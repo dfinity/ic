@@ -1,15 +1,27 @@
-use crate::extensions;
-use crate::extensions::get_extension_operation_spec_from_cache;
-use crate::logs::ERROR;
-use crate::pb::v1::{self as pb, NervousSystemFunction};
-use crate::types::native_action_ids::{self, SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION};
-use crate::{governance::Governance, pb::v1::nervous_system_function::FunctionType};
+use crate::{
+    extensions,
+    extensions::{get_extension_operation_spec_from_cache, ExtensionOperationSpec},
+    governance::Governance,
+    logs::ERROR,
+    pb::v1::{self as pb, nervous_system_function::FunctionType, NervousSystemFunction},
+    storage::list_registered_extensions_from_cache,
+    types::native_action_ids::{self, SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION},
+};
+use ic_base_types::CanisterId;
 use ic_canister_log::log;
 use ic_sns_governance_api::pb::v1::topics::Topic;
 use ic_sns_governance_proposal_criticality::ProposalCriticality;
 use itertools::Itertools;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::fmt;
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    fmt,
+};
+
+#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq)]
+pub struct RegisteredExtensionOperationSpec {
+    pub canister_id: CanisterId,
+    pub spec: ExtensionOperationSpec,
+}
 
 /// Each topic has some information associated with it. This information is for the benefit of the user but has
 /// no effect on the behavior of the SNS.
@@ -19,6 +31,7 @@ pub struct TopicInfo<C> {
     pub name: String,
     pub description: String,
     pub functions: C,
+    pub extension_operations: Vec<RegisteredExtensionOperationSpec>,
     pub is_critical: bool,
 }
 
@@ -51,7 +64,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
         ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION, ADVANCE_SNS_TARGET_VERSION, DEREGISTER_DAPP_CANISTERS,
         MANAGE_DAPP_CANISTER_SETTINGS, MANAGE_LEDGER_PARAMETERS, MANAGE_NERVOUS_SYSTEM_PARAMETERS,
         MANAGE_SNS_METADATA, MINT_SNS_TOKENS, MOTION, REGISTER_DAPP_CANISTERS, REGISTER_EXTENSION,
-        REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION, TRANSFER_SNS_TREASURY_FUNDS,
+        REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION, TRANSFER_SNS_TREASURY_FUNDS, UPGRADE_EXTENSION,
         UPGRADE_SNS_CONTROLLED_CANISTER, UPGRADE_SNS_TO_NEXT_VERSION,
     };
 
@@ -67,6 +80,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                     MANAGE_SNS_METADATA,
                 ],
             },
+            extension_operations: vec![],
             is_critical: true,
         },
         TopicInfo::<NativeFunctions> {
@@ -79,6 +93,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                     ADVANCE_SNS_TARGET_VERSION,
                 ],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo::<NativeFunctions> {
@@ -92,6 +107,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                     MANAGE_DAPP_CANISTER_SETTINGS,
                 ],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo::<NativeFunctions> {
@@ -101,15 +117,17 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
             functions: NativeFunctions {
                 native_functions: vec![],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo::<NativeFunctions> {
             topic: Topic::Governance,
             name: "Governance".to_string(),
-            description: "Proposals that represent community polls or other forms of community opinion but don’t have any immediate effect in terms of code changes.".to_string(),
+            description: "Proposals that represent community polls or other forms of community opinion but don't have any immediate effect in terms of code changes.".to_string(),
             functions: NativeFunctions {
                 native_functions: vec![MOTION],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo::<NativeFunctions> {
@@ -122,6 +140,7 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                     MINT_SNS_TOKENS,
                 ],
             },
+            extension_operations: vec![],
             is_critical: true,
         },
         TopicInfo::<NativeFunctions> {
@@ -135,8 +154,10 @@ pub fn topic_descriptions() -> [TopicInfo<NativeFunctions>; 7] {
                     REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
                     SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION,
                     REGISTER_EXTENSION,
+                    UPGRADE_EXTENSION,
                 ],
             },
+            extension_operations: vec![],
             is_critical: true,
         },
     ]
@@ -181,6 +202,26 @@ impl Governance {
             })
             .into_group_map();
 
+        let registered_extensions = list_registered_extensions_from_cache();
+        let all_registered_operations: BTreeMap<Topic, Vec<RegisteredExtensionOperationSpec>> =
+            registered_extensions
+                .into_iter()
+                .flat_map(|(canister_id, extension_spec)| {
+                    let operations = extension_spec.all_operations();
+                    operations.into_values().map(move |operation| {
+                        let topic = Topic::try_from(operation.topic).expect("Topic is unknown");
+                        let registered_spec = RegisteredExtensionOperationSpec {
+                            canister_id,
+                            spec: operation,
+                        };
+
+                        (topic, registered_spec)
+                    })
+                })
+                .into_group_map()
+                .into_iter()
+                .collect();
+
         let topics = topic_descriptions()
             .map(|topic| TopicInfo {
                 topic: topic.topic,
@@ -199,6 +240,10 @@ impl Governance {
                         .unwrap_or_default()
                         .clone(),
                 },
+                extension_operations: all_registered_operations
+                    .get(&topic.topic)
+                    .cloned()
+                    .unwrap_or_default(),
                 is_critical: topic.is_critical,
             })
             .to_vec();

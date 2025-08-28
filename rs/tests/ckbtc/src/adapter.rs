@@ -1,23 +1,18 @@
 use bitcoin::{block::Header, consensus::deserialize, Address, Amount, Block};
-use bitcoincore_rpc::{json::ListUnspentResultEntry, Auth, Client, RpcApi};
 use candid::{Encode, Principal};
 use ic_agent::{agent::RejectCode, Agent, AgentError};
+use ic_btc_adapter_test_utils::rpc_client::{ListUnspentResultEntry, RpcApi, RpcClient};
 use ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID;
 use ic_management_canister_types_private::{
     BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsRequestInitial, BitcoinGetSuccessorsResponse,
     BitcoinGetSuccessorsResponsePartial, BitcoinNetwork, BitcoinSendTransactionInternalArgs,
     Method as Ic00Method, Payload,
 };
-use ic_system_test_driver::{
-    driver::{test_env::TestEnv, test_env_api::retry, universal_vm::UniversalVms},
-    util::{MessageCanister, MESSAGE_CANISTER_WASM},
-};
+use ic_system_test_driver::util::{MessageCanister, MESSAGE_CANISTER_WASM};
 use ic_types::PrincipalId;
 use ic_utils::interfaces::{management_canister::CanisterStatus, ManagementCanister};
 use slog::{info, Logger};
 use std::{str::FromStr, time::Duration};
-
-use crate::{utils::UNIVERSAL_VM_NAME, BITCOIND_RPC_PORT};
 
 /// A proxy to make requests to the bitcoin adapter
 ///
@@ -77,7 +72,7 @@ impl<'a> AdapterProxy<'a> {
     ) -> Result<(Vec<Block>, Vec<Header>), AgentError> {
         let get_successors_request =
             BitcoinGetSuccessorsArgs::Initial(BitcoinGetSuccessorsRequestInitial {
-                network: BitcoinNetwork::Regtest,
+                network: BitcoinNetwork::BitcoinMainnet,
                 anchor,
                 processed_block_hashes: headers,
             });
@@ -122,7 +117,7 @@ impl<'a> AdapterProxy<'a> {
     /// Make a `bitcoin_send_tx` call
     pub async fn send_tx(&self, transaction: Vec<u8>) -> Result<(), AgentError> {
         let send_tx_request = BitcoinSendTransactionInternalArgs {
-            network: BitcoinNetwork::Mainnet,
+            network: BitcoinNetwork::BitcoinMainnet,
             transaction,
         };
 
@@ -163,7 +158,7 @@ impl<'a> AdapterProxy<'a> {
                 }
 
                 tries += 1;
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                tokio::time::sleep(Duration::from_secs(1)).await;
             };
 
             let new_headers = new_blocks
@@ -175,7 +170,7 @@ impl<'a> AdapterProxy<'a> {
             blocks.extend(new_blocks);
 
             tries += 1;
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
 
         Ok(blocks)
@@ -215,56 +210,10 @@ impl<'a> AdapterProxy<'a> {
     }
 }
 
-pub fn get_alice_and_bob_wallets(env: &TestEnv) -> (Client, Client, Address, Address) {
-    let (alice_client, alice_address) = get_test_wallet(env, "alice");
-    let (bob_client, bob_address) = get_test_wallet(env, "bob");
-
-    (alice_client, bob_client, alice_address, bob_address)
-}
-
-fn get_test_wallet(env: &TestEnv, name: &str) -> (Client, Address) {
-    let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
-    let bitcoind_addr = deployed_universal_vm.get_vm().unwrap().ipv6;
-
-    let client = Client::new(
-        format!(
-            "http://[{}]:{}/wallet/{}",
-            bitcoind_addr, BITCOIND_RPC_PORT, name
-        )
-        .as_str(),
-        Auth::UserPass(
-            crate::BITCOIND_RPC_USER.to_string(),
-            crate::BITCOIND_RPC_PASSWORD.to_string(),
-        ),
-    )
-    .unwrap();
-
-    let wallets = retry(
-        "client.list_wallets",
-        env.logger(),
-        Duration::from_secs(100),
-        Duration::from_secs(1),
-        || Ok(client.list_wallets()?),
-    )
-    .expect("Failed to list wallets");
-
-    // Create wallet if it doesn't exist
-    if !wallets.iter().any(|wallet| wallet == name) {
-        retry(
-            "client.create_wallet",
-            env.logger(),
-            Duration::from_secs(100),
-            Duration::from_secs(1),
-            || Ok(client.create_wallet(name, None, None, None, None)?),
-        )
-        .expect("Failed to create wallet");
-    }
-
-    let address = client.get_new_address(None, None).unwrap().assume_checked();
-    (client, address)
-}
-
-pub fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) -> ListUnspentResultEntry {
+pub fn fund_with_btc(
+    to_fund_client: &RpcClient,
+    to_fund_address: &Address,
+) -> ListUnspentResultEntry {
     let initial_amount = to_fund_client
         .get_received_by_address(to_fund_address, Some(0))
         .unwrap();
@@ -272,9 +221,7 @@ pub fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) -> List
     let initial_height = to_fund_client.get_blockchain_info().unwrap().blocks;
     let expected_rewards = calculate_regtest_reward(initial_height);
 
-    let initial_utxos = to_fund_client
-        .list_unspent(None, None, None, None, None)
-        .unwrap();
+    let initial_utxos = to_fund_client.list_unspent(None, None).unwrap();
 
     to_fund_client
         .generate_to_address(1, to_fund_address)
@@ -299,7 +246,7 @@ pub fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) -> List
 
     // Find the coinbase UTXO
     let coinbase_utxo = to_fund_client
-        .list_unspent(None, None, None, None, None)
+        .list_unspent(None, None)
         .unwrap()
         .into_iter()
         .find(|utxo| utxo.amount == expected_rewards)

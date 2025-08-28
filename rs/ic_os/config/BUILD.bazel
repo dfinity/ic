@@ -4,6 +4,7 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/config",
     "//rs/ic_os/config_types",
     "//rs/ic_os/deterministic_ips",
     "//rs/ic_os/network",
@@ -12,6 +13,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:anyhow",
     "@crate_index//:clap",
+    "@crate_index//:fs_extra",
     "@crate_index//:macaddr",
     "@crate_index//:regex",
     "@crate_index//:rust-ini",
@@ -20,6 +22,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_with",
     "@crate_index//:tempfile",
     "@crate_index//:url",
+    "@crate_index//:walkdir",
 ]
 
 DEV_DEPENDENCIES = [
@@ -68,6 +71,9 @@ rust_library(
 # bazel test //rs/ic_os/config:config_lib_test --test_env=UPDATE_GOLDENFILES=1 --spawn_strategy=local
 rust_test(
     name = "config_lib_test",
+    compile_data = [
+        "//ic-os/components:guestos/generate-ic-config/ic.json5.template",
+    ],
     crate = ":config_lib_dev",
     crate_features = ["dev"],
     data = glob(["golden/*"]),
@@ -100,6 +106,9 @@ rust_binary(
 
 rust_test(
     name = "config_test",
+    compile_data = [
+        "//ic-os/components:guestos/generate-ic-config/ic.json5.template",
+    ],
     crate = ":config_dev",
     crate_features = ["dev"],
     deps = DEV_DEPENDENCIES,

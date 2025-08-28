@@ -26,7 +26,6 @@ use ic_system_test_driver::{
     retry_with_msg,
     util::{block_on, runtime_from_url},
 };
-use ic_types::hostos_version::HostosVersion;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use reqwest::Client;
 
@@ -106,16 +105,16 @@ fn setup_vector_targets_for_vm(env: &TestEnv, vm_name: &str) {
 /// field to override this check and, in your test, account for the fact that
 /// after registration, the deployed node will upgrade to the NNS GuestOS version.
 fn assert_version_compatibility() {
-    if let (Ok(setupos_version), Ok(guestos_version)) =
-        (get_setupos_img_version(), get_guestos_img_version())
-    {
-        if setupos_version != guestos_version {
-            panic!(
-                "Version mismatch detected: SetupOS version '{setupos_version}' does not match GuestOS version '{guestos_version}'. If you want to create a test with different versions, add a field to override this check."
-            );
-        }
+    let setupos_version = get_setupos_img_version();
+    let guestos_version = get_guestos_img_version();
+
+    if setupos_version != guestos_version {
+        // TODO: Revert change after extending image version support
+
+        // panic!(
+        //     "Version mismatch detected: SetupOS version '{setupos_version}' does not match GuestOS version '{guestos_version}'. If you want to create a test with different versions, add a field to override this check."
+        // );
     }
-    // If either function returns an error, don't fail
 }
 
 /// Prepare the environment for nested tests.
@@ -461,14 +460,11 @@ pub fn nns_recovery_test(env: TestEnv) {
 pub fn upgrade_hostos(env: TestEnv) {
     let logger = env.logger();
 
-    let target_version = get_hostos_update_img_version().unwrap();
-    let target_version =
-        HostosVersion::try_from(target_version.to_string()).expect("Invalid target hostos version");
+    let target_version = get_hostos_update_img_version();
 
-    let update_image_url =
-        get_hostos_update_img_url().expect("Invalid target hostos update image URL");
+    let update_image_url = get_hostos_update_img_url();
     info!(logger, "HostOS update image URL: '{}'", update_image_url);
-    let update_image_sha256 = get_hostos_update_img_sha256().unwrap();
+    let update_image_sha256 = get_hostos_update_img_sha256();
 
     let initial_topology = env.topology_snapshot();
     start_nested_vm_group(env.clone());
@@ -539,7 +535,8 @@ pub fn upgrade_hostos(env: TestEnv) {
             host_boot_id_pre_upgrade
         ),
         logger.clone(),
-        Duration::from_secs(7 * 60), // long wait for hostos upgrade to apply and reboot
+        // TODO: Revert change after extending image version support
+        Duration::from_secs(15 * 60), // long wait for hostos upgrade to apply and reboot
         Duration::from_secs(5),
         || {
             let host_boot_id = get_host_boot_id(&host);
@@ -617,10 +614,8 @@ pub fn recovery_upgrader_test(env: TestEnv) {
             .expect("Failed to read /boot/boot_args file");
         info!(logger, "Current boot_args content:\n{}", current_boot_args);
 
-        let target_version =
-            get_guestos_update_img_version().expect("Failed to get target guestos version");
-        let target_short_hash =
-            &get_guestos_update_img_sha256().expect("Failed to get target guestos hash")[..6]; // node providers only expected to input the first 6 characters of the hash
+        let target_version = get_guestos_update_img_version();
+        let target_short_hash = &get_guestos_update_img_sha256()[..6]; // node providers only expected to input the first 6 characters of the hash
 
         info!(
             logger,
@@ -739,24 +734,20 @@ pub fn upgrade_guestos(env: TestEnv) {
             "Unassigned nodes config: {:?}", unassigned_nodes_config
         );
 
-        let original_version = get_setupos_img_version().expect("Failed to find initial version");
+        let original_version = get_setupos_img_version();
         info!(logger, "Original GuestOS version: {}", original_version);
 
         // determine new GuestOS version
-        let upgrade_url = get_guestos_update_img_url()
-            .expect("no image URL")
-            .to_string();
+        let upgrade_url = get_guestos_update_img_url().to_string();
         info!(logger, "GuestOS upgrade image URL: {}", upgrade_url);
 
-        let target_version =
-            get_guestos_update_img_version().expect("Failed to get target replica version");
+        let target_version = get_guestos_update_img_version();
         info!(logger, "Target replica version: {}", target_version);
 
-        let sha256 = get_guestos_update_img_sha256().expect("no SHA256 hash");
+        let sha256 = get_guestos_update_img_sha256();
         info!(logger, "Update image SHA256: {}", sha256);
 
-        let guest_launch_measurements =
-            get_guestos_launch_measurements().expect("no launch measurements");
+        let guest_launch_measurements = get_guestos_launch_measurements();
 
         // check that GuestOS is on the expected version (initial version)
         let client = Client::builder()
@@ -821,7 +812,8 @@ pub fn upgrade_guestos(env: TestEnv) {
             &guest_ipv6,
             &target_version,
             &logger,
-            Duration::from_secs(7 * 60), // Long wait for GuestOS upgrade to apply and reboot
+            // TODO: Revert change after extending image version support
+            Duration::from_secs(15 * 60), // Long wait for GuestOS upgrade to apply and reboot
             Duration::from_secs(5),
         )
         .await

@@ -54,6 +54,7 @@ def image_deps(mode, malicious = False):
             "//cpp:infogetty": "/opt/ic/bin/infogetty:0755",  # Terminal manager that replaces the login shell.
             "//rs/ic_os/release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",  # Proxies, filters, and serves public node metrics.
             "//rs/ic_os/release:metrics_tool": "/opt/ic/bin/metrics_tool:0755",  # Collects and reports custom metrics.
+            "//rs/ic_os/sev:sev_active": "/opt/ic/bin/sev_active:0755",  # Tool for querying the SEV activation status
 
             # additional libraries to install
             "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",  # Allows referring to the guest IPv6 by name guestos from host, and host as hostos from guest.
@@ -106,10 +107,11 @@ def image_deps(mode, malicious = False):
     # Update recovery component_files
     # Service files and SELinux policies must be added to components instead of rootfs so that they are processed by the Dockerfile
     if mode in ["recovery", "recovery-dev"]:
-        recovery_engine_path = "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh" if mode == "recovery" else "//ic-os/guestos/envs/recovery-dev:guestos-recovery-engine.sh"
+        expected_recovery_hash_path = "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/expected_recovery_hash" if mode == "recovery" else "//ic-os/guestos/envs/recovery-dev:recovery.tar.zst.sha256"
 
         deps["component_files"].update({
-            recovery_engine_path: "/opt/ic/bin/guestos-recovery-engine.sh",
+            expected_recovery_hash_path: "/opt/ic/share/expected_recovery_hash",
+            Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
             Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service"): "/etc/systemd/system/guestos-recovery-engine.service",
             Label("//ic-os/components:selinux/guestos-recovery-engine/guestos-recovery-engine.fc"): "/prep/guestos-recovery-engine/guestos-recovery-engine.fc",
             Label("//ic-os/components:selinux/guestos-recovery-engine/guestos-recovery-engine.te"): "/prep/guestos-recovery-engine/guestos-recovery-engine.te",

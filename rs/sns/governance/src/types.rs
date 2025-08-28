@@ -143,6 +143,9 @@ pub mod native_action_ids {
     /// ExecuteExtensionOperation Action.
     pub const EXECUTE_EXTENSION_OPERATION: u64 = 18;
 
+    /// UpgradeExtension Action.
+    pub const UPGRADE_EXTENSION: u64 = 19;
+
     // When adding something to this list, make sure to update the below function.
     pub fn nervous_system_functions() -> Vec<NervousSystemFunction> {
         vec![
@@ -164,6 +167,7 @@ pub mod native_action_ids {
             NervousSystemFunction::set_topics_for_custom_proposals(),
             NervousSystemFunction::register_extension(),
             NervousSystemFunction::execute_extension_operation(),
+            NervousSystemFunction::upgrade_extension(),
         ]
     }
 }
@@ -1176,6 +1180,17 @@ impl NervousSystemFunction {
         }
     }
 
+    fn upgrade_extension() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::UPGRADE_EXTENSION,
+            name: "Upgrade SNS extension".to_string(),
+            description: Some(
+                "Proposal to upgrade the WASM of a registered SNS extension.".to_string(),
+            ),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
     fn upgrade_sns_to_next_version() -> NervousSystemFunction {
         NervousSystemFunction {
             id: native_action_ids::UPGRADE_SNS_TO_NEXT_VERSION,
@@ -1323,6 +1338,7 @@ impl From<Action> for NervousSystemFunction {
             }
             Action::RegisterDappCanisters(_) => NervousSystemFunction::register_dapp_canisters(),
             Action::RegisterExtension(_) => NervousSystemFunction::register_extension(),
+            Action::UpgradeExtension(_) => NervousSystemFunction::upgrade_extension(),
             Action::DeregisterDappCanisters(_) => {
                 NervousSystemFunction::deregister_dapp_canisters()
             }
@@ -1910,6 +1926,7 @@ impl From<&Action> for u64 {
             Action::ExecuteExtensionOperation(_) => native_action_ids::EXECUTE_EXTENSION_OPERATION,
             Action::RegisterDappCanisters(_) => native_action_ids::REGISTER_DAPP_CANISTERS,
             Action::RegisterExtension(_) => native_action_ids::REGISTER_EXTENSION,
+            Action::UpgradeExtension(_) => native_action_ids::UPGRADE_EXTENSION,
             Action::DeregisterDappCanisters(_) => native_action_ids::DEREGISTER_DAPP_CANISTERS,
             Action::ManageSnsMetadata(_) => native_action_ids::MANAGE_SNS_METADATA,
             Action::TransferSnsTreasuryFunds(_) => native_action_ids::TRANSFER_SNS_TREASURY_FUNDS,
@@ -2900,6 +2917,36 @@ impl TryFrom<&UpgradeSnsControlledCanister> for Wasm {
                 "{ERR_PREFIX}: Either .new_canister_wasm or \
                      .chunked_canister_wasm (but not both) must be specified."
             )),
+        }
+    }
+}
+
+impl TryFrom<&crate::pb::v1::Wasm> for Wasm {
+    type Error = String;
+
+    fn try_from(wasm_wrapper: &crate::pb::v1::Wasm) -> Result<Self, Self::Error> {
+        let Some(wasm) = &wasm_wrapper.wasm else {
+            return Err("wasm.wasm field is required".to_string());
+        };
+
+        match wasm {
+            crate::pb::v1::wasm::Wasm::Bytes(bytes) => Ok(Self::Bytes(bytes.clone())),
+            crate::pb::v1::wasm::Wasm::Chunked(ChunkedCanisterWasm {
+                wasm_module_hash,
+                store_canister_id,
+                chunk_hashes_list,
+            }) => {
+                let Some(store_canister_id) = store_canister_id else {
+                    return Err("wasm.chunked.store_canister_id must be specified.".to_string());
+                };
+                let store_canister_id = CanisterId::try_from_principal_id(*store_canister_id)
+                    .map_err(|err| format!("wasm.chunked.store_canister_id: {err}"))?;
+                Ok(Self::Chunked {
+                    wasm_module_hash: wasm_module_hash.clone(),
+                    store_canister_id,
+                    chunk_hashes_list: chunk_hashes_list.clone(),
+                })
+            }
         }
     }
 }

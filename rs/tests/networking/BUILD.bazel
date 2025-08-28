@@ -1,3 +1,4 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//rs/tests:common.bzl", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
@@ -37,6 +38,7 @@ COMMON_DEPS = [
 HTTP_ENDPOINTS_DEPS = [
     # Keep sorted.
     "//rs/crypto/tree_hash",
+    "//rs/http_endpoints/public",
     "//rs/http_endpoints/test_agent",
     "//rs/tests/consensus/utils",
     "//rs/types/types",
@@ -232,13 +234,11 @@ system_test_nns(
     ],
 )
 
-system_test_nns(
+rust_binary(
     name = "nns_delegation_test",
-    env = UNIVERSAL_CANISTER_ENV,
-    tags = [
-        "long_test",
-    ],
-    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    testonly = True,
+    srcs = ["nns_delegation_test.rs"],
+    crate_name = "ic_systest_nns_delegation_test",
     deps = [
         # Keep sorted.
         "//rs/certification",
@@ -248,7 +248,9 @@ system_test_nns(
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
+        "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
+        "@crate_index//:candid",
         "@crate_index//:ic-agent",
         "@crate_index//:leb128",
         "@crate_index//:reqwest",
@@ -258,6 +260,37 @@ system_test_nns(
         "@crate_index//:time",
         "@crate_index//:tokio",
     ],
+)
+
+system_test_nns(
+    name = "nns_delegation_mainnet_nns_version_test",
+    env = UNIVERSAL_CANISTER_ENV,
+    tags = [
+        "long_test",
+    ],
+    test_driver_target = ":nns_delegation_test",
+    # The test will is long because we upgrade a subnet and then wait for a delegation to be refreshed
+    # which could take more than 15 minutes in total.
+    test_timeout = "eternal",
+    uses_guestos_img = False,
+    uses_guestos_nns_mainnet_img = True,
+    uses_guestos_update = True,
+    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+)
+
+system_test_nns(
+    name = "nns_delegation_branch_nns_version_test",
+    env = UNIVERSAL_CANISTER_ENV,
+    tags = [
+        "long_test",
+    ],
+    test_driver_target = ":nns_delegation_test",
+    # The nns_delegation_on_app_subnet_test subtest takes ~10 minutes eating up the time budget for other tests.
+    test_timeout = "eternal",
+    uses_guestos_img = True,
+    uses_guestos_nns_mainnet_img = False,
+    uses_guestos_update = True,
+    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
 )
 
 system_test_nns(
@@ -361,7 +394,7 @@ system_test_nns(
         "k8s",
         "long_test",
     ],
-    test_timeout = "long",
+    test_timeout = "eternal",
     runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/tests/networking/subnet_update_workload",
@@ -375,7 +408,7 @@ system_test_nns(
         "colocate",
         "long_test",
     ],
-    test_timeout = "long",
+    test_timeout = "eternal",
     runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/tests/networking/subnet_update_workload",

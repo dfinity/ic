@@ -9,7 +9,7 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::ExecutionServices;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_interfaces::{
-    execution_environment::{IngressHistoryReader, QueryExecutionError},
+    execution_environment::{IngressHistoryReader, QueryExecutionError, QueryExecutionInput},
     messaging::MessageRouting,
 };
 use ic_messaging::MessageRoutingImpl;
@@ -299,7 +299,16 @@ pub async fn run_drun(uo: DrunOptions) -> Result<(), String> {
                     &secret_key,
                     replica_config.subnet_id,
                 );
-                let query_result = match query_handler.clone().oneshot((q, None)).await.unwrap() {
+                let query_execution_input = QueryExecutionInput {
+                    query: q,
+                    certificate_delegation_with_metadata: None,
+                };
+                let query_result = match query_handler
+                    .clone()
+                    .oneshot(query_execution_input)
+                    .await
+                    .unwrap()
+                {
                     Ok((result, _)) => result,
                     Err(QueryExecutionError::CertifiedStateUnavailable) => {
                         panic!("Certified state unavailable for query call.")

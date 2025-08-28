@@ -266,7 +266,7 @@ mod tests {
             canister_current_memory_usage: NumBytes::new(0),
             canister_current_message_memory_usage: MessageMemoryUsage::ZERO,
             execution_parameters: execution_parameters(),
-            subnet_available_memory: SubnetAvailableMemory::new(
+            subnet_available_memory: SubnetAvailableMemory::new_for_testing(
                 i64::MAX / 2,
                 i64::MAX / 2,
                 i64::MAX / 2,
@@ -298,7 +298,7 @@ mod tests {
             canister_current_memory_usage: NumBytes::new(0),
             canister_current_message_memory_usage: MessageMemoryUsage::ZERO,
             execution_parameters: execution_parameters(),
-            subnet_available_memory: SubnetAvailableMemory::new(
+            subnet_available_memory: SubnetAvailableMemory::new_for_testing(
                 i64::MAX / 2,
                 i64::MAX / 2,
                 i64::MAX / 2,

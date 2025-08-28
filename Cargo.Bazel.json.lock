@@ -1,5 +1,5 @@
 {
-  "checksum": "586ceae93625bd8a14800a29bdca5c14a70db08ed87cdb138acbe1acaeb6b80c",
+  "checksum": "2a8e2529a739890c6bc19dfc88bc1b7fbddd9417454e89da5d909a5537536575",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -12072,7 +12072,7 @@
               "target": "candid"
             },
             {
-              "id": "ic-cdk 0.18.6",
+              "id": "ic-cdk 0.18.7",
               "target": "ic_cdk"
             },
             {
@@ -21622,7 +21622,7 @@
               "target": "ic_cbor"
             },
             {
-              "id": "ic-cdk 0.18.6",
+              "id": "ic-cdk 0.18.7",
               "target": "ic_cdk"
             },
             {
@@ -21662,7 +21662,7 @@
               "target": "ic_identity_hsm"
             },
             {
-              "id": "ic-management-canister-types 0.3.2",
+              "id": "ic-management-canister-types 0.3.3",
               "target": "ic_management_canister_types"
             },
             {
@@ -21680,6 +21680,11 @@
             {
               "id": "ic-stable-structures 0.6.8",
               "target": "ic_stable_structures"
+            },
+            {
+              "id": "ic-stable-structures 0.7.0",
+              "target": "ic_stable_structures",
+              "alias": "ic_stable_structures_next"
             },
             {
               "id": "ic-test-state-machine-client 3.0.1",
@@ -21938,6 +21943,10 @@
               "target": "p256"
             },
             {
+              "id": "p384 0.13.1",
+              "target": "p384"
+            },
+            {
               "id": "pairing 0.23.0",
               "target": "pairing"
             },
@@ -22065,6 +22074,10 @@
             {
               "id": "ratelimit 0.9.1",
               "target": "ratelimit"
+            },
+            {
+              "id": "raw-cpuid 11.5.0",
+              "target": "raw_cpuid"
             },
             {
               "id": "rayon 1.10.0",
@@ -22486,6 +22499,10 @@
             {
               "id": "walkdir 2.5.0",
               "target": "walkdir"
+            },
+            {
+              "id": "walrus 0.23.3",
+              "target": "walrus"
             },
             {
               "id": "warp 0.3.7",
@@ -26335,7 +26352,7 @@
               "target": "ic_error_types"
             },
             {
-              "id": "ic-management-canister-types 0.3.2",
+              "id": "ic-management-canister-types 0.3.3",
               "target": "ic_management_canister_types"
             },
             {
@@ -34559,7 +34576,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-cdk 0.18.6",
+              "id": "ic-cdk 0.18.7",
               "target": "ic_cdk"
             },
             {
@@ -34669,14 +34686,14 @@
       ],
       "license_file": null
     },
-    "ic-cdk 0.18.6": {
+    "ic-cdk 0.18.7": {
       "name": "ic-cdk",
-      "version": "0.18.6",
+      "version": "0.18.7",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.18.6/download",
-          "sha256": "3694c302426834b1300c095b43dee60aaf07264ca07c8f6456fc6b898c99c72f"
+          "url": "https://static.crates.io/crates/ic-cdk/0.18.7/download",
+          "sha256": "4efb278f5d3ef033b3eed7f01f1096eaf67701896aa5ef69f5eddf5a84833dc0"
         }
       },
       "targets": [
@@ -34713,7 +34730,7 @@
               "target": "ic_error_types"
             },
             {
-              "id": "ic-management-canister-types 0.3.2",
+              "id": "ic-management-canister-types 0.3.3",
               "target": "ic_management_canister_types"
             },
             {
@@ -34743,13 +34760,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "ic-cdk-macros 0.18.6",
+              "id": "ic-cdk-macros 0.18.7",
               "target": "ic_cdk_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.18.6"
+        "version": "0.18.7"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -34836,14 +34853,14 @@
       ],
       "license_file": null
     },
-    "ic-cdk-macros 0.18.6": {
+    "ic-cdk-macros 0.18.7": {
       "name": "ic-cdk-macros",
-      "version": "0.18.6",
+      "version": "0.18.7",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-macros/0.18.6/download",
-          "sha256": "b2cd13805284d5f422012c392a132757c74bd1bb2f7baeda2f3fca5cbe3d8ce7"
+          "url": "https://static.crates.io/crates/ic-cdk-macros/0.18.7/download",
+          "sha256": "7eb14c5d691cc9d72bb95459b4761e3a4b3444b85a63d17555d5ddd782969a1e"
         }
       },
       "targets": [
@@ -34891,7 +34908,7 @@
           "selects": {}
         },
         "edition": "2024",
-        "version": "0.18.6"
+        "version": "0.18.7"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -34939,7 +34956,7 @@
               "target": "futures"
             },
             {
-              "id": "ic-cdk 0.18.6",
+              "id": "ic-cdk 0.18.7",
               "target": "ic_cdk"
             },
             {
@@ -35743,14 +35760,14 @@
       ],
       "license_file": null
     },
-    "ic-management-canister-types 0.3.2": {
+    "ic-management-canister-types 0.3.3": {
       "name": "ic-management-canister-types",
-      "version": "0.3.2",
+      "version": "0.3.3",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-management-canister-types/0.3.2/download",
-          "sha256": "95f3af3543f6d0cbdecd2dcdfd4737ada2bd42d935cc787eec22090c96492c76"
+          "url": "https://static.crates.io/crates/ic-management-canister-types/0.3.3/download",
+          "sha256": "ea7e5b8a0f7c3b320d9450ac950547db4f24a31601b5d398f9680b64427455d2"
         }
       },
       "targets": [
@@ -35789,8 +35806,8 @@
           ],
           "selects": {}
         },
-        "edition": "2021",
-        "version": "0.3.2"
+        "edition": "2024",
+        "version": "0.3.3"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -36731,7 +36748,7 @@
               "target": "hkdf"
             },
             {
-              "id": "ic-cdk 0.18.6",
+              "id": "ic-cdk 0.18.7",
               "target": "ic_cdk"
             },
             {
@@ -36797,7 +36814,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "ic-cdk-macros 0.18.6",
+              "id": "ic-cdk-macros 0.18.7",
               "target": "ic_cdk_macros"
             },
             {
@@ -56621,7 +56638,7 @@
               "target": "ic_certification"
             },
             {
-              "id": "ic-management-canister-types 0.3.2",
+              "id": "ic-management-canister-types 0.3.3",
               "target": "ic_management_canister_types"
             },
             {
@@ -60622,13 +60639,13 @@
             ],
             "cfg(target_arch = \"x86\")": [
               {
-                "id": "raw-cpuid 11.1.0",
+                "id": "raw-cpuid 11.5.0",
                 "target": "raw_cpuid"
               }
             ],
             "cfg(target_arch = \"x86_64\")": [
               {
-                "id": "raw-cpuid 11.1.0",
+                "id": "raw-cpuid 11.5.0",
                 "target": "raw_cpuid"
               }
             ],
@@ -62843,14 +62860,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "raw-cpuid 11.1.0": {
+    "raw-cpuid 11.5.0": {
       "name": "raw-cpuid",
-      "version": "11.1.0",
+      "version": "11.5.0",
       "package_url": "https://github.com/gz/rust-cpuid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/raw-cpuid/11.1.0/download",
-          "sha256": "cb9ee317cfe3fbd54b36a511efc1edd42e216903c9cd575e686dd68a2ba90d8d"
+          "url": "https://static.crates.io/crates/raw-cpuid/11.5.0/download",
+          "sha256": "c6df7ab838ed27997ba19a4664507e6f82b41fe6e20be42929332156e5e85146"
         }
       },
       "targets": [
@@ -62882,7 +62899,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "11.1.0"
+        "version": "11.5.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -65877,6 +65894,7 @@
         "crate_features": {
           "common": [
             "default",
+            "getrandom",
             "pem",
             "sha2",
             "std",
@@ -95650,7 +95668,7 @@
     "ic-canister-log 0.2.0",
     "ic-canister-sig-creation 1.3.0",
     "ic-cbor 3.0.3",
-    "ic-cdk 0.18.6",
+    "ic-cdk 0.18.7",
     "ic-cdk-executor 1.0.2",
     "ic-cdk-timers 0.12.2",
     "ic-certificate-verification 3.0.3",
@@ -95660,11 +95678,12 @@
     "ic-http-certification 3.0.3",
     "ic-http-gateway 0.3.0",
     "ic-identity-hsm 0.40.1",
-    "ic-management-canister-types 0.3.2",
+    "ic-management-canister-types 0.3.3",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.0.3",
     "ic-sha3 1.0.0",
     "ic-stable-structures 0.6.8",
+    "ic-stable-structures 0.7.0",
     "ic-test-state-machine-client 3.0.1",
     "ic-transport-types 0.40.1",
     "ic-utils 0.40.1",
@@ -95731,6 +95750,7 @@
     "opentelemetry-prometheus 0.13.0",
     "opentelemetry_sdk 0.27.1",
     "p256 0.13.2",
+    "p384 0.13.1",
     "pairing 0.23.0",
     "parking_lot 0.12.1",
     "paste 1.0.15",
@@ -95765,6 +95785,7 @@
     "rand_distr 0.4.3",
     "rand_pcg 0.3.1",
     "ratelimit 0.9.1",
+    "raw-cpuid 11.5.0",
     "rayon 1.10.0",
     "rcgen 0.13.1",
     "regex 1.11.1",
@@ -95874,6 +95895,7 @@
     "virt 0.4.2",
     "vsock 0.4.0",
     "walkdir 2.5.0",
+    "walrus 0.23.3",
     "warp 0.3.7",
     "wasm-bindgen 0.2.100",
     "wasm-encoder 0.228.0",

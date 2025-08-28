@@ -42,9 +42,9 @@ genrule(
 
 # Postprocess SetupOS mainnet into a "test" image for use in nested tests
 genrule(
-    name = "mainnet-test-img",
+    name = "latest-release-mainnet-test-img",
     srcs = ["@mainnet_latest_setupos_disk_image//file"],
-    outs = ["mainnet-test-img.tar.zst"],
+    outs = ["latest-release-mainnet-test-img.tar.zst"],
     cmd = """
         tar -xf $<
         $(location //rs/ic_os/dev_test_tools/setupos-disable-checks) --image-path disk.img
@@ -59,11 +59,28 @@ genrule(
     ],
 )
 
-# Extract the GuestOS image from SetupOS
+# Extract the GuestOS NNS image from SetupOS
 genrule(
-    name = "mainnet-guest-img",
+    name = "nns-mainnet-guest-img",
     srcs = ["@mainnet_nns_setupos_disk_image//file"],
-    outs = ["mainnet-guest-img.tar.zst"],
+    outs = ["nns-mainnet-guest-img.tar.zst"],
+    cmd = """
+        $(location //rs/ic_os/build_tools/partition_tools:extract-guestos) --image $< $@
+    """,
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],
+    tools = ["//rs/ic_os/build_tools/partition_tools:extract-guestos"],
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
+)
+
+# Extract the GuestOS latest release image from SetupOS
+genrule(
+    name = "latest-release-mainnet-guest-img",
+    srcs = ["@mainnet_latest_setupos_disk_image//file"],
+    outs = ["latest-release-mainnet-guest-img.tar.zst"],
     cmd = """
         $(location //rs/ic_os/build_tools/partition_tools:extract-guestos) --image $< $@
     """,

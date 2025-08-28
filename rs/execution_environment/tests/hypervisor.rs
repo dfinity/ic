@@ -8,7 +8,7 @@ use ic_embedders::{
     wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS,
 };
 use ic_error_types::{ErrorCode, RejectCode};
-use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::HypervisorError;
 use ic_management_canister_types_private::Global;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
@@ -1825,7 +1825,7 @@ fn ic0_msg_reject_works() {
 
 #[test]
 fn wasm64_active_data_segments() {
-    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
             (import "ic0" "msg_reply" (func $msg_reply))
@@ -2944,7 +2944,7 @@ fn ic0_call_perform_enqueues_request() {
 
 #[test]
 fn wasm64_ic0_call_perform_enqueues_request() {
-    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
             (import "ic0" "call_new"
@@ -3463,7 +3463,7 @@ fn ic0_msg_cycles_available_works_for_calls() {
 
 #[test]
 fn wasm64_ic0_msg_cycles_available128_works_for_calls() {
-    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
             (import "ic0" "msg_cycles_available128" (func $msg_cycles_available128 (param i64)))
@@ -3491,7 +3491,7 @@ fn wasm64_ic0_msg_cycles_available128_works_for_calls() {
 
 #[test]
 fn wasm64_ic0_msg_cycles_accept128_works_for_calls() {
-    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
             (import "ic0" "msg_cycles_accept128"
@@ -5884,7 +5884,7 @@ fn dts_concurrent_subnet_available_change() {
         test.canister_state(canister_id).next_execution(),
         NextExecution::ContinueLong
     );
-    test.set_subnet_available_memory(SubnetAvailableMemory::new(0, 0, 0));
+    test.set_available_execution_memory(0);
     while test.canister_state(canister_id).next_execution() == NextExecution::ContinueLong {
         test.execute_slice(canister_id);
     }
@@ -5933,7 +5933,7 @@ fn system_state_apply_change_fails() {
     test.induct_messages();
     test.execute_slice(b_id);
     // No memory available after the first slice.
-    test.set_subnet_available_memory(SubnetAvailableMemory::new(0, 0, 0));
+    test.set_available_execution_memory(0);
     while test.canister_state(b_id).next_execution() == NextExecution::ContinueLong {
         test.execute_slice(b_id);
     }
@@ -8643,7 +8643,7 @@ fn ic0_mint_cycles_u64() {
 }
 
 fn check_correct_execution_state(is_wasm64: bool) {
-    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let mut test = ExecutionTestBuilder::new().build();
     let memory_size = if is_wasm64 { "i64" } else { "" };
     let wat = format!(
         r#"
