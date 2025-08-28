@@ -186,13 +186,10 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
         // - a fee of 5 satoshis/vbytes
         // Hence a total fee of 705 satoshis
         const EXPECTED_FEE: u64 = 705;
-        assert_eq!(
-            get_tx_infos.fees.map(|fees| fees.base.to_sat()),
-            Some(EXPECTED_FEE)
-        );
+        assert_eq!(get_tx_infos.fees.base.to_sat(), EXPECTED_FEE);
 
         // Check that we can modify the fee
-        assert_eq!(get_tx_infos.bip125_replaceable, Some(true));
+        assert_eq!(get_tx_infos.bip125_replaceable, true);
 
         // Try to retrieve btc to minter's main_address
         let main_btc_address = minter_agent
