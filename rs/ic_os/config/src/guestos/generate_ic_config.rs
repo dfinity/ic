@@ -6,6 +6,7 @@ use std::fs::{read_to_string, write};
 use std::net::Ipv6Addr;
 use std::path::Path;
 use std::process::Command;
+use std::time::Duration;
 
 /// Generate IC configuration from template and guestos config
 pub fn generate_ic_config(
@@ -233,7 +234,7 @@ fn substitute_template(template_content: &str, config_vars: &ConfigVariables) ->
 
 fn get_router_advertisement_ipv6_address() -> Result<String> {
     const MAX_RETRIES: usize = 12;
-    const RETRY_DELAY_SECS: u64 = 10;
+    const RETRY_DELAY: Duration = Duration::from_secs(10);
 
     for attempt in 1..=MAX_RETRIES {
         match get_router_advertisement_ipv6_address_helper() {
@@ -245,7 +246,7 @@ fn get_router_advertisement_ipv6_address() -> Result<String> {
                         MAX_RETRIES - attempt,
                         e
                     );
-                    std::thread::sleep(std::time::Duration::from_secs(RETRY_DELAY_SECS));
+                    std::thread::sleep(RETRY_DELAY);
                 } else {
                     return Err(e.context("Failed to get IPv6 address after all retries"));
                 }
