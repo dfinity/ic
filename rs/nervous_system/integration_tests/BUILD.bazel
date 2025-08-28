@@ -371,3 +371,16 @@ rust_test(
         "//rs/sns/treasury_manager",
     ],
 )
+
+rust_test(
+    name = "swap_node_in_subnet_directly",
+    timeout = "long",
+    srcs = [
+        "tests/swap_node_in_subnet_directly.rs",
+    ],
+    aliases = ALIASES,
+    data = DEV_DATA,
+    env = DEV_ENV,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [":nervous_system_integration_tests"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
+)
