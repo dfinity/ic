@@ -16,7 +16,6 @@ Success::
 . Signature requests succeed and fail as expected
 
 end::catalog[] */
-#![allow(deprecated)]
 
 use anyhow::Result;
 
