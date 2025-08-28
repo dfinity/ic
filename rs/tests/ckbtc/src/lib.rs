@@ -1,9 +1,10 @@
+use bitcoin::{dogecoin::Network as DogeNetwork, Network as BtcNetwork};
 use candid::{Encode, Principal};
 use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_btc_checker::{
-    BtcNetwork, CheckArg, CheckMode, InitArg as CheckerInitArg, UpgradeArg as CheckerUpgradeArg,
+    CheckArg, CheckMode, InitArg as CheckerInitArg, UpgradeArg as CheckerUpgradeArg,
 };
 use ic_btc_interface::{Config, Fees, Flag, Network};
 use ic_ckbtc_minter::{
@@ -74,50 +75,43 @@ pub(crate) const BITCOIND_RPC_PASSWORD: &str = "Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ks
 
 const BITCOIND_RPC_AUTH : &str = "btc-dev-preview:8555f1162d473af8e1f744aa056fd728$afaf9cb17b8cf0e8e65994d1195e4b3a4348963b08897b4084d210e5ee588bcb";
 
-const BITCOIN_CLI_PORT: u16 = 18444;
-
 const HTTPS_PORT: u16 = 20443;
 
-#[derive(Copy, Clone)]
-pub enum TokenType {
-    Bitcoin,
-    Dogecoin,
+pub trait DaemonSetup: Copy {
+    const IMAGE_NAME: &str;
+    const CONFIG_NAME: &str;
+    const CONFIG_MAPPING: &str;
+    const RPC_PORT: u16;
+    const P2P_PORT: u16;
+    fn internet_computer(socket_addr: SocketAddr) -> InternetComputer;
 }
 
-impl TokenType {
-    fn image_name(&self) -> &str {
-        match self {
-            TokenType::Bitcoin => "bitcoind",
-            TokenType::Dogecoin => "dogecoind",
-        }
-    }
-
-    fn config_name(&self) -> &str {
-        match self {
-            TokenType::Bitcoin => "bitcoin.conf",
-            TokenType::Dogecoin => "dogecoin.conf",
-        }
-    }
-
-    fn rpc_port(&self) -> u16 {
-        match self {
-            TokenType::Bitcoin => 8332,
-            TokenType::Dogecoin => 18332,
-        }
-    }
-
-    fn config_mapping(&self) -> &str {
-        match self {
-            TokenType::Bitcoin => "/tmp/bitcoin.conf:/bitcoin/.bitcoin/bitcoin.conf",
-            TokenType::Dogecoin => "/tmp/dogecoin.conf:/node/dogecoin-core/configs/config.conf",
-        }
+impl DaemonSetup for BtcNetwork {
+    const IMAGE_NAME: &str = "bitcoind";
+    const CONFIG_NAME: &str = "bitcoin.conf";
+    const CONFIG_MAPPING: &str = "/tmp/bitcoin.conf:/bitcoin/.bitcoin/bitcoin.conf";
+    const RPC_PORT: u16 = 8332;
+    const P2P_PORT: u16 = 18444;
+    fn internet_computer(socket_addr: SocketAddr) -> InternetComputer {
+        InternetComputer::new().with_bitcoind_addr(socket_addr)
     }
 }
 
-fn ckbtc_config(env: TestEnv, token: TokenType) {
-    let btc_node_ipv6 = setup_bitcoind_uvm(&env, token);
-    InternetComputer::new()
-        .with_bitcoind_addr(SocketAddr::new(IpAddr::V6(btc_node_ipv6), BITCOIN_CLI_PORT))
+impl DaemonSetup for DogeNetwork {
+    const IMAGE_NAME: &str = "dogecoind";
+    const CONFIG_NAME: &str = "dogecoin.conf";
+    const CONFIG_MAPPING: &str = "/tmp/dogecoin.conf:/node/dogecoin-core/configs/config.conf";
+    const RPC_PORT: u16 = 18332;
+    const P2P_PORT: u16 = 18444;
+    fn internet_computer(socket_addr: SocketAddr) -> InternetComputer {
+        InternetComputer::new().with_dogecoind_addr(socket_addr)
+    }
+}
+
+fn ckbtc_config<Network: DaemonSetup>(env: TestEnv) {
+    let node_ipv6 = setup_bitcoind_uvm::<Network>(&env);
+    let socket_addr = SocketAddr::new(IpAddr::V6(node_ipv6), Network::P2P_PORT);
+    Network::internet_computer(socket_addr)
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(10))
@@ -150,10 +144,10 @@ fn ckbtc_config(env: TestEnv, token: TokenType) {
         .expect("failed to setup IC under test");
 }
 
-fn adapter_test_config(env: TestEnv, token: TokenType) {
-    let btc_node_ipv6 = setup_bitcoind_uvm(&env, token);
-    InternetComputer::new()
-        .with_bitcoind_addr(SocketAddr::new(IpAddr::V6(btc_node_ipv6), BITCOIN_CLI_PORT))
+fn adapter_test_config<Network: DaemonSetup>(env: TestEnv) {
+    let node_ipv6 = setup_bitcoind_uvm::<Network>(&env);
+    let socket_addr = SocketAddr::new(IpAddr::V6(node_ipv6), Network::P2P_PORT);
+    Network::internet_computer(socket_addr)
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(10))
@@ -164,7 +158,7 @@ fn adapter_test_config(env: TestEnv, token: TokenType) {
         .expect("failed to setup IC under test");
 }
 
-fn setup_bitcoind_uvm(env: &TestEnv, token: TokenType) -> Ipv6Addr {
+fn setup_bitcoind_uvm<Network: DaemonSetup>(env: &TestEnv) -> Ipv6Addr {
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
         .with_config_img(get_dependency_path(
             env::var("CKBTC_UVM_CONFIG_PATH").expect("CKBTC_UVM_CONFIG_PATH not set"),
@@ -176,10 +170,11 @@ fn setup_bitcoind_uvm(env: &TestEnv, token: TokenType) -> Ipv6Addr {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     let universal_vm = deployed_universal_vm.get_vm().unwrap();
     let btc_node_ipv6 = universal_vm.ipv6;
-    let rpc_port = token.rpc_port();
-    let config_name = token.config_name();
-    let image_name = token.image_name();
-    let config_mapping = token.config_mapping();
+    let rpc_port = Network::RPC_PORT;
+    let p2p_port = Network::P2P_PORT;
+    let config_name = Network::CONFIG_NAME;
+    let image_name = Network::IMAGE_NAME;
+    let config_mapping = Network::CONFIG_MAPPING;
 
     // Regtest bitcoin node listens on 18444
     // docker bitcoind image uses 8332 for the rpc server
@@ -223,7 +218,7 @@ END
 docker load -i /config/{image_name}.tar
 docker run  --name={image_name}-node -d \
   -e VIRTUAL_HOST=localhost -e VIRTUAL_PORT={rpc_port} -v {config_mapping} \
-  -p {BITCOIN_CLI_PORT}:{BITCOIN_CLI_PORT} -p {rpc_port}:{rpc_port} \
+  -p {p2p_port}:{p2p_port} -p {rpc_port}:{rpc_port} \
   {image_name}:image
 
 # docker load -i /config/httpbin.tar
@@ -236,9 +231,8 @@ docker run  --name={image_name}-node -d \
 }
 
 pub fn ckbtc_setup(env: TestEnv) {
-    let token = TokenType::Bitcoin;
     // Use the ckbtc integration setup.
-    ckbtc_config(env.clone(), token);
+    ckbtc_config::<BtcNetwork>(env.clone());
     check_nodes_health(&env);
     check_ecdsa_works(&env);
     install_nns_canisters_at_ids(&env);
@@ -246,13 +240,13 @@ pub fn ckbtc_setup(env: TestEnv) {
 
 pub fn btc_adapter_test_setup(env: TestEnv) {
     // Use the adapter test integration setup.
-    adapter_test_config(env.clone(), TokenType::Bitcoin);
+    adapter_test_config::<BtcNetwork>(env.clone());
     check_nodes_health(&env);
 }
 
 pub fn doge_adapter_test_setup(env: TestEnv) {
     // Use the adapter test integration setup.
-    adapter_test_config(env.clone(), TokenType::Dogecoin);
+    adapter_test_config::<DogeNetwork>(env.clone());
     check_nodes_health(&env);
 }
 
@@ -444,7 +438,7 @@ pub async fn install_btc_checker(
         BITCOIND_RPC_USER, BITCOIND_RPC_PASSWORD, btc_node_ipv6, HTTPS_PORT,
     );
     let init_args = CheckArg::InitArg(CheckerInitArg {
-        btc_network: BtcNetwork::Regtest { json_rpc_url },
+        btc_network: ic_btc_checker::BtcNetwork::Regtest { json_rpc_url },
         check_mode: CheckMode::Normal,
         num_subnet_nodes: 1,
     });

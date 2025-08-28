@@ -19,7 +19,7 @@ Runbook::
 
 end::catalog[] */
 
-use crate::ADDRESS_LENGTH;
+use crate::{DaemonSetup, ADDRESS_LENGTH};
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat};
 use canister_test::Canister;
@@ -421,11 +421,11 @@ pub async fn send_to_btc_address<T: RpcClientType>(
 pub fn get_btc_client(env: &TestEnv) -> RpcClient<BtcNetwork> {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     RpcClient::new(
-        bitcoin::Network::Regtest,
+        BtcNetwork::Regtest,
         &format!(
             "http://[{}]:{}",
             deployed_universal_vm.get_vm().unwrap().ipv6,
-            crate::TokenType::Bitcoin.rpc_port(),
+            BtcNetwork::RPC_PORT
         ),
         Auth::UserPass(
             crate::BITCOIND_RPC_USER.to_string(),
@@ -441,11 +441,11 @@ pub fn get_btc_client(env: &TestEnv) -> RpcClient<BtcNetwork> {
 pub fn get_doge_client(env: &TestEnv) -> RpcClient<DogeNetwork> {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     RpcClient::new(
-        bitcoin::dogecoin::Network::Regtest,
+        DogeNetwork::Regtest,
         &format!(
             "http://[{}]:{}",
             deployed_universal_vm.get_vm().unwrap().ipv6,
-            crate::TokenType::Dogecoin.rpc_port(),
+            DogeNetwork::RPC_PORT,
         ),
         Auth::UserPass(
             crate::BITCOIND_RPC_USER.to_string(),
