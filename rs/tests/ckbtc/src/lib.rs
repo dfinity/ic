@@ -3,6 +3,7 @@ use candid::{Encode, Principal};
 use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_btc_adapter_test_utils::rpc_client::RpcClientType;
 use ic_btc_checker::{
     CheckArg, CheckMode, InitArg as CheckerInitArg, UpgradeArg as CheckerUpgradeArg,
 };
@@ -77,7 +78,7 @@ const BITCOIND_RPC_AUTH : &str = "btc-dev-preview:8555f1162d473af8e1f744aa056fd7
 
 const HTTPS_PORT: u16 = 20443;
 
-pub trait DaemonSetup: Copy {
+pub trait IcRpcClientType: RpcClientType {
     const IMAGE_NAME: &str;
     const CONFIG_NAME: &str;
     const CONFIG_MAPPING: &str;
@@ -86,7 +87,7 @@ pub trait DaemonSetup: Copy {
     fn internet_computer(socket_addr: SocketAddr) -> InternetComputer;
 }
 
-impl DaemonSetup for BtcNetwork {
+impl IcRpcClientType for BtcNetwork {
     const IMAGE_NAME: &str = "bitcoind";
     const CONFIG_NAME: &str = "bitcoin.conf";
     const CONFIG_MAPPING: &str = "/tmp/bitcoin.conf:/bitcoin/.bitcoin/bitcoin.conf";
@@ -97,7 +98,7 @@ impl DaemonSetup for BtcNetwork {
     }
 }
 
-impl DaemonSetup for DogeNetwork {
+impl IcRpcClientType for DogeNetwork {
     const IMAGE_NAME: &str = "dogecoind";
     const CONFIG_NAME: &str = "dogecoin.conf";
     const CONFIG_MAPPING: &str = "/tmp/dogecoin.conf:/node/dogecoin-core/configs/config.conf";
@@ -108,7 +109,7 @@ impl DaemonSetup for DogeNetwork {
     }
 }
 
-fn ckbtc_config<Network: DaemonSetup>(env: TestEnv) {
+fn ckbtc_config<Network: IcRpcClientType>(env: TestEnv) {
     let node_ipv6 = setup_bitcoind_uvm::<Network>(&env);
     let socket_addr = SocketAddr::new(IpAddr::V6(node_ipv6), Network::P2P_PORT);
     Network::internet_computer(socket_addr)
@@ -144,7 +145,7 @@ fn ckbtc_config<Network: DaemonSetup>(env: TestEnv) {
         .expect("failed to setup IC under test");
 }
 
-fn adapter_test_config<Network: DaemonSetup>(env: TestEnv) {
+fn adapter_test_config<Network: IcRpcClientType>(env: TestEnv) {
     let node_ipv6 = setup_bitcoind_uvm::<Network>(&env);
     let socket_addr = SocketAddr::new(IpAddr::V6(node_ipv6), Network::P2P_PORT);
     Network::internet_computer(socket_addr)
@@ -158,7 +159,7 @@ fn adapter_test_config<Network: DaemonSetup>(env: TestEnv) {
         .expect("failed to setup IC under test");
 }
 
-fn setup_bitcoind_uvm<Network: DaemonSetup>(env: &TestEnv) -> Ipv6Addr {
+fn setup_bitcoind_uvm<Network: IcRpcClientType>(env: &TestEnv) -> Ipv6Addr {
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
         .with_config_img(get_dependency_path(
             env::var("CKBTC_UVM_CONFIG_PATH").expect("CKBTC_UVM_CONFIG_PATH not set"),
@@ -238,15 +239,9 @@ pub fn ckbtc_setup(env: TestEnv) {
     install_nns_canisters_at_ids(&env);
 }
 
-pub fn btc_adapter_test_setup(env: TestEnv) {
+pub fn adapter_test_setup<T: IcRpcClientType>(env: TestEnv) {
     // Use the adapter test integration setup.
-    adapter_test_config::<BtcNetwork>(env.clone());
-    check_nodes_health(&env);
-}
-
-pub fn doge_adapter_test_setup(env: TestEnv) {
-    // Use the adapter test integration setup.
-    adapter_test_config::<DogeNetwork>(env.clone());
+    adapter_test_config::<T>(env.clone());
     check_nodes_health(&env);
 }
 

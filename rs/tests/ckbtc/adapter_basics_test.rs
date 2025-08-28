@@ -1,5 +1,5 @@
 use anyhow::Result;
-use bitcoin::Amount;
+use bitcoin::{dogecoin::Network as DogeNetwork, Amount, Network as BtcNetwork};
 use ic_btc_adapter_test_utils::rpc_client::CreateRawTransactionInput;
 use ic_system_test_driver::{
     driver::{
@@ -12,19 +12,20 @@ use ic_system_test_driver::{
 };
 use ic_tests_ckbtc::{
     adapter::{fund_with_btc, AdapterProxy},
-    btc_adapter_test_setup, subnet_sys,
-    utils::get_btc_client,
+    adapter_test_setup, subnet_sys,
+    utils::get_rpc_client,
+    IcRpcClientType,
 };
 use slog::info;
 use std::collections::HashMap;
 
-fn test_received_blocks(env: TestEnv) {
+fn test_received_blocks<T: IcRpcClientType>(env: TestEnv) {
     let log = env.logger();
     let subnet_sys = subnet_sys(&env);
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
 
     // Setup client
-    let client = get_btc_client(&env);
+    let client = get_rpc_client::<T>(&env);
     let start_height = client.get_blockchain_info().unwrap().blocks;
     let anchor = client.get_block_hash(start_height).unwrap()[..].to_vec();
     info!(log, "Set up bitcoind wallet");
@@ -53,12 +54,12 @@ fn test_received_blocks(env: TestEnv) {
     }
 }
 
-fn test_receives_new_3rd_party_txs(env: TestEnv) {
+fn test_receives_new_3rd_party_txs<T: IcRpcClientType>(env: TestEnv) {
     let log = env.logger();
     let subnet_sys = subnet_sys(&env);
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
 
-    let client = get_btc_client(&env);
+    let client = get_rpc_client::<T>(&env);
     let start_height = client.get_blockchain_info().unwrap().blocks;
     let anchor = client.get_block_hash(start_height).unwrap()[..].to_vec();
     info!(log, "Set up bitcoind wallet");
@@ -118,13 +119,13 @@ fn test_receives_new_3rd_party_txs(env: TestEnv) {
         .any(|tx| tx.compute_txid() == txid));
 }
 
-fn test_send_tx(env: TestEnv) {
+fn test_send_tx<T: IcRpcClientType>(env: TestEnv) {
     let log = env.logger();
     let subnet_sys = subnet_sys(&env);
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
 
     info!(log, "Set up bitcoind wallet");
-    let client = get_btc_client(&env);
+    let client = get_rpc_client::<T>(&env);
     let alice_client = client.with_account("alice").unwrap();
     let bob_client = client.with_account("bob").unwrap();
     let alice_address = alice_client.get_address().unwrap();
@@ -180,12 +181,17 @@ fn test_send_tx(env: TestEnv) {
     );
 }
 
-fn main() -> Result<()> {
+fn test<T: 'static + IcRpcClientType>() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(btc_adapter_test_setup)
-        .add_test(systest!(test_received_blocks))
-        .add_test(systest!(test_receives_new_3rd_party_txs))
-        .add_test(systest!(test_send_tx))
-        .execute_from_args()?;
+        .with_setup(adapter_test_setup::<T>)
+        .add_test(systest!(test_received_blocks::<T>))
+        .add_test(systest!(test_receives_new_3rd_party_txs::<T>))
+        .add_test(systest!(test_send_tx::<T>))
+        .execute_from_args()
+}
+
+fn main() -> Result<()> {
+    test::<BtcNetwork>()?;
+    test::<DogeNetwork>()?;
     Ok(())
 }

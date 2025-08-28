@@ -19,12 +19,12 @@ Runbook::
 
 end::catalog[] */
 
-use crate::{DaemonSetup, ADDRESS_LENGTH};
+use crate::{IcRpcClientType, ADDRESS_LENGTH};
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat};
 use canister_test::Canister;
 use ic_btc_adapter_test_utils::{
-    bitcoin::{dogecoin::Network as DogeNetwork, Address, Amount, Network as BtcNetwork, Txid},
+    bitcoin::{Address, Amount, Txid},
     rpc_client::{Auth, RpcClient, RpcClientType},
 };
 use ic_ckbtc_agent::CkBtcMinterAgent;
@@ -417,35 +417,15 @@ pub async fn send_to_btc_address<T: RpcClientType>(
     }
 }
 
-/// Create a client for bitcoind.
-pub fn get_btc_client(env: &TestEnv) -> RpcClient<BtcNetwork> {
+/// Create a client for bitcoind or dogecoind.
+pub fn get_rpc_client<T: IcRpcClientType>(env: &TestEnv) -> RpcClient<T> {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     RpcClient::new(
-        BtcNetwork::Regtest,
+        T::REGTEST,
         &format!(
             "http://[{}]:{}",
             deployed_universal_vm.get_vm().unwrap().ipv6,
-            BtcNetwork::RPC_PORT
-        ),
-        Auth::UserPass(
-            crate::BITCOIND_RPC_USER.to_string(),
-            crate::BITCOIND_RPC_PASSWORD.to_string(),
-        ),
-    )
-    .unwrap()
-    .ensure_wallet()
-    .unwrap()
-}
-
-/// Create a client for dogecoind.
-pub fn get_doge_client(env: &TestEnv) -> RpcClient<DogeNetwork> {
-    let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
-    RpcClient::new(
-        DogeNetwork::Regtest,
-        &format!(
-            "http://[{}]:{}",
-            deployed_universal_vm.get_vm().unwrap().ipv6,
-            DogeNetwork::RPC_PORT,
+            T::RPC_PORT
         ),
         Auth::UserPass(
             crate::BITCOIND_RPC_USER.to_string(),
