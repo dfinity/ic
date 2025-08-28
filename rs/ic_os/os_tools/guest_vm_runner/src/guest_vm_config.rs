@@ -65,15 +65,16 @@ fn make_bootstrap_options(
     };
 
     #[cfg(feature = "dev")]
-    if hostos_config.icos_settings.use_ssh_authorized_keys {
-        bootstrap_options.accounts_ssh_authorized_keys =
-            Some(PathBuf::from("/boot/config/ssh_authorized_keys"));
-    }
+    {
+        if hostos_config.icos_settings.use_ssh_authorized_keys {
+            bootstrap_options.accounts_ssh_authorized_keys =
+                Some(PathBuf::from("/boot/config/ssh_authorized_keys"));
+        }
 
-    // Only set NNS public key override if the file exists
-    let nns_key_override_path = PathBuf::from("/boot/config/nns_public_key_override.pem");
-    if nns_key_override_path.exists() {
-        bootstrap_options.nns_public_key_override = Some(nns_key_override_path);
+        let nns_key_override_path = PathBuf::from("/boot/config/nns_public_key_override.pem");
+        if nns_key_override_path.exists() {
+            bootstrap_options.nns_public_key_override = Some(nns_key_override_path);
+        }
     }
 
     if hostos_config.icos_settings.use_node_operator_private_key {
