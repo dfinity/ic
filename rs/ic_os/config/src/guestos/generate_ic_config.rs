@@ -3,6 +3,7 @@ use config_types::{GuestOSConfig, Ipv6Config};
 use get_if_addrs::get_if_addrs;
 use serde_json;
 use std::fs::{read_to_string, write};
+use std::net::Ipv6Addr;
 use std::path::Path;
 use std::process::Command;
 
@@ -236,7 +237,7 @@ fn get_router_advertisement_ipv6_address() -> Result<String> {
 
     for attempt in 1..=MAX_RETRIES {
         match get_router_advertisement_ipv6_address_helper() {
-            Ok(ipv6_address) => return Ok(ipv6_address),
+            Ok(ipv6_addr) => return Ok(ipv6_addr.to_string()),
             Err(e) => {
                 if attempt < MAX_RETRIES {
                     eprintln!(
@@ -255,9 +256,9 @@ fn get_router_advertisement_ipv6_address() -> Result<String> {
     anyhow::bail!("Cannot determine an IPv6 address, aborting");
 }
 
-fn get_router_advertisement_ipv6_address_helper() -> Result<String> {
+fn get_router_advertisement_ipv6_address_helper() -> Result<Ipv6Addr> {
     let ifaces = get_if_addrs().context("Failed to get network interfaces")?;
-    let ipv6_address = ifaces
+    let ipv6_addr = ifaces
         .iter()
         .find_map(|iface| {
             // Filter out virtual interfaces
@@ -266,20 +267,13 @@ fn get_router_advertisement_ipv6_address_helper() -> Result<String> {
             }
 
             match &iface.addr {
-                get_if_addrs::IfAddr::V6(addr) => {
-                    let ipv6_str = addr.ip.to_string();
-                    if !ipv6_str.is_empty() {
-                        Some(ipv6_str)
-                    } else {
-                        None
-                    }
-                }
+                get_if_addrs::IfAddr::V6(addr) => Some(addr.ip),
                 _ => None,
             }
         })
         .context("No suitable network interface with IPv6 address found")?;
 
-    Ok(ipv6_address)
+    Ok(ipv6_addr)
 }
 
 fn is_virtual_interface(interface_name: &str) -> bool {
