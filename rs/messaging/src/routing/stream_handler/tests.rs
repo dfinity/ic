@@ -2627,8 +2627,8 @@ fn legacy_induct_stream_slices_partial_success() {
 
 /// Tests that a message addressed to a canister that is not currently hosted by
 /// this subnet; and is not being migrated on a path containing both this subnet
-/// and its known host; is dropped, incrementing the respective critical error
-/// count.
+/// and its known host; is rejected as is coming either due to canister migration
+/// or from a malicious subnet.
 #[test]
 fn induct_stream_slices_receiver_subnet_mismatch() {
     with_test_setup(
@@ -2672,7 +2672,8 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
             // The expected state should be unchanged...
             let mut expected_state = state.clone();
 
-            // ...except that the stream should have `signals_end` incremented for the 2 dropped messages.
+            // ...except that the stream should have `signals_end` incremented for the 2 messages and
+            // reject signals.
             let outgoing_stream = state.get_stream(&REMOTE_SUBNET);
             let expected_stream = stream_from_config(StreamConfig {
                 begin: 21,
