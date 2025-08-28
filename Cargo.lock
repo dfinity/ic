@@ -10007,6 +10007,7 @@ dependencies = [
  "ic-icrc1-test-utils",
  "ic-icrc1-tokens-u256",
  "ic-icrc1-tokens-u64",
+ "ic-icrc3-test-ledger",
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-suite-state-machine-tests",
