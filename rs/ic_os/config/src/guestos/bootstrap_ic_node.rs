@@ -34,12 +34,75 @@ fn validate_bootstrap_contents(extracted_dir: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Copy bootstrap files from extracted directory to their destinations
+fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &Path) -> Result<()> {
+    let ic_crypto_src = extracted_dir.join("ic_crypto");
+    let ic_crypto_dst = state_root.join("crypto");
+    if ic_crypto_src.exists() {
+        println!("Installing initial crypto material");
+        copy_directory_recursive(&ic_crypto_src, &ic_crypto_dst)?;
+    }
+
+    let ic_state_src = extracted_dir.join("ic_state");
+    let ic_state_dst = state_root.join("data/ic_state");
+    if ic_state_src.exists() {
+        println!("Installing initial state");
+        copy_directory_recursive(&ic_state_src, &ic_state_dst)?;
+    }
+
+    let ic_registry_src = extracted_dir.join("ic_registry_local_store");
+    let ic_registry_dst = state_root.join("data/ic_registry_local_store");
+    if ic_registry_src.exists() {
+        println!("Setting up initial ic_registry_local_store");
+        copy_directory_recursive(&ic_registry_src, &ic_registry_dst)?;
+    }
+
+    let node_op_key_src = extracted_dir.join("node_operator_private_key.pem");
+    let node_op_key_dst = state_root.join("data/node_operator_private_key.pem");
+    if node_op_key_src.exists() {
+        println!("Setting up initial node_operator_private_key.pem");
+        fs::copy(&node_op_key_src, &node_op_key_dst)?;
+        // Try to set permissions, but don't fail if we can't in test environment
+        let _ = fs::set_permissions(&node_op_key_dst, fs::Permissions::from_mode(0o400));
+    }
+
+    // set up initial ssh authorized keys
+    let ssh_keys_src = extracted_dir.join("accounts_ssh_authorized_keys");
+    let ssh_keys_dst = config_root.join("accounts_ssh_authorized_keys");
+    if ssh_keys_src.exists() {
+        println!("Setting up accounts_ssh_authorized_keys");
+        copy_directory_recursive(&ssh_keys_src, &ssh_keys_dst)?;
+    }
+
+    // TODO: remove nns_public_key.pem config after changes rolled out to all nodes
+    // (to allow tests that use mainnet images to continue working)
+    let nns_key_src = extracted_dir.join("nns_public_key.pem");
+    let nns_key_dst = state_root.join("data/nns_public_key.pem");
+    if nns_key_src.exists() {
+        println!("Setting up initial nns_public_key.pem");
+        fs::copy(&nns_key_src, &nns_key_dst)?;
+        // Try to set permissions, but don't fail if we can't in test environment
+        let _ = fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444));
+    }
+
+    #[cfg(feature = "dev")]
+    {
+        let nns_key_override_src = extracted_dir.join("nns_public_key_override.pem");
+        if nns_key_override_src.exists() {
+            println!(
+                "Overriding nns_public_key.pem with nns_public_key_override.pem from injected config"
+            );
+            fs::copy(&nns_key_override_src, &nns_key_dst)?;
+            // Try to set permissions, but don't fail if we can't in test environment
+            let _ = fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444));
+        }
+    }
+
+    Ok(())
+}
+
 /// Process the bootstrap package to populate SSH keys and injected data
-pub fn process_bootstrap(
-    bootstrap_tar: &Path,
-    config_root: &Path,
-    state_root: &Path,
-) -> Result<()> {
+fn process_bootstrap(bootstrap_tar: &Path, config_root: &Path, state_root: &Path) -> Result<()> {
     let tmpdir = TempDir::new().context("Failed to create temporary directory")?;
 
     let status = Command::new("tar")
@@ -56,67 +119,8 @@ pub fn process_bootstrap(
 
     validate_bootstrap_contents(tmpdir.path()).context("Bootstrap validation failed")?;
 
-    let ic_crypto_src = tmpdir.path().join("ic_crypto");
-    let ic_crypto_dst = state_root.join("crypto");
-    if ic_crypto_src.exists() {
-        println!("Installing initial crypto material");
-        copy_directory_recursive(&ic_crypto_src, &ic_crypto_dst)?;
-    }
-
-    let ic_state_src = tmpdir.path().join("ic_state");
-    let ic_state_dst = state_root.join("data/ic_state");
-    if ic_state_src.exists() {
-        println!("Installing initial state");
-        copy_directory_recursive(&ic_state_src, &ic_state_dst)?;
-    }
-
-    let ic_registry_src = tmpdir.path().join("ic_registry_local_store");
-    let ic_registry_dst = state_root.join("data/ic_registry_local_store");
-    if ic_registry_src.exists() {
-        println!("Setting up initial ic_registry_local_store");
-        copy_directory_recursive(&ic_registry_src, &ic_registry_dst)?;
-    }
-
-    let node_op_key_src = tmpdir.path().join("node_operator_private_key.pem");
-    let node_op_key_dst = state_root.join("data/node_operator_private_key.pem");
-    if node_op_key_src.exists() {
-        println!("Setting up initial node_operator_private_key.pem");
-        fs::copy(&node_op_key_src, &node_op_key_dst)?;
-        // Try to set permissions, but don't fail if we can't in test environment
-        let _ = fs::set_permissions(&node_op_key_dst, fs::Permissions::from_mode(0o400));
-    }
-
-    // set up initial ssh authorized keys
-    let ssh_keys_src = tmpdir.path().join("accounts_ssh_authorized_keys");
-    let ssh_keys_dst = config_root.join("accounts_ssh_authorized_keys");
-    if ssh_keys_src.exists() {
-        println!("Setting up accounts_ssh_authorized_keys");
-        copy_directory_recursive(&ssh_keys_src, &ssh_keys_dst)?;
-    }
-
-    // TODO: remove nns_public_key.pem config after changes rolled out to all nodes
-    // (to allow tests that use mainnet images to continue working)
-    let nns_key_src = tmpdir.path().join("nns_public_key.pem");
-    let nns_key_dst = state_root.join("data/nns_public_key.pem");
-    if nns_key_src.exists() {
-        println!("Setting up initial nns_public_key.pem");
-        fs::copy(&nns_key_src, &nns_key_dst)?;
-        // Try to set permissions, but don't fail if we can't in test environment
-        let _ = fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444));
-    }
-
-    #[cfg(feature = "dev")]
-    {
-        let nns_key_override_src = tmpdir.path().join("nns_public_key_override.pem");
-        if nns_key_override_src.exists() {
-            println!(
-                "Overriding nns_public_key.pem with nns_public_key_override.pem from injected config"
-            );
-            fs::copy(&nns_key_override_src, &nns_key_dst)?;
-            // Try to set permissions, but don't fail if we can't in test environment
-            let _ = fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444));
-        }
-    }
+    // Copy all bootstrap files
+    copy_bootstrap_files(tmpdir.path(), config_root, state_root)?;
 
     // Fix up permissions. Ideally this is specific to only what is copied. If
     // we do make this change, we need to make sure `data` itself has the
