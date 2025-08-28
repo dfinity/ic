@@ -1,10 +1,10 @@
 use crate::rewards_calculator_results::{
-    BaseRewards, DailyBaseRewardsType3, DailyResults, DayUtc, NodeMetricsDaily,
-    NodeProviderRewards, NodeResults, NodeStatus, Percent, RewardCalculatorError,
-    RewardsCalculatorResults, XDRPermyriad,
+    BaseRewards, DailyBaseRewardsType3, DailyResults, NodeMetricsDaily, NodeProviderRewards,
+    NodeResults, NodeStatus, Percent, RewardCalculatorError, RewardsCalculatorResults,
+    XDRPermyriad,
 };
 use crate::types::{
-    NodeMetricsDailyRaw, Region, RewardPeriod, RewardableNode, SubnetMetricsDailyKey,
+    DayUtc, NodeMetricsDailyRaw, Region, RewardPeriod, RewardableNode, SubnetMetricsDailyKey,
 };
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
@@ -15,6 +15,7 @@ use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::cmp::max;
 use std::collections::{BTreeMap, HashMap, HashSet};
+
 pub mod test_utils;
 
 pub struct RewardsCalculatorInput {
@@ -115,6 +116,8 @@ pub fn calculate_rewards(
     }
 
     Ok(RewardsCalculatorResults {
+        start_day: input.reward_period.from,
+        end_day: input.reward_period.to,
         subnets_fr,
         provider_results: results_per_provider,
     })
