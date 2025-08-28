@@ -5,27 +5,23 @@ use ic_types::PrincipalId;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 
-use crate::registry::Registry;
-
-/// Feature flag used to enable/disable the swapping feature on the whole network.
-const ENABLED: bool = false;
+use crate::{flags::is_node_swapping_enabled, registry::Registry};
 
 impl Registry {
     /// Called by the node operators in order to rotate their nodes without the need for governance.
     pub fn do_swap_node_in_subnet_directly(&mut self, payload: SwapNodeInSubnetDirectlyPayload) {
-        self.swap_nodes_inner(ENABLED, payload, dfn_core::api::caller())
+        self.swap_nodes_inner(payload, dfn_core::api::caller())
             .unwrap_or_else(|e| panic!("{e}"));
     }
 
     /// Top level function for the swapping feature which has all inputs.
     fn swap_nodes_inner(
         &mut self,
-        enabled: bool,
         payload: SwapNodeInSubnetDirectlyPayload,
         _caller: PrincipalId,
     ) -> Result<(), SwapError> {
         // Check if the feature is enabled on the network.
-        if !enabled {
+        if !is_node_swapping_enabled() {
             return Err(SwapError::FeatureDisabled);
         }
 
@@ -98,6 +94,7 @@ mod tests {
     use ic_types::PrincipalId;
 
     use crate::{
+        flags::{temporarily_disable_node_swapping, temporarily_enable_node_swapping},
         mutations::do_swap_node_in_subnet_directly::{SwapError, SwapNodeInSubnetDirectlyPayload},
         registry::Registry,
     };
@@ -136,22 +133,47 @@ mod tests {
         ]
     }
 
-    #[test]
-    fn valid_payload() {
-        let payload = SwapNodeInSubnetDirectlyPayload {
+    fn valid_payload() -> SwapNodeInSubnetDirectlyPayload {
+        SwapNodeInSubnetDirectlyPayload {
             new_node_id: Some(PrincipalId::new_node_test_id(1)),
             old_node_id: Some(PrincipalId::new_node_test_id(2)),
-        };
+        }
+    }
 
-        assert!(payload.validate().is_ok())
+    #[test]
+    fn feature_flag_check_works() {
+        let mut registry = Registry::new();
+
+        let _temp = temporarily_disable_node_swapping();
+
+        let payload = valid_payload();
+
+        assert!(registry
+            .swap_nodes_inner(payload, PrincipalId::new_user_test_id(1))
+            .is_err_and(|err| err == SwapError::FeatureDisabled))
+    }
+
+    #[test]
+    fn valid_payload_test() {
+        let mut registry = Registry::new();
+
+        let _temp = temporarily_enable_node_swapping();
+
+        let payload = valid_payload();
+
+        assert!(registry
+            .swap_nodes_inner(payload, PrincipalId::new_user_test_id(1))
+            .is_ok())
     }
 
     #[test]
     fn invalid_payloads() {
         let mut registry = Registry::new();
 
+        let _temp = temporarily_enable_node_swapping();
+
         for (payload, expected_err) in invalid_payloads_with_expected_errors() {
-            let output = registry.swap_nodes_inner(true, payload, PrincipalId::new_user_test_id(1));
+            let output = registry.swap_nodes_inner(payload, PrincipalId::new_user_test_id(1));
 
             let expected: Result<(), SwapError> = Err(expected_err);
             assert_eq!(
