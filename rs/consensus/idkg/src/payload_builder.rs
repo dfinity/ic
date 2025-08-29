@@ -1166,7 +1166,7 @@ mod tests {
         valid_key_id: &IDkgMasterPublicKeyId,
         store_pre_signatures_in_state: FlagStatus,
     ) {
-        let invalid_key_id: IDkgMasterPublicKeyId = key_id_with_name(&valid_key_id, "invalid")
+        let invalid_key_id: IDkgMasterPublicKeyId = key_id_with_name(valid_key_id, "invalid")
             .try_into()
             .unwrap();
         let (mut idkg_payload, _env) = set_up_idkg_payload_with_keys(vec![valid_key_id.clone()]);
