@@ -442,7 +442,7 @@ def system_test(
         deps = deps + UNIVERSAL_VM_RUNTIME_DEPS
 
     run_system_test(
-        name = name,
+        name = test_name,
         src = test_driver_target,
         runtime_deps = deps,
         env_deps = _env_deps,
@@ -459,7 +459,7 @@ def system_test(
     )
 
     env = env | {
-        "COLOCATED_TEST": name,
+        "COLOCATED_TEST": test_name,
         "COLOCATED_TEST_DRIVER_VM_REQUIRED_HOST_FEATURES": json.encode(colocated_test_driver_vm_required_host_features),
         "COLOCATED_TEST_DRIVER_VM_RESOURCES": json.encode(colocated_test_driver_vm_resources),
     }
@@ -478,7 +478,7 @@ def system_test(
             deps.append(dep)
 
     run_system_test(
-        name = name + "_colocate",
+        name = test_name + "_colocate",
         src = "//rs/tests/idx:colocate_test_bin",
         colocated_test_bin = test_driver_target,
         runtime_deps = deps + [
