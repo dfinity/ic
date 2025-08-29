@@ -169,7 +169,7 @@ impl<'a, T: IcRpcClientType> AdapterProxy<'a, T> {
 
             let new_headers = new_blocks
                 .iter()
-                .map(|block| T::block_hash(&block)[..].to_vec())
+                .map(|block| T::block_hash(block)[..].to_vec())
                 .collect::<Vec<_>>();
 
             headers.extend(new_headers);
