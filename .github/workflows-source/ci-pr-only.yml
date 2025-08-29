@@ -117,7 +117,7 @@ jobs:
   generate-config-fixtures:
     name: Generate Config Fixtures
     <<: *dind-small-setup
-    timeout-minutes: 5
+    timeout-minutes: 10
     if: ${{ github.event_name != 'merge_group' }}
     env:
       CI_EVENT_NAME: ${{ github.event_name }}

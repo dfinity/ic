@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
 use ic_crypto_prng::Csprng;
 use ic_interfaces::execution_environment::RegistryExecutionSettings;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{error, warn, ReplicaLogger};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     EcdsaMatchedPreSignature, PreSignatureStash, SchnorrMatchedPreSignature,
     SignWithThresholdContext, ThresholdArguments,
@@ -71,13 +71,39 @@ pub(crate) fn update_signature_request_contexts(
                 .with_label_values(&[&key_id.to_string()])
                 .observe(delivered.pre_signatures.len() as f64);
 
-            pre_signature_stashes
-                .entry(key_id)
+            let stash = pre_signature_stashes
+                .entry(key_id.clone())
                 .and_modify(|stash| stash.pre_signatures.append(&mut delivered.pre_signatures))
                 .or_insert_with(|| PreSignatureStash {
                     key_transcript: Arc::new(delivered.key_transcript),
                     pre_signatures: delivered.pre_signatures,
                 });
+
+            // In case the maximum stash size was reduced via proposal (or due to a bug in consensus),
+            // the current size of the stash may exceed the configured maximum.
+            // In that case, log a warning and trim the stash back to the maximum size.
+            let max_stash_size = registry_settings
+                .chain_key_settings
+                .get(&key_id)
+                .map(|setting| setting.pre_signatures_to_create_in_advance)
+                .unwrap_or_default() as usize;
+            let exceeding = stash.pre_signatures.len().saturating_sub(max_stash_size);
+            if exceeding > 0 {
+                warn!(
+                    every_n_seconds => 10,
+                    logger,
+                    "Pre-signature stash of key {key_id} exceeded configured size of {max_stash_size}"
+                );
+                metrics
+                    .exceeding_pre_signatures
+                    .with_label_values(&[&key_id.to_string()])
+                    .inc_by(exceeding as u64);
+                // Trim the stash by splitting off the highest exceeding entries
+                let Some(split_key) = stash.pre_signatures.keys().rev().nth(exceeding - 1) else {
+                    continue;
+                };
+                stash.pre_signatures.split_off(&split_key.clone());
+            }
         }
 
         match_contexts_with_stashed_pre_signatures(
@@ -252,6 +278,7 @@ mod tests {
 
     use super::*;
     use ic_config::subnet_config::SchedulerConfig;
+    use ic_interfaces::execution_environment::ChainKeySettings;
     use ic_logger::no_op_logger;
     use ic_management_canister_types_private::{
         EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
@@ -596,7 +623,20 @@ mod tests {
         delivered_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, AvailablePreSignatures>,
         pre_signature_stashes: &mut BTreeMap<IDkgMasterPublicKeyId, PreSignatureStash>,
         store_pre_signatures_in_state: FlagStatus,
+        max_stash_size: u32,
     ) {
+        let chain_key_settings = delivered_pre_signatures
+            .keys()
+            .chain(pre_signature_stashes.keys())
+            .map(|key_id| {
+                let settings = ChainKeySettings {
+                    max_queue_size: 20,
+                    pre_signatures_to_create_in_advance: max_stash_size,
+                };
+                (key_id.inner().clone(), settings)
+            })
+            .collect();
+
         // Call the function under test with the given arguments and some dummy parameters.
         update_signature_request_contexts(
             ExecutionRound::new(10),
@@ -609,7 +649,7 @@ mod tests {
             ),
             &RegistryExecutionSettings {
                 provisional_whitelist: ic_registry_provisional_whitelist::ProvisionalWhitelist::All,
-                chain_key_settings: BTreeMap::new(),
+                chain_key_settings,
                 max_number_of_canisters: 0,
                 subnet_size: 0,
                 node_ids: BTreeSet::new(),
@@ -636,6 +676,7 @@ mod tests {
             delivered_pre_signatures,
             &mut pre_signature_stashes,
             FlagStatus::Disabled,
+            20,
         );
         assert!(
             pre_signature_stashes.is_empty(),
@@ -665,6 +706,7 @@ mod tests {
             delivered_pre_signatures,
             &mut pre_signature_stashes,
             FlagStatus::Enabled,
+            20,
         );
         let pre_sigs_after = pre_signature_stashes[&key_id]
             .pre_signatures
@@ -691,6 +733,7 @@ mod tests {
             BTreeMap::new(),
             &mut pre_signature_stashes,
             FlagStatus::Enabled,
+            20,
         );
         assert!(pre_signature_stashes.is_empty());
     }
@@ -717,6 +760,7 @@ mod tests {
             delivered_pre_signatures,
             &mut pre_signature_stashes,
             FlagStatus::Enabled,
+            20,
         );
         let pre_sigs_after = pre_signature_stashes[&key_id]
             .pre_signatures
@@ -728,6 +772,65 @@ mod tests {
             pre_sigs_after,
             "Pre-signature stashes should contain both the initial and the delivered pre-signatures"
         );
+    }
+
+    #[test]
+    fn test_exceeding_pre_signatures_are_purged() {
+        let key_id = ecdsa_key_id(1);
+        let pre_sigs_before = vec![1, 2, 3];
+        let pre_sigs_delivered = vec![4, 5, 6];
+        let mut pre_signature_stashes = BTreeMap::new();
+        pre_signature_stashes.insert(
+            key_id.clone(),
+            setup_pre_signature_stash(&key_id, pre_sigs_before),
+        );
+        let mut delivered_pre_signatures = BTreeMap::new();
+        let mut delivered = setup_pre_signatures(&key_id, pre_sigs_delivered);
+        // The delivered key transcript should be the same as the one in the stash.
+        delivered.key_transcript = pre_signature_stashes[&key_id]
+            .key_transcript
+            .as_ref()
+            .clone();
+        delivered_pre_signatures.insert(key_id.clone(), delivered);
+        pre_signature_delivery_test(
+            delivered_pre_signatures.clone(),
+            &mut pre_signature_stashes,
+            FlagStatus::Enabled,
+            4, // Max stash size is lower than final stash size
+        );
+        let pre_sigs_after = pre_signature_stashes[&key_id]
+            .pre_signatures
+            .keys()
+            .map(|pid| pid.id())
+            .collect::<Vec<_>>();
+        assert_eq!(vec![1, 2, 3, 4], pre_sigs_after);
+
+        // Don't deliver more pre-signatures, but reduce max stash size even further
+        delivered_pre_signatures
+            .get_mut(&key_id)
+            .unwrap()
+            .pre_signatures
+            .clear();
+        pre_signature_delivery_test(
+            delivered_pre_signatures.clone(),
+            &mut pre_signature_stashes,
+            FlagStatus::Enabled,
+            2, // Max stash size is lower than current stash size
+        );
+        let pre_sigs_after = pre_signature_stashes[&key_id]
+            .pre_signatures
+            .keys()
+            .map(|pid| pid.id())
+            .collect::<Vec<_>>();
+        assert_eq!(vec![1, 2], pre_sigs_after);
+
+        pre_signature_delivery_test(
+            delivered_pre_signatures,
+            &mut pre_signature_stashes,
+            FlagStatus::Enabled,
+            0, // Max stash size is lower than current stash size
+        );
+        assert!(pre_signature_stashes[&key_id].pre_signatures.is_empty());
     }
 
     #[test]
