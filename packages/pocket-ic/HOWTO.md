@@ -654,14 +654,13 @@ we refer to the basic bitcoin example canister in DFINITY's [examples](https://g
 
 ## VetKd
 
-To test the VetKd feature, you need to create a PocketIC instance with II or fiduciary subnet and enable nonmainnet features:
+To test the VetKd feature, you need to create a PocketIC instance with II or fiduciary subnet:
 
 ```rust
     // We create a PocketIC instance consisting of the II and one application subnet.
     let pic = PocketIcBuilder::new()
         .with_ii_subnet()               // this subnet has threshold keys
         .with_application_subnet()      // we deploy the dapp canister here
-        .with_nonmainnet_features(true) // the VetKd feature is not available on mainnet yet
         .build();
 ```
 
@@ -742,13 +741,17 @@ and a `Duration` can be added to a PocketIC time.
 ## Nonmainnet features
 
 To test a new feature that has not (yet) been rolled out to the ICP mainnet,
-the `PocketIcBuilder::with_nonmainnet_features` pattern should be used when creating a new PocketIC instance.
+use `PocketIcBuilder::with_nonmainnet_features` when creating a new PocketIC instance.
 
 ```rust
-    // We create a PocketIC instance with features enabled that are not yet available on the ICP mainnet.
+    // We create a PocketIC instance with beta features enabled that are not yet available on the ICP mainnet.
+    let nonmainnet_features = NonmainnetFeatures {
+        enable_beta_features: Some(EmptyConfig {}),
+        ..Default::default()
+    };
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
-        .with_nonmainnet_features(true)
+        .with_nonmainnet_features(nonmainnet_features)
         .build();
 ```
 

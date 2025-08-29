@@ -305,7 +305,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.6.3",
             ),
             "bitcoin": crate.spec(
-                version = "^0.32.99",
+                git = "https://github.com/dfinity/rust-dogecoin",
+                rev = "b5125f00d9d1e6c553d83ee54ee9d6203da8e0db",
                 features = [
                     "default",
                     "rand",
@@ -320,12 +321,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                     "rand",
                     "use-serde",
                 ],
-            ),
-            "bitcoincore-rpc": crate.spec(
-                version = "^0.19.0",
-            ),
-            "bitcoind": crate.spec(
-                version = "^0.32.0",
             ),
             "bitflags": crate.spec(
                 version = "^1.2.1",
@@ -721,6 +716,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "ic-stable-structures": crate.spec(
                 version = "^0.6.8",
             ),
+            "ic-stable-structures-next": crate.spec(
+                package = "ic-stable-structures",
+                version = "^0.7.0",
+            ),
             "icrc1-test-env": crate.spec(
                 git = "https://github.com/dfinity/ICRC-1",
                 rev = ICRC_1_REV,
@@ -793,6 +792,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "itertools": crate.spec(
                 version = "^0.12.0",
+            ),
+            "jsonrpc": crate.spec(
+                version = "^0.18.0",
+                features = [
+                    "minreq_http",
+                ],
             ),
             "json-patch": crate.spec(
                 version = "^0.2.6",
@@ -994,6 +999,14 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 ],
                 default_features = False,
             ),
+            "p384": crate.spec(
+                version = "0.13",
+                features = [
+                    "ecdsa",
+                    "pem",
+                ],
+                default_features = False,
+            ),
             "pairing": crate.spec(
                 version = "^0.23",
             ),
@@ -1165,7 +1178,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "rsa": crate.spec(
                 version = "^0.9.6",
-                features = ["sha2"],
+                features = ["sha2", "getrandom"],
             ),
             "rstest": crate.spec(
                 version = "^0.19.0",

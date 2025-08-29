@@ -1,5 +1,5 @@
 use crate::external_canister_types::{
-    CaptchaConfig, CaptchaTrigger, InternetIdentityInit, OpenIdConfig, RateLimitConfig,
+    CaptchaConfig, CaptchaTrigger, GoogleOpenIdConfig, InternetIdentityInit, RateLimitConfig,
     StaticCaptchaTrigger,
 };
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
@@ -30,9 +30,11 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_crypto_sha2::Sha256;
+use ic_http_endpoints_public::query;
 use ic_http_endpoints_public::{
-    call_v2, call_v3, metrics::HttpHandlerMetrics, CanisterReadStateServiceBuilder,
-    IngressValidatorBuilder, QueryServiceBuilder, SubnetReadStateServiceBuilder,
+    call_async, call_sync, metrics::HttpHandlerMetrics, read_state,
+    CanisterReadStateServiceBuilder, IngressValidatorBuilder, QueryServiceBuilder,
+    SubnetReadStateServiceBuilder,
 };
 use ic_https_outcalls_adapter::{
     start_server as start_canister_http_server, Config as HttpsOutcallsConfig,
@@ -83,6 +85,7 @@ use ic_state_machine_tests::{
 use ic_state_manager::StateManagerImpl;
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types::messages::{CertificateDelegationFormat, CertificateDelegationMetadata};
 use ic_types::{
     artifact::UnvalidatedArtifactMutation,
     canister_http::{
@@ -105,9 +108,10 @@ use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayloadBuilder, Subaccount
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
-    CanisterHttpResponse, ExtendedSubnetConfigSet, IcpFeatures, MockCanisterHttpResponse,
-    RawAddCycles, RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId,
-    RawSetStableMemory, SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
+    CanisterHttpResponse, EmptyConfig, ExtendedSubnetConfigSet, IcpFeatures,
+    MockCanisterHttpResponse, NonmainnetFeatures, RawAddCycles, RawCanisterCall, RawCanisterId,
+    RawEffectivePrincipal, RawMessageId, RawSetStableMemory, SubnetInstructionConfig, SubnetKind,
+    TickConfigs, Topology,
 };
 use pocket_ic::{copy_dir, ErrorCode, RejectCode, RejectResponse};
 use registry_canister::init::RegistryCanisterInitPayload;
@@ -525,7 +529,7 @@ struct PocketIcSubnets {
     state_dir: Option<PathBuf>,
     routing_table: RoutingTable,
     chain_keys: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
-    nonmainnet_features: bool,
+    nonmainnet_features: NonmainnetFeatures,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
     icp_features: Option<IcpFeatures>,
@@ -544,18 +548,54 @@ impl PocketIcSubnets {
         instruction_config: SubnetInstructionConfig,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         create_at_registry_version: RegistryVersion,
-        nonmainnet_features: bool,
+        nonmainnet_features: &NonmainnetFeatures,
         log_level: Option<Level>,
         bitcoin_adapter_uds_path: Option<PathBuf>,
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
         let mut subnet_config = SubnetConfig::new(subnet_type);
-        let mut hypervisor_config = if nonmainnet_features {
-            crate::nonmainnet_features::hypervisor_config(true)
+        // using `let NonmainnetFeatures { }` with explicit field names
+        // to force an update after adding a new field to `NonmainnetFeatures`
+        let NonmainnetFeatures {
+            enable_beta_features,
+            disable_canister_backtrace,
+            disable_function_name_length_limits,
+            disable_canister_execution_rate_limiting,
+        } = nonmainnet_features;
+        // using `EmptyConfig { }` explicitly
+        // to force an update after adding a new field to `EmptyConfig`
+        let mut hypervisor_config = if let Some(EmptyConfig {}) = enable_beta_features {
+            crate::beta_features::hypervisor_config()
         } else {
             execution_environment::Config::default()
         };
+        // using `EmptyConfig { }` explicitly
+        // to force an update after adding a new field to `EmptyConfig`
+        if let Some(EmptyConfig {}) = disable_canister_backtrace {
+            hypervisor_config
+                .embedders_config
+                .feature_flags
+                .canister_backtrace = FlagStatus::Disabled;
+        }
+        // using `EmptyConfig { }` explicitly
+        // to force an update after adding a new field to `EmptyConfig`
+        if let Some(EmptyConfig {}) = disable_function_name_length_limits {
+            // the maximum size of a canister WASM is much less than 1GB
+            // and thus the following limits effectively disable all limits
+            hypervisor_config
+                .embedders_config
+                .max_number_exported_functions = 1_000_000_000;
+            hypervisor_config
+                .embedders_config
+                .max_sum_exported_function_name_lengths = 1_000_000_000;
+        }
+        // using `EmptyConfig { }` explicitly
+        // to force an update after adding a new field to `EmptyConfig`
+        if let Some(EmptyConfig {}) = disable_canister_execution_rate_limiting {
+            hypervisor_config.rate_limiting_of_heap_delta = FlagStatus::Disabled;
+            hypervisor_config.rate_limiting_of_instructions = FlagStatus::Disabled;
+        }
         if let SubnetInstructionConfig::Benchmarking = instruction_config {
             let instruction_limit = NumInstructions::new(99_999_999_999_999);
             if instruction_limit > subnet_config.scheduler_config.max_instructions_per_round {
@@ -567,14 +607,6 @@ impl PocketIcSubnets {
                 .scheduler_config
                 .max_instructions_per_message_without_dts = instruction_limit;
             hypervisor_config.max_query_call_graph_instructions = instruction_limit;
-
-            // exported functions limits
-            hypervisor_config
-                .embedders_config
-                .max_number_exported_functions = 100_000;
-            hypervisor_config
-                .embedders_config
-                .max_sum_exported_function_name_lengths = 5_000_000;
         }
         // bound PocketIc resource consumption
         hypervisor_config.embedders_config.max_sandbox_count = 64;
@@ -605,7 +637,7 @@ impl PocketIcSubnets {
     fn new(
         runtime: Arc<Runtime>,
         state_dir: Option<PathBuf>,
-        nonmainnet_features: bool,
+        nonmainnet_features: NonmainnetFeatures,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
@@ -677,8 +709,11 @@ impl PocketIcSubnets {
     }
 
     fn route(&self, canister_id: CanisterId) -> Option<Arc<StateMachine>> {
-        let subnet_id = self.routing_table.route(canister_id.get());
-        subnet_id.map(|subnet_id| self.get(subnet_id).unwrap())
+        self.get(SubnetId::from(canister_id.get())).or_else(|| {
+            self.routing_table
+                .lookup_entry(canister_id)
+                .and_then(|(_, subnet_id)| self.get(subnet_id))
+        })
     }
 
     fn time(&self) -> SystemTime {
@@ -730,7 +765,7 @@ impl PocketIcSubnets {
             instruction_config.clone(),
             self.registry_data_provider.clone(),
             create_at_registry_version,
-            self.nonmainnet_features,
+            &self.nonmainnet_features,
             self.log_level,
             bitcoin_adapter_uds_path.clone(),
         );
@@ -759,14 +794,12 @@ impl PocketIcSubnets {
                 subnet_chain_keys.push(MasterPublicKeyId::Ecdsa(key_id));
             }
 
-            if self.nonmainnet_features {
-                for name in ["key_1", "test_key_1", "dfx_test_key"] {
-                    let key_id = VetKdKeyId {
-                        curve: VetKdCurve::Bls12_381_G2,
-                        name: name.to_string(),
-                    };
-                    subnet_chain_keys.push(MasterPublicKeyId::VetKd(key_id));
-                }
+            for name in ["key_1", "test_key_1", "dfx_test_key"] {
+                let key_id = VetKdKeyId {
+                    curve: VetKdCurve::Bls12_381_G2,
+                    name: name.to_string(),
+                };
+                subnet_chain_keys.push(MasterPublicKeyId::VetKd(key_id));
             }
         }
         for chain_key in &subnet_chain_keys {
@@ -1784,51 +1817,53 @@ impl PocketIcSubnets {
 
             // Install the Internet Identity canister.
             // The initial values have been adapted from the mainnet values obtained by calling
-            // `$ dfx canister call rdmx6-jaaaa-aaaaa-aaadq-cai config --ic`:
-            // record {
-            //   fetch_root_key = null;
-            //   openid_google = opt opt record {
-            //     client_id = "775077467414-rgoesk3egruq26c61s6ta8bpjetjqvgo.apps.googleusercontent.com";
-            //   };
-            //   is_production = opt true;
-            //   enable_dapps_explorer = opt false;
-            //   assigned_user_number_range = opt record {
-            //     10_000 : nat64;
-            //     7_569_744 : nat64;
-            //   };
-            //   new_flow_origins = opt vec { "https://id.ai" };
-            //   archive_config = opt record {
-            //     polling_interval_ns = 15_000_000_000 : nat64;
-            //     entries_buffer_limit = 10_000 : nat64;
-            //     module_hash = blob "\17\4d\7e\2c\3d\4d\3b\0f\34\61\63\4d\49\ea\c2\85\55\5a\97\48\de\7c\c7\a8\53\cf\ea\00\41\52\a1\97";
-            //     entries_fetch_limit = 1_000 : nat16;
-            //   };
-            //   canister_creation_cycles_cost = opt (0 : nat64);
-            //   analytics_config = opt opt variant {
-            //     Plausible = record {
-            //       domain = opt "identity.internetcomputer.org";
-            //       track_localhost = null;
-            //       hash_mode = null;
-            //       api_host = null;
+            // `dfx canister call rdmx6-jaaaa-aaaaa-aaadq-cai config --ic`:
+            //     record {
+            //       fetch_root_key = null;
+            //       openid_google = opt opt record {
+            //         client_id = "775077467414-rgoesk3egruq26c61s6ta8bpjetjqvgo.apps.googleusercontent.com";
+            //       };
+            //       is_production = opt true;
+            //       enable_dapps_explorer = opt false;
+            //       assigned_user_number_range = opt record {
+            //         10_000 : nat64;
+            //         7_569_744 : nat64;
+            //       };
+            //       new_flow_origins = opt vec { "https://id.ai" };
+            //       archive_config = opt record {
+            //         polling_interval_ns = 15_000_000_000 : nat64;
+            //         entries_buffer_limit = 10_000 : nat64;
+            //         module_hash = blob "\4e\84\31\f2\c0\1c\32\ac\ed\21\43\9e\8a\97\ea\0a\be\22\4a\f8\18\89\58\a4\77\ea\df\ad\46\e6\90\fb";
+            //         entries_fetch_limit = 1_000 : nat16;
+            //       };
+            //       canister_creation_cycles_cost = opt (0 : nat64);
+            //       analytics_config = opt opt variant {
+            //         Plausible = record {
+            //           domain = opt "identity.internetcomputer.org";
+            //           track_localhost = null;
+            //           hash_mode = null;
+            //           api_host = null;
+            //         }
+            //       };
+            //       feature_flag_enable_generic_open_id_fe = null;
+            //       related_origins = opt vec {
+            //         "https://id.ai";
+            //         "https://identity.ic0.app";
+            //         "https://identity.internetcomputer.org";
+            //         "https://identity.icp0.io";
+            //       };
+            //       feature_flag_continue_from_another_device = opt true;
+            //       openid_configs = null;
+            //       captcha_config = opt record {
+            //         max_unsolved_captchas = 500 : nat64;
+            //         captcha_trigger = variant { Static = variant { CaptchaDisabled } };
+            //       };
+            //       dummy_auth = opt null;
+            //       register_rate_limit = opt record {
+            //         max_tokens = 25_000 : nat64;
+            //         time_per_token_ns = 1_000_000_000 : nat64;
+            //       };
             //     }
-            //   };
-            //   related_origins = opt vec {
-            //     "https://id.ai";
-            //     "https://identity.ic0.app";
-            //     "https://identity.internetcomputer.org";
-            //     "https://identity.icp0.io";
-            //   };
-            //   feature_flag_continue_from_another_device = null;
-            //   captcha_config = opt record {
-            //     max_unsolved_captchas = 500 : nat64;
-            //     captcha_trigger = variant { Static = variant { CaptchaDisabled } };
-            //   };
-            //   dummy_auth = opt null;
-            //   register_rate_limit = opt record {
-            //     max_tokens = 25_000 : nat64;
-            //     time_per_token_ns = 1_000_000_000 : nat64;
-            //   };
-            // },
 
             // The Internet Identity canister makes canister http outcalls if an `OpenIdConfig` is provided
             // and thus we should only provide one if auto progress is enabled
@@ -1836,7 +1871,7 @@ impl PocketIcSubnets {
             let openid_google = if self.auto_progress_enabled {
                 // We use a different id than in production:
                 // https://github.com/dfinity/internet-identity/blob/22d1d7659f0832d010aba7c84948c42bc771af0d/dfx.json#L8
-                Some(Some(OpenIdConfig {
+                Some(Some(GoogleOpenIdConfig {
                     client_id:
                         "775077467414-q1ajffledt8bjj82p2rl5a09co8cf4rf.apps.googleusercontent.com"
                             .to_string(),
@@ -1856,15 +1891,17 @@ impl PocketIcSubnets {
                     max_unsolved_captchas: 500,
                     captcha_trigger: CaptchaTrigger::Static(StaticCaptchaTrigger::CaptchaDisabled),
                 }),
-                related_origins: None,      // DIFFERENT FROM ICP MAINNET
-                new_flow_origins: None,     // DIFFERENT FROM ICP MAINNET
-                openid_google,              // DIFFERENT FROM ICP MAINNET
+                related_origins: None,  // DIFFERENT FROM ICP MAINNET
+                new_flow_origins: None, // DIFFERENT FROM ICP MAINNET
+                openid_google,          // DIFFERENT FROM ICP MAINNET
+                openid_configs: None,
                 analytics_config: None,     // DIFFERENT FROM ICP MAINNET
                 fetch_root_key: Some(true), // DIFFERENT FROM ICP MAINNET
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
                 dummy_auth: Some(None),
-                feature_flag_continue_from_another_device: None,
+                feature_flag_continue_from_another_device: Some(true),
+                feature_flag_enable_generic_open_id_fe: None,
             });
             ii_subnet
                 .state_machine
@@ -2064,14 +2101,6 @@ impl PocketIc {
             let subnet_config = pocket_ic::common::rest::SubnetConfig {
                 subnet_kind: config.subnet_kind,
                 subnet_seed,
-                node_ids: self
-                    .subnets
-                    .get(config.subnet_id)
-                    .unwrap()
-                    .nodes
-                    .iter()
-                    .map(|n| n.node_id.get().0.into())
-                    .collect(),
                 canister_ranges,
                 instruction_config: config.instruction_config.clone(),
             };
@@ -2088,7 +2117,7 @@ impl PocketIc {
         seed: u64,
         mut subnet_configs: ExtendedSubnetConfigSet,
         state_dir: Option<PathBuf>,
-        nonmainnet_features: bool,
+        nonmainnet_features: NonmainnetFeatures,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
@@ -3270,7 +3299,16 @@ impl Operation for Query {
         let subnet = route_call(pic, canister_call);
         match subnet {
             Ok(subnet) => {
-                let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
+                let delegation = pic
+                    .get_nns_delegation_for_subnet(subnet.get_subnet_id())
+                    .map(|delegation| {
+                        (
+                            delegation,
+                            CertificateDelegationMetadata {
+                                format: CertificateDelegationFormat::Flat,
+                            },
+                        )
+                    });
                 match subnet.query_as_with_delegation(
                     self.0.sender,
                     self.0.canister_id,
@@ -3402,6 +3440,7 @@ impl Operation for StatusRequest {
 pub enum CallRequestVersion {
     V2,
     V3,
+    V4,
 }
 
 pub struct CallRequest {
@@ -3470,8 +3509,8 @@ impl Operation for CallRequest {
                 });
 
                 let svc = match self.version {
-                    CallRequestVersion::V2 => call_v2::new_service(ingress_validator),
-                    CallRequestVersion::V3 => {
+                    CallRequestVersion::V2 => call_async::new_service(ingress_validator),
+                    CallRequestVersion::V3 | CallRequestVersion::V4 => {
                         let subnet_id = subnet.get_subnet_id();
                         let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
                         let builder = delegation.map(|delegation| {
@@ -3486,7 +3525,7 @@ impl Operation for CallRequest {
                         let metrics_registry = MetricsRegistry::new();
                         let metrics = HttpHandlerMetrics::new(&metrics_registry);
 
-                        call_v3::new_service(
+                        call_sync::new_service(
                             ingress_validator,
                             subnet.ingress_watcher_handle.clone(),
                             metrics,
@@ -3494,6 +3533,11 @@ impl Operation for CallRequest {
                                 .ingress_message_certificate_timeout_seconds,
                             NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                             subnet.state_manager.clone(),
+                            match self.version {
+                                CallRequestVersion::V2 => unreachable!(),
+                                CallRequestVersion::V3 => call_sync::Version::V3,
+                                CallRequestVersion::V4 => call_sync::Version::V4,
+                            },
                         )
                     }
                 };
@@ -3501,6 +3545,7 @@ impl Operation for CallRequest {
                 let api_version = match self.version {
                     CallRequestVersion::V2 => "v2",
                     CallRequestVersion::V3 => "v3",
+                    CallRequestVersion::V4 => "v4",
                 };
 
                 let request = axum::http::Request::builder()
@@ -3547,6 +3592,7 @@ impl Operation for CallRequest {
 pub struct QueryRequest {
     pub effective_canister_id: CanisterId,
     pub bytes: Bytes,
+    pub version: query::Version,
 }
 
 #[derive(Clone)]
@@ -3597,15 +3643,21 @@ impl Operation for QueryRequest {
                     Arc::new(StandaloneIngressSigVerifier),
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     query_handler,
+                    self.version,
                 )
                 .with_time_source(subnet.time_source.clone())
                 .build_service();
+
+                let version_str = match self.version {
+                    query::Version::V2 => "v2",
+                    query::Version::V3 => "v3",
+                };
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)
                     .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
                     .uri(format!(
-                        "/api/v2/canister/{}/query",
+                        "/api/{version_str}/canister/{}/query",
                         PrincipalId(self.effective_canister_id.get().into())
                     ))
                     .body(self.bytes.clone().into())
@@ -3634,6 +3686,7 @@ impl Operation for QueryRequest {
 pub struct CanisterReadStateRequest {
     pub effective_canister_id: CanisterId,
     pub bytes: Bytes,
+    pub version: read_state::canister::Version,
 }
 
 impl Operation for CanisterReadStateRequest {
@@ -3663,15 +3716,21 @@ impl Operation for CanisterReadStateRequest {
                     subnet.registry_client.clone(),
                     Arc::new(StandaloneIngressSigVerifier),
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
+                    self.version,
                 )
                 .with_time_source(subnet.time_source.clone())
                 .build_service();
+
+                let version_str = match self.version {
+                    read_state::canister::Version::V2 => "v2",
+                    read_state::canister::Version::V3 => "v3",
+                };
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)
                     .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
                     .uri(format!(
-                        "/api/v2/canister/{}/read_state",
+                        "/api/{version_str}/canister/{}/read_state",
                         PrincipalId(self.effective_canister_id.get().into())
                     ))
                     .body(self.bytes.clone().into())
@@ -3703,6 +3762,7 @@ impl Operation for CanisterReadStateRequest {
 pub struct SubnetReadStateRequest {
     pub subnet_id: SubnetId,
     pub bytes: Bytes,
+    pub version: read_state::subnet::Version,
 }
 
 impl Operation for SubnetReadStateRequest {
@@ -3725,14 +3785,20 @@ impl Operation for SubnetReadStateRequest {
                 let svc = SubnetReadStateServiceBuilder::builder(
                     NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone()),
                     subnet.state_manager.clone(),
+                    self.version,
                 )
                 .build_service();
+
+                let version_str = match self.version {
+                    read_state::subnet::Version::V2 => "v2",
+                    read_state::subnet::Version::V3 => "v3",
+                };
 
                 let request = axum::http::Request::builder()
                     .method(Method::POST)
                     .header(CONTENT_TYPE, CONTENT_TYPE_CBOR)
                     .uri(format!(
-                        "/api/v2/subnet/{}/read_state",
+                        "/api/{version_str}/subnet/{}/read_state",
                         PrincipalId(self.subnet_id.get().into())
                     ))
                     .body(self.bytes.clone().into())
@@ -4283,7 +4349,7 @@ mod tests {
                     ..Default::default()
                 },
                 None,
-                false,
+                NonmainnetFeatures::default(),
                 None,
                 None,
                 None,
@@ -4300,7 +4366,7 @@ mod tests {
                     ..Default::default()
                 },
                 None,
-                false,
+                NonmainnetFeatures::default(),
                 None,
                 None,
                 None,

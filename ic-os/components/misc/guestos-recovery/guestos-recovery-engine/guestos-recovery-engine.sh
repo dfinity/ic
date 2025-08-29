@@ -36,7 +36,7 @@ perform_recovery() {
 
     download_recovery_artifact() {
         local base_url="$1"
-        local recovery_url="${base_url}/ic/${EXPECTED_RECOVERY_HASH}/recovery.tar.zst"
+        local recovery_url="${base_url}/recovery/${EXPECTED_RECOVERY_HASH}/recovery.tar.zst"
 
         echo "Attempting to download recovery artifact from $recovery_url"
 

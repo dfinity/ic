@@ -15,8 +15,9 @@ jobs:
       # Sanitize PR title for Slack (<, >, &)
       - name: Sanitize PR title
         id: sanitize
+        env:
+          RAW_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          RAW_TITLE="${{ github.event.pull_request.title }}"
           ESCAPED_TITLE=$(echo "$RAW_TITLE" \
             | sed 's/&/\&amp;/g' \
             | sed 's/</\&lt;/g' \

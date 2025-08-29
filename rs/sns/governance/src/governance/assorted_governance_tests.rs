@@ -37,7 +37,7 @@ use crate::{
 };
 use assert_matches::assert_matches;
 use async_trait::async_trait;
-use candid::Principal;
+use candid::{Nat, Principal};
 use futures::{join, FutureExt};
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_canisters::cmc::FakeCmc;
@@ -90,6 +90,19 @@ impl ICRC1Ledger for AlwaysSucceedingLedger {
 
     fn canister_id(&self) -> CanisterId {
         CanisterId::from_u64(42)
+    }
+
+    async fn icrc2_approve(
+        &self,
+        _spender: Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<Subaccount>,
+    ) -> Result<Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 
     async fn icrc3_get_blocks(
@@ -177,6 +190,19 @@ async fn test_perform_transfer_sns_treasury_funds_execution_fails_when_another_c
 
         fn canister_id(&self) -> CanisterId {
             unimplemented!()
+        }
+
+        async fn icrc2_approve(
+            &self,
+            _spender: Account,
+            _amount: u64,
+            _expires_at: Option<u64>,
+            _fee: u64,
+            _from_subaccount: Option<Subaccount>,
+        ) -> Result<Nat, NervousSystemError> {
+            Err(NervousSystemError {
+                error_message: "Not Implemented".to_string(),
+            })
         }
 
         async fn icrc3_get_blocks(
@@ -312,6 +338,19 @@ async fn test_neuron_operations_exclude_one_another() {
 
         fn canister_id(&self) -> CanisterId {
             unimplemented!()
+        }
+
+        async fn icrc2_approve(
+            &self,
+            _spender: Account,
+            _amount: u64,
+            _expires_at: Option<u64>,
+            _fee: u64,
+            _from_subaccount: Option<Subaccount>,
+        ) -> Result<Nat, NervousSystemError> {
+            Err(NervousSystemError {
+                error_message: "Not Implemented".to_string(),
+            })
         }
 
         async fn icrc3_get_blocks(
@@ -5010,6 +5049,18 @@ fn test_list_topics() {
                         name: "Register SNS extension".to_string(),
                         description: Some(
                             "Proposal to register a new SNS extension.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 19,
+                        name: "Upgrade SNS extension".to_string(),
+                        description: Some(
+                            "Proposal to upgrade the WASM of a registered SNS extension.".to_string(),
                         ),
                         function_type: Some(
                             FunctionType::NativeNervousSystemFunction(
