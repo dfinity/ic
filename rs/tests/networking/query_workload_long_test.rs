@@ -25,6 +25,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     canister_api::{CallMode, GenericRequest},
     driver::{
+        farm::HostFeature,
         group::SystemTestGroup,
         ic::ImageSizeGiB,
         test_env::TestEnv,
@@ -143,19 +144,18 @@ pub fn test(env: TestEnv, rps: usize, runtime: Duration) {
 fn main() -> Result<()> {
     let per_task_timeout: Duration = WORKLOAD_RUNTIME + TASK_TIMEOUT_DELTA; // This should be a bit larger than the workload execution time.
     let overall_timeout: Duration = per_task_timeout + OVERALL_TIMEOUT_DELTA; // This should be a bit larger than the per_task_timeout.
-    let setup = |env| {
-        setup(
-            env,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            // Since this is a long-running test, it accumulates a lot of disk space.
-            // This is why we increase the default of 50 GiB to 500 GiB.
-            Some(ImageSizeGiB::new(500)),
-            vec![],
-        )
-    };
     let test = |env| test(env, RPS, WORKLOAD_RUNTIME);
     SystemTestGroup::new()
-        .with_setup(setup)
+        .with_setup(|env| {
+            setup(
+                env,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                // Since this is a long-running test, it accumulates a lot of disk space.
+                // This is why we increase the default of 50 GiB to 500 GiB.
+                Some(ImageSizeGiB::new(500)),
+                vec![HostFeature::Performance],
+            )
+        })
         .add_test(systest!(test))
         .with_timeout_per_test(per_task_timeout) // each task (including the setup function) may take up to `per_task_timeout`.
         .with_overall_timeout(overall_timeout) // the entire group may take up to `overall_timeout`.

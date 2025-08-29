@@ -67,6 +67,7 @@ pub fn setup(
 ) {
     let logger = env.logger();
     PrometheusVm::default()
+        .with_required_host_features(required_host_features.clone())
         .start(&env)
         .expect("failed to start prometheus VM");
     let vm_resources = VmResources {
