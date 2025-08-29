@@ -1,4 +1,5 @@
 use crate::{metrics::IDkgPayloadMetrics, signer::ThresholdSignatureBuilder};
+use ic_config::flag_status::FlagStatus;
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext;
@@ -37,6 +38,7 @@ pub(crate) fn update_signature_agreements(
     payload: &mut idkg::IDkgPayload,
     valid_keys: &BTreeSet<IDkgMasterPublicKeyId>,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
+    store_pre_signatures_in_state: FlagStatus,
 ) {
     let all_random_ids = all_requests
         .values()
@@ -83,11 +85,23 @@ pub(crate) fn update_signature_agreements(
             continue;
         }
 
-        // We can only remove expired requests once they were matched with a
-        // pre-signature. Otherwise the context may be matched with a pre-signature
-        // at the next certified state height, which then wouldn't be removed.
-        let Some((pre_sig_id, _)) = context.matched_pre_signature else {
-            continue;
+        let pre_sig_id = if store_pre_signatures_in_state == FlagStatus::Disabled {
+            // If pre-signatures are stored on the blockchain, then that means
+            // we can only reject expired requests once the request was matched with a
+            // pre-signature. Otherwise the context may be matched with a pre-signature
+            // at the next certified state height. In that case, the pre-signature would
+            // not be removed and may be used again for a different request.
+            match context.matched_pre_signature {
+                Some((pre_sig_id, _)) => Some(pre_sig_id),
+                None => continue,
+            }
+        } else {
+            // If pre-signatures are stored in the state, then it is safe to reject
+            // the request even if it hasn't been paired yet. While it may be paired
+            // by the time this reject is executed, the paired pre-signature is consumed
+            // from the stash, so there is no risk of using it again for a different
+            // request.
+            None
         };
 
         if request_expiry_time.is_some_and(|expiry| context.batch_time < expiry) {
@@ -99,7 +113,9 @@ pub(crate) fn update_signature_agreements(
                     "Signature request expired",
                 )),
             );
-            payload.available_pre_signatures.remove(&pre_sig_id);
+            if let Some(pre_sig_id) = pre_sig_id.as_ref() {
+                payload.available_pre_signatures.remove(pre_sig_id);
+            }
 
             if let Some(metrics) = idkg_payload_metrics {
                 metrics.payload_errors_inc("expired_requests");
@@ -134,7 +150,9 @@ pub(crate) fn update_signature_agreements(
             context.pseudo_random_id,
             idkg::CompletedSignature::Unreported(response),
         );
-        payload.available_pre_signatures.remove(&pre_sig_id);
+        if let Some(pre_sig_id) = pre_sig_id.as_ref() {
+            payload.available_pre_signatures.remove(pre_sig_id);
+        }
     }
 }
 
@@ -190,7 +208,12 @@ mod tests {
     }
 
     #[test]
-    fn test_update_signature_agreements_reporting() {
+    fn test_update_signature_agreements_reporting_with_flags() {
+        test_update_signature_agreements_reporting(FlagStatus::Disabled);
+        test_update_signature_agreements_reporting(FlagStatus::Enabled);
+    }
+
+    fn test_update_signature_agreements_reporting(store_pre_signatures_in_state: FlagStatus) {
         let delivered_pseudo_random_id = pseudo_random_id(0);
         let old_pseudo_random_id = pseudo_random_id(1);
         let new_pseudo_random_id = pseudo_random_id(2);
@@ -220,6 +243,7 @@ mod tests {
             &mut idkg_payload,
             &BTreeSet::from([key_id]),
             None,
+            store_pre_signatures_in_state,
         );
 
         assert_eq!(idkg_payload.signature_agreements.len(), 1);
@@ -236,16 +260,28 @@ mod tests {
     fn test_update_signature_agreements_success_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_update_signature_agreements_success(key_id);
+            test_update_signature_agreements_success(&key_id, FlagStatus::Disabled);
+            test_update_signature_agreements_success(&key_id, FlagStatus::Enabled);
         }
     }
 
-    fn test_update_signature_agreements_success(key_id: IDkgMasterPublicKeyId) {
+    fn test_update_signature_agreements_success(
+        key_id: &IDkgMasterPublicKeyId,
+        store_pre_signatures_in_state: FlagStatus,
+    ) {
         let subnet_id = subnet_test_id(0);
         let mut idkg_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let valid_keys = BTreeSet::from_iter([key_id.clone()]);
         let pre_sig_ids = (0..4)
-            .map(|i| create_available_pre_signature(&mut idkg_payload, key_id.clone(), i as u8))
+            .map(|i| {
+                if store_pre_signatures_in_state == FlagStatus::Disabled {
+                    // If pre-signatures aren't stored in the state, then we expect them to exist
+                    // in the payload
+                    create_available_pre_signature(&mut idkg_payload, key_id.clone(), i as u8)
+                } else {
+                    idkg_payload.uid_generator.next_pre_signature_id()
+                }
+            })
             .collect::<Vec<_>>();
         let ids = (0..4)
             .map(|i| request_id(i, Height::from(0)))
@@ -298,13 +334,16 @@ mod tests {
             &mut idkg_payload,
             &valid_keys,
             None,
+            store_pre_signatures_in_state,
         );
 
-        // Only the pre-signature for the completed request should be removed
-        assert_eq!(idkg_payload.available_pre_signatures.len(), 3);
-        assert!(!idkg_payload
-            .available_pre_signatures
-            .contains_key(&pre_sig_ids[1]));
+        if store_pre_signatures_in_state == FlagStatus::Disabled {
+            // Only the pre-signature for the completed request should be removed
+            assert_eq!(idkg_payload.available_pre_signatures.len(), 3);
+            assert!(!idkg_payload
+                .available_pre_signatures
+                .contains_key(&pre_sig_ids[1]));
+        }
 
         assert_eq!(idkg_payload.signature_agreements.len(), 2);
         let Some(idkg::CompletedSignature::Unreported(response_1)) =
@@ -321,7 +360,14 @@ mod tests {
     }
 
     #[test]
-    fn test_update_signature_agreements_ignores_vetkd_contexts() {
+    fn test_update_signature_agreements_ignores_vetkd_contexts_with_flags() {
+        test_update_signature_agreements_ignores_vetkd_contexts(FlagStatus::Disabled);
+        test_update_signature_agreements_ignores_vetkd_contexts(FlagStatus::Enabled);
+    }
+
+    fn test_update_signature_agreements_ignores_vetkd_contexts(
+        store_pre_signatures_in_state: FlagStatus,
+    ) {
         let subnet_id = subnet_test_id(0);
         let ecdsa_key_id = fake_ecdsa_idkg_master_public_key_id();
         let vet_key_id = fake_vetkd_master_public_key_id();
@@ -330,7 +376,13 @@ mod tests {
         let valid_keys = BTreeSet::from_iter([ecdsa_key_id.clone()]);
         let pre_sig_ids = (0..2)
             .map(|i| {
-                create_available_pre_signature(&mut idkg_payload, ecdsa_key_id.clone(), i as u8)
+                if store_pre_signatures_in_state == FlagStatus::Disabled {
+                    // If pre-signatures aren't stored in the state, then we expect them to exist
+                    // in the payload
+                    create_available_pre_signature(&mut idkg_payload, ecdsa_key_id.clone(), i as u8)
+                } else {
+                    idkg_payload.uid_generator.next_pre_signature_id()
+                }
             })
             .collect::<Vec<_>>();
         let ids = (0..2)
@@ -370,7 +422,7 @@ mod tests {
             }),
         );
 
-        // Only the ecdsa request with available pre-signature should be completed
+        // Only the ecdsa request should be completed
         update_signature_agreements(
             &contexts,
             &signature_builder,
@@ -378,13 +430,16 @@ mod tests {
             &mut idkg_payload,
             &valid_keys,
             None,
+            store_pre_signatures_in_state,
         );
 
-        // Only the pre-signature for the completed request should be removed
-        assert_eq!(idkg_payload.available_pre_signatures.len(), 1);
-        assert!(!idkg_payload
-            .available_pre_signatures
-            .contains_key(&pre_sig_ids[0]));
+        if store_pre_signatures_in_state == FlagStatus::Disabled {
+            // Only the pre-signature for the completed request should be removed
+            assert_eq!(idkg_payload.available_pre_signatures.len(), 1);
+            assert!(!idkg_payload
+                .available_pre_signatures
+                .contains_key(&pre_sig_ids[0]));
+        }
 
         assert_eq!(idkg_payload.signature_agreements.len(), 1);
         let Some(idkg::CompletedSignature::Unreported(response_1)) =
