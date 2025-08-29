@@ -691,7 +691,7 @@ fn test_receives_new_3rd_party_txs<T: RpcClientType + Into<AdapterNetwork>>() {
         .generate_to_address(1, &blackhole_address)
         .unwrap();
     assert_eq!(
-        T::REGTEST_COINBASE_MATURITY + 102,
+        T::REGTEST_COINBASE_MATURITY + 2,
         alice_client.get_blockchain_info().unwrap().blocks
     );
 
