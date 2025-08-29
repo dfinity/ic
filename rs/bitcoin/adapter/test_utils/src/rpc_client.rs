@@ -454,15 +454,6 @@ impl<T: RpcClientType> RpcClient<T> {
         self.call("sendrawtransaction", &[tx.raw_hex().into()])
     }
 
-    pub fn get_received_by_address(
-        &self,
-        address: &T::Address,
-        minconf: Option<u32>,
-    ) -> Result<Amount> {
-        let args = [address.to_string().into(), opt_into_json(minconf, null())?];
-        Ok(Amount::from_btc(self.call("getreceivedbyaddress", &args)?)?)
-    }
-
     pub fn list_unspent(
         &self,
         minconf: Option<usize>,

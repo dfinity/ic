@@ -221,7 +221,7 @@ pub fn fund_with_btc<T: RpcClientType>(
     to_fund_address: &T::Address,
 ) -> ListUnspentResultEntry {
     let initial_amount = to_fund_client
-        .get_received_by_address(to_fund_address, Some(0))
+        .get_balance_of(None, to_fund_address)
         .unwrap();
 
     let initial_height = to_fund_client.get_blockchain_info().unwrap().blocks;
@@ -246,7 +246,7 @@ pub fn fund_with_btc<T: RpcClientType>(
 
     assert_eq!(
         to_fund_client
-            .get_received_by_address(to_fund_address, Some(0))
+            .get_balance_of(None, to_fund_address)
             .unwrap(),
         initial_amount + expected_rewards
     );
