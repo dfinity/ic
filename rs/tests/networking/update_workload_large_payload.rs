@@ -1,4 +1,5 @@
 use anyhow::Result;
+use ic_system_test_driver::driver::farm::HostFeature;
 use std::time::Duration;
 
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
@@ -28,7 +29,14 @@ fn main() -> Result<()> {
         )
     };
     SystemTestGroup::new()
-        .with_setup(|env| setup(env, SMALL_APP_SUBNET_MAX_SIZE, None))
+        .with_setup(|env| {
+            setup(
+                env,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                None,
+                vec![HostFeature::Performance],
+            )
+        })
         .add_test(systest!(test))
         .with_timeout_per_test(per_task_timeout) // each task (including the setup function) may take up to `per_task_timeout`.
         .with_overall_timeout(overall_timeout) // the entire group may take up to `overall_timeout`.

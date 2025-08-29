@@ -150,6 +150,7 @@ fn main() -> Result<()> {
             // Since this is a long-running test, it accumulates a lot of disk space.
             // This is why we increase the default of 50 GiB to 500 GiB.
             Some(ImageSizeGiB::new(500)),
+            vec![],
         )
     };
     let test = |env| test(env, RPS, WORKLOAD_RUNTIME);

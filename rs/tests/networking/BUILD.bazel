@@ -403,6 +403,10 @@ system_test_nns(
 
 system_test_nns(
     name = "update_workload_large_payload",
+    colocated_test_driver_vm_required_host_features = ["performance"],
+    colocated_test_driver_vm_resources = {
+        "vcpus": 16,
+    },
     flaky = True,  # flakiness rate of 1.83% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "colocate",
