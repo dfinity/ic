@@ -10,9 +10,11 @@ use bitcoin::{
     hex::DisplayHex,
     Amount, Block as BtcBlock, BlockHash, Transaction, Txid,
 };
+use ic_config::adapters::AdaptersConfig;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -133,14 +135,20 @@ pub trait RpcClientType: Copy + std::fmt::Display {
     type AddressUnchecked: for<'a> serde::Deserialize<'a>;
     type AddressParseError;
     type GetMempoolEntryResult: for<'a> serde::Deserialize<'a>;
+
     const REGTEST: Self;
     const NAME: &str;
     const RPC_WALLET_SUPPORT: bool;
+    /// Initial block reward for regtest network.
     const REGTEST_INITIAL_BLOCK_REWARDS: Amount;
+    /// Number of blocks for coinbase maturity
+    const REGTEST_COINBASE_MATURITY: u64;
+
     fn require_network(address: Self::AddressUnchecked, network: Self) -> Result<Self::Address>;
     fn assume_checked(address: Self::AddressUnchecked) -> Self::Address;
     fn block_hash(block: &Self::Block) -> BlockHash;
     fn iter_transactions(block: &Self::Block) -> impl Iterator<Item = &Transaction>;
+    fn new_adapters_config_with_mainnet_uds_path(mainnet_uds_path: &Path) -> AdaptersConfig;
 }
 
 impl RpcClientType for BtcNetwork {
@@ -149,10 +157,13 @@ impl RpcClientType for BtcNetwork {
     type AddressUnchecked = BtcAddress<NetworkUnchecked>;
     type AddressParseError = BtcAddressParseError;
     type GetMempoolEntryResult = BtcGetMempoolEntryResult;
+
     const REGTEST: Self = BtcNetwork::Regtest;
     const NAME: &str = "Bitcoin";
     const RPC_WALLET_SUPPORT: bool = true;
     const REGTEST_INITIAL_BLOCK_REWARDS: Amount = Amount::from_sat(5_000_000_000);
+    const REGTEST_COINBASE_MATURITY: u64 = 60;
+
     fn require_network(address: Self::AddressUnchecked, network: Self) -> Result<Self::Address> {
         Ok(address.require_network(network)?)
     }
@@ -164,6 +175,12 @@ impl RpcClientType for BtcNetwork {
     }
     fn iter_transactions(block: &Self::Block) -> impl Iterator<Item = &Transaction> {
         block.txdata.iter()
+    }
+    fn new_adapters_config_with_mainnet_uds_path(mainnet_uds_path: &Path) -> AdaptersConfig {
+        AdaptersConfig {
+            bitcoin_mainnet_uds_path: Some(mainnet_uds_path.into()),
+            ..Default::default()
+        }
     }
 }
 
@@ -173,10 +190,13 @@ impl RpcClientType for DogeNetwork {
     type AddressUnchecked = DogeAddress<NetworkUnchecked>;
     type AddressParseError = DogeAddressParseError;
     type GetMempoolEntryResult = DogeGetMempoolEntryResult;
+
     const REGTEST: Self = DogeNetwork::Regtest;
     const NAME: &str = "Dogecoin";
     const RPC_WALLET_SUPPORT: bool = false;
     const REGTEST_INITIAL_BLOCK_REWARDS: Amount = Amount::from_sat(50_000_000_000_000);
+    const REGTEST_COINBASE_MATURITY: u64 = 60;
+
     fn require_network(address: Self::AddressUnchecked, network: Self) -> Result<Self::Address> {
         Ok(address.require_network(network)?)
     }
@@ -189,6 +209,12 @@ impl RpcClientType for DogeNetwork {
     fn iter_transactions(block: &Self::Block) -> impl Iterator<Item = &Transaction> {
         block.txdata.iter()
     }
+    fn new_adapters_config_with_mainnet_uds_path(mainnet_uds_path: &Path) -> AdaptersConfig {
+        AdaptersConfig {
+            dogecoin_mainnet_uds_path: Some(mainnet_uds_path.into()),
+            ..Default::default()
+        }
+    }
 }
 
 /// RPC client that sends RPC commands to a Bitcoin daemon.
@@ -196,16 +222,6 @@ pub struct RpcClient<T: RpcClientType> {
     network: T,
     client: Arc<jsonrpc::client::Client>,
     address: Option<T::Address>,
-}
-
-fn get_new_address<T: RpcClientType>(
-    client: &RpcClient<T>,
-    network: T,
-    label: Option<&str>,
-) -> Result<T::Address> {
-    let address: T::AddressUnchecked = client.call("getnewaddress", &opt_into_vec_json(label)?)?;
-    let address = T::require_network(address, network)?;
-    Ok(address)
 }
 
 impl<T: RpcClientType> Drop for RpcClient<T> {
@@ -236,7 +252,7 @@ impl<T: RpcClientType> RpcClient<T> {
     /// because all accounts will share the same wallet.
     /// We can't rely on the wallet feature because Dogecoin does not support it.
     pub fn with_account(&self, account: &str) -> Result<Self> {
-        let address = get_new_address(self, self.network, Some(account))?;
+        let address = self.get_new_address_with_label(Some(account))?;
         Ok(RpcClient {
             network: self.network,
             client: self.client.clone(),
@@ -262,7 +278,7 @@ impl<T: RpcClientType> RpcClient<T> {
                 break;
             }
         }
-        self.address = Some(get_new_address(&self, self.network, None)?);
+        self.address = Some(self.get_new_address()?);
         Ok(self)
     }
 
@@ -363,9 +379,7 @@ impl<T: RpcClientType> RpcClient<T> {
     ) -> Result<V> {
         let raw = serde_json::value::to_raw_value(args)?;
         let req = self.client.build_request(cmd, Some(&raw));
-        eprintln!("req = {:?}", req);
         let resp = self.client.send_request(req).map_err(RpcError::from);
-        eprintln!("resp = {:?}", resp);
         Ok(resp?.result()?)
     }
 
@@ -373,8 +387,15 @@ impl<T: RpcClientType> RpcClient<T> {
         self.call("stop", &[])
     }
 
+    pub fn get_new_address_with_label(&self, label: Option<&str>) -> Result<T::Address> {
+        let address: T::AddressUnchecked =
+            self.call("getnewaddress", &opt_into_vec_json(label)?)?;
+        let address = T::require_network(address, self.network)?;
+        Ok(address)
+    }
+
     pub fn get_new_address(&self) -> Result<T::Address> {
-        get_new_address(self, self.network, None)
+        self.get_new_address_with_label(None)
     }
 
     pub fn get_blockchain_info(&self) -> Result<GetBlockchainInfoResult> {

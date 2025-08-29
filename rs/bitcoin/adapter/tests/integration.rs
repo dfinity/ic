@@ -5,14 +5,13 @@ use bitcoin::{
 use ic_btc_adapter::{start_server, AdapterNetwork, Config, IncomingSource};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::{
-    bitcoind::{BitcoinD, Conf},
+    bitcoind::{Conf, Daemon},
     rpc_client::{CreateRawTransactionInput, RpcClient, RpcClientType},
 };
 use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
     Network, SendTransactionRequest,
 };
-use ic_config::adapters::AdaptersConfig;
 use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig;
 use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
@@ -112,7 +111,7 @@ fn start_adapter<T: RpcClientType + Into<AdapterNetwork>>(
     start_server(logger, metrics_registry, rt_handle, config);
 }
 
-fn start_bitcoind<T: RpcClientType>(network: T) -> BitcoinD<T> {
+fn start_bitcoind<T: RpcClientType>(network: T) -> Daemon<T> {
     let conf = Conf {
         p2p: true,
         view_stdout: true,
@@ -121,7 +120,7 @@ fn start_bitcoind<T: RpcClientType>(network: T) -> BitcoinD<T> {
     let name = format!("{}_CORE_PATH", T::NAME.to_uppercase());
     let path = std::env::var(&name).unwrap_or_else(|_| panic!("Failed to get {name} env variable"));
 
-    BitcoinD::new(&path, network, conf).unwrap()
+    Daemon::new(&path, network, conf).unwrap()
 }
 
 fn start_client<T: RpcClientType>(
@@ -130,15 +129,7 @@ fn start_client<T: RpcClientType>(
     rt_handle: &tokio::runtime::Handle,
     uds_path: &Path,
 ) -> AdapterClient {
-    let mut adapters_config = AdaptersConfig::default();
-    if T::NAME == BtcNetwork::NAME {
-        adapters_config.bitcoin_mainnet_uds_path = Some(uds_path.into());
-    } else if T::NAME == DogeNetwork::NAME {
-        adapters_config.dogecoin_mainnet_uds_path = Some(uds_path.into());
-    } else {
-        panic!("Unsupported network {}", T::NAME);
-    }
-
+    let adapters_config = T::new_adapters_config_with_mainnet_uds_path(uds_path);
     let clients = setup_bitcoin_adapter_clients(
         logger.clone(),
         metrics_registry,
@@ -395,7 +386,7 @@ fn sync_blocks_at_once<T: RpcClientType>(
 }
 
 fn create_alice_and_bob_wallets<T: RpcClientType>(
-    bitcoind: &BitcoinD<T>,
+    bitcoind: &Daemon<T>,
 ) -> (RpcClient<T>, RpcClient<T>) {
     let client = &bitcoind.rpc_client;
     let alice_client = client.with_account("alice").unwrap();
@@ -403,7 +394,7 @@ fn create_alice_and_bob_wallets<T: RpcClientType>(
     (alice_client, bob_client)
 }
 
-fn fund_with_btc<T: RpcClientType>(to_fund_client: &RpcClient<T>) {
+fn fund<T: RpcClientType>(to_fund_client: &RpcClient<T>) {
     let blackhole_address = to_fund_client.get_new_address().unwrap();
     let to_fund_address = to_fund_client.get_address().unwrap();
     let initial_amount = to_fund_client
@@ -414,12 +405,11 @@ fn fund_with_btc<T: RpcClientType>(to_fund_client: &RpcClient<T>) {
         .generate_to_address(1, to_fund_address)
         .unwrap();
 
-    // Generate 100 blocks for coinbase maturity
+    // Generate enough blocks for coinbase maturity
     to_fund_client
-        .generate_to_address(100, &blackhole_address)
+        .generate_to_address(T::REGTEST_COINBASE_MATURITY, &blackhole_address)
         .unwrap();
 
-    // The reward for mining a block is 50 bitcoins
     // The check below uses `listunspent` internally, which is more reliable than `receivedbyaddress`.
     assert_eq!(
         to_fund_client
@@ -612,7 +602,7 @@ fn doge_idle_adapter_does_not_connect_to_peers() {
     idle_adapter_does_not_connect_to_peers::<DogeNetwork>()
 }
 
-/// Checks that the adapter can connect to multiple BitcoinD peers.
+/// Checks that the adapter can connect to multiple peers.
 fn test_connection_to_multiple_peers<T: RpcClientType + Into<AdapterNetwork>>() {
     let logger = no_op_logger();
     let network = T::REGTEST;
@@ -679,7 +669,7 @@ fn test_receives_new_3rd_party_txs<T: RpcClientType + Into<AdapterNetwork>>() {
     let (alice_client, bob_client) = create_alice_and_bob_wallets(&bitcoind);
     let blackhole_address = alice_client.get_new_address().unwrap();
 
-    fund_with_btc(&alice_client);
+    fund(&alice_client);
 
     assert_eq!(101, alice_client.get_blockchain_info().unwrap().blocks);
     let initial_alice_balance = alice_client.get_balance(None).unwrap();
@@ -740,7 +730,7 @@ fn test_send_tx<T: RpcClientType + Into<AdapterNetwork>>() {
 
     let (alice_client, bob_client) = create_alice_and_bob_wallets(&bitcoind);
 
-    fund_with_btc(&alice_client);
+    fund(&alice_client);
 
     let to_send = Amount::from_btc(1.0).unwrap();
     let tx_fee = Amount::from_btc(0.001).unwrap();

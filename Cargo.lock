@@ -6755,6 +6755,7 @@ dependencies = [
  "flate2",
  "hex",
  "ic-btc-adapter",
+ "ic-config",
  "jsonrpc",
  "rand 0.8.5",
  "serde",
