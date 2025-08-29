@@ -204,6 +204,7 @@ default_vm_resources = {
 
 def system_test(
         name,
+        test_name = None,
         test_driver_target = None,
         runtime_deps = [],
         tags = [],
@@ -288,8 +289,11 @@ def system_test(
     # Convert env to a mutable dictionary
     env = dict(env)
 
+    if test_name = None:
+      test_name = name;
+
     if test_driver_target == None:
-        bin_name = name + "_bin"
+        bin_name = test_name + "_bin"
         original_srcs = kwargs.pop("srcs", [])
         rust_binary(
             name = bin_name,

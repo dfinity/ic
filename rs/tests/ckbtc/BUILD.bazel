@@ -224,11 +224,12 @@ system_test_nns(
 
 [
     system_test(
-        name = test_name + "_adapter_basics_test",
+        name = "adapter_basics_test",
+        test_name = adapter + "_adapter_basics_test",
         env = MESSAGE_CANISTER_ENV | {
             "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
             "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
-            "TEST_ADAPTER_NAME": test_name,
+            "ADAPTER_TO_TEST": adapter,
         },
         tags = [],
         runtime_deps =
@@ -240,7 +241,7 @@ system_test_nns(
             ],
         deps = DEPENDENCIES + [":ckbtc"],
     )
-    for test_name in [
+    for adapter in [
         "btc",
         "doge",
     ]
