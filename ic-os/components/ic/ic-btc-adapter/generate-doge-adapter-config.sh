@@ -6,8 +6,7 @@
 # Arguments:
 # - $1: Name of the file to be read.
 
-# source /opt/ic/bin/config.sh
-source ../../../components/misc/config/guestos/config.sh
+source /opt/ic/bin/config.sh
 
 function read_config_variables() {
     config_dogecoind_addr=$(get_config_value '.guestos_settings.guestos_dev_settings.dogecoind_addr')
