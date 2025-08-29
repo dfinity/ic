@@ -317,7 +317,7 @@ impl NodeRewardsCanister {
     }
 
     pub fn get_historical_reward_periods() -> GetHistoricalRewardPeriods {
-        HISTORICAL_REWARDS.with_borrow(|historical_rewards| {
+        Ok(HISTORICAL_REWARDS.with_borrow(|historical_rewards| {
             historical_rewards
                 .keys()
                 .filter_map(|reward_key| {
@@ -347,7 +347,7 @@ impl NodeRewardsCanister {
                     providers_rewarded: group.map(|(principal_id, _, _)| principal_id.0).collect(),
                 })
                 .collect()
-        })
+        }))
     }
 }
 

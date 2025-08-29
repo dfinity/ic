@@ -115,7 +115,7 @@ type GetNodeProvidersRewardsResponse = variant { Ok : NodeProvidersRewards; Err 
 
 type GetNodeProviderRewardsCalculationResponse = variant { Ok : NodeProviderRewards; Err : text };
 
-type GetHistoricalRewardPeriods = vec HistoricalRewardPeriod;
+type GetHistoricalRewardPeriods = variant { Ok : vec HistoricalRewardPeriod; Err : text };
 
 service : () -> {
     get_node_providers_monthly_xdr_rewards: (GetNodeProvidersMonthlyXdrRewardsRequest) -> (
