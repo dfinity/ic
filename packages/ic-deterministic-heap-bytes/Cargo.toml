@@ -13,4 +13,5 @@ path = "src/lib.rs"
 candid = { workspace = true }
 ic-deterministic-heap-bytes-derive = { path = "../ic-deterministic-heap-bytes-derive" }
 paste = { workspace = true }
+prometheus = { workspace = true }
 tempfile = { workspace = true }

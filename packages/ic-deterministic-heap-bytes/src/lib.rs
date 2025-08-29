@@ -167,10 +167,22 @@ impl_heap_bytes_for_tuple!(0, 1, 2, 3, 4, 5, 6, 7);
 
 impl DeterministicHeapBytes for candid::Principal {}
 impl DeterministicHeapBytes for candid::types::principal::PrincipalError {}
+impl DeterministicHeapBytes for prometheus::Histogram {
+    fn deterministic_heap_bytes(&self) -> usize {
+        let num_buckets = prometheus::DEFAULT_BUCKETS.len();
+        // To get the actual buckets and labels, we need to collect the metric,
+        // which is slow. Instead, we just assume that histogram allocates
+        // a default vector of buckets with no labels.
+        num_buckets * size_of::<f64>()
+    }
+}
+impl DeterministicHeapBytes for prometheus::IntCounter {}
+impl DeterministicHeapBytes for prometheus::IntGauge {}
 impl DeterministicHeapBytes for tempfile::TempDir {
     fn deterministic_heap_bytes(&self) -> usize {
-        // TempDir allocates a string for the path.
-        self.path().as_os_str().len()
+        // TempDir allocates a string for the path. For the sake of determinism,
+        // just assume it allocated up to 4096 bytes (which is a common max path length).
+        4096
     }
 }
 
