@@ -290,7 +290,7 @@ def system_test(
     env = dict(env)
 
     if test_name == None:
-        test_name = name;
+        test_name = name
 
     if test_driver_target == None:
         bin_name = test_name + "_bin"
