@@ -18,6 +18,7 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 which = { workspace = true }
 zstd = { workspace = true }
+dflate = { path = "../dflate" }
 
 [[bin]]
 name = "extract_guestos"

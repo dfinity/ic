@@ -18578,6 +18578,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "clap 4.5.27",
+ "dflate",
  "gpt",
  "indoc",
  "itertools 0.12.1",

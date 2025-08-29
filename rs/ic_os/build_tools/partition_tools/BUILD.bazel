@@ -48,3 +48,19 @@ rust_binary(
         "@crate_index//:zstd",
     ],
 )
+
+rust_binary(
+    name = "fuse-guestos",
+    srcs = ["src/bin/fuse_guestos.rs"],
+    version = "0.1.0",
+    deps = [
+        ":partition_tools",
+        "//rs/ic_os/build_tools/dflate:dflate_lib",
+        "@crate_index//:anyhow",
+        "@crate_index//:clap",
+        "@crate_index//:tar",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+        "@crate_index//:zstd",
+    ],
+)

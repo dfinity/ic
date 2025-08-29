@@ -1,7 +1,7 @@
 pub mod exes;
 pub mod ext;
 pub mod fat;
-mod gpt;
+pub mod gpt;
 mod partition;
 
 pub use partition::Partition;
