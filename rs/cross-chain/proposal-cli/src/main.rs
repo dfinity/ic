@@ -1,6 +1,7 @@
 mod candid;
 mod canister;
 mod dashboard;
+mod forum;
 mod git;
 mod ic_admin;
 mod proposal;
