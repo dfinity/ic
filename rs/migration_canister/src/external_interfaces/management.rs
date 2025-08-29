@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use candid::{CandidType, Principal};
 use ic_cdk::{
     api::{canister_self, canister_version},
@@ -67,7 +69,7 @@ pub async fn set_original_controllers(
     canister_id: Principal,
     controllers: Vec<Principal>,
     subnet_id: Principal,
-) -> ProcessingResult<(), () /* should be `!` */> {
+) -> ProcessingResult<(), Infallible> {
     let args = UpdateSettingsArgs {
         canister_id,
         settings: CanisterSettings {
@@ -187,7 +189,9 @@ pub async fn canister_status(
 // ========================================================================= //
 // `canister_info`
 
-pub async fn get_canister_info(canister_id: Principal) -> ProcessingResult<CanisterInfoResult, ()> {
+pub async fn get_canister_info(
+    canister_id: Principal,
+) -> ProcessingResult<CanisterInfoResult, Infallible> {
     let args = CanisterInfoArgs {
         canister_id,
         num_requested_changes: None,
@@ -224,7 +228,7 @@ pub async fn rename_canister(
     source_version: u64,
     target: Principal,
     total_num_changes: u64,
-) -> ProcessingResult<(), ()> {
+) -> ProcessingResult<(), Infallible> {
     let args = RenameCanisterArgs {
         canister_id: source,
         rename_to: RenameToArgs {

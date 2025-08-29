@@ -3,7 +3,7 @@
 //! Each method processes a specific type of request, and it may
 //! process several requests in sequence before terminating.
 
-use std::{future::Future, iter::zip};
+use std::{convert::Infallible, future::Future, iter::zip};
 
 use crate::{
     canister_state::{
@@ -17,7 +17,7 @@ use crate::{
     Event, RequestState, ValidationError,
 };
 use futures::future::join_all;
-use ic_cdk::{api::time, management_canister::CanisterInfoResult, println};
+use ic_cdk::{api::time, println};
 
 /// Given a lock tag, a filter predicate on `RequestState` and a processor function,
 /// invokes the processor on all requests in the given state concurrently and
@@ -140,7 +140,10 @@ pub async fn process_controllers_changed(
 
 pub async fn process_stopped(
     request: RequestState,
-) -> ProcessingResult<RequestState, RequestState> {
+) -> ProcessingResult<
+    RequestState,
+    RequestState, /* TODO: should be `Infallible` but we want `transition` to be available */
+> {
     let RequestState::StoppedAndReady {
         request,
         stopped_since,
@@ -183,7 +186,7 @@ pub async fn process_all_failed() {
 
 /// Accepts a `Failed` request, returns `Event::Failed` or must be retried.
 // TODO: Confirm this only occurs before `rename_canister`, otherwise the subnet_id args are wrong.
-async fn process_failed(request: RequestState) -> ProcessingResult<Event, () /* should be `!` */> {
+async fn process_failed(request: RequestState) -> ProcessingResult<Event, Infallible> {
     let RequestState::Failed { request, reason } = request else {
         println!("Error: list_failed returned bad variant");
         return ProcessingResult::NoProgress;
@@ -254,6 +257,7 @@ where
     F: std::fmt::Debug,
 {
     /// Use for results of infallible calls to ensure retrying in the presence of bugs.
+    /// // TODO: here we transiution to infallible
     pub fn or_retry<T>(self) -> ProcessingResult<S, T> {
         match self {
             ProcessingResult::Success(x) => ProcessingResult::Success(x),
@@ -298,8 +302,21 @@ impl ProcessingResult<RequestState, RequestState> {
     }
 }
 
+impl ProcessingResult<RequestState, Infallible> {
+    fn transition(self, old_state: RequestState) {
+        match self {
+            ProcessingResult::Success(new_state) => {
+                remove_request(&old_state);
+                insert_request(new_state);
+            }
+            ProcessingResult::NoProgress => {}
+            ProcessingResult::FatalFailure(_) => {}
+        }
+    }
+}
+
 // Processing a `RequestState::Failure` successfully results in an `Event::Failed`.
-impl ProcessingResult<Event, ()> {
+impl ProcessingResult<Event, Infallible> {
     fn transition(self, old_state: RequestState) {
         match self {
             ProcessingResult::Success(_event) => {
@@ -308,9 +325,7 @@ impl ProcessingResult<Event, ()> {
                 // TODO: insert_event(event);
             }
             ProcessingResult::NoProgress => {}
-            ProcessingResult::FatalFailure(_) => {
-                println!("Error: Processing failed states must not fail, should return `NoProgress` instead.");
-            }
+            ProcessingResult::FatalFailure(_) => {}
         }
     }
 }
