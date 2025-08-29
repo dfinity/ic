@@ -35,7 +35,9 @@ use ic_interfaces::{
     certification::{Verifier, VerifierError},
     consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
     consensus_pool::ConsensusTime,
-    execution_environment::{IngressFilterService, IngressHistoryReader, QueryExecutionService},
+    execution_environment::{
+        IngressFilterService, IngressHistoryReader, QueryExecutionInput, QueryExecutionService,
+    },
     ingress_pool::{
         IngressPool, IngressPoolObject, PoolSection, UnvalidatedIngressArtifact,
         ValidatedIngressArtifact,
@@ -91,7 +93,7 @@ use ic_registry_keys::{
     make_canister_ranges_key, make_catch_up_package_contents_key,
     make_chain_key_enabled_subnet_list_key, make_crypto_node_key, make_crypto_tls_cert_key,
     make_node_record_key, make_provisional_whitelist_record_key, make_replica_version_key,
-    make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
+    ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, INITIAL_REGISTRY_VERSION};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -144,9 +146,10 @@ use ic_types::{
     },
     malicious_flags::MaliciousFlags,
     messages::{
-        extract_effective_canister_id, Blob, Certificate, CertificateDelegation, HttpCallContent,
-        HttpCanisterUpdate, HttpRequestContent, HttpRequestEnvelope, Payload as MsgPayload, Query,
-        QuerySource, RejectContext, SignedIngress, EXPECTED_MESSAGE_ID_LENGTH,
+        extract_effective_canister_id, Blob, Certificate, CertificateDelegation,
+        CertificateDelegationMetadata, HttpCallContent, HttpCanisterUpdate, HttpRequestContent,
+        HttpRequestEnvelope, Payload as MsgPayload, Query, QuerySource, RejectContext,
+        SignedIngress, EXPECTED_MESSAGE_ID_LENGTH,
     },
     signature::ThresholdSignature,
     time::GENESIS,
@@ -262,14 +265,6 @@ pub fn add_global_registry_records(
             &make_canister_ranges_key(CanisterId::from_u64(0)),
             registry_version,
             Some(pb_routing_table.clone()),
-        )
-        .unwrap();
-    // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
-    registry_data_provider
-        .add(
-            &make_routing_table_record_key(),
-            registry_version,
-            Some(pb_routing_table),
         )
         .unwrap();
 
@@ -3735,7 +3730,7 @@ impl StateMachine {
         receiver: CanisterId,
         method: impl ToString,
         method_payload: Vec<u8>,
-        delegation: Option<CertificateDelegation>,
+        delegation: Option<(CertificateDelegation, CertificateDelegationMetadata)>,
     ) -> Result<WasmResult, UserError> {
         self.certify_latest_state();
         let user_query = Query {
@@ -3749,11 +3744,11 @@ impl StateMachine {
             method_payload,
         };
         let query_svc = self.query_handler.lock().unwrap().clone();
-        if let Ok((result, _)) = self
-            .runtime
-            .block_on(query_svc.oneshot((user_query, delegation)))
-            .unwrap()
-        {
+        let input = QueryExecutionInput {
+            query: user_query,
+            certificate_delegation_with_metadata: delegation,
+        };
+        if let Ok((result, _)) = self.runtime.block_on(query_svc.oneshot(input)).unwrap() {
             result
         } else {
             unreachable!()
@@ -4047,14 +4042,6 @@ impl StateMachine {
                 &make_canister_ranges_key(CanisterId::from_u64(0)),
                 next_version,
                 Some(pb_routing_table.clone()),
-            )
-            .unwrap();
-        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
-        self.registry_data_provider
-            .add(
-                &make_routing_table_record_key(),
-                next_version,
-                Some(pb_routing_table),
             )
             .unwrap();
         self.registry_client.update_to_latest_version();

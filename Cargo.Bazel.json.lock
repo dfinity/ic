@@ -1,5 +1,5 @@
 {
-  "checksum": "a24431a8da91de59f47d6f07df0bb2b34137931403e0ba6cbfaaccb9dac00159",
+  "checksum": "1cfae161bb1dfdb063dfd5e5bd810e5eb911301d5685ede6479322a383e65806",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21043,6 +21043,11 @@
             {
               "id": "ic-stable-structures 0.6.8",
               "target": "ic_stable_structures"
+            },
+            {
+              "id": "ic-stable-structures 0.7.0",
+              "target": "ic_stable_structures",
+              "alias": "ic_stable_structures_next"
             },
             {
               "id": "ic-test-state-machine-client 3.0.1",
@@ -94819,6 +94824,7 @@
     "ic-response-verification 3.0.3",
     "ic-sha3 1.0.0",
     "ic-stable-structures 0.6.8",
+    "ic-stable-structures 0.7.0",
     "ic-test-state-machine-client 3.0.1",
     "ic-transport-types 0.40.1",
     "ic-utils 0.40.1",

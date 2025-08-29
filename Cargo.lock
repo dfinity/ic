@@ -2588,6 +2588,7 @@ dependencies = [
  "config_types",
  "deterministic_ips",
  "fs_extra",
+ "get_if_addrs",
  "ic-config",
  "ic-types",
  "ic_sev",
@@ -9496,6 +9497,7 @@ name = "ic-http-endpoints-test-agent"
 version = "0.9.0"
 dependencies = [
  "ic-crypto-tree-hash",
+ "ic-http-endpoints-public",
  "ic-types",
  "ic-validator",
  "reqwest 0.12.15",
@@ -10703,6 +10705,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-migration-canister"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "futures",
+ "ic-cdk",
+ "ic-cdk-timers",
+ "ic-stable-structures 0.7.0",
+ "serde",
+ "serde_bytes",
+ "serde_cbor",
+]
+
+[[package]]
 name = "ic-nervous-system-agent"
 version = "0.0.1"
 dependencies = [
@@ -10980,6 +10996,7 @@ dependencies = [
  "canister-test",
  "cycles-minting-canister",
  "futures",
+ "hex",
  "ic-base-types",
  "ic-crypto-sha2",
  "ic-error-types 0.2.0",
@@ -13128,7 +13145,6 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "ic-cdk",
- "ic-management-canister-types",
  "ic_bls12_381",
  "serde",
 ]
@@ -14095,7 +14111,6 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-ledger-core",
  "ic-limits",
- "ic-management-canister-types",
  "ic-management-canister-types-private",
  "ic-message",
  "ic-nervous-system-common",
@@ -15239,7 +15254,6 @@ dependencies = [
  "ic-cdk",
  "ic-config",
  "ic-limits",
- "ic-management-canister-types",
  "ic-management-canister-types-private",
  "ic-message",
  "ic-nervous-system-common-test-keys",
@@ -15378,8 +15392,6 @@ dependencies = [
  "canister-test",
  "comparable",
  "crc32fast",
- "dfn_candid",
- "dfn_core",
  "dfn_protobuf",
  "hex",
  "ic-base-types",
@@ -16464,20 +16476,16 @@ checksum = "09edd9e8b54e49e587e4f6295a7d29c3ea94d469cb40ab8ca70b288248a81db2"
 name = "ledger-canister"
 version = "0.9.0"
 dependencies = [
- "async-trait",
  "canbench-rs",
  "candid",
  "candid_parser",
  "ciborium",
- "dfn_candid",
- "dfn_core",
  "dfn_protobuf",
  "hex",
  "ic-agent",
  "ic-base-types",
  "ic-canister-log 0.2.0",
  "ic-cdk",
- "ic-error-types 0.2.0",
  "ic-http-types",
  "ic-icrc1",
  "ic-icrc1-test-utils",
@@ -17504,13 +17512,13 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "canister-test",
+ "futures",
  "ic-canister-client",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
- "ic-nns-constants",
- "ic-nns-governance-api",
  "ic-nns-test-utils",
  "ic-protobuf",
+ "ic-recovery",
  "ic-registry-keys",
  "ic-registry-nns-data-provider",
  "ic-registry-subnet-type",
@@ -17518,9 +17526,10 @@ dependencies = [
  "ic-types",
  "ic_consensus_system_test_utils",
  "prost 0.13.4",
+ "rand 0.8.5",
  "regex",
- "registry-canister",
  "reqwest 0.12.15",
+ "sha2 0.10.9",
  "slog",
  "url",
 ]
@@ -17559,6 +17568,7 @@ dependencies = [
  "ic-certification 0.9.0",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
+ "ic-http-endpoints-public",
  "ic-http-endpoints-test-agent",
  "ic-limits",
  "ic-management-canister-types-private",
@@ -17575,6 +17585,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-types",
  "ic-types",
+ "ic-universal-canister",
  "ic-utils 0.40.1",
  "ic_consensus_system_test_utils",
  "itertools 0.12.1",
@@ -18995,10 +19006,14 @@ dependencies = [
  "ed25519-dalek",
  "flate2",
  "hex",
+ "ic-base-types",
  "ic-cdk",
  "ic-certification 3.0.3",
  "ic-error-types 0.2.0",
  "ic-management-canister-types",
+ "ic-registry-client",
+ "ic-registry-client-helpers",
+ "ic-registry-proto-data-provider",
  "ic-transport-types",
  "ic-vetkeys",
  "icrc-ledger-types",

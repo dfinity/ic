@@ -3609,6 +3609,7 @@ dependencies = [
  "ic-response-verification",
  "ic-sha3",
  "ic-stable-structures 0.6.8",
+ "ic-stable-structures 0.7.0",
  "ic-test-state-machine-client",
  "ic-transport-types 0.40.1",
  "ic-utils",

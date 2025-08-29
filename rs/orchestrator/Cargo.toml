@@ -13,7 +13,7 @@ candid = { workspace = true }
 clap = { workspace = true }
 exec = "0.3.1"
 env-file-reader = "0.3.0"
-get_if_addrs = "0.5.3"
+get_if_addrs = { workspace = true }
 hex = { workspace = true }
 http-body-util = { workspace = true }
 hyper = { workspace = true }
