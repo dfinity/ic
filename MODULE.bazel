@@ -139,7 +139,7 @@ use_repo(oci, "bitcoind", "bitcoind_linux_amd64")
 # dogecoin container used in test
 oci.pull(
     name = "dogecoind",
-    image = "ghcr.io/dfinity/shkeeper-dogecoind@sha256:b2fcdeece97660f9d80871395ef13703e480efa0d387ea4702433045e083d563",
+    image = "ghcr.io/dfinity/cmajewski/shkeeper-dogecoind@sha256:b2fcdeece97660f9d80871395ef13703e480efa0d387ea4702433045e083d563",
     platforms = [
         "linux/amd64",
     ],
