@@ -8987,6 +8987,7 @@ dependencies = [
  "candid",
  "ic-deterministic-heap-bytes-derive",
  "paste",
+ "prometheus 0.13.4",
  "tempfile",
 ]
 

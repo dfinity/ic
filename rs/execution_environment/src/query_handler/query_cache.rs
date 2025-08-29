@@ -22,6 +22,7 @@ mod tests;
 
 ////////////////////////////////////////////////////////////////////////
 /// Query Cache metrics.
+#[derive(DeterministicHeapBytes)]
 pub(crate) struct QueryCacheMetrics {
     pub hits: IntCounter,
     pub hits_with_ignored_time: IntCounter,
@@ -373,9 +374,6 @@ pub(crate) struct QueryCache {
     /// The upper limit on how long the data certificate stays valid in the query cache.
     data_certificate_expiry_time: Duration,
     /// Query cache metrics (public for tests).
-    // Assume the metrics do not use any heap allocations. This is not entirely
-    // correct, as Histograms use a `Vec` internally, but we ignore it for simplicity.
-    #[deterministic_heap_bytes(with = |_| 0)]
     pub(crate) metrics: QueryCacheMetrics,
 }
 
