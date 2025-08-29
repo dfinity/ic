@@ -181,7 +181,7 @@ pub const WASM64_INSTRUCTION_COST_OVERHEAD: u128 = 2;
 /// This means they will be immediately purged from the blockchain once delivered.
 /// If disabled, pre-signatures remain on the blockchain, until they are consumed by a signature
 /// request.
-pub const STORE_PRE_SIGNATURES_IN_STATE: FlagStatus = FlagStatus::Disabled;
+pub const STORE_PRE_SIGNATURES_IN_STATE: FlagStatus = FlagStatus::Enabled;
 
 /// The per subnet type configuration for the scheduler component
 #[derive(Clone, Deserialize, Serialize)]
