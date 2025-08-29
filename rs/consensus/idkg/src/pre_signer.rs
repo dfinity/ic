@@ -480,7 +480,7 @@ impl IDkgPreSignerImpl {
                                 ),
                             ))
                         } else {
-                            let signer = support.sig_share.signer.clone();
+                            let signer = support.sig_share.signer;
                             let action = self.crypto_verify_dealing_support(
                                 id,
                                 &transcript_params,
@@ -2450,7 +2450,7 @@ mod tests {
                     valid_dealing_supports
                         .entry(validated_id.clone())
                         .or_default()
-                        .insert(support.sig_share.signer.clone());
+                        .insert(support.sig_share.signer);
                 }
 
                 let change_set = vec![IDkgChangeAction::AddToValidated(
@@ -2834,15 +2834,15 @@ mod tests {
                     valid_dealing_supports
                         .entry(validated_id_1.clone())
                         .or_default()
-                        .insert(support_1.sig_share.signer.clone());
+                        .insert(support_1.sig_share.signer);
                     valid_dealing_supports
                         .entry(validated_id_2.clone())
                         .or_default()
-                        .insert(support_2.sig_share.signer.clone());
+                        .insert(support_2.sig_share.signer);
                     valid_dealing_supports
                         .entry(validated_id_3.clone())
                         .or_default()
-                        .insert(support_3.sig_share.signer.clone());
+                        .insert(support_3.sig_share.signer);
                 }
                 let change_set = vec![
                     IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(support_1)),
