@@ -225,7 +225,7 @@ pub fn fund_with_btc<T: RpcClientType>(
         .unwrap();
 
     let initial_height = to_fund_client.get_blockchain_info().unwrap().blocks;
-    let expected_rewards = calculate_regtest_reward(initial_height);
+    let expected_rewards = calculate_regtest_reward::<T>(initial_height);
 
     let initial_utxos = to_fund_client.list_unspent(None, None).unwrap();
 
@@ -265,8 +265,8 @@ pub fn fund_with_btc<T: RpcClientType>(
     coinbase_utxo
 }
 
-fn calculate_regtest_reward(height: u64) -> Amount {
+fn calculate_regtest_reward<T: RpcClientType>(height: u64) -> Amount {
     let halvings = (height / 150) as u32;
-    let base_reward = Amount::from_btc(50.0).unwrap();
+    let base_reward = T::REGTEST_INITIAL_BLOCK_REWARDS;
     base_reward / 2u64.pow(halvings)
 }
