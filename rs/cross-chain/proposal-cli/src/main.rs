@@ -76,6 +76,13 @@ enum Commands {
         #[command(subcommand)]
         submit: Option<SubmitProposal>,
     },
+    /// Create a forum post for a new proposal
+    #[command(arg_required_else_help = true)]
+    CreateForumPost {
+        /// ID of the proposal.
+        #[arg(long)]
+        proposal_id: u64,
+    },
 }
 
 #[derive(Clone, Debug, Subcommand)]
@@ -186,6 +193,9 @@ async fn main() {
                     write_to_disk(output_dir, proposal, submit.clone(), &git_repo);
                 }
             }
+        }
+        Commands::CreateForumPost { proposal_id } => {
+            panic!("BOOM!: {proposal_id}")
         }
     }
 }

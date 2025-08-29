@@ -33,6 +33,7 @@ impl ForumPost {
         btreeset! {Tag::ApplicationCanisterMgmt}
     }
 }
+
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Tag {
     ApplicationCanisterMgmt,
