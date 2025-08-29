@@ -1,4 +1,4 @@
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{bail, ensure, Result};
 use config_types::{
     DeterministicIpv6Config, FixedIpv6Config, GuestOSConfig, GuestOSUpgradeConfig, GuestVMType,
     HostOSConfig, Ipv6Config, TrustedExecutionEnvironmentConfig,
