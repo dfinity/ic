@@ -1,9 +1,8 @@
 use assert_matches::assert_matches;
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_btc_interface::Network;
 use ic_btc_replica_types::{
     BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, BitcoinReject,
-    GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, SendTransactionRequest,
+    GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, Network, SendTransactionRequest,
 };
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{
@@ -570,10 +569,10 @@ fn memory_taken_by_canister_history() {
     canister_state.system_state.add_canister_change(
         Time::from_nanos_since_unix_epoch(0),
         CanisterChangeOrigin::from_user(user_test_id(42).get()),
-        CanisterChangeDetails::canister_creation(vec![
-            canister_test_id(777).get(),
-            user_test_id(42).get(),
-        ]),
+        CanisterChangeDetails::canister_creation(
+            vec![canister_test_id(777).get(), user_test_id(42).get()],
+            None,
+        ),
     );
     canister_state.system_state.add_canister_change(
         Time::from_nanos_since_unix_epoch(16),
@@ -753,7 +752,7 @@ fn insert_bitcoin_response() {
         SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
             request: RequestBuilder::default().build(),
             payload: GetSuccessorsRequestInitial {
-                network: Network::Regtest,
+                network: Network::BitcoinRegtest,
                 anchor: vec![],
                 processed_block_hashes: vec![],
             },
@@ -787,7 +786,7 @@ fn insert_bitcoin_get_successor_reject_response() {
         SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
             request: RequestBuilder::default().build(),
             payload: GetSuccessorsRequestInitial {
-                network: Network::Regtest,
+                network: Network::BitcoinRegtest,
                 anchor: vec![],
                 processed_block_hashes: vec![],
             },
@@ -821,7 +820,7 @@ fn insert_bitcoin_send_transaction_reject_response() {
         SubnetCallContext::BitcoinSendTransactionInternal(BitcoinSendTransactionInternalContext {
             request: RequestBuilder::default().build(),
             payload: SendTransactionRequest {
-                network: Network::Regtest,
+                network: Network::BitcoinRegtest,
                 transaction: vec![],
             },
             time: UNIX_EPOCH,
@@ -1175,9 +1174,13 @@ fn ready_for_migration() {
     fixture
         .push_input(best_effort_request_from(OTHER_CANISTER_ID).into())
         .unwrap();
+    fixture.stop_canister();
+
+    // Input queue is not empty, not ready for migration.
+    assert!(!fixture.state.ready_for_migration(&CANISTER_ID));
+
     fixture.pop_input().unwrap();
     fixture.push_output_response(best_effort_response_to(OTHER_CANISTER_ID));
-    fixture.stop_canister();
 
     // Output queue is not empty, not ready for migration.
     assert!(!fixture.state.ready_for_migration(&CANISTER_ID));

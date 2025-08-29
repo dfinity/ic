@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use async_trait::async_trait;
 use candid::candid_method;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -19,6 +20,7 @@ use ic_nervous_system_proto::pb::v1::{
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
+use ic_sns_root::pb::v1::{RegisterExtensionRequest, RegisterExtensionResponse};
 use ic_sns_root::{
     logs::{ERROR, INFO},
     pb::v1::{
@@ -203,7 +205,7 @@ fn list_sns_canisters(_request: ListSnsCanistersRequest) -> ListSnsCanistersResp
     STATE.with(|sns_root_canister| {
         sns_root_canister
             .borrow()
-            .list_sns_canisters(ic_cdk::api::id())
+            .list_sns_canisters(PrincipalId(ic_cdk::api::id()))
     })
 }
 
@@ -248,6 +250,33 @@ fn change_canister(request: ChangeCanisterRequest) {
     });
 }
 
+#[candid_method(update)]
+#[update]
+async fn register_extension(request: RegisterExtensionRequest) -> RegisterExtensionResponse {
+    log!(INFO, "register_extension");
+    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
+
+    let canister_id = match PrincipalId::try_from(request) {
+        Ok(canister_id) => canister_id,
+        Err(err) => {
+            return RegisterExtensionResponse::from(Err(err));
+        }
+    };
+
+    let root_canister_id = PrincipalId(ic_cdk::api::id());
+
+    let result = SnsRootCanister::register_extension(
+        &STATE,
+        &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
+        root_canister_id,
+        canister_id,
+    )
+    .await;
+
+    log!(INFO, "register_extension done");
+    RegisterExtensionResponse::from(result)
+}
+
 /// This function is deprecated, and `register_dapp_canisters` should be used
 /// instead. (NNS1-1991)
 ///
@@ -277,7 +306,7 @@ async fn register_dapp_canister(
     let RegisterDappCanistersResponse {} = SnsRootCanister::register_dapp_canisters(
         &STATE,
         &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
-        ic_cdk::api::id(),
+        PrincipalId(ic_cdk::api::id()),
         request,
     )
     .await;
@@ -304,7 +333,7 @@ async fn register_dapp_canisters(
     SnsRootCanister::register_dapp_canisters(
         &STATE,
         &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
-        ic_cdk::api::id(),
+        PrincipalId(ic_cdk::api::id()),
         request,
     )
     .await
@@ -333,7 +362,7 @@ async fn set_dapp_controllers(request: SetDappControllersRequest) -> SetDappCont
     SnsRootCanister::set_dapp_controllers(
         &STATE,
         &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
-        ic_cdk::api::id(),
+        PrincipalId(ic_cdk::api::id()),
         PrincipalId(ic_cdk::api::caller()),
         &request,
     )
@@ -373,7 +402,10 @@ fn assert_eq_governance_canister_id(id: PrincipalId) {
 }
 
 // Resources to serve for a given http_request
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),

@@ -1,22 +1,21 @@
 use async_trait::async_trait;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_logger::{error, info, warn, ReplicaLogger};
-use std::future::Future;
 use std::str::FromStr;
 use std::{
     fmt::Debug,
     io::Write,
     path::PathBuf,
-    process::exit,
     time::{Duration, SystemTime},
 };
 use tokio::process::Command;
-use tokio::sync::watch::Receiver;
-use tokio::time::error::Elapsed;
 
 use crate::error::{UpgradeError, UpgradeResult};
 
 pub mod error;
+
+/// Used to signal that the system is rebooting.
+pub struct Rebooting;
 
 const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 
@@ -84,9 +83,9 @@ const REBOOT_TIME_FILENAME: &str = "reboot_time.txt";
 /// ```
 ///
 #[async_trait]
-pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send>:
-    Send + Sync
-{
+pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send + Sync {
+    type UpgradeType;
+
     /// Return the currently prepared version, if there is one. Default is None.
     /// A version `v` is considered to be prepared if its release package was successfully
     /// downloaded and unpacked after a call to `prepare_upgrade(v)`.
@@ -220,7 +219,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
 
     /// Executes the node upgrade by unpacking the downloaded image (if it didn't happen yet)
     /// and rebooting the node.
-    async fn execute_upgrade(&mut self, version: &V) -> UpgradeResult<()> {
+    async fn execute_upgrade(&mut self, version: &V) -> UpgradeResult<Rebooting> {
         match self.get_prepared_version() {
             Some(v) if v == version => {
                 info!(
@@ -261,7 +260,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
             ))
         } else {
             info!(self.log(), "Rebooting {:?}", out);
-            exit(42);
+            Ok(Rebooting)
         }
     }
 
@@ -308,29 +307,5 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     /// * Check if an image upgrade is scheduled.
     /// * Optionally prepare the upgrade in advance using `prepare_upgrade`.
     /// * Once it is time to upgrade, execute it using `execute_upgrade`
-    async fn check_for_upgrade(&mut self) -> UpgradeResult<R>;
-
-    /// Calls `check_for_upgrade()` once every `interval`, timing out after `timeout`.
-    /// Awaiting this function blocks until `exit_signal` is set to `true`.
-    /// For every execution of `check_for_upgrade()` the given handler is called with
-    /// the result returned by the check.
-    async fn upgrade_loop<F, Fut>(
-        &mut self,
-        mut exit_signal: Receiver<bool>,
-        interval: Duration,
-        timeout: Duration,
-        handler: F,
-    ) where
-        F: Fn(Result<UpgradeResult<R>, Elapsed>) -> Fut + Send + Sync,
-        Fut: Future<Output = ()> + Send,
-    {
-        while !*exit_signal.borrow() {
-            let r = tokio::time::timeout(timeout, self.check_for_upgrade()).await;
-            handler(r).await;
-            tokio::select! {
-                _ = tokio::time::sleep(interval) => {}
-                _ = exit_signal.changed() => {}
-            };
-        }
-    }
+    async fn check_for_upgrade(&mut self) -> UpgradeResult<Self::UpgradeType>;
 }

@@ -12,7 +12,9 @@ use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
 use ic_ledger_suite_state_machine_tests::archiving::icrc_archives;
 use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
-use ic_ledger_suite_state_machine_tests::in_memory_ledger::verify_ledger_state;
+use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
+    verify_ledger_state, AllowancesRecentlyPurged,
+};
 use ic_ledger_suite_state_machine_tests::{
     get_all_ledger_and_archive_blocks, send_approval, send_transfer_from, AllowanceProvider,
     ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
@@ -264,6 +266,14 @@ fn encode_upgrade_args() -> LedgerArgument {
 #[test]
 fn test_metadata() {
     ic_ledger_suite_state_machine_tests::test_metadata(ledger_wasm(), encode_init_args)
+}
+
+#[test]
+fn test_icrc3_supported_block_types() {
+    ic_ledger_suite_state_machine_tests::test_icrc3_supported_block_types(
+        ledger_wasm(),
+        encode_init_args,
+    );
 }
 
 #[test]
@@ -536,6 +546,11 @@ fn test_icrc21_standard() {
 }
 
 #[test]
+fn test_icrc21_fee_error() {
+    ic_ledger_suite_state_machine_tests::test_icrc21_fee_error(ledger_wasm(), encode_init_args);
+}
+
+#[test]
 fn test_archiving_lots_of_blocks_after_enabling_archiving() {
     ic_ledger_suite_state_machine_tests::archiving::test_archiving_lots_of_blocks_after_enabling_archiving(
         ledger_wasm(), encode_init_args,
@@ -602,6 +617,14 @@ fn test_icrc106_unsupported_if_index_not_set() {
 fn test_icrc106_set_index_in_install() {
     ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_index_in_install(
         ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
+fn test_icrc106_set_index_in_install_with_mainnet_ledger_wasm() {
+    ic_ledger_suite_state_machine_tests::icrc_106::test_icrc106_set_index_in_install_with_mainnet_ledger_wasm(
+        ledger_mainnet_wasm(),
         encode_init_args,
     );
 }
@@ -1458,8 +1481,33 @@ fn test_icrc3_get_blocks() {
         .map(|BlockWithId { id, block }| (id, block))
         .collect::<BTreeMap<_, _>>();
 
+    let expected_num_blocks = |ranges: &Vec<(u64, u64)>| {
+        let mut count = 0;
+        for (start, length) in ranges {
+            let start = *start;
+            let length = *length;
+            if start >= expected_blocks_by_id.len() as u64 {
+                continue;
+            }
+            let end = (start + length).min(expected_blocks_by_id.len() as u64);
+            count += end - start;
+        }
+        count as usize
+    };
+
     let check_icrc3_get_blocks = |ranges: Vec<(u64, u64)>| {
-        for (pos, BlockWithId { id, block }) in get_all_blocks(ranges).into_iter().enumerate() {
+        let expected_block_count = expected_num_blocks(&ranges);
+        let all_blocks = get_all_blocks(ranges.clone());
+        assert_eq!(
+            expected_block_count,
+            all_blocks.len(),
+            "Expected {} blocks but got {} blocks, total num blocks: {}, ranges: {:?}",
+            expected_block_count,
+            all_blocks.len(),
+            expected_blocks_by_id.len(),
+            &ranges
+        );
+        for (pos, BlockWithId { id, block }) in all_blocks.into_iter().enumerate() {
             let expected_block = match expected_blocks_by_id.get(&id) {
                 None => panic!("Got block with id {id} at position {pos} which doesn't exist"),
                 Some(expected_block) => expected_block,
@@ -1497,7 +1545,7 @@ fn test_icrc3_get_blocks() {
     // multiple ranges
     check_icrc3_get_blocks(vec![(2, 3), (1, 2), (0, 10), (10, 5)]);
 
-    verify_ledger_state::<Tokens>(&env, ledger_id, None);
+    verify_ledger_state::<Tokens>(&env, ledger_id, None, AllowancesRecentlyPurged::Yes);
 }
 
 #[test]

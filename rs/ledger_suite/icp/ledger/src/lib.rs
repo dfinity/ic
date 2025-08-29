@@ -19,8 +19,9 @@ use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemor
 use ic_stable_structures::{storable::Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use icp_ledger::{
-    AccountIdentifier, Block, FeatureFlags, LedgerAllowances, LedgerBalances, Memo, Operation,
-    PaymentError, Transaction, TransferError, TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, Allowance as Allowance103, Allowances, Block, FeatureFlags,
+    LedgerAllowances, LedgerBalances, Memo, Operation, PaymentError, Transaction, TransferError,
+    TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE, MAX_TAKE_ALLOWANCES,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use intmap::IntMap;
@@ -158,7 +159,6 @@ pub enum LedgerField {
 
 /// The ledger versions represent backwards incompatible versions of the ledger.
 /// Downgrading to a lower ledger version is never suppported.
-/// Upgrading from version N to version N+1 should always be possible.
 /// We have the following ledger versions:
 ///   * 0 - the whole ledger state is stored on the heap.
 ///   * 1 - the allowances are stored in stable structures.
@@ -522,10 +522,8 @@ impl Ledger {
             .get_blocks_for_archiving(trigger_threshold, num_blocks)
     }
 
-    pub fn can_send(&self, principal_id: &PrincipalId) -> bool {
-        // If we include more principals here, we need to update the trap message
-        // in `icrc1_transfer` and similar functions.
-        !principal_id.is_anonymous()
+    pub fn can_send(&self, _principal_id: &PrincipalId) -> bool {
+        true
     }
 
     /// Check if it's allowed to notify this canister.
@@ -561,6 +559,10 @@ impl Ledger {
             self.feature_flags = feature_flags;
         }
     }
+
+    pub fn max_take_allowances(&self) -> u64 {
+        MAX_TAKE_ALLOWANCES
+    }
 }
 
 pub fn add_payment(
@@ -590,6 +592,42 @@ pub fn change_notification_state(
 
 pub fn balances_len() -> u64 {
     BALANCES_MEMORY.with_borrow(|balances| balances.len())
+}
+
+pub fn get_allowances_list(
+    from: AccountIdentifier,
+    spender: Option<AccountIdentifier>,
+    max_results: u64,
+    now: u64,
+) -> Allowances {
+    let mut result = vec![];
+    let start_spender = spender.unwrap_or(AccountIdentifier { hash: [0u8; 28] });
+    ALLOWANCES_MEMORY.with_borrow(|allowances| {
+        for ((from_account_id, to_spender_id), storable_allowance) in
+            allowances.range((from, start_spender)..)
+        {
+            if spender.is_some() && start_spender == to_spender_id {
+                continue;
+            }
+            if result.len() >= max_results as usize || from_account_id != from {
+                break;
+            }
+            if let Some(expires_at) = storable_allowance.expires_at {
+                if expires_at.as_nanos_since_unix_epoch() <= now {
+                    continue;
+                }
+            }
+            result.push(Allowance103 {
+                from_account_id,
+                to_spender_id,
+                allowance: storable_allowance.amount,
+                expires_at: storable_allowance
+                    .expires_at
+                    .map(|t| t.as_nanos_since_unix_epoch()),
+            });
+        }
+    });
+    result
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]

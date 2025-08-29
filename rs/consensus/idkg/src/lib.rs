@@ -189,7 +189,7 @@ use crate::{
 };
 use ic_consensus_utils::{bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto, RoundRobin};
 use ic_interfaces::{
-    consensus_pool::ConsensusBlockCache,
+    consensus_pool::{ConsensusBlockCache, ConsensusPoolCache},
     crypto::IDkgProtocol,
     idkg::{IDkgChangeSet, IDkgPool},
     p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
@@ -199,8 +199,10 @@ use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    artifact::IDkgMessageId, consensus::idkg::IDkgBlockReader,
-    crypto::canister_threshold_sig::error::IDkgRetainKeysError, malicious_flags::MaliciousFlags,
+    artifact::IDkgMessageId,
+    consensus::{idkg::IDkgBlockReader, HasHeight},
+    crypto::canister_threshold_sig::{error::IDkgRetainKeysError, idkg::IDkgTranscript},
+    malicious_flags::MaliciousFlags,
     Height, NodeId, SubnetId,
 };
 use std::{
@@ -247,6 +249,7 @@ pub struct IDkgImpl {
     complaint_handler: Box<dyn IDkgComplaintHandler>,
     consensus_block_cache: Arc<dyn ConsensusBlockCache>,
     crypto: Arc<dyn ConsensusCrypto>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     schedule: RoundRobin,
     last_transcript_purge_ts: RefCell<Instant>,
     metrics: IDkgClientMetrics,
@@ -275,9 +278,8 @@ impl IDkgImpl {
         ));
         let signer = Box::new(ThresholdSignerImpl::new(
             node_id,
-            consensus_block_cache.clone(),
             crypto.clone(),
-            state_reader,
+            state_reader.clone(),
             metrics_registry.clone(),
             logger.clone(),
         ));
@@ -293,6 +295,7 @@ impl IDkgImpl {
             signer,
             complaint_handler,
             crypto,
+            state_reader,
             consensus_block_cache,
             schedule: RoundRobin::default(),
             last_transcript_purge_ts: RefCell::new(Instant::now()),
@@ -304,41 +307,21 @@ impl IDkgImpl {
 
     /// Purges the transcripts that are no longer active.
     fn purge_inactive_transcripts(&self, block_reader: &dyn IDkgBlockReader) {
-        let mut active_transcripts = HashSet::new();
-        let mut error_count = 0;
-        for transcript_ref in block_reader.active_transcripts() {
-            match block_reader.transcript(&transcript_ref) {
-                Ok(transcript) => {
-                    self.metrics
-                        .client_metrics
-                        .with_label_values(&["resolve_active_transcript_refs"])
-                        .inc();
-                    active_transcripts.insert(transcript);
-                }
-                Err(error) => {
-                    warn!(
-                        self.logger,
-                        "purge_inactive_transcripts(): failed to resolve transcript ref: err = {:?}, \
-                        {:?}",
-                        error,
-                        transcript_ref,
-                    );
-                    self.metrics
-                        .client_errors
-                        .with_label_values(&["resolve_active_transcript_refs"])
-                        .inc();
-                    error_count += 1;
-                }
+        let active_transcripts = match get_active_transcripts(
+            block_reader,
+            self.state_reader.as_ref(),
+            &self.metrics,
+            &self.logger,
+        ) {
+            Ok(transcripts) => transcripts,
+            Err(err) => {
+                warn!(
+                    self.logger,
+                    "purge_inactive_transcripts(): abort due to: {}", err,
+                );
+                return;
             }
-        }
-
-        if error_count > 0 {
-            warn!(
-                self.logger,
-                "purge_inactive_transcripts(): abort due to {} errors", error_count,
-            );
-            return;
-        }
+        };
 
         match IDkgProtocol::retain_active_transcripts(&*self.crypto, &active_transcripts) {
             Err(IDkgRetainKeysError::TransientInternalError { internal_error }) => {
@@ -371,6 +354,66 @@ impl IDkgImpl {
             }
         }
     }
+}
+
+fn get_active_transcripts(
+    block_reader: &dyn IDkgBlockReader,
+    state_reader: &dyn StateReader<State = ReplicatedState>,
+    metrics: &IDkgClientMetrics,
+    logger: &ReplicaLogger,
+) -> Result<HashSet<IDkgTranscript>, String> {
+    let mut active_transcripts = HashSet::new();
+    let mut error_count = 0;
+    // Retain all active transcripts on the blockchain
+    for transcript_ref in block_reader.active_transcripts() {
+        match block_reader.transcript(&transcript_ref) {
+            Ok(transcript) => {
+                metrics
+                    .client_metrics
+                    .with_label_values(&["resolve_active_transcript_refs"])
+                    .inc();
+                active_transcripts.insert(transcript);
+            }
+            Err(error) => {
+                warn!(
+                    logger,
+                    "purge_inactive_transcripts(): failed to resolve transcript ref: err = {:?}, \
+                        {:?}",
+                    error,
+                    transcript_ref,
+                );
+                metrics
+                    .client_errors
+                    .with_label_values(&["resolve_active_transcript_refs"])
+                    .inc();
+                error_count += 1;
+            }
+        }
+    }
+
+    if error_count > 0 {
+        return Err(format!(
+            "Received {} errors when resolving transcipts",
+            error_count
+        ));
+    }
+
+    if let Some(snapshot) = state_reader.get_certified_state_snapshot() {
+        let state = snapshot.get_state();
+
+        // Retain all stashed key transcripts
+        for stash in state.pre_signature_stashes().values() {
+            active_transcripts.insert((*stash.key_transcript).clone());
+        }
+
+        // Retain transcripts paired with ongoing requests
+        for request in state.signature_request_contexts().values() {
+            for transcript in request.iter_idkg_transcripts() {
+                active_transcripts.insert(transcript.clone());
+            }
+        }
+    }
+    Ok(active_transcripts)
 }
 
 impl<T: IDkgPool> PoolMutationsProducer<T> for IDkgImpl {
@@ -435,7 +478,7 @@ impl<T: IDkgPool> PoolMutationsProducer<T> for IDkgImpl {
 /// Implements the BouncerFactory interface for IDkg.
 pub struct IDkgBouncer {
     subnet_id: SubnetId,
-    consensus_block_cache: Arc<dyn ConsensusBlockCache>,
+    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     metrics: BouncerMetrics,
 }
@@ -445,14 +488,21 @@ impl IDkgBouncer {
     pub fn new(
         metrics_registry: &MetricsRegistry,
         subnet_id: SubnetId,
-        consensus_block_cache: Arc<dyn ConsensusBlockCache>,
+        consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Self {
         Self {
             subnet_id,
-            consensus_block_cache,
+            consensus_pool_cache,
             state_reader,
             metrics: BouncerMetrics::new(metrics_registry, "idkg_pool"),
+        }
+    }
+
+    fn compute_args(&self) -> IDkgBouncerArgs {
+        IDkgBouncerArgs {
+            finalized_height: self.consensus_pool_cache.finalized_block().height(),
+            certified_height: self.state_reader.latest_certified_height(),
         }
     }
 }
@@ -462,25 +512,12 @@ struct IDkgBouncerArgs {
     certified_height: Height,
 }
 
-impl IDkgBouncerArgs {
-    fn new(
-        block_reader: &dyn IDkgBlockReader,
-        state_reader: &dyn StateReader<State = ReplicatedState>,
-    ) -> Self {
-        Self {
-            finalized_height: block_reader.tip_height(),
-            certified_height: state_reader.latest_certified_height(),
-        }
-    }
-}
-
 impl<Pool: IDkgPool> BouncerFactory<IDkgMessageId, Pool> for IDkgBouncer {
     fn new_bouncer(&self, _idkg_pool: &Pool) -> Bouncer<IDkgMessageId> {
         let _timer = self.metrics.update_duration.start_timer();
 
-        let block_reader = IDkgBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;
-        let args = IDkgBouncerArgs::new(&block_reader, self.state_reader.as_ref());
+        let args = self.compute_args();
         Box::new(move |id| compute_bouncer(id, subnet_id, &args))
     }
 
@@ -560,35 +597,163 @@ fn compute_bouncer(
 
 #[cfg(test)]
 mod tests {
+    use std::{collections::BTreeMap, sync::RwLock};
+
+    use crate::test_utils::create_transcript;
+
     use self::test_utils::TestIDkgBlockReader;
 
     use super::*;
+    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_logger::no_op_logger;
+    use ic_management_canister_types_private::MasterPublicKeyId;
     use ic_test_utilities::state_manager::RefMockStateManager;
-    use ic_test_utilities_consensus::idkg::request_id;
+    use ic_test_utilities_consensus::idkg::{
+        fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
+        fake_master_public_key_ids_for_all_idkg_algorithms, fake_pre_signature_stash,
+        fake_signature_request_context_from_id, request_id, FakeCertifiedStateSnapshot,
+    };
     use ic_types::{
         consensus::idkg::{
             complaint_prefix, dealing_prefix, dealing_support_prefix, ecdsa_sig_share_prefix,
             opening_prefix, schnorr_sig_share_prefix, vetkd_key_share_prefix, IDkgArtifactIdData,
-            RequestId, SigShareIdData,
+            PreSigId, RequestId, SigShareIdData, TranscriptRef,
         },
         crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, CryptoHash},
+        messages::CallbackId,
     };
-    use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_1, SUBNET_2};
+    use ic_types_test_utils::ids::{subnet_test_id, NODE_1, NODE_2, SUBNET_1, SUBNET_2};
+
+    #[test]
+    fn test_get_active_transcripts() {
+        let mut block_reader = TestIDkgBlockReader::new();
+        let logger = no_op_logger();
+        let metrics = IDkgClientMetrics::new(MetricsRegistry::new());
+
+        let mut state = ic_test_utilities_state::get_initial_state(0, 0);
+        let expected_state_snapshot = Arc::new(RwLock::new(FakeCertifiedStateSnapshot {
+            height: Height::from(1),
+            state: Arc::new(state.clone()),
+        }));
+        let expected_state_snapshot_clone = expected_state_snapshot.clone();
+
+        let state_manager = Arc::new(RefMockStateManager::default());
+        state_manager
+            .get_mut()
+            .expect_get_certified_state_snapshot()
+            .returning(move || {
+                Some(Box::new(
+                    expected_state_snapshot_clone.read().unwrap().clone(),
+                ))
+            });
+
+        let transcripts =
+            get_active_transcripts(&block_reader, state_manager.as_ref(), &metrics, &logger)
+                .unwrap();
+
+        assert!(transcripts.is_empty());
+
+        // Add some transcripts to the blockchain
+        let chain_transcripts = 3;
+        for i in 0..chain_transcripts {
+            let height = Height::from(1);
+            let key_id = fake_ecdsa_idkg_master_public_key_id();
+            let transcript_id = IDkgTranscriptId::new(SUBNET_1, i, height);
+            let transcript = create_transcript(&key_id, transcript_id, &[NODE_1, NODE_2]);
+            let transcript_ref = TranscriptRef {
+                height,
+                transcript_id,
+            };
+            block_reader.add_transcript(transcript_ref, transcript);
+        }
+
+        let transcripts =
+            get_active_transcripts(&block_reader, state_manager.as_ref(), &metrics, &logger)
+                .unwrap();
+        assert_eq!(transcripts.len() as u64, chain_transcripts);
+
+        // Create some pre-signature stashes
+        let mut stashes = BTreeMap::new();
+        for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
+            stashes.insert(key_id.clone(), fake_pre_signature_stash(&key_id, 5));
+        }
+        let stashed_transcripts = stashes.len() as u64;
+        state
+            .metadata
+            .subnet_call_context_manager
+            .pre_signature_stashes = stashes;
+        expected_state_snapshot.write().unwrap().state = Arc::new(state.clone());
+
+        let transcripts =
+            get_active_transcripts(&block_reader, state_manager.as_ref(), &metrics, &logger)
+                .unwrap();
+        assert_eq!(
+            transcripts.len() as u64,
+            chain_transcripts + stashed_transcripts
+        );
+
+        // Create some paired signature requests
+        let mut contexts = BTreeMap::new();
+        let mut context_transcripts = 0;
+        for key_id in fake_master_public_key_ids_for_all_algorithms() {
+            let callback_id = CallbackId::from(context_transcripts);
+            let pre_sig_id = PreSigId(context_transcripts);
+            let request_id = RequestId {
+                callback_id,
+                height: Height::from(1),
+            };
+            match &key_id {
+                MasterPublicKeyId::Ecdsa(_) => context_transcripts += 5, // quadruple + key transcript
+                MasterPublicKeyId::Schnorr(_) => context_transcripts += 2, // blinder + key transcript
+                MasterPublicKeyId::VetKd(_) => {}                          // No IDkgTranscripts
+            }
+            contexts.insert(
+                callback_id,
+                fake_signature_request_context_from_id(key_id, pre_sig_id, request_id).1,
+            );
+        }
+        state
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_threshold_contexts = contexts;
+        expected_state_snapshot.write().unwrap().state = Arc::new(state.clone());
+
+        let transcripts =
+            get_active_transcripts(&block_reader, state_manager.as_ref(), &metrics, &logger)
+                .unwrap();
+        assert_eq!(
+            transcripts.len() as u64,
+            chain_transcripts + stashed_transcripts + context_transcripts
+        );
+    }
 
     #[test]
     fn test_idkg_priority_fn_args() {
-        let state_manager = Arc::new(RefMockStateManager::default());
-        let height = Height::from(100);
-        state_manager
-            .get_mut()
-            .expect_latest_certified_height()
-            .returning(move || height);
+        const EXPECTED_CERTIFIED_HEIGHT: u64 = 10;
+        const EXPECTED_FINALIZED_HEIGHT: u64 = 12;
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies { mut pool, .. } = dependencies(pool_config.clone(), 1);
 
-        let block_reader = TestIDkgBlockReader::for_signer_test(height.increment(), vec![]);
+            let state_manager = Arc::new(RefMockStateManager::default());
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .returning(move || EXPECTED_CERTIFIED_HEIGHT.into());
 
-        let args = IDkgBouncerArgs::new(&block_reader, state_manager.as_ref());
-        assert_eq!(args.certified_height, height);
-        assert_eq!(args.finalized_height, height.increment());
+            pool.advance_round_normal_operation_n(EXPECTED_FINALIZED_HEIGHT);
+
+            let bouncer_factory = IDkgBouncer::new(
+                &MetricsRegistry::new(),
+                subnet_test_id(1),
+                pool.get_cache(),
+                state_manager as Arc<_>,
+            );
+
+            let args = bouncer_factory.compute_args();
+
+            assert_eq!(args.certified_height.get(), EXPECTED_CERTIFIED_HEIGHT);
+            assert_eq!(args.finalized_height.get(), EXPECTED_FINALIZED_HEIGHT);
+        });
     }
 
     fn get_fake_artifact_id_data(i: IDkgTranscriptId) -> IDkgArtifactIdData {

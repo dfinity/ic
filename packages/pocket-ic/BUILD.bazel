@@ -2,57 +2,40 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test",
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:backoff",
-    "@crate_index//:base64",
-    "@crate_index//:candid",
-    "@crate_index//:flate2",
-    "@crate_index//:hex",
-    "@crate_index//:ic-certification",
-    "@crate_index//:ic-management-canister-types",
-    "@crate_index//:ic-transport-types",
-    "@crate_index//:reqwest",
-    "@crate_index//:schemars",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:serde_json",
-    "@crate_index//:sha2",
-    "@crate_index//:slog",
-    "@crate_index//:strum",
-    "@crate_index//:tempfile",
-    "@crate_index//:thiserror",
-    "@crate_index//:tokio",
-    "@crate_index//:tracing",
-    "@crate_index//:tracing-appender",
-    "@crate_index//:tracing-subscriber",
-]
-
-MACRO_DEPENDENCIES = [
-    "@crate_index//:strum_macros",
-]
-
-TEST_DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-error-types",
-    #TODO: try upgrading this to the latest bitcion crate
-    "@crate_index//:bitcoin_0_28",
-    "@crate_index//:candid_parser",
-    "@crate_index//:ed25519-dalek",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:ic-vetkeys",
-    "@crate_index//:k256",
-    "@crate_index//:lazy_static",
-    "@crate_index//:wat",
-]
-
 rust_library(
     name = "pocket-ic",
     srcs = glob(["src/**/*.rs"]),
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    compile_data = ["README.md"],
+    proc_macro_deps = [
+        "@crate_index//:strum_macros",
+    ],
     version = "9.0.2",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:backoff",
+        "@crate_index//:base64",
+        "@crate_index//:candid",
+        "@crate_index//:flate2",
+        "@crate_index//:hex",
+        "@crate_index//:ic-certification",
+        "@crate_index//:ic-management-canister-types",
+        "@crate_index//:ic-transport-types",
+        "@crate_index//:reqwest",
+        "@crate_index//:schemars",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:serde_json",
+        "@crate_index//:sha2",
+        "@crate_index//:slog",
+        "@crate_index//:strum",
+        "@crate_index//:tempfile",
+        "@crate_index//:thiserror",
+        "@crate_index//:tokio",
+        "@crate_index//:tracing",
+        "@crate_index//:tracing-appender",
+        "@crate_index//:tracing-subscriber",
+    ],
 )
 
 rust_doc_test(
@@ -62,14 +45,16 @@ rust_doc_test(
 
 rust_test(
     name = "pocket-ic-test",
-    srcs = glob(["src/**/*.rs"]),
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + TEST_DEPENDENCIES,
+    compile_data = ["README.md"],
+    crate = ":pocket-ic",
+    deps = ["//packages/ic-error-types"],
 )
 
 rust_test_suite(
     name = "test",
-    size = "medium",
+    # the test sometimes times out on CI with default timeout
+    # of "moderate" (5 minutes) - 2025-07-03
+    timeout = "long",
     srcs = ["tests/tests.rs"],
     data = [
         "//packages/pocket-ic/test_canister:test_canister.wasm.gz",
@@ -77,12 +62,12 @@ rust_test_suite(
         "@mozilla_root_ca_store//file",
     ],
     env = {
-        "RUST_TEST_THREADS": "2",
+        "RUST_TEST_THREADS": "4",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
         "TEST_WASM": "$(rootpath //packages/pocket-ic/test_canister:test_canister.wasm.gz)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    flaky = True,
     tags = [
         "cpu:16",
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
@@ -90,7 +75,67 @@ rust_test_suite(
         "requires-network",
         "test_macos",
     ],
-    deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":pocket-ic",
+        "//rs/registry/client",
+        "//rs/registry/helpers",
+        "//rs/registry/proto_data_provider",
+        "//rs/types/base_types",
+        "@crate_index//:bitcoin_0_28",
+        "@crate_index//:candid",
+        "@crate_index//:ed25519-dalek",
+        "@crate_index//:flate2",
+        "@crate_index//:hex",
+        "@crate_index//:ic-certification",
+        "@crate_index//:ic-management-canister-types",
+        "@crate_index//:ic-transport-types",
+        "@crate_index//:ic-vetkeys",
+        "@crate_index//:k256",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:sha2",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+        "@crate_index//:wat",
+    ],
+)
+
+rust_test_suite(
+    name = "icp_features",
+    # the test sometimes times out on CI with default timeout
+    # of "moderate" (5 minutes) - 2025-07-03
+    timeout = "long",
+    srcs = ["tests/icp_features.rs"],
+    data = [
+        "//packages/pocket-ic/test_canister:test_canister.wasm.gz",
+        "//rs/pocket_ic_server:pocket-ic-server",
+    ],
+    env = {
+        "RUST_TEST_THREADS": "2",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "TEST_WASM": "$(rootpath //packages/pocket-ic/test_canister:test_canister.wasm.gz)",
+    },
+    tags = [
+        "cpu:16",
+        # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
+        # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
+        "requires-network",
+        "test_macos",
+        "long_test",  # The P90 of this test is over 8m for the week starting on 2025-08-20
+    ],
+    deps = [
+        # Keep sorted.
+        ":pocket-ic",
+        "//packages/icrc-ledger-types",
+        "@crate_index//:candid",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde",
+        "@crate_index//:sha2",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+    ],
 )
 
 rust_test_suite(
@@ -105,14 +150,16 @@ rust_test_suite(
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
         # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
         "requires-network",
         "test_macos",
     ],
-    deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
+    deps = [
+        ":pocket-ic",
+        "@crate_index//:reqwest",
+    ],
 )
 
 rust_test_suite(
@@ -129,7 +176,6 @@ rust_test_suite(
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
         "TEST_WASM": "$(rootpath //packages/pocket-ic/test_canister:test_canister.wasm.gz)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "cpu:16",
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
@@ -137,5 +183,8 @@ rust_test_suite(
         "requires-network",
         "test_macos",
     ],
-    deps = [":pocket-ic"] + DEPENDENCIES + TEST_DEPENDENCIES,
+    deps = [
+        ":pocket-ic",
+        "@crate_index//:candid",
+    ],
 )

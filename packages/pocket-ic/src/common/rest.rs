@@ -74,7 +74,7 @@ pub enum CreateInstanceResponse {
     },
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Copy, JsonSchema)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct RawTime {
     pub nanos_since_epoch: u64,
 }
@@ -537,13 +537,76 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
     }
 }
 
+/// Forward-compatible configuration type used instead of `bool` and `Option<bool>`:
+/// if provided, the corresponding feature is enabled.
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub struct EmptyConfig {}
+
+/// Specifies nonmainnet features enabled in this instance.
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub struct NonmainnetFeatures {
+    /// Enables (beta) features (disabled on the ICP mainnet).
+    pub enable_beta_features: Option<EmptyConfig>,
+    /// Disables canister backtraces (enabled on the ICP mainnet).
+    pub disable_canister_backtrace: Option<EmptyConfig>,
+    /// Disables limits on function name length in canister WASM (enabled on the ICP mainnet).
+    pub disable_function_name_length_limits: Option<EmptyConfig>,
+    /// Disables rate-limiting of canister execution (enabled on the ICP mainnet).
+    /// Canister execution refers to instructions and memory writes here.
+    pub disable_canister_execution_rate_limiting: Option<EmptyConfig>,
+}
+
+/// Specifies ICP features enabled by deploying their corresponding system canisters
+/// when creating a PocketIC instance and keeping them up to date
+/// during the PocketIC instance lifetime.
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub struct IcpFeatures {
+    pub registry: bool,
+    /// If the `cycles_minting` feature is enabled, then the default timestamp of a PocketIC instance is set to 10 May 2021 10:00:01 AM CEST (the smallest value that is strictly larger than the default timestamp hard-coded in the CMC state).
+    pub cycles_minting: bool,
+    pub icp_token: bool,
+    pub cycles_token: bool,
+    pub nns_governance: bool,
+    pub sns: bool,
+    pub ii: bool,
+}
+
+impl IcpFeatures {
+    pub fn all_icp_features() -> Self {
+        Self {
+            registry: true,
+            cycles_minting: true,
+            icp_token: true,
+            cycles_token: true,
+            nns_governance: true,
+            sns: true,
+            ii: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub enum InitialTime {
+    /// Sets the initial timestamp of the new instance to the provided value which must be at least
+    /// - 10 May 2021 10:00:01 AM CEST if the `cycles_minting` feature is enabled in `icp_features`;
+    /// - 06 May 2021 21:17:10 CEST otherwise.
+    Timestamp(RawTime),
+    /// Configures the new instance to make progress automatically,
+    /// i.e., periodically update the time of the IC instance
+    /// to the real time and execute rounds on the subnets.
+    AutoProgress(AutoProgressConfig),
+}
+
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct InstanceConfig {
     pub subnet_config_set: ExtendedSubnetConfigSet,
     pub state_dir: Option<PathBuf>,
-    pub nonmainnet_features: bool,
+    pub nonmainnet_features: Option<NonmainnetFeatures>,
     pub log_level: Option<String>,
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
+    pub icp_features: Option<IcpFeatures>,
+    pub allow_incomplete_state: Option<bool>,
+    pub initial_time: Option<InitialTime>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
@@ -672,6 +735,59 @@ impl ExtendedSubnetConfigSet {
         }
         Err("ExtendedSubnetConfigSet must contain at least one subnet".to_owned())
     }
+
+    pub fn try_with_icp_features(mut self, icp_features: &IcpFeatures) -> Result<Self, String> {
+        let check_empty_subnet = |subnet: &Option<SubnetSpec>, subnet_desc, icp_feature| {
+            if let Some(config) = subnet {
+                if !matches!(config.state_config, SubnetStateConfig::New) {
+                    return Err(format!(
+                        "The {} subnet must be empty when specifying the `{}` ICP feature.",
+                        subnet_desc, icp_feature
+                    ));
+                }
+            }
+            Ok(())
+        };
+        // using `let IcpFeatures { }` with explicit field names
+        // to force an update after adding a new field to `IcpFeatures`
+        let IcpFeatures {
+            registry,
+            cycles_minting,
+            icp_token,
+            cycles_token,
+            nns_governance,
+            sns,
+            ii,
+        } = icp_features;
+        // NNS canisters
+        for (flag, icp_feature_str) in [
+            (*registry, "registry"),
+            (*cycles_minting, "cycles_minting"),
+            (*icp_token, "icp_token"),
+            (*nns_governance, "nns_governance"),
+            (*sns, "sns"),
+        ] {
+            if flag {
+                check_empty_subnet(&self.nns, "NNS", icp_feature_str)?;
+                self.nns = Some(self.nns.unwrap_or_default());
+            }
+        }
+        // canisters on the II subnet
+        for (flag, icp_feature_str) in [(*cycles_token, "cycles_token"), (*ii, "ii")] {
+            if flag {
+                check_empty_subnet(&self.ii, "II", icp_feature_str)?;
+                self.ii = Some(self.ii.unwrap_or_default());
+            }
+        }
+        // canisters on the SNS subnet
+        for (flag, icp_feature_str) in [(*sns, "sns")] {
+            if flag {
+                check_empty_subnet(&self.sns, "SNS", icp_feature_str)?;
+                self.sns = Some(self.sns.unwrap_or_default());
+            }
+        }
+        Ok(self)
+    }
 }
 
 /// Configuration details for a subnet, returned by PocketIc server
@@ -681,8 +797,6 @@ pub struct SubnetConfig {
     pub subnet_seed: [u8; 32],
     /// Instruction limits for canister execution on this subnet.
     pub instruction_config: SubnetInstructionConfig,
-    /// Node ids of nodes in the subnet.
-    pub node_ids: Vec<RawNodeId>,
     /// Some mainnet subnets have several disjunct canister ranges.
     pub canister_ranges: Vec<CanisterIdRange>,
 }

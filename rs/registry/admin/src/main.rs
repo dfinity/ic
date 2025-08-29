@@ -69,6 +69,7 @@ use ic_nns_governance_api::{
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
 use ic_nns_test_utils::governance::{HardResetNnsRootToVersionPayload, UpgradeRootProposal};
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord,
     crypto::v1::{PublicKey, X509PublicKeyCert},
@@ -79,7 +80,9 @@ use ic_protobuf::registry::{
     node_rewards::v2::{NodeRewardRate, UpdateNodeRewardsTableProposalPayload},
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
-    routing_table::v1::{CanisterMigrations, RoutingTable},
+    routing_table::v1::{
+        routing_table::Entry as RoutingTableEntry, CanisterMigrations, RoutingTable,
+    },
     subnet::v1::{SubnetListRecord, SubnetRecord as SubnetRecordProto},
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
@@ -95,20 +98,17 @@ use ic_registry_keys::{
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
-    make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
-    make_subnet_record_key, make_unassigned_nodes_config_record_key, FirewallRulesScope,
-    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
-    NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
+    make_replica_version_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_unassigned_nodes_config_record_key, FirewallRulesScope,
+    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, CANISTER_RANGES_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX,
+    NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
 };
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_nns_data_provider_wrappers::{CertifiedNnsDataProvider, NnsDataProvider};
-use ic_registry_routing_table::{
-    CanisterIdRange, CanisterMigrations as OtherCanisterMigrations,
-    RoutingTable as OtherRoutingTable,
-};
+use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations as OtherCanisterMigrations};
 use ic_registry_transport::Error;
 use ic_sns_init::pb::v1::SnsInitPayload; // To validate CreateServiceNervousSystem.
 use ic_sns_wasm::pb::v1::{
@@ -117,7 +117,7 @@ use ic_sns_wasm::pb::v1::{
 };
 use ic_types::{
     crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
-    CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
+    subnet_id_try_from_protobuf, CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
 };
 use indexmap::IndexMap;
 use itertools::izip;
@@ -192,7 +192,8 @@ const IC_DOMAINS: &[&str; 3] = &["ic0.app", "icp0.io", "icp-api.io"];
 #[derive(Parser)]
 #[clap(version = "1.0")]
 struct Opts {
-    #[clap(short = 'r', long, aliases = &["registry-url", "nns-url"], value_delimiter = ',', global = true, default_value = "https://ic0.app")]
+    #[clap(short = 'r', long, aliases = &["registry-url", "nns-url"], value_delimiter = ',', global = true, default_value = "https://ic0.app"
+    )]
     /// The URL of an NNS entry point. That is, the URL of any replica on the
     /// NNS subnet.
     nns_urls: Vec<Url>,
@@ -449,6 +450,9 @@ enum SubCommand {
 
     /// Submits a proposal to express the interest in renting a subnet.
     ProposeToRentSubnet(ProposeToRentSubnetCmd),
+
+    /// Propose to fulfill a subnet rental request
+    ProposeToFulfillSubnetRentalRequest(ProposeToFulfillSubnetRentalRequestCmd),
 
     /// Propose to modify the routing table. Step 2 of canister migration.
     ProposeToRerouteCanisterRanges(ProposeToRerouteCanisterRangesCmd),
@@ -947,6 +951,24 @@ struct ProposeToReviseElectedGuestsOsVersionsCmd {
     #[clap(long, num_args(1..), visible_alias = "replica-versions-to-unelect")]
     /// The GuestOS version ids to remove.
     pub guestos_versions_to_unelect: Vec<String>,
+
+    // TODO: populate this arg in clients and make it required
+    #[clap(long)]
+    /// Path to the json containing the guest launch measurements
+    /// (schema: registry.replica_version.v1.GuestLaunchMeasurements)
+    pub guest_launch_measurements_path: Option<PathBuf>,
+}
+
+impl ProposeToReviseElectedGuestsOsVersionsCmd {
+    /// Reads and returns the SEV-SNP measurements from the input file.
+    fn read_guest_launch_measurements(&self) -> Option<GuestLaunchMeasurements> {
+        self.guest_launch_measurements_path.as_ref().map(|path| {
+            let guest_launch_measurements_json =
+                std::fs::read(path).unwrap_or_else(|_| panic!("Failed to read {}", path.display()));
+            serde_json::from_slice::<GuestLaunchMeasurements>(&guest_launch_measurements_json)
+                .expect("Could not decode GuestLaunchMeasurements")
+        })
+    }
 }
 
 impl ProposalTitle for ProposeToReviseElectedGuestsOsVersionsCmd {
@@ -970,7 +992,7 @@ impl ProposalPayload<ReviseElectedGuestosVersionsPayload>
             replica_version_to_elect: self.guestos_version_to_elect.clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: self.release_package_urls.clone(),
-            guest_launch_measurement_sha256_hex: None,
+            guest_launch_measurements: self.read_guest_launch_measurements(),
             replica_versions_to_unelect: self.guestos_versions_to_unelect.clone(),
         };
         payload.validate().expect("Failed to validate payload");
@@ -1214,6 +1236,47 @@ impl ProposalPayload<SubnetRentalRequest> for ProposeToRentSubnetCmd {
             user: self.user,
             rental_condition_id: self.rental_condition_id,
         }
+    }
+}
+/// Sub-command to submit a subnet rental request proposal.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToFulfillSubnetRentalRequestCmd {
+    /// The principal ID of the user whose rental request should be fulfilled
+    #[clap(long)]
+    user: PrincipalId,
+
+    /// Node IDs that will be members of the subnet
+    #[clap(long, num_args(1..))]
+    node_ids: Vec<PrincipalId>,
+
+    /// Replica version ID (40 character hexadecimal git commit ID)
+    #[clap(long)]
+    replica_version_id: String,
+}
+
+impl ProposalTitle for ProposeToFulfillSubnetRentalRequestCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Fulfill Subnet Rental Request for {}",
+                self.user.to_string().split('-').next().unwrap_or("")
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalAction for ProposeToFulfillSubnetRentalRequestCmd {
+    async fn action(&self) -> ProposalActionRequest {
+        ProposalActionRequest::FulfillSubnetRentalRequest(
+            ic_nns_governance_api::FulfillSubnetRentalRequest {
+                user: Some(self.user),
+                node_ids: Some(self.node_ids.clone()),
+                replica_version_id: Some(self.replica_version_id.clone()),
+            },
+        )
     }
 }
 
@@ -3698,6 +3761,7 @@ async fn main() {
             SubCommand::ProposeToRemoveNodeOperators(_) => (),
             SubCommand::ProposeToRemoveNodes(_) => (),
             SubCommand::ProposeToRentSubnet(_) => (),
+            SubCommand::ProposeToFulfillSubnetRentalRequest(_) => (),
             SubCommand::ProposeToRerouteCanisterRanges(_) => (),
             SubCommand::ProposeToReviseElectedGuestosVersions(_) => (),
             SubCommand::ProposeToReviseElectedHostosVersions(_) => (),
@@ -3905,7 +3969,7 @@ async fn main() {
             let mut success = true;
 
             eprintln!("Download IC-OS .. ");
-            let tmp_dir = tempfile::tempdir().unwrap().into_path();
+            let tmp_dir = tempfile::tempdir().unwrap().keep();
             let mut tmp_file = tmp_dir.clone();
             tmp_file.push("temp-image");
 
@@ -3966,12 +4030,7 @@ async fn main() {
             .await;
         }
         SubCommand::GetRoutingTable => {
-            print_and_get_last_value::<RoutingTable>(
-                make_routing_table_record_key().as_bytes().to_vec(),
-                &registry_canister,
-                opts.json,
-            )
-            .await;
+            print_routing_table(reachable_nns_urls);
         }
         SubCommand::GetEcdsaSigningSubnets => {
             let registry_client = make_registry_client(
@@ -4933,6 +4992,16 @@ async fn main() {
             )
             .await;
         }
+        SubCommand::ProposeToFulfillSubnetRentalRequest(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            propose_action_from_command(cmd, canister_client, proposer).await;
+        }
         SubCommand::ProposeToUpdateCanisterSettings(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             let canister_client = make_canister_client(
@@ -5029,25 +5098,6 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
                 registry.records.push(record);
 
                 println!("{}", serde_json::to_string_pretty(&registry).unwrap());
-            } else if key == b"routing_table" {
-                let value = OtherRoutingTable::try_from(
-                    RoutingTable::decode(&bytes[..]).expect("Error decoding value from registry."),
-                )
-                .unwrap();
-                println!("Routing table. Most recent version is {:?}.\n", version);
-                for (range, subnet) in value.into_iter() {
-                    println!("Subnet: {}", subnet);
-                    println!(
-                        "    Range start: {} (0x{})",
-                        range.start,
-                        hex::encode(range.start.get_ref().as_slice())
-                    );
-                    println!(
-                        "    Range end:   {} (0x{})",
-                        range.end,
-                        hex::encode(range.end.get_ref().as_slice())
-                    );
-                }
             } else if key == b"canister_migrations" {
                 let value = OtherCanisterMigrations::try_from(
                     CanisterMigrations::decode(&bytes[..])
@@ -5637,7 +5687,7 @@ async fn download_wasm_module(url: &Url) -> PathBuf {
         panic!("Wasm module urls must use https");
     }
 
-    let tmp_dir = tempfile::tempdir().unwrap().into_path();
+    let tmp_dir = tempfile::tempdir().unwrap().keep();
     let mut tmp_file = tmp_dir.clone();
     tmp_file.push("wasm_module.tar.gz");
 
@@ -5702,6 +5752,82 @@ fn get_api_boundary_node_ids(nns_url: Vec<Url>) -> Vec<String> {
         })
         .collect::<Vec<_>>();
     records
+}
+
+fn print_routing_table(nns_urls: Vec<Url>) -> Vec<(SubnetId, CanisterIdRange)> {
+    let registry_client = RegistryClientImpl::new(
+        Arc::new(NnsDataProvider::new(
+            tokio::runtime::Handle::current(),
+            nns_urls,
+        )),
+        None,
+    );
+
+    registry_client
+        .try_polling_latest_version(usize::MAX)
+        .unwrap();
+
+    let latest_version = registry_client.get_latest_version();
+
+    println!("Routing table. Most recent version is {}", latest_version);
+
+    let keys = registry_client
+        .get_key_family(CANISTER_RANGES_PREFIX, latest_version)
+        .unwrap();
+
+    for routing_table_key in keys.iter() {
+        let routing_table_value = registry_client
+            .get_versioned_value(routing_table_key, latest_version)
+            .unwrap()
+            .value
+            .unwrap();
+        let routing_table = RoutingTable::decode(&routing_table_value[..]).unwrap();
+
+        for RoutingTableEntry { range, subnet_id } in routing_table.entries {
+            let subnet_id = subnet_id_try_from_protobuf(
+                subnet_id.expect("subnet_id is missing from routing table entry"),
+            )
+            .unwrap();
+            println!("Subnet: {}", subnet_id);
+            let range = CanisterIdRange::try_from(
+                range.expect("range is missing from routing table entry"),
+            )
+            .expect("failed to parse range");
+            println!(
+                "    Range start: {} (0x{})",
+                range.start,
+                hex::encode(range.start.get_ref().as_slice())
+            );
+            println!(
+                "    Range end:   {} (0x{})",
+                range.end,
+                hex::encode(range.end.get_ref().as_slice())
+            );
+        }
+    }
+
+    keys.iter()
+        .flat_map(|key| {
+            let value = registry_client
+                .get_versioned_value(key, latest_version)
+                .unwrap()
+                .value
+                .unwrap();
+            let routing_table = RoutingTable::decode(&value[..]).unwrap();
+            routing_table.entries
+        })
+        .map(|RoutingTableEntry { range, subnet_id }| {
+            let subnet_id = subnet_id_try_from_protobuf(
+                subnet_id.expect("subnet_id is missing from routing table entry"),
+            )
+            .unwrap();
+            let range = CanisterIdRange::try_from(
+                range.expect("range is missing from routing table entry"),
+            )
+            .expect("failed to parse range");
+            (subnet_id, range)
+        })
+        .collect()
 }
 
 /// Writes a threshold signing public key to the given path.
@@ -6084,12 +6210,12 @@ impl GovernanceCanisterClient {
             }))),
             id: Some((*self.0.proposal_author()).into()),
         })
-        .map_err(|e| {
-            format!(
-                "Cannot candid-serialize the submit_add_or_remove_node_provider_proposal payload: {}",
-                e
-            )
-        })?;
+            .map_err(|e| {
+                format!(
+                    "Cannot candid-serialize the submit_add_or_remove_node_provider_proposal payload: {}",
+                    e
+                )
+            })?;
         let response = self
             .0
             .execute_update("manage_neuron", serialized)

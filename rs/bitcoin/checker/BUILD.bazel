@@ -4,23 +4,15 @@ load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
-LIB_SRCS = [
-    "src/blocklist.rs",
-    "src/blocklist/tests.rs",
-    "src/lib.rs",
-    "src/types.rs",
-]
-
 rust_library(
     name = "btc_checker_lib",
-    srcs = LIB_SRCS,
+    srcs = glob(["lib/**"]),
     crate_name = "ic_btc_checker",
     deps = [
         # Keep sorted.
         "@crate_index//:bitcoin",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
-        "@crate_index//:ic-management-canister-types",
         "@crate_index//:serde",
     ],
 )
@@ -41,7 +33,6 @@ rust_test(
         # Keep sorted.
         "@crate_index//:candid_parser",
         "@crate_index//:ic-btc-interface",
-        "@crate_index//:ic-management-canister-types",
         "@crate_index//:proptest",
         "@crate_index//:scraper",
         "@crate_index//:tokio",
@@ -50,10 +41,7 @@ rust_test(
 
 rust_canister(
     name = "btc_checker_canister",
-    srcs = glob(
-        ["src/**"],
-        exclude = LIB_SRCS,
-    ),
+    srcs = glob(["src/**"]),
     compile_data = [
         "templates/dashboard.html",
     ],

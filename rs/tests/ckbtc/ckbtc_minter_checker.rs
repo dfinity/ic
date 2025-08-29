@@ -1,8 +1,7 @@
 use anyhow::Result;
-
-use bitcoincore_rpc::RpcApi;
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
+use ic_btc_adapter_test_utils::rpc_client::RpcApi;
 use ic_btc_checker::CheckMode as NewCheckMode;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::updates::{
@@ -20,15 +19,15 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
 };
 use ic_tests_ckbtc::{
-    create_canister, install_bitcoin_canister, install_btc_checker, install_ledger, install_minter,
-    setup, subnet_app, subnet_sys, upgrade_btc_checker,
+    ckbtc_setup, create_canister, install_bitcoin_canister, install_btc_checker, install_ledger,
+    install_minter, subnet_app, subnet_sys, upgrade_btc_checker,
     utils::{
         assert_account_balance, assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
-        ensure_wallet, generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
-        start_canister, stop_canister, upgrade_canister, wait_for_bitcoin_balance,
-        wait_for_mempool_change, BTC_BLOCK_REWARD,
+        generate_blocks, get_btc_address, get_btc_client, send_to_btc_address, start_canister,
+        stop_canister, upgrade_canister, wait_for_bitcoin_balance, wait_for_mempool_change,
+        BITCOIN_NETWORK_TRANSFER_FEE, BTC_BLOCK_REWARD,
     },
-    BTC_MIN_CONFIRMATIONS, CHECK_FEE,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
@@ -48,20 +47,14 @@ pub fn test_btc_checker(env: TestEnv) {
     // Get access to btc replica.
     let btc_rpc = get_btc_client(&env);
 
-    // Create wallet if required.
-    ensure_wallet(&btc_rpc, &logger);
-
-    let default_btc_address = btc_rpc
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let default_btc_address = btc_rpc.get_address().unwrap();
     // Creating the 101 first block to reach the min confirmations to spend a coinbase utxo.
     debug!(
         &logger,
-        "Generating 101 blocks to default address: {}", &default_btc_address
+        "Generating 101 blocks to default address: {}", default_btc_address
     );
     btc_rpc
-        .generate_to_address(101, &default_btc_address)
+        .generate_to_address(101, default_btc_address)
         .unwrap();
 
     block_on(async {
@@ -120,7 +113,6 @@ pub fn test_btc_checker(env: TestEnv) {
 
         // Mint block to the first sub-account (with single utxo).
         let first_transfer_amount = 100_000_000;
-        const BITCOIN_NETWORK_TRANSFER_FEE: u64 = 2820;
         send_to_btc_address(&btc_rpc, &logger, &btc_address1, first_transfer_amount).await;
         generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
 
@@ -207,7 +199,7 @@ pub fn test_btc_checker(env: TestEnv) {
                         &logger,
                         block_index,
                         &account1,
-                        first_transfer_amount - CHECK_FEE - BITCOIN_NETWORK_TRANSFER_FEE,
+                        first_transfer_amount - CHECK_FEE,
                     )
                     .await;
                 }
@@ -259,7 +251,7 @@ pub fn test_btc_checker(env: TestEnv) {
                 &logger,
                 *block_index,
                 &account1,
-                first_transfer_amount - CHECK_FEE - BITCOIN_NETWORK_TRANSFER_FEE,
+                first_transfer_amount - CHECK_FEE,
             )
             .await;
         } else {
@@ -367,7 +359,9 @@ pub fn test_btc_checker(env: TestEnv) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(setup)
+        .with_timeout_per_test(TIMEOUT_PER_TEST)
+        .with_overall_timeout(OVERALL_TIMEOUT)
+        .with_setup(ckbtc_setup)
         .add_test(systest!(test_btc_checker))
         .execute_from_args()?;
     Ok(())

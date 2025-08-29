@@ -13,47 +13,12 @@ BOOT_PARTITION_B=7
 ROOT_PARTITION_B=8
 VAR_PARTITION_B=9
 
+MAX_ATTEMPTS=10
+RETRY_DELAY=5
+
 GUESTOS_DEVICE="/dev/hostlvm/guestos"
 
-# Reads properties "boot_alternative" and "boot_cycle" from the grubenv
-# file. The properties are stored as global variables.
-#
-# Arguments:
-# $1 - name of grubenv file
-read_grubenv() {
-    local GRUBENV_FILE="$1"
-
-    while IFS="=" read -r key value; do
-        case "$key" in
-            '#'*) ;;
-            'boot_alternative' | 'boot_cycle')
-                eval "$key=\"$value\""
-                ;;
-            *) ;;
-        esac
-    done <"$GRUBENV_FILE"
-}
-
-# Writes "boot_alternative" and "boot_cycle" global variables to grubenv file
-#
-# Arguments:
-# $1 - name of grubenv file
-write_grubenv() {
-    local GRUBENV_FILE="$1"
-
-    TMP_FILE=$(mktemp /tmp/grubenv-XXXXXXXXXXXX)
-    (
-        echo "# GRUB Environment Block"
-        echo boot_alternative="$boot_alternative"
-        echo boot_cycle="$boot_cycle"
-        # Fill to make sure we will have 1024 bytes
-        echo -n "################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################"
-    ) >"${TMP_FILE}"
-    # Truncate to arrive at precisely 1024 bytes
-    truncate --size=1024 "${TMP_FILE}"
-    cat "${TMP_FILE}" >"${GRUBENV_FILE}"
-    rm "${TMP_FILE}"
-}
+source /opt/ic/bin/grub.sh
 
 # Helper function to extract a value from /proc/cmdline
 get_cmdline_var() {
@@ -80,9 +45,7 @@ prepare_guestos_upgrade() {
 
     workdir="$(mktemp -d)"
     grubdir="${workdir}/grub"
-    bootdir="${workdir}/boot"
-    rootdir="${workdir}/root"
-    mkdir "${grubdir}" "${bootdir}" "${rootdir}"
+    mkdir "${grubdir}"
     echo "Created temporary directories in $workdir"
 
     mount -o rw,sync "${lodev}p${GRUB_PARTITION_NUM}" "${grubdir}"
@@ -104,13 +67,13 @@ download_and_verify_upgrade() {
     local tmpdir="$3"
 
     local base_urls=(
-        "https://download.dfinity.systems/ic"
-        "https://download.dfinity.network/ic"
+        "https://download.dfinity.systems"
+        "https://download.dfinity.network"
     )
 
     local download_successful=false
     for base_url in "${base_urls[@]}"; do
-        local url="${base_url}/${version}/guest-os/update-img/update-img.tar.zst"
+        local url="${base_url}/ic/${version}/guest-os/update-img/update-img.tar.zst"
         echo "Attempting to download upgrade from $url..."
 
         if curl -L -o "$tmpdir/upgrade.tar.zst" "$url"; then
@@ -126,7 +89,7 @@ download_and_verify_upgrade() {
 
     if [ "$download_successful" = false ]; then
         echo "ERROR: Failed to download upgrade file from all available URLs"
-        exit 1
+        return 1
     fi
 
     echo "Verifying upgrade image hash..."
@@ -137,9 +100,10 @@ download_and_verify_upgrade() {
         echo "Expected short 6-character hash: $short_hash"
         echo "Got short 6-character hash: $actual_short_hash"
         echo "Full hash: $actual_hash"
-        exit 1
+        return 1
     fi
     echo "Hash verification successful"
+    return 0
 }
 
 extract_upgrade() {
@@ -169,26 +133,14 @@ install_upgrade() {
 
     echo "Writing boot image to ${boot_target}..."
     dd if="$tmpdir/boot.img" of="${boot_target}" bs=1M status=progress
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to write boot image"
-        exit 1
-    fi
     echo "Boot image written successfully"
 
     echo "Writing root image to ${root_target}..."
     dd if="$tmpdir/root.img" of="${root_target}" bs=1M status=progress
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to write root image"
-        exit 1
-    fi
     echo "Root image written successfully"
 
     echo "Wiping var partition header on ${var_target}..."
     dd if=/dev/zero of="${var_target}" bs=1M count=16 status=progress
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Failed to wipe var partition header"
-        exit 1
-    fi
     echo "Var partition header wiped successfully"
 
     echo "Updating grubenv to prepare for next boot..."
@@ -202,7 +154,7 @@ install_upgrade() {
     fi
     boot_cycle=first_boot
     echo "Setting boot_alternative to ${boot_alternative} and boot_cycle to ${boot_cycle}"
-    write_grubenv "${grubdir}/grubenv"
+    write_grubenv "${grubdir}/grubenv" "$boot_alternative" "$boot_cycle"
     echo "Grubenv updated successfully"
 
     echo "Upgrade installation complete"
@@ -213,6 +165,10 @@ guestos_upgrade_cleanup() {
     if [ -n "${grubdir}" ] && mountpoint -q "${grubdir}"; then
         umount "${grubdir}"
         echo "Unmounted ${grubdir}"
+    fi
+    if [ -n "${lodev}" ]; then
+        losetup -d "${lodev}"
+        echo "Detached loop device ${lodev}"
     fi
     if [ -n "${workdir}" ] && [ -d "${workdir}" ]; then
         rm -rf "${workdir}"
@@ -239,7 +195,33 @@ main() {
     trap 'guestos_upgrade_cleanup; rm -rf "$TMPDIR"' EXIT
 
     prepare_guestos_upgrade
-    download_and_verify_upgrade "$VERSION" "$SHORT_HASH" "$TMPDIR"
+
+    echo "Starting download and verification with retry logic (max attempts: $MAX_ATTEMPTS, delay: ${RETRY_DELAY}s)..."
+
+    attempt=1
+    while [ $attempt -le $MAX_ATTEMPTS ]; do
+        echo "=== Download attempt $attempt/$MAX_ATTEMPTS ==="
+
+        if download_and_verify_upgrade "$VERSION" "$SHORT_HASH" "$TMPDIR"; then
+            echo "✓ Download and verification completed successfully on attempt $attempt"
+            break
+        else
+            echo "✗ Download and verification failed on attempt $attempt"
+
+            if [ $attempt -lt $MAX_ATTEMPTS ]; then
+                echo "Waiting ${RETRY_DELAY} seconds before retry..."
+                sleep $RETRY_DELAY
+            fi
+        fi
+
+        ((attempt++))
+    done
+
+    if [ $attempt -gt $MAX_ATTEMPTS ]; then
+        echo "ERROR: Failed to download and verify upgrade file after $MAX_ATTEMPTS attempts"
+        exit 1
+    fi
+
     extract_upgrade "$TMPDIR"
     install_upgrade "$TMPDIR"
 

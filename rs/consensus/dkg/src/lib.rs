@@ -261,6 +261,7 @@ impl DkgImpl {
 }
 
 /// Validate the signature and dealing of the given message against its config
+#[allow(clippy::result_large_err)]
 pub(crate) fn crypto_validate_dealing(
     crypto: &dyn ConsensusCrypto,
     config: &NiDkgConfig,
@@ -1576,6 +1577,7 @@ mod tests {
                             }],
                             signature_request_timeout_ns: None,
                             idkg_key_rotation_period_ms: None,
+                            max_parallel_pre_signature_transcripts_in_creation: None,
                         })
                         .build(),
                 )],
@@ -2067,6 +2069,7 @@ mod tests {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         }
     }
 

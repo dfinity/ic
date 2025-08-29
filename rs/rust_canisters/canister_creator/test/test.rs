@@ -102,10 +102,10 @@ fn install_code_works() {
     assert_eq!(result, WasmResult::Reply("null".as_bytes().to_vec()));
 
     // Assert there are 1_001 canisters running with the memory usage below the
-    // subnet storage capacity, which is currently 1 TiB
+    // subnet storage capacity, which is currently 2 TiB
     assert_eq!(env.num_running_canisters(), 1_001);
     assert!(
-        env.canister_memory_usage_bytes() < 1024 * 1024 * 1024 * 1024,
+        env.canister_memory_usage_bytes() < 2 * 1024 * 1024 * 1024 * 1024,
         "Actual: {} bytes",
         env.canister_memory_usage_bytes()
     );

@@ -235,21 +235,41 @@ package(default_visibility = ["//visibility:public"])
     ]
 ]
 
-rust_test(
-    name = "ledger_canister_test",
-    crate = ":_wasm_ledger_canister",
-    data = [
-        ":ledger.did",
-    ],
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/ledger",
-    },
-    deps = ["@crate_index//:candid_parser"],
-)
+[
+    rust_test(
+        name = "ledger_canister_test" + name_suffix,
+        crate = ":_wasm_ledger_canister" + name_suffix,
+        crate_features = features,
+        data = [
+            ":ledger.did",
+        ],
+        env = {
+            "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1/ledger",
+        },
+        deps = ["@crate_index//:candid_parser"] + extra_deps,
+    )
+    for (name_suffix, features, extra_deps) in [
+        (
+            "",
+            [],
+            [
+                "//rs/ledger_suite/icrc1/tokens_u64",
+            ],
+        ),
+        (
+            "_u256",
+            ["u256-tokens"],
+            [
+                "//rs/ledger_suite/icrc1/tokens_u256",
+            ],
+        ),
+    ]
+]
 
 [
     rust_ic_test(
         name = "ledger_test" + name_suffix,
+        timeout = "long",
         srcs = ["tests/tests.rs"],
         crate_features = features,
         data = [

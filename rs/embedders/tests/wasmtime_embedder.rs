@@ -12,25 +12,23 @@ use ic_embedders::{
     },
 };
 use ic_interfaces::execution_environment::{
-    CanisterBacktrace, ExecutionMode, HypervisorError, SystemApi, TrapCode,
+    CanisterBacktrace, HypervisorError, SystemApi, TrapCode,
 };
 use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_test_utilities_embedders::{WasmtimeInstanceBuilder, DEFAULT_NUM_INSTRUCTIONS};
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
-use ic_types::PrincipalId;
 use ic_types::{
     ingress::WasmResult,
     messages::RejectContext,
     methods::{FuncRef, WasmClosure, WasmMethod},
     time::UNIX_EPOCH,
-    Cycles, NumBytes, NumInstructions,
+    Cycles, NumBytes, NumInstructions, PrincipalId,
 };
 
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
-#[cfg(target_os = "linux")]
 /// Ensures that attempts to execute messages on wasm modules that do not
 /// define memory fails.
 #[test]
@@ -1632,10 +1630,7 @@ fn stable_access_beyond_32_bit_range() {
         )"#
     );
 
-    let mut instance = WasmtimeInstanceBuilder::new()
-        .with_wat(&wat)
-        .with_canister_memory_limit(NumBytes::from(40 * gb))
-        .build();
+    let mut instance = WasmtimeInstanceBuilder::new().with_wat(&wat).build();
     instance.run(func_ref("write_to_last_page")).unwrap();
 }
 
@@ -1827,7 +1822,6 @@ fn wasm_debug_print_instructions_charging() {
     for (rate_limiting, subnet_type, expected_instructions) in test_cases {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = rate_limiting;
-        config.feature_flags.wasm64 = FlagStatus::Enabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(subnet_type)
@@ -1882,7 +1876,6 @@ fn wasm_canister_logging_instructions_charging() {
     for (message_len, expected_instructions) in test_cases {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
-        config.feature_flags.wasm64 = FlagStatus::Enabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(SubnetType::Application)
@@ -1952,7 +1945,6 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
     // same for wasm64
     let mut config = Config::default();
     config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
     let instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_subnet_type(SubnetType::Application)
@@ -1977,8 +1969,7 @@ fn wasm64_basic_test() {
         (memory (export "memory") i64 10)
     )"#;
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2004,8 +1995,7 @@ fn memory_copy_test() {
         (memory (export "memory") 10)
     )"#;
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2030,8 +2020,7 @@ fn wasm64_memory_copy_test() {
         (memory (export "memory") i64 10)
     )"#;
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2057,8 +2046,7 @@ fn wasm64_memory_init_test() {
             (data (;0;) "\01\02\03\04")
     )"#;
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2085,8 +2073,7 @@ fn wasm64_handles_memory_grow_failure_test() {
         (memory (export "memory") i64 10)
     )"#;
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2230,8 +2217,7 @@ fn wasm64_import_system_api_functions() {
         (memory (export "memory") i64 10)
     )"#;
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2271,8 +2257,7 @@ fn wasm64_msg_caller_copy() {
         call_context_test_id(13),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2341,8 +2326,7 @@ fn wasm64_msg_arg_data_copy() {
         call_context_test_id(13),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2402,8 +2386,7 @@ fn wasm64_msg_method_name_copy() {
     let msg_name = "test".to_string();
     let api = ApiType::inspect_message(caller, msg_name.clone(), payload, UNIX_EPOCH);
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2472,8 +2455,7 @@ fn wasm64_msg_reply_data_append() {
         caller,
         call_context_test_id(13),
     );
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2523,8 +2505,7 @@ fn wasm64_msg_reject() {
         caller,
         call_context_test_id(13),
     );
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2572,12 +2553,10 @@ fn wasm64_reject_msg_copy() {
         Cycles::zero(),
         call_context_test_id(13),
         false,
-        ExecutionMode::Replicated,
         NumInstructions::new(700),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2643,8 +2622,7 @@ fn wasm64_root_key() {
         call_context_test_id(13),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2716,8 +2694,7 @@ fn wasm64_canister_self_copy() {
         call_context_test_id(13),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2787,8 +2764,7 @@ fn wasm64_subnet_self_size() {
         call_context_test_id(13),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2841,8 +2817,7 @@ fn wasm64_subnet_self_copy() {
         call_context_test_id(13),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2915,8 +2890,7 @@ fn wasm64_trap() {
         user_test_id(24).get(),
         call_context_test_id(13),
     );
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2957,8 +2931,7 @@ fn wasm64_canister_cycle_balance128() {
         call_context_test_id(13),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -3023,8 +2996,7 @@ fn wasm64_canister_liquid_cycle_balance128() {
         call_context_test_id(13),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -3095,12 +3067,10 @@ fn wasm64_msg_cycles_refunded128() {
         Cycles::new(777),
         call_context_test_id(13),
         false,
-        ExecutionMode::Replicated,
         NumInstructions::new(700),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -3162,8 +3132,7 @@ fn wasm64_cycles_burn128() {
         call_context_test_id(13),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -3205,8 +3174,7 @@ fn large_wasm64_memory_allocation_test() {
     // This test checks if maximum memory size
     // is capped to the maximum allowed memory size in 64 bit mode.
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let max_heap_size_in_pages = config.max_wasm64_memory_size.get() / WASM_PAGE_SIZE as u64;
     let wat = format!(
         r#"
@@ -3287,10 +3255,11 @@ fn large_wasm64_stable_read_write_test() {
 
     let gb = 1024 * 1024 * 1024;
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
-    // Declare a large heap.
-    config.max_wasm64_memory_size = NumBytes::from(10 * gb);
+    let config = ic_config::embedders::Config {
+        // Declare a large heap.
+        max_wasm64_memory_size: NumBytes::from(10 * gb),
+        ..Default::default()
+    };
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
@@ -3302,7 +3271,6 @@ fn large_wasm64_stable_read_write_test() {
             call_context_test_id(13),
         ))
         .with_wat(wat)
-        .with_canister_memory_limit(NumBytes::from(40 * gb))
         .build();
 
     let result = instance.run(FuncRef::Method(WasmMethod::Update("test".to_string())));
@@ -3367,8 +3335,7 @@ fn wasm64_saturate_fun_index() {
         call_context_test_id(13),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -3421,49 +3388,104 @@ fn wasm64_saturate_fun_index() {
 #[test]
 fn test_environment_variable_system_api() {
     let wat = r#"
-  (module
+(module
       (import "ic0" "msg_reply" (func $msg_reply))
       (import "ic0" "msg_reply_data_append"
             (func $msg_reply_data_append (param i32 i32)))
       (import "ic0" "env_var_count" (func $ic0_env_var_count (result i32)))
       (import "ic0" "env_var_name_size" (func $env_var_name_size (param i32) (result i32)))
       (import "ic0" "env_var_name_copy" (func $env_var_name_copy (param i32 i32 i32 i32)))
+      (import "ic0" "env_var_name_exists" (func $env_var_name_exists (param i32 i32) (result i32)))
       (import "ic0" "env_var_value_size" (func $env_var_value_size (param i32 i32) (result i32)))
       (import "ic0" "env_var_value_copy" (func $env_var_value_copy (param i32 i32 i32 i32 i32)))
-    
-            
+      (import "ic0" "trap" (func $trap (param i32 i32)))
+
       (func (export "canister_update go")
-        (call $ic0_env_var_count)
-        drop
+        (local $name_dst i32)
+        (local $output_dst i32)
+        (local $var_count i32)
+        (local $index i32)
+        (local $name_size i32)
+        (local $value_size i32)
 
+        (local.set $name_dst (i32.const 0))
+        (local.set $output_dst (i32.const 1000)) ;; output buffer starting after enough slack for the name buffer
+
+        ;; Assert that the number of environment variables is 2:
+        ;; this update call traps with an empty error message if this is not the case
+        (local.set $var_count (call $ic0_env_var_count))
+        (if (i32.ne (local.get $var_count) (i32.const 2))
+          (then
+            (call $trap (i32.const 0) (i32.const 0))
+          )
+        )
+       
         ;; Copy first name to memory
-        (call $env_var_name_copy (i32.const 0) (i32.const 0) (i32.const 0) (call $env_var_name_size (i32.const 0)))
+        (local.set $index (i32.const 0))
+        (local.set $name_size (call $env_var_name_size (local.get $index)))
+        (call $env_var_name_copy
+            (local.get $index)     ;; index
+            (local.get $name_dst)  ;; dst
+            (i32.const 0)          ;; offset
+            (local.get $name_size) ;; (name) size
+        )
+        
+        ;; Assert that the first name exists:
+        (if (i32.ne (call $env_var_name_exists (local.get $name_dst) (local.get $name_size)) (i32.const 1))
+          (then
+            (call $trap (i32.const 0) (i32.const 0))
+          )
+        )
 
-        ;; Get value size: 11.
-        (call $env_var_value_size (i32.const 0) (i32.const 10))
-        drop
+        ;; Copy first value to memory
+        (local.set $value_size (call $env_var_value_size (local.get $name_dst) (local.get $name_size)))
+        (call $env_var_value_copy
+            (local.get $name_dst)   ;; name_src
+            (local.get $name_size)  ;; name_size
+            (local.get $output_dst) ;; dst
+            (i32.const 0)           ;; offset
+            (local.get $value_size) ;; (value) size
+        )
 
-        ;; Copy value to memory
-        (call $env_var_value_copy (i32.const 0) (i32.const 10) (i32.const 20) (i32.const 0) (i32.const 11))
-
-        (call $msg_reply_data_append (i32.const 20) (i32.const 11))
+        ;; Append first value to reply
+        (call $msg_reply_data_append (local.get $output_dst) (local.get $value_size))
 
         ;; Copy second name to memory
-        (call $env_var_name_copy (i32.const 1) (i32.const 0) (i32.const 0) (call $env_var_name_size (i32.const 1)))
+        (local.set $index (i32.const 1))
+        (local.set $name_size (call $env_var_name_size (local.get $index)))
+        (call $env_var_name_copy
+            (local.get $index)     ;; index
+            (local.get $name_dst)  ;; dst
+            (i32.const 0)          ;; offset
+            (local.get $name_size) ;; (name) size
+        )
 
-        ;; Get value size: 10.
-        (call $env_var_value_size (i32.const 0) (i32.const 10))
-        drop
+        ;; Assert that the second name exists:
+        (if (i32.ne (call $env_var_name_exists (local.get $name_dst) (local.get $name_size)) (i32.const 1))
+          (then
+            (call $trap (i32.const 0) (i32.const 0))
+          )
+        )
 
-        ;; Copy value to memory
-        (call $env_var_value_copy (i32.const 0) (i32.const 10) (i32.const 20) (i32.const 0) (i32.const 10))
+        ;; Copy second value to memory
+        (local.set $value_size (call $env_var_value_size (local.get $name_dst) (local.get $name_size)))
+        (call $env_var_value_copy
+            (local.get $name_dst)   ;; name_src
+            (local.get $name_size)  ;; name_size
+            (local.get $output_dst) ;; dst
+            (i32.const 0)           ;; offset
+            (local.get $value_size) ;; (value) size
+        )
 
+        ;; Append second value to reply
+        (call $msg_reply_data_append (local.get $output_dst) (local.get $value_size))
 
-        (call $msg_reply_data_append (i32.const 20) (i32.const 10))
+        ;; Finish the reply
         (call $msg_reply)
       )
+
       (memory (export "memory") 10)
-  )"#;
+)"#;
 
     // Add test environment variables
     let mut env_vars = std::collections::BTreeMap::new();

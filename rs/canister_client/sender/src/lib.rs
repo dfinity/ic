@@ -116,7 +116,7 @@ pub enum Sender {
     PrincipalId(PrincipalId),
     /// Signed from the node itself, with its key.
     Node {
-        /// DER encoded public key
+        /// Ed25519 public key
         pub_key: Vec<u8>,
         /// Function that signs the message id
         sign: SignMessageId,

@@ -557,7 +557,9 @@ fn distribute_rewards_with_stable_neurons() -> BenchResult {
             .unwrap();
     }
 
-    bench_fn(|| governance.distribute_rewards(Tokens::new(10_000_000, 0).unwrap()))
+    bench_fn(|| {
+        governance.distribute_voting_rewards_to_neurons(Tokens::new(10_000_000, 0).unwrap())
+    })
 }
 
 #[bench(raw)]
@@ -744,7 +746,7 @@ fn list_proposals() -> BenchResult {
 /// embedders crate.
 #[export_name = "canister_update update_empty"]
 fn update_empty() {
-    ic_cdk::api::call::reply_raw(&[]);
+    ic_cdk::api::msg_reply([]);
 }
 
 /// Used for benchmarking compilation/instrumentation/execution changes in the
@@ -752,5 +754,5 @@ fn update_empty() {
 #[export_name = "canister_query go"]
 fn go() {
     let _ = list_neurons_stable();
-    ic_cdk::api::call::reply_raw(&[]);
+    ic_cdk::api::msg_reply([]);
 }

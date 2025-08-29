@@ -11,6 +11,7 @@ clap = { workspace = true }
 hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
+ic-nns-delegation-manager = { path = "../http_endpoints/nns_delegation_manager" }
 ic-btc-adapter-client = { path = "../bitcoin/client" }
 ic-btc-consensus = { path = "../bitcoin/consensus" }
 ic-config = { path = "../config" }

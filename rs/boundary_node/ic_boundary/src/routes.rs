@@ -22,8 +22,8 @@ use crate::{
     core::ANONYMOUS_PRINCIPAL,
     errors::{ApiError, ErrorCause},
     http::error_infer,
-    persist::{RouteSubnet, Routes},
-    snapshot::RegistrySnapshot,
+    persist::Routes,
+    snapshot::{RegistrySnapshot, Subnet},
 };
 
 #[derive(Debug, Clone, PartialEq, Hash, CandidType, Deserialize)]
@@ -102,9 +102,8 @@ pub trait Proxy: Sync + Send {
 }
 
 pub trait Lookup: Sync + Send {
-    fn lookup_subnet_by_canister_id(&self, id: &CanisterId)
-        -> Result<Arc<RouteSubnet>, ErrorCause>;
-    fn lookup_subnet_by_id(&self, id: &SubnetId) -> Result<Arc<RouteSubnet>, ErrorCause>;
+    fn lookup_subnet_by_canister_id(&self, id: &CanisterId) -> Result<Arc<Subnet>, ErrorCause>;
+    fn lookup_subnet_by_id(&self, id: &SubnetId) -> Result<Arc<Subnet>, ErrorCause>;
 }
 
 pub trait Health: Sync + Send {
@@ -120,8 +119,8 @@ pub trait RootKey: Sync + Send {
 #[derive(Clone, derive_new::new)]
 pub struct ProxyRouter {
     http_client: Arc<dyn HttpClient>,
-    published_routes: Arc<ArcSwapOption<Routes>>,
-    published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+    routing_table: Arc<ArcSwapOption<Routes>>,
+    registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
     subnets_alive_threshold: f64,
     nodes_per_subnet_alive_threshold: f64,
 }
@@ -143,9 +142,9 @@ impl Lookup for ProxyRouter {
     fn lookup_subnet_by_canister_id(
         &self,
         canister_id: &CanisterId,
-    ) -> Result<Arc<RouteSubnet>, ErrorCause> {
+    ) -> Result<Arc<Subnet>, ErrorCause> {
         let subnet = self
-            .published_routes
+            .routing_table
             .load_full()
             .ok_or(ErrorCause::NoRoutingTable)? // No routing table present
             .lookup_by_canister_id(canister_id.get_ref().0)
@@ -154,9 +153,9 @@ impl Lookup for ProxyRouter {
         Ok(subnet)
     }
 
-    fn lookup_subnet_by_id(&self, subnet_id: &SubnetId) -> Result<Arc<RouteSubnet>, ErrorCause> {
+    fn lookup_subnet_by_id(&self, subnet_id: &SubnetId) -> Result<Arc<Subnet>, ErrorCause> {
         let subnet = self
-            .published_routes
+            .routing_table
             .load_full()
             .ok_or(ErrorCause::NoRoutingTable)? // No routing table present
             .lookup_by_id(subnet_id.get_ref().0)
@@ -168,7 +167,7 @@ impl Lookup for ProxyRouter {
 
 impl RootKey for ProxyRouter {
     fn root_key(&self) -> Option<Vec<u8>> {
-        self.published_registry_snapshot
+        self.registry_snapshot
             .load_full()
             .map(|x| x.nns_public_key.clone())
     }
@@ -177,8 +176,8 @@ impl RootKey for ProxyRouter {
 impl Health for ProxyRouter {
     fn health(&self) -> ReplicaHealthStatus {
         match (
-            self.published_routes.load_full(),
-            self.published_registry_snapshot.load_full(),
+            self.routing_table.load_full(),
+            self.registry_snapshot.load_full(),
         ) {
             (Some(rt), Some(snap)) => {
                 if snap.subnets.is_empty() {
@@ -240,7 +239,7 @@ pub async fn lookup_subnet(
     };
 
     // Inject subnet into request
-    request.extensions_mut().insert(Arc::clone(&subnet));
+    request.extensions_mut().insert(subnet.clone());
 
     // Pass request to the next processor
     let mut response = next.run(request).await;
@@ -259,7 +258,6 @@ pub(crate) mod test {
 
     use anyhow::Error;
     use axum::{body::Body, http::Request, routing::method_routing::get, Router};
-    use ethnum::u256;
     use http::{
         header::{HeaderName, HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS},
         StatusCode,
@@ -285,68 +283,39 @@ pub(crate) mod test {
             handlers::{health, status},
             PATH_HEALTH, PATH_STATUS,
         },
-        persist::{test::node, Persist, Persister},
-        snapshot::{test::test_registry_snapshot, Node},
+        persist::{Persist, Persister},
+        snapshot::test::test_registry_snapshot,
         test_utils::{setup_test_router, TestHttpClient},
     };
 
-    pub fn test_node(id: u64) -> Arc<Node> {
-        node(id, principal!("f7crg-kabae"))
-    }
-
-    pub fn test_route_subnet_with_id(id: String, n: usize) -> RouteSubnet {
-        let mut nodes = Vec::new();
-
-        for i in 0..n {
-            nodes.push(test_node(i as u64));
-        }
-
-        // "casting integer literal to `u32` is unnecessary"
-        // fck clippy
-        let zero = 0u32;
-
-        RouteSubnet {
-            id: Principal::from_text(id).unwrap(),
-            range_start: u256::from(zero),
-            range_end: u256::from(zero),
-            nodes,
-        }
-    }
-
-    pub fn test_route_subnet(n: usize) -> RouteSubnet {
-        test_route_subnet_with_id("f7crg-kabae".into(), n)
-    }
-
     fn assert_header(headers: &http::HeaderMap, name: HeaderName, expected_value: &str) {
-        assert!(headers.contains_key(&name), "Header {} is missing", name);
+        assert!(headers.contains_key(&name), "Header {name} is missing");
         assert_eq!(
             headers.get(&name).unwrap(),
             &HeaderValue::from_str(expected_value).unwrap(),
-            "Header {} does not match expected value: {}",
-            name,
-            expected_value,
+            "Header {name} does not match expected value: {expected_value}"
         );
     }
 
     #[tokio::test]
     async fn test_health() -> Result<(), Error> {
-        let published_routes = Arc::new(ArcSwapOption::empty());
-        let published_registry_snapshot = Arc::new(ArcSwapOption::empty());
+        let routing_table = Arc::new(ArcSwapOption::empty());
+        let registry_snapshot = Arc::new(ArcSwapOption::empty());
 
-        let persister = Persister::new(published_routes.clone());
+        let persister = Persister::new(routing_table.clone());
 
         let http_client = Arc::new(TestHttpClient(1));
         let proxy_router = Arc::new(ProxyRouter::new(
             http_client,
-            published_routes,
-            published_registry_snapshot.clone(),
+            routing_table,
+            registry_snapshot.clone(),
             0.51,
             0.6666,
         ));
 
         // Install snapshot
         let (snapshot, _, _) = test_registry_snapshot(5, 3);
-        published_registry_snapshot.store(Some(Arc::new(snapshot.clone())));
+        registry_snapshot.store(Some(Arc::new(snapshot.clone())));
 
         // Initial state
         assert_eq!(proxy_router.health(), ReplicaHealthStatus::Starting);
@@ -486,7 +455,7 @@ pub(crate) mod test {
 
         // Install snapshot with zero subnets
         let (snapshot, _, _) = test_registry_snapshot(0, 0);
-        published_registry_snapshot.store(Some(Arc::new(snapshot.clone())));
+        registry_snapshot.store(Some(Arc::new(snapshot.clone())));
         persister.persist(snapshot.subnets.clone());
 
         // Make sure it doesn't crash
@@ -497,7 +466,7 @@ pub(crate) mod test {
 
         // Install snapshot with subnets which have zero nodes
         let (snapshot, _, _) = test_registry_snapshot(5, 0);
-        published_registry_snapshot.store(Some(Arc::new(snapshot.clone())));
+        registry_snapshot.store(Some(Arc::new(snapshot.clone())));
         persister.persist(snapshot.subnets.clone());
 
         // Make sure it doesn't crash
@@ -521,19 +490,19 @@ pub(crate) mod test {
             44, 183, 41, 121, 43, 119, 84, 128, 45, 105, 10,
         ];
 
-        let published_routes = Arc::new(ArcSwapOption::empty());
-        let published_registry_snapshot = Arc::new(ArcSwapOption::empty());
+        let routing_table = Arc::new(ArcSwapOption::empty());
+        let registry_snapshot = Arc::new(ArcSwapOption::empty());
 
-        let persister = Persister::new(published_routes.clone());
+        let persister = Persister::new(routing_table.clone());
         let (mut snapshot, _, _) = test_registry_snapshot(5, 3);
         snapshot.nns_public_key = ROOT_KEY.into();
-        published_registry_snapshot.store(Some(Arc::new(snapshot.clone())));
+        registry_snapshot.store(Some(Arc::new(snapshot.clone())));
 
         let http_client = Arc::new(TestHttpClient(1));
         let proxy_router = Arc::new(ProxyRouter::new(
             http_client,
-            published_routes,
-            published_registry_snapshot,
+            routing_table,
+            registry_snapshot,
             0.51,
             0.6666,
         ));

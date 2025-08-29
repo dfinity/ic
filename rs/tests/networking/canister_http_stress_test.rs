@@ -21,6 +21,7 @@ Success::
 2. The results are written to a json file (in benchmark/benchmark.json).
 
 end::catalog[] */
+#![allow(deprecated)]
 
 use std::time::Duration;
 
@@ -175,6 +176,7 @@ async fn do_request(
                         }),
                         method: HttpMethod::GET,
                         max_response_bytes: None,
+                        is_replicated: None,
                     },
                     cycles: 500_000_000_000,
                 },

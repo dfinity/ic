@@ -15,6 +15,7 @@ Success::
 2. Received failed to connect error from application subnet.
 
 end::catalog[] */
+#![allow(deprecated)]
 
 use anyhow::bail;
 use anyhow::Result;
@@ -132,6 +133,7 @@ pub fn test(env: TestEnv) {
                             }),
                             method: HttpMethod::GET,
                             max_response_bytes: None,
+                            is_replicated: None,
                         },
                         cycles: 500_000_000_000,
                     },
@@ -185,6 +187,7 @@ pub fn test(env: TestEnv) {
                             }),
                             method: HttpMethod::GET,
                             max_response_bytes: None,
+                            is_replicated: None,
                         },
                         cycles: 500_000_000_000,
                     },

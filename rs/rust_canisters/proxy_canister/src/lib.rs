@@ -5,6 +5,7 @@
 //! as a canister message to client if the call was successful and agreed by majority nodes,
 //! otherwise errors out.
 //!
+#![allow(deprecated)]
 use std::time::Duration;
 
 use candid::{CandidType, Deserialize};
@@ -37,6 +38,7 @@ pub struct UnvalidatedCanisterHttpRequestArgs {
     pub body: Option<Vec<u8>>,
     pub method: HttpMethod,
     pub transform: Option<TransformContext>,
+    pub is_replicated: Option<bool>,
 }
 impl Payload<'_> for UnvalidatedCanisterHttpRequestArgs {}
 
@@ -51,6 +53,7 @@ impl From<UnvalidatedCanisterHttpRequestArgs>
             body: args.body,
             method: args.method,
             transform: args.transform,
+            is_replicated: None,
         }
     }
 }

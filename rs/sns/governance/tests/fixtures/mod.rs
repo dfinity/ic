@@ -1,5 +1,6 @@
 use crate::fixtures::environment_fixture::{EnvironmentFixture, EnvironmentFixtureState};
 use async_trait::async_trait;
+use candid::Nat;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
@@ -10,7 +11,7 @@ use ic_sns_governance::{
     governance::{Governance, ValidGovernanceProto},
     pb::v1::{
         get_neuron_response, get_proposal_response,
-        governance::{MaturityModulation, Mode, SnsMetadata, Version},
+        governance::{GovernanceCachedMetrics, MaturityModulation, Mode, SnsMetadata, Version},
         manage_neuron::{
             self, AddNeuronPermissions, MergeMaturity, RegisterVote, RemoveNeuronPermissions,
         },
@@ -129,7 +130,7 @@ impl ICRC1Ledger for LedgerFixture {
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         let accounts = &mut self.ledger_fixture_state.try_lock().unwrap().accounts;
 
-        Ok(Tokens::from_e8s(accounts.iter().map(|(_, y)| y).sum()))
+        Ok(Tokens::from_e8s(accounts.values().sum()))
     }
 
     async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError> {
@@ -143,6 +144,19 @@ impl ICRC1Ledger for LedgerFixture {
             .try_lock()
             .unwrap()
             .target_canister_id
+    }
+
+    async fn icrc2_approve(
+        &self,
+        _spender: Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<Subaccount>,
+    ) -> Result<Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 
     async fn icrc3_get_blocks(
@@ -450,6 +464,19 @@ impl GovernanceCanisterFixture {
     /// orthogonal to this test scenario, as they would require setting up mock responses.
     pub fn temporarily_disable_sns_upgrades(&mut self) -> &mut Self {
         assert!(self.governance.acquire_upgrade_periodic_task_lock());
+        self
+    }
+
+    /// Ensures that the cached metrics are not updated during the test. Siuable for tests that
+    /// do not care about the cached metrics. Only needs to be called once per test.
+    pub fn disable_update_cached_metrics(&mut self) -> &mut Self {
+        self.governance
+            .proto
+            .metrics
+            .replace(GovernanceCachedMetrics {
+                timestamp_seconds: u64::MAX,
+                ..Default::default()
+            });
         self
     }
 

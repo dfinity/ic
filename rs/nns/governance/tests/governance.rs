@@ -15,7 +15,9 @@ use fixtures::{account, new_motion_proposal, principal, NNSBuilder, NeuronBuilde
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_crypto_sha2::Sha256;
-use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
+use ic_nervous_system_clients::canister_status::{
+    CanisterStatusResultV2, CanisterStatusType, MemoryMetricsFromManagementCanister,
+};
 use ic_nervous_system_common::{
     ledger, ledger::compute_neuron_staking_subaccount_bytes, NervousSystemError, E8,
     ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
@@ -31,10 +33,7 @@ use ic_nervous_system_timers::test::{
 use ic_neurons_fund::{
     NeuronsFundParticipationLimits, PolynomialMatchingFunction, SerializableFunction,
 };
-use ic_nns_common::{
-    pb::v1::{NeuronId, ProposalId},
-    types::UpdateIcpXdrConversionRatePayload,
-};
+use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
@@ -735,75 +734,6 @@ async fn test_cascade_following() {
             .expect("Neuron not found"),
         0
     );
-}
-
-/// In this scenario, we simply test that you cannot make a proposal
-/// to set the conversion rate below the minimum allowable rate.
-#[tokio::test]
-async fn test_minimum_icp_xdr_conversion_rate() {
-    let driver = fake::FakeDriver::default();
-    let mut gov = Governance::new(
-        fixture_for_following(),
-        driver.get_fake_env(),
-        driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
-        driver.get_fake_randomness_generator(),
-    );
-    // Set minimum conversion rate.
-    gov.heap_data
-        .economics
-        .as_mut()
-        .unwrap()
-        .minimum_icp_xdr_rate = 100_000;
-    // This should fail.
-    assert_eq!(
-        ErrorType::InvalidProposal as i32,
-        gov.make_proposal(
-            &NeuronId { id: 1 },
-            // Must match neuron 1's serialized_id.
-            &PrincipalId::try_from(b"SID1".to_vec()).unwrap(),
-            &Proposal {
-                summary: "test".to_string(),
-                action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                    nns_function: NnsFunction::IcpXdrConversionRate as i32,
-                    payload: Encode!(&UpdateIcpXdrConversionRatePayload {
-                        xdr_permyriad_per_icp: 0,
-                        data_source: "".to_string(),
-                        timestamp_seconds: 0,
-                        reason: None,
-                    })
-                    .unwrap(),
-                })),
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap_err()
-        .error_type
-    );
-    // This should succeed
-    gov.make_proposal(
-        &NeuronId { id: 1 },
-        // Must match neuron 1's serialized_id.
-        &PrincipalId::try_from(b"SID1".to_vec()).unwrap(),
-        &Proposal {
-            title: Some("A Reasonable Title".to_string()),
-            summary: "test".to_string(),
-            action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                nns_function: NnsFunction::IcpXdrConversionRate as i32,
-                payload: Encode!(&UpdateIcpXdrConversionRatePayload {
-                    xdr_permyriad_per_icp: 100_000_000,
-                    data_source: "".to_string(),
-                    timestamp_seconds: 0,
-                    reason: None,
-                })
-                .unwrap(),
-            })),
-            ..Default::default()
-        },
-    )
-    .await
-    .unwrap();
 }
 
 #[tokio::test]
@@ -1989,7 +1919,7 @@ fn test_enforce_private_neuron() {
             },
             full_neurons: vec![full_neuron],
             total_pages_available: Some(1),
-        },
+        }
     );
 }
 
@@ -3369,29 +3299,6 @@ async fn test_genesis_in_the_future_in_supported() {
         )
         .await
         .unwrap();
-    let short_proposal_pid = gov
-        .make_proposal(
-            &NeuronId { id: 1 },
-            // Must match neuron 1's serialized_id.
-            &principal(1),
-            &Proposal {
-                title: Some("A Reasonable Title".to_string()),
-                summary: "proposal 2 (short)".to_string(),
-                action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                    nns_function: NnsFunction::IcpXdrConversionRate as i32,
-                    payload: Encode!(&UpdateIcpXdrConversionRatePayload {
-                        xdr_permyriad_per_icp: 9256,
-                        data_source: "the data source".to_string(),
-                        timestamp_seconds: 111_222_333,
-                        reason: None,
-                    })
-                    .unwrap(),
-                })),
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
 
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
     run_pending_timers();
@@ -3409,20 +3316,6 @@ async fn test_genesis_in_the_future_in_supported() {
             rounds_since_last_distribution: Some(0),
             latest_round_available_e8s_equivalent: Some(0)
         }
-    );
-    // ... even though the short proposal is ready to settle
-    let short_info = gov
-        .get_proposal_info(&PrincipalId::new_anonymous(), short_proposal_pid)
-        .unwrap();
-    assert_eq!(
-        short_info.reward_status, ReadyToSettle as i32,
-        "Proposal info for the 'short' proposal: {:#?}",
-        short_info
-    );
-    assert_eq!(
-        short_info.reward_event_round, 0,
-        "Proposal info for the 'short' proposal: {:#?}",
-        short_info
     );
 
     // The long proposal, however, is still open for voting
@@ -3506,7 +3399,7 @@ async fn test_genesis_in_the_future_in_supported() {
         RewardEvent {
             day_after_genesis: 1,
             actual_timestamp_seconds: fake_driver.now(),
-            settled_proposals: vec![long_early_proposal_pid, short_proposal_pid],
+            settled_proposals: vec![long_early_proposal_pid],
             distributed_e8s_equivalent: 2,
             total_available_e8s_equivalent: 100,
             rounds_since_last_distribution: Some(1),
@@ -3539,12 +3432,6 @@ async fn test_genesis_in_the_future_in_supported() {
     // At this point, all proposals have been rewarded
     assert_eq!(
         gov.get_proposal_info(&PrincipalId::new_anonymous(), long_early_proposal_pid)
-            .unwrap()
-            .reward_event_round,
-        1
-    );
-    assert_eq!(
-        gov.get_proposal_info(&PrincipalId::new_anonymous(), short_proposal_pid)
             .unwrap()
             .reward_event_round,
         1
@@ -3600,7 +3487,6 @@ fn compute_maturities(
     let governance_proto = GovernanceProtoBuilder::new()
         .with_instant_neuron_operations()
         .with_neurons(neurons)
-        .with_short_voting_period(10)
         .with_neuron_management_voting_period(10)
         .with_wait_for_quiet_threshold(10)
         .build();
@@ -3692,19 +3578,7 @@ proptest! {
 fn test_topic_weights(stake in 1u64..1_000_000_000) {
     // Check that voting on
     // 1. a governance proposal yields 20 times the voting power
-    // 2. an exchange rate proposal yields 0.01 times the voting power
     // 3. other proposals yield 1 time the voting power
-
-    // Test alloacting 100 maturity to two neurons with equal stake where
-    // 1. first neuron voting on a network proposal (1x) and
-    // 2. second neuron voting on an exchange proposal (0.01x).
-    // Overall reward weights are 2 * (1+0.01) = 2.02
-    // First neuron gets 1/2.02 * 100 = 49.5 truncated to 49.
-    // Second neuron gets 0.01/2.02 * 100 = 0.495 truncated to 0.
-    assert_eq!(
-        compute_maturities(vec![stake, stake], vec!["P-N", "-PE"], USUAL_REWARD_POT_E8S),
-        vec![49, 0]
-    );
 
     // Test alloacting 100 maturity to two neurons with equal stake where
     // 1. first neuron voting on a gov proposal (20x) and
@@ -3759,7 +3633,6 @@ fn test_random_voting_rewards_scenarios() {
             match proposal_topic {
                 fake::ProposalTopicBehavior::Governance => 20_00,
                 fake::ProposalTopicBehavior::NetworkEconomics => 1_00,
-                fake::ProposalTopicBehavior::ExchangeRate => 1,
             }
         }
 
@@ -3792,7 +3665,6 @@ fn test_random_voting_rewards_scenarios() {
             let proposal_topic = *[
                 fake::ProposalTopicBehavior::Governance,
                 fake::ProposalTopicBehavior::NetworkEconomics,
-                fake::ProposalTopicBehavior::ExchangeRate,
             ]
             .iter()
             .choose(&mut rng)
@@ -7160,7 +7032,7 @@ fn test_manage_and_reward_node_providers() {
         )
         .now_or_never()
         .unwrap()
-        .panic_if_error("Couldn't submit proposal.")
+        .panic_if_error("Couldn't submit proposal to add NP.")
         .command
         .unwrap()
     {
@@ -7185,7 +7057,7 @@ fn test_manage_and_reward_node_providers() {
     );
 
     // Adding the same node provider again should fail.
-    let pid = match gov
+    assert!(gov
         .manage_neuron(
             &voter_pid,
             &ManageNeuron {
@@ -7208,18 +7080,10 @@ fn test_manage_and_reward_node_providers() {
         )
         .now_or_never()
         .unwrap()
-        .panic_if_error("Couldn't submit proposal.")
-        .command
+        .err()
         .unwrap()
-    {
-        manage_neuron_response::Command::MakeProposal(resp) => resp.proposal_id.unwrap(),
-        _ => panic!("Invalid response"),
-    };
-
-    assert_eq!(
-        gov.get_proposal_data(pid).unwrap().status(),
-        ProposalStatus::Failed
-    );
+        .error_message
+        .contains("cannot add already existing Node Provider"));
 
     // Rewarding the node provider to the default account should now work.
     let pid = match gov
@@ -7546,7 +7410,7 @@ fn test_manage_and_reward_multiple_node_providers() {
 
     // Adding any of the same node providers again should fail
     for np_pid in np_pid_vec {
-        let prop_id = match gov
+        assert!(gov
             .manage_neuron(
                 &voter_pid,
                 &ManageNeuron {
@@ -7569,19 +7433,10 @@ fn test_manage_and_reward_multiple_node_providers() {
             )
             .now_or_never()
             .unwrap()
-            .panic_if_error("Couldn't submit proposal.")
-            .command
+            .err()
             .unwrap()
-        {
-            manage_neuron_response::Command::MakeProposal(resp) => resp.proposal_id.unwrap(),
-            _ => panic!("Invalid response"),
-        };
-
-        // The proposal should have failed
-        assert_eq!(
-            gov.get_proposal_data(prop_id).unwrap().status(),
-            ProposalStatus::Failed
-        );
+            .error_message
+            .contains("cannot add already existing Node Provider"));
     }
 
     let to_subaccount = Subaccount({
@@ -11700,6 +11555,7 @@ lazy_static! {
                     268693, // idle_cycles_burned_per_day
                     (3.5 * (1 << 30) as f32) as u64, // wasm_memory_limit (3.5gb)
                     123478, // wasm_memory_threshold
+                    MemoryMetricsFromManagementCanister::default(), // memory_metrics
                 )),
             }),
             governance: Some(ic_sns_root::CanisterSummary {
@@ -13238,6 +13094,7 @@ async fn test_metrics() {
         // Garbage values, because this test was written before this feature.
         total_voting_power_non_self_authenticating_controller: Some(0xDEAD),
         total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),
+        spawning_neurons_count: 0,
         non_self_authenticating_controller_neuron_subset_metrics: None,
         public_neuron_subset_metrics: None,
         declining_voting_power_neuron_subset_metrics: None,
@@ -13334,6 +13191,7 @@ async fn test_metrics() {
         dissolving_neurons_e8s_buckets_ect: Default::default(),
         not_dissolving_neurons_e8s_buckets_seed: hashmap! { 0 => 100000000.0 },
         not_dissolving_neurons_e8s_buckets_ect: hashmap! { 2 => 200000000.0 },
+        spawning_neurons_count: 0,
         // Garbage values, because this test was written before this feature.
         total_voting_power_non_self_authenticating_controller: Some(0xDEAD),
         total_staked_e8s_non_self_authenticating_controller: Some(0xBEEF),

@@ -23,29 +23,12 @@ const REPLICATION_FACTOR: usize = 2;
 const EXCLUDED: &[&str] = &[
     // to start with something that is always false
     "(1 == 0)",
-    // the replica does not yet check that the effective canister id is valid in all cases
-    "$0 ~ /wrong effective canister id.in management call/",
-    "$0 ~ /access denied with different effective canister id/",
     // Recursive calls from queries are now allowed.
     // When composite queries are enabled, we should clean up and re-enable this test
     "$0 ~ /Call from query method traps (in query call)/",
 ];
 
-pub fn group_all() -> Vec<&'static str> {
-    [group_01(), group_02()].concat()
-}
-
 pub fn group_01() -> Vec<&'static str> {
-    vec![
-        "($0 ~ /canister history/)",
-        "($0 ~ /canister version/)",
-        "($0 ~ /canister global timer/)",
-        "($0 ~ /canister http/)",
-        "($0 ~ /WebAssembly module validation/)",
-    ]
-}
-
-pub fn group_02() -> Vec<&'static str> {
     vec![
         "($0 ~ /stable memory/)",
         "($0 ~ /inter-canister calls/)",

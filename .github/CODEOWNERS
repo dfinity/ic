@@ -22,6 +22,7 @@
 /third_party/                      @dfinity/idx
 /MODULE.bazel                      @dfinity/idx
 /WORKSPACE.bazel                   @dfinity/idx
+/PULL_REQUEST_BAZEL_TARGETS        @dfinity/idx
 
 # [Rust Lang]
 rust-toolchain.toml       @dfinity/consensus
@@ -41,25 +42,29 @@ go_deps.bzl               @dfinity/idx
 /publish/ @dfinity/idx
 
 # [Packages]
-/packages/canlog/                       @dfinity/cross-chain-team
-/packages/canlog_derive/                @dfinity/cross-chain-team
-/packages/icrc-cbor/                    @dfinity/finint @dfinity/cross-chain-team
-/packages/icrc-ledger-agent/            @dfinity/finint
-/packages/icrc-ledger-types/            @dfinity/finint
-/packages/ic-ledger-hash-of/            @dfinity/finint
-/packages/pocket-ic/                    @dfinity/pocket-ic
-/packages/ic-error-types/               @dfinity/execution
-/packages/ic-dummy-getrandom-for-wasm/  @dfinity/crypto-team
-/packages/ic-ed25519/                   @dfinity/crypto-team
-/packages/ic-ethereum-types/            @dfinity/cross-chain-team
-/packages/ic-hpke/                      @dfinity/crypto-team
-/packages/ic-http-types/                @dfinity/cross-chain-team
-/packages/ic-metrics-assert/            @dfinity/cross-chain-team
-/packages/ic-secp256k1/                 @dfinity/crypto-team
-/packages/ic-secp256r1/                 @dfinity/crypto-team
-/packages/ic-sha3/                      @dfinity/crypto-team
-/packages/ic-signature-verification/    @dfinity/crypto-team
-/packages/ic-vetkd-utils/               @dfinity/crypto-team
+/packages/canlog/                               @dfinity/cross-chain-team
+/packages/canlog_derive/                        @dfinity/cross-chain-team
+/packages/icrc-cbor/                            @dfinity/finint @dfinity/cross-chain-team
+/packages/icrc-ledger-agent/                    @dfinity/finint
+/packages/icrc-ledger-client/                   @dfinity/finint
+/packages/icrc-ledger-client-cdk/               @dfinity/finint
+/packages/icrc-ledger-types/                    @dfinity/finint
+/packages/ic-ledger-hash-of/                    @dfinity/finint
+/packages/pocket-ic/                            @dfinity/pocket-ic
+/packages/ic-error-types/                       @dfinity/execution
+/packages/ic-dummy-getrandom-for-wasm/          @dfinity/crypto-team
+/packages/ic-ed25519/                           @dfinity/crypto-team
+/packages/ic-ethereum-types/                    @dfinity/cross-chain-team
+/packages/ic-deterministic-heap-bytes/          @dfinity/execution
+/packages/ic-deterministic-heap-bytes-derive/   @dfinity/execution
+/packages/ic-hpke/                              @dfinity/crypto-team
+/packages/ic-http-types/                        @dfinity/cross-chain-team
+/packages/ic-metrics-assert/                    @dfinity/cross-chain-team
+/packages/ic-secp256k1/                         @dfinity/crypto-team
+/packages/ic-secp256r1/                         @dfinity/crypto-team
+/packages/ic-sha3/                              @dfinity/crypto-team
+/packages/ic-signature-verification/            @dfinity/crypto-team
+/packages/ic-vetkd-utils/                       @dfinity/crypto-team
 
 # [IC-OS]
 /ic-os/                                                                 @dfinity/node
@@ -147,6 +152,7 @@ go_deps.bzl               @dfinity/idx
 /rs/interfaces/registry/                                @dfinity/governance-team
 /rs/interfaces/src/canister_http.rs                     @dfinity/consensus
 /rs/interfaces/src/consensus.rs                         @dfinity/consensus
+/rs/interfaces/src/consensus/                           @dfinity/consensus
 /rs/interfaces/src/consensus_pool.rs                    @dfinity/consensus
 /rs/interfaces/src/crypto.rs                            @dfinity/crypto-team
 /rs/interfaces/src/crypto/                              @dfinity/crypto-team
@@ -162,6 +168,7 @@ go_deps.bzl               @dfinity/idx
 /rs/limits/                                             @dfinity/ic-interface-owners
 /rs/memory_tracker/                                     @dfinity/execution
 /rs/messaging/                                          @dfinity/ic-message-routing-owners
+/rs/migration_canister/                                 @dfinity/execution 
 /rs/monitoring/                                         @dfinity/consensus
 /rs/monitoring/metrics                                  @dfinity/consensus @dfinity/ic-message-routing-owners
 /rs/monitoring/pprof/                                   @dfinity/consensus @dfinity/ic-message-routing-owners
@@ -224,7 +231,6 @@ go_deps.bzl               @dfinity/idx
 /rs/rust_canisters/downstream_calls_test/               @dfinity/ic-message-routing-owners
 /rs/rust_canisters/random_traffic_test/                 @dfinity/ic-message-routing-owners
 /rs/sns/                                                @dfinity/governance-team
-/rs/starter/                                            @dfinity/consensus
 /rs/state_layout/                                       @dfinity/ic-message-routing-owners
 /rs/state_machine_tests/                                @dfinity/ic-message-routing-owners @dfinity/pocket-ic
 /rs/state_manager/                                      @dfinity/ic-message-routing-owners
@@ -287,9 +293,9 @@ go_deps.bzl               @dfinity/idx
 /rs/types/wasm_types/                                   @dfinity/execution
 /rs/universal_canister/                                 @dfinity/execution
 /rs/utils/                                              @dfinity/ic-interface-owners
+/rs/utils/ensure/                                       @dfinity/finint
 /rs/utils/lru_cache/                                    @dfinity/execution
 /rs/utils/thread/                                       @dfinity/ic-message-routing-owners
-/rs/utils/ensure/                                       @dfinity/finint
 /rs/validator/                                          @dfinity/crypto-team
 /rs/wasm_transform/                                     @dfinity/execution
 /rs/xnet/                                               @dfinity/ic-message-routing-owners

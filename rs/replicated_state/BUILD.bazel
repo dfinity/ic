@@ -28,7 +28,6 @@ DEPENDENCIES = [
     "//rs/utils/validate_eq",
     "@crate_index//:bit-vec",
     "@crate_index//:cvt",
-    "@crate_index//:ic-btc-interface",
     "@crate_index//:itertools",
     "@crate_index//:lazy_static",
     "@crate_index//:libc",
@@ -59,7 +58,9 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ed25519",
     "//rs/criterion_time",
+    "//rs/crypto/test_utils/canister_threshold_sigs",
     "//rs/crypto/test_utils/keys",
+    "//rs/crypto/test_utils/reproducible_rng",
     "//rs/test_utilities/io",
     "//rs/test_utilities/metrics",
     "//rs/test_utilities/state",

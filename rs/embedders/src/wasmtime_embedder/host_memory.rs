@@ -76,6 +76,15 @@ impl WasmtimeMemoryCreator {
 }
 
 unsafe impl wasmtime::MemoryCreator for WasmtimeMemoryCreator {
+    /// Our Wasmtime configuration should use a `memory_reservation` that is
+    /// larger than our maximum allowed heap or stable memory. This means that
+    /// `reserved_size_in_bytes` should always be `Some`. Instrumentation is
+    /// also responsible for setting the maximum limit for all memories and this
+    /// maximum should be below the `reserved_size_in_bytes` value.
+    ///
+    /// So we can just allocate the reseverd_size and allow all grows to
+    /// succeed, relying on instrumentation to have set maximum limits to what
+    /// the system allows.
     fn new_memory(
         &self,
         ty: MemoryType,
@@ -90,24 +99,26 @@ unsafe impl wasmtime::MemoryCreator for WasmtimeMemoryCreator {
             WASM32_MAX_SIZE / (WASM_PAGE_SIZE as u64)
         };
         let min = ty.minimum().min(max_pages) as usize;
-        let max = ty.maximum().unwrap_or(max_pages).min(max_pages) as usize;
+        let max = ty
+            .maximum()
+            .expect("Instrumentation should add a maximum limit for all memories")
+            as usize;
 
-        let Some(reserved_size) = reserved_size_in_bytes else {
+        let Some(reserved_size_in_bytes) = reserved_size_in_bytes else {
             panic!(
                 "Wasmtime issued request to create a memory without specifying a reserved size."
             );
         };
         assert!(
-            reserved_size <= MAX_STABLE_MEMORY_IN_BYTES as usize,
+            reserved_size_in_bytes <= MAX_STABLE_MEMORY_IN_BYTES as usize,
             "Reserved bytes for wasm memory {} exceeds the maximum expected {}",
-            reserved_size,
+            reserved_size_in_bytes,
             MAX_STABLE_MEMORY_IN_BYTES
         );
-
         assert!(
-            reserved_size >= max * WASM_PAGE_SIZE as usize,
+            reserved_size_in_bytes >= max * WASM_PAGE_SIZE as usize,
             "Reserved size {} in bytes is smaller than expected max size {} in wasm pages",
-            reserved_size,
+            reserved_size_in_bytes,
             max
         );
 
@@ -124,7 +135,7 @@ unsafe impl wasmtime::MemoryCreator for WasmtimeMemoryCreator {
             uffd,
             max * WASM_PAGE_SIZE as usize
         );
-        let mem = MmapMemory::new(reserved_size, guard_size);
+        let mem = MmapMemory::new(reserved_size_in_bytes, guard_size);
 
         match self.created_memories.lock() {
             Err(err) => Err(format!("Error locking map of created memories: {:?}", err)),
@@ -164,7 +175,7 @@ unsafe impl Send for MmapMemory {}
 unsafe impl Sync for MmapMemory {}
 
 impl MmapMemory {
-    pub fn new(mem_size_in_bytes: usize, guard_size_in_bytes: usize) -> Self {
+    pub fn new(reserved_size_in_bytes: usize, guard_size_in_bytes: usize) -> Self {
         assert!(
             guard_size_in_bytes >= MIN_GUARD_REGION_SIZE,
             "Requested guard size {} is smaller than required size {}",
@@ -177,15 +188,15 @@ impl MmapMemory {
             guard_size_in_bytes
         );
         assert!(
-            is_multiple_of_page_size(mem_size_in_bytes),
+            is_multiple_of_page_size(reserved_size_in_bytes),
             "Requested memory size {} is not a multiple of the page size.",
-            mem_size_in_bytes
+            reserved_size_in_bytes
         );
 
         let prologue_guard_size_in_bytes = guard_size_in_bytes;
         let epilogue_guard_size_in_bytes = guard_size_in_bytes;
         let size_in_bytes =
-            prologue_guard_size_in_bytes + mem_size_in_bytes + epilogue_guard_size_in_bytes;
+            prologue_guard_size_in_bytes + reserved_size_in_bytes + epilogue_guard_size_in_bytes;
 
         // SAFETY: These are valid arguments to `mmap`. Only `mem_size` is non-constant,
         // but any `usize` will result in a valid call.
@@ -241,7 +252,7 @@ impl Drop for MmapMemory {
 
 pub struct WasmtimeMemory {
     mem: MmapMemory,
-    max_size_in_pages: usize,
+    reserved_size_in_bytes: usize,
     used: MemoryPageSize,
     uffd: Arc<Uffd>,
 }
@@ -255,7 +266,7 @@ impl WasmtimeMemory {
     ) -> Self {
         Self {
             mem,
-            max_size_in_pages,
+            reserved_size_in_bytes,
             used: MemoryPageSize(Arc::new(AtomicUsize::new(min_size_in_pages))),
             uffd,
         }
@@ -276,8 +287,11 @@ unsafe impl LinearMemory for WasmtimeMemory {
         convert_pages_to_bytes(self.used.load(Ordering::SeqCst))
     }
 
+    /// This result tells wasmtime how large the memory can grow before it needs
+    /// to be relocated.  But instrumentation imposes a maximum memory size that
+    /// is below the reserved size anyway, so no grows will trigger relocation.
     fn byte_capacity(&self) -> usize {
-        convert_pages_to_bytes(self.max_size_in_pages)
+        self.reserved_size_in_bytes
     }
 
     fn grow_to(&mut self, new_size: usize) -> anyhow::Result<()> {
@@ -291,7 +305,7 @@ unsafe impl LinearMemory for WasmtimeMemory {
         match self
             .used
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |prev_pages| {
-                if new_pages <= prev_pages || new_pages > self.max_size_in_pages {
+                if new_pages <= prev_pages {
                     None
                 } else {
                     Some(new_pages)

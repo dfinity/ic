@@ -7,9 +7,8 @@ use ic_embedders::wasmtime_embedder::system_api::{
 };
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
-    CanisterOutOfCyclesError, ExecutionMode, HypervisorError, HypervisorResult,
-    PerformanceCounterType, StableMemoryApi, SubnetAvailableMemory, SystemApi, SystemApiCallId,
-    TrapCode,
+    CanisterOutOfCyclesError, HypervisorError, HypervisorResult, PerformanceCounterType,
+    StableMemoryApi, SubnetAvailableMemory, SystemApi, SystemApiCallId, TrapCode,
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
@@ -25,13 +24,14 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
+    batch::CanisterCyclesCostSchedule,
     messages::{
         CallbackId, RejectContext, RequestOrResponse, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
     },
     methods::{Callback, WasmClosure},
     time::{self, UNIX_EPOCH},
     CanisterTimer, CountBytes, Cycles, NumInstructions, PrincipalId, SubnetId, Time,
-    MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE,
+    MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use maplit::btreemap;
 use more_asserts::assert_le;
@@ -155,16 +155,14 @@ fn cleanup_api() -> ApiType {
     ApiType::Cleanup {
         caller: PrincipalId::new_anonymous(),
         time: UNIX_EPOCH,
-        execution_mode: ExecutionMode::Replicated,
         call_context_instructions_executed: 0.into(),
     }
 }
 
 fn composite_cleanup_api() -> ApiType {
-    ApiType::Cleanup {
+    ApiType::CompositeCleanup {
         caller: PrincipalId::new_anonymous(),
         time: UNIX_EPOCH,
-        execution_mode: ExecutionMode::NonReplicated,
         call_context_instructions_executed: 0.into(),
     }
 }
@@ -250,6 +248,7 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::EnvVarCount => vec!["*"],
         SystemApiCallId::EnvVarNameSize => vec!["*"],
         SystemApiCallId::EnvVarNameCopy => vec!["*"],
+        SystemApiCallId::EnvVarNameExists => vec!["*"],
         SystemApiCallId::EnvVarValueSize => vec!["*"],
         SystemApiCallId::EnvVarValueCopy => vec!["*"],
     };
@@ -813,6 +812,19 @@ fn api_availability_test(
                 context,
             );
         }
+        SystemApiCallId::EnvVarNameExists => {
+            let mut heap = vec![0u8; 64];
+            let var_name = b"TEST_VAR_1";
+            copy_to_heap(&mut heap, var_name);
+            assert_api_availability(
+                |api| api.ic0_env_var_name_exists(0, var_name.len(), &heap.clone()),
+                api_type,
+                &system_state,
+                cycles_account_manager,
+                api_type_enum,
+                context,
+            );
+        }
         SystemApiCallId::EnvVarValueSize => {
             let mut heap = vec![0u8; 64];
             let var_name = b"TEST_VAR_1";
@@ -1331,8 +1343,10 @@ fn call_perform_not_enough_cycles_does_not_trap() {
         .build();
     // Set initial cycles small enough so that it does not have enough
     // cycles to send xnet messages.
-    let initial_cycles = cycles_account_manager.xnet_call_performed_fee(SMALL_APP_SUBNET_MAX_SIZE)
-        - Cycles::from(10u128);
+    let initial_cycles = cycles_account_manager.xnet_call_performed_fee(
+        SMALL_APP_SUBNET_MAX_SIZE,
+        CanisterCyclesCostSchedule::Normal,
+    ) - Cycles::from(10u128);
     let mut system_state = SystemStateBuilder::new()
         .initial_cycles(initial_cycles)
         .build();
@@ -1382,7 +1396,8 @@ fn call_perform_not_enough_cycles_does_not_trap() {
 fn growing_wasm_memory_updates_subnet_available_memory() {
     let wasm_page_size = 64 << 10;
     let subnet_available_memory_bytes = 2 * wasm_page_size;
-    let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes, 0, 0);
+    let subnet_available_memory =
+        SubnetAvailableMemory::new_for_testing(subnet_available_memory_bytes, 0, 0);
     let wasm_custom_sections_available_memory_before =
         subnet_available_memory.get_wasm_custom_sections_memory();
     let system_state = SystemStateBuilder::default().build();
@@ -1399,6 +1414,7 @@ fn growing_wasm_memory_updates_subnet_available_memory() {
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
     let mut api = SystemApiImpl::new(
         api_type,
@@ -1450,7 +1466,8 @@ fn helper_test_on_low_wasm_memory(
 ) {
     let wasm_page_size = 64 << 10;
     let subnet_available_memory_bytes = 20 * GIB;
-    let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes, 0, 0);
+    let subnet_available_memory =
+        SubnetAvailableMemory::new_for_testing(subnet_available_memory_bytes, 0, 0);
 
     let mut state_builder = SystemStateBuilder::default()
         .wasm_memory_threshold(wasm_memory_threshold)
@@ -1479,6 +1496,7 @@ fn helper_test_on_low_wasm_memory(
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
 
     let mut api = SystemApiImpl::new(
@@ -1500,8 +1518,13 @@ fn helper_test_on_low_wasm_memory(
     if grow_wasm_memory {
         api.try_grow_wasm_memory(0, additional_wasm_pages).unwrap();
     } else {
-        api.try_grow_stable_memory(0, additional_wasm_pages, StableMemoryApi::Stable64)
-            .unwrap();
+        api.try_grow_stable_memory(
+            0,
+            additional_wasm_pages,
+            MAX_STABLE_MEMORY_IN_BYTES,
+            StableMemoryApi::Stable64,
+        )
+        .unwrap();
     }
 
     let system_state_modifications = api.take_system_state_modifications();
@@ -1677,7 +1700,7 @@ fn push_output_request_respects_memory_limits() {
     let subnet_available_memory_bytes = 1 << 30;
     let subnet_available_message_memory_bytes = MAX_RESPONSE_COUNT_BYTES as i64 + 13;
 
-    let subnet_available_memory = SubnetAvailableMemory::new(
+    let subnet_available_memory = SubnetAvailableMemory::new_for_testing(
         subnet_available_memory_bytes,
         subnet_available_message_memory_bytes,
         0,
@@ -1696,6 +1719,7 @@ fn push_output_request_respects_memory_limits() {
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
@@ -1787,7 +1811,7 @@ fn push_output_request_oversized_request_memory_limits() {
     let subnet_available_memory_bytes = 1 << 30;
     let subnet_available_message_memory_bytes = 3 * MAX_RESPONSE_COUNT_BYTES as i64;
 
-    let subnet_available_memory = SubnetAvailableMemory::new(
+    let subnet_available_memory = SubnetAvailableMemory::new_for_testing(
         subnet_available_memory_bytes,
         subnet_available_message_memory_bytes,
         0,
@@ -1806,6 +1830,7 @@ fn push_output_request_oversized_request_memory_limits() {
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
@@ -2221,6 +2246,7 @@ fn get_system_api_for_best_effort_response(
         Default::default(),
         api_type.caller(),
         api_type.call_context_id(),
+        CanisterCyclesCostSchedule::Normal,
     );
 
     SystemApiImpl::new(
@@ -2229,7 +2255,7 @@ fn get_system_api_for_best_effort_response(
         CANISTER_CURRENT_MEMORY_USAGE,
         CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
         execution_parameters,
-        SubnetAvailableMemory::new(
+        SubnetAvailableMemory::new_for_testing(
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,
@@ -2242,15 +2268,14 @@ fn get_system_api_for_best_effort_response(
     )
 }
 
-#[test]
-fn composite_queries_do_not_return_state_changes_on_trap() {
+fn composite_context_does_not_return_state_changes_on_trap_helper(api_type: ApiType) {
     let cycles_amount = Cycles::from(1_000_000_000_000u128);
     let max_num_instructions = NumInstructions::from(1 << 30);
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_max_num_instructions(max_num_instructions)
         .build();
     let mut api = get_system_api(
-        ApiTypeBuilder::build_composite_query_api(),
+        api_type,
         &get_system_state_with_cycles(cycles_amount),
         cycles_account_manager,
     );
@@ -2272,6 +2297,21 @@ fn composite_queries_do_not_return_state_changes_on_trap() {
 }
 
 #[test]
+fn composite_queries_do_not_return_state_changes_on_trap() {
+    composite_context_does_not_return_state_changes_on_trap_helper(composite_query_api());
+}
+
+#[test]
+fn composite_replies_do_not_return_state_changes_on_trap() {
+    composite_context_does_not_return_state_changes_on_trap_helper(composite_reply_api());
+}
+
+#[test]
+fn composite_rejects_do_not_return_state_changes_on_trap() {
+    composite_context_does_not_return_state_changes_on_trap_helper(composite_reject_api());
+}
+
+#[test]
 fn test_env_var_name_operations() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut env_vars = BTreeMap::new();
@@ -2279,6 +2319,7 @@ fn test_env_var_name_operations() {
     let var_name_2 = "TEST_VAR_22".to_string();
     let var_value_1 = "TEST_VALUE_1".to_string();
     let var_value_2 = "TEST_VALUE_2".to_string();
+    let non_existing_var = "does_not_exist".to_string();
 
     env_vars.insert(var_name_1.clone(), var_value_1.clone());
     env_vars.insert(var_name_2.clone(), var_value_2.clone());
@@ -2293,6 +2334,23 @@ fn test_env_var_name_operations() {
 
     // Test ic0_env_var_count
     assert_eq!(api.ic0_env_var_count().unwrap(), 2);
+
+    // Test ic0_env_var_name_exists
+    assert_eq!(
+        api.ic0_env_var_name_exists(0, var_name_1.len(), var_name_1.as_bytes())
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        api.ic0_env_var_name_exists(0, var_name_2.len(), var_name_2.as_bytes())
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        api.ic0_env_var_name_exists(0, non_existing_var.len(), non_existing_var.as_bytes())
+            .unwrap(),
+        0
+    );
 
     // Test ic0_env_var_name_size
     assert_eq!(api.ic0_env_var_name_size(0).unwrap(), var_name_1.len()); // "TEST_VAR_1"
@@ -2322,20 +2380,20 @@ fn test_env_var_name_operations() {
 
     // Test invalid index
     assert!(matches!(
-        api.ic0_env_var_name_copy(2, 0, 0, 9, &mut heap),
+        api.ic0_env_var_name_copy(2, 0, 0, 0, &mut heap),
         Err(HypervisorError::EnvironmentVariableIndexOutOfBounds {
             index: 2,
             length: 2
         })
     ));
 
-    // Test invalid offset
+    // Test invalid offset (destination buffer overflow)
     assert!(matches!(
         api.ic0_env_var_name_copy(0, 0, 10, var_name_1.len(), &mut heap),
         Err(HypervisorError::ToolchainContractViolation { .. })
     ));
 
-    // Test dst is not aligned
+    // Test invalid dst (destination buffer overflow)
     assert!(matches!(
         api.ic0_env_var_name_copy(0, 10, 0, var_name_1.len(), &mut heap),
         Err(HypervisorError::ToolchainContractViolation { .. })
@@ -2362,6 +2420,7 @@ fn test_env_var_value_operations() {
     let var_name_empty = "EMPTY_VAR".to_string();
     let var_value_1 = "Hello World".to_string();
     let var_value_path = "/usr/local/bin:/usr/bin".to_string();
+    let var_value_empty = "".to_string();
 
     let mut env_vars = BTreeMap::new();
     env_vars.insert(var_name_1.clone(), var_value_1.clone());
@@ -2380,48 +2439,26 @@ fn test_env_var_value_operations() {
     // Test ic0_env_var_count.
     assert_eq!(api.ic0_env_var_count().unwrap(), 3);
 
-    // Test empty variable.
-    copy_to_heap(&mut heap, var_name_empty.as_bytes());
-    assert_eq!(
-        api.ic0_env_var_value_size(0, var_name_empty.len(), &heap)
-            .unwrap(),
-        0
-    );
-    // Test copying an empty variable.
-    api.ic0_env_var_value_copy(0, var_name_empty.len(), 0, 0, 0, &mut heap)
-        .unwrap();
-    let mut expected_empty_value = vec![0u8; 64];
-    copy_to_heap(&mut expected_empty_value, var_name_empty.as_bytes());
-    assert_eq!(&heap[0..expected_empty_value.len()], expected_empty_value);
+    for (var_name, var_value) in [
+        (var_name_empty, var_value_empty),
+        (var_name_1, var_value_1),
+        (var_name_path, var_value_path),
+    ] {
+        // Test API for the size of the value.
+        copy_to_heap(&mut heap, var_name.as_bytes());
+        assert_eq!(
+            api.ic0_env_var_value_size(0, var_name.len(), &heap)
+                .unwrap(),
+            var_value.len(),
+        );
 
-    // Test value size and copying for existing variable: TEST_VAR_1.
-    copy_to_heap(&mut heap, var_name_1.as_bytes());
-    assert_eq!(
-        api.ic0_env_var_value_size(0, var_name_1.len(), &heap)
-            .unwrap(),
-        var_value_1.len() // length of "Hello World"
-    );
-    api.ic0_env_var_value_copy(0, var_name_1.len(), 0, 0, var_value_1.len(), &mut heap)
-        .unwrap();
-    assert_eq!(&heap[0..var_value_1.len()], var_value_1.as_bytes());
-
-    // Test value size and copying for existing variable: PATH.
-    copy_to_heap(&mut heap, var_name_path.as_bytes());
-    assert_eq!(
-        api.ic0_env_var_value_size(0, var_name_path.len(), &heap)
-            .unwrap(),
-        var_value_path.len() // length of "/usr/local/bin:/usr/bin"
-    );
-    api.ic0_env_var_value_copy(
-        0,
-        var_name_path.len(),
-        0,
-        0,
-        var_value_path.len(),
-        &mut heap,
-    )
-    .unwrap();
-    assert_eq!(&heap[0..var_value_path.len()], var_value_path.as_bytes());
+        // Test API for copying the value.
+        let mut expected_heap = heap.clone();
+        copy_to_heap(&mut expected_heap, var_value.as_bytes());
+        api.ic0_env_var_value_copy(0, var_name.len(), 0, 0, var_value.len(), &mut heap)
+            .unwrap();
+        assert_eq!(expected_heap, heap);
+    }
 
     // Test non-existent variable
     let non_existent = "NON_EXISTENT".to_string();
@@ -2450,7 +2487,6 @@ fn test_env_var_value_operations() {
 
     let result = api.ic0_env_var_value_copy(0, invalid_utf8.len(), 0, 0, 0, &mut heap);
     let error = result.unwrap_err();
-    println!("error: {:?}", error);
     assert!(error
         .to_string()
         .contains("Variable name is not a valid UTF-8 string."));
@@ -2495,7 +2531,7 @@ fn test_env_variables_empty() {
     // Test ic0_env_var_name_copy with invalid index on empty variables
     let mut heap = vec![0u8; 16];
     assert!(matches!(
-        api.ic0_env_var_name_copy(0, 0, 0, 9, &mut heap),
+        api.ic0_env_var_name_copy(0, 0, 0, 0, &mut heap),
         Err(HypervisorError::EnvironmentVariableIndexOutOfBounds {
             index: 0,
             length: 0

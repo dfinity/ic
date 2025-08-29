@@ -11,7 +11,7 @@
 // You can setup this test by executing the following commands:
 //
 //   $ ci/container/container-run.sh
-//   $ ict test consensus_performance_test_colocate --keepalive -- --test_tmpdir=./performance
+//   $ ict test tecdsa_performance_test_colocate --keepalive -- --test_tmpdir=./performance --test_env DOWNLOAD_P8S_DATA=1
 //
 // The --test_tmpdir=./performance will store the test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
@@ -27,7 +27,7 @@
 //     vCPUs: 64
 //     Memory: 512142680 KiB
 //
-// To get access to P8s and Grafana look for the following log lines:
+// To get live access to P8s and Grafana while the test is running look for the following log lines:
 //
 //   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:168:0]
 //     Prometheus Web UI at http://prometheus.performance--1681227226065.testnet.farm.dfinity.systems
@@ -35,6 +35,20 @@
 //     IC Progress Clock at http://grafana.performance--1681227226065.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now
 //   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:169:0]
 //     Grafana at http://grafana.performance--1681227226065.testnet.farm.dfinity.systems
+//
+// To inspect the metrics after the test has finished, exit the dev container
+// and run a local p8s and Grafana on the downloaded p8s data directory using:
+//
+//   $ rs/tests/run-p8s.sh --grafana-dashboards-dir ~/k8s/bases/apps/ic-dashboards performance/_tmp/*/setup/colocated_test/tests/test/universal_vms/prometheus/prometheus-data-dir.tar.zst
+//
+// Note this this script requires Nix so make sure it's installed (https://nixos.org/download/).
+// The script also requires a local clone of https://github.com/dfinity-ops/k8s containing the Grafana dashboards.
+//
+// Then, on your laptop, forward the Grafana port 3000 to your devenv:
+//
+//   $ ssh devenv -L 3000:localhost:3000 -N
+//
+// and load http://localhost:3000/ in your browser to inspect the dashboards.
 //
 // Happy testing!
 
@@ -68,7 +82,7 @@ use ic_system_test_driver::generic_workload_engine::metrics::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    block_on, get_app_subnet_and_node, get_nns_node, MessageCanister,
+    block_on, get_app_subnet_and_node, get_nns_node, MessageCanister, SignerCanister,
 };
 use ic_types::Height;
 use slog::{error, info};
@@ -99,7 +113,14 @@ const PRE_SIGNATURES_TO_CREATE: u32 = 30;
 const MAX_QUEUE_SIZE: u32 = 10;
 const CANISTER_COUNT: usize = 4;
 const SIGNATURE_REQUESTS_PER_SECOND: f64 = 2.5;
-const SCHNORR_MSG_SIZE_BYTES: usize = 2_096_000; // 2MiB minus some message overhead
+
+const SMALL_MSG_SIZE_BYTES: usize = 32;
+#[allow(dead_code)]
+const LARGE_MSG_SIZE_BYTES: usize = 10_484_000; // 10MiB minus some message overhead
+
+// By default, we keep a small message size, to avoid permanent heavy test load.
+// Change to LARGE_MSG_SIZE_BYTES to test large signature requests.
+const MSG_SIZE_BYTES: usize = SMALL_MSG_SIZE_BYTES;
 
 const BENCHMARK_REPORT_FILE: &str = "benchmark/benchmark.json";
 
@@ -150,7 +171,7 @@ pub fn setup(env: TestEnv) {
     info!(env.logger(), "Running the test with key ids: {:?}", key_ids);
 
     PrometheusVm::default()
-        .with_required_host_features(vec![HostFeature::Performance])
+        .with_required_host_features(vec![HostFeature::Performance, HostFeature::Supermicro])
         .start(&env)
         .expect("Failed to start prometheus VM");
 
@@ -161,7 +182,7 @@ pub fn setup(env: TestEnv) {
     };
 
     InternetComputer::new()
-        .with_required_host_features(vec![HostFeature::Performance])
+        .with_required_host_features(vec![HostFeature::Performance, HostFeature::Dell])
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_default_vm_resources(vm_resources)
@@ -182,6 +203,7 @@ pub fn setup(env: TestEnv) {
                         .collect(),
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
+                    max_parallel_pre_signature_transcripts_in_creation: None,
                 })
                 .add_nodes(NODES_COUNT),
         )
@@ -196,7 +218,9 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    tecdsa_performance_test(env, false, false);
+    let download_p8s_data =
+        std::env::var("DOWNLOAD_P8S_DATA").is_ok_and(|v| v == "true" || v == "1");
+    tecdsa_performance_test(env, false, download_p8s_data);
 }
 
 pub fn tecdsa_performance_test(
@@ -236,10 +260,10 @@ pub fn tecdsa_performance_test(
         run_chain_key_signature_test(&nns_canister, &log, &key_id, public_key);
     }
 
-    info!(log, "Step 2: Installing Message canisters");
+    info!(log, "Step 2: Installing Signer canisters");
     let principals = (0..CANISTER_COUNT)
         .map(|_| {
-            block_on(MessageCanister::new_with_cycles(
+            block_on(SignerCanister::new_with_cycles(
                 &app_agent,
                 app_node.effective_canister_id(),
                 u128::MAX,
@@ -250,11 +274,42 @@ pub fn tecdsa_performance_test(
     let mut requests = vec![];
     for principal in principals {
         for key_id in make_key_ids() {
-            requests.push(ChainSignatureRequest::new(
+            // The derivation path can vary either in length or in size of the elements.
+            // For simplicity, we test one derivation element of maximum size. We could
+            // also test a big number of small elements, but this would imply a larger
+            // serialization overhead (as it would include the length of each element),
+            // which we would need to account for in the LARGE_MSG_SIZE_BYTES constant.
+            //
+            // For Schnorr, we test a large message and a keep the derivation path small,
+            // as the latter is tested in ECDSA.
+            //
+            // For VetKD, we can vary either the context size or the input size. For simplicity,
+            // we test a large input size.
+
+            let (method_name, payload) = match key_id.clone() {
+                MasterPublicKeyId::Ecdsa(key_id) => {
+                    ChainSignatureRequest::large_ecdsa_method_and_payload(1, MSG_SIZE_BYTES, key_id)
+                }
+                MasterPublicKeyId::Schnorr(key_id) => {
+                    ChainSignatureRequest::large_schnorr_method_and_payload(
+                        MSG_SIZE_BYTES,
+                        1,
+                        0,
+                        key_id,
+                        None,
+                    )
+                }
+                MasterPublicKeyId::VetKd(key_id) => {
+                    ChainSignatureRequest::large_vetkd_method_and_payload(MSG_SIZE_BYTES, 0, key_id)
+                }
+            };
+
+            requests.push(ChainSignatureRequest {
                 principal,
+                method_name,
                 key_id,
-                SCHNORR_MSG_SIZE_BYTES,
-            ))
+                payload,
+            });
         }
     }
 
@@ -349,7 +404,9 @@ pub fn tecdsa_performance_test(
         };
 
         let open_and_write_to_file_result =
-            ic_sys::fs::write_atomically(&report_path, |f| f.write_all(json_report_str.as_bytes()));
+            ic_sys::fs::write_atomically(&report_path, ic_sys::fs::Clobber::Yes, |f| {
+                f.write_all(json_report_str.as_bytes())
+            });
 
         match create_dir_result.and(open_and_write_to_file_result) {
             Ok(()) => info!(log, "Benchmark report written to {}", report_path.display()),

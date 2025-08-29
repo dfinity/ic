@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{anyhow, bail, Context, Error};
 use arc_swap::ArcSwapOption;
 use axum::{
     extract::Request,
@@ -68,6 +68,7 @@ use crate::{
         handlers::{self, logs_canister, LogsState},
         middleware::{
             cache::{cache_middleware, CacheState},
+            cors::{self},
             geoip::{self},
             process::{self},
             retry::{retry_request, RetryParams},
@@ -81,7 +82,7 @@ use crate::{
         MetricParamsSnapshot, MetricsCache, MetricsRunner, WithMetricsCheck, WithMetricsPersist,
         WithMetricsSnapshot,
     },
-    persist::{Persist, Persister, Routes},
+    persist::{Persist, Persister},
     rate_limiting::{generic, RateLimit},
     routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
     salt_fetcher::AnonymizationSaltFetcher,
@@ -129,7 +130,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     if !(cli.registry.registry_local_store_path.is_none()
         ^ cli.registry.registry_stub_replica.is_empty())
     {
-        return Err(anyhow!("Local store path and Stub Replica are mutually exclusive and at least one of them must be specified"));
+        bail!("Local store path and Stub Replica are mutually exclusive and at least one of them must be specified");
     }
 
     #[cfg(feature = "tls")]
@@ -137,16 +138,14 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         && cli.listen.listen_http_unix_socket.is_none()
         && cli.listen.listen_https_port.is_none()
     {
-        return Err(anyhow!(
+        bail!(
             "at least one of --listen-http-port / --listen-https-port / --listen-http-unix-socket must be specified"
-        ));
+        );
     }
 
     #[cfg(not(feature = "tls"))]
     if cli.listen.listen_http_port.is_none() && cli.listen.listen_http_unix_socket.is_none() {
-        return Err(anyhow!(
-            "at least one of --listen-http-port / --listen-http-unix-socket must be specified"
-        ));
+        bail!("at least one of --listen-http-port / --listen-http-unix-socket must be specified");
     }
 
     // Make sure ic-boundary is the leader of its own process group
@@ -177,13 +176,13 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     let registry_snapshot = Arc::new(ArcSwapOption::empty());
 
     // DNS
-    let dns_resolver = DnsResolver::new(Arc::clone(&registry_snapshot));
+    let dns_resolver = DnsResolver::new(registry_snapshot.clone());
 
     // TLS client
     let tls_verifier: Arc<dyn ServerCertVerifier> = if cli.misc.skip_replica_tls_verification {
         Arc::new(NoopServerCertVerifier::default())
     } else {
-        Arc::new(TlsVerifier::new(Arc::clone(&registry_snapshot)))
+        Arc::new(TlsVerifier::new(registry_snapshot.clone()))
     };
 
     let mut tls_config_client =
@@ -226,7 +225,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     );
 
     // Setup registry-related stuff
-    let persister = Persister::new(Arc::clone(&routing_table));
+    let persister = Persister::new(routing_table.clone());
 
     // Snapshot update notification channels
     let (channel_snapshot_send, channel_snapshot_recv) = tokio::sync::watch::channel(None);
@@ -273,9 +272,7 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         || cli.obs.obs_log_anonymization_canister_id.is_some()
     {
         if cli.misc.crypto_config.is_some() && registry_client.is_none() {
-            return Err(anyhow!(
-                "IC-Agent: registry client is required when crypto-config is in use"
-            ));
+            bail!("IC-Agent: registry client is required when crypto-config is in use");
         }
 
         if cli.misc.crypto_config.is_none() {
@@ -365,17 +362,24 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     // HTTP Logs Anonymization
     let anonymization_salt = Arc::new(ArcSwapOption::<Vec<u8>>::empty());
 
+    // Proxy Router
+    let proxy_router = Arc::new(ProxyRouter::new(
+        http_client.clone(),
+        routing_table.clone(),
+        registry_snapshot.clone(),
+        cli.health.health_subnets_alive_threshold,
+        cli.health.health_nodes_per_subnet_alive_threshold,
+    ));
+
     // Prepare Axum Router
     let router = setup_router(
-        registry_snapshot.clone(),
-        routing_table.clone(),
-        http_client,
         bouncer,
         generic_limiter.clone(),
         &cli,
         &metrics_registry,
         cache_state.clone(),
         anonymization_salt.clone(),
+        proxy_router.clone(),
     );
 
     // HTTP server metrics
@@ -467,7 +471,8 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         metrics_cache,
         metrics_registry.clone(),
         cache_state,
-        Arc::clone(&registry_snapshot),
+        registry_snapshot.clone(),
+        proxy_router,
     ));
     tasks.add_interval("metrics_runner", metrics_runner, 5 * SECOND);
 
@@ -567,7 +572,7 @@ async fn create_identity(
     registry_client: Arc<RegistryClientImpl>,
 ) -> Result<Box<dyn Identity>, Error> {
     let crypto_component = tokio::task::spawn_blocking({
-        let registry_client = Arc::clone(&registry_client);
+        let registry_client = registry_client.clone();
 
         move || {
             Arc::new(CryptoComponent::new(
@@ -582,7 +587,7 @@ async fn create_identity(
     .await?;
 
     let public_key = tokio::task::spawn_blocking({
-        let crypto_component = Arc::clone(&crypto_component);
+        let crypto_component = crypto_component.clone();
 
         move || {
             crypto_component
@@ -652,7 +657,7 @@ fn setup_registry(
     let snapshotter = WithMetricsSnapshot(
         {
             let mut snapshotter = Snapshotter::new(
-                Arc::clone(&registry_snapshot),
+                registry_snapshot.clone(),
                 channel_snapshot_send,
                 registry_client.clone(),
                 cli.registry.registry_min_version_age,
@@ -810,7 +815,7 @@ fn setup_tls_resolver(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Err
         Err(e) => warn!("TLS: unable to load ACME resolver: {e}"),
     }
 
-    Err(anyhow!("TLS: no resolvers were able to load"))
+    bail!("TLS: no resolvers were able to load")
 }
 
 #[cfg(feature = "tls")]
@@ -862,28 +867,16 @@ impl TypeExtractor for RequestTypeExtractor {
 
 /// Creates an Axum router that is ready to be served over HTTP
 pub fn setup_router(
-    registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
-    routing_table: Arc<ArcSwapOption<Routes>>,
-    http_client: Arc<dyn bnhttp::Client>,
     bouncer: Option<Arc<bouncer::Bouncer>>,
     generic_limiter: Option<Arc<generic::GenericLimiter>>,
     cli: &Cli,
     metrics_registry: &Registry,
     cache_state: Option<Arc<CacheState>>,
     anonymization_salt: Arc<ArcSwapOption<Vec<u8>>>,
+    proxy_router: Arc<ProxyRouter>,
 ) -> Router {
     // Init it early to avoid race conditions
     lazy_static::initialize(&UUID_REGEX);
-
-    let proxy_router = ProxyRouter::new(
-        http_client.clone(),
-        Arc::clone(&routing_table),
-        Arc::clone(&registry_snapshot),
-        cli.health.health_subnets_alive_threshold,
-        cli.health.health_nodes_per_subnet_alive_threshold,
-    );
-
-    let proxy_router = Arc::new(proxy_router);
 
     let (proxy, lookup, root_key, health) = (
         proxy_router.clone() as Arc<dyn Proxy>,
@@ -946,7 +939,7 @@ pub fn setup_router(
             BrokerBuilder::new()
                 .with_buffer_size(cli.obs.obs_log_websocket_buffer)
                 .with_idle_timeout(cli.obs.obs_log_websocket_idle_timeout)
-                .with_max_subscribers(cli.obs.obs_log_websocket_max_subscribers)
+                .with_max_subscribers(cli.obs.obs_log_websocket_max_subscribers_per_topic)
                 .with_max_topics(cli.obs.obs_log_websocket_max_topics)
                 .with_metric_registry(metrics_registry)
                 .build(),
@@ -1092,12 +1085,19 @@ pub fn setup_router(
         .merge(health_route);
 
     if let Some(v) = logs_broker {
-        let state = LogsState::new(v, lookup);
-        let logs_canister_router =
-            Router::new().route("/canister/{canister_id}", any(logs_canister));
+        let state = Arc::new(LogsState::new(
+            v,
+            lookup,
+            cli.obs.obs_log_websocket_max_subscribers_per_topic_per_ip,
+        ));
+
+        let logs_canister_router = Router::new()
+            .route("/canister/{canister_id}", any(logs_canister))
+            .layer(cors::layer());
         let logs_router = Router::new()
             .nest("/logs", logs_canister_router)
             .with_state(state);
+
         router = router.merge(logs_router);
     }
 

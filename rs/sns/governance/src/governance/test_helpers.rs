@@ -1,6 +1,7 @@
 use super::*;
 use crate::pb::v1::{Motion, NeuronPermissionType};
 use async_trait::async_trait;
+use candid::Nat;
 use ic_nervous_system_clients::canister_status::{
     CanisterStatusResultFromManagementCanister, CanisterStatusResultV2, CanisterStatusType,
 };
@@ -64,6 +65,12 @@ pub(crate) fn basic_governance_proto() -> GovernanceProto {
             description: Some("A project to spin up a ServiceNervousSystem".to_string()),
             url: Some("https://internetcomputer.org".to_string()),
         }),
+
+        // Ensure that cached metrics are not attempted to be refreshed in tests.
+        metrics: Some(GovernanceCachedMetrics {
+            timestamp_seconds: u64::MAX,
+            ..Default::default()
+        }),
         ..Default::default()
     }
 }
@@ -115,7 +122,20 @@ impl ICRC1Ledger for DoNothingLedger {
     }
 
     fn canister_id(&self) -> CanisterId {
-        unimplemented!()
+        CanisterId::from(42)
+    }
+
+    async fn icrc2_approve(
+        &self,
+        _spender: Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<Subaccount>,
+    ) -> Result<Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 
     async fn icrc3_get_blocks(

@@ -22,10 +22,6 @@ pub fn generate_network_config(
     eprintln!("Generating IPv6 address");
 
     match &network_settings.ipv6_config {
-        Ipv6Config::RouterAdvertisement => {
-            Err(anyhow!("IC-OS router advertisement is not yet supported"))
-        }
-        Ipv6Config::Fixed(_) => Err(anyhow!("Fixed IP configuration is not yet supported")),
         Ipv6Config::Deterministic(ipv6_config) => {
             let ipv6_address = generated_mac.calculate_slaac(&ipv6_config.prefix)?;
             eprintln!("Using IPv6 address: {ipv6_address}");
@@ -37,6 +33,11 @@ pub fn generate_network_config(
                 &ipv6_address,
             )
         }
+        Ipv6Config::RouterAdvertisement => {
+            Err(anyhow!("IC-OS router advertisement is not yet supported"))
+        }
+        Ipv6Config::Fixed(_) => Err(anyhow!("Fixed IP configuration is not yet supported")),
+        Ipv6Config::Unknown => Err(anyhow!("Unknown Ipv6Config variant")),
     }
 }
 

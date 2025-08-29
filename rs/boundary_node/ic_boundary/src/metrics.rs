@@ -1,5 +1,3 @@
-#![allow(clippy::disallowed_types)]
-
 use std::{
     sync::{Arc, RwLock},
     time::{Instant, SystemTime},
@@ -42,9 +40,8 @@ use tracing::info;
 use crate::{
     errors::ErrorCause,
     http::middleware::{cache::CacheState, geoip, retry::RetryResult},
-    persist::RouteSubnet,
-    routes::{RequestContext, RequestType},
-    snapshot::{Node, RegistrySnapshot},
+    routes::{Health, RequestContext, RequestType},
+    snapshot::{Node, RegistrySnapshot, Subnet},
 };
 
 const KB: f64 = 1024.0;
@@ -140,8 +137,10 @@ pub struct MetricsRunner {
 
     mem_allocated: IntGauge,
     mem_resident: IntGauge,
+    healthy: IntGauge,
 
     published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+    health: Arc<dyn Health>,
 }
 
 // Snapshots & encodes the metrics for the handler to export
@@ -151,6 +150,7 @@ impl MetricsRunner {
         registry: Registry,
         cache_state: Option<Arc<CacheState>>,
         published_registry_snapshot: Arc<ArcSwapOption<RegistrySnapshot>>,
+        health: Arc<dyn Health>,
     ) -> Self {
         let mem_allocated = register_int_gauge_with_registry!(
             format!("memory_allocated"),
@@ -166,6 +166,13 @@ impl MetricsRunner {
         )
         .unwrap();
 
+        let healthy = register_int_gauge_with_registry!(
+            format!("healthy"),
+            format!("Node health status"),
+            registry
+        )
+        .unwrap();
+
         Self {
             metrics_cache,
             registry,
@@ -173,7 +180,9 @@ impl MetricsRunner {
             cache_state,
             mem_allocated,
             mem_resident,
+            healthy,
             published_registry_snapshot,
+            health,
         }
     }
 }
@@ -191,6 +200,10 @@ impl Run for MetricsRunner {
         if let Some(v) = &self.cache_state {
             v.update_metrics().await;
         }
+
+        // Record health metric
+        let healthy: i64 = (self.health.health() == ReplicaHealthStatus::Healthy).into();
+        self.healthy.set(healthy);
 
         // Get a snapshot of metrics
         let mut metric_families = self.registry.gather();
@@ -482,11 +495,8 @@ pub async fn metrics_middleware(
     let response = next.run(request).await;
     let proc_duration = start_time.elapsed().as_secs_f64();
 
-    // in case subnet_id=None (i.e. for /api/v2/canister/... request), we get the target subnet_id from the RouteSubnet extension
-    let subnet_id = subnet_id.or(response
-        .extensions()
-        .get::<Arc<RouteSubnet>>()
-        .map(|x| x.id));
+    // in case subnet_id=None (i.e. for /api/v2/canister/... request), we get the target subnet_id from the Subnet extension
+    let subnet_id = subnet_id.or(response.extensions().get::<Arc<Subnet>>().map(|x| x.id));
     let subnet_id_str = subnet_id_str.or(subnet_id.map(|x| x.to_string()));
 
     // Extract extensions
@@ -510,7 +520,7 @@ pub async fn metrics_middleware(
 
     // Prepare fields
     let status_code = response.status();
-    let sender = ctx.sender.map(|x| x.to_string());
+    let sender = ctx.sender.map(|x| x.to_string()).unwrap_or_default();
     let node_id = node.as_ref().map(|x| x.id.to_string());
 
     let HttpMetricParams {
@@ -605,8 +615,8 @@ pub async fn metrics_middleware(
             hex::encode(&result[..16])
         };
 
-        let remote_addr = hash_fn(&remote_addr);
-        let sender = hash_fn(&sender.unwrap_or_default());
+        let remote_addr_hashed = hash_fn(&remote_addr);
+        let sender_hashed = hash_fn(&sender);
 
         // Log
         if !log_failed_requests_only || failed {
@@ -623,8 +633,8 @@ pub async fn metrics_middleware(
                 canister_id_str,
                 canister_id_actual = canister_id_actual.map(|x| x.to_string()),
                 canister_id_cbor = ctx.canister_id.map(|x| x.to_string()),
-                sender,
-                remote_addr,
+                sender_hashed,
+                remote_addr_hashed,
                 method = ctx.method_name,
                 duration = proc_duration,
                 duration_full = full_duration,
@@ -645,11 +655,12 @@ pub async fn metrics_middleware(
             .and_then(|(broker, id)| broker.topic_get(&id))
         {
             let ts = format_rfc3339(SystemTime::now()).to_string();
+            let client_id = hash_fn(&format!("{sender}{remote_addr}"));
 
             let msg = json!({
                 "cache_status": cache_status_lbl,
                 "cache_bypass_reason": cache_bypass_reason_lbl,
-                "client_addr": remote_addr,
+                "client_id": client_id,
                 "client_ip_family": ip_family,
                 "client_country_code": country_code,
                 "duration": proc_duration,
@@ -661,13 +672,10 @@ pub async fn metrics_middleware(
                 "ic_node_id": node_id.unwrap_or_default(),
                 "ic_subnet_id": subnet_id_str,
                 "ic_method": ctx.method_name,
-                "ic_sender": sender,
                 "request_id": request_id,
                 "request_size": ctx.request_size,
                 "request_type": request_type,
                 "response_size": response_size,
-                "retry_count": retry_result.as_ref().map(|x| x.retries).unwrap_or(0),
-                "retry_success": &retry_result.map(|x| x.success).unwrap_or_default(),
                 "timestamp": ts,
             });
 
@@ -796,7 +804,7 @@ mod test {
         // - ftjgm-3pkam-aaaaa-aaaap-2ai
         // - fat3m-uhiam-aaaaa-aaaap-2ai
         let snapshot = Arc::new(generate_custom_registry_snapshot(1, 3, 0));
-        let mfs = remove_stale_metrics(Arc::clone(&snapshot), gen_metric_families());
+        let mfs = remove_stale_metrics(snapshot.clone(), gen_metric_families());
         assert_eq!(mfs.len(), 6);
 
         let mut only_node_id = 0;

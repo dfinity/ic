@@ -75,16 +75,18 @@ use std::{io::Read, time::Duration};
 use std::{io::Write, path::Path};
 use url::Url;
 
-const DKG_INTERVAL: u64 = 14;
+const DKG_INTERVAL: u64 = 20;
 const NNS_NODES: usize = 4;
 const APP_NODES: usize = 4;
 const UNASSIGNED_NODES: usize = 4;
 
-const DKG_INTERVAL_LARGE: u64 = 99;
 const NNS_NODES_LARGE: usize = 40;
 const APP_NODES_LARGE: usize = 37;
+/// 40 dealings * 3 transcripts being reshared (high/local, high/remote, low/remote)
+/// plus 4 to make checkpoint heights more predictable
+const DKG_INTERVAL_LARGE: u64 = 124;
 
-pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
@@ -118,6 +120,7 @@ fn setup(env: TestEnv, cfg: SetupConfig) {
                     key_configs,
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
+                    max_parallel_pre_signature_transcripts_in_creation: None,
                 }),
         )
         .with_unassigned_nodes(cfg.unassigned_nodes);
@@ -298,8 +301,8 @@ pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
 fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
-    let master_version = env.get_initial_replica_version().unwrap();
-    info!(logger, "IC_VERSION_ID: {master_version:?}");
+    let initial_version = get_guestos_img_version();
+    info!(logger, "IC_VERSION_ID: {initial_version:?}");
     let topology_snapshot = env.topology_snapshot();
 
     // Choose a node from the nns subnet
@@ -347,7 +350,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
                 &nns_canister,
                 source_subnet_id,
                 cfg.subnet_size,
-                master_version.clone(),
+                initial_version.clone(),
                 key_ids.clone(),
                 &logger,
             )
@@ -415,7 +418,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
         nns_url: nns_node.get_public_url(),
-        replica_version: Some(master_version.clone()),
+        replica_version: Some(initial_version.clone()),
         key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
         test_mode: true,
         skip_prompts: true,
@@ -440,23 +443,22 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     let version_is_broken = cfg.upgrade && unassigned_nodes_ids.is_empty();
     let working_version = if version_is_broken {
-        format!("{}-test", master_version)
+        get_guestos_update_img_version()
     } else {
-        master_version.to_string()
+        initial_version
     };
 
     let subnet_args = AppSubnetRecoveryArgs {
         keep_downloaded_state: Some(cfg.chain_key),
         subnet_id,
-        upgrade_version: version_is_broken
-            .then(|| ReplicaVersion::try_from(working_version.clone()).unwrap()),
-        upgrade_image_url: get_ic_os_update_img_test_url().ok(),
-        upgrade_image_hash: get_ic_os_update_img_test_sha256().ok(),
+        upgrade_version: version_is_broken.then(|| working_version.clone()),
+        upgrade_image_url: Some(get_guestos_update_img_url()),
+        upgrade_image_hash: Some(get_guestos_update_img_sha256()),
         replacement_nodes: Some(unassigned_nodes_ids.clone()),
-        replay_until_height: None,
+        replay_until_height: None, // We will set this after breaking/halting the subnet, see below
         // If the latest CUP is corrupted we can't deploy read-only access
         pub_key: (!cfg.corrupt_cup).then_some(pub_key),
-        download_method: None,
+        download_method: None, // We will set this after breaking/halting the subnet, see below
         upload_method: Some(DataLocation::Remote(upload_node.get_ip_addr())),
         wait_for_cup_node: Some(upload_node.get_ip_addr()),
         chain_key_subnet_id: cfg.chain_key.then_some(source_subnet_id),
@@ -504,6 +506,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     subnet_recovery.params.download_method =
         Some(DataLocation::Remote(download_node.0.get_ip_addr()));
+    subnet_recovery.params.replay_until_height = Some(download_node.1.certification_height.get());
 
     if cfg.local_recovery {
         info!(logger, "Performing a local node recovery");
@@ -539,7 +542,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         );
     }
 
-    assert_subnet_is_healthy(&all_app_nodes, working_version, app_can_id, msg, &logger);
+    assert_subnet_is_healthy(&all_app_nodes, &working_version, app_can_id, msg, &logger);
 
     for node in all_app_nodes {
         let height = block_on(get_node_metrics(&logger, &node.get_ip_addr()))
@@ -604,6 +607,11 @@ fn remote_recovery(cfg: &TestConfig, subnet_recovery: AppSubnetRecovery, logger:
 fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
     let nns_url = subnet_recovery.recovery_args.nns_url;
     let subnet_id = subnet_recovery.params.subnet_id;
+    let maybe_replay_until_height = subnet_recovery
+        .params
+        .replay_until_height
+        .map(|h| format!("--replay-until-height {h} "))
+        .unwrap_or_default();
     let pub_key = subnet_recovery.params.pub_key.unwrap();
     let pub_key = pub_key.trim();
     let node_ip = node.get_ip_addr();
@@ -614,6 +622,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
         --test --skip-prompts --use-local-binaries \
         app-subnet-recovery \
         --subnet-id {subnet_id} \
+        {maybe_replay_until_height}\
         --pub-key "{pub_key}" \
         --download-method local \
         --upload-method local \
@@ -828,18 +837,18 @@ fn assert_subnet_is_broken(
     );
 }
 
-/// Select a node with highest finalization height in the given subnet snapshot
+/// Select a node with highest certification height in the given subnet snapshot
 fn select_download_node(subnet: &SubnetSnapshot, logger: &Logger) -> (IcNodeSnapshot, NodeMetrics) {
     let node = subnet
         .nodes()
         .filter_map(|n| block_on(get_node_metrics(logger, &n.get_ip_addr())).map(|m| (n, m)))
-        .max_by_key(|(_, metric)| metric.finalization_height)
+        .max_by_key(|(_, metric)| metric.certification_height)
         .expect("No download node found");
     info!(
         logger,
         "Selected download node: ({}, {})",
         node.0.get_ip_addr(),
-        node.1.finalization_height
+        node.1.certification_height
     );
     node
 }

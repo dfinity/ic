@@ -3,26 +3,27 @@ Enumerate every component file dependency for HostOS
 """
 
 component_files = {
-    # hostos-scripts
-    Label("hostos-scripts/guestos/guestos.service"): "/etc/systemd/system/guestos.service",
-    Label("hostos-scripts/libvirt/setup-libvirt.sh"): "/opt/ic/bin/setup-libvirt.sh",
-    Label("hostos-scripts/libvirt/setup-libvirt.service"): "/etc/systemd/system/setup-libvirt.service",
-    Label("hostos-scripts/misc/setup-var.sh"): "/opt/ic/bin/setup-var.sh",
-    Label("hostos-scripts/misc/detect-first-boot.sh"): "/opt/ic/bin/detect-first-boot.sh",
-    Label("hostos-scripts/monitoring/monitor-guestos.sh"): "/opt/ic/bin/monitor-guestos.sh",
-    Label("hostos-scripts/monitoring/monitor-guestos.service"): "/etc/systemd/system/monitor-guestos.service",
-    Label("hostos-scripts/monitoring/monitor-guestos.timer"): "/etc/systemd/system/monitor-guestos.timer",
-    Label("hostos-scripts/monitoring/custom-metrics.sh"): "/opt/ic/bin/custom-metrics.sh",
-    Label("hostos-scripts/monitoring/custom-metrics.service"): "/etc/systemd/system/custom-metrics.service",
-    Label("hostos-scripts/monitoring/monitor-nvme.sh"): "/opt/ic/bin/monitor-nvme.sh",
-    Label("hostos-scripts/monitoring/monitor-nvme.service"): "/etc/systemd/system/monitor-nvme.service",
-    Label("hostos-scripts/monitoring/monitor-nvme.timer"): "/etc/systemd/system/monitor-nvme.timer",
-    Label("hostos-scripts/monitoring/monitor-power.sh"): "/opt/ic/bin/monitor-power.sh",
-    Label("hostos-scripts/monitoring/monitor-power.service"): "/etc/systemd/system/monitor-power.service",
-    Label("hostos-scripts/monitoring/monitor-power.timer"): "/etc/systemd/system/monitor-power.timer",
-    Label("hostos-scripts/verbose-logging/verbose-logging.sh"): "/opt/ic/bin/verbose-logging.sh",
-    Label("hostos-scripts/verbose-logging/verbose-logging.service"): "/etc/systemd/system/verbose-logging.service",
-    Label("hostos-scripts/verbose-logging/logrotate.d/verbose-logging"): "/etc/logrotate.d/verbose-logging",
+    # hostos components
+    Label("hostos/guestos/guestos.service"): "/etc/systemd/system/guestos.service",
+    Label("hostos/guestos/upgrade-guestos.service"): "/etc/systemd/system/upgrade-guestos.service",
+    Label("hostos/libvirt/setup-libvirt.sh"): "/opt/ic/bin/setup-libvirt.sh",
+    Label("hostos/libvirt/setup-libvirt.service"): "/etc/systemd/system/setup-libvirt.service",
+    Label("hostos/misc/setup-var.sh"): "/opt/ic/bin/setup-var.sh",
+    Label("hostos/misc/detect-first-boot.sh"): "/opt/ic/bin/detect-first-boot.sh",
+    Label("hostos/monitoring/monitor-guestos.sh"): "/opt/ic/bin/monitor-guestos.sh",
+    Label("hostos/monitoring/monitor-guestos.service"): "/etc/systemd/system/monitor-guestos.service",
+    Label("hostos/monitoring/monitor-guestos.timer"): "/etc/systemd/system/monitor-guestos.timer",
+    Label("hostos/monitoring/custom-metrics.sh"): "/opt/ic/bin/custom-metrics.sh",
+    Label("hostos/monitoring/custom-metrics.service"): "/etc/systemd/system/custom-metrics.service",
+    Label("hostos/monitoring/monitor-nvme.sh"): "/opt/ic/bin/monitor-nvme.sh",
+    Label("hostos/monitoring/monitor-nvme.service"): "/etc/systemd/system/monitor-nvme.service",
+    Label("hostos/monitoring/monitor-nvme.timer"): "/etc/systemd/system/monitor-nvme.timer",
+    Label("hostos/monitoring/monitor-power.sh"): "/opt/ic/bin/monitor-power.sh",
+    Label("hostos/monitoring/monitor-power.service"): "/etc/systemd/system/monitor-power.service",
+    Label("hostos/monitoring/monitor-power.timer"): "/etc/systemd/system/monitor-power.timer",
+    Label("hostos/verbose-logging/verbose-logging.sh"): "/opt/ic/bin/verbose-logging.sh",
+    Label("hostos/verbose-logging/verbose-logging.service"): "/etc/systemd/system/verbose-logging.service",
+    Label("hostos/verbose-logging/logrotate.d/verbose-logging"): "/etc/logrotate.d/verbose-logging",
 
     # early-boot
     Label("early-boot/relabel-machine-id/relabel-machine-id.sh"): "/opt/ic/bin/relabel-machine-id.sh",
@@ -41,16 +42,16 @@ component_files = {
     Label("early-boot/initramfs-tools/hostos/set-machine-id/set-machine-id"): "/etc/initramfs-tools/scripts/init-bottom/set-machine-id/set-machine-id",
 
     # misc
-    Label("misc/config/config.sh"): "/opt/ic/bin/config.sh",
+    Label("misc/config/hostos/config.sh"): "/opt/ic/bin/config.sh",
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
     Label("misc/vsock/vsock-agent.service"): "/etc/systemd/system/vsock-agent.service",
     Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
     Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
-    Label("misc/hostos/sudoers"): "/etc/sudoers",
-    Label("misc/hostos/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
-    Label("misc/hostos/20-ipmi.rules"): "/etc/udev/rules.d/20-ipmi.rules",
+    Label("hostos/misc/sudoers"): "/etc/sudoers",
+    Label("hostos/misc/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
+    Label("hostos/misc/20-ipmi.rules"): "/etc/udev/rules.d/20-ipmi.rules",
     Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.sh"): "/opt/ic/bin/guestos-recovery-upgrader.sh",
     Label("misc/guestos-recovery/guestos-recovery-upgrader/guestos-recovery-upgrader.service"): "/etc/systemd/system/guestos-recovery-upgrader.service",
 
@@ -69,6 +70,8 @@ component_files = {
     Label("monitoring/logrotate/override.conf"): "/etc/systemd/system/logrotate.service.d/override.conf",
     Label("misc/log-config/log-config-hostos.service"): "/etc/systemd/system/log-config.service",
     Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
+    Label("monitoring/grub-version/grub-version.sh"): "/opt/ic/bin/grub-version.sh",
+    Label("monitoring/grub-version/grub-version.service"): "/etc/systemd/system/grub-version.service",
 
     # networking
     Label("networking/generate-network-config/hostos/generate-network-config.service"): "/etc/systemd/system/generate-network-config.service",
@@ -79,11 +82,12 @@ component_files = {
     Label("networking/nftables/hostos/setup-nftables.service"): "/etc/systemd/system/setup-nftables.service",
     Label("networking/nftables/hostos/setup-nftables.sh"): "/opt/ic/bin/setup-nftables.sh",
     Label("networking/hosts"): "/etc/hosts",
+    Label("networking/dev-certs/canister_http_test_ca.cert"): "/dev-certs/canister_http_test_ca.cert",
 
     # ssh
     Label("ssh/generate-host-ssh-keys/generate-host-ssh-keys.sh"): "/opt/ic/bin/generate-host-ssh-keys.sh",
     Label("ssh/generate-host-ssh-keys/generate-host-ssh-keys.service"): "/etc/systemd/system/generate-host-ssh-keys.service",
-    Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys.sh"): "/opt/ic/bin/setup-ssh-user-keys.sh",
+    Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys-hostos.sh"): "/opt/ic/bin/setup-ssh-user-keys.sh",
     Label("ssh/setup-ssh-user-keys/setup-ssh-user-keys.service"): "/etc/systemd/system/setup-ssh-user-keys.service",
 
     # upgrade
@@ -91,7 +95,5 @@ component_files = {
     Label("upgrade/systemd-generators/hostos/mount-generator"): "/etc/systemd/system-generators/mount-generator",
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/install-upgrade.sh"): "/opt/ic/bin/install-upgrade.sh",
-
-    # TODO(NODE-1518): delete update-config.service after switch to new icos config
-    Label("misc/update-config/update-hostos-config.service"): "/etc/systemd/system/update-config.service",
+    Label("upgrade/grub.sh"): "/opt/ic/bin/grub.sh",
 }

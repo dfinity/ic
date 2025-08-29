@@ -41,12 +41,19 @@ use icp_ledger::ArchiveOptions;
 use slog::{info, Logger};
 use std::{
     env,
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv6Addr, SocketAddr},
     str::FromStr,
     time::Duration,
 };
 
+pub mod adapter;
 pub mod utils;
+
+/// For an, as of yet, unexplained reason the setup task of all the ckbtc system-tests often times out
+/// after the default 10 minutes because creating the btc-node takes a long time.
+/// So to reduce flakiness we bump the timeout to 15 minutes.
+pub const TIMEOUT_PER_TEST: Duration = Duration::from_secs(15 * 60);
+pub const OVERALL_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 
 pub const TEST_KEY_LOCAL: &str = "an_arbitrary_key_id";
 
@@ -79,13 +86,63 @@ const BITCOIN_CLI_PORT: u16 = 18444;
 
 const HTTPS_PORT: u16 = 20443;
 
-pub fn btc_config(env: TestEnv) {
+pub fn ckbtc_config(env: TestEnv) {
+    let btc_node_ipv6 = setup_bitcoind_uvm(&env);
+    InternetComputer::new()
+        .with_bitcoind_addr(SocketAddr::new(IpAddr::V6(btc_node_ipv6), BITCOIN_CLI_PORT))
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_dkg_interval_length(Height::from(10))
+                .with_chain_key_config(ic_registry_subnet_features::ChainKeyConfig {
+                    key_configs: vec![ic_registry_subnet_features::KeyConfig {
+                        key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                            curve: EcdsaCurve::Secp256k1,
+                            name: TEST_KEY_LOCAL.to_string(),
+                        }),
+                        pre_signatures_to_create_in_advance: 10,
+                        max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+                    }],
+                    signature_request_timeout_ns: None,
+                    idkg_key_rotation_period_ms: None,
+                    max_parallel_pre_signature_transcripts_in_creation: None,
+                })
+                .add_nodes(1),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_dkg_interval_length(Height::from(10))
+                .with_features(SubnetFeatures {
+                    http_requests: true,
+                    ..SubnetFeatures::default()
+                })
+                .add_nodes(1),
+        )
+        .use_specified_ids_allocation_range()
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
+}
+
+pub fn adapter_test_config(env: TestEnv) {
+    let btc_node_ipv6 = setup_bitcoind_uvm(&env);
+    InternetComputer::new()
+        .with_bitcoind_addr(SocketAddr::new(IpAddr::V6(btc_node_ipv6), BITCOIN_CLI_PORT))
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_dkg_interval_length(Height::from(10))
+                .add_nodes(1),
+        )
+        .use_specified_ids_allocation_range()
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
+}
+
+fn setup_bitcoind_uvm(env: &TestEnv) -> Ipv6Addr {
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
         .with_config_img(get_dependency_path(
             env::var("CKBTC_UVM_CONFIG_PATH").expect("CKBTC_UVM_CONFIG_PATH not set"),
         ))
         .enable_ipv4()
-        .start(&env)
+        .start(env)
         .expect("failed to setup universal VM");
 
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
@@ -140,45 +197,21 @@ docker run  --name=bitcoind-node -d \
 "#
         ))
         .unwrap());
-
-    InternetComputer::new()
-        .with_bitcoind_addr(SocketAddr::new(IpAddr::V6(btc_node_ipv6), BITCOIN_CLI_PORT))
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_dkg_interval_length(Height::from(10))
-                .with_chain_key_config(ic_registry_subnet_features::ChainKeyConfig {
-                    key_configs: vec![ic_registry_subnet_features::KeyConfig {
-                        key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                            curve: EcdsaCurve::Secp256k1,
-                            name: TEST_KEY_LOCAL.to_string(),
-                        }),
-                        pre_signatures_to_create_in_advance: 10,
-                        max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
-                    }],
-                    signature_request_timeout_ns: None,
-                    idkg_key_rotation_period_ms: None,
-                })
-                .add_nodes(1),
-        )
-        .add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_dkg_interval_length(Height::from(10))
-                .with_features(SubnetFeatures {
-                    http_requests: true,
-                    ..SubnetFeatures::default()
-                })
-                .add_nodes(1),
-        )
-        .use_specified_ids_allocation_range()
-        .setup_and_start(&env)
-        .expect("failed to setup IC under test");
+    btc_node_ipv6
 }
 
-pub fn setup(env: TestEnv) {
-    // Use the btc integration setup.
-    btc_config(env.clone());
+pub fn ckbtc_setup(env: TestEnv) {
+    // Use the ckbtc integration setup.
+    ckbtc_config(env.clone());
     check_nodes_health(&env);
+    check_ecdsa_works(&env);
     install_nns_canisters_at_ids(&env);
+}
+
+pub fn adapter_test_setup(env: TestEnv) {
+    // Use the adapter test integration setup.
+    adapter_test_config(env.clone());
+    check_nodes_health(&env);
 }
 
 pub fn install_nns_canisters_at_ids(env: &TestEnv) {
@@ -206,7 +239,9 @@ fn check_nodes_health(env: &TestEnv) {
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
     info!(&env.logger(), "All nodes are ready, IC setup succeeded.");
+}
 
+fn check_ecdsa_works(env: &TestEnv) {
     // Check that ECDSA signatures work
     let sys_node = subnet_sys(env)
         .nodes()

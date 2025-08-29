@@ -6,4 +6,7 @@
 // 5. Simple Organization
 
 pub mod canister;
+pub mod metrics;
+pub mod registry_querier;
 pub mod storage;
+pub mod telemetry;

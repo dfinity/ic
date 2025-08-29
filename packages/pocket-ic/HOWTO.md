@@ -654,14 +654,13 @@ we refer to the basic bitcoin example canister in DFINITY's [examples](https://g
 
 ## VetKd
 
-To test the VetKd feature, you need to create a PocketIC instance with II or fiduciary subnet and enable nonmainnet features:
+To test the VetKd feature, you need to create a PocketIC instance with II or fiduciary subnet:
 
 ```rust
     // We create a PocketIC instance consisting of the II and one application subnet.
     let pic = PocketIcBuilder::new()
         .with_ii_subnet()               // this subnet has threshold keys
         .with_application_subnet()      // we deploy the dapp canister here
-        .with_nonmainnet_features(true) // the VetKd feature is not available on mainnet yet
         .build();
 ```
 
@@ -738,3 +737,30 @@ which fails with an error if the conversion would lead to loss of precision (e.g
 
 Finally, PocketIC times can be compared (for both equality and ordering)
 and a `Duration` can be added to a PocketIC time.
+
+## Nonmainnet features
+
+To test a new feature that has not (yet) been rolled out to the ICP mainnet,
+use `PocketIcBuilder::with_nonmainnet_features` when creating a new PocketIC instance.
+
+```rust
+    // We create a PocketIC instance with beta features enabled that are not yet available on the ICP mainnet.
+    let nonmainnet_features = NonmainnetFeatures {
+        enable_beta_features: Some(EmptyConfig {}),
+        ..Default::default()
+    };
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_nonmainnet_features(nonmainnet_features)
+        .build();
+```
+
+To use a new management canister endpoint that is not yet supported by a dedicated (Rust) PocketIC library function,
+the generic PocketIC library API, e.g., `PocketIc::update_call_with_effective_principal` should be used:
+- the `canister_id` argument should be the management canister principal (`aaaaa-aa`),
+- the `effective_principal` argument should be the actual canister or subnet to which the call is targetted
+  (e.g., `RawEffectivePrincipal::CanisterId(canister_id.as_slice().to_vec())` for a `canister_id` of type `Principal`;
+  in particular, `RawEffectivePrincipal::None` must not be used),
+- and the `payload` argument should be the Candid-encoded binary input to the new management canister endpoint
+  (the type of the `payload` argument can either be obtained from a corresponding branch of the public `ic-management-canister-types` crate
+  or be defined manually).

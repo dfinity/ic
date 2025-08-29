@@ -570,7 +570,6 @@ impl StreamHandlerImpl {
             let new_destination = state
                 .metadata
                 .network_topology
-                .routing_table
                 .route(response.receiver().get())
                 .expect("Canister disappeared from registry. Registry in an inconsistent state.");
             info!(
@@ -827,11 +826,7 @@ impl StreamHandlerImpl {
         available_guaranteed_response_memory: &mut i64,
     ) -> InductionResult {
         // Subnet that should have received the message according to the routing table.
-        let receiver_host_subnet = state
-            .metadata
-            .network_topology
-            .routing_table
-            .route(msg.receiver().get());
+        let receiver_host_subnet = state.metadata.network_topology.route(msg.receiver().get());
 
         let payload_size = msg.payload_size_bytes().get();
         let msg_cycles = msg.cycles();
@@ -925,6 +920,15 @@ impl StreamHandlerImpl {
                 Reject(RejectReason::CanisterMigrating, msg)
             }
 
+            // Best-effort response to canister hosted by other subnet. May occur
+            // legitimately if the canister was migrated after having timed out the
+            // matching callback.
+            Some(_) if msg.is_best_effort() && matches!(msg, RequestOrResponse::Response(_)) => {
+                self.observe_inducted_message_status(msg_type, LABEL_VALUE_DROPPED);
+                // Cycles were lost.
+                Accept(msg_cycles)
+            }
+
             // Receiver is not and was not (according to `migrating_canisters`) recently
             // hosted by this subnet.
             host_subnet => {
@@ -957,11 +961,7 @@ impl StreamHandlerImpl {
         state: &ReplicatedState,
     ) -> bool {
         // Remote subnet that should have sent the message according to the routing table.
-        let expected_subnet_id = state
-            .metadata
-            .network_topology
-            .routing_table
-            .route(msg.sender().get());
+        let expected_subnet_id = state.metadata.network_topology.route(msg.sender().get());
 
         match expected_subnet_id {
             // The actual originating subnet and the routing table entry for the sender are in agreement.
@@ -1021,11 +1021,7 @@ impl StreamHandlerImpl {
     ) -> bool {
         debug_assert_eq!(
             Some(actual_receiver_subnet_id),
-            state
-                .metadata
-                .network_topology
-                .routing_table
-                .route(msg.receiver().get())
+            state.metadata.network_topology.route(msg.receiver().get())
         );
 
         // Reroute if `msg.receiver()` is being migrated from `self.subnet_id` to

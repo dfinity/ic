@@ -13,17 +13,8 @@ clap = { workspace = true }
 config = { path = "../../config" }
 config_types = { path = "../../config_types" }
 deterministic_ips = { path = "../../deterministic_ips" }
-ic-metrics-tool = { path = "../../metrics_tool" }
 network = { path = "../../network" }
-nix = { workspace = true }
 utils = { path = "../../utils" }
-tempfile = { workspace = true }
-tokio = { workspace = true }
-virt = { workspace = true }
-tokio-util = { workspace = true }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-systemd = { workspace = true }
-
-[dev-dependencies]
-regex = { workspace = true }
+[features]
+dev = ["config/dev"]

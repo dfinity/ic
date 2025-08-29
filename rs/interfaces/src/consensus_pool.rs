@@ -84,9 +84,9 @@ pub trait ChangeSetOperation: Sized {
     /// Conditional composition when self is empty. Similar to Option::or_else.
     fn or_else<F: FnOnce() -> Self>(self, f: F) -> Self;
     /// Append a change action only when it is not a duplicate of what already
-    /// exists in the Mutations. Return the rejected action as error when it
+    /// exists in the Mutations. Return the rejected action when it
     /// is considered as duplicate.
-    fn dedup_push(&mut self, action: ChangeAction) -> Result<(), ChangeAction>;
+    fn dedup_push(&mut self, action: ChangeAction) -> Option<ChangeAction>;
 }
 
 impl ChangeSetOperation for Mutations {
@@ -98,12 +98,12 @@ impl ChangeSetOperation for Mutations {
         }
     }
 
-    fn dedup_push(&mut self, action: ChangeAction) -> Result<(), ChangeAction> {
+    fn dedup_push(&mut self, action: ChangeAction) -> Option<ChangeAction> {
         if !self.iter().any(|x| x.content_eq(&action)) {
             self.push(action);
-            Ok(())
+            None
         } else {
-            Err(action)
+            Some(action)
         }
     }
 }
@@ -287,8 +287,8 @@ pub trait ConsensusPool {
     /// Return a reference to the consensus block cache (ConsensusBlockCache).
     fn as_block_cache(&self) -> &dyn ConsensusBlockCache;
 
-    /// Return the block chain between the given start/end.
-    fn build_block_chain(&self, start: &Block, end: &Block) -> Arc<dyn ConsensusBlockChain>;
+    /// Return the block chain between the given start/end, ends inclusive.
+    fn build_block_chain(&self, start_height: Height, end: Block) -> Arc<dyn ConsensusBlockChain>;
 
     /// Return the first instant at which a block with the given hash was inserted
     /// into the validated pool. Returns None if no timestamp was found.
@@ -423,6 +423,9 @@ pub trait ConsensusBlockChain: Send + Sync {
 
     /// Returns the length of the chain.
     fn len(&self) -> usize;
+
+    /// Iterate over all Blocks above the given height.
+    fn iter_above(&self, height: Height) -> Box<dyn Iterator<Item = &Block> + '_>;
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]

@@ -121,5 +121,6 @@ try_from_u8!(
         LiquidCyclesBalance128 = 92,
         CallDataAppendCyclesAddMax = 93,
         RootKey = 94,
+        SetOnLowWasmMemoryMethod = 95,
     }
 );

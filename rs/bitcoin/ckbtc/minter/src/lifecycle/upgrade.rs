@@ -69,7 +69,7 @@ pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
     log!(P0, "[upgrade]: replaying {} events", count_events());
 
     let state = replay::<CheckInvariantsImpl>(events()).unwrap_or_else(|e| {
-        ic_cdk::trap(&format!(
+        ic_cdk::trap(format!(
             "[upgrade]: failed to replay the event log: {:?}",
             e
         ))

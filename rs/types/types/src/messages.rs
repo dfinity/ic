@@ -9,8 +9,9 @@ mod read_state;
 mod webauthn;
 
 pub use self::http::{
-    Authentication, Certificate, CertificateDelegation, Delegation, HasCanisterId, HttpCallContent,
-    HttpCanisterUpdate, HttpQueryContent, HttpQueryResponse, HttpQueryResponseReply, HttpReadState,
+    Authentication, Certificate, CertificateDelegation, CertificateDelegationFormat,
+    CertificateDelegationMetadata, Delegation, HasCanisterId, HttpCallContent, HttpCanisterUpdate,
+    HttpQueryContent, HttpQueryResponse, HttpQueryResponseReply, HttpReadState,
     HttpReadStateContent, HttpReadStateResponse, HttpReply, HttpRequest, HttpRequestContent,
     HttpRequestEnvelope, HttpRequestError, HttpSignedQueryResponse, HttpStatusResponse,
     HttpUserQuery, NodeSignature, QueryResponseHash, RawHttpRequestVal, ReplicaHealthStatus,
@@ -28,8 +29,7 @@ use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
 pub use ingress_messages::{
-    extract_effective_canister_id, is_subnet_id, Ingress, ParseIngressError, SignedIngress,
-    SignedIngressContent,
+    extract_effective_canister_id, Ingress, ParseIngressError, SignedIngress, SignedIngressContent,
 };
 pub use inter_canister::{
     CallContextId, CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse,

@@ -15,6 +15,7 @@ Success::
 1. Http requests succeed in environment where nodes fail.
 
 end::catalog[] */
+#![allow(deprecated)]
 
 use anyhow::bail;
 use anyhow::Result;
@@ -163,6 +164,7 @@ pub fn test(env: TestEnv) {
                                 context: vec![0, 1, 2],
                             }),
                             max_response_bytes: None,
+                            is_replicated: None,
                         },
                         cycles: 500_000_000_000,
                     },

@@ -235,7 +235,7 @@ mod ni_dkg {
     fn should_fail_with_transient_internal_error_if_dealing_encryption_key_persistence_fails() {
         let local_vault = {
             let mut pks_returning_io_error = MockPublicKeyStore::new();
-            let io_error = io::Error::new(io::ErrorKind::Other, "oh no!");
+            let io_error = io::Error::other("oh no!");
             pks_returning_io_error
                 .expect_set_once_ni_dkg_dealing_encryption_pubkey()
                 .return_once(|_key| Err(PublicKeySetOnceError::Io(io_error)));
@@ -297,7 +297,7 @@ mod idkg {
     #[test]
     fn should_fail_with_transient_internal_error_if_storing_idkg_public_key_fails() {
         let local_vault = {
-            let io_error = std::io::Error::new(std::io::ErrorKind::Other, "oh no!");
+            let io_error = std::io::Error::other("oh no!");
             let mut pks_returning_io_error = MockPublicKeyStore::new();
             pks_returning_io_error
                 .expect_add_idkg_dealing_encryption_pubkey()

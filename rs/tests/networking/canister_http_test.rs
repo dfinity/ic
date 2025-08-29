@@ -14,6 +14,7 @@ Success::
 1. Received http response with status 200.
 
 end::catalog[] */
+#![allow(deprecated)]
 
 use anyhow::bail;
 use anyhow::Result;
@@ -93,6 +94,7 @@ async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger:
                             }),
                             method: HttpMethod::GET,
                             max_response_bytes: None,
+                            is_replicated: None,
                         },
                         cycles: 500_000_000_000,
                     },

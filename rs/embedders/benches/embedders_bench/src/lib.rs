@@ -56,7 +56,6 @@ fn initialize_execution_test(
         .with_slice_instruction_limit(LARGE_INSTRUCTION_LIMIT);
 
     if is_wasm64 {
-        test = test.with_wasm64();
         // Set memory size to 8 GiB for Wasm64.
         test = test.with_max_wasm64_memory_size(NumBytes::from(8 * 1024 * 1024 * 1024));
     }

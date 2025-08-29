@@ -57,7 +57,7 @@ impl RecurringAsyncTask for CalculateDistributableRewardsTask {
         match total_supply {
             Ok(total_supply) => {
                 self.governance.with_borrow_mut(|governance| {
-                    governance.distribute_rewards(total_supply);
+                    governance.distribute_voting_rewards_to_neurons(total_supply);
                 });
             }
             Err(err) => {

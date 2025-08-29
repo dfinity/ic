@@ -6,7 +6,7 @@ use candid::Principal;
 use certificate_orchestrator_interface::IcCertificate;
 use ic_agent::{hash_tree::HashTree, Certificate};
 use prometheus::{CounterVec, HistogramVec, Registry};
-use tracing::info;
+use tracing::{error, info};
 use trust_dns_resolver::{error::ResolveError, lookup::Lookup, proto::rr::RecordType};
 
 use crate::{
@@ -539,9 +539,9 @@ impl<T: acme::Finalize> acme::Finalize for WithMetrics<T> {
     async fn finalize(&self, name: &str) -> Result<(String, String), acme::FinalizeError> {
         let start_time = Instant::now();
 
-        let out = self.0.finalize(name).await;
+        let result = self.0.finalize(name).await;
 
-        let status = if out.is_ok() { "ok" } else { "fail" };
+        let status = if result.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
 
         let MetricParams {
@@ -553,9 +553,21 @@ impl<T: acme::Finalize> acme::Finalize for WithMetrics<T> {
         counter.with_label_values(&[status]).inc();
         recorder.with_label_values(&[status]).observe(duration);
 
-        info!(action = action.as_str(), name, status, duration, error = ?out.as_ref().err());
+        match &result {
+            Ok(_) => {
+                info!(action, name, duration,);
+            }
+            Err(err) => {
+                error!(
+                    action,
+                    name,
+                    duration,
+                    error = %err,
+                );
+            }
+        }
 
-        out
+        result
     }
 }
 

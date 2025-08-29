@@ -284,6 +284,16 @@ pub mod fake {
             version: u64,
             value: Option<Vec<u8>>,
         ) {
+            self.set_value_at_version_with_timestamp(key, version, 0, value);
+        }
+
+        pub fn set_value_at_version_with_timestamp(
+            &self,
+            key: impl AsRef<str>,
+            version: u64,
+            timestamp_nanoseconds: u64,
+            value: Option<Vec<u8>>,
+        ) {
             let key_bytes = key.as_ref().as_bytes().to_vec();
             let mut binding = self.store.lock().unwrap();
 
@@ -302,6 +312,7 @@ pub mod fake {
                         value,
                         version,
                         deletion_marker,
+                        timestamp_nanoseconds,
                     };
                     entry.insert(index, registry_value)
                 }
@@ -324,6 +335,7 @@ pub mod fake {
                     value: mutation.value,
                     version: next_version,
                     deletion_marker: mutation.mutation_type == Type::Delete as i32,
+                    timestamp_nanoseconds: 0,
                 })
             }
             // Set next version.

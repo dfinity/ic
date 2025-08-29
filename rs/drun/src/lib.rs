@@ -9,7 +9,7 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::ExecutionServices;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_interfaces::{
-    execution_environment::{IngressHistoryReader, QueryExecutionError},
+    execution_environment::{IngressHistoryReader, QueryExecutionError, QueryExecutionInput},
     messaging::MessageRouting,
 };
 use ic_messaging::MessageRoutingImpl;
@@ -22,7 +22,7 @@ use ic_protobuf::types::v1::PrincipalId as PrincipalIdIdProto;
 use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_keys::{
-    make_provisional_whitelist_record_key, make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
+    make_canister_ranges_key, make_provisional_whitelist_record_key, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -50,7 +50,6 @@ use rand::distributions::{Distribution, Uniform};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use slog::{Drain, Logger};
-use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -134,9 +133,9 @@ fn get_registry(
     let pb_routing_table = PbRoutingTable::from(routing_table);
     data_provider
         .add(
-            &make_routing_table_record_key(),
+            &make_canister_ranges_key(CanisterId::from_u64(0)),
             registry_version,
-            Some(pb_routing_table),
+            Some(pb_routing_table.clone()),
         )
         .unwrap();
     let pb_whitelist = PbProvisionalWhitelist::from(ProvisionalWhitelist::All);
@@ -291,7 +290,16 @@ pub async fn run_drun(uo: DrunOptions) -> Result<(), String> {
                     &secret_key,
                     replica_config.subnet_id,
                 );
-                let query_result = match query_handler.clone().oneshot((q, None)).await.unwrap() {
+                let query_execution_input = QueryExecutionInput {
+                    query: q,
+                    certificate_delegation_with_metadata: None,
+                };
+                let query_result = match query_handler
+                    .clone()
+                    .oneshot(query_execution_input)
+                    .await
+                    .unwrap()
+                {
                     Ok((result, _)) => result,
                     Err(QueryExecutionError::CertifiedStateUnavailable) => {
                         panic!("Certified state unavailable for query call.")
@@ -384,9 +392,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
             ..BatchMessages::default()
         },
         randomness: Randomness::from(get_random_seed()),
-        chain_key_subnet_public_keys: BTreeMap::new(),
-        idkg_pre_signature_ids: BTreeMap::new(),
-        ni_dkg_ids: BTreeMap::new(),
+        chain_key_data: Default::default(),
         registry_version: RegistryVersion::from(1),
         time: time::current_time(),
         consensus_responses: vec![],

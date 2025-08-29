@@ -4,7 +4,7 @@ use crate::{
     file_sync_helper::create_dir,
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
-    util::DataLocation,
+    util::{DataLocation, SshUser},
     RecoveryArgs, RecoveryResult, CUPS_DIR,
 };
 use clap::Parser;
@@ -30,10 +30,11 @@ pub enum StepType {
     ICReplay,
     ValidateReplayOutput,
     UpdateRegistryLocalStore,
-    CreateTars,
+    CreateRegistryTar,
     CopyIcState,
     GetRecoveryCUP,
-    UploadCUPandRegistry,
+    CreateArtifacts,
+    UploadCUPAndRegistry,
     WaitForCUP,
     UploadState,
     Cleanup,
@@ -71,6 +72,14 @@ pub struct NNSRecoverySameNodesArgs {
     /// Local recoveries allow us to skip a potentially expensive data transfer.
     #[clap(long, value_parser=crate::util::data_location_from_str)]
     pub upload_method: Option<DataLocation>,
+
+    /// The path to a file containing the private key that has backup access to all nodes in the subnet.
+    #[clap(long)]
+    pub backup_key_file: Option<PathBuf>,
+
+    /// The output directory where the recovery artifacts (and its hash) will be stored.
+    #[clap(long)]
+    pub output_dir: Option<PathBuf>,
 
     /// If present the tool will start execution for the provided step, skipping the initial ones
     #[clap(long = "resume")]
@@ -160,7 +169,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 }
             }
 
-            StepType::WaitForCUP => {
+            StepType::UploadCUPAndRegistry => {
                 if self.params.upload_method.is_none() {
                     self.params.upload_method = read_optional_data_location(
                         &self.logger,
@@ -186,7 +195,8 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             StepType::DownloadCertifications => {
                 Ok(Box::new(self.recovery.get_download_certs_step(
                     self.params.subnet_id,
-                    true,
+                    SshUser::Backup,
+                    self.params.backup_key_file.clone(),
                     !self.interactive(),
                 )))
             }
@@ -224,6 +234,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                         url,
                         hash,
                         self.params.replay_until_height,
+                        !self.interactive(),
                     )?))
                 } else {
                     Ok(Box::new(self.recovery.get_replay_step(
@@ -231,6 +242,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                         None,
                         None,
                         self.params.replay_until_height,
+                        !self.interactive(),
                     )))
                 }
             }
@@ -243,27 +255,42 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 if self.params.upgrade_version.is_none() {
                     Err(RecoveryError::StepSkipped)
                 } else {
-                    Ok(Box::new(
-                        self.recovery
-                            .get_update_local_store_step(self.params.subnet_id),
-                    ))
+                    Ok(Box::new(self.recovery.get_update_local_store_step(
+                        self.params.subnet_id,
+                        !self.interactive(),
+                    )))
                 }
             }
 
-            StepType::CreateTars => Ok(Box::new(self.recovery.get_create_tars_step())),
+            StepType::CreateRegistryTar => {
+                Ok(Box::new(self.recovery.get_create_registry_tar_step()))
+            }
 
             StepType::CopyIcState => Ok(Box::new(
                 self.recovery.get_copy_ic_state(self.new_state_dir.clone()),
             )),
 
             StepType::GetRecoveryCUP => Ok(Box::new(
-                self.recovery.get_recovery_cup_step(self.params.subnet_id)?,
+                self.recovery
+                    .get_recovery_cup_step(self.params.subnet_id, !self.interactive())?,
             )),
 
-            StepType::UploadCUPandRegistry => Ok(Box::new(
+            StepType::CreateArtifacts => Ok(Box::new(
                 self.recovery
-                    .get_upload_cup_and_tar_step(self.params.subnet_id),
+                    .get_create_nns_recovery_tar_step(self.params.output_dir.clone()),
             )),
+
+            StepType::UploadCUPAndRegistry => {
+                if let Some(method) = self.params.upload_method {
+                    let node_ip = match method {
+                        DataLocation::Remote(ip) => ip,
+                        DataLocation::Local => IpAddr::V6(Ipv6Addr::LOCALHOST),
+                    };
+                    Ok(Box::new(self.recovery.get_upload_cup_and_tar_step(node_ip)))
+                } else {
+                    Err(RecoveryError::StepSkipped)
+                }
+            }
 
             StepType::WaitForCUP => {
                 if let Some(method) = self.params.upload_method {

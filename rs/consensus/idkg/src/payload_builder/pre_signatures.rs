@@ -1,25 +1,31 @@
-use crate::{
-    payload_builder::IDkgPayloadError, pre_signer::IDkgTranscriptBuilder,
-    utils::algorithm_for_key_id,
-};
+// TODO(CON-1530): Remove this once the new code is called
+#![allow(dead_code)]
+use crate::{payload_builder::IDkgPayloadError, pre_signer::IDkgTranscriptBuilder};
+use ic_interfaces_state_manager::Labeled;
 use ic_logger::{debug, error, ReplicaLogger};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_features::ChainKeyConfig;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext;
+use ic_replicated_state::{
+    metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext, ReplicatedState,
+};
 use ic_types::{
     consensus::idkg::{
         self,
         common::{PreSignatureInCreation, PreSignatureRef},
         ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation},
         schnorr::{PreSignatureTranscriptRef, TranscriptInCreation},
-        HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId, IDkgUIDGenerator, PreSigId,
-        TranscriptAttributes, UnmaskedTranscriptWithAttributes,
+        HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId, IDkgUIDGenerator,
+        PreSigId, TranscriptAttributes, UnmaskedTranscriptWithAttributes,
     },
-    crypto::canister_threshold_sig::idkg::IDkgTranscript,
+    crypto::{canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId},
     messages::CallbackId,
     Height, NodeId, RegistryVersion,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 /// Update the pre-signatures in the payload by:
 /// - making new configs when pre-conditions are met;
@@ -409,6 +415,81 @@ fn make_new_pre_signatures_if_needed_helper(
     new_pre_signatures
 }
 
+/// Count the number of pre-signatures for each key ID in the given state,
+/// and all blocks above the state height.
+pub(super) fn count_pre_signatures_total(
+    state: &Labeled<Arc<ReplicatedState>>,
+    block_reader: &dyn IDkgBlockReader,
+) -> BTreeMap<IDkgMasterPublicKeyId, usize> {
+    let mut total = state
+        .get_ref()
+        .pre_signature_stashes()
+        .iter()
+        .map(|(key_id, stash)| (key_id.clone(), stash.pre_signatures.len()))
+        .collect::<BTreeMap<_, _>>();
+
+    block_reader
+        .iter_above(state.height())
+        .flat_map(|idkg| idkg.available_pre_signatures.values())
+        .for_each(|pre_sig| {
+            *total.entry(pre_sig.key_id()).or_default() += 1;
+        });
+
+    total
+}
+
+/// A struct to keep track of the current fill level of a pre-signature stash for a given
+/// key ID and transcript. The [Ord] implementation assigns a higher priority to stashes with
+/// proportionally lower fill level.
+/// Ties between stashes of the same fill level are broken by comparing the key IDs instead.
+#[derive(Clone, Debug, Eq)]
+struct PrioritizedStash<'a> {
+    count: usize,
+    max: usize,
+    key_id: &'a IDkgMasterPublicKeyId,
+    key_transcript: &'a UnmaskedTranscriptWithAttributes,
+}
+
+impl Ord for PrioritizedStash<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Stashes with zero max should receive the least priority
+        if self.max == 0 && other.max == 0 {
+            // Use key_id as a tie breaker
+            return self.key_id.cmp(other.key_id);
+        } else if self.max == 0 {
+            return Ordering::Less;
+        } else if other.max == 0 {
+            return Ordering::Greater;
+        }
+
+        // Compare the fill level by cross-multiplying to avoid floating-point arithmetic
+        let self_level = self.count * other.max;
+        let other_level = other.count * self.max;
+
+        // Reverse the order to make the emptiest stash the greatest priority
+        let res = other_level.cmp(&self_level);
+
+        if res == Ordering::Equal {
+            // Use key_id as a tie breaker
+            return self.key_id.cmp(other.key_id);
+        }
+
+        res
+    }
+}
+
+impl PartialEq for PrioritizedStash<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl PartialOrd for PrioritizedStash<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 /// Create a new masked random transcript config and advance the
 /// next_unused_transcript_id by one.
 fn new_random_config(
@@ -426,7 +507,7 @@ fn new_random_config(
         dealers,
         receivers,
         summary_registry_version,
-        algorithm_for_key_id(key_id),
+        AlgorithmId::from(key_id.inner()),
     )
 }
 
@@ -447,7 +528,7 @@ pub fn new_random_unmasked_config(
         dealers,
         receivers,
         summary_registry_version,
-        algorithm_for_key_id(key_id),
+        AlgorithmId::from(key_id.inner()),
     )
 }
 
@@ -533,15 +614,21 @@ pub(super) mod test_utils {
 
 #[cfg(test)]
 pub(super) mod tests {
-    use super::{algorithm_for_key_id, test_utils::*, *};
-    use crate::test_utils::{
-        create_available_pre_signature, create_available_pre_signature_with_key_transcript,
-        into_idkg_contexts, set_up_idkg_payload, IDkgPayloadTestHelper, TestIDkgBlockReader,
-        TestIDkgTranscriptBuilder,
+    use super::{test_utils::*, *};
+    use crate::{
+        test_utils::{
+            create_available_pre_signature, create_available_pre_signature_with_key_transcript,
+            into_idkg_contexts, set_up_idkg_payload, IDkgPayloadTestHelper, TestIDkgBlockReader,
+            TestIDkgTranscriptBuilder,
+        },
+        utils::block_chain_reader,
     };
     use assert_matches::assert_matches;
+    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_utils::pool_reader::PoolReader;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
+        generate_key_transcript, mock_transcript, mock_unmasked_transcript_type,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_logger::replica_logger::no_op_logger;
@@ -550,13 +637,20 @@ pub(super) mod tests {
     use ic_test_utilities_consensus::idkg::*;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::idkg::{
-            common::PreSignatureRef, IDkgMasterPublicKeyId, IDkgPayload, UnmaskedTranscript,
+        batch::BatchPayload,
+        consensus::{
+            dkg::DkgDataPayload,
+            idkg::{
+                common::PreSignatureRef, IDkgMasterPublicKeyId, IDkgPayload,
+                IDkgTranscriptAttributes, UnmaskedTranscript,
+            },
+            BlockPayload, DataPayload, HasHeight, HashedBlock, Payload,
         },
         crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
         SubnetId,
     };
     use idkg::IDkgTranscriptOperationRef;
+    use rand::prelude::SliceRandom;
     use strum::IntoEnumIterator;
 
     fn set_up(
@@ -579,6 +673,305 @@ pub(super) mod tests {
             .expect("Should successfully update the height");
 
         (idkg_payload, env, block_reader)
+    }
+
+    #[test]
+    fn test_count_pre_signatures_total() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies {
+                mut pool,
+                replica_config,
+                ..
+            } = dependencies(pool_config.clone(), 4);
+
+            // Advance 4 rounds without IDkg
+            let mut height = pool.advance_round_normal_operation_n(4);
+            assert_eq!(height.get(), 4);
+
+            // Create an IDkgPayload with available pre-signatures
+            let key_ids = fake_master_public_key_ids_for_all_idkg_algorithms();
+            let (mut idkg_payload, _, _) = set_up(
+                &mut reproducible_rng(),
+                replica_config.subnet_id,
+                key_ids.clone(),
+                height,
+            );
+            // create 3 pre-sigs for the first key, 1 for the second, none for the third
+            for i in 0..3 {
+                create_available_pre_signature(&mut idkg_payload, key_ids[0].clone(), i);
+            }
+            create_available_pre_signature(&mut idkg_payload, key_ids[1].clone(), 3);
+
+            // add this payload 4 times.
+            for _ in 0..4 {
+                let mut block_proposal = pool.make_next_block();
+                let block = block_proposal.content.as_mut();
+                block.payload = Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Data(DataPayload {
+                        batch: BatchPayload::default(),
+                        dkg: DkgDataPayload::new_empty(Height::from(0)),
+                        idkg: Some(idkg_payload.clone()),
+                    }),
+                );
+                block_proposal.content =
+                    HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+                pool.advance_round_with_block(&block_proposal);
+                height = block_proposal.height();
+            }
+            assert_eq!(height.get(), 8);
+
+            // Create the blockchain reader
+            let pool_reader = PoolReader::new(&pool);
+            let block_reader = block_chain_reader(
+                &pool_reader,
+                Height::from(0),
+                pool_reader.get_finalized_tip(),
+                None,
+                &no_op_logger(),
+            )
+            .unwrap();
+
+            // Create two pre-signature stashes, one for the first key, one for a new key
+            let mut stashes = BTreeMap::new();
+            // The first stash has 2 pre-signatures
+            stashes.insert(key_ids[0].clone(), fake_pre_signature_stash(&key_ids[0], 2));
+            let new_key_id = IDkgMasterPublicKeyId::try_from(key_id_with_name(
+                key_ids[0].inner(),
+                "some_new_key",
+            ))
+            .unwrap();
+            // The second stash has 1 pre-signature
+            stashes.insert(new_key_id.clone(), fake_pre_signature_stash(&new_key_id, 1));
+
+            let mut state = ic_test_utilities_state::get_initial_state(0, 0);
+            state
+                .metadata
+                .subnet_call_context_manager
+                .pre_signature_stashes = stashes;
+
+            // Create the certified state at height 6 (there are two more IDkgPayloads above)
+            let certified_state =
+                ic_interfaces_state_manager::Labeled::new(Height::new(6), Arc::new(state));
+
+            // The entire blockchain should now contain pre-signatures for different keys as follows:
+            // [ C ]--[ B1 ]--[ B2 ]--[ B3 ]--[ B4 ]--[   B5   ]---[   B6   ]---[   B7   ]---[   B8   ]
+            //                                        [key0 x 3]   [key0 x 3]   [key0 x 3]   [key0 x 3]
+            //                                        [key1 x 1]   [key1 x 1]   [key1 x 1]   [key1 x 1]
+            //                                                         ||
+            //                                            {State; key0 x 2; key3 x 1}
+
+            // Count the total pre-signatures in and above the state for each key
+            let count = count_pre_signatures_total(&certified_state, &block_reader);
+            assert_eq!(count.len(), 3);
+            // key0: 2 in the stash + 3 at height seven + 3 at height eight = 8
+            assert_eq!(count[&key_ids[0]], 8);
+            // key1: 0 in the stash + 1 at height seven + 1 at height eight = 2
+            assert_eq!(count[&key_ids[1]], 2);
+            // key2: No pre-signatures in the stash or the blockchain
+            assert!(!count.contains_key(&key_ids[2]));
+            // key3: 1 in the stash + 0 at height seven + 0 at height eight = 1
+            assert_eq!(count[&new_key_id], 1);
+        });
+    }
+
+    fn make_stash<'a>(
+        count: usize,
+        max: usize,
+        key_id: &'a IDkgMasterPublicKeyId,
+        key_transcript: &'a UnmaskedTranscriptWithAttributes,
+    ) -> PrioritizedStash<'a> {
+        PrioritizedStash {
+            count,
+            max,
+            key_id,
+            key_transcript,
+        }
+    }
+
+    fn make_key_transcript() -> UnmaskedTranscriptWithAttributes {
+        let mut rng = reproducible_rng();
+        let alg = AlgorithmId::EcdsaSecp256k1;
+        let transcript =
+            mock_transcript(alg, None, mock_unmasked_transcript_type(&mut rng), &mut rng);
+        UnmaskedTranscriptWithAttributes::new(
+            IDkgTranscriptAttributes::new(BTreeSet::new(), alg, RegistryVersion::from(0)),
+            UnmaskedTranscript::try_from((Height::from(0), &transcript)).unwrap(),
+        )
+    }
+
+    #[test]
+    fn test_emptier_stash_has_greater_priority() {
+        let transcript = make_key_transcript();
+        let id1 = fake_ecdsa_idkg_master_public_key_id();
+        let id2 = fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519);
+
+        let emptier = make_stash(1, 10, &id1, &transcript);
+        let fuller = make_stash(5, 10, &id2, &transcript);
+
+        // Emptier stash has greater priority
+        assert_eq!(emptier.cmp(&fuller), Ordering::Greater);
+        assert_eq!(fuller.cmp(&emptier), Ordering::Less);
+
+        // switch the key_ids
+        let emptier = make_stash(1, 10, &id2, &transcript);
+        let fuller = make_stash(5, 10, &id1, &transcript);
+        // Emptier stash should still have greater priority
+        assert_eq!(emptier.cmp(&fuller), Ordering::Greater);
+        assert_eq!(fuller.cmp(&emptier), Ordering::Less);
+    }
+
+    #[test]
+    fn test_equal_ratios_uses_key_id_tiebreaker() {
+        let transcript = make_key_transcript();
+        let id1 = fake_ecdsa_idkg_master_public_key_id();
+        let id2 = fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519);
+
+        let stash1 = make_stash(2, 10, &id1, &transcript);
+        let stash2 = make_stash(1, 5, &id2, &transcript);
+
+        assert_eq!(id1.cmp(&id2), Ordering::Less);
+        assert_eq!(stash1.cmp(&stash2), Ordering::Less);
+        assert_eq!(stash2.cmp(&stash1), Ordering::Greater);
+
+        // switch the key_ids
+        let stash1 = make_stash(2, 10, &id2, &transcript);
+        let stash2 = make_stash(1, 5, &id1, &transcript);
+        // Order should be reversed
+        assert_eq!(stash1.cmp(&stash2), Ordering::Greater);
+        assert_eq!(stash2.cmp(&stash1), Ordering::Less);
+    }
+
+    #[test]
+    fn test_stash_both_max_zero_orders_by_key_id() {
+        let transcript = make_key_transcript();
+        // both max = 0, order by key_id
+        let id1 = fake_ecdsa_idkg_master_public_key_id();
+        let id2 = fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519);
+
+        let stash1 = make_stash(0, 0, &id1, &transcript);
+        // counts shouldn't matter when max = 0
+        let stash2 = make_stash(999, 0, &id2, &transcript);
+
+        assert_eq!(id1.cmp(&id2), Ordering::Less);
+        assert_eq!(stash1.cmp(&stash2), Ordering::Less);
+        assert_eq!(stash2.cmp(&stash1), Ordering::Greater);
+
+        // switch the key_ids
+        let stash1 = make_stash(0, 0, &id2, &transcript);
+        let stash2 = make_stash(999, 0, &id1, &transcript);
+        // Order should be reversed
+        assert_eq!(stash1.cmp(&stash2), Ordering::Greater);
+        assert_eq!(stash2.cmp(&stash1), Ordering::Less);
+    }
+
+    #[test]
+    fn test_zero_count_zero_max_has_lowest_priority() {
+        let transcript = make_key_transcript();
+        let id1 = fake_ecdsa_idkg_master_public_key_id();
+        let id2 = fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519);
+        let id3 = fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Bip340Secp256k1);
+
+        let zero = make_stash(0, 0, &id1, &transcript);
+        let nonzero = make_stash(2, 10, &id2, &transcript);
+        let empty_nonzero = make_stash(0, 10, &id3, &transcript);
+
+        // Stash with a max of zero has the lowest priority
+        assert_eq!(zero.cmp(&nonzero), Ordering::Less);
+        assert_eq!(nonzero.cmp(&zero), Ordering::Greater);
+        assert_eq!(empty_nonzero.cmp(&nonzero), Ordering::Greater);
+        assert_eq!(empty_nonzero.cmp(&zero), Ordering::Greater);
+
+        // switch the key_ids
+        let zero = make_stash(0, 0, &id2, &transcript);
+        let nonzero = make_stash(2, 10, &id3, &transcript);
+        let empty_nonzero = make_stash(0, 10, &id1, &transcript);
+        // Stash with a max of zero should still have the lower priority
+        assert_eq!(zero.cmp(&nonzero), Ordering::Less);
+        assert_eq!(nonzero.cmp(&zero), Ordering::Greater);
+        assert_eq!(empty_nonzero.cmp(&nonzero), Ordering::Greater);
+        assert_eq!(empty_nonzero.cmp(&zero), Ordering::Greater);
+    }
+
+    #[test]
+    fn test_max_zero_has_lowest_priority() {
+        let transcript = make_key_transcript();
+        let id1 = fake_ecdsa_idkg_master_public_key_id();
+        let id2 = fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519);
+
+        // Both stashes are over-filled
+        let zero = make_stash(10, 0, &id1, &transcript);
+        let nonzero = make_stash(15, 5, &id2, &transcript);
+
+        // Stash with a max of zero has the lowest priority
+        assert_eq!(zero.cmp(&nonzero), Ordering::Less);
+        assert_eq!(nonzero.cmp(&zero), Ordering::Greater);
+
+        // switch the key_ids
+        let zero = make_stash(10, 0, &id2, &transcript);
+        let nonzero = make_stash(15, 5, &id1, &transcript);
+        // Stash with a max of zero should still have lower priority
+        assert_eq!(zero.cmp(&nonzero), Ordering::Less);
+        assert_eq!(nonzero.cmp(&zero), Ordering::Greater);
+    }
+
+    #[test]
+    fn test_stash_equality() {
+        let transcript = make_key_transcript();
+        // All stashes have the same id
+        let id = fake_ecdsa_idkg_master_public_key_id();
+
+        // Both stashes have the same ratio
+        let ratio1 = make_stash(1, 5, &id, &transcript);
+        let ratio2 = make_stash(2, 10, &id, &transcript);
+
+        // Both stashes have a count of 0
+        let zero_count1 = make_stash(0, 5, &id, &transcript);
+        let zero_count2 = make_stash(0, 10, &id, &transcript);
+
+        // Both stashes have a max of 0
+        let zero_max1 = make_stash(0, 0, &id, &transcript);
+        let zero_max2 = make_stash(10, 0, &id, &transcript);
+
+        for (a, b) in [
+            (ratio1, ratio2),
+            (zero_count1, zero_count2),
+            (zero_max1, zero_max2),
+        ] {
+            assert_eq!(a.cmp(&b), Ordering::Equal);
+            assert_eq!(b.cmp(&a), Ordering::Equal);
+            assert_eq!(a.cmp(&a), Ordering::Equal);
+            assert_eq!(b.cmp(&b), Ordering::Equal);
+        }
+    }
+
+    #[test]
+    fn sort_orders_as_specified() {
+        fn make_key_id(i: u64) -> IDkgMasterPublicKeyId {
+            let key_id = fake_ecdsa_idkg_master_public_key_id().inner().clone();
+            key_id_with_name(&key_id, &format!("some_key{i}"))
+                .try_into()
+                .unwrap()
+        }
+
+        let ids = (0..6).map(make_key_id).collect::<Vec<_>>();
+        let transcript = make_key_transcript();
+
+        let expected = vec![
+            make_stash(5, 0, &ids[3], &transcript),  // zero max
+            make_stash(0, 0, &ids[4], &transcript),  // zero max but larger key_id than id 3
+            make_stash(5, 10, &ids[2], &transcript), // ratio 0.5
+            make_stash(2, 10, &ids[1], &transcript), // ratio 0.2
+            make_stash(1, 5, &ids[2], &transcript),  // ratio 0.2 tie but larger key_id
+            make_stash(1, 10, &ids[0], &transcript), // ratio 0.1 has highest priority
+        ];
+
+        let mut shuffled = expected.clone();
+
+        shuffled.shuffle(&mut reproducible_rng());
+        shuffled.sort();
+
+        assert_eq!(expected, shuffled);
     }
 
     #[test]
@@ -628,7 +1021,7 @@ pub(super) mod tests {
                     MasterPublicKeyId::Schnorr(transcript.key_id.clone())
                 );
                 let config = transcript.blinder_unmasked_config.as_ref();
-                assert_eq!(config.algorithm_id, algorithm_for_key_id(key_id));
+                assert_eq!(config.algorithm_id, AlgorithmId::from(key_id.inner()));
                 assert_eq!(config.registry_version, registry_version);
                 assert_eq!(config.dealers, config.receivers);
                 assert_eq!(config.dealers, BTreeSet::from(*nodes));
@@ -1043,7 +1436,7 @@ pub(super) mod tests {
             .expect("Translating should succeed");
         assert_eq!(
             translated.blinder_unmasked().algorithm_id,
-            algorithm_for_key_id(&key_id)
+            AlgorithmId::from(key_id.inner())
         );
     }
 
@@ -1078,7 +1471,7 @@ pub(super) mod tests {
             &env,
             &dealers,
             &receivers,
-            algorithm_for_key_id(&key_id),
+            AlgorithmId::from(key_id.inner()),
             &mut rng,
         );
         let key_transcript2 =
@@ -1185,7 +1578,7 @@ pub(super) mod tests {
             &env,
             &dealers,
             &receivers,
-            algorithm_for_key_id(&key_id),
+            AlgorithmId::from(key_id.inner()),
             &mut rng,
         );
         let other_key_transcript =
