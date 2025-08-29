@@ -29,8 +29,8 @@ impl Partition for ExtPartition {
         let _ = debugfs().context("debugfs is needed to open ext4 partitions")?;
 
         if let Some(index) = index {
-            let offset = gpt::get_partition_offset(&image, index).await?;
-            let length = gpt::get_partition_length(&image, index).await?;
+            let offset = gpt::get_partition_offset(&image, index)?;
+            let length = gpt::get_partition_length(&image, index)?;
             Self::open_range(image, offset, length).await
         } else {
             // open_range is several times slower than fs::copy, therefore we use fs::copy
@@ -64,6 +64,9 @@ impl Partition for ExtPartition {
                 "conv=sparse",
                 "iflag=skip_bytes,count_bytes"
             ])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .status()
             .await
             .context("failed to run dd command")?
