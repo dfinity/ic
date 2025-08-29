@@ -641,14 +641,8 @@ fn default_decimals() -> u8 {
     ic_ledger_core::tokens::DECIMAL_PLACES as u8
 }
 
-#[cfg(not(feature = "u256-tokens"))]
 pub fn wasm_token_type() -> String {
-    "U64".to_string()
-}
-
-#[cfg(feature = "u256-tokens")]
-pub fn wasm_token_type() -> String {
-    "U256".to_string()
+    Tokens::TYPE.to_string()
 }
 
 fn map_metadata_or_trap(arg_metadata: Vec<(String, Value)>) -> Vec<(String, StoredValue)> {
