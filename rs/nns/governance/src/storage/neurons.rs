@@ -746,6 +746,10 @@ where
 
         update_range(new_entries, range, &mut self.followees_map);
     }
+
+    pub fn is_known_neuron(&self, neuron_id: NeuronId) -> bool {
+        self.known_neuron_data_map.contains_key(&neuron_id)
+    }
 }
 
 /// Number of entries for each section of the neuron storage. Only the ones needed are defined.
