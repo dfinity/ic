@@ -14,6 +14,7 @@ use crate::{
     canister_state::{max_active_requests, num_active_requests},
     processing::{
         process_accepted, process_all_failed, process_all_generic, process_controllers_changed,
+        process_stopped,
     },
 };
 
@@ -241,6 +242,13 @@ pub fn start_timers() {
             "controllers_changed",
             |r| matches!(r, RequestState::ControllersChanged { .. }),
             process_controllers_changed,
+        ))
+    });
+    set_timer_interval(interval, || {
+        spawn(process_all_generic(
+            "stopped",
+            |r| matches!(r, RequestState::StoppedAndReady { .. }),
+            process_stopped,
         ))
     });
 

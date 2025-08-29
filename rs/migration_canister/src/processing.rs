@@ -11,8 +11,8 @@ use crate::{
         MethodGuard,
     },
     external_interfaces::management::{
-        canister_status, get_canister_info, set_exclusive_controller, set_original_controllers,
-        CanisterStatusType,
+        canister_status, get_canister_info, rename_canister, set_exclusive_controller,
+        set_original_controllers, CanisterStatusType,
     },
     Event, RequestState, ValidationError,
 };
@@ -143,6 +143,34 @@ pub async fn process_controllers_changed(
     })
 }
 
+pub async fn process_stopped(
+    request: RequestState,
+) -> ProcessingResult<RequestState, RequestState> {
+    let RequestState::StoppedAndReady {
+        request,
+        stopped_since,
+        canister_version,
+        canister_history_total_num,
+    } = request
+    else {
+        println!("Error: list_by StoppedAndReady returned bad variant");
+        return ProcessingResult::NoProgress;
+    };
+    rename_canister(
+        request.source,
+        canister_version,
+        request.target,
+        canister_history_total_num,
+    )
+    .await
+    .map_success(|_| RequestState::RenamedTarget {
+        request,
+        stopped_since,
+    })
+    .or_retry()
+}
+
+// ----------------------------------------------------------------------------
 pub async fn process_all_failed() {
     let Ok(_guard) = MethodGuard::new("failed") else {
         return;
@@ -159,7 +187,7 @@ pub async fn process_all_failed() {
 }
 
 /// Accepts a `Failed` request, returns `Event::Failed` or must be retried.
-// TODO: Make sure this only occurs before `rename_canister`, otherwise the subnet_id args are wrong.
+// TODO: Confirm this only occurs before `rename_canister`, otherwise the subnet_id args are wrong.
 async fn process_failed(request: RequestState) -> ProcessingResult<Event, () /* should be `!` */> {
     let RequestState::Failed { request, reason } = request else {
         println!("Error: list_failed returned bad variant");
@@ -226,12 +254,30 @@ impl<S, F> ProcessingResult<S, F> {
     }
 }
 
+impl<S, F> ProcessingResult<S, F>
+where
+    F: std::fmt::Debug,
+{
+    /// Use for results of infallible calls to ensure retrying in the presence of bugs.
+    pub fn or_retry<T>(self) -> ProcessingResult<S, T> {
+        match self {
+            ProcessingResult::Success(x) => ProcessingResult::Success(x),
+            ProcessingResult::NoProgress => ProcessingResult::NoProgress,
+            ProcessingResult::FatalFailure(f) => {
+                println!("Unreachable: Ignore failure {:?} and retry.", f);
+                ProcessingResult::NoProgress
+            }
+        }
+    }
+}
+
 impl<S> ProcessingResult<S, ValidationError> {
-    pub fn into_result(self, context: &str) -> Result<S, ValidationError> {
+    /// Use this during validation only, where `NoProgress` should lead to an error.
+    pub fn into_result(self, reason: &str) -> Result<S, ValidationError> {
         match self {
             ProcessingResult::Success(s) => Ok(s),
             ProcessingResult::NoProgress => Err(ValidationError::CallFailed {
-                reason: context.to_string(),
+                reason: reason.to_string(),
             }),
             ProcessingResult::FatalFailure(e) => Err(e),
         }

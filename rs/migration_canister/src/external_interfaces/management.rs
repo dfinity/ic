@@ -1,6 +1,6 @@
 use candid::{CandidType, Principal};
 use ic_cdk::{
-    api::canister_self,
+    api::{canister_self, canister_version},
     call::Call,
     management_canister::{canister_info, CanisterInfoArgs, CanisterInfoResult},
     println,
@@ -187,9 +187,7 @@ pub async fn canister_status(
 // ========================================================================= //
 // `canister_info`
 
-pub async fn get_canister_info(
-    canister_id: Principal,
-) -> ProcessingResult<CanisterInfoResult, ValidationError> {
+pub async fn get_canister_info(canister_id: Principal) -> ProcessingResult<CanisterInfoResult, ()> {
     let args = CanisterInfoArgs {
         canister_id,
         num_requested_changes: None,
@@ -199,6 +197,53 @@ pub async fn get_canister_info(
         Ok(canister_info) => ProcessingResult::Success(canister_info),
         Err(e) => {
             println!("Call `canister_info` for {:?}, failed {:?}", canister_id, e);
+            ProcessingResult::NoProgress
+        }
+    }
+}
+
+// ========================================================================= //
+// `rename_canister`
+
+#[derive(Clone, Debug, Deserialize, CandidType, PartialEq)]
+pub struct RenameCanisterArgs {
+    pub canister_id: Principal,
+    pub rename_to: RenameToArgs,
+    pub sender_canister_version: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, CandidType, PartialEq)]
+pub struct RenameToArgs {
+    pub canister_id: Principal,
+    pub version: u64,
+    pub total_num_changes: u64,
+}
+
+pub async fn rename_canister(
+    source: Principal,
+    source_version: u64,
+    target: Principal,
+    total_num_changes: u64,
+) -> ProcessingResult<(), ()> {
+    let args = RenameCanisterArgs {
+        canister_id: source,
+        rename_to: RenameToArgs {
+            canister_id: target,
+            version: source_version,
+            total_num_changes,
+        },
+        sender_canister_version: canister_version(),
+    };
+
+    match Call::bounded_wait(target, "rename_canister")
+        .with_arg(args)
+        .await
+    {
+        Ok(_) => ProcessingResult::Success(()),
+        Err(e) => {
+            println!("Call `rename_canister` for {:?} failed {:?}", target, e);
+            // All fatal error conditions have been checked upfront and should not be possible now.
+            // CanisterAlreadyExists, RenameCanisterNotStopped, RenameCanisterHasSnapshot.
             ProcessingResult::NoProgress
         }
     }
