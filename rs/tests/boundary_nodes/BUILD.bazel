@@ -30,6 +30,7 @@ system_test_nns(
     colocated_test_driver_vm_resources = {
         "vcpus": 16,
     },
+    enable_head_nns_variant = False,
     tags = [
         "colocate",
     ],
