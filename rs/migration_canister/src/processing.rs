@@ -127,20 +127,15 @@ pub async fn process_controllers_changed(
     // TODO: target has enough cycles
 
     // Determine history length of source
-    let ProcessingResult::Success(CanisterInfoResult {
-        total_num_changes, ..
-    }) = get_canister_info(request.source).await
-    else {
-        return ProcessingResult::NoProgress;
-    };
-
-    let stopped_since = time();
-    ProcessingResult::Success(RequestState::StoppedAndReady {
-        request,
-        stopped_since,
-        canister_version,
-        canister_history_total_num: total_num_changes,
-    })
+    get_canister_info(request.source)
+        .await
+        .map_success(|canister_info_result| RequestState::StoppedAndReady {
+            request,
+            stopped_since: time(),
+            canister_version,
+            canister_history_total_num: canister_info_result.total_num_changes,
+        })
+        .or_retry()
 }
 
 pub async fn process_stopped(
@@ -272,7 +267,7 @@ where
 }
 
 impl<S> ProcessingResult<S, ValidationError> {
-    /// Use this during validation only, where `NoProgress` should lead to an error.
+    /// Use during validation only, where `NoProgress` should lead to an error.
     pub fn into_result(self, reason: &str) -> Result<S, ValidationError> {
         match self {
             ProcessingResult::Success(s) => Ok(s),
