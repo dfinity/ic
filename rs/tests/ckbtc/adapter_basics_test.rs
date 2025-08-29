@@ -186,7 +186,14 @@ fn test<T: 'static + IcRpcClientType>() -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    test::<BtcNetwork>()?;
-    test::<DogeNetwork>()?;
+    let test_name = std::env::var("TEST_ADAPTER_NAME")
+        .unwrap_or_else(|_| panic!("environment variable TEST_ADAPTER_NAME is not set"));
+    if test_name == "BTC" {
+        test::<BtcNetwork>()?;
+    } else if test_name == "DOGE" {
+        test::<DogeNetwork>()?;
+    } else {
+        panic!("Unsupported TEST_ADAPTER_NAME {}", test_name);
+    }
     Ok(())
 }
