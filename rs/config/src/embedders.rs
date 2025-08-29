@@ -124,8 +124,6 @@ pub struct FeatureFlags {
     /// If this flag is enabled, then the output of the `debug_print` system-api
     /// call will be skipped based on heuristics.
     pub rate_limiting_of_debug_prints: FlagStatus,
-    /// Indicates whether the support for 64 bit main memory is enabled
-    pub wasm64: FlagStatus,
     /// Collect a backtrace from the canister when it panics.
     pub canister_backtrace: FlagStatus,
     /// If this flag is enabled, then the environment variables are supported.
@@ -136,7 +134,6 @@ impl FeatureFlags {
     const fn const_default() -> Self {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
-            wasm64: FlagStatus::Enabled,
             canister_backtrace: FlagStatus::Enabled,
             environment_variables: FlagStatus::Disabled,
         }

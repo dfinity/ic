@@ -1,5 +1,5 @@
 {
-  "checksum": "4e786aff693eef578cf8cd99c58bfb3d136b36154fd7f455115e49355aff337a",
+  "checksum": "1cfae161bb1dfdb063dfd5e5bd810e5eb911301d5685ede6479322a383e65806",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -8196,7 +8196,6 @@
             "actual-serde",
             "default",
             "rand",
-            "rand-std",
             "secp-recovery",
             "serde",
             "std"
@@ -8615,138 +8614,6 @@
         "CC0-1.0"
       ],
       "license_file": null
-    },
-    "bitcoincore-rpc 0.19.0": {
-      "name": "bitcoincore-rpc",
-      "version": "0.19.0",
-      "package_url": "https://github.com/rust-bitcoin/rust-bitcoincore-rpc/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bitcoincore-rpc/0.19.0/download",
-          "sha256": "aedd23ae0fd321affb4bbbc36126c6f49a32818dc6b979395d24da8c9d4e80ee"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bitcoincore_rpc",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bitcoincore_rpc",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "rand"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bitcoincore-rpc-json 0.19.0",
-              "target": "bitcoincore_rpc_json"
-            },
-            {
-              "id": "jsonrpc 0.18.0",
-              "target": "jsonrpc"
-            },
-            {
-              "id": "log 0.4.20",
-              "target": "log"
-            },
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.132",
-              "target": "serde_json"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.19.0"
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "bitcoincore-rpc-json 0.19.0": {
-      "name": "bitcoincore-rpc-json",
-      "version": "0.19.0",
-      "package_url": "https://github.com/rust-bitcoin/rust-bitcoincore-rpc/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bitcoincore-rpc-json/0.19.0/download",
-          "sha256": "d8909583c5fab98508e80ef73e5592a651c954993dc6b7739963257d19f0e71a"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bitcoincore_rpc_json",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bitcoincore_rpc_json",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "rand"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bitcoin 0.32.99",
-              "target": "bitcoin"
-            },
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.132",
-              "target": "serde_json"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.19.0"
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": "LICENSE"
     },
     "bitfield 0.19.1": {
       "name": "bitfield",
@@ -20781,10 +20648,6 @@
               "target": "bitcoin"
             },
             {
-              "id": "bitcoincore-rpc 0.19.0",
-              "target": "bitcoincore_rpc"
-            },
-            {
               "id": "bitflags 1.3.2",
               "target": "bitflags"
             },
@@ -21182,6 +21045,11 @@
               "target": "ic_stable_structures"
             },
             {
+              "id": "ic-stable-structures 0.7.0",
+              "target": "ic_stable_structures",
+              "alias": "ic_stable_structures_next"
+            },
+            {
               "id": "ic-test-state-machine-client 3.0.1",
               "target": "ic_test_state_machine_client"
             },
@@ -21442,6 +21310,10 @@
               "target": "p256"
             },
             {
+              "id": "p384 0.13.1",
+              "target": "p384"
+            },
+            {
               "id": "pairing 0.23.0",
               "target": "pairing"
             },
@@ -21569,6 +21441,10 @@
             {
               "id": "ratelimit 0.9.1",
               "target": "ratelimit"
+            },
+            {
+              "id": "raw-cpuid 11.5.0",
+              "target": "raw_cpuid"
             },
             {
               "id": "rayon 1.10.0",
@@ -21990,6 +21866,10 @@
             {
               "id": "walkdir 2.5.0",
               "target": "walkdir"
+            },
+            {
+              "id": "walrus 0.23.3",
+              "target": "walrus"
             },
             {
               "id": "warp 0.3.7",
@@ -60062,13 +59942,13 @@
             ],
             "cfg(target_arch = \"x86\")": [
               {
-                "id": "raw-cpuid 11.1.0",
+                "id": "raw-cpuid 11.5.0",
                 "target": "raw_cpuid"
               }
             ],
             "cfg(target_arch = \"x86_64\")": [
               {
-                "id": "raw-cpuid 11.1.0",
+                "id": "raw-cpuid 11.5.0",
                 "target": "raw_cpuid"
               }
             ],
@@ -62283,14 +62163,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "raw-cpuid 11.1.0": {
+    "raw-cpuid 11.5.0": {
       "name": "raw-cpuid",
-      "version": "11.1.0",
+      "version": "11.5.0",
       "package_url": "https://github.com/gz/rust-cpuid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/raw-cpuid/11.1.0/download",
-          "sha256": "cb9ee317cfe3fbd54b36a511efc1edd42e216903c9cd575e686dd68a2ba90d8d"
+          "url": "https://static.crates.io/crates/raw-cpuid/11.5.0/download",
+          "sha256": "c6df7ab838ed27997ba19a4664507e6f82b41fe6e20be42929332156e5e85146"
         }
       },
       "targets": [
@@ -62322,7 +62202,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "11.1.0"
+        "version": "11.5.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -65317,6 +65197,7 @@
         "crate_features": {
           "common": [
             "default",
+            "getrandom",
             "pem",
             "sha2",
             "std",
@@ -69006,7 +68887,6 @@
             "alloc",
             "hashes",
             "rand",
-            "rand-std",
             "recovery",
             "serde",
             "std"
@@ -94842,7 +94722,6 @@
     "bit-vec 0.6.3",
     "bitcoin 0.28.2",
     "bitcoin 0.32.99",
-    "bitcoincore-rpc 0.19.0",
     "bitflags 1.3.2",
     "bs58 0.5.0",
     "build-info 0.0.27",
@@ -94945,6 +94824,7 @@
     "ic-response-verification 3.0.3",
     "ic-sha3 1.0.0",
     "ic-stable-structures 0.6.8",
+    "ic-stable-structures 0.7.0",
     "ic-test-state-machine-client 3.0.1",
     "ic-transport-types 0.40.1",
     "ic-utils 0.40.1",
@@ -95012,6 +94892,7 @@
     "opentelemetry-prometheus 0.13.0",
     "opentelemetry_sdk 0.27.1",
     "p256 0.13.2",
+    "p384 0.13.1",
     "pairing 0.23.0",
     "parking_lot 0.12.1",
     "paste 1.0.15",
@@ -95046,6 +94927,7 @@
     "rand_distr 0.4.3",
     "rand_pcg 0.3.1",
     "ratelimit 0.9.1",
+    "raw-cpuid 11.5.0",
     "rayon 1.10.0",
     "rcgen 0.13.1",
     "regex 1.11.1",
@@ -95155,6 +95037,7 @@
     "virt 0.4.2",
     "vsock 0.4.0",
     "walkdir 2.5.0",
+    "walrus 0.23.3",
     "warp 0.3.7",
     "wasm-bindgen 0.2.100",
     "wasm-encoder 0.228.0",

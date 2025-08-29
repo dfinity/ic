@@ -11,7 +11,7 @@ use std::str::FromStr;
 type AddressUnchecked = Address<NetworkUnchecked>;
 
 // Used for createrawtransaction argument.
-#[derive(Serialize, Clone, PartialEq, Eq, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateRawTransactionInput {
     pub txid: Txid,
@@ -20,7 +20,7 @@ pub struct CreateRawTransactionInput {
     pub sequence: Option<u32>,
 }
 
-#[derive(Deserialize, Clone, PartialEq, Eq, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetBalancesResultEntry {
     #[serde(with = "bitcoin::amount::serde::as_btc")]
     pub trusted: Amount,
@@ -30,7 +30,7 @@ pub struct GetBalancesResultEntry {
     pub immature: Amount,
 }
 
-#[derive(Deserialize, Clone, PartialEq, Eq, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetBalancesResult {
     pub mine: GetBalancesResultEntry,
@@ -38,7 +38,7 @@ pub struct GetBalancesResult {
 }
 
 /// Models the result of "getblockchaininfo"
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetBlockchainInfoResult {
     /// Current network name as defined in BIP70 (main, test, signet, regtest)
     #[serde(deserialize_with = "deserialize_bip70_network")]
@@ -80,15 +80,15 @@ pub struct GetBlockchainInfoResult {
 }
 
 /// Used to represent values that can either be a string or a string array.
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum StringOrStringArray {
     String(String),
     StringArray(Vec<String>),
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
-pub struct GetMempoolEntryResult {
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BtcGetMempoolEntryResult {
     /// Virtual transaction size as defined in BIP 141. This is different from actual serialized
     /// size for witness transactions as witness data is discounted.
     #[serde(alias = "size")]
@@ -112,53 +112,23 @@ pub struct GetMempoolEntryResult {
     #[serde(rename = "ancestorsize")]
     pub ancestor_size: u64,
     /// Hash of serialized transaction, including witness data
-    pub wtxid: Option<bitcoin::Txid>,
-    /// Fee information (only for Bitcoin)
-    pub fees: Option<GetMempoolEntryResultFees>,
-    /// Fee (only for Dogecoin)
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "bitcoin::amount::serde::as_btc::opt"
-    )]
-    pub fee: Option<Amount>,
-    /// Transaction fee with fee deltas used for mining priority in BTC (only for Dogecoin)
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "bitcoin::amount::serde::as_btc::opt"
-    )]
-    pub modifiedfee: Option<Amount>,
-    /// Modified fees (see above) of in-mempool ancestors (including this one) in BTC (only for
-    /// Dogecoin)
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "bitcoin::amount::serde::as_btc::opt"
-    )]
-    pub ancestorfees: Option<Amount>,
-    /// Modified fees (see above) of in-mempool descendants (including this one) in BTC (only for
-    /// Dogecoin)
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "bitcoin::amount::serde::as_btc::opt"
-    )]
-    pub descendantfees: Option<Amount>,
+    pub wtxid: bitcoin::Txid,
+    /// Fee information
+    pub fees: GetMempoolEntryResultFees,
     /// Unconfirmed transactions used as inputs for this transaction
     pub depends: Vec<Txid>,
     /// Unconfirmed transactions spending outputs from this transaction
     #[serde(rename = "spentby")]
     pub spent_by: Vec<Txid>,
-    /// Whether this transaction could be replaced due to BIP125 (replace-by-fee, only for Bitcoin)
+    /// Whether this transaction could be replaced due to BIP125
     #[serde(rename = "bip125-replaceable")]
-    pub bip125_replaceable: Option<bool>,
+    pub bip125_replaceable: bool,
     /// Whether this transaction is currently unbroadcast (initial broadcast not yet acknowledged by any peers)
     /// Added in Bitcoin Core v0.21
     pub unbroadcast: Option<bool>,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetMempoolEntryResultFees {
     /// Transaction fee in BTC
     #[serde(with = "bitcoin::amount::serde::as_btc")]
@@ -174,7 +144,49 @@ pub struct GetMempoolEntryResultFees {
     pub descendant: Amount,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DogeGetMempoolEntryResult {
+    /// Virtual transaction size as defined in BIP 141. This is different from actual serialized
+    /// size for witness transactions as witness data is discounted.
+    #[serde(alias = "size")]
+    pub vsize: u64,
+    /// Transaction weight as defined in BIP 141. Added in Core v0.19.0.
+    pub weight: Option<u64>,
+    /// Local time transaction entered pool in seconds since 1 Jan 1970 GMT
+    pub time: u64,
+    /// Block height when transaction entered pool
+    pub height: u64,
+    /// Number of in-mempool descendant transactions (including this one)
+    #[serde(rename = "descendantcount")]
+    pub descendant_count: u64,
+    /// Virtual transaction size of in-mempool descendants (including this one)
+    #[serde(rename = "descendantsize")]
+    pub descendant_size: u64,
+    /// Number of in-mempool ancestor transactions (including this one)
+    #[serde(rename = "ancestorcount")]
+    pub ancestor_count: u64,
+    /// Virtual transaction size of in-mempool ancestors (including this one)
+    #[serde(rename = "ancestorsize")]
+    pub ancestor_size: u64,
+    #[serde(with = "bitcoin::amount::serde::as_btc")]
+    /// Transaction fee.
+    pub fee: Amount,
+    #[serde(with = "bitcoin::amount::serde::as_btc")]
+    /// Transaction fee with fee deltas used for mining priority.
+    pub modifiedfee: Amount,
+    /// Modified fees (see above) of in-mempool ancestors (including this one).
+    /// Dogecoin)
+    #[serde(with = "bitcoin::amount::serde::as_btc")]
+    pub ancestorfees: Amount,
+    /// Modified fees (see above) of in-mempool descendants (including this one).
+    /// Dogecoin)
+    #[serde(with = "bitcoin::amount::serde::as_btc")]
+    pub descendantfees: Amount,
+    /// Unconfirmed transactions used as inputs for this transaction
+    pub depends: Vec<Txid>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListUnspentResultEntry {
     pub txid: Txid,
@@ -195,7 +207,7 @@ pub struct ListUnspentResultEntry {
 }
 
 // Used for signrawtransaction argument.
-#[derive(Serialize, Clone, PartialEq, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SignRawTransactionInput {
     pub txid: Txid,
@@ -211,7 +223,7 @@ pub struct SignRawTransactionInput {
     pub amount: Option<Amount>,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SignRawTransactionResultError {
     pub txid: Txid,
@@ -221,7 +233,7 @@ pub struct SignRawTransactionResultError {
     pub error: String,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SignRawTransactionResult {
     #[serde(with = "serde_hex")]
@@ -230,13 +242,13 @@ pub struct SignRawTransactionResult {
     pub errors: Option<Vec<SignRawTransactionResultError>>,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LoadWalletResult {
     pub name: String,
     pub warning: Option<String>,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UnloadWalletResult {
     pub warning: Option<String>,
 }
@@ -285,21 +297,5 @@ pub mod serde_hex {
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u8>, D::Error> {
         let hex_str: String = ::serde::Deserialize::deserialize(d)?;
         FromHex::from_hex(&hex_str).map_err(D::Error::custom)
-    }
-
-    pub mod opt {
-        use super::*;
-
-        pub fn serialize<S: Serializer>(b: &Option<Vec<u8>>, s: S) -> Result<S::Ok, S::Error> {
-            match *b {
-                None => s.serialize_none(),
-                Some(ref b) => s.serialize_str(&b.to_lower_hex_string()),
-            }
-        }
-
-        pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Vec<u8>>, D::Error> {
-            let hex_str: String = ::serde::Deserialize::deserialize(d)?;
-            Ok(Some(FromHex::from_hex(&hex_str).map_err(D::Error::custom)?))
-        }
     }
 }

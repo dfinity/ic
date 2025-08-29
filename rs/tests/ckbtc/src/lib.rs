@@ -53,6 +53,12 @@ use std::{
 pub mod adapter;
 pub mod utils;
 
+/// For an, as of yet, unexplained reason the setup task of all the ckbtc system-tests often times out
+/// after the default 10 minutes because creating the btc-node takes a long time.
+/// So to reduce flakiness we bump the timeout to 15 minutes.
+pub const TIMEOUT_PER_TEST: Duration = Duration::from_secs(15 * 60);
+pub const OVERALL_TIMEOUT: Duration = Duration::from_secs(20 * 60);
+
 pub const TEST_KEY_LOCAL: &str = "an_arbitrary_key_id";
 
 pub const ADDRESS_LENGTH: usize = 44;

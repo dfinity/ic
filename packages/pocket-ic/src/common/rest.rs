@@ -537,6 +537,25 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
     }
 }
 
+/// Forward-compatible configuration type used instead of `bool` and `Option<bool>`:
+/// if provided, the corresponding feature is enabled.
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub struct EmptyConfig {}
+
+/// Specifies nonmainnet features enabled in this instance.
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub struct NonmainnetFeatures {
+    /// Enables (beta) features (disabled on the ICP mainnet).
+    pub enable_beta_features: Option<EmptyConfig>,
+    /// Disables canister backtraces (enabled on the ICP mainnet).
+    pub disable_canister_backtrace: Option<EmptyConfig>,
+    /// Disables limits on function name length in canister WASM (enabled on the ICP mainnet).
+    pub disable_function_name_length_limits: Option<EmptyConfig>,
+    /// Disables rate-limiting of canister execution (enabled on the ICP mainnet).
+    /// Canister execution refers to instructions and memory writes here.
+    pub disable_canister_execution_rate_limiting: Option<EmptyConfig>,
+}
+
 /// Specifies ICP features enabled by deploying their corresponding system canisters
 /// when creating a PocketIC instance and keeping them up to date
 /// during the PocketIC instance lifetime.
@@ -549,6 +568,7 @@ pub struct IcpFeatures {
     pub cycles_token: bool,
     pub nns_governance: bool,
     pub sns: bool,
+    pub ii: bool,
 }
 
 impl IcpFeatures {
@@ -560,6 +580,7 @@ impl IcpFeatures {
             cycles_token: true,
             nns_governance: true,
             sns: true,
+            ii: true,
         }
     }
 }
@@ -580,7 +601,7 @@ pub enum InitialTime {
 pub struct InstanceConfig {
     pub subnet_config_set: ExtendedSubnetConfigSet,
     pub state_dir: Option<PathBuf>,
-    pub nonmainnet_features: bool,
+    pub nonmainnet_features: Option<NonmainnetFeatures>,
     pub log_level: Option<String>,
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
     pub icp_features: Option<IcpFeatures>,
@@ -736,6 +757,7 @@ impl ExtendedSubnetConfigSet {
             cycles_token,
             nns_governance,
             sns,
+            ii,
         } = icp_features;
         // NNS canisters
         for (flag, icp_feature_str) in [
@@ -751,7 +773,7 @@ impl ExtendedSubnetConfigSet {
             }
         }
         // canisters on the II subnet
-        for (flag, icp_feature_str) in [(*cycles_token, "cycles_token")] {
+        for (flag, icp_feature_str) in [(*cycles_token, "cycles_token"), (*ii, "ii")] {
             if flag {
                 check_empty_subnet(&self.ii, "II", icp_feature_str)?;
                 self.ii = Some(self.ii.unwrap_or_default());
@@ -775,8 +797,6 @@ pub struct SubnetConfig {
     pub subnet_seed: [u8; 32],
     /// Instruction limits for canister execution on this subnet.
     pub instruction_config: SubnetInstructionConfig,
-    /// Node ids of nodes in the subnet.
-    pub node_ids: Vec<RawNodeId>,
     /// Some mainnet subnets have several disjunct canister ranges.
     pub canister_ranges: Vec<CanisterIdRange>,
 }

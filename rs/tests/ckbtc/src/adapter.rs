@@ -13,7 +13,7 @@ use ic_system_test_driver::util::{MessageCanister, MESSAGE_CANISTER_WASM};
 use ic_types::PrincipalId;
 use ic_utils::interfaces::{management_canister::CanisterStatus, ManagementCanister};
 use slog::{info, Logger};
-use std::str::FromStr;
+use std::{str::FromStr, time::Duration};
 
 /// A proxy to make requests to the bitcoin adapter
 ///
@@ -164,7 +164,7 @@ impl<'a, T: IcRpcClientType> AdapterProxy<'a, T> {
                 }
 
                 tries += 1;
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                tokio::time::sleep(Duration::from_secs(1)).await;
             };
 
             let new_headers = new_blocks
@@ -176,7 +176,7 @@ impl<'a, T: IcRpcClientType> AdapterProxy<'a, T> {
             blocks.extend(new_blocks);
 
             tries += 1;
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
 
         Ok(blocks)

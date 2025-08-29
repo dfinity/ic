@@ -22,7 +22,7 @@ use ic_tests_ckbtc::{
         wait_for_finalization_no_new_blocks, wait_for_mempool_change, wait_for_update_balance,
         BITCOIN_NETWORK_TRANSFER_FEE,
     },
-    BTC_MIN_CONFIRMATIONS, CHECK_FEE, TRANSFER_FEE,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, TRANSFER_FEE,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
@@ -240,13 +240,10 @@ pub fn test_batching(env: TestEnv) {
         // Hence, we expect the fee to be 3650
         // By checking the fee we know that we have the right amount of inputs and outputs
         const EXPECTED_FEE: u64 = 3650;
-        assert_eq!(
-            get_tx_infos.fees.map(|fees| fees.base.to_sat()),
-            Some(EXPECTED_FEE)
-        );
+        assert_eq!(get_tx_infos.fees.base.to_sat(), EXPECTED_FEE);
 
         // Check that we can modify the fee
-        assert_eq!(get_tx_infos.bip125_replaceable, Some(true));
+        assert!(get_tx_infos.bip125_replaceable);
 
         // Generate more blocks and wait for the minter to finalize the retrieval.
         generate_blocks(
@@ -290,6 +287,8 @@ pub fn test_batching(env: TestEnv) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
+        .with_timeout_per_test(TIMEOUT_PER_TEST)
+        .with_overall_timeout(OVERALL_TIMEOUT)
         .with_setup(ckbtc_setup)
         .add_test(systest!(test_batching))
         .execute_from_args()?;

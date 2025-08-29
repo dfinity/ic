@@ -47,6 +47,7 @@ go_deps.bzl               @dfinity/idx
 /packages/icrc-cbor/                            @dfinity/finint @dfinity/cross-chain-team
 /packages/icrc-ledger-agent/                    @dfinity/finint
 /packages/icrc-ledger-client/                   @dfinity/finint
+/packages/icrc-ledger-client-cdk/               @dfinity/finint
 /packages/icrc-ledger-types/                    @dfinity/finint
 /packages/ic-ledger-hash-of/                    @dfinity/finint
 /packages/pocket-ic/                            @dfinity/pocket-ic
@@ -167,6 +168,7 @@ go_deps.bzl               @dfinity/idx
 /rs/limits/                                             @dfinity/ic-interface-owners
 /rs/memory_tracker/                                     @dfinity/execution
 /rs/messaging/                                          @dfinity/ic-message-routing-owners
+/rs/migration_canister/                                 @dfinity/execution 
 /rs/monitoring/                                         @dfinity/consensus
 /rs/monitoring/metrics                                  @dfinity/consensus @dfinity/ic-message-routing-owners
 /rs/monitoring/pprof/                                   @dfinity/consensus @dfinity/ic-message-routing-owners

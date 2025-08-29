@@ -67,13 +67,13 @@ download_and_verify_upgrade() {
     local tmpdir="$3"
 
     local base_urls=(
-        "https://download.dfinity.systems/ic"
-        "https://download.dfinity.network/ic"
+        "https://download.dfinity.systems"
+        "https://download.dfinity.network"
     )
 
     local download_successful=false
     for base_url in "${base_urls[@]}"; do
-        local url="${base_url}/${version}/guest-os/update-img/update-img.tar.zst"
+        local url="${base_url}/ic/${version}/guest-os/update-img/update-img.tar.zst"
         echo "Attempting to download upgrade from $url..."
 
         if curl -L -o "$tmpdir/upgrade.tar.zst" "$url"; then

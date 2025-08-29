@@ -115,6 +115,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) inducted_messages: IntCounterVec,
     pub(super) threshold_signature_agreements: IntGaugeVec,
     pub(super) delivered_pre_signatures: HistogramVec,
+    pub(super) exceeding_pre_signatures: IntCounterVec,
     pub(super) in_flight_signature_request_contexts: HistogramVec,
     pub(super) completed_signature_request_contexts: IntCounterVec,
     pub(super) pre_signature_stash_size: IntGaugeVec,
@@ -282,6 +283,11 @@ impl SchedulerMetrics {
                 "execution_idkg_delivered_pre_signatures",
                 "Number of IDkg pre-signatures delivered to execution by key ID",
                 vec![0.0, 1.0, 2.0, 5.0, 10.0, 15.0, 20.0],
+                &["key_id"],
+            ),
+            exceeding_pre_signatures: metrics_registry.int_counter_vec(
+                "execution_idkg_exceeding_pre_signatures",
+                "Number of IDkg pre-signatures delivered to execution that exceeded the maximum stash size",
                 &["key_id"],
             ),
             in_flight_signature_request_contexts: metrics_registry.histogram_vec(

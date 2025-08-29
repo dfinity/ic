@@ -17,7 +17,6 @@ candid = { workspace = true }
 hex-literal = "0.4"
 hmac = "0.12"
 k256 = { workspace = true }
-lazy_static = { workspace = true }
 num-bigint = { workspace = true }
 pem = "1.1.0"
 rand = { workspace = true }

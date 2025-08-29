@@ -1,7 +1,7 @@
-use crate::ic_wasm::{ic_embedders_config, ICWasmModule};
+use crate::ic_wasm::ICWasmModule;
 use ic_config::{
-    execution_environment::Config as HypervisorConfig, flag_status::FlagStatus,
-    subnet_config::SchedulerConfig,
+    embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
+    flag_status::FlagStatus, subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
@@ -40,7 +40,7 @@ const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 
 lazy_static! {
     pub(crate) static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(
+        SubnetAvailableMemory::new_for_testing(
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY
@@ -59,7 +59,7 @@ pub fn run_fuzzer(module: ICWasmModule) {
     let wasm_methods: BTreeSet<WasmMethod> = module.exported_functions;
 
     let log = no_op_logger();
-    let embedder_config = ic_embedders_config(module.config.memory64_enabled);
+    let embedder_config = EmbeddersConfig::default();
     let metrics_registry = MetricsRegistry::new();
     let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
 

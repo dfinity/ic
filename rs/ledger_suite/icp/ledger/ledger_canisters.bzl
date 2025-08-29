@@ -33,8 +33,6 @@ LEDGER_CANISTER_DEPS = [
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1",
     "//rs/rust_canisters/canister_log",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",

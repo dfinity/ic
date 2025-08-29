@@ -59,5 +59,10 @@ icrc-ledger-types = { path = "../icrc-ledger-types" }
 ic-error-types = { path = "../ic-error-types" }
 ic-vetkeys = { workspace = true }
 k256 = { workspace = true }
-lazy_static = { workspace = true }
 wat = { workspace = true }
+
+[target.'cfg(not(windows))'.dev-dependencies]
+ic-base-types = { path = "../../rs/types/base_types" }
+ic-registry-client = { path = "../../rs/registry/client" }
+ic-registry-client-helpers = { path = "../../rs/registry/helpers" }
+ic-registry-proto-data-provider = { path = "../../rs/registry/proto_data_provider" }
