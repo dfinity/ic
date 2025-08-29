@@ -40,9 +40,6 @@ rust_library(
         "fixtures/mock_amd_key_server_response.crt",
     ],
     crate_name = "ic_sev",
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
     deps = DEPENDENCIES,
 )
 
