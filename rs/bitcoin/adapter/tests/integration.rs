@@ -671,7 +671,10 @@ fn test_receives_new_3rd_party_txs<T: RpcClientType + Into<AdapterNetwork>>() {
 
     fund(&alice_client);
 
-    assert_eq!(101, alice_client.get_blockchain_info().unwrap().blocks);
+    assert_eq!(
+        T::REGTEST_COINBASE_MATURITY + 1,
+        alice_client.get_blockchain_info().unwrap().blocks
+    );
     let initial_alice_balance = alice_client.get_balance(None).unwrap();
     let txid = alice_client
         .send_to(
@@ -680,11 +683,17 @@ fn test_receives_new_3rd_party_txs<T: RpcClientType + Into<AdapterNetwork>>() {
             Amount::from_btc(0.001).unwrap(),
         )
         .expect("Failed to send to Bob");
-    assert_eq!(101, alice_client.get_blockchain_info().unwrap().blocks);
+    assert_eq!(
+        T::REGTEST_COINBASE_MATURITY + 1,
+        alice_client.get_blockchain_info().unwrap().blocks
+    );
     alice_client
         .generate_to_address(1, &blackhole_address)
         .unwrap();
-    assert_eq!(102, alice_client.get_blockchain_info().unwrap().blocks);
+    assert_eq!(
+        T::REGTEST_COINBASE_MATURITY + 102,
+        alice_client.get_blockchain_info().unwrap().blocks
+    );
 
     let alice_balance = alice_client.get_balance(None).unwrap();
 
@@ -698,7 +707,13 @@ fn test_receives_new_3rd_party_txs<T: RpcClientType + Into<AdapterNetwork>>() {
         Amount::from_btc(1.0).unwrap()
     );
 
-    let blocks = sync_until_end_block(&adapter_client, &alice_client, 101, &mut vec![], 15);
+    let blocks = sync_until_end_block(
+        &adapter_client,
+        &alice_client,
+        T::REGTEST_COINBASE_MATURITY + 1,
+        &mut vec![],
+        15,
+    );
 
     assert_eq!(blocks.len(), 1);
     assert!(T::iter_transactions(&blocks[0]).any(|tx| tx.compute_txid() == txid));

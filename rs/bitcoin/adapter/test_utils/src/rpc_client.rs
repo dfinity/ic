@@ -162,7 +162,7 @@ impl RpcClientType for BtcNetwork {
     const NAME: &str = "Bitcoin";
     const RPC_WALLET_SUPPORT: bool = true;
     const REGTEST_INITIAL_BLOCK_REWARDS: Amount = Amount::from_sat(5_000_000_000);
-    const REGTEST_COINBASE_MATURITY: u64 = 60;
+    const REGTEST_COINBASE_MATURITY: u64 = 100;
 
     fn require_network(address: Self::AddressUnchecked, network: Self) -> Result<Self::Address> {
         Ok(address.require_network(network)?)
