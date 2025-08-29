@@ -261,7 +261,7 @@ impl WasmtimeMemory {
     fn new(
         mem: MmapMemory,
         min_size_in_pages: usize,
-        max_size_in_pages: usize,
+        reserved_size_in_bytes: usize,
         uffd: Arc<Uffd>,
     ) -> Self {
         Self {

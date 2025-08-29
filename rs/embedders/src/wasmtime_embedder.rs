@@ -999,27 +999,22 @@ impl WasmtimeInstance {
             })
         } else {
             let wasm_dirty_pages = match self.modification_tracking {
-                ModificationTracking::Track => match self.write_barrier {
-                    FlagStatus::Enabled => {
-                        self.dirty_pages_from_bytemap(CanisterMemoryType::Heap)?
-                    }
-                    FlagStatus::Disabled => {
-                        let tracker = self
-                            .memory_trackers
-                            .get(&CanisterMemoryType::Heap)
-                            .unwrap()
-                            .0
-                            .lock()
-                            .unwrap();
-                        let speculatively_dirty_pages = tracker.take_speculatively_dirty_pages();
-                        let dirty_pages = tracker.take_dirty_pages();
-                        dirty_pages
-                            .into_iter()
-                            .chain(speculatively_dirty_pages)
-                            .filter_map(|p| tracker.validate_speculatively_dirty_page(p))
-                            .collect::<Vec<PageIndex>>()
-                    }
-                },
+                ModificationTracking::Track => {
+                    let tracker = self
+                        .memory_trackers
+                        .get(&CanisterMemoryType::Heap)
+                        .unwrap()
+                        .0
+                        .lock()
+                        .unwrap();
+                    let speculatively_dirty_pages = tracker.take_speculatively_dirty_pages();
+                    let dirty_pages = tracker.take_dirty_pages();
+                    dirty_pages
+                        .into_iter()
+                        .chain(speculatively_dirty_pages)
+                        .filter_map(|p| tracker.validate_speculatively_dirty_page(p))
+                        .collect::<Vec<PageIndex>>()
+                }
                 ModificationTracking::Ignore => {
                     vec![]
                 }
@@ -1236,13 +1231,16 @@ impl WasmtimeInstance {
 
     fn stable_dirty_pages_from_bytemap(&mut self) -> HypervisorResult<Vec<PageIndex>> {
         let mut result = vec![];
-        if let Ok(heap_memory) = self.get_memory(memory_name) {
-            let bytemap = self.get_memory(bytemap_name)?.data(&self.store);
-            let tracker = self.memory_trackers.get(&memory_type).ok_or_else(|| {
-                HypervisorError::ToolchainContractViolation {
-                    error: format!("No {} memory tracker", memory_type),
-                }
-            })?;
+        if let Ok(heap_memory) = self.get_memory(STABLE_MEMORY_NAME) {
+            let bytemap = self
+                .get_memory(STABLE_BYTEMAP_MEMORY_NAME)?
+                .data(&self.store);
+            let tracker = self
+                .memory_trackers
+                .get(&CanisterMemoryType::Stable)
+                .ok_or_else(|| HypervisorError::ToolchainContractViolation {
+                    error: "No memory tracker for stable memory".to_string(),
+                })?;
             let tracker = tracker.0.lock().unwrap();
             let page_map = tracker.page_map();
             let accessed_pages = tracker.accessed_pages().borrow();
