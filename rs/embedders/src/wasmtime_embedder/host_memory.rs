@@ -140,7 +140,8 @@ unsafe impl wasmtime::MemoryCreator for WasmtimeMemoryCreator {
         match self.created_memories.lock() {
             Err(err) => Err(format!("Error locking map of created memories: {:?}", err)),
             Ok(mut created_memories) => {
-                let new_memory = WasmtimeMemory::new(mem, min, max, Arc::clone(&uffd));
+                let new_memory =
+                    WasmtimeMemory::new(mem, min, reserved_size_in_bytes, Arc::clone(&uffd));
                 created_memories.insert(
                     MemoryStart(LinearMemory::as_ptr(&new_memory) as usize),
                     CreatedWasmtimeMemory::new(
