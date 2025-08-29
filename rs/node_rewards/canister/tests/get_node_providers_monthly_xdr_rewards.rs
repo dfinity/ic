@@ -5,7 +5,7 @@ use ic_nns_constants::NODE_REWARDS_CANISTER_ID;
 use ic_nns_test_utils::common::build_node_rewards_test_wasm;
 use ic_node_rewards_canister_api::monthly_rewards::GetNodeProvidersMonthlyXdrRewardsRequest;
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
-    GetHistoricalRewardPeriods, GetNodeProviderRewardsCalculationRequest,
+    GetHistoricalRewardPeriodsResponse, GetNodeProviderRewardsCalculationRequest,
     GetNodeProviderRewardsCalculationResponse,
 };
 use ic_types::PrincipalId;
@@ -129,7 +129,7 @@ async fn get_historical_reward_periods_is_only_callable_in_nonreplicated_mode() 
     let node_rewards_id = NODE_REWARDS_CANISTER_ID.get().0;
 
     // Non-replicated query call is allowed.
-    let res = query_candid::<_, (GetHistoricalRewardPeriods,)>(
+    let res = query_candid::<_, (GetHistoricalRewardPeriodsResponse,)>(
         &pocket_ic,
         node_rewards_id,
         "get_historical_reward_periods",
@@ -142,7 +142,7 @@ async fn get_historical_reward_periods_is_only_callable_in_nonreplicated_mode() 
     assert!(res.is_empty());
 
     // Replicated update call is not allowed.
-    let err = update_candid::<_, (GetHistoricalRewardPeriods,)>(
+    let err = update_candid::<_, (GetHistoricalRewardPeriodsResponse,)>(
         &pocket_ic,
         node_rewards_id,
         "get_historical_reward_periods",

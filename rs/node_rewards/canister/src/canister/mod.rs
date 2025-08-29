@@ -8,7 +8,7 @@ use ic_node_rewards_canister_api::monthly_rewards::{
     NodeProvidersMonthlyXdrRewards,
 };
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
-    GetHistoricalRewardPeriods, GetNodeProviderRewardsCalculationRequest,
+    GetHistoricalRewardPeriodsResponse, GetNodeProviderRewardsCalculationRequest,
     GetNodeProviderRewardsCalculationResponse, HistoricalRewardPeriod,
 };
 use ic_node_rewards_canister_api::providers_rewards::{
@@ -316,7 +316,7 @@ impl NodeRewardsCanister {
         }
     }
 
-    pub fn get_historical_reward_periods() -> GetHistoricalRewardPeriods {
+    pub fn get_historical_reward_periods() -> GetHistoricalRewardPeriodsResponse {
         Ok(HISTORICAL_REWARDS.with_borrow(|historical_rewards| {
             historical_rewards
                 .keys()
