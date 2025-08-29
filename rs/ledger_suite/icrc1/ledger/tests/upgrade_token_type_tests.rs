@@ -50,6 +50,7 @@ fn default_init_args(initial_balances: Vec<(Account, Nat)>) -> Vec<u8> {
     .unwrap()
 }
 
+// TODO: This test can be deleted when the PR that added it is part of mainnet.
 #[test]
 #[should_panic(expected = "assertion `left == right` failed: u256 representation is 32-bytes long")]
 fn test_mainnet_u64_with_balance_to_master_u256() {
@@ -71,7 +72,11 @@ fn test_mainnet_u64_with_balance_to_master_u256() {
         .expect("Unable to upgrade the ledger canister");
 }
 
+// TODO: When the PR that added this test is part of mainnet, we can uncomment the panic expectation.
 #[test]
+// #[should_panic(
+//     expected = "Incompatible token type, the upgraded ledger token type is U64, current wasm token type is U256"
+// )]
 fn test_mainnet_u64_to_master_u256() {
     let env = StateMachine::new();
     let ledger_id = env
