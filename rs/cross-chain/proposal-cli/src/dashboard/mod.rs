@@ -4,9 +4,11 @@ mod responses;
 #[cfg(test)]
 mod tests;
 
-use crate::dashboard::responses::CanisterInfo;
+use crate::dashboard::responses::{CanisterInfo, ProposalInfo};
 use candid::Principal;
+use reqwest::StatusCode;
 use std::collections::BTreeSet;
+use std::time::Duration;
 
 pub struct DashboardClient {
     client: reqwest::Client,
@@ -42,5 +44,39 @@ impl DashboardClient {
             fut.push(self.list_canister_upgrade_proposals(canister_id));
         }
         futures::future::join_all(fut).await
+    }
+
+    /// Retrieve a given proposal by ID.
+    ///
+    /// When the proposal was recently submitted, the dashboard API may need some time
+    /// to catch up, so that retries are maybe necessary.
+    pub async fn retrieve_proposal(&self, proposal_id: u64) -> ProposalInfo {
+        let url = format!("{}/proposals/{}", self.base_url, proposal_id);
+        let num_retries = 5;
+        let sleep_duration = Duration::from_secs(5);
+        for i in 1..=num_retries {
+            let response = self.client.get(&url).send().await.unwrap();
+            match response.status() {
+                StatusCode::OK => {
+                    let proposal: ProposalInfo = response.json().await.unwrap();
+                    assert_eq!(proposal.proposal_id, proposal_id);
+                    println!("Found proposal {proposal_id}");
+                    return proposal;
+                }
+                StatusCode::NOT_FOUND => {
+                    let delay = sleep_duration * i;
+                    println!(
+                        "Proposal {proposal_id} not found, retrying in {}s",
+                        delay.as_secs()
+                    );
+                    tokio::time::sleep(delay).await;
+                    continue;
+                }
+                error_status => {
+                    panic!("Error when retrieving proposal {proposal_id}. Received response {response:?} with status code {error_status}")
+                }
+            }
+        }
+        panic!("Unable to retrieve proposal {proposal_id} after {num_retries} attempts.");
     }
 }

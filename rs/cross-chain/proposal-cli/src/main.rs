@@ -195,7 +195,9 @@ async fn main() {
             }
         }
         Commands::CreateForumPost { proposal_id } => {
-            panic!("BOOM!: {proposal_id}")
+            let dashboard = DashboardClient::new();
+            let proposal = dashboard.retrieve_proposal(proposal_id).await;
+            panic!("BOOM!: {proposal:?}")
         }
     }
 }
