@@ -37,7 +37,7 @@ pub struct StreamHeader {
     pub end: u64,
     pub signals_end: u64,
     #[serde(default, skip_serializing_if = "is_zero")]
-    pub field_index_3_filler: u64,
+    pub reserved_3: u64,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub flags: u64,
     #[serde(default, skip_serializing_if = "RejectSignals::is_empty")]
@@ -249,7 +249,7 @@ impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeade
             begin: header.begin().get(),
             end: header.end().get(),
             signals_end: header.signals_end().get(),
-            field_index_3_filler: 0,
+            reserved_3: 0,
             flags,
             reject_signals,
         }
@@ -259,10 +259,10 @@ impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeade
 impl TryFrom<StreamHeader> for ic_types::xnet::StreamHeader {
     type Error = ProxyDecodeError;
     fn try_from(header: StreamHeader) -> Result<Self, Self::Error> {
-        if header.field_index_3_filler != 0 {
+        if header.reserved_3 != 0 {
             return Err(ProxyDecodeError::Other(format!(
                 "StreamHeader: field index 3 is populated: {:?}",
-                header.field_index_3_filler,
+                header.reserved_3,
             )));
         }
         if header.flags & !STREAM_SUPPORTED_FLAGS != 0 {
@@ -277,7 +277,7 @@ impl TryFrom<StreamHeader> for ic_types::xnet::StreamHeader {
                 != 0,
         };
 
-        let reject_signals = try_from_deltas(header.reject_signals, header.signals_end)?;
+        let reject_signals = try_from_deltas(&header.reject_signals, header.signals_end)?;
 
         Ok(Self::new(
             header.begin.into(),
@@ -331,7 +331,7 @@ impl From<(&VecDeque<RejectSignal>, StreamIndex, CertificationVersion)> for Reje
 }
 
 pub(crate) fn try_from_deltas(
-    reject_signals: RejectSignals,
+    reject_signals: &RejectSignals,
     signals_end: u64,
 ) -> Result<VecDeque<RejectSignal>, ProxyDecodeError> {
     use RejectReason::*;

@@ -15,7 +15,10 @@ use ic_replicated_state::{metadata_state::SubnetMetrics, SystemMetadata};
 use ic_test_utilities_state::{arb_invalid_stream_header, arb_stream_header, arb_subnet_metrics};
 use ic_test_utilities_types::arbitrary;
 use ic_types::{
-    crypto::CryptoHash, messages::RequestOrResponse, xnet::StreamHeader, CryptoHashOfPartialState,
+    crypto::CryptoHash,
+    messages::RequestOrResponse,
+    xnet::{RejectReason, StreamHeader},
+    CryptoHashOfPartialState,
 };
 use lazy_static::lazy_static;
 use proptest::prelude::*;
@@ -71,7 +74,11 @@ pub(crate) fn arb_valid_versioned_stream_header(
         // Stream headers may have flavours of reject signals other than `CanisterMigrating`
         // starting from certification version 19.
         (
-            arb_stream_header(/* min_signal_count */ 0, max_signal_count,),
+            arb_stream_header(
+                /* min_signal_count */ 0,
+                max_signal_count,
+                /* with_reject_reasons */ RejectReason::all(),
+            ),
             Just(CertificationVersion::V19..=MAX_SUPPORTED_CERTIFICATION_VERSION)
         )
     ]
@@ -218,7 +225,6 @@ fn stream_header_encoding_panic_on_invalid(
 pub(crate) fn arb_valid_versioned_message(
 ) -> impl Strategy<Value = (RequestOrResponse, RangeInclusive<CertificationVersion>)> {
     prop_oneof![(
-        // Optionally populate `deadline` from version 18 on.
         arbitrary::request_or_response_with_config(true),
         Just(CertificationVersion::V19..=MAX_SUPPORTED_CERTIFICATION_VERSION)
     ),]

@@ -150,7 +150,7 @@ fn try_from_stream_header_with_field_index_3_populated() {
         &stream_header(MAX_SUPPORTED_CERTIFICATION_VERSION),
         MAX_SUPPORTED_CERTIFICATION_VERSION,
     ));
-    header.field_index_3_filler = 1;
+    header.reserved_3 = 1;
 
     assert_matches!(
         ic_types::xnet::StreamHeader::try_from(header),

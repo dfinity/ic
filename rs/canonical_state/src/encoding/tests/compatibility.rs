@@ -45,6 +45,48 @@ use std::collections::{BTreeMap, VecDeque};
 ///     begin: 23.into(),
 ///     end: 25.into(),
 ///     signals_end: 256.into(),
+///     reject_signals: VecDeque::new(),
+///     flags: StreamFlags::default(),
+/// }
+/// ```
+///
+/// Expected:
+///
+/// ```text
+/// A3         # map(3)
+///    00      # field_index(StreamHeader::begin)
+///    17      # unsigned(23)
+///    01      # field_index(StreamHeader::end)
+///    18 19   # unsigned(25)
+///    02      # field_index(StreamHeader::signals_end)
+///    19 0100 # unsigned(256)
+/// ```
+/// Used http://cbor.me/ for printing the human friendly output.
+#[test]
+fn canonical_encoding_minimal_stream_header() {
+    for certification_version in all_supported_versions() {
+        let header = StreamHeader::new(
+            23.into(),
+            25.into(),
+            256.into(),
+            VecDeque::new(),
+            StreamFlags::default(),
+        );
+
+        assert_eq!(
+            "A3 00 17 01 18 19 02 19 01 00",
+            as_hex(&encode_stream_header(&header, certification_version,))
+        );
+    }
+}
+
+/// Canonical CBOR encoding of:
+///
+/// ```no_run
+/// StreamHeader {
+///     begin: 23.into(),
+///     end: 25.into(),
+///     signals_end: 256.into(),
 ///     reject_signals: vec![
 ///         RejectSignal::new(RejectReason::CanisterMigrating, 249.into()),
 ///         RejectSignal::new(RejectReason::CanisterNotFound, 250.into()),
@@ -260,7 +302,7 @@ fn canonical_encoding_subnet_metrics() {
 /// ```
 /// Used http://cbor.me/ for printing the human friendly output.
 #[test]
-fn canonical_encoding_request_no_deadline() {
+fn canonical_encoding_minimal_request() {
     for certification_version in all_supported_versions() {
         let request: RequestOrResponse = Request {
             receiver: canister_test_id(1),
@@ -496,7 +538,7 @@ fn canonical_encoding_response_no_deadline() {
     }
 }
 
-/// Canonical CBOR encoding (with certification versions 18 and up) of:
+/// Canonical CBOR encoding of:
 ///
 /// ```no_run
 /// RequestOrResponse::Response(
@@ -1310,7 +1352,7 @@ fn request_message(certification_version: CertificationVersion) -> RequestOrResp
     request(certification_version).into()
 }
 
-fn request(certification_version: CertificationVersion) -> Request {
+fn request(_certification_version: CertificationVersion) -> Request {
     Request {
         receiver: canister_test_id(1),
         sender: canister_test_id(2),
@@ -1319,18 +1361,18 @@ fn request(certification_version: CertificationVersion) -> Request {
         method_name: "test".to_string(),
         method_payload: vec![6],
         metadata: request_metadata(),
-        deadline: deadline(certification_version),
+        deadline: CoarseTime::from_secs_since_unix_epoch(8),
     }
 }
 
-fn response(certification_version: CertificationVersion) -> Response {
+fn response(_certification_version: CertificationVersion) -> Response {
     Response {
         originator: canister_test_id(6),
         respondent: canister_test_id(5),
         originator_reply_callback: CallbackId::from(4),
         refund: cycles(),
         response_payload: data_payload(),
-        deadline: deadline(certification_version),
+        deadline: CoarseTime::from_secs_since_unix_epoch(8),
     }
 }
 
@@ -1356,8 +1398,4 @@ fn reject_context() -> RejectContext {
 
 fn request_metadata() -> RequestMetadata {
     RequestMetadata::new(13, Time::from_nanos_since_unix_epoch(101))
-}
-
-fn deadline(_certification_version: CertificationVersion) -> CoarseTime {
-    CoarseTime::from_secs_since_unix_epoch(8)
 }

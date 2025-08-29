@@ -21,86 +21,6 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::time::CoarseTime;
 use serde::{Deserialize, Serialize};
 
-/// Canonical representation of `ic_types::xnet::StreamHeader` at certification version V19.
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct StreamHeaderV19 {
-    pub begin: u64,
-    pub end: u64,
-    pub signals_end: u64,
-    #[serde(default, skip_serializing_if = "types::is_zero")]
-    pub field_index_3_filler: u64,
-    #[serde(default, skip_serializing_if = "types::is_zero")]
-    pub flags: u64,
-    #[serde(default, skip_serializing_if = "types::RejectSignals::is_empty")]
-    pub reject_signals: RejectSignals,
-}
-
-impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeaderV19 {
-    fn from(
-        (header, certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
-    ) -> Self {
-        let mut flags = 0;
-        let ic_types::xnet::StreamFlags {
-            deprecated_responses_only,
-        } = *header.flags();
-        if deprecated_responses_only {
-            flags |= StreamFlagBits::DeprecatedResponsesOnly as u64;
-        }
-
-        // Generate deltas representation based on `certification_version` to ensure unique
-        // encoding.
-        let reject_signals = (
-            header.reject_signals(),
-            header.signals_end(),
-            certification_version,
-        )
-            .into();
-
-        Self {
-            begin: header.begin().get(),
-            end: header.end().get(),
-            signals_end: header.signals_end().get(),
-            field_index_3_filler: 0,
-            flags,
-            reject_signals,
-        }
-    }
-}
-
-impl TryFrom<StreamHeaderV19> for ic_types::xnet::StreamHeader {
-    type Error = ProxyDecodeError;
-    fn try_from(header: StreamHeaderV19) -> Result<Self, Self::Error> {
-        if header.field_index_3_filler != 0 {
-            return Err(ProxyDecodeError::Other(format!(
-                "StreamHeader: field index 3 is populated: {:?}",
-                header.field_index_3_filler,
-            )));
-        }
-        if header.flags & !STREAM_SUPPORTED_FLAGS != 0 {
-            return Err(ProxyDecodeError::Other(format!(
-                "StreamHeader: unsupported flags: got `flags` {:#b}, `supported_flags` {:#b}",
-                header.flags, STREAM_SUPPORTED_FLAGS,
-            )));
-        }
-        let flags = ic_types::xnet::StreamFlags {
-            deprecated_responses_only: header.flags
-                & StreamFlagBits::DeprecatedResponsesOnly as u64
-                != 0,
-        };
-
-        let reject_signals = types::try_from_deltas(header.reject_signals, header.signals_end)?;
-
-        Ok(Self::new(
-            header.begin.into(),
-            header.end.into(),
-            header.signals_end.into(),
-            reject_signals,
-            flags,
-        ))
-    }
-}
-
 /// Canonical representation of `ic_types::messages::RequestOrResponse` at certification version V19.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -283,5 +203,85 @@ impl TryFrom<ResponseV19> for ic_types::messages::Response {
             response_payload: response.response_payload.try_into()?,
             deadline: CoarseTime::from_secs_since_unix_epoch(response.deadline),
         })
+    }
+}
+
+/// Canonical representation of `ic_types::xnet::StreamHeader` at certification version V19.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct StreamHeaderV19 {
+    pub begin: u64,
+    pub end: u64,
+    pub signals_end: u64,
+    #[serde(default, skip_serializing_if = "types::is_zero")]
+    pub reserved_3: u64,
+    #[serde(default, skip_serializing_if = "types::is_zero")]
+    pub flags: u64,
+    #[serde(default, skip_serializing_if = "types::RejectSignals::is_empty")]
+    pub reject_signals: RejectSignals,
+}
+
+impl From<(&ic_types::xnet::StreamHeader, CertificationVersion)> for StreamHeaderV19 {
+    fn from(
+        (header, certification_version): (&ic_types::xnet::StreamHeader, CertificationVersion),
+    ) -> Self {
+        let mut flags = 0;
+        let ic_types::xnet::StreamFlags {
+            deprecated_responses_only,
+        } = *header.flags();
+        if deprecated_responses_only {
+            flags |= StreamFlagBits::DeprecatedResponsesOnly as u64;
+        }
+
+        // Generate deltas representation based on `certification_version` to ensure unique
+        // encoding.
+        let reject_signals = (
+            header.reject_signals(),
+            header.signals_end(),
+            certification_version,
+        )
+            .into();
+
+        Self {
+            begin: header.begin().get(),
+            end: header.end().get(),
+            signals_end: header.signals_end().get(),
+            reserved_3: 0,
+            flags,
+            reject_signals,
+        }
+    }
+}
+
+impl TryFrom<StreamHeaderV19> for ic_types::xnet::StreamHeader {
+    type Error = ProxyDecodeError;
+    fn try_from(header: StreamHeaderV19) -> Result<Self, Self::Error> {
+        if header.reserved_3 != 0 {
+            return Err(ProxyDecodeError::Other(format!(
+                "StreamHeader: field index 3 is populated: {:?}",
+                header.reserved_3,
+            )));
+        }
+        if header.flags & !STREAM_SUPPORTED_FLAGS != 0 {
+            return Err(ProxyDecodeError::Other(format!(
+                "StreamHeader: unsupported flags: got `flags` {:#b}, `supported_flags` {:#b}",
+                header.flags, STREAM_SUPPORTED_FLAGS,
+            )));
+        }
+        let flags = ic_types::xnet::StreamFlags {
+            deprecated_responses_only: header.flags
+                & StreamFlagBits::DeprecatedResponsesOnly as u64
+                != 0,
+        };
+
+        let reject_signals = types::try_from_deltas(&header.reject_signals, header.signals_end)?;
+
+        Ok(Self::new(
+            header.begin.into(),
+            header.end.into(),
+            header.signals_end.into(),
+            reject_signals,
+            flags,
+        ))
     }
 }
