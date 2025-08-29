@@ -189,7 +189,7 @@ def check():
     * can be read and parsed.
     * each pattern matches at least one file tracked by git.
     * each pattern has at least one explicit target.
-    * each target is valid and when queried results in at least one target after excluding all manual targets.
+    * each target is valid and when queried results in at least one target after excluding all excluded targets.
     Otherwise print all errors to stderr and exit erroneously with 1.
     """
     try:
@@ -218,7 +218,8 @@ def check():
             errors.append(f"Pattern '{pattern}' has no explicit targets!")
 
         for target in explicit_targets_for_pattern:
-            query = f"({target}) except attr(tags, manual, //...)"
+            excluded_tags_regex = "|".join(EXCLUDED_TAGS)
+            query = f"({target}) except attr(tags, '{excluded_tags_regex}', //...)"
             result = subprocess.run(["bazel", "query", query], capture_output=True, text=True)
             if result.returncode != 0:
                 indented_error_msg = f"{indentation}" + f"\n{indentation}".join(result.stderr.strip().splitlines())
