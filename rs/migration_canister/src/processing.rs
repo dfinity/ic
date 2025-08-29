@@ -10,9 +10,12 @@ use crate::{
         requests::{insert_request, list_by, remove_request},
         MethodGuard,
     },
-    external_interfaces::management::{
-        canister_status, get_canister_info, rename_canister, set_exclusive_controller,
-        set_original_controllers, CanisterStatusType,
+    external_interfaces::{
+        management::{
+            canister_status, get_canister_info, rename_canister, set_exclusive_controller,
+            set_original_controllers, CanisterStatusType,
+        },
+        registry::migrate_canister,
     },
     Event, RequestState, ValidationError,
 };
@@ -168,6 +171,30 @@ pub async fn process_stopped(
     .or_retry()
 }
 
+pub async fn process_renamed(
+    request: RequestState,
+) -> ProcessingResult<RequestState, RequestState> {
+    let RequestState::RenamedTarget {
+        request,
+        stopped_since,
+    } = request
+    else {
+        println!("Error: list_by RenamedTarget returned bad variant");
+        return ProcessingResult::NoProgress;
+    };
+
+    // let registry_version =
+
+    migrate_canister(request.source, request.target_subnet)
+        .await
+        .map_success(|_| RequestState::UpdatedRoutingTable {
+            request,
+            stopped_since,
+            registry_version: todo!(),
+        })
+        .or_retry()
+}
+
 // ----------------------------------------------------------------------------
 pub async fn process_all_failed() {
     let Ok(_guard) = MethodGuard::new("failed") else {
@@ -257,7 +284,6 @@ where
     F: std::fmt::Debug,
 {
     /// Use for results of infallible calls to ensure retrying in the presence of bugs.
-    /// // TODO: here we transiution to infallible
     pub fn or_retry<T>(self) -> ProcessingResult<S, T> {
         match self {
             ProcessingResult::Success(x) => ProcessingResult::Success(x),

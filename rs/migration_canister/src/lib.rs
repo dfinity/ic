@@ -119,6 +119,7 @@ pub enum RequestState {
         stopped_since: u64,
     },
 
+    // TODO: need a state here to store registry_version
     /// Called registry `migrate_canisters`.
     ///
     /// Record the new registry version.
