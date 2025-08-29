@@ -2707,7 +2707,7 @@ fn wasm64_canister_self_copy() {
 
     // This is the system state used by WasmtimeInstanceBuilder
     let system_state = ic_test_utilities_state::SystemStateBuilder::default().build();
-    let canister_id = system_state.canister_id.get_ref().as_slice();
+    let canister_id = system_state.metadata.canister_id.get_ref().as_slice();
 
     // After this call, we expect the instance to have a memory with size of 1 wasm page
     // of which the first OS page was touched and contains relevant data at offset 0

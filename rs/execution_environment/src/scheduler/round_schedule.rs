@@ -444,6 +444,7 @@ impl RoundSchedule {
             if !canister.has_input() {
                 canister
                     .system_state
+                    .metadata
                     .canister_metrics
                     .skipped_round_due_to_no_messages += 1;
             }

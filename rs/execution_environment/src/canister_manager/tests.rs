@@ -526,7 +526,10 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
         "Canister requested 10.00 MiB of memory but only 10.00 MiB are available in the subnet.",
     );
     assert_eq!(
-        test.canister_state(canister2).system_state.balance(),
+        test.canister_state(canister2)
+            .system_state
+            .metadata
+            .balance(),
         initial_cycles - test.canister_execution_cost(canister2)
     );
 }
@@ -758,12 +761,18 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
     // with have the test id corresponding to `1`.
     let canister = test.canister_state(canister_test_id(1));
     assert_eq!(
-        canister.system_state.canister_metrics.consumed_cycles.get(),
+        canister
+            .system_state
+            .metadata
+            .canister_metrics
+            .consumed_cycles
+            .get(),
         creation_fee.get()
     );
     assert_eq!(
         canister
             .system_state
+            .metadata
             .canister_metrics
             .get_consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::CanisterCreation)
@@ -772,7 +781,7 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
         creation_fee.get()
     );
     assert_eq!(
-        canister.system_state.balance(),
+        canister.system_state.metadata.balance(),
         *INITIAL_CYCLES - creation_fee
     );
 }
@@ -814,10 +823,15 @@ fn create_canister_free() {
     // with have the test id corresponding to `1`.
     let canister = test.canister_state(canister_test_id(1));
     assert_eq!(
-        canister.system_state.canister_metrics.consumed_cycles.get(),
+        canister
+            .system_state
+            .metadata
+            .canister_metrics
+            .consumed_cycles
+            .get(),
         0
     );
-    assert_eq!(canister.system_state.balance(), *INITIAL_CYCLES);
+    assert_eq!(canister.system_state.metadata.balance(), *INITIAL_CYCLES);
 }
 
 #[test]
@@ -828,18 +842,23 @@ fn provisional_create_canister_has_no_creation_fee() {
 
     let canister = test.canister_state(canister_id);
     assert_eq!(
-        canister.system_state.canister_metrics.consumed_cycles,
+        canister
+            .system_state
+            .metadata
+            .canister_metrics
+            .consumed_cycles,
         NominalCycles::default(),
     );
     assert_eq!(
         canister
             .system_state
+            .metadata
             .canister_metrics
             .get_consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::CanisterCreation),
         None
     );
-    assert_eq!(canister.system_state.balance(), *INITIAL_CYCLES);
+    assert_eq!(canister.system_state.metadata.balance(), *INITIAL_CYCLES);
 }
 
 #[test]
@@ -1569,7 +1588,11 @@ fn deposit_cycles_succeeds_with_enough_cycles() {
     let canister_id = test.create_canister(*INITIAL_CYCLES);
     let deposit_canister = test.universal_canister().unwrap();
 
-    let cycles_balance_before = test.canister_state(canister_id).system_state.balance();
+    let cycles_balance_before = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
 
     let cycles_to_deposit = Cycles::new(100);
     let deposit_cycles_args = CanisterIdRecord::from(canister_id).encode();
@@ -1587,7 +1610,10 @@ fn deposit_cycles_succeeds_with_enough_cycles() {
     test.ingress(deposit_canister, "update", payload).unwrap();
 
     assert_eq!(
-        test.canister_state(canister_id).system_state.balance(),
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance(),
         cycles_balance_before + cycles_to_deposit
     );
 }
@@ -1632,7 +1658,7 @@ fn create_canister_with_cycles_sender_in_whitelist() {
     let canister = state.take_canister_state(&canister_id).unwrap();
 
     // Verify cycles are set as expected.
-    assert_eq!(canister.system_state.balance(), Cycles::new(123));
+    assert_eq!(canister.system_state.metadata.balance(), Cycles::new(123));
 }
 
 fn create_canister_with_specified_id(
@@ -1727,7 +1753,7 @@ fn add_cycles_sender_in_whitelist() {
     let sender = canister_test_id(1).get();
 
     let mut state = initial_state(subnet_id, false);
-    let initial_cycles = canister.system_state.balance();
+    let initial_cycles = canister.system_state.metadata.balance();
     state.put_canister_state(canister);
 
     let canister = state.canister_state_mut(&canister_id).unwrap();
@@ -1743,7 +1769,7 @@ fn add_cycles_sender_in_whitelist() {
     // Verify cycles are set as expected.
     let canister = state.take_canister_state(&canister_id).unwrap();
     assert_eq!(
-        canister.system_state.balance(),
+        canister.system_state.metadata.balance(),
         initial_cycles + Cycles::new(123),
     );
 }
@@ -1803,7 +1829,11 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
 
     test.install_canister(canister2, wasm.clone()).unwrap();
 
-    let cycles_before = test.canister_state(canister2).system_state.balance();
+    let cycles_before = test
+        .canister_state(canister2)
+        .system_state
+        .metadata
+        .balance();
     let execution_cost_before = test.canister_execution_cost(canister2);
 
     // Try upgrading the canister, should fail because there is not enough memory capacity
@@ -1817,7 +1847,10 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
         );
 
     assert_eq!(
-        test.canister_state(canister2).system_state.balance(),
+        test.canister_state(canister2)
+            .system_state
+            .metadata
+            .balance(),
         cycles_before - (test.canister_execution_cost(canister2) - execution_cost_before)
     );
 }
@@ -2382,10 +2415,10 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .unwrap()
         .system_state
         .clone();
-    original_canister.system_state.certified_data = Vec::new();
-    original_canister.system_state.global_timer = CanisterTimer::Inactive;
-    original_canister.system_state.canister_version += 1;
-    original_canister.system_state.add_canister_change(
+    original_canister.system_state.metadata.certified_data = Vec::new();
+    original_canister.system_state.metadata.global_timer = CanisterTimer::Inactive;
+    original_canister.system_state.metadata.canister_version += 1;
+    original_canister.system_state.metadata.add_canister_change(
         state.time(),
         canister_change_origin_from_canister(&controller),
         CanisterChangeDetails::code_deployment(CanisterInstallMode::Install, module_hash),
@@ -2427,10 +2460,10 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .unwrap()
         .system_state
         .clone();
-    original_canister.system_state.certified_data = Vec::new();
-    original_canister.system_state.global_timer = CanisterTimer::Inactive;
-    original_canister.system_state.canister_version += 1;
-    original_canister.system_state.add_canister_change(
+    original_canister.system_state.metadata.certified_data = Vec::new();
+    original_canister.system_state.metadata.global_timer = CanisterTimer::Inactive;
+    original_canister.system_state.metadata.canister_version += 1;
+    original_canister.system_state.metadata.add_canister_change(
         state.time(),
         canister_change_origin_from_canister(&controller),
         CanisterChangeDetails::code_deployment(CanisterInstallMode::Reinstall, module_hash),
@@ -2447,12 +2480,14 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     // reset certified_data cleared by install and reinstall in the previous steps
     original_canister
         .system_state
+        .metadata
         .certified_data
         .clone_from(&certified_data);
     state
         .canister_state_mut(&canister_id)
         .unwrap()
         .system_state
+        .metadata
         .certified_data = certified_data;
     let instructions_before_upgrade = as_num_instructions(round_limits.instructions);
     let ctxt = InstallCodeContextBuilder::default()
@@ -2481,9 +2516,9 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .unwrap()
         .system_state
         .clone();
-    original_canister.system_state.global_timer = CanisterTimer::Inactive;
-    original_canister.system_state.canister_version += 1;
-    original_canister.system_state.add_canister_change(
+    original_canister.system_state.metadata.global_timer = CanisterTimer::Inactive;
+    original_canister.system_state.metadata.canister_version += 1;
+    original_canister.system_state.metadata.add_canister_change(
         state.time(),
         canister_change_origin_from_canister(&controller),
         CanisterChangeDetails::code_deployment(CanisterInstallMode::Upgrade, module_hash),
@@ -2644,6 +2679,7 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         .canister_state_mut(&canister_test_id(0))
         .unwrap()
         .system_state
+        .metadata
         .wasm_chunk_store;
     let chunk = [0x41, 200].to_vec();
     let result = store.can_insert_chunk(canister_manager.config.wasm_chunk_store_max_size, chunk);
@@ -2664,6 +2700,7 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
             .canister_state(&canister_test_id(0))
             .unwrap()
             .system_state
+            .metadata
             .wasm_chunk_store
             .memory_usage(),
         NumBytes::from(1024 * 1024)
@@ -2693,6 +2730,7 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
             .canister_state(&canister_test_id(0))
             .unwrap()
             .system_state
+            .metadata
             .wasm_chunk_store
             .memory_usage(),
         NumBytes::from(0)
@@ -3213,9 +3251,17 @@ fn unfreezing_of_frozen_canister() {
         sender_canister_version: None,
     }
     .encode();
-    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let balance_before = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     let result = test.subnet_message(Method::UpdateSettings, payload);
-    let balance_after = test.canister_state(canister_id).system_state.balance();
+    let balance_after = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     // If the freezing threshold doesn't change, then the canister is not charged.
     assert_eq!(balance_before, balance_after);
     get_reply(result);
@@ -3237,10 +3283,18 @@ fn unfreezing_of_frozen_canister() {
     .encode();
     let ingress_bytes =
         NumBytes::from((Method::UpdateSettings.to_string().len() + payload.len()) as u64);
-    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let balance_before = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     test.subnet_message(Method::UpdateSettings, payload)
         .unwrap();
-    let balance_after = test.canister_state(canister_id).system_state.balance();
+    let balance_after = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     assert_eq!(
         balance_before - balance_after,
         test.cycles_account_manager()
@@ -3711,7 +3765,7 @@ fn cycles_correct_if_upgrade_succeeds() {
 
     test.install_canister(id, wasm.clone()).unwrap();
     assert_eq!(
-        test.canister_state(id).system_state.balance(),
+        test.canister_state(id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(id),
     );
 
@@ -3726,14 +3780,14 @@ fn cycles_correct_if_upgrade_succeeds() {
         Cycles::new(10)
     );
 
-    let cycles_before = test.canister_state(id).system_state.balance();
+    let cycles_before = test.canister_state(id).system_state.metadata.balance();
     let execution_cost_before = test.canister_execution_cost(id);
     // Clear `expected_compiled_wasms` so that the full execution cost is applied
     test.state_mut().metadata.expected_compiled_wasms.clear();
     test.upgrade_canister(id, wasm.clone()).unwrap();
     let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
     assert_eq!(
-        test.canister_state(id).system_state.balance(),
+        test.canister_state(id).system_state.metadata.balance(),
         cycles_before - execution_cost,
     );
     assert_delta!(
@@ -3774,7 +3828,7 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
 
     test.install_canister(id, wasm.clone()).unwrap();
     assert_eq!(
-        test.canister_state(id).system_state.balance(),
+        test.canister_state(id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(id),
     );
     assert_eq!(
@@ -3793,12 +3847,12 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
         .scheduler_state
         .install_code_debit = NumInstructions::from(u64::MAX);
 
-    let cycles_before = test.canister_state(id).system_state.balance();
+    let cycles_before = test.canister_state(id).system_state.metadata.balance();
     let execution_cost_before = test.canister_execution_cost(id);
     test.upgrade_canister(id, wasm).unwrap_err();
     let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
     assert_eq!(
-        test.canister_state(id).system_state.balance(),
+        test.canister_state(id).system_state.metadata.balance(),
         cycles_before - execution_cost,
     );
     assert_eq!(
@@ -3847,16 +3901,16 @@ fn cycles_correct_if_upgrade_fails_at_start() {
 
     test.install_canister(id, wasm1).unwrap();
     assert_eq!(
-        test.canister_state(id).system_state.balance(),
+        test.canister_state(id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(id),
     );
 
-    let cycles_before = test.canister_state(id).system_state.balance();
+    let cycles_before = test.canister_state(id).system_state.metadata.balance();
     let execution_cost_before = test.canister_execution_cost(id);
     test.upgrade_canister(id, wasm2.clone()).unwrap_err();
     let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
     assert_eq!(
-        test.canister_state(id).system_state.balance(),
+        test.canister_state(id).system_state.metadata.balance(),
         cycles_before - execution_cost,
     );
     assert_delta!(
@@ -3899,7 +3953,7 @@ fn cycles_correct_if_upgrade_fails_at_pre_upgrade() {
 
     test.install_canister(id, wasm.clone()).unwrap();
     assert_eq!(
-        test.canister_state(id).system_state.balance(),
+        test.canister_state(id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(id),
     );
     assert_eq!(
@@ -3912,12 +3966,12 @@ fn cycles_correct_if_upgrade_fails_at_pre_upgrade() {
         )
     );
 
-    let cycles_before = test.canister_state(id).system_state.balance();
+    let cycles_before = test.canister_state(id).system_state.metadata.balance();
     let execution_cost_before = test.canister_execution_cost(id);
     test.upgrade_canister(id, wasm).unwrap_err();
     let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
     assert_eq!(
-        test.canister_state(id).system_state.balance(),
+        test.canister_state(id).system_state.metadata.balance(),
         cycles_before - execution_cost,
     );
     assert_delta!(
@@ -3963,16 +4017,16 @@ fn cycles_correct_if_upgrade_fails_at_post_upgrade() {
 
     test.install_canister(id, wasm1).unwrap();
     assert_eq!(
-        test.canister_state(id).system_state.balance(),
+        test.canister_state(id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(id),
     );
 
-    let cycles_before = test.canister_state(id).system_state.balance();
+    let cycles_before = test.canister_state(id).system_state.metadata.balance();
     let execution_cost_before = test.canister_execution_cost(id);
     test.upgrade_canister(id, wasm2.clone()).unwrap_err();
     let execution_cost = test.canister_execution_cost(id) - execution_cost_before;
     assert_eq!(
-        test.canister_state(id).system_state.balance(),
+        test.canister_state(id).system_state.metadata.balance(),
         cycles_before - execution_cost,
     );
     assert_delta!(
@@ -4014,7 +4068,7 @@ fn cycles_correct_if_install_succeeds() {
 
     test.install_canister(id, wasm.clone()).unwrap();
     assert_eq!(
-        test.canister_state(id).system_state.balance(),
+        test.canister_state(id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(id),
     );
     assert_delta!(
@@ -4062,7 +4116,7 @@ fn cycles_correct_if_install_fails_at_validation() {
 
     test.install_canister(id, wasm.clone()).unwrap_err();
     assert_eq!(
-        test.canister_state(id).system_state.balance(),
+        test.canister_state(id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(id),
     );
     assert_eq!(
@@ -4104,7 +4158,7 @@ fn cycles_correct_if_install_fails_at_start() {
 
     test.install_canister(id, wasm.clone()).unwrap_err();
     assert_eq!(
-        test.canister_state(id).system_state.balance(),
+        test.canister_state(id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(id),
     );
 
@@ -4144,7 +4198,7 @@ fn cycles_correct_if_install_fails_at_init() {
 
     test.install_canister(id, wasm.clone()).unwrap_err();
     assert_eq!(
-        test.canister_state(id).system_state.balance(),
+        test.canister_state(id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(id),
     );
     assert_delta!(
@@ -4328,6 +4382,7 @@ fn install_does_not_reserve_cycles_when_memory_allocation_is_set() {
         let reserved_cycles = test
             .canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance();
         assert_gt!(reserved_cycles, Cycles::zero());
         assert_eq!(
@@ -4353,13 +4408,22 @@ fn install_does_not_reserve_cycles_when_memory_allocation_is_set() {
 
         let wasm_binary = wat::parse_str(wat).unwrap();
 
-        let balance_before = test.canister_state(canister_id).system_state.balance();
+        let balance_before = test
+            .canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance();
         test.install_canister(canister_id, wasm_binary).unwrap();
-        let balance_after = test.canister_state(canister_id).system_state.balance();
+        let balance_after = test
+            .canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance();
 
         let new_reserved_cycles = test
             .canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance();
 
         // The reserved balance shouldn't change because the canister has already
@@ -4414,14 +4478,23 @@ fn install_reserves_cycles_on_memory_grow() {
         let subnet_memory_usage =
             CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
         let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
-        let balance_before = test.canister_state(canister_id).system_state.balance();
+        let balance_before = test
+            .canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance();
         test.install_canister(canister_id, wasm_binary).unwrap();
-        let balance_after = test.canister_state(canister_id).system_state.balance();
+        let balance_after = test
+            .canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance();
         let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
 
         let reserved_cycles = test
             .canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance();
 
         assert_gt!(reserved_cycles, Cycles::zero());
@@ -4490,18 +4563,28 @@ fn upgrade_reserves_cycles_on_memory_grow() {
         let subnet_memory_usage =
             CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
         let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
-        let balance_before = test.canister_state(canister_id).system_state.balance();
+        let balance_before = test
+            .canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance();
         let reserved_cycles_before = test
             .canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance();
         test.upgrade_canister(canister_id, wasm_binary).unwrap();
-        let balance_after = test.canister_state(canister_id).system_state.balance();
+        let balance_after = test
+            .canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance();
         let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
 
         let reserved_cycles = test
             .canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance();
 
         assert_gt!(reserved_cycles, Cycles::zero());
@@ -4550,7 +4633,11 @@ fn install_does_not_reserve_cycles_on_system_subnet() {
     // where reservations would trigger. Because it's a system subnet we expect
     // that no cycles reservation will be made.
     let canister_id = test.create_canister(CYCLES);
-    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let balance_before = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     test.install_canister(
         canister_id,
         wat_canister()
@@ -4558,7 +4645,11 @@ fn install_does_not_reserve_cycles_on_system_subnet() {
             .build_wasm(),
     )
     .unwrap();
-    let balance_after = test.canister_state(canister_id).system_state.balance();
+    let balance_after = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
 
     // Message execution fee is an order of a few million cycles.
     assert_lt!(balance_before - balance_after, Cycles::new(1_000_000_000));
@@ -4566,6 +4657,7 @@ fn install_does_not_reserve_cycles_on_system_subnet() {
     let reserved_cycles = test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .reserved_balance();
     assert_eq!(reserved_cycles, Cycles::zero());
 }
@@ -4601,7 +4693,11 @@ fn create_canister_reserves_cycles_for_memory_allocation() {
                     .build(),
             )
             .unwrap();
-        let balance_after = test.canister_state(canister_id).system_state.balance();
+        let balance_after = test
+            .canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance();
 
         assert_eq!(
             test.canister_state(canister_id)
@@ -4614,6 +4710,7 @@ fn create_canister_reserves_cycles_for_memory_allocation() {
         let reserved_cycles = test
             .canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance();
 
         assert_gt!(reserved_cycles, Cycles::zero());
@@ -4669,10 +4766,18 @@ fn update_settings_reserves_cycles_for_memory_allocation() {
 
         // TODO(RUN-745): This should be `execution_memory_usage()`.
         let memory_usage_before = test.canister_state(canister_id).memory_usage();
-        let balance_before = test.canister_state(canister_id).system_state.balance();
+        let balance_before = test
+            .canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance();
         test.canister_update_allocations_settings(canister_id, None, Some(USAGE))
             .unwrap();
-        let balance_after = test.canister_state(canister_id).system_state.balance();
+        let balance_after = test
+            .canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance();
         let memory_usage_after = NumBytes::new(USAGE);
 
         assert_eq!(
@@ -4686,6 +4791,7 @@ fn update_settings_reserves_cycles_for_memory_allocation() {
         let reserved_cycles = test
             .canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance();
 
         assert_gt!(reserved_cycles, Cycles::zero());
@@ -4804,7 +4910,11 @@ fn resource_saturation_scaling_works_in_create_canister() {
         )
         .unwrap();
 
-    let balance_after = test.canister_state(canister_id).system_state.balance();
+    let balance_after = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
 
     assert_eq!(
         test.canister_state(canister_id)
@@ -4817,6 +4927,7 @@ fn resource_saturation_scaling_works_in_create_canister() {
     let reserved_cycles = test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .reserved_balance();
 
     assert_gt!(reserved_cycles, Cycles::zero());
@@ -4885,14 +4996,23 @@ fn resource_saturation_scaling_works_in_install_code() {
     let subnet_memory_usage =
         CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
     let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
-    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let balance_before = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     test.install_canister(canister_id, wasm_binary).unwrap();
-    let balance_after = test.canister_state(canister_id).system_state.balance();
+    let balance_after = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
 
     let reserved_cycles = test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .reserved_balance();
 
     assert_gt!(reserved_cycles, Cycles::zero());
@@ -4935,6 +5055,7 @@ fn update_settings_respects_reserved_cycles_limit_on_memory_allocation() {
 
     test.canister_state_mut(canister_id)
         .system_state
+        .metadata
         .set_reserved_balance_limit(Cycles::new(1));
 
     let err = test
@@ -4981,6 +5102,7 @@ fn install_respects_reserved_cycles_limit_on_memory_grow() {
 
     test.canister_state_mut(canister_id)
         .system_state
+        .metadata
         .set_reserved_balance_limit(Cycles::new(1));
 
     let err = test.install_canister(canister_id, wasm_binary).unwrap_err();
@@ -5087,6 +5209,7 @@ fn create_canister_can_set_reserved_cycles_limit() {
     assert_eq!(
         test.canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance_limit(),
         Some(Cycles::new(1))
     );
@@ -5125,6 +5248,7 @@ fn create_canister_sets_default_reserved_cycles_limit() {
     assert_eq!(
         test.canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance_limit(),
         Some(
             test.cycles_account_manager()
@@ -5156,6 +5280,7 @@ fn update_settings_can_set_reserved_cycles_limit() {
     assert_eq!(
         test.canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance_limit(),
         Some(Cycles::new(1))
     );
@@ -5193,6 +5318,7 @@ fn canister_status_contains_reserved_cycles() {
         status.reserved_cycles(),
         test.canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance()
             .get()
     );
@@ -5578,6 +5704,7 @@ fn uninstall_clears_wasm_chunk_store() {
     assert_eq!(
         test.canister_state(canister_id)
             .system_state
+            .metadata
             .wasm_chunk_store
             .memory_usage(),
         NumBytes::from(0)
@@ -5604,9 +5731,15 @@ fn upload_chunk_fails_when_freeze_threshold_triggered() {
             test.canister_wasm_execution_mode(canister_id),
         )
         + Cycles::from(1_000_u128);
-    let to_remove = test.canister_state(canister_id).system_state.balance() - new_balance;
+    let to_remove = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance()
+        - new_balance;
     test.canister_state_mut(canister_id)
         .system_state
+        .metadata
         .remove_cycles(to_remove, CyclesUseCase::BurnedCycles);
 
     // Upload a chunk
@@ -5699,6 +5832,7 @@ fn upload_chunk_reserves_cycles() {
         assert_eq!(
             test.canister_state(canister_id)
                 .system_state
+                .metadata
                 .reserved_balance(),
             Cycles::from(0_u128)
         );
@@ -5714,6 +5848,7 @@ fn upload_chunk_reserves_cycles() {
         assert_eq!(
             test.canister_state(canister_id)
                 .system_state
+                .metadata
                 .reserved_balance(),
             Cycles::from(0_u128)
         );
@@ -5729,6 +5864,7 @@ fn upload_chunk_reserves_cycles() {
         let reserved_balance = test
             .canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance()
             .get();
         assert_lt!(
@@ -5745,6 +5881,7 @@ fn upload_chunk_reserves_cycles() {
         let new_reserved_balance = test
             .canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance()
             .get();
         assert_eq!(
@@ -5782,6 +5919,7 @@ fn clear_chunk_store_works() {
     assert!(test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .wasm_chunk_store
         .get_chunk_data(&hash)
         .is_some());
@@ -5800,6 +5938,7 @@ fn clear_chunk_store_works() {
     assert!(test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .wasm_chunk_store
         .get_chunk_data(&hash)
         .is_none());
@@ -5913,6 +6052,7 @@ fn upload_chunk_fails_when_heap_delta_rate_limited() {
     assert_eq!(
         test.canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance(),
         Cycles::from(0_u128)
     );
@@ -5991,7 +6131,11 @@ fn upload_chunk_charges_canister_cycles() {
 
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.create_canister(CYCLES);
-    let initial_balance = test.canister_state(canister_id).system_state.balance();
+    let initial_balance = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
 
     // Uploading one chunk will decrease balance by the cycles corresponding to
     // the instructions for uploading.
@@ -6011,7 +6155,10 @@ fn upload_chunk_charges_canister_cycles() {
         .unwrap();
 
     assert_eq!(
-        test.canister_state(canister_id).system_state.balance(),
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance(),
         initial_balance - expected_charge,
     );
 
@@ -6020,7 +6167,10 @@ fn upload_chunk_charges_canister_cycles() {
     let _hash = test.subnet_message("upload_chunk", payload).unwrap();
 
     assert_eq!(
-        test.canister_state(canister_id).system_state.balance(),
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance(),
         initial_balance - expected_charge - expected_charge,
     );
 }
@@ -6035,7 +6185,11 @@ fn upload_chunk_charges_if_failing() {
         .with_subnet_execution_memory(10)
         .build();
     let canister_id = test.create_canister(CYCLES);
-    let initial_balance = test.canister_state(canister_id).system_state.balance();
+    let initial_balance = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     // Expected charge is the same as if the upload succeeds.
     let expected_charge = test.cycles_account_manager().execution_cost(
         instructions,
@@ -6053,7 +6207,10 @@ fn upload_chunk_charges_if_failing() {
     let _err = test.subnet_message("upload_chunk", payload).unwrap_err();
 
     assert_eq!(
-        test.canister_state(canister_id).system_state.balance(),
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance(),
         initial_balance - expected_charge,
     );
 }
@@ -6073,6 +6230,7 @@ fn chunk_store_methods_succeed_from_canister_itself() {
     assert!(!test
         .canister_state(uc)
         .system_state
+        .metadata
         .controllers
         .contains(&uc.into()));
 
@@ -6199,7 +6357,11 @@ fn run_canister_in_wasm_mode(is_wasm64_mode: bool, execute_ingress: bool) -> (Cy
         .canister_from_cycles_and_wat(DEFAULT_PROVISIONAL_BALANCE, canister_wat)
         .unwrap();
 
-    let balance_before_ingress = test.canister_state(canister_id).system_state.balance();
+    let balance_before_ingress = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     let cost_for_install = DEFAULT_PROVISIONAL_BALANCE - balance_before_ingress;
 
     if execute_ingress {
@@ -6208,7 +6370,11 @@ fn run_canister_in_wasm_mode(is_wasm64_mode: bool, execute_ingress: bool) -> (Cy
         return (balance_before_ingress, cost_for_install);
     }
 
-    let balance_after_ingress = test.canister_state(canister_id).system_state.balance();
+    let balance_after_ingress = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     let cost_for_ingress = balance_before_ingress - balance_after_ingress;
 
     (balance_after_ingress, cost_for_ingress)
@@ -6836,7 +7002,7 @@ fn test_environment_variables_are_changed_via_create_canister() {
     // Verify environment variables are set.
     let canister = test.canister_state(canister_id);
     assert_eq!(
-        canister.system_state.environment_variables,
+        canister.system_state.metadata.environment_variables,
         EnvironmentVariables::new(env_vars)
     );
 }
@@ -6877,7 +7043,10 @@ fn test_environment_variables_are_updated_on_update_settings() {
 
     // Verify environment variables are set.
     let canister = test.canister_state(canister_id);
-    assert_eq!(canister.system_state.environment_variables, env_vars);
+    assert_eq!(
+        canister.system_state.metadata.environment_variables,
+        env_vars
+    );
 
     // Environment variables are unchanged when not specified.
     let args = UpdateSettingsArgs {
@@ -6890,7 +7059,10 @@ fn test_environment_variables_are_updated_on_update_settings() {
 
     // Verify environment variables are unchanged.
     let canister = test.canister_state(canister_id);
-    assert_eq!(canister.system_state.environment_variables, env_vars);
+    assert_eq!(
+        canister.system_state.metadata.environment_variables,
+        env_vars
+    );
 }
 
 #[test]
@@ -6927,7 +7099,7 @@ fn test_environment_variables_are_not_set_when_disabled() {
     // Verify environment variables are not set.
     let canister = test.canister_state(canister_id);
     assert_eq!(
-        canister.system_state.environment_variables,
+        canister.system_state.metadata.environment_variables,
         EnvironmentVariables::new(BTreeMap::new())
     );
 
@@ -6945,7 +7117,7 @@ fn test_environment_variables_are_not_set_when_disabled() {
     // Verify environment variables are not set.
     let canister = test.canister_state(canister_id);
     assert_eq!(
-        canister.system_state.environment_variables,
+        canister.system_state.metadata.environment_variables,
         EnvironmentVariables::new(BTreeMap::new())
     );
 }
@@ -7144,6 +7316,7 @@ fn check_environment_variables_via_canister_status(
     assert_eq!(
         canister
             .system_state
+            .metadata
             .environment_variables
             .iter()
             .map(|(name, value)| EnvironmentVariable {
@@ -7267,6 +7440,7 @@ fn rename_canister(
         .canister_state(&sender_canister)
         .unwrap()
         .system_state
+        .metadata
         .canister_version;
 
     let arguments = RenameCanisterArgs {
@@ -7360,6 +7534,7 @@ fn can_rename_canister() {
             .canister_state(&canister_id)
             .unwrap()
             .system_state
+            .metadata
             .get_canister_history()
             .get_total_num_changes()
     };
@@ -7406,6 +7581,7 @@ fn can_rename_canister() {
                 .canister_state(&new_canister_id)
                 .unwrap()
                 .system_state
+                .metadata
                 .canister_version
         );
         assert_eq!(
@@ -7414,6 +7590,7 @@ fn can_rename_canister() {
                 .canister_state(&new_canister_id)
                 .unwrap()
                 .system_state
+                .metadata
                 .get_canister_history()
                 .get_total_num_changes()
         );
@@ -7422,6 +7599,7 @@ fn can_rename_canister() {
             .canister_state(&new_canister_id)
             .unwrap()
             .system_state
+            .metadata
             .get_canister_history()
             .get_changes(1)
             .next()
@@ -7460,6 +7638,7 @@ fn can_rename_canister() {
         .canister_state(&new_canister_id)
         .unwrap()
         .system_state
+        .metadata
         .canister_version;
     let third_version = version_before_rename - 10;
     let third_num_changes = 10;
