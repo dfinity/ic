@@ -79,15 +79,31 @@ fn main() {
         start_metrics_grpc(global_metrics, logger.clone(), stream);
     }
 
+    // TODO(CRP-2915): remove canister SKS cleanup logic
+    cleanup_obsolete_canister_sks_file_if_it_exists(sks_dir, &logger, &metrics);
+
+    rt.block_on(ic_crypto_internal_csp::run_csp_vault_server(
+        sks_dir,
+        systemd_socket_listener,
+        logger,
+        metrics,
+    ));
+}
+
+fn cleanup_obsolete_canister_sks_file_if_it_exists(
+    sks_dir: &Path,
+    logger: &ReplicaLogger,
+    metrics: &CryptoMetrics,
+) {
     // Clean up the obsolete canister SKS data file.
     const CANISTER_SKS_DATA_FILENAME: &str = "canister_sks_data.pb";
     log_cleanup_errors_and_observe_metrics(
         overwrite_file_with_zeroes_and_delete_if_it_exists(
             sks_dir.join(CANISTER_SKS_DATA_FILENAME),
-            &logger,
+            logger,
         ),
-        &logger,
-        &metrics,
+        logger,
+        metrics,
     );
     // Clean up the respective .old file, although it is highly unlikely that this exists.
     // Such a file only exists if the node crashes during the cleanup procedure after
@@ -96,18 +112,11 @@ fn main() {
     log_cleanup_errors_and_observe_metrics(
         overwrite_file_with_zeroes_and_delete_if_it_exists(
             sks_dir.join(CANISTER_SKS_DATA_OLD_FILENAME),
-            &logger,
+            logger,
         ),
-        &logger,
-        &metrics,
-    );
-
-    rt.block_on(ic_crypto_internal_csp::run_csp_vault_server(
-        sks_dir,
-        systemd_socket_listener,
         logger,
         metrics,
-    ));
+    );
 }
 
 /// Aborts the whole program with a core dump if a single thread panics.
