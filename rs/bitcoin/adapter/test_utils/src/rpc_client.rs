@@ -17,9 +17,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 pub use crate::rpc_json::{
-    CreateRawTransactionInput, GetBalancesResult, GetBlockchainInfoResult, GetMempoolEntryResult,
-    ListUnspentResultEntry, LoadWalletResult, SignRawTransactionInput, SignRawTransactionResult,
-    UnloadWalletResult,
+    BtcGetMempoolEntryResult, CreateRawTransactionInput, DogeGetMempoolEntryResult,
+    GetBalancesResult, GetBlockchainInfoResult, ListUnspentResultEntry, LoadWalletResult,
+    SignRawTransactionInput, SignRawTransactionResult, UnloadWalletResult,
 };
 
 pub type Result<T> = std::result::Result<T, RpcError>;
@@ -132,6 +132,7 @@ pub trait RpcClientType: Copy + std::fmt::Display {
     type Address: serde::Serialize + std::fmt::Display;
     type AddressUnchecked: for<'a> serde::Deserialize<'a>;
     type AddressParseError;
+    type GetMempoolEntryResult: for<'a> serde::Deserialize<'a>;
     const REGTEST: Self;
     const NAME: &str;
     const RPC_WALLET_SUPPORT: bool;
@@ -147,6 +148,7 @@ impl RpcClientType for BtcNetwork {
     type Address = BtcAddress;
     type AddressUnchecked = BtcAddress<NetworkUnchecked>;
     type AddressParseError = BtcAddressParseError;
+    type GetMempoolEntryResult = BtcGetMempoolEntryResult;
     const REGTEST: Self = BtcNetwork::Regtest;
     const NAME: &str = "Bitcoin";
     const RPC_WALLET_SUPPORT: bool = true;
@@ -170,6 +172,7 @@ impl RpcClientType for DogeNetwork {
     type Address = DogeAddress;
     type AddressUnchecked = DogeAddress<NetworkUnchecked>;
     type AddressParseError = DogeAddressParseError;
+    type GetMempoolEntryResult = DogeGetMempoolEntryResult;
     const REGTEST: Self = DogeNetwork::Regtest;
     const NAME: &str = "Dogecoin";
     const RPC_WALLET_SUPPORT: bool = false;
@@ -478,7 +481,7 @@ impl<T: RpcClientType> RpcClient<T> {
         self.call("getrawmempool", &[])
     }
 
-    pub fn get_mempool_entry(&self, txid: &Txid) -> Result<GetMempoolEntryResult> {
+    pub fn get_mempool_entry(&self, txid: &Txid) -> Result<T::GetMempoolEntryResult> {
         self.call("getmempoolentry", &[into_json(txid)?])
     }
 
