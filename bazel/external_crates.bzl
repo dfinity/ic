@@ -1358,6 +1358,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "static_assertions": crate.spec(
                 version = "1.1.0",
             ),
+            "stoppable_thread": crate.spec(
+                version = "0.2.1",
+            ),
             "strum": crate.spec(
                 version = "^0.26.3",
                 default_features = False,
@@ -1551,6 +1554,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                     "serde",
                 ],
             ),
+	    "userfaultfd": crate.spec(
+                version = "^0.8.1",
+		features = ["linux5_7"],
+	    ),
             # DO NOT upgrade to >=1.13 unless you are ready to deal with problems.
             # This breaks `wasm32-unknown-unknown` compatibility.
             # Read https://github.com/uuid-rs/uuid/releases/tag/1.13.0

@@ -10,6 +10,7 @@ use std::sync::{atomic::Ordering, Arc, Mutex};
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 /// Helper function to create a memory tracking SIGSEGV handler function.
+#[allow(dead_code)]
 pub(crate) fn sigsegv_memory_tracker_handler(
     memories: Vec<(Arc<Mutex<SigsegvMemoryTracker>>, MemoryPageSize)>,
 ) -> impl Fn(i32, *const libc::siginfo_t, *const libc::c_void) -> bool + Send + Sync {

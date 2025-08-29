@@ -10,8 +10,8 @@ use std::{
 
 use ic_management_canister_types_private::Global;
 use wasmtime::{
-    unix::StoreExt, Engine, Instance, InstancePre, Linker, Memory, Module, Mutability, Store,
-    StoreLimits, StoreLimitsBuilder, Val, ValType,
+    Engine, Instance, InstancePre, Linker, Memory, Module, Mutability, Store, StoreLimits,
+    StoreLimitsBuilder, Val, ValType,
 };
 
 pub use host_memory::WasmtimeMemoryCreator;
@@ -30,16 +30,21 @@ use ic_types::{
     CanisterId, NumBytes, NumInstructions, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
-use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
+use memory_tracker::{uffd_handler, DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
 use signal_stack::WasmtimeSignalStack;
 
-use crate::wasm_utils::instrumentation::{
-    WasmMemoryType, ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
-    INSTRUCTIONS_COUNTER_GLOBAL_NAME,
-};
 use crate::{
     serialized_module::SerializedModuleBytes, wasm_utils::validation::wasmtime_validation_config,
 };
+use crate::{
+    wasm_utils::instrumentation::{
+        WasmMemoryType, ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
+        INSTRUCTIONS_COUNTER_GLOBAL_NAME,
+    },
+    wasmtime_embedder::host_memory::CreatedWasmtimeMemory,
+};
+use std::sync::MutexGuard;
+use userfaultfd::{Event, FaultKind, ReadWrite, Uffd};
 
 use super::InstanceRunResult;
 
@@ -209,7 +214,7 @@ pub struct WasmtimeEmbedder {
     // `SigsegvMemoryTracker` is created it will look up the corresponding memory in the map
     // and remove it. So memories will only be in this map for the time between module
     // instantiation and creation of the corresponding `SigsegvMemoryTracker`.
-    created_memories: Arc<Mutex<HashMap<MemoryStart, MemoryPageSize>>>,
+    created_memories: Arc<Mutex<HashMap<MemoryStart, CreatedWasmtimeMemory>>>,
 }
 
 impl WasmtimeEmbedder {
@@ -590,7 +595,7 @@ impl WasmtimeEmbedder {
             }
             let start = MemoryStart(instance_memory.data_ptr(&store) as usize);
             let mut created_memories = self.created_memories.lock().unwrap();
-            let current_size = match created_memories.remove(&start) {
+            let memory = match created_memories.remove(&start) {
                 None => {
                     error!(
                         self.log,
@@ -604,11 +609,13 @@ impl WasmtimeEmbedder {
                 }
                 Some(current_memory_size_in_pages) => current_memory_size_in_pages,
             };
+            let (current_size, uffd) = memory.into_parts();
             memories_to_track.insert(
                 memory_info.memory_type,
                 MemorySigSegvInfo {
                     instance_memory,
                     current_memory_size_in_pages: current_size,
+                    uffd,
                     page_map: memory_info.memory.page_map.clone(),
                     dirty_page_tracking: memory_info.dirty_page_tracking,
                 },
@@ -635,7 +642,7 @@ impl WasmtimeEmbedder {
         bytemap_name: &str,
         instance: &Instance,
         mut store: &mut Store<StoreData>,
-        created_memories: &mut HashMap<MemoryStart, MemoryPageSize>,
+        created_memories: &mut HashMap<MemoryStart, CreatedWasmtimeMemory>,
         canister_id: CanisterId,
     ) -> HypervisorResult<()> {
         let memory =
@@ -659,10 +666,10 @@ impl WasmtimeEmbedder {
                     ),
                 ))
             }
-            Some((instance_memory, current_memory_size_in_pages)) => {
+            Some((instance_memory, created_memory)) => {
                 let addr = instance_memory.data_ptr(store) as usize;
                 let size_in_bytes =
-                    current_memory_size_in_pages.load(Ordering::SeqCst) * WASM_PAGE_SIZE_IN_BYTES;
+                    created_memory.current_size().load(Ordering::SeqCst) * WASM_PAGE_SIZE_IN_BYTES;
                 use nix::sys::mman;
                 // SAFETY: This is the array we created in the host_memory creator, so we know it is a valid memory region that we own.
                 unsafe {
@@ -687,6 +694,7 @@ pub struct MemorySigSegvInfo {
     instance_memory: wasmtime::Memory,
     current_memory_size_in_pages: MemoryPageSize,
     page_map: PageMap,
+    uffd: Arc<Uffd>,
     dirty_page_tracking: DirtyPageTracking,
 }
 
@@ -694,8 +702,13 @@ fn sigsegv_memory_tracker<S>(
     memories: HashMap<CanisterMemoryType, MemorySigSegvInfo>,
     store: &mut wasmtime::Store<S>,
     log: ReplicaLogger,
-) -> HashMap<CanisterMemoryType, Arc<Mutex<SigsegvMemoryTracker>>> {
-    let mut tracked_memories = vec![];
+) -> HashMap<
+    CanisterMemoryType,
+    (
+        Arc<Mutex<SigsegvMemoryTracker>>,
+        stoppable_thread::StoppableHandle<()>,
+    ),
+> {
     let mut result = HashMap::new();
     for (
         mem_type,
@@ -703,27 +716,29 @@ fn sigsegv_memory_tracker<S>(
             instance_memory,
             current_memory_size_in_pages,
             page_map,
+            uffd,
             dirty_page_tracking,
         },
     ) in memories
     {
         let base = instance_memory.data_ptr(&store);
         let size = instance_memory.data_size(&store);
+        // println!("memory tracker size: {}", size);
+
+        // For both SIGSEGV and in the future UFFD memory tracking we need
+        // the base address of the heap and its size
+        let base = base as *mut libc::c_void;
+        if base as usize % PAGE_SIZE != 0 {
+            fatal!(log, "[EXC-BUG] Memory tracker - Heap must be page aligned.");
+        }
+        if size % PAGE_SIZE != 0 {
+            fatal!(
+                log,
+                "[EXC-BUG] Memory tracker - Heap size must be a multiple of page size."
+            );
+        }
 
         let sigsegv_memory_tracker = {
-            // For both SIGSEGV and in the future UFFD memory tracking we need
-            // the base address of the heap and its size
-            let base = base as *mut libc::c_void;
-            if base as usize % PAGE_SIZE != 0 {
-                fatal!(log, "[EXC-BUG] Memory tracker - Heap must be page aligned.");
-            }
-            if size % PAGE_SIZE != 0 {
-                fatal!(
-                    log,
-                    "[EXC-BUG] Memory tracker - Heap size must be a multiple of page size."
-                );
-            }
-
             Arc::new(Mutex::new(
                 SigsegvMemoryTracker::new(
                     base,
@@ -731,19 +746,112 @@ fn sigsegv_memory_tracker<S>(
                     log.clone(),
                     dirty_page_tracking,
                     page_map,
+                    Arc::clone(&uffd),
                 )
                 .expect("failed to instantiate SIGSEGV memory tracker"),
             ))
         };
-        result.insert(mem_type, Arc::clone(&sigsegv_memory_tracker));
-        tracked_memories.push((sigsegv_memory_tracker, current_memory_size_in_pages));
+        let sigsegv_memory_tracker_clone = Arc::clone(&sigsegv_memory_tracker);
+
+        let handle = stoppable_thread::spawn(move |stopped| {
+            while !stopped.get() {
+                let event = uffd.read_event().expect("Failed to read uffd event");
+
+                if let Some(Event::Pagefault { addr, rw, kind }) = event {
+                    // println!(
+                    //     "Page fault for mem_type {}, at address: {:p}",
+                    //     mem_type, addr
+                    // );
+
+                    let memory_tracker = sigsegv_memory_tracker.lock().unwrap();
+
+                    let check_if_expanded =
+                        move |tracker: &MutexGuard<SigsegvMemoryTracker>,
+                              addr: *mut libc::c_void,
+                              current_size_in_pages: &MemoryPageSize| unsafe {
+                            let page_count = current_size_in_pages.load(Ordering::SeqCst);
+                            let heap_size = page_count * WASM_PAGE_SIZE_IN_BYTES;
+                            let heap_start = tracker.area().addr() as *mut libc::c_void;
+                            if (heap_start <= addr) && (addr < { heap_start.add(heap_size) }) {
+                                Some(heap_size)
+                            } else {
+                                None
+                            }
+                        };
+
+                    if !memory_tracker.area().is_within(addr) {
+                        // The heap has expanded. Update tracked memory area.
+                        if let Some(heap_size) =
+                            check_if_expanded(&memory_tracker, addr, &current_memory_size_in_pages)
+                        {
+                            let delta =
+                                NumBytes::new(heap_size as u64) - memory_tracker.area().size();
+                            memory_tracker.expand(delta);
+                        }
+                    }
+
+                    match (kind, rw) {
+                        (FaultKind::Missing, ReadWrite::Read) => {
+                            // println!("[handler] Handling missing page fault for read access");
+
+                            let res = uffd_handler(&memory_tracker, &uffd, rw, addr);
+
+                            if let Some((start_addr, size)) = res {
+                                if memory_tracker.dirty_page_tracking() == DirtyPageTracking::Track
+                                {
+                                    // Undocumented requirement: write-protect ioctl on the region
+                                    // can only happen after a missing page fault has been handled
+                                    // (as opposed to performing it right after registration but
+                                    // before any page fault).
+                                    uffd.write_protect(start_addr, size)
+                                        .expect("write_protect failed");
+                                }
+                                uffd.wake(start_addr, size).expect("wake failed");
+                            }
+                        }
+                        (FaultKind::Missing, ReadWrite::Write) => {
+                            // println!("[handler] Handling missing page fault for write access");
+
+                            let res = uffd_handler(&memory_tracker, &uffd, rw, addr);
+
+                            // println!("[handler] Missing page for write access res: {:?}", res);
+
+                            if let Some((start_addr, size)) = res {
+                                uffd.wake(start_addr, size).expect("wake failed");
+                            }
+                        }
+                        (FaultKind::WriteProtected, ReadWrite::Read) => {
+                            unreachable!("Should not receive notification");
+                        }
+                        (FaultKind::WriteProtected, ReadWrite::Write) => {
+                            // println!(
+                            //     "[handler] Handling write-protect page fault for write access"
+                            // );
+                            let res = uffd_handler(&memory_tracker, &uffd, rw, addr);
+
+                            if let Some((start_addr, size)) = res {
+                                if memory_tracker.dirty_page_tracking() == DirtyPageTracking::Track
+                                {
+                                    // If the page is already dirty, we can remove write protection.
+                                    uffd.remove_write_protection(start_addr, size, false)
+                                        .expect("remove_write_protection failed");
+                                }
+                                uffd.wake(start_addr, size).expect("wake failed");
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        result.insert(mem_type, (sigsegv_memory_tracker_clone, handle));
     }
 
-    let handler = signal_handler::sigsegv_memory_tracker_handler(tracked_memories);
-    // http://man7.org/linux/man-pages/man7/signal-safety.7.html
-    unsafe {
-        store.set_signal_handler(handler);
-    };
+    // let handler = crate::signal_handler::sigsegv_memory_tracker_handler(tracked_memories);
+    // // http://man7.org/linux/man-pages/man7/signal-safety.7.html
+    // unsafe {
+    //     store.set_signal_handler(handler);
+    // };
     result
 }
 
@@ -810,7 +918,13 @@ pub struct PageAccessResults {
 /// Encapsulates a Wasmtime instance on the Internet Computer.
 pub struct WasmtimeInstance {
     instance: wasmtime::Instance,
-    memory_trackers: HashMap<CanisterMemoryType, Arc<Mutex<SigsegvMemoryTracker>>>,
+    memory_trackers: HashMap<
+        CanisterMemoryType,
+        (
+            Arc<Mutex<SigsegvMemoryTracker>>,
+            stoppable_thread::StoppableHandle<()>,
+        ),
+    >,
     signal_stack: WasmtimeSignalStack,
     log: ReplicaLogger,
     instance_stats: InstanceStats,
@@ -828,6 +942,13 @@ pub struct WasmtimeInstance {
 
 impl WasmtimeInstance {
     pub fn into_store_data(self) -> StoreData {
+        // Big hack incoming. Need to do this here because having a `Drop` conflicts
+        // with consuming `self` in this method.
+        // Stop the uffd handler threads.
+        // println!("Stopping uffd handler threads");
+        for (_, handle) in self.memory_trackers.into_values() {
+            handle.stop().join().unwrap();
+        }
         self.store.into_data()
     }
 
@@ -883,6 +1004,7 @@ impl WasmtimeInstance {
                         .memory_trackers
                         .get(&CanisterMemoryType::Heap)
                         .unwrap()
+                        .0
                         .lock()
                         .unwrap();
                     let speculatively_dirty_pages = tracker.take_speculatively_dirty_pages();
@@ -902,6 +1024,7 @@ impl WasmtimeInstance {
                 .memory_trackers
                 .get(&CanisterMemoryType::Heap)
                 .unwrap()
+                .0
                 .lock()
                 .unwrap();
 
@@ -937,6 +1060,7 @@ impl WasmtimeInstance {
                 .memory_trackers
                 .get(&CanisterMemoryType::Stable)
                 .unwrap()
+                .0
                 .lock()
                 .unwrap();
 
@@ -1117,7 +1241,7 @@ impl WasmtimeInstance {
                 .ok_or_else(|| HypervisorError::ToolchainContractViolation {
                     error: "No memory tracker for stable memory".to_string(),
                 })?;
-            let tracker = tracker.lock().unwrap();
+            let tracker = tracker.0.lock().unwrap();
             let page_map = tracker.page_map();
             let accessed_pages = tracker.accessed_pages().borrow();
             let heap_memory = heap_memory.data(&self.store);

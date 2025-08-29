@@ -138,7 +138,7 @@ impl Execution {
                 system_api_call_counters,
             },
             deltas,
-            mut instance_or_system_api,
+            mut store_or_system_api,
         ) = ic_embedders::wasm_executor::process(
             exec_input.func_ref,
             exec_input.api_type,
@@ -157,7 +157,7 @@ impl Execution {
             Rc::new(out_of_instructions_handler),
         );
 
-        let system_api = match &mut instance_or_system_api {
+        let system_api = match &mut store_or_system_api {
             // Here we use `store_data_mut` instead of
             // `into_store_data` because the later will drop the
             // wasmtime Instance which can be an expensive
@@ -165,8 +165,7 @@ impl Execution {
             // to delay the drop until after the execution
             // completed message is sent back to the main
             // process.
-            Ok(instance) => instance
-                .store_data_mut()
+            Ok(store) => store
                 .system_api_mut()
                 .expect("System api not present in the wasmtime instance"),
             Err(system_api) => system_api,
