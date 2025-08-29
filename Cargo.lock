@@ -9049,12 +9049,12 @@ dependencies = [
 name = "ic-ed25519"
 version = "0.3.0"
 dependencies = [
- "candid",
  "curve25519-dalek",
  "ed25519-dalek",
  "hex",
  "hex-literal 0.4.1",
  "hkdf",
+ "ic_principal",
  "pem 1.1.1",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -13057,10 +13057,10 @@ version = "0.2.0"
 dependencies = [
  "bip32 0.5.3",
  "bitcoin 0.28.2",
- "candid",
  "hex",
  "hex-literal 0.4.1",
  "hmac",
+ "ic_principal",
  "k256 0.13.4",
  "num-bigint 0.4.6",
  "pem 1.1.1",
