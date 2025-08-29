@@ -241,7 +241,7 @@ fn overwrite_file_with_zeroes_and_delete_if_it_exists<P: AsRef<Path>>(
         }
         Err(e) => Err(vec![CleanupError::OpeningFileForWriting(e)]),
     };
-    if result.is_ok() {
+    if old_file_exists && result.is_ok() {
         info!(
             logger,
             "Successfully zeroized canister secret key store file '{}'",
