@@ -238,6 +238,7 @@ def system_test(
 
     Args:
       name: base name to use for the binary and test rules.
+      test_name: optional name for the test, useful when the test name is different than name.
       test_driver_target: optional string to identify the target of the test driver binary. Defaults to None which means declare a rust_binary from <name>.rs.
       runtime_deps: dependencies to make available to the test when it runs.
       tags: additional tags for the system_test.
