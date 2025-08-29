@@ -187,7 +187,8 @@ fn test<T: 'static + IcRpcClientType>() -> Result<()> {
 
 fn main() -> Result<()> {
     let test_name = std::env::var("ADAPTER_TO_TEST")
-        .unwrap_or_else(|_| panic!("environment variable ADAPTER_TO_TEST is not set"));
+        .unwrap_or_else(|_| panic!("environment variable ADAPTER_TO_TEST is not set"))
+        .to_uppercase();
     if test_name == "BTC" {
         test::<BtcNetwork>()?;
     } else if test_name == "DOGE" {
