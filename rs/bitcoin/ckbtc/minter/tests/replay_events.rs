@@ -83,6 +83,9 @@ pub fn mock_ecdsa_public_key() -> ECDSAPublicKey {
 
 lazy_static! {
     static ref MAINNET_EVENTS: GetEventsResult = Mainnet.deserialize();
+    static ref MAINNET_STATE: CkBtcMinterState =
+        replay::<SkipCheckInvariantsImpl>(MAINNET_EVENTS.events.iter().cloned())
+            .expect("Failed to replay events");
     static ref TESTNET_EVENTS: GetEventsResult = Testnet.deserialize();
 }
 
@@ -90,8 +93,7 @@ lazy_static! {
 async fn should_replay_events_for_mainnet() {
     Mainnet.retrieve_and_store_events_if_env().await;
 
-    let state = replay::<SkipCheckInvariantsImpl>(MAINNET_EVENTS.events.iter().cloned())
-        .expect("Failed to replay events");
+    let state = &MAINNET_STATE;
     state
         .check_invariants()
         .expect("Failed to check invariants");
@@ -137,8 +139,7 @@ async fn should_have_not_many_transactions_with_many_used_utxos() {
 async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30() {
     Mainnet.retrieve_and_store_events_if_env().await;
 
-    let mut state = replay::<SkipCheckInvariantsImpl>(MAINNET_EVENTS.events.iter().cloned())
-        .expect("Failed to replay events");
+    let mut state = MAINNET_STATE.clone();
 
     assert_eq!(state.btc_network, Network::Mainnet);
     assert_eq!(state.get_total_btc_managed(), 43_366_185_379);
@@ -371,14 +372,13 @@ async fn should_replay_events_for_testnet() {
 #[test]
 #[ignore]
 fn should_replay_events_and_check_invariants() {
-    fn test(file: impl GetEventsFile + std::fmt::Debug) {
-        let events = file.deserialize();
-        println!("Replaying {} {:?} events", events.total_event_count, file);
-        let _state = replay::<CheckInvariantsImpl>(events.events.into_iter())
+    fn test(events: &GetEventsResult) {
+        println!("Replaying {} events", events.total_event_count);
+        let _state = replay::<CheckInvariantsImpl>(events.events.iter().cloned())
             .expect("Failed to replay events");
     }
-    test(Mainnet);
-    test(Testnet);
+    test(&MAINNET_EVENTS);
+    test(&TESTNET_EVENTS);
 }
 
 // Due to an initial bug, there were a lot of useless events.
