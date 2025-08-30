@@ -569,6 +569,7 @@ pub struct IcpFeatures {
     pub nns_governance: bool,
     pub sns: bool,
     pub ii: bool,
+    pub nns_ui: bool,
 }
 
 impl IcpFeatures {
@@ -581,6 +582,7 @@ impl IcpFeatures {
             nns_governance: true,
             sns: true,
             ii: true,
+            nns_ui: true,
         }
     }
 }
@@ -758,6 +760,7 @@ impl ExtendedSubnetConfigSet {
             nns_governance,
             sns,
             ii,
+            nns_ui,
         } = icp_features;
         // NNS canisters
         for (flag, icp_feature_str) in [
@@ -766,6 +769,7 @@ impl ExtendedSubnetConfigSet {
             (*icp_token, "icp_token"),
             (*nns_governance, "nns_governance"),
             (*sns, "sns"),
+            (*nns_ui, "nns_ui"),
         ] {
             if flag {
                 check_empty_subnet(&self.nns, "NNS", icp_feature_str)?;
