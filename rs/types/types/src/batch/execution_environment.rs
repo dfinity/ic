@@ -23,6 +23,7 @@
 
 use crate::{node_id_into_protobuf, node_id_try_from_option, QueryStatsEpoch};
 use ic_base_types::{CanisterId, NodeId, NumBytes};
+use ic_deterministic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::registry::subnet::v1 as proto;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -36,7 +37,7 @@ use prost::{bytes::BufMut, Message};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, hash::Hash};
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Default)]
+#[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Hash, Debug, Default)]
 pub struct QueryStats {
     pub num_calls: u32,
     pub num_instructions: u64, // Want u128, but not supported in protobuf

@@ -5,8 +5,13 @@ package(default_visibility = ["//visibility:public"])
 rust_library(
     name = "phantom_newtype",
     srcs = glob(["src/**"]),
+    proc_macro_deps = [
+        # Keep sorted.
+        "//packages/ic-deterministic-heap-bytes-derive",
+    ],
     deps = [
         # Keep sorted.
+        "//packages/ic-deterministic-heap-bytes",
         "@crate_index//:candid",
         "@crate_index//:num-traits",
         "@crate_index//:serde",

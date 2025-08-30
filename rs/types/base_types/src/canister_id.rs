@@ -1,12 +1,25 @@
 use super::{PrincipalId, PrincipalIdClass, PrincipalIdError, SubnetId};
 use candid::types::principal::PrincipalError;
 use candid::{CandidType, Principal};
+use ic_deterministic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use serde::{de::Error, Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
 
 /// A type representing a canister's [`PrincipalId`].
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, CandidType, Serialize)]
+#[derive(
+    Copy,
+    Clone,
+    Eq,
+    DeterministicHeapBytes,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    CandidType,
+    Serialize,
+)]
 pub struct CanisterId(PrincipalId);
 
 /// Represents an error that can occur when constructing a [`CanisterId`] from a
