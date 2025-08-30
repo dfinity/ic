@@ -3,18 +3,24 @@
 //! Each method processes a specific type of request, and it may
 //! process several requests in sequence before terminating.
 
-use std::{future::Future, iter::zip};
+use std::{convert::Infallible, future::Future, iter::zip};
 
 use crate::{
     canister_state::{
         requests::{insert_request, list_by, remove_request},
         MethodGuard,
     },
-    external_interfaces::management::set_exclusive_controller,
+    external_interfaces::{
+        management::{
+            canister_status, get_canister_info, rename_canister, set_exclusive_controller,
+            set_original_controllers, CanisterStatusType,
+        },
+        registry::migrate_canister,
+    },
     Event, RequestState, ValidationError,
 };
 use futures::future::join_all;
-use ic_cdk::println;
+use ic_cdk::{api::time, println};
 
 /// Given a lock tag, a filter predicate on `RequestState` and a processor function,
 /// invokes the processor on all requests in the given state concurrently and
@@ -75,11 +81,121 @@ pub async fn process_accepted(
         .map_failure(|reason| RequestState::Failed { request, reason })
 }
 
-// pub async fn process_controllers_changed(
-//     request: RequestState,
-// ) -> ProcessingResult<RequestState, RequestState> {
-// }
+pub async fn process_controllers_changed(
+    request: RequestState,
+) -> ProcessingResult<RequestState, RequestState> {
+    let RequestState::ControllersChanged { request } = request else {
+        println!("Error: list_by ControllersChanged returned bad variant");
+        return ProcessingResult::NoProgress;
+    };
 
+    // These checks are repeated because the canisters may have changed since validation:
+    let ProcessingResult::Success(source_status) =
+        canister_status(request.source, request.source_subnet).await
+    else {
+        return ProcessingResult::NoProgress;
+    };
+    if source_status.status != CanisterStatusType::Stopped {
+        return ProcessingResult::FatalFailure(RequestState::Failed {
+            request,
+            reason: "Source is not stopped.".to_string(),
+        });
+    }
+    if !source_status.ready_for_migration {
+        return ProcessingResult::FatalFailure(RequestState::Failed {
+            request,
+            reason: "Source is not ready for migration.".to_string(),
+        });
+    }
+    let canister_version = source_status.version;
+    if canister_version > u64::MAX / 2 {
+        return ProcessingResult::FatalFailure(RequestState::Failed {
+            request,
+            reason: "Source version is too large.".to_string(),
+        });
+    }
+
+    let ProcessingResult::Success(target_status) =
+        canister_status(request.target, request.target_subnet).await
+    else {
+        return ProcessingResult::NoProgress;
+    };
+    if target_status.status != CanisterStatusType::Stopped {
+        return ProcessingResult::FatalFailure(RequestState::Failed {
+            request,
+            reason: "Target is not stopped.".to_string(),
+        });
+    }
+    // TODO: target has no snapshots
+    // TODO: target has enough cycles
+
+    // Determine history length of source
+    get_canister_info(request.source)
+        .await
+        .map_success(|canister_info_result| RequestState::StoppedAndReady {
+            request,
+            stopped_since: time(),
+            canister_version,
+            canister_history_total_num: canister_info_result.total_num_changes,
+        })
+        .or_retry()
+}
+
+pub async fn process_stopped(
+    request: RequestState,
+) -> ProcessingResult<
+    RequestState,
+    RequestState, /* TODO: should be `Infallible` but we want `transition` to be available */
+> {
+    let RequestState::StoppedAndReady {
+        request,
+        stopped_since,
+        canister_version,
+        canister_history_total_num,
+    } = request
+    else {
+        println!("Error: list_by StoppedAndReady returned bad variant");
+        return ProcessingResult::NoProgress;
+    };
+    rename_canister(
+        request.source,
+        canister_version,
+        request.target,
+        canister_history_total_num,
+    )
+    .await
+    .map_success(|_| RequestState::RenamedTarget {
+        request,
+        stopped_since,
+    })
+    .or_retry()
+}
+
+pub async fn process_renamed(
+    request: RequestState,
+) -> ProcessingResult<RequestState, RequestState> {
+    let RequestState::RenamedTarget {
+        request,
+        stopped_since,
+    } = request
+    else {
+        println!("Error: list_by RenamedTarget returned bad variant");
+        return ProcessingResult::NoProgress;
+    };
+
+    // let registry_version =
+
+    migrate_canister(request.source, request.target_subnet)
+        .await
+        .map_success(|_| RequestState::UpdatedRoutingTable {
+            request,
+            stopped_since,
+            registry_version: todo!(),
+        })
+        .or_retry()
+}
+
+// ----------------------------------------------------------------------------
 pub async fn process_all_failed() {
     let Ok(_guard) = MethodGuard::new("failed") else {
         return;
@@ -96,23 +212,35 @@ pub async fn process_all_failed() {
 }
 
 /// Accepts a `Failed` request, returns `Event::Failed` or must be retried.
-async fn process_failed(request: RequestState) -> ProcessingResult<Event, ()> {
-    let RequestState::Failed {
-        request: _,
-        reason: _,
-    } = request
-    else {
+// TODO: Confirm this only occurs before `rename_canister`, otherwise the subnet_id args are wrong.
+async fn process_failed(request: RequestState) -> ProcessingResult<Event, Infallible> {
+    let RequestState::Failed { request, reason } = request else {
         println!("Error: list_failed returned bad variant");
         return ProcessingResult::NoProgress;
     };
-    // 1. If source controllers are the original controllers, or we are NOT controllers of source any more,
-    //    then we continue. Otherwise, we set the source controllers to the original. If we fail, return NoProgress.
-    // TODO
 
-    // 2. Same for target
-    // TODO
+    let res1 = set_original_controllers(
+        request.source.clone(),
+        request.source_original_controllers.clone(),
+        request.source_subnet.clone(),
+    )
+    .await;
+    let res2 = set_original_controllers(
+        request.target.clone(),
+        request.target_original_controllers.clone(),
+        request.target_subnet.clone(),
+    )
+    .await;
 
-    ProcessingResult::NoProgress
+    if res1.is_fatal_failure() || res2.is_fatal_failure() {
+        println!("Error: Unreachable: `set_original_controllers` must not return Failure");
+    }
+    // If any did not succeed, we have to retry later.
+    if res1.is_no_progress() || res2.is_no_progress() {
+        return ProcessingResult::NoProgress;
+    }
+    // We successfully returned controllership.
+    ProcessingResult::Success(Event::Failed { request, reason })
 }
 
 #[must_use]
@@ -151,12 +279,30 @@ impl<S, F> ProcessingResult<S, F> {
     }
 }
 
+impl<S, F> ProcessingResult<S, F>
+where
+    F: std::fmt::Debug,
+{
+    /// Use for results of infallible calls to ensure retrying in the presence of bugs.
+    pub fn or_retry<T>(self) -> ProcessingResult<S, T> {
+        match self {
+            ProcessingResult::Success(x) => ProcessingResult::Success(x),
+            ProcessingResult::NoProgress => ProcessingResult::NoProgress,
+            ProcessingResult::FatalFailure(f) => {
+                println!("Unreachable: Ignore failure {:?} and retry.", f);
+                ProcessingResult::NoProgress
+            }
+        }
+    }
+}
+
 impl<S> ProcessingResult<S, ValidationError> {
-    pub fn into_result(self, context: &str) -> Result<S, ValidationError> {
+    /// Use during validation only, where `NoProgress` should lead to an error.
+    pub fn into_result(self, reason: &str) -> Result<S, ValidationError> {
         match self {
             ProcessingResult::Success(s) => Ok(s),
             ProcessingResult::NoProgress => Err(ValidationError::CallFailed {
-                reason: context.to_string(),
+                reason: reason.to_string(),
             }),
             ProcessingResult::FatalFailure(e) => Err(e),
         }
@@ -182,8 +328,21 @@ impl ProcessingResult<RequestState, RequestState> {
     }
 }
 
+impl ProcessingResult<RequestState, Infallible> {
+    fn transition(self, old_state: RequestState) {
+        match self {
+            ProcessingResult::Success(new_state) => {
+                remove_request(&old_state);
+                insert_request(new_state);
+            }
+            ProcessingResult::NoProgress => {}
+            ProcessingResult::FatalFailure(_) => {}
+        }
+    }
+}
+
 // Processing a `RequestState::Failure` successfully results in an `Event::Failed`.
-impl ProcessingResult<Event, ()> {
+impl ProcessingResult<Event, Infallible> {
     fn transition(self, old_state: RequestState) {
         match self {
             ProcessingResult::Success(_event) => {
@@ -192,9 +351,7 @@ impl ProcessingResult<Event, ()> {
                 // TODO: insert_event(event);
             }
             ProcessingResult::NoProgress => {}
-            ProcessingResult::FatalFailure(_) => {
-                println!("Error: Processing failed states must not fail, should return `NoProgress` instead.");
-            }
+            ProcessingResult::FatalFailure(_) => {}
         }
     }
 }

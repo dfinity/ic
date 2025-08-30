@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use candid::{CandidType, Principal};
 use ic_cdk::{call::Call, println};
 use serde::Deserialize;
@@ -52,5 +54,38 @@ pub async fn get_subnet_for_canister(
                 ProcessingResult::NoProgress
             }
         },
+    }
+}
+
+// ========================================================================= //
+// `migrate_canisters`
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+struct MigrateCanistersArgs {
+    canister_ids: Vec<Principal>,
+    target_subnet_id: Principal,
+}
+
+pub async fn migrate_canister(
+    source: Principal,
+    target_subnet: Principal,
+) -> ProcessingResult<(), Infallible> {
+    let args = MigrateCanistersArgs {
+        canister_ids: vec![source],
+        target_subnet_id: target_subnet,
+    };
+
+    match Call::bounded_wait(
+        Principal::from_text(REGISTRY_CANISTER_ID).unwrap(),
+        "migrate_canisters",
+    )
+    .with_arg(args)
+    .await
+    {
+        Err(e) => {
+            println!("Call `migrate_canisters` for {:?} failed: {:?}", source, e);
+            ProcessingResult::NoProgress
+        }
+        Ok(_) => ProcessingResult::Success(()),
     }
 }
