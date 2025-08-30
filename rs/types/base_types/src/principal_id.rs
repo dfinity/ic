@@ -4,7 +4,7 @@ use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
 use candid::types::principal::{Principal, PrincipalError};
 use candid::types::{Type, TypeId, TypeInner};
 use ic_crypto_sha2::Sha224;
-use ic_deterministic_heap_bytes::DeterministicHeapBytes;
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
 use std::{

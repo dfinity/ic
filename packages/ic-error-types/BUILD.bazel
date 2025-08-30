@@ -4,14 +4,14 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-deterministic-heap-bytes",
+    "//packages/ic-heap-bytes",
     "@crate_index//:serde",
     "@crate_index//:strum",
 ]
 
 MACRO_DEPENDENCIES = [
     "@crate_index//:strum_macros",
-    "//packages/ic-deterministic-heap-bytes-derive",
+    "//packages/ic-heap-bytes-derive",
 ]
 
 rust_library(

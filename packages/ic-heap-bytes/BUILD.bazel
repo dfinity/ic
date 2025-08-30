@@ -3,11 +3,11 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 rust_library(
-    name = "ic-deterministic-heap-bytes",
+    name = "ic-heap-bytes",
     srcs = glob(["src/**"]),
     proc_macro_deps = [
         # Keep sorted.
-        "//packages/ic-deterministic-heap-bytes-derive",
+        "//packages/ic-heap-bytes-derive",
         "@crate_index//:paste",
     ],
     version = "0.1.0",
@@ -20,6 +20,6 @@ rust_library(
 )
 
 rust_test(
-    name = "ic-deterministic-heap-bytes-test",
-    crate = ":ic-deterministic-heap-bytes",
+    name = "ic-heap-bytes-test",
+    crate = ":ic-heap-bytes",
 )

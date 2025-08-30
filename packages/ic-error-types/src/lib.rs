@@ -1,7 +1,7 @@
 //! A crate that groups user-facing and internal error types and codes produced
 //! by the Internet Computer.
 
-use ic_deterministic_heap_bytes::DeterministicHeapBytes;
+use ic_heap_bytes::DeterministicHeapBytes;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
 use str_traits::StrEllipsize;

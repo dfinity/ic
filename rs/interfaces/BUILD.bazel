@@ -4,8 +4,8 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-deterministic-heap-bytes",
     "//packages/ic-error-types",
+    "//packages/ic-heap-bytes",
     "//rs/crypto/interfaces/sig_verification",
     "//rs/interfaces/state_manager",
     "//rs/phantom_newtype",
@@ -32,7 +32,7 @@ DEV_DEPENDENCIES = [
 
 PROC_MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-deterministic-heap-bytes-derive",
+    "//packages/ic-heap-bytes-derive",
     "@crate_index//:strum_macros",
 ]
 

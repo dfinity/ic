@@ -8,7 +8,7 @@ use std::{
     sync::Arc,
 };
 
-use ic_deterministic_heap_bytes::DeterministicHeapBytes;
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_replicated_state::canister_state::execution_state::WasmMetadata;
 use ic_types::{methods::WasmMethod, DiskBytes, NumInstructions};

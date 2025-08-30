@@ -1,6 +1,6 @@
 use ic_base_types::{CanisterId, NumBytes};
-use ic_deterministic_heap_bytes::DeterministicHeapBytes;
 use ic_error_types::UserError;
+use ic_heap_bytes::{total_bytes, DeterministicHeapBytes, HeapBytes};
 use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_metrics::MetricsRegistry;
 use ic_query_stats::QueryStatsCollector;
@@ -22,7 +22,7 @@ mod tests;
 
 ////////////////////////////////////////////////////////////////////////
 /// Query Cache metrics.
-#[derive(DeterministicHeapBytes)]
+#[derive(HeapBytes)]
 pub(crate) struct QueryCacheMetrics {
     pub hits: IntCounter,
     pub hits_with_ignored_time: IntCounter,
@@ -364,7 +364,7 @@ impl EntryValue {
 
 ////////////////////////////////////////////////////////////////////////
 /// Replica Side Query Cache.
-#[derive(DeterministicHeapBytes)]
+#[derive(HeapBytes)]
 pub(crate) struct QueryCache {
     // We can't use `RwLock`, as the `LruCache::get()` requires mutable reference
     // to update the LRU.
@@ -416,9 +416,7 @@ impl QueryCache {
                 // The cache entry is no longer valid, remove it.
                 cache.pop(key);
                 // Update the `count_bytes` metric.
-                self.metrics
-                    .count_bytes
-                    .set(cache.deterministic_total_bytes() as i64);
+                self.metrics.count_bytes.set(total_bytes(&*cache) as i64);
             }
         }
         None
@@ -466,7 +464,7 @@ impl QueryCache {
             let d = evicted_value.elapsed_seconds(now);
             self.metrics.evicted_entries_duration.observe(d);
         }
-        let memory_bytes = cache.deterministic_total_bytes() as i64;
+        let memory_bytes = total_bytes(&*cache) as i64;
         self.metrics.count_bytes.set(memory_bytes);
         self.metrics.len.set(cache.len() as i64);
     }

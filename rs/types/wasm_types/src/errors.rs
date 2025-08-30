@@ -1,4 +1,4 @@
-use ic_deterministic_heap_bytes::DeterministicHeapBytes;
+use ic_heap_bytes::DeterministicHeapBytes;
 use serde::{Deserialize, Serialize};
 
 /// Create a link to this section of the Execution Errors documentation.

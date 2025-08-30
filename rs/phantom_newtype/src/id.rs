@@ -1,5 +1,5 @@
 use crate::displayer::{DisplayProxy, DisplayerOf};
-use ic_deterministic_heap_bytes::DeterministicHeapBytes;
+use ic_heap_bytes::DeterministicHeapBytes;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
 use std::fmt;

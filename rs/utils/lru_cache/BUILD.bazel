@@ -8,12 +8,12 @@ rust_library(
     crate_name = "ic_utils_lru_cache",
     proc_macro_deps = [
         # Keep sorted.
-        "//packages/ic-deterministic-heap-bytes-derive",
+        "//packages/ic-heap-bytes-derive",
     ],
     version = "0.1.0",
     deps = [
         # Keep sorted.
-        "//packages/ic-deterministic-heap-bytes",
+        "//packages/ic-heap-bytes",
         "//rs/types/types",
         "@crate_index//:lru",
     ],

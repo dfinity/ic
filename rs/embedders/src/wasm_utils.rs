@@ -4,7 +4,7 @@ use std::{
 };
 
 use ic_config::embedders::Config as EmbeddersConfig;
-use ic_deterministic_heap_bytes::DeterministicHeapBytes;
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_replicated_state::{
     canister_state::{execution_state::WasmMetadata, WASM_PAGE_SIZE_IN_BYTES},

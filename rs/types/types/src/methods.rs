@@ -3,9 +3,9 @@
 
 use crate::{messages::CallContextId, time::CoarseTime, Cycles};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_deterministic_heap_bytes::DeterministicHeapBytes;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::{canister_state_bits::v1 as pb, queues::v1::Cycles as PbCycles};
 use ic_protobuf::types::v1 as pb_types;

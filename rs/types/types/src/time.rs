@@ -5,9 +5,9 @@
 #[cfg(test)]
 mod tests;
 
-use ic_deterministic_heap_bytes::DeterministicHeapBytes;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT};
 #[cfg(test)]
 use proptest_derive::Arbitrary;

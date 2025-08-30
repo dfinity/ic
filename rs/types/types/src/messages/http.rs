@@ -12,7 +12,7 @@ use crate::{
 };
 use ic_base_types::{hash_of_map, CanisterId, CanisterIdError, NodeId, PrincipalId};
 use ic_crypto_tree_hash::{MixedHashTree, Path};
-use ic_deterministic_heap_bytes::DeterministicHeapBytes;
+use ic_heap_bytes::DeterministicHeapBytes;
 use maplit::btreemap;
 #[cfg(test)]
 use proptest_derive::Arbitrary;

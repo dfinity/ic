@@ -13,7 +13,7 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-ic-deterministic-heap-bytes = { path = "../ic-deterministic-heap-bytes" }
+ic-heap-bytes = { path = "../ic-heap-bytes" }
 serde = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }

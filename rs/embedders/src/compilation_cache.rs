@@ -9,7 +9,7 @@ use std::{
 use tempfile::TempDir;
 
 use crate::{OnDiskSerializedModule, SerializedModule};
-use ic_deterministic_heap_bytes::DeterministicHeapBytes;
+use ic_heap_bytes::HeapBytes;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_types::{DiskBytes, NumBytes};
 use ic_utils_lru_cache::LruCache;
@@ -30,7 +30,7 @@ const DEFAULT_MEMORY_CAPACITY: NumBytes = NumBytes::new(10 * GB);
 
 /// Stores the serialized modules of wasm code that has already been compiled so
 /// that it can be used again without recompiling.
-#[derive(DeterministicHeapBytes)]
+#[derive(HeapBytes)]
 pub struct CompilationCache {
     /// Directory holding all the temporary files. It will be deleted on
     /// drop.

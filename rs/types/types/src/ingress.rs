@@ -2,10 +2,10 @@
 
 use crate::artifact::IngressMessageId;
 use crate::{CanisterId, PrincipalId, Time, UserId};
-use ic_deterministic_heap_bytes::DeterministicHeapBytes;
 use ic_error_types::{ErrorCode, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::ingress::v1 as pb_ingress,

@@ -23,7 +23,7 @@
 
 use crate::{node_id_into_protobuf, node_id_try_from_option, QueryStatsEpoch};
 use ic_base_types::{CanisterId, NodeId, NumBytes};
-use ic_deterministic_heap_bytes::DeterministicHeapBytes;
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::registry::subnet::v1 as proto;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},

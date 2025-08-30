@@ -7,8 +7,8 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-deterministic-heap-bytes",
     "//packages/ic-error-types",
+    "//packages/ic-heap-bytes",
     "//rs/config",
     "//rs/cycles_account_manager",
     "//rs/interfaces",
@@ -53,7 +53,7 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-deterministic-heap-bytes-derive",
+    "//packages/ic-heap-bytes-derive",
 ]
 
 DEV_DEPENDENCIES = [

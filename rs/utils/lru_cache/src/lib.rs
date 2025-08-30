@@ -1,4 +1,4 @@
-use ic_deterministic_heap_bytes::DeterministicHeapBytes;
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_types::{DiskBytes, NumBytes};
 use std::hash::Hash;
 

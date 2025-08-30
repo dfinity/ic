@@ -1,7 +1,7 @@
 use candid::{CandidType, Nat};
-use ic_deterministic_heap_bytes::DeterministicHeapBytes;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::state::canister_state_bits::v1::CyclesAccount as pbCyclesAccount;
 use ic_protobuf::state::queues::v1::Cycles as PbCycles;
 use serde::{Deserialize, Serialize};

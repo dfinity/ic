@@ -1,7 +1,7 @@
 use super::{PrincipalId, PrincipalIdClass, PrincipalIdError, SubnetId};
 use candid::types::principal::PrincipalError;
 use candid::{CandidType, Principal};
-use ic_deterministic_heap_bytes::DeterministicHeapBytes;
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use serde::{de::Error, Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
