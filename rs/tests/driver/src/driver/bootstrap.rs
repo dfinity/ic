@@ -61,6 +61,7 @@ pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;
 
 const CONF_IMG_FNAME: &str = "config_disk.img";
 const BITCOIND_ADDR_PATH: &str = "bitcoind_addr";
+const DOGECOIND_ADDR_PATH: &str = "dogecoind_addr";
 const JAEGER_ADDR_PATH: &str = "jaeger_addr";
 const SOCKS_PROXY_PATH: &str = "socks_proxy";
 
@@ -80,6 +81,10 @@ pub fn init_ic(
 
     if let Some(bitcoind_addr) = &ic.bitcoind_addr {
         test_env.write_json_object(BITCOIND_ADDR_PATH, &bitcoind_addr)?;
+    }
+
+    if let Some(dogecoind_addr) = &ic.dogecoind_addr {
+        test_env.write_json_object(DOGECOIND_ADDR_PATH, &dogecoind_addr)?;
     }
 
     if let Some(jaeger_addr) = &ic.jaeger_addr {
@@ -383,6 +388,7 @@ fn create_config_disk_image(
         malicious_behavior: None,
         query_stats_epoch_length: None,
         bitcoind_addr: None,
+        dogecoind_addr: None,
         jaeger_addr: None,
         socks_proxy: None,
         hostname: None,
@@ -468,6 +474,11 @@ fn create_config_disk_image(
     // The bitcoin_addr specifies the local bitcoin node that the bitcoin adapter should connect to in the system test environment.
     if let Ok(bitcoind_addr) = test_env.read_json_object::<String, _>(BITCOIND_ADDR_PATH) {
         config.bitcoind_addr = Some(bitcoind_addr.clone());
+    }
+
+    // The bitcoin_addr specifies the local bitcoin node that the bitcoin adapter should connect to in the system test environment.
+    if let Ok(dogecoind_addr) = test_env.read_json_object::<String, _>(DOGECOIND_ADDR_PATH) {
+        config.dogecoind_addr = Some(dogecoind_addr.clone());
     }
 
     // The jaeger_addr specifies the local Jaeger node that the nodes should connect to in the system test environment.

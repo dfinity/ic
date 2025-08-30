@@ -42,6 +42,7 @@ pub struct InternetComputer {
     pub ssh_readonly_access_to_unassigned_nodes: Vec<String>,
     name: String,
     pub bitcoind_addr: Option<SocketAddr>,
+    pub dogecoind_addr: Option<SocketAddr>,
     pub jaeger_addr: Option<SocketAddr>,
     pub socks_proxy: Option<String>,
     use_specified_ids_allocation_range: bool,
@@ -193,6 +194,11 @@ impl InternetComputer {
 
     pub fn with_bitcoind_addr(mut self, bitcoind_addr: SocketAddr) -> Self {
         self.bitcoind_addr = Some(bitcoind_addr);
+        self
+    }
+
+    pub fn with_dogecoind_addr(mut self, dogecoind_addr: SocketAddr) -> Self {
+        self.dogecoind_addr = Some(dogecoind_addr);
         self
     }
 

@@ -1,14 +1,14 @@
-use bitcoin::dogecoin::Address as DogeAddress;
-use bitcoin::dogecoin::Network as DogeNetwork;
-use bitcoin::Address as BtcAddress;
-use bitcoin::Network as BtcNetwork;
 use bitcoin::{
-    address::{NetworkUnchecked, ParseError as BtcAddressParseError},
+    address::{Address as BtcAddress, NetworkUnchecked, ParseError as BtcAddressParseError},
     amount::ParseAmountError,
+    block::Header,
     consensus::{encode, Decodable},
-    dogecoin::{address::ParseError as DogeAddressParseError, Block as DogeBlock},
+    dogecoin::{
+        address::ParseError as DogeAddressParseError, Address as DogeAddress, Block as DogeBlock,
+        Network as DogeNetwork,
+    },
     hex::DisplayHex,
-    Amount, Block as BtcBlock, BlockHash, Transaction, Txid,
+    Amount, Block as BtcBlock, BlockHash, Network as BtcNetwork, Transaction, Txid,
 };
 use ic_config::adapters::AdaptersConfig;
 use std::collections::HashMap;
@@ -130,6 +130,7 @@ impl From<std::io::Error> for RpcError {
 }
 
 pub trait RpcClientType: Copy + std::fmt::Display {
+    type Header: Decodable;
     type Block: Decodable;
     type Address: serde::Serialize + std::fmt::Display;
     type AddressUnchecked: for<'a> serde::Deserialize<'a>;
@@ -152,6 +153,7 @@ pub trait RpcClientType: Copy + std::fmt::Display {
 }
 
 impl RpcClientType for BtcNetwork {
+    type Header = Header;
     type Block = BtcBlock;
     type Address = BtcAddress;
     type AddressUnchecked = BtcAddress<NetworkUnchecked>;
@@ -185,6 +187,7 @@ impl RpcClientType for BtcNetwork {
 }
 
 impl RpcClientType for DogeNetwork {
+    type Header = Header;
     type Block = DogeBlock;
     type Address = DogeAddress;
     type AddressUnchecked = DogeAddress<NetworkUnchecked>;
@@ -473,15 +476,6 @@ impl<T: RpcClientType> RpcClient<T> {
 
     pub fn send_raw_transaction<R: RawTx>(&self, tx: R) -> Result<Txid> {
         self.call("sendrawtransaction", &[tx.raw_hex().into()])
-    }
-
-    pub fn get_received_by_address(
-        &self,
-        address: &T::Address,
-        minconf: Option<u32>,
-    ) -> Result<Amount> {
-        let args = [address.to_string().into(), opt_into_json(minconf, null())?];
-        Ok(Amount::from_btc(self.call("getreceivedbyaddress", &args)?)?)
     }
 
     pub fn list_unspent(

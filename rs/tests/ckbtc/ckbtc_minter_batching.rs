@@ -18,7 +18,7 @@ use ic_tests_ckbtc::{
     ckbtc_setup, create_canister, install_bitcoin_canister, install_btc_checker, install_ledger,
     install_minter, subnet_app, subnet_sys,
     utils::{
-        generate_blocks, get_btc_address, get_btc_client, retrieve_btc, send_to_btc_address,
+        generate_blocks, get_btc_address, get_rpc_client, retrieve_btc, send_to_btc_address,
         wait_for_finalization_no_new_blocks, wait_for_mempool_change, wait_for_update_balance,
         BITCOIN_NETWORK_TRANSFER_FEE,
     },
@@ -47,7 +47,7 @@ pub fn test_batching(env: TestEnv) {
     let subnet_app = subnet_app(&env);
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
     let app_node = subnet_app.nodes().next().expect("No node in app subnet.");
-    let btc_rpc = get_btc_client(&env);
+    let btc_rpc = get_rpc_client::<bitcoin::Network>(&env);
 
     let default_btc_address = btc_rpc.get_address().unwrap();
     // Creating the 101 first block to reach the min confirmations to spend a coinbase utxo.
