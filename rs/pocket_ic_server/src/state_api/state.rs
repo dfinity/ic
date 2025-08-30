@@ -38,7 +38,7 @@ use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, NodeId, Princip
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     AutoProgressConfig, CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig,
-    HttpGatewayDetails, HttpGatewayInfo, Topology,
+    HttpGatewayDetails, HttpGatewayInfo, InstanceHttpGatewayConfig, Topology,
 };
 use pocket_ic::RejectResponse;
 use reqwest::Url;
@@ -560,7 +560,8 @@ impl ApiState {
         &self,
         create_instance_from_seed: F,
         auto_progress: Option<AutoProgressConfig>,
-    ) -> Result<(InstanceId, Topology), String>
+        instance_http_gateway_config: Option<InstanceHttpGatewayConfig>,
+    ) -> Result<(InstanceId, Topology, Option<HttpGatewayInfo>), String>
     where
         F: FnOnce(u64) -> Result<PocketIc, String> + std::marker::Send + 'static,
     {
@@ -584,7 +585,27 @@ impl ApiState {
                 .await
                 .unwrap();
         }
-        Ok((instance_id, topology))
+        let http_gateway_info =
+            if let Some(instance_http_gateway_config) = instance_http_gateway_config {
+                let http_gateway_config = HttpGatewayConfig {
+                    ip_addr: instance_http_gateway_config.ip_addr,
+                    port: instance_http_gateway_config.port,
+                    forward_to: HttpGatewayBackend::PocketIcInstance(instance_id),
+                    domains: instance_http_gateway_config.domains,
+                    https_config: instance_http_gateway_config.https_config,
+                };
+                let res = self.create_http_gateway(http_gateway_config).await;
+                match res {
+                    Ok(http_gateway_info) => Some(http_gateway_info),
+                    Err(e) => {
+                        self.delete_instance(instance_id).await;
+                        return Err(e);
+                    }
+                }
+            } else {
+                None
+            };
+        Ok((instance_id, topology, http_gateway_info))
     }
 
     pub async fn delete_instance(&self, instance_id: InstanceId) {
