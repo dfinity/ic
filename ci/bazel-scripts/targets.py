@@ -17,7 +17,7 @@
 # When the command is `check` the PULL_REQUEST_BAZEL_TARGETS file is checked for correctness.
 #
 # The script will print the bazel query to stderr which is useful for debugging:
-#   ci/bazel-scripts/targets.py --skip_long_tests --base=master.. test
+#   ci/bazel-scripts/targets.py --skip_long_tests --base=master test
 #   bazel query --keep_going '(((kind(".*_test", //...)) except attr(tags, long_test, //...)) + set(//pre-commit:shfmt-check //pre-commit:ruff-lint)) except attr(tags, manual, //...)'
 
 import argparse
@@ -30,6 +30,17 @@ from typing import Set
 # The file specifying which bazel targets to test explicitly on PRs based on which file modifications
 # regardless of whether those targets explicitly depend on those files or whether they're tagged as `long_test`.
 PULL_REQUEST_BAZEL_TARGETS = "PULL_REQUEST_BAZEL_TARGETS"
+
+# Targets will always be excluded if they have any of the following tags:
+EXCLUDED_TAGS = [
+    "manual",
+    "system_test_large",
+    "system_test_benchmark",
+    "fuzz_test",
+    "fi_tests_nightly",
+    "nns_tests_nightly",
+    "pocketic_tests_nightly",
+]
 
 # Return all bazel targets (//...) sans the long_tests (if --skip_long_tests is specified)
 # in case any file is modified matching any of the following globs:
@@ -158,8 +169,9 @@ def targets(command: str, skip_long_tests: bool, base: str | None, head: str | N
         else diff_only_query(command, base, "HEAD" if head is None else head, skip_long_tests)
     )
 
-    # Finally, exclude targets tagged with 'manual' to avoid running manual tests:
-    query = f"({query}) except attr(tags, manual, //...)"
+    # Finally, exclude targets that have any of the excluded tags:
+    excluded_tags_regex = "|".join(EXCLUDED_TAGS)
+    query = f"({query}) except attr(tags, '{excluded_tags_regex}', //...)"
 
     log(f"bazel query --keep_going '{query}'")
     result = subprocess.run(["bazel", "query", "--keep_going", query], stderr=subprocess.PIPE, text=True)
@@ -177,7 +189,7 @@ def check():
     * can be read and parsed.
     * each pattern matches at least one file tracked by git.
     * each pattern has at least one explicit target.
-    * each target is valid and when queried results in at least one target after excluding all manual targets.
+    * each target is valid and when queried results in at least one target after excluding all excluded targets.
     Otherwise print all errors to stderr and exit erroneously with 1.
     """
     try:
@@ -206,7 +218,8 @@ def check():
             errors.append(f"Pattern '{pattern}' has no explicit targets!")
 
         for target in explicit_targets_for_pattern:
-            query = f"({target}) except attr(tags, manual, //...)"
+            excluded_tags_regex = "|".join(EXCLUDED_TAGS)
+            query = f"({target}) except attr(tags, '{excluded_tags_regex}', //...)"
             result = subprocess.run(["bazel", "query", query], capture_output=True, text=True)
             if result.returncode != 0:
                 indented_error_msg = f"{indentation}" + f"\n{indentation}".join(result.stderr.strip().splitlines())
