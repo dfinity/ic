@@ -288,6 +288,7 @@ impl CanisterManagerBuilder {
             ingress_history_writer,
             Arc::new(TestPageAllocatorFileDescriptorImpl),
             FlagStatus::Disabled,
+            FlagStatus::Disabled,
         )
     }
 }
