@@ -17,6 +17,7 @@ mod vetkd;
 
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::PublicKeyStore;
+use crate::secret_key_store::memory_secret_key_store::InMemorySecretKeyStore;
 use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspSecretKey;
@@ -90,7 +91,7 @@ pub struct LocalCspVault<
 }
 
 pub type ProdLocalCspVault =
-    LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicKeyStore>;
+    LocalCspVault<OsRng, ProtoSecretKeyStore, InMemorySecretKeyStore, ProtoPublicKeyStore>;
 
 impl ProdLocalCspVault {
     /// Creates a production-grade local CSP vault.
@@ -102,14 +103,13 @@ impl ProdLocalCspVault {
     /// do not use distinct files.
     pub fn new(
         node_secret_key_store: ProtoSecretKeyStore,
-        canister_secret_key_store: ProtoSecretKeyStore,
+        canister_secret_key_store: InMemorySecretKeyStore,
         public_key_store: ProtoPublicKeyStore,
         metrics: Arc<CryptoMetrics>,
         logger: ReplicaLogger,
     ) -> Self {
         ensure_unique_paths(&[
             node_secret_key_store.proto_file_path(),
-            canister_secret_key_store.proto_file_path(),
             public_key_store.proto_file_path(),
         ]);
         ProdLocalCspVault::builder(

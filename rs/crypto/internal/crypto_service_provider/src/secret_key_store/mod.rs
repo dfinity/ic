@@ -7,6 +7,7 @@ pub use scope::Scope;
 use std::fmt;
 
 // Implementations
+pub mod memory_secret_key_store;
 pub mod proto_store;
 
 #[cfg(test)]
