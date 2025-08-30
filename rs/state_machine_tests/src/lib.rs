@@ -67,6 +67,7 @@ use ic_management_canister_types_private::{
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use ic_protobuf::{
     registry::{
         crypto::v1::{ChainKeyEnabledSubnetList, PublicKey as PublicKeyProto, X509PublicKeyCert},
@@ -93,7 +94,7 @@ use ic_registry_keys::{
     make_canister_ranges_key, make_catch_up_package_contents_key,
     make_chain_key_enabled_subnet_list_key, make_crypto_node_key, make_crypto_tls_cert_key,
     make_node_record_key, make_provisional_whitelist_record_key, make_replica_version_key,
-    ROOT_SUBNET_ID_KEY,
+    NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, INITIAL_REGISTRY_VERSION};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -289,6 +290,17 @@ pub fn add_global_registry_records(
             )
             .unwrap();
     }
+
+    // node rewards table
+    registry_data_provider
+        .add(
+            NODE_REWARDS_TABLE_KEY,
+            registry_version,
+            Some(NodeRewardsTable {
+                table: BTreeMap::new(),
+            }),
+        )
+        .unwrap();
 }
 
 /// Adds initial registry records to the registry managed by the registry data provider:

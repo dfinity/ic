@@ -694,7 +694,7 @@ fn test_get_historical_reward_periods() {
 
     let providers: Vec<Principal> = providers.into_iter().map(|p| p.0).collect();
 
-    let got = NodeRewardsCanister::get_historical_reward_periods();
+    let got = NodeRewardsCanister::get_historical_reward_periods().unwrap();
     for (from, to) in reward_periods {
         let expected = HistoricalRewardPeriod {
             from_nanos: from.get(),

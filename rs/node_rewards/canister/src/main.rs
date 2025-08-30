@@ -1,3 +1,4 @@
+use ic_cdk::api::in_replicated_execution;
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -8,7 +9,7 @@ use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
-    GetHistoricalRewardPeriods, GetNodeProviderRewardsCalculationRequest,
+    GetHistoricalRewardPeriodsResponse, GetNodeProviderRewardsCalculationRequest,
     GetNodeProviderRewardsCalculationResponse,
 };
 use ic_node_rewards_canister_api::providers_rewards::{
@@ -123,9 +124,11 @@ async fn get_node_providers_rewards(
 fn get_node_provider_rewards_calculation(
     request: GetNodeProviderRewardsCalculationRequest,
 ) -> GetNodeProviderRewardsCalculationResponse {
-    if !request.historical {
-        // TODO: Add rate limiting and restrictions on reward period before enabling it.
-        return Err("Not yet active.".to_string());
+    if in_replicated_execution() {
+        return Err(
+            "Replicated execution of this method is not allowed. Use a non-replicated query call."
+                .to_string(),
+        );
     }
 
     NodeRewardsCanister::get_node_provider_rewards_calculation::<RegistryStoreStableMemoryBorrower>(
@@ -134,7 +137,14 @@ fn get_node_provider_rewards_calculation(
 }
 
 #[query]
-fn get_historical_reward_periods() -> GetHistoricalRewardPeriods {
+fn get_historical_reward_periods() -> GetHistoricalRewardPeriodsResponse {
+    if in_replicated_execution() {
+        return Err(
+            "Replicated execution of this method is not allowed. Use a non-replicated query call."
+                .to_string(),
+        );
+    }
+
     NodeRewardsCanister::get_historical_reward_periods()
 }
 
