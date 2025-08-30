@@ -405,6 +405,7 @@ fn test_load_shedding_update_call() {
 #[rstest]
 #[case::v2_endpoint(Call::V2)]
 #[case::v3_endpoint(Call::V3)]
+#[case::v4_endpoint(Call::V4)]
 fn test_load_shedding_update_call_when_ingress_pool_is_full(#[case] endpoint: Call) {
     use std::sync::RwLock;
 
@@ -442,6 +443,7 @@ fn test_load_shedding_update_call_when_ingress_pool_is_full(#[case] endpoint: Ca
 #[rstest]
 #[case::v2_endpoint(Call::V2)]
 #[case::v3_endpoint(Call::V3)]
+#[case::v4_endpoint(Call::V4)]
 fn test_load_shedding_update_call_when_ingress_channel_is_full(#[case] endpoint: Call) {
     let rt = Runtime::new().unwrap();
 
