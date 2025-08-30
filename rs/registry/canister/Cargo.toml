@@ -102,6 +102,8 @@ itertools = { workspace = true }
 registry-canister-protobuf-generator = { path = "./protobuf_generator" }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+pocket-ic = { path = "../../../packages/pocket-ic" }
+ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests"}
 
 [features]
 test = []
