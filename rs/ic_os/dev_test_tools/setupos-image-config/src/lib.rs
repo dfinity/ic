@@ -49,7 +49,7 @@ pub struct DeploymentConfig {
     pub nns_urls: Option<Url>,
 
     #[arg(long, allow_hyphen_values = true)]
-    pub nns_public_key: Option<String>,
+    pub nns_public_key_override: Option<String>,
 
     #[arg(long)]
     pub memory_gb: Option<u32>,
