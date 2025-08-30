@@ -1564,14 +1564,16 @@ fn delete_canister_consumed_cycles_observed() {
 
 #[test]
 fn deposit_cycles_succeeds_with_enough_cycles() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_u128 << 62)
+        .build();
 
-    let canister_id = test.create_canister(*INITIAL_CYCLES);
+    let canister_id = test.universal_canister().unwrap();
     let deposit_canister = test.universal_canister().unwrap();
 
     let cycles_balance_before = test.canister_state(canister_id).system_state.balance();
 
-    let cycles_to_deposit = Cycles::new(100);
+    let cycles_to_deposit = Cycles::new(1_u128 << 61);
     let deposit_cycles_args = CanisterIdRecord::from(canister_id).encode();
     let payload = wasm()
         .call_with_cycles(
@@ -1589,6 +1591,9 @@ fn deposit_cycles_succeeds_with_enough_cycles() {
     assert_eq!(
         test.canister_state(canister_id).system_state.balance(),
         cycles_balance_before + cycles_to_deposit
+    );
+    assert!(
+        test.canister_state(deposit_canister).system_state.balance() < Cycles::from(1_u128 << 61)
     );
 }
 
