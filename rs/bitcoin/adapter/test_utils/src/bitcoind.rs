@@ -32,8 +32,9 @@ use tokio::{
     net::{TcpListener, TcpStream},
 };
 
-use crate::rpc_client::{Auth, RpcApi, RpcClient, RpcError};
+use crate::rpc_client::{Auth, RpcClient, RpcClientType, RpcError};
 
+// TODO(XC-471): Fix this for Dogecoin.
 const MINIMUM_PROTOCOL_VERSION: u32 = 70001;
 
 async fn write_network_message<Block: BlockLike>(
@@ -119,6 +120,7 @@ async fn handle_getheaders<Block: BlockLike>(
         }
         found.unwrap_or_else(|| {
             // If no locators are found, use the genesis hash.
+            // TODO(XC-471): fix this for Dogecoin.
             "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"
                 .parse()
                 .unwrap()
@@ -271,15 +273,15 @@ where
 const LOCAL_IP: net::Ipv4Addr = net::Ipv4Addr::new(127, 0, 0, 1);
 
 /// Bitcoin daemon.
-pub struct BitcoinD {
+pub struct Daemon<T: RpcClientType> {
     /// RPC client that connects to this Bitcoin daemon.
-    pub rpc_client: RpcClient,
+    pub rpc_client: RpcClient<T>,
     _work_dir: WorkDir,
     p2p_socket: Option<net::SocketAddrV4>,
     process: process::Child,
 }
 
-impl Drop for BitcoinD {
+impl<T: RpcClientType> Drop for Daemon<T> {
     fn drop(&mut self) {
         let _ = self.stop();
         let _ = self.process.kill();
@@ -301,7 +303,7 @@ impl WorkDir {
     }
 }
 
-/// Configuration for [BitcoinD].
+/// Configuration for [Daemon].
 pub struct Conf<'a> {
     /// [Auth] setting of the daemon. If not specified, an auto-generated cookie file will be used.
     pub auth: Option<Auth>,
@@ -328,14 +330,10 @@ impl<'a> Default for Conf<'a> {
     }
 }
 
-impl BitcoinD {
+impl<T: RpcClientType> Daemon<T> {
     /// Create a new Bitcoin daemon by running the executable at the given path, network and
     /// configration.
-    pub fn new(
-        bitcoind_path: &str,
-        network: bitcoin::Network,
-        conf: Conf,
-    ) -> Result<BitcoinD, RpcError> {
+    pub fn new(bitcoind_path: &str, network: T, conf: Conf) -> Result<Daemon<T>, RpcError> {
         let work_dir = match conf.work_dir {
             Some(dir) => {
                 fs::create_dir_all(dir.clone())?;
@@ -374,6 +372,7 @@ impl BitcoinD {
         };
 
         let mut process = process::Command::new(bitcoind_path)
+            .arg("-printtoconsole")
             .arg(format!("-conf={}", conf_path.display()))
             .arg(format!("-datadir={}", work_dir.path().display()))
             .arg(format!("-rpcport={}", rpc_port))

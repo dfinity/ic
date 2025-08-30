@@ -24,8 +24,8 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat};
 use canister_test::Canister;
 use ic_btc_adapter_test_utils::{
-    bitcoin::{Address, Amount, Txid},
-    rpc_client::{Auth, RpcApi, RpcClient},
+    bitcoin::{Address, Amount, Network as BtcNetwork, Txid},
+    rpc_client::Auth,
 };
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
@@ -46,6 +46,8 @@ use icrc_ledger_types::{
 };
 use slog::{debug, info, Logger};
 use std::time::{Duration, Instant};
+
+pub type RpcClient = ic_btc_adapter_test_utils::rpc_client::RpcClient<BtcNetwork>;
 
 pub const UNIVERSAL_VM_NAME: &str = "btc-node";
 
