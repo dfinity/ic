@@ -228,7 +228,9 @@ system_test(
         "CKBTC_UVM_CONFIG_PATH": "$(rootpath //rs/tests:ckbtc_uvm_config_image)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
     },
-    tags = [],
+    tags = [
+        "long_test",  # this test has a P90 duration of over 6 minutes for the week starting on 2025-08-21.
+    ],
     runtime_deps =
         MESSAGE_CANISTER_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS + [
