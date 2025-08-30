@@ -262,38 +262,64 @@ impl Firewall {
         // in the registry inclusive.
         let registry_versions = self.get_registry_versions(registry_version);
 
-        // Get the IPs of all nodes on system subnets
-        let system_subnet_node_ips: BTreeSet<IpAddr> = registry_versions
-            .into_iter()
-            .flat_map(|registry_version| {
-                self.registry
-                    .get_system_subnet_nodes_ip_addresses(registry_version)
-                    .inspect_err(|err| {
-                        warn!(
-                        every_n_seconds => 30,
-                        self.logger,
-                        "Failed to get the IPs of system subnet nodes in the registry: {}", err)
-                    })
-                    .unwrap_or_default()
-            })
-            .collect();
+        // Depending on whether the node is a system or app API boundary node, get the IPs of all
+        // system subnet or application subnet nodes
+        let node_ips: BTreeSet<IpAddr> = match self
+            .registry
+            .is_system_api_boundary_node(self.node_id, registry_version)
+        {
+            Ok(true) => registry_versions
+                .into_iter()
+                .flat_map(|registry_version| {
+                    self.registry
+                        .get_system_subnet_nodes_ip_addresses(registry_version)
+                        .inspect_err(|err| {
+                            warn!(
+                            every_n_seconds => 30,
+                            self.logger,
+                            "Failed to get the IPs of system subnet nodes in the registry: {}", err)
+                        })
+                        .unwrap_or_default()
+                })
+                .collect(),
+            Ok(false) => registry_versions
+                .into_iter()
+                .flat_map(|registry_version| {
+                    self.registry
+                        .get_system_subnet_nodes_ip_addresses(registry_version)
+                        .inspect_err(|err| {
+                            warn!(
+                            every_n_seconds => 30,
+                            self.logger,
+                            "Failed to get the IPs of app subnet nodes in the registry: {}", err)
+                        })
+                        .unwrap_or_default()
+                })
+                .collect(),
+            Err(err) => {
+                warn!(
+                    every_n_seconds => 30,
+                    self.logger,
+                    "Failed to determine if node is a system or app API boundary node: {}", err);
+                BTreeSet::new()
+            }
+        };
 
         // Then split it to v4 and v6 separately
-        let (system_subnet_node_ipv4s, system_subnet_node_ipv6s) =
-            split_ips_by_address_family(&system_subnet_node_ips);
+        let (node_ipv4s, node_ipv6s) = split_ips_by_address_family(&node_ips);
         info!(
             self.logger,
-            "Whitelisting system subnet node IP addresses ({} v4 and {} v6) for the SOCKS proxy on the firewall",
-            system_subnet_node_ipv4s.len(),
-            system_subnet_node_ipv6s.len()
+            "Whitelisting node IP addresses ({} v4 and {} v6) for the SOCKS proxy on the firewall",
+            node_ipv4s.len(),
+            node_ipv6s.len()
         );
 
         FirewallRule {
-            ipv4_prefixes: system_subnet_node_ipv4s,
-            ipv6_prefixes: system_subnet_node_ipv6s,
+            ipv4_prefixes: node_ipv4s,
+            ipv6_prefixes: node_ipv6s,
             ports: vec![SOCKS_PROXY_PORT.into()],
             action: FirewallAction::Allow as i32,
-            comment: "system subnet nodes for SOCKS proxy".to_string(),
+            comment: "nodes for SOCKS proxy".to_string(),
             user: None,
             direction: Some(FirewallRuleDirection::Inbound as i32),
         }

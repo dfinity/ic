@@ -239,6 +239,16 @@ impl RegistryHelper {
             .map_err(OrchestratorError::ReplicaVersionParseError)
     }
 
+    pub(crate) fn is_system_api_boundary_node(
+        &self,
+        node_id: NodeId,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<bool> {
+        self.registry_client
+            .is_system_api_boundary_node(node_id, version)
+            .map_err(OrchestratorError::RegistryClientError)
+    }
+
     /// Return the DC ID where the current replica is located.
     pub fn dc_id(&self) -> Option<String> {
         let registry_version = self.get_latest_version();
