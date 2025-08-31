@@ -162,7 +162,7 @@ pub fn setup(env: TestEnv) {
         .unwrap();
 
     let server_ipv6 = get_upstreams_uvm_ipv6(&env);
-    spoof_node_dns(&node, &server_ipv6);
+    spoof_node_dns(&node, &server_ipv6).unwrap();
 }
 
 pub fn test(env: TestEnv) {

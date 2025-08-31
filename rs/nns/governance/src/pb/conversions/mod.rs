@@ -789,6 +789,7 @@ impl From<pb::manage_neuron::Split> for pb_api::manage_neuron::Split {
     fn from(item: pb::manage_neuron::Split) -> Self {
         Self {
             amount_e8s: item.amount_e8s,
+            memo: item.memo,
         }
     }
 }
@@ -796,6 +797,7 @@ impl From<pb_api::manage_neuron::Split> for pb::manage_neuron::Split {
     fn from(item: pb_api::manage_neuron::Split) -> Self {
         Self {
             amount_e8s: item.amount_e8s,
+            memo: item.memo,
         }
     }
 }

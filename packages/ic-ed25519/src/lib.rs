@@ -13,7 +13,7 @@ use hex_literal::hex;
 use thiserror::Error;
 use zeroize::ZeroizeOnDrop;
 
-pub use candid::Principal as CanisterId;
+pub use ic_principal::Principal as CanisterId;
 
 /// An error if a private key cannot be decoded
 #[derive(Clone, Debug, Error)]

@@ -9,7 +9,7 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::ExecutionServices;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_interfaces::{
-    execution_environment::{IngressHistoryReader, QueryExecutionError},
+    execution_environment::{IngressHistoryReader, QueryExecutionError, QueryExecutionInput},
     messaging::MessageRouting,
 };
 use ic_messaging::MessageRoutingImpl;
@@ -22,8 +22,7 @@ use ic_protobuf::types::v1::PrincipalId as PrincipalIdIdProto;
 use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_keys::{
-    make_canister_ranges_key, make_provisional_whitelist_record_key, make_routing_table_record_key,
-    ROOT_SUBNET_ID_KEY,
+    make_canister_ranges_key, make_provisional_whitelist_record_key, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -137,14 +136,6 @@ fn get_registry(
             &make_canister_ranges_key(CanisterId::from_u64(0)),
             registry_version,
             Some(pb_routing_table.clone()),
-        )
-        .unwrap();
-    // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
-    data_provider
-        .add(
-            &make_routing_table_record_key(),
-            registry_version,
-            Some(pb_routing_table),
         )
         .unwrap();
     let pb_whitelist = PbProvisionalWhitelist::from(ProvisionalWhitelist::All);
@@ -299,7 +290,16 @@ pub async fn run_drun(uo: DrunOptions) -> Result<(), String> {
                     &secret_key,
                     replica_config.subnet_id,
                 );
-                let query_result = match query_handler.clone().oneshot((q, None)).await.unwrap() {
+                let query_execution_input = QueryExecutionInput {
+                    query: q,
+                    certificate_delegation_with_metadata: None,
+                };
+                let query_result = match query_handler
+                    .clone()
+                    .oneshot(query_execution_input)
+                    .await
+                    .unwrap()
+                {
                     Ok((result, _)) => result,
                     Err(QueryExecutionError::CertifiedStateUnavailable) => {
                         panic!("Certified state unavailable for query call.")

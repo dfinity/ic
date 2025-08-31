@@ -113,7 +113,7 @@ jobs:
       image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
         -e NODE_NAME
-    timeout-minutes: 5
+    timeout-minutes: 10
     if: ${{ github.event_name != 'merge_group' }}
     env:
       CI_EVENT_NAME: ${{ github.event_name }}
