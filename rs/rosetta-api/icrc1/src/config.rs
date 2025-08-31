@@ -299,7 +299,7 @@ mod tests {
             port: None,
             port_file: None,
             store_type: StoreType::InMemory,
-            store_file: None,
+            store_file: PathBuf::from("/test/db.sqlite"),
             network_type: None,
             network_url: None,
             log_level: Level::INFO,
