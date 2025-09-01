@@ -8611,6 +8611,8 @@ fn ic0_msg_cycles_refunded_u64() {
         }
         WasmResult::Reject(err) => unreachable!("{:?}", err),
     }
+    canister_balance_is_roughly(&test, caller_id, 2 * (1 << 64));
+    canister_balance_is_roughly(&test, callee_id, 2 * (1 << 64));
 }
 
 // Test the result that is close to 2^64.
@@ -9043,7 +9045,7 @@ fn legacy_cycles_balance_traps_if_balance_too_large() {
     match res {
         WasmResult::Reply(data) => {
             let balance = u128::from_le_bytes(data.try_into().unwrap());
-            assert!(balance > 1_u128 << 64);
+            balance_is_roughly(balance, 1_u128 << 65);
         }
         WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
     };
@@ -9073,7 +9075,7 @@ fn get_balance_twice() {
             let balance1 = u128::from_le_bytes(data[0..16].try_into().unwrap());
             let balance2 = u128::from_le_bytes(data[16..32].try_into().unwrap());
             assert_eq!(balance1, balance2);
-            assert!(balance1 > 1_u128 << 60);
+            balance_is_roughly(balance1, 1_u128 << 62);
         }
         WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
     };
@@ -9277,7 +9279,7 @@ fn relay_before_accept_traps() {
         )
         .msg_cycles_accept(1_i64 << 60)
         .build();
-    let call_args = CallArgs::default().other_side(relay_before_accept);
+    let call_args = CallArgs::default().other_side(relay_before_accept).on_reject(wasm().reject_message().reject().build());
     let res = test
         .ingress(
             canister_1,
@@ -9290,7 +9292,7 @@ fn relay_before_accept_traps() {
     match res {
         WasmResult::Reply(data) => panic!("Unexpected reply: {:?}", data),
         WasmResult::Reject(msg) => {
-            println!("msg: {}", msg);
+            assert!(msg.contains("out of cycles"));
         }
     };
     canister_balance_is_roughly(&test, canister_1, 1_u128 << 62);

@@ -37,7 +37,7 @@ use ic_types::{
     },
     nominal_cycles::NominalCycles,
     time::UNIX_EPOCH,
-    CanisterId, CountBytes, Cycles, PrincipalId, RegistryVersion, UserId,
+    CanisterId, CountBytes, Cycles, PrincipalId, RegistryVersion,
 };
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{call_args, wasm, CallArgs, UNIVERSAL_CANISTER_WASM};
@@ -2272,8 +2272,6 @@ fn inspect_method_name() {
 fn inspect_caller() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister = test.universal_canister().unwrap();
-    let user_id = UserId::from(PrincipalId::new_anonymous());
-    test.set_user_id(user_id);
     test.ingress(
         canister,
         "update",
@@ -2281,7 +2279,7 @@ fn inspect_caller() {
             .set_inspect_message(
                 wasm()
                     .caller()
-                    .trap_if_eq(user_id.get(), "no no no")
+                    .trap_if_eq(user_test_id(0).get(), "no no no")
                     .accept_message()
                     .build(),
             )
@@ -2289,11 +2287,12 @@ fn inspect_caller() {
             .build(),
     )
     .unwrap();
+    test.set_user_id(user_test_id(0));
     let err = test
         .should_accept_ingress_message(canister, "update", vec![])
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
-    test.set_user_id(user_test_id(0));
+    test.set_user_id(user_test_id(1));
     test.should_accept_ingress_message(canister, "", vec![])
         .unwrap();
 }
