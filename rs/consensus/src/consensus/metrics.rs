@@ -1,3 +1,7 @@
+use ic_consensus_idkg::{
+    metrics::{key_id_label, CounterPerMasterPublicKeyId, IDkgPayloadStats, KEY_ID_LABEL},
+    utils::CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
+};
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
 use ic_metrics::{
@@ -6,21 +10,13 @@ use ic_metrics::{
 };
 use ic_types::{
     batch::BatchPayload,
-    consensus::{
-        idkg::{CompletedReshareRequest, CompletedSignature, IDkgPayload, KeyTranscriptCreation},
-        Block, BlockPayload, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank,
-    },
+    consensus::{Block, BlockPayload, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank},
     CountBytes, Height, Time,
 };
 use prometheus::{
     GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
 };
 use std::sync::RwLock;
-
-use crate::idkg::metrics::{
-    count_by_master_public_key_id, expected_keys, key_id_label, CounterPerMasterPublicKeyId,
-    KEY_ID_LABEL,
-};
 
 // For certain metrics, we record metrics based on block's rank.
 // Since we can only record limited number of them, the follow is
@@ -118,7 +114,7 @@ pub struct BlockStats {
     pub block_height: u64,
     pub block_time: Time,
     pub block_context_certified_height: u64,
-    pub idkg_stats: Option<IDkgStats>,
+    pub idkg_stats: Option<IDkgPayloadStats>,
 }
 
 impl From<&Block> for BlockStats {
@@ -128,7 +124,7 @@ impl From<&Block> for BlockStats {
             block_height: block.height().get(),
             block_time: block.context.time,
             block_context_certified_height: block.context.certified_height.get(),
-            idkg_stats: block.payload.as_ref().as_idkg().map(IDkgStats::from),
+            idkg_stats: block.payload.as_ref().as_idkg().map(IDkgPayloadStats::from),
         }
     }
 }
@@ -158,67 +154,7 @@ impl BatchStats {
         self.xnet_bytes_delivered += payload.xnet.size_bytes();
         self.ingress_ids
             .extend(payload.ingress.message_ids().cloned());
-    }
-}
-
-// IDkg payload stats
-pub struct IDkgStats {
-    pub signature_agreements: usize,
-    pub key_transcripts_created: CounterPerMasterPublicKeyId,
-    pub available_pre_signatures: CounterPerMasterPublicKeyId,
-    pub pre_signatures_in_creation: CounterPerMasterPublicKeyId,
-    pub ongoing_xnet_reshares: CounterPerMasterPublicKeyId,
-    pub xnet_reshare_agreements: CounterPerMasterPublicKeyId,
-}
-
-impl From<&IDkgPayload> for IDkgStats {
-    fn from(payload: &IDkgPayload) -> Self {
-        let mut key_transcripts_created = CounterPerMasterPublicKeyId::new();
-
-        for (key_id, key_transcript) in &payload.key_transcripts {
-            if let KeyTranscriptCreation::Created(transcript) = &key_transcript.next_in_creation {
-                let transcript_id = &transcript.as_ref().transcript_id;
-                let current_transcript_id = key_transcript
-                    .current
-                    .as_ref()
-                    .map(|transcript| &transcript.as_ref().transcript_id);
-                if Some(transcript_id) != current_transcript_id
-                    && payload.idkg_transcripts.contains_key(transcript_id)
-                {
-                    *key_transcripts_created.entry(key_id.clone()).or_default() += 1;
-                }
-            }
-        }
-
-        let keys = expected_keys(payload);
-
-        Self {
-            key_transcripts_created,
-            signature_agreements: payload
-                .signature_agreements
-                .values()
-                .filter(|status| matches!(status, CompletedSignature::Unreported(_)))
-                .count(),
-            available_pre_signatures: count_by_master_public_key_id(
-                payload.available_pre_signatures.values(),
-                &keys,
-            ),
-            pre_signatures_in_creation: count_by_master_public_key_id(
-                payload.pre_signatures_in_creation.values(),
-                &keys,
-            ),
-            ongoing_xnet_reshares: count_by_master_public_key_id(
-                payload.ongoing_xnet_reshares.keys(),
-                &keys,
-            ),
-            xnet_reshare_agreements: count_by_master_public_key_id(
-                payload
-                    .xnet_reshare_agreements
-                    .iter()
-                    .filter(|(_, status)| matches!(status, CompletedReshareRequest::Unreported(_))),
-                &keys,
-            ),
-        }
+        self.canister_http.payload_bytes = payload.canister_http.len();
     }
 }
 
@@ -238,10 +174,12 @@ pub struct FinalizerMetrics {
     pub idkg_pre_signatures_in_creation: IntGaugeVec,
     pub idkg_ongoing_xnet_reshares: IntGaugeVec,
     pub idkg_xnet_reshare_agreements: IntCounterVec,
+    pub idkg_transcript_resolution_errors: IntCounter,
     // canister http payload metrics
-    pub canister_http_success_delivered: IntCounter,
+    pub canister_http_success_delivered: IntCounterVec,
     pub canister_http_timeouts_delivered: IntCounter,
     pub canister_http_divergences_delivered: IntCounter,
+    pub canister_http_payload_bytes_delivered: Histogram,
 }
 
 impl FinalizerMetrics {
@@ -320,10 +258,14 @@ impl FinalizerMetrics {
                 "Total number of IDKG reshare agreements created",
                 &[KEY_ID_LABEL],
             ),
+            idkg_transcript_resolution_errors: metrics_registry.error_counter(
+                CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
+            ),
             // canister http payload metrics
-            canister_http_success_delivered: metrics_registry.int_counter(
+            canister_http_success_delivered: metrics_registry.int_counter_vec(
                 "canister_http_success_delivered",
                 "Total number of canister http messages successfully delivered",
+                &["REPLICATION"],
             ),
             canister_http_timeouts_delivered: metrics_registry.int_counter(
                 "canister_http_timeouts_delivered",
@@ -332,6 +274,13 @@ impl FinalizerMetrics {
             canister_http_divergences_delivered: metrics_registry.int_counter(
                 "canister_http_divergences_delivered",
                 "Total number of canister http messages delivered as divergences",
+            ),
+            canister_http_payload_bytes_delivered: metrics_registry.histogram(
+                "canister_http_payload_bytes_delivered", 
+                "Total number of bytes in the canister http payload",
+                // This will create 16 buckets starting from 0, 100, 200, 500, 1000  
+                // up to 5 * 10^6 ~= 5MB
+                decimal_buckets_with_zero(2, 6),
             ),
         }
     }
@@ -349,11 +298,17 @@ impl FinalizerMetrics {
             block_stats.block_height as i64 - block_stats.block_context_certified_height as i64,
         );
         self.canister_http_success_delivered
+            .with_label_values(&["fully_replicated"])
             .inc_by(batch_stats.canister_http.responses as u64);
+        self.canister_http_success_delivered
+            .with_label_values(&["non_replicated"])
+            .inc_by(batch_stats.canister_http.single_signature_responses as u64);
         self.canister_http_timeouts_delivered
             .inc_by(batch_stats.canister_http.timeouts as u64);
         self.canister_http_divergences_delivered
             .inc_by(batch_stats.canister_http.divergence_responses as u64);
+        self.canister_http_payload_bytes_delivered
+            .observe(batch_stats.canister_http.payload_bytes as f64);
 
         if let Some(idkg) = &block_stats.idkg_stats {
             let set = |metric: &IntGaugeVec, counts: &CounterPerMasterPublicKeyId| {
@@ -394,6 +349,8 @@ impl FinalizerMetrics {
                 &self.idkg_xnet_reshare_agreements,
                 &idkg.xnet_reshare_agreements,
             );
+            self.idkg_transcript_resolution_errors
+                .inc_by(idkg.transcript_resolution_errors as u64);
         }
     }
 }

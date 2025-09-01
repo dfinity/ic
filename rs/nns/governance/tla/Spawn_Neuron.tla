@@ -63,7 +63,7 @@ process (Spawn_Neuron \in Spawn_Neuron_Process_Ids)
                     await child_neuron_id \notin locks;
 
                     neuron_id_by_account := child_account_id :> child_neuron_id @@ neuron_id_by_account;
-                    neuron := child_neuron_id :> [ cached_stake |-> 0, account |-> child_account_id, fees |-> 0, maturity |-> maturity_to_spawn, state |-> SPAWNING ]
+                    neuron := child_neuron_id :> [ cached_stake |-> 0, account |-> child_account_id, fees |-> 0, maturity |-> maturity_to_spawn, state |-> SPAWNING, maturity_disbursements_in_progress |-> <<>> ]
                            @@ [ neuron EXCEPT ![parent_neuron_id].maturity = @ - maturity_to_spawn ];
                 };
             };
@@ -71,11 +71,11 @@ process (Spawn_Neuron \in Spawn_Neuron_Process_Ids)
     }
 
 } *)
-\* BEGIN TRANSLATION (chksum(pcal) = "d832f660" /\ chksum(tla) = "2b59e34a")
-VARIABLES neuron, neuron_id_by_account, locks, governance_to_ledger,
+\* BEGIN TRANSLATION (chksum(pcal) = "a2172260" /\ chksum(tla) = "f68bb7dc")
+VARIABLES neuron, neuron_id_by_account, locks, governance_to_ledger, 
           ledger_to_governance, spawning_neurons
 
-vars == << neuron, neuron_id_by_account, locks, governance_to_ledger,
+vars == << neuron, neuron_id_by_account, locks, governance_to_ledger, 
            ledger_to_governance, spawning_neurons >>
 
 ProcSet == (Spawn_Neuron_Process_Ids)
@@ -97,9 +97,9 @@ Spawn_Neuron(self) == /\ \/ /\ TRUE
                                        /\ (neuron[parent_neuron_id].state # SPAWNING)
                                        /\ child_neuron_id \notin locks
                                        /\ neuron_id_by_account' = (child_account_id :> child_neuron_id @@ neuron_id_by_account)
-                                       /\ neuron' = (   child_neuron_id :> [ cached_stake |-> 0, account |-> child_account_id, fees |-> 0, maturity |-> maturity_to_spawn, state |-> SPAWNING ]
+                                       /\ neuron' = (   child_neuron_id :> [ cached_stake |-> 0, account |-> child_account_id, fees |-> 0, maturity |-> maturity_to_spawn, state |-> SPAWNING, maturity_disbursements_in_progress |-> <<>> ]
                                                      @@ [ neuron EXCEPT ![parent_neuron_id].maturity = @ - maturity_to_spawn ])
-                      /\ UNCHANGED << locks, governance_to_ledger,
+                      /\ UNCHANGED << locks, governance_to_ledger, 
                                       ledger_to_governance, spawning_neurons >>
 
 Next == (\E self \in Spawn_Neuron_Process_Ids: Spawn_Neuron(self))

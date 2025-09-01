@@ -34,6 +34,9 @@
 //! The start state is a dedicated state that always exists independent of which computations have
 //! been carried out. A state which has no outcoming computations is called a leaf.
 
+mod beta_features;
+
+pub mod external_canister_types;
 pub mod pocket_ic;
 pub mod state_api;
 
@@ -76,23 +79,6 @@ pub trait BlobStore: Send + Sync {
 
 // ================================================================================================================= //
 // Helpers
-
-pub fn copy_dir(
-    src: impl AsRef<std::path::Path>,
-    dst: impl AsRef<std::path::Path>,
-) -> std::io::Result<()> {
-    std::fs::create_dir_all(&dst)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        if ty.is_dir() {
-            copy_dir(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        } else {
-            std::fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
-        }
-    }
-    Ok(())
-}
 
 #[derive(Clone, Debug)]
 pub struct SubnetBlockmaker {

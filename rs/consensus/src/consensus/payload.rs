@@ -30,9 +30,9 @@ use std::sync::Arc;
 /// and that the following constraints are satisfied:
 ///
 /// - Payload size returned by [`build_payload`](BatchPayloadSectionBuilder::build_payload)
-///     `<=` `max_size` passed into [`build_payload`](BatchPayloadSectionBuilder::build_payload)
+///   `<=` `max_size` passed into [`build_payload`](BatchPayloadSectionBuilder::build_payload)
 /// - Payload size returned by [`validate_payload`](BatchPayloadSectionBuilder::validate_payload)
-///     `<=` payload size returned by [`build_payload`](BatchPayloadSectionBuilder::build_payload)
+///   `<=` payload size returned by [`build_payload`](BatchPayloadSectionBuilder::build_payload)
 ///
 /// It is advised to call the validation function after building the payload to be 100% sure.
 // [build_payload]: (BatchPayloadSectionBuilder::build_payload)

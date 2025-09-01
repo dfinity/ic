@@ -37,7 +37,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR,
 };
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{governance_error::ErrorType, GovernanceError, Neuron};
+use ic_nns_governance_api::{governance_error::ErrorType, GovernanceError, Neuron};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
@@ -218,8 +218,8 @@ pub fn test(env: TestEnv) {
             .await
             .expect("cannot obtain full_neuron?");
         assert_eq!(
-            authz_fail.err().unwrap().error_type(),
-            ErrorType::NotAuthorized
+            authz_fail.err().unwrap().error_type,
+            ErrorType::NotAuthorized as i32
         );
 
         let n1 = governance

@@ -8,6 +8,7 @@ edition.workspace = true
 
 [dependencies]
 ic-base-types = { path = "../../types/base_types/" }
+ic-cdk = { workspace = true }
 ic-protobuf = { path = "../../protobuf" }
 
 [dev-dependencies]

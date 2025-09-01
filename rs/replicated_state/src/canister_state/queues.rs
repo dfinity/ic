@@ -1,5 +1,6 @@
 mod input_schedule;
 mod message_pool;
+pub mod proto;
 mod queue;
 #[cfg(test)]
 mod tests;
@@ -13,16 +14,13 @@ use self::queue::{CanisterQueue, IngressQueue, InputQueue, OutputQueue};
 use crate::page_map::int_map::MutableIntMap;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{
-    CanisterState, CheckpointLoadingMetrics, InputQueueType, InputSource, MessageMemoryUsage,
-    StateError,
+    CanisterState, CheckpointLoadingMetrics, DroppedMessageMetrics, InputQueueType, InputSource,
+    MessageMemoryUsage, StateError,
 };
 use ic_base_types::PrincipalId;
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::IC_00;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::queues::v1 as pb_queues;
-use ic_protobuf::state::queues::v1::canister_queues::CanisterQueuePair;
-use ic_protobuf::types::v1 as pb_types;
 use ic_types::messages::{
     CallbackId, Ingress, Payload, RejectContext, Request, RequestOrResponse, Response,
     MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
@@ -1413,27 +1411,31 @@ impl CanisterQueues {
     /// into a previously empty input queue also requires the set of local canisters
     /// to decide whether the destination canister was local or remote.
     ///
-    /// Returns the number of messages that were timed out and the total amount of
-    /// attached cycles that was lost (where a reject response refunding the cycles
-    /// was not enqueued).
+    /// Returns the total amount of attached cycles that was lost (where a reject
+    /// response refunding the cycles was not enqueued).
     pub fn time_out_messages(
         &mut self,
         current_time: Time,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
-    ) -> (usize, Cycles) {
+        metrics: &impl DroppedMessageMetrics,
+    ) -> Cycles {
         let expired_messages = self.store.pool.expire_messages(current_time);
-        let expired_message_count = expired_messages.len();
         let mut cycles_lost = Cycles::zero();
 
         let input_queue_type_fn = input_queue_type_fn(own_canister_id, local_canisters);
         for (reference, msg) in expired_messages.into_iter() {
+            metrics.observe_timed_out_message(
+                reference.kind().to_label_value(),
+                reference.context().to_label_value(),
+                reference.class().to_label_value(),
+            );
             cycles_lost += self.on_message_dropped(reference, msg, &input_queue_type_fn);
         }
 
         debug_assert_eq!(Ok(()), self.test_invariants());
         debug_assert_eq!(Ok(()), self.schedules_ok(&input_queue_type_fn));
-        (expired_message_count, cycles_lost)
+        cycles_lost
     }
 
     /// Removes the largest best-effort message in the underlying pool. Returns
@@ -1449,9 +1451,15 @@ impl CanisterQueues {
         &mut self,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        metrics: &impl DroppedMessageMetrics,
     ) -> (bool, Cycles) {
         if let Some((reference, msg)) = self.store.pool.shed_largest_message() {
             let input_queue_type_fn = input_queue_type_fn(own_canister_id, local_canisters);
+            metrics.observe_shed_message(
+                reference.kind().to_label_value(),
+                reference.context().to_label_value(),
+                msg.count_bytes(),
+            );
             let cycles_lost = self.on_message_dropped(reference, msg, &input_queue_type_fn);
 
             debug_assert_eq!(Ok(()), self.test_invariants());
@@ -1760,156 +1768,6 @@ fn input_queue_type_fn<'a>(
         } else {
             InputQueueType::RemoteSubnet
         }
-    }
-}
-
-impl From<&CanisterQueues> for pb_queues::CanisterQueues {
-    fn from(item: &CanisterQueues) -> Self {
-        fn callback_references_to_proto(
-            callback_references: &MutableIntMap<message_pool::InboundReference, CallbackId>,
-        ) -> Vec<pb_queues::canister_queues::CallbackReference> {
-            callback_references
-                .iter()
-                .map(|(&id, &callback_id)| message_pool::CallbackReference(id, callback_id).into())
-                .collect()
-        }
-
-        let (next_input_source, local_sender_schedule, remote_sender_schedule) =
-            (&item.input_schedule).into();
-
-        Self {
-            ingress_queue: (&item.ingress_queue).into(),
-            canister_queues: item
-                .canister_queues
-                .iter()
-                .map(|(canid, (iq, oq))| CanisterQueuePair {
-                    canister_id: Some(pb_types::CanisterId::from(*canid)),
-                    input_queue: Some((&**iq).into()),
-                    output_queue: Some((&**oq).into()),
-                })
-                .collect(),
-            pool: if item.store.pool != MessagePool::default() {
-                Some((&item.store.pool).into())
-            } else {
-                None
-            },
-            expired_callbacks: callback_references_to_proto(&item.store.expired_callbacks),
-            shed_responses: callback_references_to_proto(&item.store.shed_responses),
-            next_input_source,
-            local_sender_schedule,
-            remote_sender_schedule,
-            guaranteed_response_memory_reservations: item
-                .queue_stats
-                .guaranteed_response_memory_reservations
-                as u64,
-        }
-    }
-}
-
-impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for CanisterQueues {
-    type Error = ProxyDecodeError;
-    fn try_from(
-        (item, metrics): (pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics),
-    ) -> Result<Self, Self::Error> {
-        let pool = MessagePool::try_from(item.pool.unwrap_or_default())?;
-
-        fn callback_references_try_from_proto(
-            callback_references: Vec<pb_queues::canister_queues::CallbackReference>,
-        ) -> Result<MutableIntMap<message_pool::InboundReference, CallbackId>, ProxyDecodeError>
-        {
-            callback_references
-                .into_iter()
-                .map(|cr_proto| {
-                    let cr = message_pool::CallbackReference::try_from(cr_proto)?;
-                    Ok((cr.0, cr.1))
-                })
-                .collect()
-        }
-        let expired_callbacks = callback_references_try_from_proto(item.expired_callbacks)?;
-        let shed_responses = callback_references_try_from_proto(item.shed_responses)?;
-
-        let mut enqueued_pool_messages = BTreeSet::new();
-        let canister_queues = item
-            .canister_queues
-            .into_iter()
-            .map(|qp| {
-                let canister_id: CanisterId =
-                    try_from_option_field(qp.canister_id, "CanisterQueuePair::canister_id")?;
-                let iq: InputQueue =
-                    try_from_option_field(qp.input_queue, "CanisterQueuePair::input_queue")?;
-                let oq: OutputQueue =
-                    try_from_option_field(qp.output_queue, "CanisterQueuePair::output_queue")?;
-
-                iq.iter().for_each(|&reference| {
-                    if pool.get(reference).is_some()
-                        && !enqueued_pool_messages.insert(SomeReference::Inbound(reference))
-                    {
-                        metrics.observe_broken_soft_invariant(format!(
-                            "CanisterQueues: {:?} enqueued more than once",
-                            reference
-                        ));
-                    }
-                });
-                oq.iter().for_each(|&reference| {
-                    if pool.get(reference).is_some()
-                        && !enqueued_pool_messages.insert(SomeReference::Outbound(reference))
-                    {
-                        metrics.observe_broken_soft_invariant(format!(
-                            "CanisterQueues: {:?} enqueued more than once",
-                            reference
-                        ));
-                    }
-                });
-
-                Ok((canister_id, (Arc::new(iq), Arc::new(oq))))
-            })
-            .collect::<Result<_, Self::Error>>()?;
-
-        if enqueued_pool_messages.len() != pool.len() {
-            metrics.observe_broken_soft_invariant(format!(
-                "CanisterQueues: Pool holds {} messages, but only {} of them are enqueued",
-                pool.len(),
-                enqueued_pool_messages.len()
-            ));
-        }
-
-        let queue_stats = Self::calculate_queue_stats(
-            &canister_queues,
-            item.guaranteed_response_memory_reservations as usize,
-        );
-
-        let input_schedule = InputSchedule::try_from((
-            item.next_input_source,
-            item.local_sender_schedule,
-            item.remote_sender_schedule,
-        ))?;
-
-        let store = MessageStoreImpl {
-            pool,
-            expired_callbacks,
-            shed_responses,
-        };
-        let callbacks_with_enqueued_response = store
-            .callbacks_with_enqueued_response(&canister_queues)
-            .map_err(ProxyDecodeError::Other)?;
-
-        let queues = Self {
-            ingress_queue: IngressQueue::try_from(item.ingress_queue)?,
-            canister_queues,
-            store,
-            queue_stats,
-            input_schedule,
-            callbacks_with_enqueued_response,
-        };
-
-        // Safe to pretend that all senders are remote, as the validation logic allows
-        // for deleted local canisters (which would be categorized as remote).
-        if let Err(msg) = queues.schedules_ok(&|_| InputQueueType::RemoteSubnet) {
-            metrics.observe_broken_soft_invariant(msg);
-        }
-        queues.test_invariants().map_err(ProxyDecodeError::Other)?;
-
-        Ok(queues)
     }
 }
 

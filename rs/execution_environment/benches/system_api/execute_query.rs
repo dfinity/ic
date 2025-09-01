@@ -1,6 +1,14 @@
-///
-/// Benchmark System API performance in `execute_query()`
-///
+//! Benchmark System API performance in `execute_query()`.
+//!
+//! This benchmark runs nightly in CI, and the results are available in Grafana.
+//! See: `schedule-rust-bench.yml`
+//!
+//! To run the benchmark locally:
+//!
+//! ```shell
+//! bazel run //rs/execution_environment:execute_query_bench
+//! ```
+
 use criterion::{criterion_group, criterion_main, Criterion};
 use execution_environment_bench::{common, wat::*};
 use ic_execution_environment::{
@@ -9,6 +17,7 @@ use ic_execution_environment::{
     NonReplicatedQueryKind, RoundLimits,
 };
 use ic_interfaces::execution_environment::ExecutionMode;
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::methods::WasmMethod;
 use ic_types::PrincipalId;
 
@@ -81,7 +90,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
     let sender = PrincipalId::new_node_test_id(common::REMOTE_CANISTER_ID);
     common::run_benchmarks(
         c,
-        "query",
+        "execution_environment:query",
         &benchmarks,
         |id: &str,
          exec_env: &ExecutionEnvironment,
@@ -117,6 +126,7 @@ pub fn execute_query_bench(c: &mut Criterion) {
                 exec_env.hypervisor_for_testing(),
                 &mut round_limits,
                 exec_env.state_changes_error(),
+                CanisterCyclesCostSchedule::Normal,
             )
             .2;
             let executed_instructions =
@@ -132,5 +142,9 @@ pub fn execute_query_bench(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benchmarks, execute_query_bench);
+criterion_group! {
+    name = benchmarks;
+    config = Criterion::default().sample_size(10);
+    targets = execute_query_bench
+}
 criterion_main!(benchmarks);

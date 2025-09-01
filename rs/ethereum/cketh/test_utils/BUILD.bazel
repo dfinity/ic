@@ -2,68 +2,52 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-[
-    rust_library(
-        name = "test_utils" + name_suffix,
-        testonly = True,
-        srcs = glob(
-            ["src/**/*.rs"],
-        ),
-        crate_features = features,
-        crate_name = "ic_cketh_test_utils",
-        proc_macro_deps = [
-            # Keep sorted.
-            "@crate_index//:strum_macros",
-        ],
-        version = "0.1.0",
-        deps = [
-            # Keep sorted.
-            "//packages/ic-error-types",
-            "//packages/ic-ethereum-types",
-            "//packages/icrc-ledger-types:icrc_ledger_types",
-            "//rs/ethereum/cketh/minter",
-            "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
-            "//rs/ethereum/ledger-suite-orchestrator/test_utils",
-            "//rs/ledger_suite/icrc1/ledger",
-            "//rs/rust_canisters/http_types",
-            "//rs/state_machine_tests",
-            "//rs/test_utilities/load_wasm",
-            "//rs/types/base_types",
-            "//rs/types/management_canister_types",
-            "//rs/types/types",
-            "@crate_index//:assert_matches",
-            "@crate_index//:candid",
-            "@crate_index//:ethers-core",
-            "@crate_index//:evm_rpc_types",
-            "@crate_index//:hex",
-            "@crate_index//:ic-cdk",
-            "@crate_index//:num-traits",
-            "@crate_index//:serde",
-            "@crate_index//:serde_bytes",
-            "@crate_index//:serde_json",
-            "@crate_index//:strum",
-        ],
-    )
-    for (name_suffix, features) in [
-        ("", []),
-        (
-            "_evm_rpc",
-            ["evm-rpc"],
-        ),
-    ]
-]
+rust_library(
+    name = "test_utils",
+    testonly = True,
+    srcs = glob(
+        ["src/**/*.rs"],
+    ),
+    crate_name = "ic_cketh_test_utils",
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:strum_macros",
+    ],
+    version = "0.1.0",
+    deps = [
+        # Keep sorted.
+        "//packages/ic-error-types",
+        "//packages/ic-ethereum-types",
+        "//packages/ic-http-types",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/ethereum/cketh/minter",
+        "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
+        "//rs/ethereum/ledger-suite-orchestrator/test_utils",
+        "//rs/ledger_suite/icrc1/ledger",
+        "//rs/state_machine_tests",
+        "//rs/test_utilities/load_wasm",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:candid",
+        "@crate_index//:ethers-core",
+        "@crate_index//:evm_rpc_types",
+        "@crate_index//:hex",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:num-traits",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
+        "@crate_index//:strum",
+    ],
+)
 
-[
-    rust_test(
-        name = "lib_tests" + name_suffix,
-        crate = ":test_utils" + name_suffix,
-        deps = [
-            # Keep sorted.
-            ":test_utils" + name_suffix,
-        ],
-    )
-    for name_suffix in [
-        "",
-        "_evm_rpc",
-    ]
-]
+rust_test(
+    name = "lib_tests",
+    crate = ":test_utils",
+    deps = [
+        # Keep sorted.
+        ":test_utils",
+    ],
+)

@@ -37,9 +37,9 @@ message ECDSASigningSubnetList {
   repeated types.v1.SubnetId subnets = 2;
 }
 
-// A list of subnets that can sign with a given chain key.
+// A list of subnets on which a given chain-key is enabled.
 // This allows replicas to route their signing requests to the right subnets.
-message ChainKeySigningSubnetList {
+message ChainKeyEnabledSubnetList {
   repeated types.v1.SubnetId subnets = 1;
 }
 

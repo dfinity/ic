@@ -2,11 +2,13 @@ use crate::{
     sns::archive::ArchiveCanister, sns::governance::GovernanceCanister, sns::index::IndexCanister,
     sns::ledger::LedgerCanister, sns::swap::SwapCanister, sns::Sns, CallCanisters,
 };
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
+use ic_nervous_system_clients::canister_status::CanisterStatusResult;
 use ic_sns_root::{
     pb::v1::{ListSnsCanistersRequest, ListSnsCanistersResponse},
     GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
 };
+use requests::GetSnsControlledCanisterStatus;
 use serde::{Deserialize, Serialize};
 
 pub mod requests;
@@ -19,6 +21,7 @@ pub struct RootCanister {
 pub struct SnsCanisters {
     pub sns: Sns,
     pub dapps: Vec<PrincipalId>,
+    pub extensions: Vec<PrincipalId>,
 }
 
 impl TryFrom<ListSnsCanistersResponse> for SnsCanisters {
@@ -33,6 +36,7 @@ impl TryFrom<ListSnsCanistersResponse> for SnsCanisters {
             index: Some(index_canister_id),
             archives,
             dapps,
+            extensions,
         } = src
         else {
             return Err(format!("Some SNS canisters were missing: {:?}", src));
@@ -47,7 +51,14 @@ impl TryFrom<ListSnsCanistersResponse> for SnsCanisters {
             archive: archives.into_iter().map(ArchiveCanister::new).collect(),
         };
 
-        Ok(Self { sns, dapps })
+        let extensions =
+            extensions.map_or_else(Vec::new, |extensions| extensions.extension_canister_ids);
+
+        Ok(Self {
+            sns,
+            dapps,
+            extensions,
+        })
     }
 }
 
@@ -80,5 +91,18 @@ impl RootCanister {
             .await?;
 
         Ok(response)
+    }
+
+    pub async fn get_sns_controlled_canister_status<C: CallCanisters>(
+        &self,
+        agent: &C,
+        canister_id: CanisterId,
+    ) -> Result<CanisterStatusResult, C::Error> {
+        agent
+            .call(
+                self.canister_id,
+                GetSnsControlledCanisterStatus { canister_id },
+            )
+            .await
     }
 }

@@ -79,8 +79,14 @@ DEV_DEPENDENCIES = [
     "@crate_index//:tokio",
 ]
 
+NONMALICIOUS_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/consensus/idkg",
+]
+
 MALICIOUS_DEPENDENCIES = [
     # Keep sorted.
+    "//rs/consensus/idkg:malicious_idkg",
     "//rs/crypto/test_utils/canister_threshold_sigs",
 ]
 
@@ -103,7 +109,7 @@ rust_library(
     crate_name = "ic_consensus",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + NONMALICIOUS_DEPENDENCIES,
 )
 
 rust_library(
@@ -143,14 +149,14 @@ rust_test(
     name = "payload_test",
     srcs = glob(["tests/**"]),
     crate_root = "tests/payload.rs",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":malicious_consensus"],
+    deps = DEPENDENCIES + MALICIOUS_DEPENDENCIES + DEV_DEPENDENCIES + [":malicious_consensus"],
 )
 
 rust_test(
     name = "types_test",
     srcs = glob(["tests/**"]),
     crate_root = "tests/types.rs",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":consensus"],
+    deps = DEPENDENCIES + MALICIOUS_DEPENDENCIES + DEV_DEPENDENCIES + [":consensus"],
 )
 
 rust_ic_bench(

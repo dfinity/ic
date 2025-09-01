@@ -6,9 +6,9 @@ use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_2_ID, TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
-use ic_nns_common::types::{NeuronId, UpdateIcpXdrConversionRatePayload};
+use ic_nns_common::types::NeuronId;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{Governance as GovernanceProto, NnsFunction};
+use ic_nns_governance_api::NnsFunction;
 use ic_nns_gtc::{
     pb::v1::{AccountState, Gtc as GtcProto},
     test_constants::{TEST_IDENTITY_1, TEST_IDENTITY_2, TEST_IDENTITY_3, TEST_IDENTITY_4},
@@ -18,7 +18,7 @@ use ic_nns_test_utils::{
     governance::{
         bump_gzip_timestamp, get_pending_proposals, reinstall_nns_canister_by_proposal,
         submit_external_update_proposal, upgrade_nns_canister_by_proposal,
-        upgrade_nns_canister_with_arg_by_proposal,
+        upgrade_nns_canister_with_arg_by_proposal, HardResetNnsRootToVersionPayload,
     },
     itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
 };
@@ -110,13 +110,11 @@ fn test_reinstall_and_upgrade_canisters_with_state_changes() {
             Sender::from_keypair(&TEST_NEURON_2_OWNER_KEYPAIR),
             NeuronId(TEST_NEURON_2_ID),
             // Random proposal type
-            NnsFunction::IcpXdrConversionRate,
+            NnsFunction::HardResetNnsRootToVersion,
             // Payload itself doesn't matter
-            UpdateIcpXdrConversionRatePayload {
-                data_source: "".to_string(),
-                timestamp_seconds: 1,
-                xdr_permyriad_per_icp: 100,
-                reason: None,
+            HardResetNnsRootToVersionPayload {
+                wasm_module: vec![],
+                init_arg: vec![],
             },
             "<proposal created by test_reinstall_and_upgrade_canisters_with_state_changes>"
                 .to_string(),
@@ -166,13 +164,11 @@ fn test_reinstall_and_upgrade_canisters_with_state_changes() {
             Sender::from_keypair(&TEST_NEURON_2_OWNER_KEYPAIR),
             NeuronId(TEST_NEURON_2_ID),
             // Random proposal type
-            NnsFunction::IcpXdrConversionRate,
+            NnsFunction::HardResetNnsRootToVersion,
             // Payload itself doesn't matter
-            UpdateIcpXdrConversionRatePayload {
-                data_source: "".to_string(),
-                timestamp_seconds: 1,
-                xdr_permyriad_per_icp: 100,
-                reason: None,
+            HardResetNnsRootToVersionPayload {
+                wasm_module: vec![],
+                init_arg: vec![],
             },
             "<proposal created by test_reinstall_and_upgrade_canisters_with_state_changes>"
                 .to_string(),
@@ -222,8 +218,7 @@ fn encode_init_state(init_state: NnsInitPayloads) -> Vec<Vec<u8>> {
     GtcProto::encode(&init_state.genesis_token, &mut gtc_init_vec).unwrap();
     let cmc_init_vec = Encode!(&init_state.cycles_minting).unwrap();
     let lifeline_init_vec = Encode!(&init_state.lifeline).unwrap();
-    let mut governance_init_vec = Vec::new();
-    GovernanceProto::encode(&init_state.governance, &mut governance_init_vec).unwrap();
+    let governance_init_vec = Encode!(&init_state.governance).unwrap();
     let root_init_vec = Encode!(&init_state.root).unwrap();
     let registry_init_vec = Encode!(&init_state.registry).unwrap();
 

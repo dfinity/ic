@@ -592,3 +592,44 @@ fn verification_follows_zip215() {
         );
     }
 }
+
+#[test]
+fn offline_key_derivation_matches_mainnet_for_key_1() {
+    use std::str::FromStr;
+
+    let canister_id = ic_ed25519::CanisterId::from_str("h5jwf-5iaaa-aaaan-qmvoa-cai").unwrap();
+    let derivation_path = [hex!("ABCDEF").to_vec(), hex!("012345").to_vec()];
+
+    let dpk = PublicKey::derive_mainnet_key(
+        ic_ed25519::MasterPublicKeyId::Key1,
+        &canister_id,
+        &derivation_path,
+    );
+
+    assert_eq!(
+        hex::encode(dpk.0.serialize_raw()),
+        "43f0008b26564b6da51f585ad47669dfeb1db6d94d7dd216bd304fc1f5f5e997"
+    );
+}
+
+#[test]
+fn offline_key_derivation_matches_mainnet_for_test_key_1() {
+    use std::str::FromStr;
+
+    let canister_id = ic_ed25519::CanisterId::from_str("h5jwf-5iaaa-aaaan-qmvoa-cai").unwrap();
+    let derivation_path = [
+        "Hello".as_bytes().to_vec(),
+        "Threshold".as_bytes().to_vec(),
+        "Signatures".as_bytes().to_vec(),
+    ];
+    let dpk = PublicKey::derive_mainnet_key(
+        ic_ed25519::MasterPublicKeyId::TestKey1,
+        &canister_id,
+        &derivation_path,
+    );
+
+    assert_eq!(
+        hex::encode(dpk.0.serialize_raw()),
+        "d9a2ce6a3cd33fe16dce37e045609e51ff516e93bb51013823d6d7a915e3cfb9"
+    );
+}

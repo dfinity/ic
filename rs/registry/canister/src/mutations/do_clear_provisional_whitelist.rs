@@ -20,6 +20,7 @@ impl Registry {
                 value,
                 version: _,
                 deletion_marker: _,
+                timestamp_nanoseconds: _,
             }) => ProvisionalWhitelist::decode(value.as_slice()).unwrap(),
             None => panic!("Provisional whitelist not found in the registry"),
         };

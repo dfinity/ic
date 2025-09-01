@@ -2,11 +2,11 @@ use anyhow::Result;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
-    boundary_node::{BoundaryNode, BoundaryNodeVm},
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
+    ic_gateway_vm::{IcGatewayVm, IC_GATEWAY_VM_NAME},
     test_env::TestEnv,
-    test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr},
+    test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
 use ic_system_test_driver::systest;
 use nns_dapp::nns_dapp_customizations;
@@ -19,8 +19,6 @@ use sdk_system_tests::{
 use slog::info;
 use std::fs;
 
-const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
-
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
@@ -30,10 +28,9 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
-    let logger = env.logger();
-
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
+        .with_api_boundary_nodes(1)
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
 
@@ -49,31 +46,9 @@ pub fn setup(env: TestEnv) {
         nns_dapp_customizations(),
     );
 
-    BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
-        .allocate_vm(&env)
-        .expect("Allocation of BoundaryNode failed.")
-        .for_ic(&env, "")
-        .use_real_certs_and_dns()
+    IcGatewayVm::new(IC_GATEWAY_VM_NAME)
         .start(&env)
-        .expect("failed to setup BoundaryNode VM");
-
-    let boundary_node_vm = env
-        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
-
-    info!(
-        &logger,
-        "Boundary node {BOUNDARY_NODE_NAME} has IPv4 {:?} and IPv6 {:?}",
-        boundary_node_vm.block_on_ipv4().unwrap(),
-        boundary_node_vm.ipv6()
-    );
-
-    info!(&logger, "Checking BN health");
-    boundary_node_vm
-        .await_status_is_healthy()
-        .expect("Boundary node did not come up healthy.");
+        .expect("failed to setup ic-gateway");
 }
 
 fn test(env: TestEnv) {
@@ -100,7 +75,7 @@ fn test(env: TestEnv) {
 
     let asset_body = get_asset_as_string(
         &env,
-        BOUNDARY_NODE_NAME,
+        IC_GATEWAY_VM_NAME,
         &frontend_canister_id,
         "/sample-asset.txt",
     );

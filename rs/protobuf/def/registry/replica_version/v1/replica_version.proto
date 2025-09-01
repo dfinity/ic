@@ -10,15 +10,35 @@ message ReplicaVersionRecord {
   // that corresponds to this version
   repeated string release_package_urls = 7;
 
-  // The hex-formatted SHA-256 hash measurement of the SEV guest launch context.
-  optional string guest_launch_measurement_sha256_hex = 8;
+  // The SEV-SNP measurements that belong to this release
+  GuestLaunchMeasurements guest_launch_measurements = 9;
 
-  reserved 1, 2, 3, 4, 5;
+  reserved 1, 2, 3, 4, 5, 8;
   reserved "binary_url";
   reserved "sha256_hex";
   reserved "node_manager_binary_url";
   reserved "node_manager_sha256_hex";
   reserved "release_package_url";
+  reserved "guest_launch_measurement_sha256_hex";
+}
+
+message GuestLaunchMeasurements {
+  // A list of valid SEV-SNP measurements. One release can have multiple valid
+  // measurements, e.g. depending on the kernel command line used to launch the
+  // guest. Must be non-empty.
+  repeated GuestLaunchMeasurement guest_launch_measurements = 1;
+}
+
+message GuestLaunchMeasurement {
+  // SEV-SNP measurement (48 bytes)
+  bytes measurement = 1;
+  // Metadata about how the measurement was obtained
+  GuestLaunchMeasurementMetadata metadata = 2;
+}
+
+message GuestLaunchMeasurementMetadata {
+  // Kernel command line string used to launch the guest
+  string kernel_cmdline = 1;
 }
 
 // A list of blessed versions of the IC Replica

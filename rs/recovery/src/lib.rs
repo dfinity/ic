@@ -7,6 +7,7 @@
 //! execution.
 use crate::{
     cli::wait_for_confirmation, file_sync_helper::remove_dir, registry_helper::RegistryHelper,
+    util::SshUser,
 };
 use admin_helper::{AdminHelper, IcAdmin, RegistryParams};
 use command_helper::exec_cmd;
@@ -73,6 +74,7 @@ pub const IC_STATE_EXCLUDES: &[&str] = &[
     // it is a new directory used for storing the files backing up the
     // page deltas. We do not need to copy page deltas when nodes are re-assigned.
     "page_deltas",
+    "node_operator_private_key.pem",
     IC_REGISTRY_LOCAL_STORE,
 ];
 pub const IC_STATE: &str = "ic_state";
@@ -80,8 +82,6 @@ pub const NEW_IC_STATE: &str = "new_ic_state";
 pub const OLD_IC_STATE: &str = "old_ic_state";
 pub const IC_REGISTRY_LOCAL_STORE: &str = "ic_registry_local_store";
 pub const CHECKPOINTS: &str = "checkpoints";
-pub const ADMIN: &str = "admin";
-pub const READONLY: &str = "readonly";
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct NeuronArgs {
@@ -194,7 +194,7 @@ impl Recovery {
             if let Some(version) = args.replica_version {
                 block_on(download_binary(
                     &logger,
-                    version,
+                    &version,
                     String::from("ic-admin"),
                     &binary_dir,
                 ))?;
@@ -319,7 +319,8 @@ impl Recovery {
     pub fn get_download_certs_step(
         &self,
         subnet_id: SubnetId,
-        admin: bool,
+        ssh_user: SshUser,
+        alt_key_file: Option<PathBuf>,
         auto_retry: bool,
     ) -> impl Step {
         DownloadCertificationsStep {
@@ -328,9 +329,9 @@ impl Recovery {
             registry_helper: self.registry_helper.clone(),
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            key_file: alt_key_file.or(self.key_file.clone()),
             auto_retry,
-            admin,
+            ssh_user,
         }
     }
 
@@ -386,6 +387,7 @@ impl Recovery {
         subcmd: Option<ReplaySubCmd>,
         canister_caller_id: Option<CanisterId>,
         replay_until_height: Option<u64>,
+        skip_prompts: bool,
     ) -> impl Step {
         ReplayStep {
             logger: self.logger.clone(),
@@ -396,6 +398,7 @@ impl Recovery {
             canister_caller_id,
             replay_until_height,
             result: self.work_dir.join(replay_helper::OUTPUT_FILE_NAME),
+            skip_prompts,
         }
     }
 
@@ -408,6 +411,7 @@ impl Recovery {
         upgrade_url: Url,
         sha256: String,
         replay_until_height: Option<u64>,
+        skip_prompts: bool,
     ) -> RecoveryResult<impl Step> {
         let version_record = format!(
             r#"{{ "release_package_sha256_hex": "{}", "release_package_urls": ["{}"] }}"#,
@@ -428,6 +432,7 @@ impl Recovery {
             }),
             None,
             replay_until_height,
+            skip_prompts,
         ))
     }
 
@@ -439,6 +444,7 @@ impl Recovery {
         new_registry_local_store: PathBuf,
         canister_caller_id: &str,
         replay_until_height: Option<u64>,
+        skip_prompts: bool,
     ) -> RecoveryResult<impl Step> {
         let canister_id = CanisterId::from_str(canister_caller_id).map_err(|e| {
             RecoveryError::invalid_output_error(format!("Failed to parse canister id: {}", e))
@@ -461,6 +467,7 @@ impl Recovery {
             }),
             Some(canister_id),
             replay_until_height,
+            skip_prompts,
         ))
     }
 
@@ -806,15 +813,24 @@ impl Recovery {
     }
 
     /// Return an [UpdateLocalStoreStep] to update the current local store using ic-replay
-    pub fn get_update_local_store_step(&self, subnet_id: SubnetId) -> impl Step {
+    pub fn get_update_local_store_step(
+        &self,
+        subnet_id: SubnetId,
+        skip_prompts: bool,
+    ) -> impl Step {
         UpdateLocalStoreStep {
             subnet_id,
             work_dir: self.work_dir.clone(),
+            skip_prompts,
         }
     }
 
     /// Return an [GetRecoveryCUPStep] to get the recovery CUP using ic-replay
-    pub fn get_recovery_cup_step(&self, subnet_id: SubnetId) -> RecoveryResult<impl Step> {
+    pub fn get_recovery_cup_step(
+        &self,
+        subnet_id: SubnetId,
+        skip_prompts: bool,
+    ) -> RecoveryResult<impl Step> {
         let state_params = self.get_replay_output()?;
         let recovery_height = Recovery::get_recovery_height(state_params.height);
         Ok(GetRecoveryCUPStep {
@@ -824,22 +840,24 @@ impl Recovery {
             state_hash: state_params.hash,
             work_dir: self.work_dir.clone(),
             recovery_height,
+            skip_prompts,
         })
     }
 
-    /// Return a [CreateTarsStep] to create tar files of the current registry local store and ic state
-    pub fn get_create_tars_step(&self) -> impl Step {
+    /// Return a [CreateRegistryTarStep] a tar file that contains the current registry local store
+    pub fn get_create_registry_tar_step(&self) -> impl Step {
         let mut tar = Command::new("tar");
         tar.arg("-C")
             .arg(self.work_dir.join("data").join(IC_REGISTRY_LOCAL_STORE))
-            .arg("-zcvf")
+            .arg("--zstd")
+            .arg("-cvf")
             .arg(
                 self.work_dir
                     .join(format!("{}.tar.zst", IC_REGISTRY_LOCAL_STORE)),
             )
             .arg(".");
 
-        CreateTarsStep {
+        CreateRegistryTarStep {
             logger: self.logger.clone(),
             store_tar_cmd: tar,
         }
@@ -853,15 +871,27 @@ impl Recovery {
         }
     }
 
-    /// Return an [UploadCUPAndTar] uploading tars and extracted CUP to subnet nodes
-    pub fn get_upload_cup_and_tar_step(&self, subnet_id: SubnetId) -> impl Step {
-        UploadCUPAndTar {
+    /// Return an [UploadCUPAndTarStep] uploading CUP and registry tar to the given node IP
+    pub fn get_upload_cup_and_tar_step(&self, node_ip: IpAddr) -> impl Step {
+        UploadCUPAndTarStep {
             logger: self.logger.clone(),
             registry_helper: self.registry_helper.clone(),
-            subnet_id,
+            node_ip,
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
             key_file: self.key_file.clone(),
+        }
+    }
+
+    /// Return a [CreateNNSRecoveryTarStep] creating a tar file that contains a tar of the registry
+    /// local store and a recovery CUP
+    pub fn get_create_nns_recovery_tar_step(&self, output_dir: Option<PathBuf>) -> impl Step {
+        CreateNNSRecoveryTarStep {
+            logger: self.logger.clone(),
+            work_dir: self.work_dir.clone(),
+            // If no output directory is specified, save the files in a directory that will
+            // not be deleted by the cleanup step (i.e., not `self.work_dir`).
+            output_dir: output_dir.unwrap_or(PathBuf::from("/tmp/recovery_artifacts")),
         }
     }
 

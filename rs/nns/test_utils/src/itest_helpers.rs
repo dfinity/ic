@@ -23,10 +23,7 @@ use ic_nns_common::{
     types::{NeuronId, ProposalId},
 };
 use ic_nns_constants::*;
-use ic_nns_governance_api::{
-    pb::v1::{Governance, NnsFunction, ProposalStatus},
-    test_api::TimeWarp,
-};
+use ic_nns_governance_api::{test_api::TimeWarp, Governance, NnsFunction, ProposalStatus};
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_registry_transport::pb::v1::RegistryMutation;
@@ -43,7 +40,9 @@ use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
 use std::{future::Future, path::Path, thread, time::SystemTime};
 
-/// All the NNS canisters that exist at genesis.
+/// All the NNS canisters that are use in tests, but not all canisters
+/// on NNS mainnet (there are 4 ledger archives, for example and a ledger index that aren't tested
+/// using this struct)
 #[derive(Clone)]
 pub struct NnsCanisters<'a> {
     // Canisters here are listed in creation order.
@@ -262,7 +261,7 @@ impl NnsCanisters<'_> {
         }
     }
 
-    pub fn all_canisters(&self) -> [&Canister<'_>; NUM_NNS_CANISTERS] {
+    pub fn all_canisters(&self) -> [&Canister<'_>; 10] {
         [
             &self.registry,
             &self.governance,
@@ -442,10 +441,7 @@ pub async fn install_rust_canister_from_path<P: AsRef<Path>>(
 /// Compiles the governance canister, builds it's initial payload and installs
 /// it
 pub async fn install_governance_canister(canister: &mut Canister<'_>, init_payload: Governance) {
-    let mut serialized = Vec::new();
-    init_payload
-        .encode(&mut serialized)
-        .expect("Couldn't serialize init payload.");
+    let serialized = Encode!(&init_payload).expect("Couldn't serialize init payload.");
     install_rust_canister(canister, "governance-canister", &["test"], Some(serialized)).await;
 }
 
@@ -632,6 +628,10 @@ pub async fn install_sns_wasm_canister(
 ) {
     let encoded = Encode!(&init_payload).unwrap();
     install_rust_canister(canister, "sns-wasm-canister", &[], Some(encoded)).await;
+}
+
+pub async fn install_node_rewards_canister(canister: &mut Canister<'_>) {
+    install_rust_canister(canister, "node-rewards-canister", &[], None).await;
 }
 
 /// Creates and installs the sns_wasm canister.

@@ -1,10 +1,11 @@
+#![allow(deprecated)]
 use candid::candid_method;
 use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
     MillisatoshiPerByte, Network, Utxo, UtxosFilterInRequest,
 };
 use ic_cdk::api::management_canister::bitcoin::{BitcoinNetwork, SendTransactionRequest};
-use ic_cdk_macros::{init, update};
+use ic_cdk::{init, update};
 use serde_bytes::ByteBuf;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};

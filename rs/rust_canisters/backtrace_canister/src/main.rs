@@ -1,5 +1,5 @@
 use candid::candid_method;
-use ic_cdk_macros::update;
+use ic_cdk::update;
 
 /// Macro to create a chain of function calls resulting in the provided
 /// expression and expose it via an update with the provided name.
@@ -48,7 +48,7 @@ make_call_chain!(ic0_trap, {
 });
 
 make_call_chain!(stable_oob, {
-    ic_cdk::api::stable::stable_write(1_000 * 1_000, "foo".as_bytes());
+    ic_cdk::stable::stable_write(1_000 * 1_000, "foo".as_bytes());
 });
 
 // When run on native this prints the candid service definition of this

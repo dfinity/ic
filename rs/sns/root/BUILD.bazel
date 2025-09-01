@@ -12,6 +12,7 @@ filegroup(
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-http-types",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
@@ -19,7 +20,6 @@ DEPENDENCIES = [
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
     "//rs/rust_canisters/canister_log",
-    "//rs/rust_canisters/http_types",
     "//rs/sns/swap",  # TODO[NNS1-2282]
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
@@ -38,7 +38,6 @@ MACRO_DEPENDENCIES = [
     # Keep sorted.
     "//rs/nervous_system/common/build_metadata",
     "@crate_index//:async-trait",
-    "@crate_index//:ic-cdk-macros",
 ]
 
 BUILD_DEPENDENCIES = [

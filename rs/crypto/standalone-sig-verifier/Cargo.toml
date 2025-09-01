@@ -21,7 +21,7 @@ ic-types = { path = "../../types/types" }
 [dev-dependencies]
 assert_matches = { workspace = true }
 hex = { workspace = true }
-ic-crypto-ecdsa-secp256r1 = { path = "../ecdsa_secp256r1" }
+ic-secp256r1 = { path = "../../../packages/ic-secp256r1" }
 ic-crypto-internal-test-vectors = { path = "../internal/test_vectors" }
 ic-crypto-test-utils-canister-sigs = { path = "../test_utils/canister_sigs" }
 ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }

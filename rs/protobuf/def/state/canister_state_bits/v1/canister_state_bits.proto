@@ -4,9 +4,14 @@ package state.canister_state_bits.v1;
 import "google/protobuf/wrappers.proto";
 import "state/ingress/v1/ingress.proto";
 import "state/queues/v1/queues.proto";
-import "state/v1/metadata.proto";
 import "types/v1/management_canister_types.proto";
 import "types/v1/types.proto";
+
+enum SnapshotSource {
+  SNAPSHOT_SOURCE_UNSPECIFIED = 0;
+  SNAPSHOT_SOURCE_TAKEN_FROM_CANISTER = 1;
+  SNAPSHOT_SOURCE_UPLOADED_MANUALLY = 2;
+}
 
 message CallContext {
   message Ingress {
@@ -142,7 +147,7 @@ message ExecutionStateBits {
   repeated WasmMethod exports = 3;
   uint64 last_executed_round = 4;
   WasmMetadata metadata = 5;
-  optional bytes binary_hash = 6;
+  bytes binary_hash = 6;
   optional NextScheduledMethod next_scheduled_method = 7;
   bool is_wasm64 = 8;
 }
@@ -254,6 +259,7 @@ message CanisterChangeFromCanister {
 
 message CanisterCreation {
   repeated types.v1.PrincipalId controllers = 1;
+  optional bytes environment_variables_hash = 2;
 }
 
 message CanisterCodeUninstall {}
@@ -271,6 +277,28 @@ message CanisterLoadSnapshot {
   uint64 canister_version = 1;
   uint64 taken_at_timestamp = 2;
   bytes snapshot_id = 3;
+  SnapshotSource source = 4;
+}
+
+message CanisterControllers {
+  repeated types.v1.PrincipalId controllers = 1;
+}
+
+message CanisterSettingsChange {
+  optional CanisterControllers controllers = 1;
+  optional bytes environment_variables_hash = 2;
+}
+
+message CanisterRename {
+  types.v1.PrincipalId canister_id = 1;
+  uint64 total_num_changes = 2;
+  RenameTo rename_to = 3;
+}
+
+message RenameTo {
+  types.v1.PrincipalId canister_id = 1;
+  uint64 version = 2;
+  uint64 total_num_changes = 3;
 }
 
 message CanisterChange {
@@ -286,6 +314,8 @@ message CanisterChange {
     CanisterCodeDeployment canister_code_deployment = 7;
     CanisterControllersChange canister_controllers_change = 8;
     CanisterLoadSnapshot canister_load_snapshot = 9;
+    CanisterSettingsChange canister_settings_change = 10;
+    CanisterRename canister_rename = 11;
   }
 }
 
@@ -365,7 +395,7 @@ message CanisterStateBits {
   reserved 1;
   reserved "controller";
   uint64 last_full_execution_round = 2;
-  CallContextManager call_context_manager = 3;
+  reserved 3;
   uint64 compute_allocation = 4;
   int64 accumulated_priority = 5;
   reserved 6;
@@ -454,4 +484,6 @@ message CanisterStateBits {
   // Contains tasks that need to be executed before processing any input of the
   // canister.
   TaskQueue tasks = 54;
+  // A map of environment variable names to their values
+  map<string, string> environment_variables = 55;
 }

@@ -54,5 +54,9 @@
   "nns-ui": {
     "local": "qoctq-giaaa-aaaaa-aaaea-cai",
     "mainnet": "qoctq-giaaa-aaaaa-aaaea-cai"
+  },
+  "node-rewards": {
+    "local": "sgymv-uiaaa-aaaaa-aaaia-cai",
+    "mainnet": "sgymv-uiaaa-aaaaa-aaaia-cai"
   }
 }

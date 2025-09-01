@@ -26,7 +26,7 @@ pub(crate) enum QuerySchedulerFlag {
 }
 
 /// The query scheduler accepts and executes non-replicated queries (user
-/// queries, anonymous queries, and ingress filter queries). It currently
+/// queries, system queries, and ingress filter queries). It currently
 /// schedules each canister that has queries in a round-robin fashion.
 /// When a canister is scheduled and starts executing, it is allowed to execute
 /// multiple queries until it reaches the `time_slice_per_canister` limit.

@@ -1,18 +1,18 @@
-use candid::{candid_method, Decode, Nat, Principal};
-#[cfg(feature = "notify-method")]
-use dfn_candid::CandidOne;
-#[cfg(feature = "notify-method")]
-use dfn_core::BytesS;
-#[cfg(feature = "notify-method")]
-use dfn_protobuf::protobuf;
+#![allow(deprecated)]
+#[cfg(feature = "canbench-rs")]
+mod canbench;
+
+use candid::Decode;
+use candid::{candid_method, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::{LogEntry, Sink};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::{
     call::{arg_data_raw, reply_raw},
     caller, data_certificate, instruction_counter, print, set_certified_data, time, trap,
 };
-use ic_cdk_macros::{post_upgrade, pre_upgrade, query, update};
+use ic_cdk::futures::{in_executor_context, in_query_executor_context};
+use ic_cdk::{post_upgrade, pre_upgrade, query, update};
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
 use ic_ledger_canister_core::ledger::LedgerContext;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
@@ -31,26 +31,29 @@ use ic_ledger_core::{
 };
 use ic_stable_structures::reader::{BufferedReader, Reader};
 use ic_stable_structures::writer::{BufferedWriter, Writer};
-#[cfg(feature = "notify-method")]
-use icp_ledger::BlockRes;
 #[cfg(feature = "icp-allowance-getter")]
 use icp_ledger::IcpAllowanceArgs;
+#[cfg(not(feature = "canbench-rs"))]
+use icp_ledger::InitArgs;
 use icp_ledger::{
     from_proto_bytes, max_blocks_per_request, protobuf, to_proto_bytes, tokens_into_proto,
-    AccountBalanceArgs, AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, ArchiveInfo,
-    ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block,
-    BlockArg, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, GetBlocksRes, InitArgs,
-    IterBlocksArgs, IterBlocksRes, LedgerCanisterPayload, Memo, Name, Operation, PaymentError,
-    QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes,
+    AccountBalanceArgs, AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, Allowances,
+    ArchiveInfo, ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives,
+    BinaryAccountBalanceArgs, Block, BlockArg, CandidBlock, Decimals, FeatureFlags,
+    GetAllowancesArgs, GetBlocksArgs, GetBlocksRes, IterBlocksArgs, IterBlocksRes,
+    LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
+    QueryEncodedBlocksResponse, RemoveApprovalArgs, SendArgs, Subaccount, Symbol, TipOfChainRes,
     TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
     MEMO_SIZE_BYTES,
 };
-use icrc_ledger_types::icrc1::transfer::TransferError as Icrc1TransferError;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
-    icrc21::lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
+    icrc21::lib::{
+        build_icrc21_consent_info, build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
+        icrc21_check_fee,
+    },
     icrc3::archive::QueryArchiveFn,
 };
 use icrc_ledger_types::{
@@ -61,14 +64,18 @@ use icrc_ledger_types::{
     icrc1::transfer::TransferArg,
     icrc21::{errors::Icrc21Error, requests::ConsentMessageRequest, responses::ConsentInfo},
 };
+use icrc_ledger_types::{
+    icrc1::transfer::TransferError as Icrc1TransferError,
+    icrc21::{
+        errors::ErrorInfo,
+        lib::{AccountOrId, GenericMemo, GenericTransferArgs},
+    },
+};
 use ledger_canister::{
-    balances_len, clear_stable_allowance_data, clear_stable_balances_data,
-    clear_stable_blocks_data, is_ready, ledger_state, panic_if_not_ready, set_ledger_state, Ledger,
-    LedgerField, LedgerState, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY,
+    balances_len, get_allowances_list, Ledger, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES,
+    UPGRADES_MEMORY,
 };
 use num_traits::cast::ToPrimitive;
-#[allow(unused_imports)]
-use on_wire::IntoWire;
 use std::cell::RefCell;
 use std::io::{Read, Write};
 use std::{
@@ -150,6 +157,7 @@ fn init(
             ));
         }
     }
+    #[cfg(not(feature = "canbench-rs"))]
     set_certified_data(
         &LEDGER
             .read()
@@ -164,17 +172,6 @@ fn init(
         LEDGER.write().unwrap().blockchain.archive =
             Arc::new(RwLock::new(Some(Archive::new(archive_options))))
     }
-}
-
-#[cfg(feature = "notify-method")]
-fn add_payment(
-    memo: Memo,
-    operation: Operation,
-    created_at_time: Option<TimeStamp>,
-) -> (BlockIndex, ic_ledger_hash_of::HashOf<EncodedBlock>) {
-    let (height, hash) = ledger_canister::add_payment(memo, operation, created_at_time);
-    set_certified_data(&hash.into_bytes());
-    (height, hash)
 }
 
 /// This is the only operation that changes the state of the canister blocks and
@@ -224,7 +221,8 @@ async fn send(
         Operation::Mint { to, amount }
     } else if to == minting_acc {
         assert_eq!(fee, Tokens::ZERO, "Fee for burning should be zero");
-        let min_burn_amount = LEDGER.read().unwrap().transfer_fee;
+        let balance = LEDGER.read().unwrap().balances().account_balance(&from);
+        let min_burn_amount = LEDGER.read().unwrap().transfer_fee.min(balance);
         if amount < min_burn_amount {
             panic!("Burns lower than {} are not allowed", min_burn_amount);
         }
@@ -267,7 +265,7 @@ async fn send(
     Ok(height)
 }
 
-async fn icrc1_send(
+fn icrc1_send_not_async(
     memo: Option<icrc_ledger_types::icrc1::transfer::Memo>,
     amount: Nat,
     fee: Option<Nat>,
@@ -358,12 +356,39 @@ async fn icrc1_send(
             icrc1_memo: memo.map(|x| x.0),
             created_at_time,
         };
+
+        #[cfg(not(feature = "canbench-rs"))]
         let (block_index, hash) = apply_transaction(&mut *ledger, tx, now, effective_fee)?;
 
+        #[cfg(feature = "canbench-rs")]
+        let (block_index, _hash) = apply_transaction(&mut *ledger, tx, now, effective_fee)?;
+
+        #[cfg(not(feature = "canbench-rs"))]
         set_certified_data(&hash.into_bytes());
 
         block_index
     };
+    Ok(block_index)
+}
+
+async fn icrc1_send(
+    memo: Option<icrc_ledger_types::icrc1::transfer::Memo>,
+    amount: Nat,
+    fee: Option<Nat>,
+    from_account: Account,
+    to_account: Account,
+    spender_account: Option<Account>,
+    created_at_time: Option<u64>,
+) -> Result<BlockIndex, CoreTransferError<Tokens>> {
+    let block_index = icrc1_send_not_async(
+        memo,
+        amount,
+        fee,
+        from_account,
+        to_account,
+        spender_account,
+        created_at_time,
+    )?;
 
     let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
     archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
@@ -371,187 +396,20 @@ async fn icrc1_send(
 }
 
 thread_local! {
-    static NOTIFY_METHOD_CALLS: RefCell<u64> = const { RefCell::new(0) };
     static PRE_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
     static POST_UPGRADE_INSTRUCTIONS_CONSUMED: RefCell<u64> = const { RefCell::new(0) };
-    static STABLE_UPGRADE_MIGRATION_STEPS: RefCell<u64> = const { RefCell::new(0) };
 }
 
-/// You can notify a canister that you have made a payment to it. The
-/// payment must have been made to the account of a canister and from the
-/// callers account. You cannot notify a canister about a transaction it has
-/// already been successfully notified of. If the canister rejects the
-/// notification call it is not considered to have been notified.
-///
-/// # Arguments
-///
-/// * `block_height` -  The height of the block you would like to send a
-///   notification about.
-/// * `max_fee` - The fee of the payment.
-/// * `from_subaccount` - The subaccount that made the payment.
-/// * `to_canister` - The canister that received the payment.
-/// * `to_subaccount` - The subaccount that received the payment.
-/// * `notify_using_protobuf` - Whether the notification should be encoded using
-///   protobuf or candid.
 #[cfg(feature = "notify-method")]
-pub async fn notify(
-    block_height: BlockIndex,
-    max_fee: Tokens,
-    from_subaccount: Option<Subaccount>,
-    to_canister: CanisterId,
-    to_subaccount: Option<Subaccount>,
-    notify_using_protobuf: bool,
-) -> Result<BytesS, String> {
-    use dfn_core::api::{call_bytes_with_cleanup, call_with_cleanup, Funds};
-    use dfn_protobuf::ProtoBuf;
-
-    NOTIFY_METHOD_CALLS.with(|n| *n.borrow_mut() += 1);
-
+fn trap_since_notify_is_no_longer_supported() {
     let caller_principal_id = PrincipalId::from(caller());
+    print(format!(
+        "[ledger] notify method called by [{}]",
+        caller_principal_id
+    ));
 
-    if !LEDGER.read().unwrap().can_send(&caller_principal_id) {
-        panic!("Notifying from {} is not allowed", caller_principal_id);
-    }
-
-    if !LEDGER.read().unwrap().can_be_notified(&to_canister) {
-        panic!(
-            "Notifying non-whitelisted canister is not allowed: {}",
-            to_canister
-        );
-    }
-
-    let expected_from = AccountIdentifier::new(caller_principal_id, from_subaccount);
-
-    let expected_to = AccountIdentifier::new(to_canister.get(), to_subaccount);
-
-    let transfer_fee = LEDGER.read().unwrap().transfer_fee;
-
-    if max_fee != transfer_fee {
-        panic!("Transfer fee should be {}", transfer_fee);
-    }
-
-    let raw_block: EncodedBlock =
-        match block(block_height).unwrap_or_else(|| panic!("Block {} not found", block_height)) {
-            Ok(raw_block) => raw_block,
-            Err(cid) => {
-                print(format!(
-                    "Searching canister {} for block {}",
-                    cid, block_height
-                ));
-                // Lookup the block on the archive
-                let BlockRes(res) = call_with_cleanup(cid, "get_block_pb", protobuf, block_height)
-                    .await
-                    .map_err(|e| format!("Failed to fetch block {}", e.1))?;
-                res.ok_or("Block not found")?
-                    .map_err(|c| format!("Tried to redirect lookup a second time to {}", c))?
-            }
-        };
-
-    let block = Block::decode(raw_block).unwrap();
-
-    let (from, to, amount) = match block.transaction().operation {
-        Operation::Transfer {
-            from, to, amount, ..
-        } => (from, to, amount),
-        _ => panic!("Notification failed transfer must be of type send"),
-    };
-
-    assert_eq!(
-        (from, to),
-        (expected_from, expected_to),
-        "sender and recipient must match the specified block"
-    );
-
-    let transaction_notification_args = icp_ledger::TransactionNotification {
-        from: caller_principal_id,
-        from_subaccount,
-        to: to_canister,
-        to_subaccount,
-        block_height,
-        amount,
-        memo: block.transaction().memo,
-    };
-
-    let block_timestamp = block.timestamp();
-
-    ledger_canister::change_notification_state(block_height, block_timestamp, true)
-        .expect("Notification failed");
-
-    // This transaction provides an on chain record that a notification was
-    // attempted
-    let transfer = Operation::Transfer {
-        from: expected_from,
-        to: expected_to,
-        spender: None,
-        amount: Tokens::ZERO,
-        fee: max_fee,
-    };
-
-    // While this payment has been made here, it isn't actually committed until you
-    // make an inter canister call. As such we don't reject without rollback until
-    // an inter-canister call has definitely been made
-    add_payment(Memo(block_height), transfer, None);
-
-    let response = if notify_using_protobuf {
-        let bytes = ProtoBuf(transaction_notification_args)
-            .into_bytes()
-            .expect("transaction notification serialization failed");
-        call_bytes_with_cleanup(
-            to_canister,
-            "transaction_notification_pb",
-            &bytes[..],
-            Funds::zero(),
-        )
-        .await
-    } else {
-        let bytes = candid::encode_one(transaction_notification_args)
-            .expect("transaction notification serialization failed");
-        call_bytes_with_cleanup(
-            to_canister,
-            "transaction_notification",
-            &bytes[..],
-            Funds::zero(),
-        )
-        .await
-    };
-    // Don't panic after here or the notification might look like it succeeded
-    // when actually it failed
-
-    // propagate the response/rejection from 'to_canister' if it's shorter than this
-    // length.
-    // This could be done better because we still read in the whole
-    // String/Vec as is
-    pub const MAX_LENGTH: usize = 8192;
-
-    match response {
-        Ok(bs) => {
-            if bs.len() > MAX_LENGTH {
-                let caller = PrincipalId::from(caller());
-                Err(format!(
-                    "Notification succeeded, but the canister '{}' returned too large of a response",
-                    caller,
-                ))
-            } else {
-                Ok(BytesS(bs))
-            }
-        }
-        Err((_code, err)) => {
-            // It may be that by the time this callback is made the block will have been
-            // garbage collected. That is fine because we don't inspect the
-            // response here.
-            let _ =
-                ledger_canister::change_notification_state(block_height, block_timestamp, false);
-            if err.len() > MAX_LENGTH {
-                let caller = PrincipalId::from(caller());
-                Err(format!(
-                    "Notification failed, but the canister '{}' returned too large of a response",
-                    caller,
-                ))
-            } else {
-                Err(format!("Notification failed with message '{}'", err))
-            }
-        }
-    }
+    trap("The notify method is no longer supported. \
+    Please migrate to the CMC notify flow: https://forum.dfinity.org/t/deprecating-the-ledger-notify-flow-for-minting-cycles-in-favor-of-cmc-notify/42502");
 }
 
 /// This gives you the index of the last block added to the chain
@@ -582,10 +440,6 @@ fn block(block_index: BlockIndex) -> Option<Result<EncodedBlock, CanisterId>> {
         Some(Err(result))
     // Or the block may be in the ledger, or the block may not exist
     } else {
-        print(format!(
-            "[ledger] Checking the ledger for block [{}]",
-            block_index
-        ));
         state.blockchain.get(block_index).map(Ok)
     }
 }
@@ -597,13 +451,11 @@ fn account_balance(account: AccountIdentifier) -> Tokens {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_balance_of(acc: Account) -> Nat {
     Nat::from(account_balance(AccountIdentifier::from(acc)).get_e8s())
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_supported_standards() -> Vec<StandardRecord> {
     let mut standards = vec![StandardRecord {
         name: "ICRC-1".to_string(),
@@ -626,19 +478,16 @@ fn icrc1_supported_standards() -> Vec<StandardRecord> {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_minting_account() -> Option<Account> {
     LEDGER.read().unwrap().icrc1_minting_account
 }
 
 #[query]
-#[candid_method(query)]
 fn transfer_fee(_: TransferFeeArgs) -> TransferFee {
     LEDGER.read().unwrap().transfer_fee()
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_metadata() -> Vec<(String, Value)> {
     vec![
         Value::entry("icrc1:decimals", DECIMAL_PLACES as u64),
@@ -652,7 +501,6 @@ fn icrc1_metadata() -> Vec<(String, Value)> {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_fee() -> Nat {
     Nat::from(LEDGER.read().unwrap().transfer_fee.get_e8s())
 }
@@ -663,13 +511,11 @@ fn total_supply() -> Tokens {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_total_supply() -> Nat {
     Nat::from(LEDGER.read().unwrap().balances().total_supply().get_e8s())
 }
 
 #[query(name = "symbol")]
-#[candid_method(query, rename = "symbol")]
 fn token_symbol() -> Symbol {
     Symbol {
         symbol: LEDGER.read().unwrap().token_symbol.clone(),
@@ -677,7 +523,6 @@ fn token_symbol() -> Symbol {
 }
 
 #[query(name = "name")]
-#[candid_method(query, rename = "name")]
 fn token_name() -> Name {
     Name {
         name: LEDGER.read().unwrap().token_name.clone(),
@@ -685,19 +530,16 @@ fn token_name() -> Name {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_name() -> String {
     LEDGER.read().unwrap().token_name.clone()
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_symbol() -> String {
     LEDGER.read().unwrap().token_symbol.to_string()
 }
 
 #[query(name = "decimals")]
-#[candid_method(query, rename = "decimals")]
 fn token_decimals() -> Decimals {
     Decimals {
         decimals: DECIMAL_PLACES,
@@ -705,7 +547,6 @@ fn token_decimals() -> Decimals {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_decimals() -> u8 {
     debug_assert!(ic_ledger_core::tokens::DECIMAL_PLACES <= u8::MAX as u32);
     ic_ledger_core::tokens::DECIMAL_PLACES as u8
@@ -733,19 +574,20 @@ fn canister_init(arg: LedgerCanisterPayload) {
     }
 }
 
+#[cfg(not(feature = "canbench-rs"))]
 #[export_name = "canister_init"]
 fn main() {
-    ic_cdk::setup();
-    let bytes = arg_data_raw();
-    // We support the old init argument for backward
-    // compatibility. If decoding the bytes as the new
-    // init arguments fails then we fallback to the old
-    // init arguments.
-    match Decode!(&bytes, LedgerCanisterPayload) {
-        Ok(arg) => canister_init(arg),
-        Err(new_err) => {
-            // fallback to old init
-            match Decode!(&bytes, InitArgs) {
+    in_executor_context(|| {
+        let bytes = arg_data_raw();
+        // We support the old init argument for backward
+        // compatibility. If decoding the bytes as the new
+        // init arguments fails then we fallback to the old
+        // init arguments.
+        match Decode!(&bytes, LedgerCanisterPayload) {
+            Ok(arg) => canister_init(arg),
+            Err(new_err) => {
+                // fallback to old init
+                match Decode!(&bytes, InitArgs) {
                     Ok(arg) => init(
                         arg.minting_account,
                         arg.icrc1_minting_account,
@@ -760,24 +602,18 @@ fn main() {
                         arg.feature_flags,
                     ),
                     Err(old_err) =>
-                    trap(&format!("Unable to decode init argument.\nDecode as new init returned the error {}\nDecode as old init returned the error {}", new_err, old_err))
+                    trap(format!("Unable to decode init argument.\nDecode as new init returned the error {}\nDecode as old init returned the error {}", new_err, old_err))
                 }
+            }
         }
-    }
+    })
 }
+
+#[cfg(feature = "canbench-rs")]
+fn main() {}
 
 // We use 8MiB buffer
 const BUFFER_SIZE: usize = 8388608;
-
-#[cfg(not(feature = "low-upgrade-instruction-limits"))]
-const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 300_000_000_000;
-#[cfg(not(feature = "low-upgrade-instruction-limits"))]
-const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 1_900_000_000;
-
-#[cfg(feature = "low-upgrade-instruction-limits")]
-const MAX_INSTRUCTIONS_PER_UPGRADE: u64 = 5_000_000;
-#[cfg(feature = "low-upgrade-instruction-limits")]
-const MAX_INSTRUCTIONS_PER_TIMER_CALL: u64 = 500_000;
 
 #[post_upgrade]
 fn post_upgrade(args: Option<LedgerCanisterPayload>) {
@@ -818,14 +654,15 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
             ledger_state
         });
 
-        let upgrade_from_version = ledger.ledger_version;
         if ledger.ledger_version > LEDGER_VERSION {
             panic!(
                 "Trying to downgrade from incompatible version {}. Current version is {}.",
                 ledger.ledger_version, LEDGER_VERSION
             );
         }
-        ledger.ledger_version = LEDGER_VERSION;
+        if ledger.ledger_version < LEDGER_VERSION {
+            panic!("Migration to stable structures not supported in this version, please upgrade to git revision 3ae3649a2366aaca83404b692fc58e4c6e604a25 (https://github.com/dfinity/ic/releases/tag/ledger-suite-icp-2025-03-26) first.");
+        }
 
         if let Some(args) = args {
             match args {
@@ -834,7 +671,7 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
                 if let Some(upgrade_args) = upgrade_args {
                     ledger.upgrade(upgrade_args);
                 }
-        }
+            }
     }
         }
         set_certified_data(
@@ -846,97 +683,12 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
         );
         PRE_UPGRADE_INSTRUCTIONS_CONSUMED
             .with(|n| *n.borrow_mut() = pre_upgrade_instructions_consumed);
-        if upgrade_from_version < 3 {
-            set_ledger_state(LedgerState::Migrating(LedgerField::Blocks));
-            print(format!("Upgrading from version {upgrade_from_version} which does not store blocks in stable structures, clearing stable blocks data.").as_str());
-            clear_stable_blocks_data();
-        }
-        if upgrade_from_version < 2 {
-            set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
-            print(format!("Upgrading from version {upgrade_from_version} which does not store balances in stable structures, clearing stable balances data.").as_str());
-            clear_stable_balances_data();
-            ledger.copy_token_pool();
-        }
-        if upgrade_from_version == 0 {
-            set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
-            print("Upgrading from version 0 which does not use stable structures, clearing stable allowance data.");
-            clear_stable_allowance_data();
-            ledger.clear_arrivals();
-        }
-    }
-    if !is_ready() {
-        print("Migration started.");
-        migrate_next_part(
-            MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
-        );
     }
 
     let end = instruction_counter();
     let post_upgrade_instructions_consumed = end - start;
     POST_UPGRADE_INSTRUCTIONS_CONSUMED
         .with(|n| *n.borrow_mut() = post_upgrade_instructions_consumed);
-}
-
-fn migrate_next_part(instruction_limit: u64) {
-    let instructions_migration_start = instruction_counter();
-    STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow_mut() += 1);
-    let mut migrated_allowances = 0;
-    let mut migrated_expirations = 0;
-    let mut migrated_balances = 0;
-    let mut migrated_blocks = 0;
-
-    print("Migrating part of the ledger state.");
-
-    let mut ledger = LEDGER.write().unwrap();
-    while instruction_counter() < instruction_limit {
-        let field = match ledger_state() {
-            LedgerState::Migrating(ledger_field) => ledger_field,
-            LedgerState::Ready => break,
-        };
-        match field {
-            LedgerField::Allowances => {
-                if ledger.migrate_one_allowance() {
-                    migrated_allowances += 1;
-                } else {
-                    set_ledger_state(LedgerState::Migrating(LedgerField::AllowancesExpirations));
-                }
-            }
-            LedgerField::AllowancesExpirations => {
-                if ledger.migrate_one_expiration() {
-                    migrated_expirations += 1;
-                } else {
-                    set_ledger_state(LedgerState::Migrating(LedgerField::Balances));
-                }
-            }
-            LedgerField::Balances => {
-                if ledger.migrate_one_balance() {
-                    migrated_balances += 1;
-                } else {
-                    set_ledger_state(LedgerState::Migrating(LedgerField::Blocks));
-                }
-            }
-            LedgerField::Blocks => {
-                if ledger.migrate_one_block() {
-                    migrated_blocks += 1;
-                } else {
-                    set_ledger_state(LedgerState::Ready);
-                }
-            }
-        }
-    }
-    let instructions_migration = instruction_counter() - instructions_migration_start;
-    let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances} blocks: {migrated_blocks}. Migration step instructions: {instructions_migration}, total instructions used in message: {}, limit: {instruction_limit}." ,
-        instruction_counter());
-    if !is_ready() {
-        print(format!(
-            "Migration partially done. Scheduling the next part. {msg}"
-        ));
-        ic_cdk_timers::set_timer(Duration::from_secs(0), || {
-            migrate_next_part(MAX_INSTRUCTIONS_PER_TIMER_CALL)
-        });
-    } else {
-        print(format!("Migration completed! {msg}"));
-    }
 }
 
 #[pre_upgrade]
@@ -947,12 +699,6 @@ fn pre_upgrade() {
         .read()
         // This should never happen, but it's better to be safe than sorry
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    if !is_ready() {
-        // This means that migration did not complete and the correct state
-        // of the ledger is still in UPGRADES_MEMORY.
-        print("Ledger not ready, skipping write to UPGRADES_MEMORY.");
-        return;
-    }
     UPGRADES_MEMORY.with_borrow_mut(|bs| {
         let writer = Writer::new(bs, 0);
         let mut buffered_writer = BufferedWriter::new(BUFFER_SIZE, writer);
@@ -986,26 +732,24 @@ impl LedgerAccess for Access {
 /// Canister endpoints
 #[export_name = "canister_update send_pb"]
 fn send_() {
-    panic_if_not_ready();
+    in_executor_context(|| {
+        ic_cdk::futures::spawn_017_compat(async {
+            let SendArgs {
+                memo,
+                amount,
+                fee,
+                from_subaccount,
+                to,
+                created_at_time,
+            } = from_proto_bytes(arg_data_raw()).expect("failed to decode send_pb argument");
 
-    ic_cdk::spawn(async move {
-        ic_cdk::setup();
+            let res = send(memo, amount, fee, from_subaccount, to, created_at_time)
+                .await
+                .unwrap_or_else(|e| trap(e.to_string()));
 
-        let SendArgs {
-            memo,
-            amount,
-            fee,
-            from_subaccount,
-            to,
-            created_at_time,
-        } = from_proto_bytes(arg_data_raw()).expect("failed to decode send_pb argument");
-
-        let res = send(memo, amount, fee, from_subaccount, to, created_at_time)
-            .await
-            .unwrap_or_else(|e| trap(&e.to_string()));
-
-        let res_proto = to_proto_bytes(res).expect("failed to encode send_pb response");
-        reply_raw(&res_proto)
+            let res_proto = to_proto_bytes(res).expect("failed to encode send_pb response");
+            reply_raw(&res_proto)
+        })
     })
 }
 
@@ -1015,49 +759,22 @@ fn send_() {
 ///
 /// I STRONGLY recommend that you use "send_pb" instead.
 #[update]
-#[candid_method(update)]
 async fn send_dfx(arg: SendArgs) -> BlockIndex {
-    panic_if_not_ready();
     transfer(TransferArgs::from(arg)).await.unwrap_or_else(|e| {
-        trap(&e.to_string());
+        trap(e.to_string());
     })
 }
 
 #[cfg(feature = "notify-method")]
 #[export_name = "canister_update notify_pb"]
 fn notify_() {
-    use dfn_core::endpoint::over_async_may_reject_explicit;
-    use dfn_protobuf::ProtoBuf;
-
-    // we use over_init because it doesn't reply automatically so we can do explicit
-    // replies in the callback
-    over_async_may_reject_explicit(
-        |ProtoBuf(icp_ledger::NotifyCanisterArgs {
-             block_height,
-             max_fee,
-             from_subaccount,
-             to_canister,
-             to_subaccount,
-         })| async move {
-            notify(
-                block_height,
-                max_fee,
-                from_subaccount,
-                to_canister,
-                to_subaccount,
-                true,
-            )
-            .await
-        },
-    );
+    trap_since_notify_is_no_longer_supported();
 }
 
 #[update]
-#[candid_method(update)]
 async fn transfer(arg: TransferArgs) -> Result<BlockIndex, TransferError> {
-    panic_if_not_ready();
     let to_account = AccountIdentifier::from_address(arg.to).unwrap_or_else(|e| {
-        trap(&format!("Invalid account identifier: {}", e));
+        trap(format!("Invalid account identifier: {}", e));
     });
     send(
         arg.memo,
@@ -1071,18 +788,15 @@ async fn transfer(arg: TransferArgs) -> Result<BlockIndex, TransferError> {
 }
 
 #[update]
-#[candid_method(update)]
 async fn icrc1_transfer(
     arg: TransferArg,
 ) -> Result<Nat, icrc_ledger_types::icrc1::transfer::TransferError> {
-    panic_if_not_ready();
-
     if !LEDGER
         .read()
         .unwrap()
         .can_send(&PrincipalId::from(caller()))
     {
-        trap("Anonymous principal cannot hold tokens on the ledger.");
+        trap("Caller cannot hold tokens on the ledger.");
     }
 
     let from_account = Account {
@@ -1112,16 +826,13 @@ async fn icrc1_transfer(
 }
 
 #[update]
-#[candid_method(update)]
 async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
-    panic_if_not_ready();
-
     if !LEDGER
         .read()
         .unwrap()
         .can_send(&PrincipalId::from(caller()))
     {
-        trap("Anonymous principal cannot hold tokens on the ledger.");
+        trap("Caller cannot hold tokens on the ledger.");
     }
 
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
@@ -1157,97 +868,83 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
 #[cfg(feature = "notify-method")]
 #[export_name = "canister_update notify_dfx"]
 fn notify_dfx_() {
-    use dfn_core::endpoint::over_async_may_reject_explicit;
-
-    // we use over_init because it doesn't reply automatically so we can do explicit
-    // replies in the callback
-    over_async_may_reject_explicit(
-        |CandidOne(icp_ledger::NotifyCanisterArgs {
-             block_height,
-             max_fee,
-             from_subaccount,
-             to_canister,
-             to_subaccount,
-         })| {
-            notify(
-                block_height,
-                max_fee,
-                from_subaccount,
-                to_canister,
-                to_subaccount,
-                false,
-            )
-        },
-    );
+    trap_since_notify_is_no_longer_supported();
 }
 
 #[export_name = "canister_query block_pb"]
 fn block_() {
-    panic_if_not_ready();
-    ic_cdk::setup();
-    let arg: BlockArg =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode block_pb argument");
-    let res = to_proto_bytes(icp_ledger::BlockRes(block(arg.0)))
-        .expect("failed to encode block_pb response");
-    reply_raw(&res)
+    in_query_executor_context(|| {
+        let arg: BlockArg =
+            from_proto_bytes(arg_data_raw()).expect("failed to decode block_pb argument");
+        let res = to_proto_bytes(icp_ledger::BlockRes(block(arg.0)))
+            .expect("failed to encode block_pb response");
+        reply_raw(&res)
+    })
 }
 
 #[export_name = "canister_query tip_of_chain_pb"]
 fn tip_of_chain_() {
-    panic_if_not_ready();
-    ic_cdk::setup();
-    let _: protobuf::TipOfChainRequest =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode tip_of_chain_pb argument");
-    let res = to_proto_bytes(tip_of_chain()).expect("failed to encode tip_of_chain_pb response");
-    reply_raw(&res)
+    in_query_executor_context(|| {
+        let _: protobuf::TipOfChainRequest =
+            from_proto_bytes(arg_data_raw()).expect("failed to decode tip_of_chain_pb argument");
+        let res =
+            to_proto_bytes(tip_of_chain()).expect("failed to encode tip_of_chain_pb response");
+        reply_raw(&res)
+    })
+}
+
+#[query(name = "tip_of_chain")]
+fn tip_of_chain_candid() -> TipOfChainRes {
+    tip_of_chain()
 }
 
 #[export_name = "canister_query get_archive_index_pb"]
 fn get_archive_index_() {
-    ic_cdk::setup();
-    let state = LEDGER.read().unwrap();
-    let entries = match &state
-        .blockchain
-        .archive
-        .try_read()
-        .expect("Failed to get lock on archive")
-        .as_ref()
-    {
-        None => vec![],
-        Some(archive) => archive
-            .index()
-            .into_iter()
-            .map(
-                |((height_from, height_to), canister_id)| protobuf::ArchiveIndexEntry {
-                    height_from,
-                    height_to,
-                    canister_id: Some(canister_id.get()),
-                },
-            )
-            .collect(),
-    };
-    let res = to_proto_bytes(protobuf::ArchiveIndexResponse { entries })
-        .expect("failed to encode get_archive_index_pb response");
-    reply_raw(&res);
+    in_query_executor_context(|| {
+        let state = LEDGER.read().unwrap();
+        let entries = match &state
+            .blockchain
+            .archive
+            .try_read()
+            .expect("Failed to get lock on archive")
+            .as_ref()
+        {
+            None => vec![],
+            Some(archive) => archive
+                .index()
+                .into_iter()
+                .map(
+                    |((height_from, height_to), canister_id)| protobuf::ArchiveIndexEntry {
+                        height_from,
+                        height_to,
+                        canister_id: Some(canister_id.get()),
+                    },
+                )
+                .collect(),
+        };
+        let res = to_proto_bytes(protobuf::ArchiveIndexResponse { entries })
+            .expect("failed to encode get_archive_index_pb response");
+        reply_raw(&res);
+    })
 }
 
 #[export_name = "canister_query account_balance_pb"]
 fn account_balance_() {
-    ic_cdk::setup();
-    let args: AccountBalanceArgs =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode account_balance_pb argument");
-    let res = tokens_into_proto(account_balance(args.account));
-    let res_proto = to_proto_bytes(res).expect("failed to encode account_balance_pb response");
-    reply_raw(&res_proto)
+    in_query_executor_context(|| {
+        let args: AccountBalanceArgs =
+            from_proto_bytes(arg_data_raw()).expect("failed to decode account_balance_pb argument");
+        let res = tokens_into_proto(account_balance(args.account));
+        let res_proto = to_proto_bytes(res).expect("failed to encode account_balance_pb response");
+        reply_raw(&res_proto)
+    })
 }
 
 #[query(name = "account_balance")]
-#[candid_method(query, rename = "account_balance")]
 fn account_balance_candid_(arg: AccountIdentifierByteBuf) -> Tokens {
     match BinaryAccountBalanceArgs::try_from(arg) {
         Ok(arg) => {
             let account = AccountIdentifier::from_address(arg.account).unwrap_or_else(|e| {
-                trap(&format!("Invalid account identifier: {}", e));
+                trap(format!("Invalid account identifier: {}", e));
             });
             account_balance(account)
         }
@@ -1257,35 +954,35 @@ fn account_balance_candid_(arg: AccountIdentifierByteBuf) -> Tokens {
 
 /// See caveats of use on send_dfx
 #[query(name = "account_balance_dfx")]
-#[candid_method(query, rename = "account_balance_dfx")]
 fn account_balance_dfx_(args: AccountBalanceArgs) -> Tokens {
     account_balance(args.account)
 }
 
 #[query(name = "account_identifier")]
-#[candid_method(query, rename = "account_identifier")]
 fn compute_account_identifier(arg: Account) -> AccountIdBlob {
     AccountIdentifier::from(arg).to_address()
 }
 
 #[export_name = "canister_query transfer_fee_pb"]
 fn transfer_fee_() {
-    ic_cdk::setup();
-    let args: TransferFeeArgs =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode transfer_fee_pb argument");
-    let fee = transfer_fee(args);
-    let res = to_proto_bytes(fee).expect("failed to encpde transfer_fee_pb response");
-    reply_raw(&res)
+    in_query_executor_context(|| {
+        let args: TransferFeeArgs =
+            from_proto_bytes(arg_data_raw()).expect("failed to decode transfer_fee_pb argument");
+        let fee = transfer_fee(args);
+        let res = to_proto_bytes(fee).expect("failed to encpde transfer_fee_pb response");
+        reply_raw(&res)
+    })
 }
 
 #[export_name = "canister_query total_supply_pb"]
 fn total_supply_() {
-    ic_cdk::setup();
-    let _: TotalSupplyArgs =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode total_supply_pb args");
-    let res = tokens_into_proto(total_supply());
-    let res_proto = to_proto_bytes(res).expect("failed encode total_supply_pb response");
-    reply_raw(&res_proto)
+    in_query_executor_context(|| {
+        let _: TotalSupplyArgs =
+            from_proto_bytes(arg_data_raw()).expect("failed to decode total_supply_pb args");
+        let res = tokens_into_proto(total_supply());
+        let res_proto = to_proto_bytes(res).expect("failed encode total_supply_pb response");
+        reply_raw(&res_proto)
+    })
 }
 
 /// Get multiple blocks by *offset into the container* (not BlockIndex) and
@@ -1295,56 +992,52 @@ fn total_supply_() {
 /// with height 100.
 #[export_name = "canister_query iter_blocks_pb"]
 fn iter_blocks_() {
-    panic_if_not_ready();
+    in_query_executor_context(|| {
+        let args: IterBlocksArgs =
+            from_proto_bytes(arg_data_raw()).expect("failed to decode iter_blocks_pb argument");
 
-    ic_cdk::setup();
-    let args: IterBlocksArgs =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode iter_blocks_pb argument");
-
-    let length = std::cmp::min(
-        args.length,
-        max_blocks_per_request(&PrincipalId::from(caller())),
-    ) as u64;
-    let archived_len = LEDGER.read().unwrap().blockchain.num_archived_blocks;
-    let start = archived_len + args.start as u64;
-    let end = start + length;
-    let blocks = LEDGER.read().unwrap().blockchain.get_blocks(start..end);
-    let res =
-        to_proto_bytes(IterBlocksRes(blocks)).expect("failed to encode iter_blocks_pb response");
-    reply_raw(&res)
+        let length = std::cmp::min(
+            args.length,
+            max_blocks_per_request(&PrincipalId::from(caller())),
+        ) as u64;
+        let archived_len = LEDGER.read().unwrap().blockchain.num_archived_blocks;
+        let start = archived_len + args.start as u64;
+        let end = start + length;
+        let blocks = LEDGER.read().unwrap().blockchain.get_blocks(start..end);
+        let res = to_proto_bytes(IterBlocksRes(blocks))
+            .expect("failed to encode iter_blocks_pb response");
+        reply_raw(&res)
+    })
 }
 
 /// Get multiple blocks by BlockIndex and length. If the query is outside the
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
-    panic_if_not_ready();
+    in_query_executor_context(|| {
+        let args: GetBlocksArgs =
+            from_proto_bytes(arg_data_raw()).expect("failed to decode get_blocks_pb argument");
 
-    ic_cdk::setup();
-    let args: GetBlocksArgs =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode get_blocks_pb argument");
-
-    let length = std::cmp::min(
-        args.length,
-        max_blocks_per_request(&PrincipalId::from(caller())) as u64,
-    );
-    let blockchain = &LEDGER.read().unwrap().blockchain;
-    let local_blocks_range = blockchain.num_archived_blocks..blockchain.chain_length();
-    let requested_range = args.start..args.start + length;
-    let res = if !range_utils::is_subrange(&requested_range, &local_blocks_range) {
-        GetBlocksRes(Err(format!("Requested blocks outside the range stored in the ledger node. Requested [{} .. {}]. Available [{} .. {}].",
+        let length = std::cmp::min(
+            args.length,
+            max_blocks_per_request(&PrincipalId::from(caller())) as u64,
+        );
+        let blockchain = &LEDGER.read().unwrap().blockchain;
+        let local_blocks_range = blockchain.num_archived_blocks..blockchain.chain_length();
+        let requested_range = args.start..args.start + length;
+        let res = if !range_utils::is_subrange(&requested_range, &local_blocks_range) {
+            GetBlocksRes(Err(format!("Requested blocks outside the range stored in the ledger node. Requested [{} .. {}]. Available [{} .. {}].",
             requested_range.start, requested_range.end, local_blocks_range.start, local_blocks_range.end)))
-    } else {
-        GetBlocksRes(Ok(blockchain.get_blocks(requested_range)))
-    };
-    let res_proto = to_proto_bytes(res).expect("failed to encode get_blocks_pb respone");
-    reply_raw(&res_proto)
+        } else {
+            GetBlocksRes(Ok(blockchain.get_blocks(requested_range)))
+        };
+        let res_proto = to_proto_bytes(res).expect("failed to encode get_blocks_pb respone");
+        reply_raw(&res_proto)
+    })
 }
 
 #[query]
-#[candid_method(query)]
 fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksResponse {
-    panic_if_not_ready();
     let ledger = LEDGER.read().unwrap();
     let locations = block_locations(&*ledger, start, length.min(usize::MAX as u64) as usize);
 
@@ -1386,7 +1079,6 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
 }
 
 #[query]
-#[candid_method(query)]
 fn archives() -> Archives {
     let ledger_guard = LEDGER.try_read().expect("Failed to get ledger read lock");
     let archive_guard = ledger_guard.blockchain.archive.read().unwrap();
@@ -1405,21 +1097,19 @@ fn archives() -> Archives {
 
 #[export_name = "canister_query get_nodes"]
 fn get_nodes_() {
-    ic_cdk::setup();
-    let result = archives()
-        .archives
-        .iter()
-        .map(|archive| archive.canister_id)
-        .collect::<Vec<CanisterId>>();
-    ic_cdk::api::call::reply((result,));
+    in_query_executor_context(|| {
+        let result = archives()
+            .archives
+            .iter()
+            .map(|archive| archive.canister_id)
+            .collect::<Vec<CanisterId>>();
+        ic_cdk::api::call::reply((result,));
+    })
 }
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     let ledger = LEDGER.try_read().map_err(|err| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Failed to get a LEDGER for read: {}", err),
-        )
+        std::io::Error::other(format!("Failed to get a LEDGER for read: {}", err))
     })?;
     let archive_guard = ledger.blockchain.archive.read().unwrap();
     let num_archives = archive_guard
@@ -1475,18 +1165,16 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         ledger.blockchain.num_archived_blocks.saturating_add(ledger.blockchain.num_unarchived_blocks()) as f64,
         "Total number of blocks stored in the main memory, plus total number of blocks sent to the archive.",
     )?;
-    if is_ready() {
-        w.encode_gauge(
-            "ledger_balances_token_pool",
-            ledger.balances().token_pool.get_tokens() as f64,
-            "Total number of Tokens in the pool.",
-        )?;
-        w.encode_gauge(
-            "ledger_balance_store_entries",
-            balances_len() as f64,
-            "Total number of accounts in the balance store.",
-        )?;
-    }
+    w.encode_gauge(
+        "ledger_balances_token_pool",
+        ledger.balances().token_pool.get_tokens() as f64,
+        "Total number of Tokens in the pool.",
+    )?;
+    w.encode_gauge(
+        "ledger_balance_store_entries",
+        balances_len() as f64,
+        "Total number of accounts in the balance store.",
+    )?;
     w.encode_gauge(
         "ledger_most_recent_block_time_seconds",
         ledger.blockchain.last_timestamp.as_nanos_since_unix_epoch() as f64 / 1_000_000_000.0,
@@ -1494,7 +1182,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "ledger_notify_method_calls",
-        NOTIFY_METHOD_CALLS.with(|n| *n.borrow()) as f64,
+        0f64,
         "Total number of calls to the notify-method method.",
     )?;
     w.encode_counter(
@@ -1502,13 +1190,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         num_archives as f64,
         "Total number of archives.",
     )?;
-    if is_ready() {
-        w.encode_gauge(
-            "ledger_num_approvals",
-            ledger.approvals().get_num_approvals() as f64,
-            "Total number of approvals.",
-        )?;
-    }
+    w.encode_gauge(
+        "ledger_num_approvals",
+        ledger.approvals().get_num_approvals() as f64,
+        "Total number of approvals.",
+    )?;
     let pre_upgrade_instructions = PRE_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow());
     let post_upgrade_instructions = POST_UPGRADE_INSTRUCTIONS_CONSUMED.with(|n| *n.borrow());
     w.encode_gauge(
@@ -1526,15 +1212,13 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         pre_upgrade_instructions.saturating_add(post_upgrade_instructions) as f64,
         "Total number of instructions consumed during the last upgrade.",
     )?;
-    w.encode_counter(
-        "ledger_stable_upgrade_migration_steps",
-        STABLE_UPGRADE_MIGRATION_STEPS.with(|n| *n.borrow()) as f64,
-        "Number of steps used to migrate data to stable structures.",
-    )?;
     Ok(())
 }
 
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -1543,6 +1227,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         match encode_metrics(&mut writer) {
             Ok(()) => HttpResponseBuilder::ok()
                 .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Cache-Control", "no-store")
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
@@ -1556,11 +1241,9 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 }
 
 #[query]
-#[candid_method(query)]
 fn query_encoded_blocks(
     GetBlocksArgs { start, length }: GetBlocksArgs,
 ) -> QueryEncodedBlocksResponse {
-    panic_if_not_ready();
     let ledger = LEDGER.read().unwrap();
     let locations = block_locations(&*ledger, start, length.min(usize::MAX as u64) as usize);
 
@@ -1595,17 +1278,13 @@ fn query_encoded_blocks(
     }
 }
 
-#[update]
-#[candid_method(update)]
-async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
-    panic_if_not_ready();
-
-    if !LEDGER
-        .read()
-        .unwrap()
-        .can_send(&PrincipalId::from(caller()))
-    {
-        trap("Anonymous principal cannot approve token transfers on the ledger.");
+fn icrc2_approve_not_async(
+    caller: Principal,
+    arg: ApproveArgs,
+    override_spender: Option<AccountIdentifier>,
+) -> Result<Nat, ApproveError> {
+    if !LEDGER.read().unwrap().can_send(&PrincipalId::from(caller)) {
+        trap("Caller cannot approve token transfers on the ledger.");
     }
 
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
@@ -1614,14 +1293,18 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     let now = TimeStamp::from_nanos_since_unix_epoch(time());
 
     let from_account = Account {
-        owner: caller(),
+        owner: caller,
         subaccount: arg.from_subaccount,
     };
     let from = AccountIdentifier::from(from_account);
     if from_account.owner == arg.spender.owner {
         trap("self approval is not allowed");
     }
-    let spender = AccountIdentifier::from(arg.spender);
+    let spender = if let Some(override_spender) = override_spender {
+        override_spender
+    } else {
+        AccountIdentifier::from(arg.spender)
+    };
     let minting_acc = LEDGER
         .read()
         .unwrap()
@@ -1679,7 +1362,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
             memo: Memo(0),
             icrc1_memo: arg.memo.map(|x| x.0),
         };
-        let (block_index, hash) = apply_transaction(&mut *ledger, tx, now, expected_fee)
+        let result = apply_transaction(&mut *ledger, tx, now, expected_fee)
             .map_err(convert_transfer_error)
             .map_err(|err| {
                 let err: ApproveError = match ApproveError::try_from(err) {
@@ -1689,14 +1372,28 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
                 err
             })?;
 
+        #[cfg(not(feature = "canbench-rs"))]
+        let (block_index, hash) = result;
+
+        #[cfg(feature = "canbench-rs")]
+        let (block_index, _hash) = result;
+
+        #[cfg(not(feature = "canbench-rs"))]
         set_certified_data(&hash.into_bytes());
 
         block_index
     };
 
+    Ok(Nat::from(block_index))
+}
+
+#[update]
+async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
+    let block_index = icrc2_approve_not_async(caller(), arg, None)?;
+
     let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
     archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
-    Ok(Nat::from(block_index))
+    Ok(block_index)
 }
 
 fn get_allowance(from: AccountIdentifier, spender: AccountIdentifier) -> Allowance {
@@ -1709,8 +1406,32 @@ fn get_allowance(from: AccountIdentifier, spender: AccountIdentifier) -> Allowan
     }
 }
 
+#[update]
+async fn remove_approval(args: RemoveApprovalArgs) -> Result<Nat, ApproveError> {
+    let approve_arg = ApproveArgs {
+        from_subaccount: args.from_subaccount,
+        spender: Account {
+            owner: Principal::anonymous(),
+            subaccount: None,
+        },
+        amount: Nat::from(0u64),
+        expected_allowance: None,
+        expires_at: None,
+        fee: args.fee,
+        memo: None,
+        created_at_time: None,
+    };
+    let spender = AccountIdentifier::from_address(args.spender).unwrap_or_else(|e| {
+        trap(format!("Invalid account identifier: {}", e));
+    });
+    let block_index = icrc2_approve_not_async(caller(), approve_arg, Some(spender))?;
+
+    let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
+    archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
+    Ok(block_index)
+}
+
 #[query]
-#[candid_method(query)]
 fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
     if !LEDGER.read().unwrap().feature_flags.icrc2 {
         trap("ICRC-2 features are not enabled on the ledger.");
@@ -1722,40 +1443,105 @@ fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
 
 #[cfg(feature = "icp-allowance-getter")]
 #[query(name = "allowance")]
-#[candid_method(query, rename = "allowance")]
 fn icp_allowance(arg: IcpAllowanceArgs) -> Allowance {
     get_allowance(arg.account, arg.spender)
 }
 
 #[update]
-#[candid_method(update)]
 fn icrc21_canister_call_consent_message(
     consent_msg_request: ConsentMessageRequest,
 ) -> Result<ConsentInfo, Icrc21Error> {
     let caller_principal = caller();
     let ledger_fee = Nat::from(LEDGER.read().unwrap().transfer_fee.get_e8s());
     let token_symbol = LEDGER.read().unwrap().token_symbol.clone();
+    let token_name = LEDGER.read().unwrap().token_name.clone();
     let decimals = ic_ledger_core::tokens::DECIMAL_PLACES as u8;
 
-    build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
-        consent_msg_request,
-        caller_principal,
-        ledger_fee,
-        token_symbol,
-        decimals,
-    )
+    if consent_msg_request.method == "transfer" {
+        let TransferArgs {
+            memo,
+            amount,
+            fee,
+            from_subaccount,
+            to,
+            created_at_time: _,
+        } = Decode!(&consent_msg_request.arg, TransferArgs).map_err(|e| {
+            Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                description: format!("Failed to decode TransferArgs: {}", e),
+            })
+        })?;
+        icrc21_check_fee(&Some(Nat::from(fee)), &ledger_fee)?;
+        let from = if caller() == Principal::anonymous() {
+            AccountOrId::AccountIdAddress(None)
+        } else {
+            let account = Account {
+                owner: caller(),
+                subaccount: from_subaccount.map(|sa| sa.0),
+            };
+            AccountOrId::AccountIdAddress(Some(AccountIdentifier::from(account).to_hex()))
+        };
+        let receiver = AccountIdentifier::from_slice(&to).map_err(|e| {
+            Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+                description: format!("Failed to parse receiver account id: {}", e),
+            })
+        })?;
+        let args = GenericTransferArgs {
+            from,
+            receiver: AccountOrId::AccountIdAddress(Some(receiver.to_hex())),
+            amount: Nat::from(amount.get_e8s()),
+            memo: Some(GenericMemo::IntMemo(memo.0)),
+        };
+        build_icrc21_consent_info(
+            consent_msg_request,
+            caller_principal,
+            ledger_fee,
+            token_symbol,
+            token_name,
+            decimals,
+            Some(args),
+        )
+    } else {
+        build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
+            consent_msg_request,
+            caller_principal,
+            ledger_fee,
+            token_symbol,
+            token_name,
+            decimals,
+        )
+    }
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc10_supported_standards() -> Vec<StandardRecord> {
     icrc1_supported_standards()
 }
 
 #[query]
-#[candid_method(query)]
 fn is_ledger_ready() -> bool {
-    is_ready()
+    true
+}
+
+/// Get allowances where the approver is `arg.from_account_id`. If `arg.prev_spender_id`
+/// is not specified, the list starts from the first allowance from `arg.from_account_id`.
+/// If `arg.prev_spender_id` is specified, the list starts with allowance that is lexicographically
+/// larger than (`arg.from_account_id`, `arg.prev_spender_id`). This way `arg.prev_spender_id`
+/// can be used for pagination - the user can specify which allowance they already saw.
+/// `arg.take` can be used to limit the number of returned allowances. If not specified,
+/// at most 500 allowances will be returned.
+#[query]
+fn get_allowances(arg: GetAllowancesArgs) -> Allowances {
+    let max_take_allowances = Access::with_ledger(|ledger| ledger.max_take_allowances());
+    let max_results = arg
+        .take
+        .map(|take| std::cmp::min(take, max_take_allowances))
+        .unwrap_or(max_take_allowances);
+    get_allowances_list(
+        arg.from_account_id,
+        arg.prev_spender_id,
+        max_results,
+        ic_cdk::api::time(),
+    )
 }
 
 candid::export_service!();

@@ -5,7 +5,6 @@ use assert_matches::assert_matches;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_interfaces::messaging::{InvalidXNetPayload, XNetPayloadValidationFailure};
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
-use ic_interfaces_state_manager::StateManagerError;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
@@ -14,6 +13,7 @@ use ic_test_utilities_metrics::{
     HistogramStats, MetricVec,
 };
 use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_2};
+use ic_types::state_manager::StateManagerError;
 use maplit::btreemap;
 use mockall::predicate::eq;
 

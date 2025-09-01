@@ -137,6 +137,7 @@ RUN ln -sf /bin/bash /usr/bin/sh
 RUN addgroup --system nonconfidential && \
     addgroup --system ic-csp-vault-socket && \
     addgroup --system vsock && \
+    addgroup --system ic-consensus-pool && \
     addgroup --system ic-registry-local-store
 
 # The "ic-csp-vault" account. Used to run `ic-crypto-csp` binary and access the crypto key material.
@@ -156,6 +157,7 @@ RUN adduser --system --disabled-password --home /var/lib/ic --group --no-create-
     adduser ic-replica backup && \
     adduser ic-replica ic-csp-vault-socket && \
     adduser ic-replica nonconfidential && \
+    adduser ic-replica ic-consensus-pool && \
     adduser ic-replica ic-registry-local-store && \
     adduser ic-replica ic-http-adapter && \
     adduser ic-replica vsock
@@ -169,6 +171,7 @@ RUN chsh -s /bin/bash backup && \
     chown backup:backup /var/lib/backup && \
     usermod -d /var/lib/backup backup && \
     adduser backup systemd-journal && \
+    adduser backup ic-consensus-pool && \
     adduser backup ic-registry-local-store
 
 # The "read-only" user account. May read everything besides crypto.
@@ -176,6 +179,7 @@ RUN adduser --system --disabled-password --home /var/lib/readonly --shell /bin/b
     adduser readonly backup && \
     adduser readonly nonconfidential && \
     adduser readonly systemd-journal && \
+    adduser readonly ic-consensus-pool && \
     adduser readonly ic-registry-local-store
 
 # The omnipotent "admin" account. May read everything and crucially can also
@@ -184,18 +188,11 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
     chown admin:staff /var/lib/admin && \
     adduser admin backup && \
     adduser admin nonconfidential && \
+    adduser admin ic-consensus-pool && \
     adduser admin ic-registry-local-store && \
     adduser admin systemd-journal && \
     adduser admin vsock && \
     adduser admin sudo
-
-# The "filebeat" account. Used to run filebeat binary to send logs of the
-# GuestOS.
-RUN addgroup filebeat && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "Filebeat" filebeat && \
-    adduser filebeat filebeat && \
-    adduser filebeat systemd-journal && \
-    chown root:root /usr/local/bin/filebeat
 
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.
@@ -231,6 +228,9 @@ RUN find /opt -type d -exec chmod 0755 {} \+ && \
     find /opt -type f -exec chmod 0644 {} \+ && \
     chmod 0755 /opt/ic/bin/* && \
     chmod 0644 /opt/ic/share/*
+
+# Prepare mount point for config device coming from the HostOS
+RUN mkdir /mnt/config
 
 # ------ DEV VARIANT ---------------------------------------------
 

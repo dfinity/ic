@@ -22,7 +22,6 @@ rust_library(
 rust_canister(
     name = "stable_memory_integrity_canister",
     srcs = ["bin/main.rs"],
-    proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     service_file = ":stable_memory_integrity.did",
     deps = [
         # Keep sorted.

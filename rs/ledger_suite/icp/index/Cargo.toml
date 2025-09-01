@@ -15,10 +15,9 @@ candid = { workspace = true }
 ciborium = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
-ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
+ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-icrc1-index-ng = { path = "../../icrc1/index-ng" }
 ic-ledger-canister-core = { path = "../../common/ledger_canister_core" }
 ic-ledger-core = { path = "../../common/ledger_core" }

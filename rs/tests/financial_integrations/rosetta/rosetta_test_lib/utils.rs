@@ -5,7 +5,7 @@ use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_ledger_core::{block::BlockIndex, Tokens};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::{neuron::DissolveState, Neuron};
+use ic_nns_governance_api::{neuron::DissolveState, Neuron};
 use ic_rosetta_api::{
     convert::{
         from_hex, from_model_account_identifier, from_transaction_operation_results,
@@ -28,7 +28,7 @@ use ic_rosetta_api::{
         transaction_results::TransactionResults, Request,
     },
     request_types::{
-        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity,
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, DisburseMaturity, Follow, ListNeurons,
         NeuronInfo, RefreshVotingPower, RegisterVote, RemoveHotKey, SetDissolveTimestamp, Spawn,
         Stake, StakeMaturity, StartDissolve, StopDissolve,
     },
@@ -371,12 +371,12 @@ where
             | Request::Disburse(Disburse { account, .. })
             | Request::Spawn(Spawn { account, .. })
             | Request::RegisterVote(RegisterVote { account, .. })
-            | Request::MergeMaturity(MergeMaturity { account, .. })
             | Request::StakeMaturity(StakeMaturity { account, .. })
             | Request::NeuronInfo(NeuronInfo { account, .. })
             | Request::ListNeurons(ListNeurons { account, .. })
             | Request::RefreshVotingPower(RefreshVotingPower { account, .. })
-            | Request::Follow(Follow { account, .. }) => {
+            | Request::Follow(Follow { account, .. })
+            | Request::DisburseMaturity(DisburseMaturity { account, .. }) => {
                 all_sender_account_ids.push(to_model_account_identifier(&account));
             }
             Request::Transfer(Operation::Burn { .. }) => {

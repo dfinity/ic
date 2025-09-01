@@ -9,7 +9,7 @@ All access to configuration and the config partition should go through the confi
 For testing, IC-OS Config is also used to create GuestOS configuration directly.
 
 When updating the IC-OS configuration, it's crucial to ensure backwards compatibility.
-For detailed guidelines on updating the configuration, please refer to the documentation in [`types.rs`](src/types.rs).
+For detailed guidelines on updating the configuration, please refer to the documentation in config_types [`lib.rs`](../config_types/src/lib.rs).
 Any changes to the configuration should undergo a thorough review process to ensure they follow the guidlines.
 
 For details on the IC-OS configuration mechanism, refer to [ic-os/docs/Configuration.adoc](../../../ic-os/docs/Configuration.adoc)

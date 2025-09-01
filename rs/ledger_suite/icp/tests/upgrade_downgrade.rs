@@ -12,10 +12,6 @@ use ic_ledger_test_utils::pocket_ic_helpers::install_canister;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::{
     account_balance, archives, query_blocks, query_encoded_blocks, transfer, LEDGER_CANISTER_ID,
 };
-use ic_ledger_test_utils::{
-    build_ledger_archive_wasm, build_ledger_index_wasm, build_ledger_wasm,
-    build_mainnet_ledger_archive_wasm, build_mainnet_ledger_index_wasm, build_mainnet_ledger_wasm,
-};
 use icp_ledger::CandidOperation::Mint;
 use icp_ledger::{
     AccountIdentifier, CandidBlock, CandidTransaction, LedgerCanisterInitPayload,
@@ -23,7 +19,7 @@ use icp_ledger::{
 };
 use maplit::hashmap;
 use pocket_ic::{PocketIc, PocketIcBuilder};
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 const ARCHIVE_NUM_BLOCKS_TO_ARCHIVE: usize = 5;
 /// Trigger archiving after 20 blocks.
@@ -106,6 +102,7 @@ impl Setup {
     fn execute_icp_transfer(&mut self) -> BlockIndex {
         self.pocket_ic.advance_time(Duration::from_secs(1));
         self.pocket_ic.tick();
+        let time: SystemTime = self.pocket_ic.get_time().try_into().unwrap();
         let amount = 1_000_000u64;
         let transfer_args = TransferArgs {
             memo: Memo(121u64),
@@ -113,7 +110,7 @@ impl Setup {
             fee: DEFAULT_TRANSFER_FEE,
             from_subaccount: Some(self.user1.subaccount),
             to: self.user2.account_identifier().to_address(),
-            created_at_time: Some(TimeStamp::from(self.pocket_ic.get_time())),
+            created_at_time: Some(TimeStamp::from(time)),
         };
         self.ledger_blocks_created += 1;
         transfer(&self.pocket_ic, self.user1.principal, transfer_args).unwrap()
@@ -142,15 +139,21 @@ impl Setup {
     }
 
     fn upgrade_ledger_canister(&self, upgrade_to_version: UpgradeToVersion, should_succeed: bool) {
-        let ledger_wasm = match upgrade_to_version {
-            UpgradeToVersion::MainNet => build_mainnet_ledger_wasm(),
-            UpgradeToVersion::Latest => build_ledger_wasm(),
+        let ledger_wasm_bytes = match upgrade_to_version {
+            UpgradeToVersion::MainNet => {
+                std::fs::read(std::env::var("MAINNET_ICP_LEDGER_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read mainnet ledger wasm")
+            }
+            UpgradeToVersion::Latest => {
+                std::fs::read(std::env::var("LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH").unwrap())
+                    .expect("Could not read ledger wasm")
+            }
         };
         let ledger_upgrade_args = LedgerCanisterUpgradePayload::builder().build().unwrap();
         let canister_id = candid::Principal::from(LEDGER_CANISTER_ID);
         match self.pocket_ic.upgrade_canister(
             canister_id,
-            ledger_wasm.bytes(),
+            ledger_wasm_bytes,
             Encode!(&ledger_upgrade_args).unwrap(),
             None,
         ) {
@@ -177,14 +180,20 @@ impl Setup {
         );
     }
 
-    fn upgrade_archive_canisters(
-        &self,
-        upgrade_to_version: UpgradeToVersion,
-        should_succeed: bool,
-    ) {
-        let archive_wasm_bytes = match upgrade_to_version {
-            UpgradeToVersion::MainNet => build_mainnet_ledger_archive_wasm().bytes(),
-            UpgradeToVersion::Latest => build_ledger_archive_wasm().bytes(),
+    fn upgrade_archive_canisters(&self, upgrade_to_version: UpgradeToVersion) {
+        let (archive_wasm_bytes, upgrade_arg) = match upgrade_to_version {
+            UpgradeToVersion::MainNet => (
+                std::fs::read(
+                    std::env::var("MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH").unwrap(),
+                )
+                .expect("Could not read mainnet archive wasm"),
+                vec![],
+            ),
+            UpgradeToVersion::Latest => (
+                std::fs::read(std::env::var("LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read archive wasm"),
+                Encode!(&()).unwrap(),
+            ),
         };
         let mainnet_archive_module_hash = mainnet_archive_canister_sha256sum();
         let ledger_archives = archives(&self.pocket_ic);
@@ -192,42 +201,37 @@ impl Setup {
             .iter()
             .map(|archive| candid::Principal::from(archive.canister_id))
         {
-            match self.pocket_ic.upgrade_canister(
-                archive_canister_id,
-                archive_wasm_bytes.clone(),
-                vec![],
-                None,
-            ) {
-                Ok(_) => {
-                    if !should_succeed {
-                        panic!("Upgrade should fail!");
-                    }
-                }
-                Err(e) => {
-                    if should_succeed {
-                        panic!("Upgrade should succeed!");
-                    } else {
-                        assert!(e.reject_message.contains("Decoding stable memory failed"));
-                    }
-                }
-            };
+            self.pocket_ic
+                .upgrade_canister(
+                    archive_canister_id,
+                    archive_wasm_bytes.clone(),
+                    upgrade_arg.clone(),
+                    None,
+                )
+                .expect("failed to upgrade the archive canister");
 
             self.assert_canister_module_hash(
                 archive_canister_id,
                 &mainnet_archive_module_hash,
-                upgrade_to_version == UpgradeToVersion::MainNet && should_succeed,
+                upgrade_to_version == UpgradeToVersion::MainNet,
             );
         }
     }
 
     fn upgrade_index_canister(&self, upgrade_to_version: UpgradeToVersion) {
-        let index_wasm = match upgrade_to_version {
-            UpgradeToVersion::MainNet => build_mainnet_ledger_index_wasm(),
-            UpgradeToVersion::Latest => build_ledger_index_wasm(),
+        let index_wasm_bytes = match upgrade_to_version {
+            UpgradeToVersion::MainNet => {
+                std::fs::read(std::env::var("MAINNET_ICP_INDEX_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read mainnet index wasm")
+            }
+            UpgradeToVersion::Latest => {
+                std::fs::read(std::env::var("IC_ICP_INDEX_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read index wasm")
+            }
         };
         let canister_id = candid::Principal::from(LEDGER_INDEX_CANISTER_ID);
         self.pocket_ic
-            .upgrade_canister(canister_id, index_wasm.bytes(), vec![], None)
+            .upgrade_canister(canister_id, index_wasm_bytes, vec![], None)
             .unwrap();
         let expected_module_hash = mainnet_index_canister_sha256sum();
         self.assert_canister_module_hash(
@@ -289,23 +293,27 @@ impl SetupBuilder {
         let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build();
 
         // Install the (mainnet) NNS canisters.
-        let ledger_wasm = build_mainnet_ledger_wasm();
+        let ledger_wasm_bytes =
+            std::fs::read(std::env::var("MAINNET_ICP_LEDGER_CANISTER_WASM_PATH").unwrap())
+                .expect("Could not read mainnet ledger wasm");
         install_canister(
             &pocket_ic,
             "ICP Ledger",
             LEDGER_CANISTER_ID,
             Encode!(&ledger_canister_init_payload).unwrap(),
-            ledger_wasm.bytes(),
+            ledger_wasm_bytes,
             None,
         );
 
-        let index_wasm = build_mainnet_ledger_index_wasm();
+        let index_wasm_bytes =
+            std::fs::read(std::env::var("MAINNET_ICP_INDEX_CANISTER_WASM_PATH").unwrap())
+                .expect("Could not read mainnet index wasm");
         install_canister(
             &pocket_ic,
             "ICP Index",
             LEDGER_INDEX_CANISTER_ID,
             Encode!(&index_canister_init_args).unwrap(),
-            index_wasm.bytes(),
+            index_wasm_bytes,
             None,
         );
 
@@ -319,26 +327,32 @@ impl SetupBuilder {
 }
 
 fn mainnet_ledger_canister_sha256sum() -> Vec<u8> {
-    let ledger_wasm = build_mainnet_ledger_wasm();
+    let ledger_wasm_bytes =
+        std::fs::read(std::env::var("MAINNET_ICP_LEDGER_CANISTER_WASM_PATH").unwrap())
+            .expect("Could not read mainnet ledger wasm");
 
     let mut state = Sha256::new();
-    state.write(ledger_wasm.clone().bytes().as_slice());
+    state.write(ledger_wasm_bytes.as_slice());
     state.finish().to_vec()
 }
 
 fn mainnet_archive_canister_sha256sum() -> Vec<u8> {
-    let archive_wasm = build_mainnet_ledger_archive_wasm();
+    let archive_wasm_bytes =
+        std::fs::read(std::env::var("MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH").unwrap())
+            .expect("Could not read mainnet archive wasm");
 
     let mut state = Sha256::new();
-    state.write(archive_wasm.clone().bytes().as_slice());
+    state.write(archive_wasm_bytes.as_slice());
     state.finish().to_vec()
 }
 
 fn mainnet_index_canister_sha256sum() -> Vec<u8> {
-    let index_wasm = build_mainnet_ledger_index_wasm();
+    let index_wasm_bytes =
+        std::fs::read(std::env::var("MAINNET_ICP_INDEX_CANISTER_WASM_PATH").unwrap())
+            .expect("Could not read mainnet index wasm");
 
     let mut state = Sha256::new();
-    state.write(index_wasm.clone().bytes().as_slice());
+    state.write(index_wasm_bytes.as_slice());
     state.finish().to_vec()
 }
 
@@ -352,10 +366,9 @@ fn should_set_up_initial_state_with_mainnet_canisters() {
     // The query operations do not cause PocketIc time to move forward.
     // The steps between t0 and t1, and t1 and t2, each take 2 nanoseconds.
     const MINT_TIME_OFFSET_NANOS: u64 = 2;
+    let system_time: SystemTime = setup.pocket_ic.get_time().try_into().unwrap();
     let expected_mint_timestamp = TimeStamp::from(
-        setup
-            .pocket_ic
-            .get_time()
+        system_time
             .checked_sub(Duration::from_nanos(MINT_TIME_OFFSET_NANOS))
             .unwrap(),
     );
@@ -457,13 +470,13 @@ fn should_upgrade_and_downgrade_canister_suite() {
 
     setup.upgrade_index_canister(UpgradeToVersion::Latest);
     setup.upgrade_ledger_canister(UpgradeToVersion::Latest, true);
-    setup.upgrade_archive_canisters(UpgradeToVersion::Latest, true);
+    setup.upgrade_archive_canisters(UpgradeToVersion::Latest);
 
     setup.assert_index_ledger_parity(true);
 
     setup.upgrade_index_canister(UpgradeToVersion::MainNet);
-    setup.upgrade_ledger_canister(UpgradeToVersion::MainNet, false);
-    setup.upgrade_archive_canisters(UpgradeToVersion::MainNet, false);
+    setup.upgrade_ledger_canister(UpgradeToVersion::MainNet, true);
+    setup.upgrade_archive_canisters(UpgradeToVersion::MainNet);
 
     setup.assert_index_ledger_parity(true);
 }

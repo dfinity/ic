@@ -74,7 +74,7 @@ set -euo pipefail
     )]
 
 # Rule to override another (test) rule. The resulting rule
-# will use the mainnet pocket-ic varaint.
+# will use the mainnet pocket-ic variant.
 pocket_ic_mainnet_test = rule(
     _pocket_ic_mainnet_test_impl,
     attrs = {

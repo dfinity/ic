@@ -342,13 +342,14 @@ def test_on_periodic_job_failure(jira_lib_mock):
 
     fake_bazel = Mock()
     fake_bazel.get_findings.side_effect = OSError("Call failed")
+    fake_bazel.get_scanner_id.return_value = "BAZEL_RUST"
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
     repos = [Repository("ic", "https://github.com/dfinity/ic", [Project("ic", __test_get_ic_path())])]
 
     scanner_job.do_periodic_scan(repos)
-    sub1.on_scan_job_succeeded.assert_not_called()
-    sub2.on_scan_job_succeeded.assert_not_called()
+    sub1.on_scan_job_succeeded.assert_called_once()
+    sub2.on_scan_job_succeeded.assert_called_once()
     sub1.on_scan_job_failed.assert_called_once()
     sub2.on_scan_job_failed.assert_called_once()
 

@@ -2,11 +2,6 @@ use super::*;
 use crate::test_utils::MockRandomness;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::{
-        governance::{followers_map::Followers, FollowersMap},
-        neuron::DissolveState,
-        Neuron as NeuronProto,
-    },
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
 use ic_base_types::PrincipalId;
@@ -15,20 +10,22 @@ use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::pb::v1::NeuronId;
 #[cfg(feature = "test")]
-use ic_nns_governance_api::pb::v1::CreateServiceNervousSystem as ApiCreateServiceNervousSystem;
+use ic_nns_governance_api::CreateServiceNervousSystem as ApiCreateServiceNervousSystem;
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 #[cfg(feature = "test")]
 use ic_sns_init::pb::v1::SnsInitPayload;
 #[cfg(feature = "test")]
 use ic_sns_init::pb::v1::{self as sns_init_pb};
 use lazy_static::lazy_static;
-use maplit::{btreemap, hashmap};
+use maplit::hashmap;
 use std::{convert::TryFrom, time::Duration};
 
 mod list_neurons;
+mod list_proposals;
 mod neurons_fund;
 mod node_provider_rewards;
 mod stake_maturity;
+mod update_node_provider;
 
 #[test]
 fn test_time_warp() {
@@ -150,7 +147,7 @@ mod settle_neurons_fund_participation_mem_tests {
     };
     use ic_base_types::PrincipalId;
     use ic_nns_common::pb::v1::NeuronId;
-    use ic_nns_governance_api::pb::v1::SettleNeuronsFundParticipationResponse;
+    use ic_nns_governance_api::SettleNeuronsFundParticipationResponse;
 
     fn make_dummy_neuron_portion() -> NeuronsFundNeuronPortion {
         NeuronsFundNeuronPortion {
@@ -223,6 +220,13 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
     use ic_sns_init::pb::v1::sns_init_payload;
     use ic_sns_swap::pb::v1::NeuronBasketConstructionParameters;
     use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING, IMAGE_1, IMAGE_2};
+
+    /// This canister ID can be used as `specified_id` in tests on `state_machine_builder_for_nns_tests`.
+    /// Canisters created in those tests without any `specified_id` are assigned to the default range
+    /// from `CanisterId::from_u64(0x0000000)` to `CanisterId::from_u64(0x00FFFFF)` and thus
+    /// canisters created with `specified_id` can only be assigned to the extra range
+    /// from `CanisterId::from_u64(0x2100000)` to `CanisterId::from_u64(0x21FFFFE)`.
+    const SPECIFIED_CANISTER_ID: CanisterId = CanisterId::from_u64(0x2100000);
 
     // Alias types from crate::pb::v1::...
     //
@@ -354,7 +358,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 ),
                 dapp_canisters: Some(sns_init_pb::DappCanisters {
                     canisters: vec![pb::Canister {
-                        id: Some(CanisterId::from_u64(1000).get()),
+                        id: Some(SPECIFIED_CANISTER_ID.get())
                     }],
                 }),
                 min_participants: original_swap_parameters.minimum_participants,
@@ -517,6 +521,13 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
     use ic_sns_init::pb::v1::sns_init_payload;
     use ic_sns_swap::pb::v1::NeuronBasketConstructionParameters;
     use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING, IMAGE_1, IMAGE_2};
+
+    /// This canister ID can be used as `specified_id` in tests on `state_machine_builder_for_nns_tests`.
+    /// Canisters created in those tests without any `specified_id` are assigned to the default range
+    /// from `CanisterId::from_u64(0x0000000)` to `CanisterId::from_u64(0x00FFFFF)` and thus
+    /// canisters created with `specified_id` can only be assigned to the extra range
+    /// from `CanisterId::from_u64(0x2100000)` to `CanisterId::from_u64(0x21FFFFE)`.
+    const SPECIFIED_CANISTER_ID: CanisterId = CanisterId::from_u64(0x2100000);
 
     // Alias types from crate::pb::v1::...
     //
@@ -692,7 +703,7 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
                 ),
                 dapp_canisters: Some(sns_init_pb::DappCanisters {
                     canisters: vec![pb::Canister {
-                        id: Some(CanisterId::from_u64(1000).get()),
+                        id: Some(SPECIFIED_CANISTER_ID.get())
                     }],
                 }),
                 min_participants: original_swap_parameters.minimum_participants,
@@ -840,21 +851,26 @@ mod convert_create_service_nervous_system_proposal_to_sns_init_payload_tests_wit
 
 mod metrics_tests {
     use ic_nns_common::pb::v1::ProposalId;
-    use maplit::btreemap;
     use std::sync::Arc;
 
     use crate::test_utils::MockRandomness;
     use crate::{
         encode_metrics,
         governance::Governance,
-        pb::v1::{
-            proposal, Governance as GovernanceProto, Motion, Proposal, ProposalData, Tally, Topic,
-        },
+        pb::v1::{proposal, Motion, Proposal, ProposalData, Tally, Topic},
         test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
     };
 
     #[test]
     fn test_metrics_total_voting_power() {
+        let mut governance = Governance::new(
+            Default::default(),
+            Arc::new(MockEnvironment::new(Default::default(), 0)),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
+        );
+
         let proposal_1 = ProposalData {
             id: Some(ProposalId { id: 1 }),
             proposal: Some(Proposal {
@@ -862,7 +878,7 @@ mod metrics_tests {
                 action: Some(proposal::Action::Motion(Motion {
                     motion_text: "Text for this motion".to_string(),
                 })),
-                ..Proposal::default()
+                ..Default::default()
             }),
             latest_tally: Some(Tally {
                 timestamp_seconds: 0,
@@ -870,7 +886,8 @@ mod metrics_tests {
                 no: 0,
                 total: 555,
             }),
-            ..ProposalData::default()
+            topic: Some(Topic::Governance as i32),
+            ..Default::default()
         };
 
         let proposal_2 = ProposalData {
@@ -879,7 +896,7 @@ mod metrics_tests {
                 title: Some("Foo Foo Bar".to_string()),
                 action: Some(proposal::Action::ManageNeuron(Box::default())),
 
-                ..Proposal::default()
+                ..Default::default()
             }),
             latest_tally: Some(Tally {
                 timestamp_seconds: 0,
@@ -887,21 +904,12 @@ mod metrics_tests {
                 no: 0,
                 total: 1,
             }),
-            ..ProposalData::default()
+            topic: Some(Topic::NeuronManagement as i32),
+            ..Default::default()
         };
-        let governance = Governance::new(
-            GovernanceProto {
-                proposals: btreemap! {
-                    1 =>  proposal_1,
-                    2 => proposal_2
-                },
-                ..GovernanceProto::default()
-            },
-            Arc::new(MockEnvironment::new(Default::default(), 0)),
-            Arc::new(StubIcpLedger {}),
-            Arc::new(StubCMC {}),
-            Box::new(MockRandomness::new()),
-        );
+
+        governance.heap_data.proposals.insert(1, proposal_1);
+        governance.heap_data.proposals.insert(2, proposal_2);
 
         let mut writer = ic_metrics_encoder::MetricsEncoder::new(vec![], 1000);
 
@@ -917,6 +925,14 @@ mod metrics_tests {
 
     #[test]
     fn test_metrics_proposal_deadline_timestamp_seconds() {
+        let mut governance = Governance::new(
+            Default::default(),
+            Arc::<MockEnvironment>::default(),
+            Arc::new(StubIcpLedger {}),
+            Arc::new(StubCMC {}),
+            Box::new(MockRandomness::new()),
+        );
+
         let manage_neuron_action = proposal::Action::ManageNeuron(Box::default());
         let motion_action = proposal::Action::Motion(Motion {
             motion_text: "Text for this motion".to_string(),
@@ -929,6 +945,7 @@ mod metrics_tests {
                 action: Some(manage_neuron_action.clone()),
                 ..Proposal::default()
             }),
+            topic: Some(Topic::NeuronManagement as i32),
             ..ProposalData::default()
         };
 
@@ -940,6 +957,7 @@ mod metrics_tests {
                 ..Proposal::default()
             }),
             decided_timestamp_seconds: 1,
+            topic: Some(Topic::NeuronManagement as i32),
             ..ProposalData::default()
         };
 
@@ -950,23 +968,19 @@ mod metrics_tests {
                 action: Some(motion_action.clone()),
                 ..Proposal::default()
             }),
+            topic: Some(Topic::Governance as i32),
             ..ProposalData::default()
         };
 
-        let governance = Governance::new(
-            GovernanceProto {
-                proposals: btreemap! {
-                    1 =>  open_proposal.clone(),
-                    2 =>  rejected_proposal,
-                    3 =>  motion_proposal.clone(),
-                },
-                ..GovernanceProto::default()
-            },
-            Arc::<MockEnvironment>::default(),
-            Arc::new(StubIcpLedger {}),
-            Arc::new(StubCMC {}),
-            Box::new(MockRandomness::new()),
-        );
+        governance
+            .heap_data
+            .proposals
+            .insert(1, open_proposal.clone());
+        governance.heap_data.proposals.insert(2, rejected_proposal);
+        governance
+            .heap_data
+            .proposals
+            .insert(3, motion_proposal.clone());
 
         let mut writer = ic_metrics_encoder::MetricsEncoder::new(vec![], 10);
 
@@ -1140,59 +1154,31 @@ mod neuron_archiving_tests {
 
 #[test]
 fn test_pre_and_post_upgrade_first_time() {
-    let neuron1 = NeuronProto {
-        id: Some(NeuronId { id: 1 }),
-        controller: Some(PrincipalId::new_user_test_id(1)),
-        followees: hashmap! {
-            2 => Followees {
-                followees: vec![NeuronId { id : 3}]
-            }
-        },
-        account: vec![0; 32],
-        dissolve_state: Some(DissolveState::DissolveDelaySeconds(42)),
-        aging_since_timestamp_seconds: 1,
-        ..Default::default()
-    };
-    let neurons = btreemap! { 1 => neuron1 };
-
-    // This simulates the state of heap on first post_upgrade (empty topic_followee_index)
-    let governance_proto = GovernanceProto {
-        neurons,
-        ..Default::default()
-    };
-
-    // Precondition
-    assert_eq!(governance_proto.neurons.len(), 1);
-    assert_eq!(governance_proto.topic_followee_index.len(), 0);
-
     // Then Governance is instantiated during upgrade with proto
     let mut governance = Governance::new(
-        governance_proto,
+        Default::default(),
         Arc::<MockEnvironment>::default(),
         Arc::new(StubIcpLedger {}),
         Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
 
+    let neuron = NeuronBuilder::new_for_test(
+        1,
+        DissolveStateAndAge::NotDissolving {
+            dissolve_delay_seconds: 42,
+            aging_since_timestamp_seconds: 0,
+        },
+    )
+    .build();
+    governance.add_neuron(1, neuron, false).unwrap();
+
     // Simulate seeding the randomness in a running governance canister.
     governance.randomness.seed_rng([12; 32]);
 
     assert_eq!(governance.neuron_store.len(), 1);
     // On next pre-upgrade, we get the heap proto and store it in stable memory
-    let mut extracted_proto = governance.take_heap_proto();
-
-    // topic_followee_index should have been populated
-    assert_eq!(extracted_proto.topic_followee_index.len(), 1);
-
-    // We now modify it so that we can be assured that it is not rebuilding on the next post_upgrade
-    extracted_proto.topic_followee_index.insert(
-        4,
-        FollowersMap {
-            followers_map: hashmap! {5 => Followers { followers: vec![NeuronId { id : 6}]}},
-        },
-    );
-
-    assert_eq!(extracted_proto.topic_followee_index.len(), 2);
+    let extracted_proto = governance.take_heap_proto();
 
     // We now simulate the post_upgrade
     let mut governance = Governance::new_restored(
@@ -1206,20 +1192,15 @@ fn test_pre_and_post_upgrade_first_time() {
     assert_eq!(governance.neuron_store.len(), 1);
     // It should not rebuild during post_upgrade so it should still be mis-matched with neurons.
     let extracted_proto = governance.take_heap_proto();
-    assert_eq!(extracted_proto.topic_followee_index.len(), 2);
     assert_eq!(extracted_proto.rng_seed, Some(vec![12; 32]));
 }
 
 #[test]
 fn can_spawn_neurons_only_true_when_not_spawning_and_neurons_ready_to_spawn() {
-    let proto = GovernanceProto {
-        ..Default::default()
-    };
-
     let mock_env = MockEnvironment::new(vec![], 100);
 
     let mut governance = Governance::new(
-        proto,
+        Default::default(),
         Arc::new(mock_env),
         Arc::new(StubIcpLedger {}),
         Arc::new(StubCMC {}),
@@ -1260,9 +1241,9 @@ fn can_spawn_neurons_only_true_when_not_spawning_and_neurons_ready_to_spawn() {
 #[test]
 fn test_validate_execute_nns_function() {
     let governance = Governance::new(
-        GovernanceProto {
-            economics: Some(NetworkEconomics::with_default_values()),
-            node_providers: vec![NodeProvider {
+        api::Governance {
+            economics: Some(api::NetworkEconomics::with_default_values()),
+            node_providers: vec![api::NodeProvider {
                 id: Some(PrincipalId::new_node_test_id(1)),
                 ..Default::default()
             }],
@@ -1309,20 +1290,9 @@ fn test_validate_execute_nns_function() {
                 nns_function: NnsFunction::IcpXdrConversionRate as i32,
                 payload: vec![],
             },
-            "The payload could not be decoded into a UpdateIcpXdrConversionRatePayload: \
-             Cannot parse header "
+            "Proposal is obsolete because NNS_FUNCTION_ICP_XDR_CONVERSION_RATE is obsolete as \
+            conversion rates are now provided by the exchange rate canister automatically."
                 .to_string(),
-        ),
-        (
-            ExecuteNnsFunction {
-                nns_function: NnsFunction::IcpXdrConversionRate as i32,
-                payload: Encode!(&UpdateIcpXdrConversionRatePayload {
-                    xdr_permyriad_per_icp: 0,
-                    ..Default::default()
-                })
-                .unwrap(),
-            },
-            "The proposed rate 0 is below the minimum allowable rate".to_string(),
         ),
         (
             ExecuteNnsFunction {
@@ -1448,14 +1418,6 @@ fn test_validate_execute_nns_function() {
             payload: vec![1u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX],
         },
         ExecuteNnsFunction {
-            nns_function: NnsFunction::IcpXdrConversionRate as i32,
-            payload: Encode!(&UpdateIcpXdrConversionRatePayload {
-                xdr_permyriad_per_icp: 101,
-                ..Default::default()
-            })
-            .unwrap(),
-        },
-        ExecuteNnsFunction {
             nns_function: NnsFunction::AssignNoid as i32,
             payload: Encode!(&AddNodeOperatorPayload {
                 node_provider_principal_id: Some(PrincipalId::new_node_test_id(1)),
@@ -1564,45 +1526,41 @@ fn topic_min_max_test() {
 #[cfg(feature = "test")]
 #[test]
 fn test_update_neuron_errors_out_expectedly() {
-    fn new_neuron(account: Vec<u8>) -> api::Neuron {
-        api::Neuron {
-            account,
-            id: Some(NeuronId { id: 1 }),
-            controller: Some(PrincipalId::new_user_test_id(1)),
-            followees: hashmap! {
-                2 => api::neuron::Followees {
-                    followees: vec![NeuronId { id : 3}]
-                }
+    fn new_neuron(account: Vec<u8>) -> Neuron {
+        NeuronBuilder::new_for_test(
+            1,
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds: 42,
+                aging_since_timestamp_seconds: 1,
             },
-            aging_since_timestamp_seconds: 1,
-            dissolve_state: Some(api::neuron::DissolveState::DissolveDelaySeconds(42)),
-            ..Default::default()
-        }
+        )
+        .with_subaccount(Subaccount::try_from(account.as_slice()).unwrap())
+        .with_followees(hashmap! {
+            2 => Followees {
+                followees: vec![NeuronId { id : 3}]
+            }
+        })
+        .build()
     }
 
-    let neuron1_subaccount_blob = vec![1; 32];
-    let neuron1_subaccount = Subaccount::try_from(neuron1_subaccount_blob.as_slice()).unwrap();
-    let neuron1 = NeuronProto::from(new_neuron(neuron1_subaccount_blob.clone()));
-    let neurons = btreemap! { 1 => neuron1 };
-    let governance_proto = GovernanceProto {
-        neurons,
-        ..Default::default()
-    };
     let mut governance = Governance::new(
-        governance_proto,
+        Default::default(),
         Arc::<MockEnvironment>::default(),
         Arc::new(StubIcpLedger {}),
         Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
+    let neuron = new_neuron(vec![1; 32]);
+    let neuron_subaccount = neuron.subaccount();
+    governance.add_neuron(1, neuron, false).unwrap();
 
     assert_eq!(
-        governance.update_neuron(new_neuron(vec![0; 32])),
+        governance.update_neuron(new_neuron(vec![0; 32]).into_api(0, &Default::default())),
         Err(GovernanceError::new_with_message(
             ErrorType::PreconditionFailed,
             format!(
                 "Cannot change the subaccount {} of a neuron.",
-                neuron1_subaccount
+                neuron_subaccount
             ),
         )),
     );
@@ -1613,59 +1571,55 @@ fn test_compute_ballots_for_new_proposal() {
     const CREATED_TIMESTAMP_SECONDS: u64 = 1729791574;
     let now_seconds = CREATED_TIMESTAMP_SECONDS + 999;
 
-    fn new_neuron(i: u64) -> NeuronProto {
-        let controller = PrincipalId::new_user_test_id(i);
-        let d = i / 10_u64.pow(i.ilog10());
-
-        let neuron = NeuronBuilder::new(
-            NeuronId { id: i },
-            Subaccount::try_from([d as u8; 32].as_slice()).unwrap(),
-            controller,
+    fn new_neuron_builder(id: u64) -> NeuronBuilder {
+        NeuronBuilder::new_for_test(
+            id,
             DissolveStateAndAge::NotDissolving {
                 dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
                 aging_since_timestamp_seconds: CREATED_TIMESTAMP_SECONDS + 42,
             },
-            CREATED_TIMESTAMP_SECONDS,
         )
-        .with_cached_neuron_stake_e8s(i * E8)
-        .build();
-
-        NeuronProto::from(neuron)
+        .with_cached_neuron_stake_e8s(id * E8)
     }
 
-    let mut neuron_10 = new_neuron(10);
-    neuron_10.followees = hashmap! {
-        Topic::NeuronManagement as i32 => Followees {
-            followees: vec![
-                NeuronId { id: 10 },
-                NeuronId { id: 201 },
-                NeuronId { id: 202 },
-                NeuronId { id: 203 },
-                NeuronId { id: 204 },
-                NeuronId { id: 205 },
-                NeuronId { id: 206 },
-            ]
-        }
-    };
-    let neurons = btreemap! {10 => neuron_10, 200 => new_neuron(200), 3_000 => new_neuron(3_000)};
-    let governance_proto = GovernanceProto {
-        neurons,
-        ..Default::default()
-    };
+    let neuron_10 = new_neuron_builder(10)
+        .with_followees(hashmap! {
+            Topic::NeuronManagement as i32 => Followees {
+                followees: vec![
+                    NeuronId { id: 10 },
+                    NeuronId { id: 201 },
+                    NeuronId { id: 202 },
+                    NeuronId { id: 203 },
+                    NeuronId { id: 204 },
+                    NeuronId { id: 205 },
+                    NeuronId { id: 206 },
+                ]
+            }
+        })
+        .build();
 
     let mut governance = Governance::new(
-        governance_proto,
+        Default::default(),
         Arc::<MockEnvironment>::default(),
         Arc::new(StubIcpLedger {}),
         Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
+
+    governance.add_neuron(10, neuron_10, false).unwrap();
+    governance
+        .add_neuron(200, new_neuron_builder(200).build(), false)
+        .unwrap();
+    governance
+        .add_neuron(3_000, new_neuron_builder(3_000).build(), false)
+        .unwrap();
+
     let manage_neuron_action = Action::ManageNeuron(Box::new(ManageNeuron {
         id: Some(NeuronId { id: 10 }),
         neuron_id_or_subaccount: None,
         command: None,
     }));
-    let (ballots, tot_potential_voting_power) = governance
+    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
         .compute_ballots_for_new_proposal(&manage_neuron_action, &NeuronId { id: 10 }, now_seconds)
         .expect("Failed computing ballots for new proposal");
 
@@ -1685,7 +1639,7 @@ fn test_compute_ballots_for_new_proposal() {
     );
 
     let motion_action = Action::Motion(Default::default());
-    let (ballots, tot_potential_voting_power) = governance
+    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
         .compute_ballots_for_new_proposal(&motion_action, &NeuronId { id: 10 }, now_seconds)
         .expect("Failed computing ballots for new proposal");
     // Similar to previous; this time though, Action::ManageNeuron, the weird
@@ -1716,7 +1670,7 @@ fn test_compute_ballots_for_new_proposal() {
     // Not affected by refresh.
     let now_seconds = CREATED_TIMESTAMP_SECONDS + 20 * ONE_YEAR_SECONDS;
 
-    let (ballots, tot_potential_voting_power) = governance
+    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
         .compute_ballots_for_new_proposal(&motion_action, &NeuronId { id: 10 }, now_seconds)
         .expect("Failed computing ballots for new proposal");
     let expected: u64 = governance.neuron_store.with_active_neurons_iter(|iter| {
@@ -1732,5 +1686,132 @@ fn test_compute_ballots_for_new_proposal() {
             200 => Ballot { voting_power: deciding_vote(&governance, 200, now_seconds), vote: Vote::Unspecified as i32 },
             3_000 => Ballot { voting_power: deciding_vote(&governance,3_000 , now_seconds), vote: Vote::Unspecified as i32 },
         }
+    );
+}
+
+#[test]
+fn test_validate_add_or_remove_node_provider() {
+    let node_provider_id = PrincipalId::new_user_test_id(1);
+    let existing_node_provider = api::NodeProvider {
+        id: Some(node_provider_id),
+        reward_account: None,
+    };
+
+    let governance = Governance::new(
+        api::Governance {
+            node_providers: vec![existing_node_provider.clone()],
+            ..Default::default()
+        },
+        Arc::new(MockEnvironment::new(vec![], 100)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
+    );
+
+    let existing_node_provider = NodeProvider::from(existing_node_provider);
+
+    // Test case 1: No change field
+    let add_or_remove_no_change = AddOrRemoveNodeProvider { change: None };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_no_change);
+    assert!(result.is_err());
+
+    // Test case 2: ToAdd with new node provider (should succeed)
+    let new_node_provider_id = PrincipalId::new_user_test_id(2);
+    let valid_account = AccountIdentifier::new(new_node_provider_id, None);
+
+    let new_node_provider = NodeProvider {
+        id: Some(new_node_provider_id),
+        reward_account: Some(valid_account.into_proto_with_checksum()),
+    };
+    let add_or_remove_add_new = AddOrRemoveNodeProvider {
+        change: Some(Change::ToAdd(new_node_provider)),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_add_new);
+    assert!(
+        result.is_ok(),
+        "Expected to succeed, but got error: {:?}",
+        result
+    );
+
+    // Test case 3: ToAdd with existing node provider (should fail)
+    let add_or_remove_add_existing = AddOrRemoveNodeProvider {
+        change: Some(Change::ToAdd(existing_node_provider.clone())),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_add_existing);
+    assert!(result.is_err());
+
+    // Test case 4: ToAdd with invalid account identifier (should fail)
+    let node_provider_with_invalid_account = NodeProvider {
+        id: Some(PrincipalId::new_user_test_id(3)),
+        reward_account: Some(icp_ledger::protobuf::AccountIdentifier {
+            hash: vec![1, 2, 3], // Invalid length
+        }),
+    };
+    let add_or_remove_invalid_account = AddOrRemoveNodeProvider {
+        change: Some(Change::ToAdd(node_provider_with_invalid_account)),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_invalid_account);
+    assert!(result.is_err());
+
+    // Test case 5: ToAdd with 28-byte length (should fail)
+    let node_provider_with_invalid_account = NodeProvider {
+        id: Some(PrincipalId::new_user_test_id(3)),
+        reward_account: Some(icp_ledger::protobuf::AccountIdentifier {
+            hash: vec![1; 28], // 32-byte required, but only 28 bytes provided
+        }),
+    };
+    let add_or_remove_invalid_account = AddOrRemoveNodeProvider {
+        change: Some(Change::ToAdd(node_provider_with_invalid_account)),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_invalid_account);
+    assert!(result.is_err());
+
+    // Test case 6: ToRemove with existing node provider (should succeed)
+    let add_or_remove_remove_existing = AddOrRemoveNodeProvider {
+        change: Some(Change::ToRemove(existing_node_provider)),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_remove_existing);
+    assert!(result.is_ok());
+
+    // Test case 7: ToRemove with non-existing node provider (should fail)
+    let non_existing_node_provider = NodeProvider {
+        id: Some(PrincipalId::new_user_test_id(999)),
+        reward_account: None,
+    };
+    let add_or_remove_remove_non_existing = AddOrRemoveNodeProvider {
+        change: Some(Change::ToRemove(non_existing_node_provider)),
+    };
+    let result =
+        governance.validate_add_or_remove_node_provider(&add_or_remove_remove_non_existing);
+    assert!(result.is_err());
+
+    // Test Case 8: ToAdd with no NodeProvider ID (should fail)
+    let node_provider_without_id = NodeProvider {
+        id: None,
+        reward_account: Some(valid_account.into_proto_with_checksum()),
+    };
+    let add_or_remove_no_id = AddOrRemoveNodeProvider {
+        change: Some(Change::ToAdd(node_provider_without_id)),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_no_id);
+    assert!(
+        result.is_err(),
+        "Expected to fail, but got success: {:?}",
+        result
+    );
+
+    // Test Case 9: ToRemove with no NodeProvider ID (should fail)
+    let node_provider_without_id = NodeProvider {
+        id: None,
+        reward_account: None,
+    };
+    let add_or_remove_no_id = AddOrRemoveNodeProvider {
+        change: Some(Change::ToRemove(node_provider_without_id)),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_no_id);
+    assert!(
+        result.is_err(),
+        "Expected to fail, but got success: {:?}",
+        result
     );
 }

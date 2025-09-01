@@ -470,6 +470,7 @@ pub struct LedgerSuiteVersion {
 
 /// Configuration state of the ledger orchestrator.
 #[derive(Clone, PartialEq, Debug, Default)]
+#[allow(clippy::large_enum_variant)]
 enum ConfigState {
     #[default]
     Uninitialized,

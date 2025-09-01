@@ -22,7 +22,7 @@
 mod interpolation;
 mod poly;
 
-pub use interpolation::{InterpolationError, LagrangeCoefficients};
+pub use interpolation::{InterpolationError, LagrangeCoefficients, NodeIndices};
 pub use poly::Polynomial;
 
 /// The index of a node.
@@ -37,6 +37,7 @@ use pairing::group::{ff::Field, Group};
 use paste::paste;
 use rand::{CryptoRng, Rng, RngCore};
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::{collections::HashMap, fmt};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -69,10 +70,7 @@ pub enum PairingInvalidScalar {
 pub struct Scalar {
     value: ic_bls12_381::Scalar,
 }
-
-lazy_static::lazy_static! {
-    static ref SCALAR_ZERO: Scalar = Scalar::new(ic_bls12_381::Scalar::zero());
-}
+static SCALAR_ZERO: LazyLock<Scalar> = LazyLock::new(|| Scalar::new(ic_bls12_381::Scalar::zero()));
 
 impl Ord for Scalar {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
@@ -326,7 +324,7 @@ impl Scalar {
     ///
     /// Note that
     /// * If `num_bits` overflows 254 (the floored [`Scalar`] bit length), then
-    ///    internally the `num_bits` is set to 254.
+    ///   internally the `num_bits` is set to 254.
     /// * The MSB of the returned [`Scalar`] is always 0.
     pub fn random_sparse(rng: &mut (impl Rng + CryptoRng), num_bits: u8) -> Scalar {
         let set_bit = |bytes: &mut [u8], i: u8| {
@@ -386,7 +384,7 @@ impl Scalar {
 
         let t_bits = std::mem::size_of::<u64>() * 8;
         let n_bits = std::cmp::min(255, t_bits - n.leading_zeros() as usize);
-        let n_bytes = (n_bits + 7) / 8;
+        let n_bytes = n_bits.div_ceil(8);
         let n_mask = if n_bits % 8 == 0 {
             0xFF
         } else {
@@ -797,9 +795,7 @@ declare_mul_scalar_ops_for!(Scalar);
 macro_rules! define_affine_and_projective_types {
     ( $affine:ident, $projective:ident, $size:expr ) => {
         paste! {
-            lazy_static::lazy_static! {
-                static ref [<$affine:upper _GENERATOR>] : $affine = $affine::new_with_precomputation(ic_bls12_381::$affine::generator());
-            }
+            static [<$affine:upper _GENERATOR>] : LazyLock<$affine> = LazyLock::new(|| $affine::new_with_precomputation(ic_bls12_381::$affine::generator()));
         }
 
         paste! {
@@ -1215,9 +1211,7 @@ macro_rules! define_affine_and_projective_types {
         }
 
         paste! {
-            lazy_static::lazy_static! {
-                static ref [<$projective:upper _GENERATOR>] : $projective = $projective::new(ic_bls12_381::$projective::generator());
-            }
+            static [<$projective:upper _GENERATOR>] : LazyLock<$projective> = LazyLock::new(|| $projective::new(ic_bls12_381::$projective::generator()));
         }
 
         /// An element of the group in projective form
@@ -1953,9 +1947,7 @@ pub struct Gt {
     value: ic_bls12_381::Gt,
 }
 
-lazy_static::lazy_static! {
-    static ref GT_GENERATOR : Gt = Gt::new(ic_bls12_381::Gt::generator());
-}
+static GT_GENERATOR: LazyLock<Gt> = LazyLock::new(|| Gt::new(ic_bls12_381::Gt::generator()));
 
 impl Gt {
     /// The size in bytes of this type
@@ -2110,10 +2102,9 @@ pub struct G2Prepared {
     value: ic_bls12_381::G2Prepared,
 }
 
-lazy_static::lazy_static! {
-    static ref G2PREPARED_G : G2Prepared = G2Affine::generator().into();
-    static ref G2PREPARED_NEG_G : G2Prepared = G2Affine::generator().neg().into();
-}
+static G2PREPARED_G: LazyLock<G2Prepared> = LazyLock::new(|| G2Affine::generator().into());
+static G2PREPARED_NEG_G: LazyLock<G2Prepared> =
+    LazyLock::new(|| G2Affine::generator().neg().into());
 
 impl G2Prepared {
     /// Create a new G2Prepared from the inner type

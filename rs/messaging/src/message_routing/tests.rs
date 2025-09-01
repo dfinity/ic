@@ -12,14 +12,14 @@ use ic_interfaces_registry::RegistryValue;
 use ic_interfaces_state_manager::StateReader;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
-use ic_protobuf::registry::crypto::v1::{ChainKeySigningSubnetList, PublicKey as PublicKeyProto};
+use ic_protobuf::registry::crypto::v1::{ChainKeyEnabledSubnetList, PublicKey as PublicKeyProto};
 use ic_protobuf::registry::subnet::v1::SubnetRecord as SubnetRecordProto;
 use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord, node::v1::IPv4InterfaceConfig,
     node::v1::NodeRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
-use ic_registry_keys::make_chain_key_signing_subnet_list_key;
+use ic_registry_keys::{make_canister_ranges_key, make_chain_key_enabled_subnet_list_key};
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDataProviderError};
 use ic_registry_routing_table::{routing_table_insert_subnet, CanisterMigrations, RoutingTable};
@@ -36,7 +36,6 @@ use ic_test_utilities_types::{
 };
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::xnet::{StreamIndexedQueue, StreamSlice};
-use ic_types::ReplicaVersion;
 use ic_types::{
     batch::{Batch, BatchMessages},
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
@@ -44,6 +43,7 @@ use ic_types::{
     time::Time,
     NodeId, PrincipalId, Randomness,
 };
+use ic_types::{CanisterId, ReplicaVersion};
 use maplit::{btreemap, btreeset};
 use std::{fmt::Debug, str::FromStr, sync::Arc, time::Duration};
 
@@ -430,10 +430,9 @@ impl RegistryFixture {
         routing_table: Integrity<&RoutingTable>,
     ) -> Result<(), ProtoRegistryDataProviderError> {
         use ic_protobuf::registry::routing_table::v1::RoutingTable as RoutingTableProto;
-        use ic_registry_keys::make_routing_table_record_key;
 
         self.write_record(
-            &make_routing_table_record_key(),
+            &make_canister_ranges_key(CanisterId::from_u64(0)),
             routing_table.map(RoutingTableProto::from),
         )
     }
@@ -475,10 +474,10 @@ impl RegistryFixture {
 
         for (key_id, subnet_ids) in chain_key_enabled_subnets.iter() {
             self.write_record(
-                &make_chain_key_signing_subnet_list_key(key_id),
+                &make_chain_key_enabled_subnet_list_key(key_id),
                 subnet_ids
                     .as_ref()
-                    .map(|subnet_ids| ChainKeySigningSubnetList {
+                    .map(|subnet_ids| ChainKeyEnabledSubnetList {
                         subnets: subnet_ids
                             .iter()
                             .map(|subnet_id| subnet_id_into_protobuf(*subnet_id))
@@ -652,11 +651,11 @@ impl StateMachine for FakeStateMachine {
 /// Generates an instance of `BatchProcessorImpl` along with an `Arc` to its metrics;
 /// an `Arc` to the underlying state manager; and an `Arc` to the registry settings
 /// which are stored by the fake state machine.
-fn make_batch_processor(
-    registry: Arc<impl RegistryClient + 'static>,
+fn make_batch_processor<RegistryClient_: RegistryClient + 'static>(
+    registry: Arc<RegistryClient_>,
     log: ReplicaLogger,
 ) -> (
-    BatchProcessorImpl,
+    BatchProcessorImpl<RegistryClient_>,
     MessageRoutingMetrics,
     Arc<FakeStateManager>,
     Arc<Mutex<RegistryExecutionSettings>>,
@@ -668,6 +667,9 @@ fn make_batch_processor(
         provisional_whitelist: ProvisionalWhitelist::All,
         chain_key_settings: BTreeMap::new(),
         subnet_size: 0,
+        node_ids: BTreeSet::new(),
+        registry_version: RegistryVersion::default(),
+        canister_cycles_cost_schedule: ic_types::batch::CanisterCyclesCostSchedule::Normal,
     }));
     let batch_processor = BatchProcessorImpl {
         state_manager: state_manager.clone(),
@@ -1031,9 +1033,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             requires_full_state_hash: false,
             messages: BatchMessages::default(),
             randomness: Randomness::new([123; 32]),
-            chain_key_subnet_public_keys: BTreeMap::default(),
-            idkg_pre_signature_ids: BTreeMap::new(),
-            ni_dkg_ids: BTreeMap::new(),
+            chain_key_data: Default::default(),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
             consensus_responses: Vec::new(),
@@ -1820,9 +1820,7 @@ fn process_batch_updates_subnet_metrics() {
             requires_full_state_hash: false,
             messages: BatchMessages::default(),
             randomness: Randomness::new([123; 32]),
-            chain_key_subnet_public_keys: BTreeMap::default(),
-            idkg_pre_signature_ids: BTreeMap::new(),
-            ni_dkg_ids: BTreeMap::new(),
+            chain_key_data: Default::default(),
             registry_version: fixture.registry.get_latest_version(),
             time: Time::from_nanos_since_unix_epoch(0),
             consensus_responses: Vec::new(),

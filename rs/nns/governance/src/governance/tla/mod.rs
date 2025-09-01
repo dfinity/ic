@@ -16,7 +16,9 @@ pub use tla_instrumentation::checker::{check_tla_code_link, PredicateDescription
 
 use std::path::PathBuf;
 
+use ic_cdk::println;
 use icp_ledger::Subaccount;
+
 mod common;
 mod store;
 
@@ -25,8 +27,10 @@ use common::{function_domain_union, function_range_union, governance_account_id}
 pub use store::{TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX};
 
 mod claim_neuron;
+mod disburse_maturity;
 mod disburse_neuron;
 mod disburse_to_neuron;
+mod finalize_maturity_disbursement;
 mod merge_neurons;
 mod refresh_neuron;
 mod spawn_neuron;
@@ -34,53 +38,76 @@ mod spawn_neurons;
 mod split_neuron;
 
 pub use claim_neuron::CLAIM_NEURON_DESC;
+pub use disburse_maturity::DISBURSE_MATURITY_DESC;
 pub use disburse_neuron::DISBURSE_NEURON_DESC;
 pub use disburse_to_neuron::DISBURSE_TO_NEURON_DESC;
+pub use finalize_maturity_disbursement::FINALIZE_MATURITY_DISBURSEMENT_DESC;
 pub use merge_neurons::MERGE_NEURONS_DESC;
 pub use refresh_neuron::REFRESH_NEURON_DESC;
 pub use spawn_neuron::SPAWN_NEURON_DESC;
 pub use spawn_neurons::SPAWN_NEURONS_DESC;
 pub use split_neuron::SPLIT_NEURON_DESC;
+use tla_instrumentation::UnsafeSendPtr;
 
-fn neuron_global(gov: &Governance) -> TlaValue {
+fn neuron_global() -> TlaValue {
     let neuron_map: BTreeMap<u64, TlaValue> = with_stable_neuron_store(|store| {
-        gov.neuron_store.with_active_neurons_iter(|iter| {
-            iter.map(|n| (*n).clone())
-                .chain(store.range_neurons(std::ops::RangeFull))
-                .map(|neuron| {
-                    (
-                        neuron.id().id,
-                        TlaValue::Record(BTreeMap::from([
-                            (
-                                "cached_stake".to_string(),
-                                neuron.cached_neuron_stake_e8s.to_tla_value(),
-                            ),
-                            (
-                                "account".to_string(),
-                                subaccount_to_tla(&neuron.subaccount()),
-                            ),
-                            ("fees".to_string(), neuron.neuron_fees_e8s.to_tla_value()),
-                            (
-                                "maturity".to_string(),
-                                neuron.maturity_e8s_equivalent.to_tla_value(),
-                            ),
-                            (
-                                ("state".to_string()),
-                                TlaValue::Variant {
-                                    tag: (if neuron.spawn_at_timestamp_seconds.is_some() {
-                                        "Spawning"
-                                    } else {
-                                        "NotSpawning"
-                                    })
-                                    .to_string(),
-                                    value: Box::new(TlaValue::Constant("UNIT".to_string())),
-                                },
-                            ),
-                        ])),
-                    )
-                })
-                .collect()
-        })
+        store
+            .range_neurons(std::ops::RangeFull)
+            .map(|neuron| {
+                (
+                    neuron.id().id,
+                    TlaValue::Record(BTreeMap::from([
+                        (
+                            "cached_stake".to_string(),
+                            neuron.cached_neuron_stake_e8s.to_tla_value(),
+                        ),
+                        (
+                            "account".to_string(),
+                            subaccount_to_tla(&neuron.subaccount()),
+                        ),
+                        ("fees".to_string(), neuron.neuron_fees_e8s.to_tla_value()),
+                        (
+                            "maturity".to_string(),
+                            neuron.maturity_e8s_equivalent.to_tla_value(),
+                        ),
+                        (
+                            ("state".to_string()),
+                            TlaValue::Variant {
+                                tag: (if neuron.spawn_at_timestamp_seconds.is_some() {
+                                    "Spawning"
+                                } else {
+                                    "NotSpawning"
+                                })
+                                .to_string(),
+                                value: Box::new(TlaValue::Constant("UNIT".to_string())),
+                            },
+                        ),
+                        (
+                            ("maturity_disbursements_in_progress".to_string()),
+                            neuron
+                                .maturity_disbursements_in_progress
+                                .iter()
+                                .map(|d| {
+                                    TlaValue::Record(BTreeMap::from([
+                                        (
+                                            "account_id".to_string(),
+                                            {
+                                                let account = d.destination
+                                                    .as_ref()
+                                                    .expect("Destination should exist in maturity_disbursements_in_progress entries")
+                                                    .try_into_account_identifier()
+                                                    .expect("Account are assumed to be Some in maturity_disbursements_in_progress entries.");
+                                                account_to_tla(account)
+                                            },
+                                        ),
+                                        ("amount".to_string(), d.amount_e8s.to_tla_value()),
+                                    ]))
+                                }).collect::<Vec<_>>().to_tla_value(),
+                        ),
+                    ])),
+                )
+            })
+            .collect()
     });
     neuron_map.to_tla_value()
 }
@@ -102,7 +129,8 @@ fn neuron_id_by_account() -> TlaValue {
     })
 }
 
-pub fn get_tla_globals(gov: &Governance) -> GlobalState {
+pub fn get_tla_globals(p: &UnsafeSendPtr<Governance>) -> GlobalState {
+    let gov = unsafe { &*(p.0) };
     let mut state = GlobalState::new();
     state.add(
         "locks",
@@ -114,7 +142,7 @@ pub fn get_tla_globals(gov: &Governance) -> GlobalState {
                 .collect(),
         ),
     );
-    state.add("neuron", neuron_global(gov));
+    state.add("neuron", neuron_global());
     state.add("neuron_id_by_account", neuron_id_by_account());
     state.add(
         "min_stake",
@@ -263,6 +291,18 @@ where
 /// It's assumed that the corresponding model is called `<PID>_Apalache.tla`, where PID is the
 /// `process_id`` field used in the `Update` value for the corresponding method.
 pub fn check_traces() {
+    let traces = {
+        let t_mutex = TLA_TRACES_LKEY.get();
+        let mut t = t_mutex
+            .lock()
+            .expect("Couldn't lock the traces in check_traces");
+        std::mem::take(&mut (*t))
+    };
+
+    perform_trace_check(traces)
+}
+
+pub fn perform_trace_check(traces: Vec<UpdateTrace>) {
     // Large states make Apalache time and memory consumption explode. We'll look at
     // improving that later, for now we introduce a hard limit on the state size, and
     // skip checking states larger than the limit. The limit is a somewhat arbitrary
@@ -286,7 +326,7 @@ pub fn check_traces() {
             let under_limit_len = t.state_pairs.iter().filter(|p| is_under_limit(p)).count();
             println!(
                 "TLA/Apalache checks: keeping {}/{} state pairs for update {}",
-                under_limit_len, total_len, t.update.process_id
+                under_limit_len, total_len, t.model_name
             );
         }
         println!(
@@ -294,13 +334,6 @@ pub fn check_traces() {
             total_pairs, STATE_PAIR_COUNT_LIMIT
         )
     }
-
-    let traces = {
-        let t = TLA_TRACES_LKEY.get();
-        let mut t = t.borrow_mut();
-        std::mem::take(&mut (*t))
-    };
-
     print_stats(&traces);
 
     let mut all_pairs = traces
@@ -309,14 +342,14 @@ pub fn check_traces() {
             t.state_pairs
                 .into_iter()
                 .filter(is_under_limit)
-                .map(move |p| (t.update.clone(), t.constants.clone(), p))
+                .map(move |p| (t.model_name.clone(), t.constants.clone(), p))
         })
         .collect();
 
     // A quick check that we don't have any duplicate state pairs. We assume the constants should
-    // be the same anyways and look at just the process ID and the state sthemselves.
-    dedup_by_key(&mut all_pairs, |(u, _c, p)| {
-        (u.process_id.clone(), p.start.clone(), p.end.clone())
+    // be the same anyways and look at just the model name and the state sthemselves.
+    dedup_by_key(&mut all_pairs, |(model_name, _c, p)| {
+        (model_name.clone(), p.start.clone(), p.end.clone())
     });
 
     all_pairs.truncate(STATE_PAIR_COUNT_LIMIT);
@@ -337,7 +370,7 @@ pub fn check_traces() {
     const MAX_THREADS: usize = 20;
     let mut running_threads = 0;
     let (thread_freed_tx, thread_freed_rx) = mpsc::channel::<bool>();
-    for (i, (update, constants, pair)) in all_pairs.iter().enumerate() {
+    for (i, (model_name, constants, pair)) in all_pairs.iter().enumerate() {
         println!("Checking state pair #{}", i + 1);
         if running_threads >= MAX_THREADS {
             if thread_freed_rx
@@ -354,7 +387,7 @@ pub fn check_traces() {
         let constants = constants.clone();
         let pair = pair.clone();
         // NOTE: We adopt the convention to reuse the 'process_id" as the tla module name
-        let tla_module = format!("{}_Apalache.tla", update.process_id);
+        let tla_module = format!("{}_Apalache.tla", model_name);
         let tla_module = get_tla_module_path(&tla_module);
 
         running_threads += 1;
@@ -369,9 +402,14 @@ pub fn check_traces() {
                 pair,
                 constants,
             ).map_err(|e| {
-                println!("Possible divergence from the TLA model detected when interacting with the ledger!");
-                println!("If you did not expect to change the interaction between governance and the ledger, reconsider whether your change is safe. You can find additional data on the step that triggered the error below.");
-                println!("If you are confident that your change is correct, please contact the #formal-models Slack channel and describe the problem.");
+                if e.apalache_error.is_likely_mismatch() {
+                    println!("Possible divergence from the TLA model detected when interacting with the ledger!");
+                    println!("If you did not expect to change the interaction between governance and the ledger, reconsider whether your change is safe. You can find additional data on the step that triggered the error below.");
+                    println!("If you are confident that your change is correct, please contact the #formal-models Slack channel and describe the problem.");
+                } else {
+                    println!("An error detected while checking the TLA model.");
+                    println!("The types may have diverged, or there might be something wrong with the TLA/Apalache setup");
+                }
                 println!("You can edit nns/governance/feature_flags.bzl to disable TLA checks in the CI and get on with your business.");
                 println!("-------------------");
                 println!("Error occured in TLA model {:?} and state pair:\n{:#?}\nwith constants:\n{:#?}", e.model, e.pair, e.constants);

@@ -17,7 +17,7 @@ use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
     artifact::ConsensusMessageId,
     consensus::{
-        dkg::Summary, Block, BlockPayload, BlockProposal, ConsensusMessage,
+        dkg::DkgSummary, Block, BlockPayload, BlockProposal, ConsensusMessage,
         ConsensusMessageHashable, EquivocationProof, Finalization, FinalizationContent,
         FinalizationShare, Notarization, NotarizationContent, NotarizationShare, RandomBeacon,
         RandomBeaconContent, RandomBeaconShare, RandomTape, RandomTapeContent, RandomTapeShare,
@@ -97,8 +97,8 @@ where
     })
 }
 
-pub(crate) fn make_summary(genesis_height: Height) -> Summary {
-    let mut summary = Summary::fake();
+pub(crate) fn make_summary(genesis_height: Height) -> DkgSummary {
+    let mut summary = DkgSummary::fake();
     summary.height = genesis_height;
     summary
 }

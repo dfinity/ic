@@ -89,7 +89,7 @@ pub struct HighCapacityRegistryValue {
     pub version: u64,
     /// The timestamp at which the registry mutation happened.
     #[prost(uint64, tag = "5")]
-    pub timestamp_seconds: u64,
+    pub timestamp_nanoseconds: u64,
     #[prost(oneof = "high_capacity_registry_value::Content", tags = "1, 3, 4")]
     pub content: ::core::option::Option<high_capacity_registry_value::Content>,
 }
@@ -149,6 +149,9 @@ pub struct RegistryValue {
     /// If true, this change represents a deletion.
     #[prost(bool, tag = "3")]
     pub deletion_marker: bool,
+    /// The timestamp at which the registry mutation happened.
+    #[prost(uint64, tag = "4")]
+    pub timestamp_nanoseconds: u64,
 }
 /// A sequence of changes made to a key in the registry.
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -218,7 +221,7 @@ pub struct HighCapacityRegistryGetValueResponse {
     pub version: u64,
     /// The timestamp at which the registry mutation happened.
     #[prost(uint64, tag = "5")]
-    pub timestamp_seconds: u64,
+    pub timestamp_nanoseconds: u64,
     #[prost(
         oneof = "high_capacity_registry_get_value_response::Content",
         tags = "3, 4"
@@ -318,7 +321,7 @@ pub struct HighCapacityRegistryAtomicMutateRequest {
     pub preconditions: ::prost::alloc::vec::Vec<Precondition>,
     /// The timestamp at which the registry atomic mutate request happened.
     #[prost(uint64, tag = "6")]
-    pub timestamp_seconds: u64,
+    pub timestamp_nanoseconds: u64,
 }
 /// A single mutation in the registry.
 #[derive(candid::CandidType, candid::Deserialize, Eq, Clone, PartialEq, ::prost::Message)]

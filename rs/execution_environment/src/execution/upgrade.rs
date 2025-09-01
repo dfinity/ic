@@ -14,7 +14,10 @@ use crate::execution::install_code::{
 };
 use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::PrincipalId;
-use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
+use ic_embedders::{
+    wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult},
+    wasmtime_embedder::system_api::ApiType,
+};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
@@ -25,7 +28,6 @@ use ic_management_canister_types_private::{
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState, ExecutionState,
 };
-use ic_system_api::ApiType;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{
     funds::Cycles,
@@ -105,7 +107,7 @@ pub(crate) fn execute_upgrade(
     let mut helper = InstallCodeHelper::new(&clean_canister, &original);
 
     // Stage 0: validate input.
-    if let Err(err) = helper.validate_input(&original, &round, round_limits) {
+    if let Err(err) = helper.validate_input(&original) {
         return finish_err(
             clean_canister,
             helper.instructions_left(),
@@ -165,6 +167,7 @@ pub(crate) fn execute_upgrade(
             RequestMetadata::for_new_call_tree(original.time),
             round_limits,
             round.network_topology,
+            round.cost_schedule,
         );
 
         match wasm_execution_result {
@@ -321,7 +324,6 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         instructions_from_compilation,
         result,
         memory_handling,
-        &original,
     ) {
         let instructions_left = helper.instructions_left();
         return finish_err(
@@ -367,6 +369,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
             RequestMetadata::for_new_call_tree(original.time),
             round_limits,
             round.network_topology,
+            round.cost_schedule,
         );
 
         match wasm_execution_result {
@@ -491,6 +494,7 @@ fn upgrade_stage_4a_call_post_upgrade(
         RequestMetadata::for_new_call_tree(original.time),
         round_limits,
         round.network_topology,
+        round.cost_schedule,
     );
     match wasm_execution_result {
         WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
@@ -590,7 +594,6 @@ impl PausedInstallCodeExecution for PausedPreUpgradeExecution {
             self.paused_helper,
             &self.original,
             &round,
-            round_limits,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {
@@ -695,7 +698,6 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringUpgrade {
             self.paused_helper,
             &self.original,
             &round,
-            round_limits,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {
@@ -799,7 +801,6 @@ impl PausedInstallCodeExecution for PausedPostUpgradeExecution {
             self.paused_helper,
             &self.original,
             &round,
-            round_limits,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {

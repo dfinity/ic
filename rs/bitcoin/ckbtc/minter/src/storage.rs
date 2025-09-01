@@ -102,7 +102,10 @@ pub fn decode_event(buf: &[u8]) -> Event {
         Event(Event),
     }
     match ciborium::de::from_reader(buf).expect("failed to decode a minter event") {
-        SerializedEvent::Legacy(payload) => Event::from(payload),
+        SerializedEvent::Legacy(payload) => Event {
+            payload,
+            timestamp: None,
+        },
         SerializedEvent::Event(event) => event,
     }
 }
@@ -119,7 +122,7 @@ pub fn migrate_old_events_if_not_empty() -> Option<u64> {
     let mut num_events_removed = None;
     V0_EVENTS.with(|old_events| {
         let mut old = old_events.borrow_mut();
-        if old.len() > 0 {
+        if !old.is_empty() {
             V1_EVENTS.with(|new| {
                 num_events_removed = Some(migrate_events(&old, &new.borrow()));
             });

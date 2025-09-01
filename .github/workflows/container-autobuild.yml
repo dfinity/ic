@@ -36,8 +36,8 @@ jobs:
         uses: actions/create-github-app-token@v1
         id: app-token
         with:
-          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
-          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -53,9 +53,7 @@ jobs:
           # Set relevant env variables
           set -eExuo pipefail
           IMAGE_TAG="$(ci/container/get-image-tag.sh)"
-          RUST_VERSION="$(grep channel rust-toolchain.toml | sed -e 's/.*=//' | tr -d '"')"
           echo "IMAGE_TAG=${IMAGE_TAG}" >> "$GITHUB_ENV"
-          echo "RUST_VERSION=${RUST_VERSION}" >> "$GITHUB_ENV"
 
       - name: Check Previous Builds
         shell: bash
@@ -95,7 +93,6 @@ jobs:
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/ic-build:${{ env.IMAGE_TAG }}
           build-args: |
-            RUST_VERSION=${{ env.RUST_VERSION }}
             CI_USER=1001
 
       - name: Update Image References

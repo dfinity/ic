@@ -1,0 +1,14 @@
+[Unit]
+Description=Recovery Upgrader
+ConditionKernelCommandLine=recovery=1
+After=network-online.target
+Requires=network-online.target
+Before=guestos.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/guestos-recovery-upgrader.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

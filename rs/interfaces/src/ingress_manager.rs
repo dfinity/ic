@@ -3,13 +3,13 @@ use crate::{
     execution_environment::{CanisterOutOfCyclesError, IngressHistoryError},
     validation::{ValidationError, ValidationResult},
 };
-use ic_interfaces_state_manager::StateManagerError;
 use ic_types::{
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     consensus::Payload,
     ingress::IngressSets,
     messages::MessageId,
+    state_manager::StateManagerError,
     time::{Time, UNIX_EPOCH},
     CanisterId, Height, NumBytes,
 };

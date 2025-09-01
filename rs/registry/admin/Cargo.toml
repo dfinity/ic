@@ -17,6 +17,7 @@ cycles-minting-canister = { path = "../../nns/cmc" }
 futures = { workspace = true }
 hex = { workspace = true }
 ic-admin-derive = { path = "../admin-derive" }
+ic-base-types = { path = "../../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-canister-client = { path = "../../canister_client" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
@@ -71,9 +72,11 @@ url = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
+ic-nervous-system-agent = { path = "../../nervous_system/agent" }
+ic-nervous-system-chunks = { path = "../../nervous_system/chunks" }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
+ic-registry-canister-api = { path = "../canister/api" }
 pocket-ic = { path = "../../../packages/pocket-ic" }
-
 
 [[bin]]
 name = "ic-admin"

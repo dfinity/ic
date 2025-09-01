@@ -3,7 +3,7 @@ use candid::Encode;
 use canister_test::{Canister, CanisterId, Runtime};
 use ic_ledger_core::Tokens;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::{Governance, NetworkEconomics, Neuron};
+use ic_nns_governance_api::{Governance, NetworkEconomics, Neuron};
 use ic_nns_test_utils::itest_helpers::install_rust_canister;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -20,7 +20,6 @@ use ic_system_test_driver::{
     util::{block_on, runtime_from_url},
 };
 use icp_ledger::{AccountIdentifier, ArchiveOptions, LedgerCanisterInitPayload};
-use prost::Message;
 use slog::{debug, error, info, Logger};
 use std::{
     collections::{BTreeMap, HashMap},
@@ -132,10 +131,7 @@ fn create_governance_canister(
             ..Default::default()
         };
 
-        let mut serialized = Vec::new();
-        governance_canister_init
-            .encode(&mut serialized)
-            .expect("Couldn't serialize init payload.");
+        let encoded = Encode!(&governance_canister_init).unwrap();
 
         info!(
             &logger,
@@ -146,7 +142,7 @@ fn create_governance_canister(
             &mut canister,
             "governance-canister",
             &["test"],
-            Some(serialized),
+            Some(encoded),
         )
         .await;
 

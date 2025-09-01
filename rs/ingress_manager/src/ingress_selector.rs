@@ -473,7 +473,7 @@ impl IngressManager {
 
         // Do not include the message if the recipient is Stopping or Stopped.
         let msg = signed_ingress.content();
-        if !msg.is_addressed_to_subnet(self.subnet_id) {
+        if !msg.is_addressed_to_subnet() {
             let canister_id = msg.canister_id();
             let canister_state = state.canister_state(&canister_id).ok_or({
                 ValidationError::InvalidArtifact(InvalidIngressPayloadReason::CanisterNotFound(
@@ -496,12 +496,9 @@ impl IngressManager {
         }
 
         // Skip the message if there aren't enough cycles to induct the message.
-        let effective_canister_id =
-            extract_effective_canister_id(msg, self.subnet_id).map_err(|_| {
-                ValidationError::InvalidArtifact(
-                    InvalidIngressPayloadReason::InvalidManagementMessage,
-                )
-            })?;
+        let effective_canister_id = extract_effective_canister_id(msg).map_err(|_| {
+            ValidationError::InvalidArtifact(InvalidIngressPayloadReason::InvalidManagementMessage)
+        })?;
         let subnet_size = state
             .metadata
             .network_topology
@@ -511,6 +508,7 @@ impl IngressManager {
             msg,
             effective_canister_id,
             subnet_size,
+            state.get_own_cost_schedule(),
         ) {
             IngressInductionCost::Fee {
                 payer,
@@ -526,6 +524,7 @@ impl IngressManager {
                         canister.message_memory_usage(),
                         canister.scheduler_state.compute_allocation,
                         subnet_size,
+                        state.get_own_cost_schedule(),
                         false, // error here is not returned back to the user => no need to reveal top up balance
                     ) {
                         return Err(ValidationError::InvalidArtifact(
@@ -666,7 +665,6 @@ mod tests {
         time_source::TimeSource,
     };
     use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
-    use ic_interfaces_state_manager::{StateManagerError, StateManagerResult};
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_management_canister_types_private::{CanisterIdRecord, Payload, IC_00};
     use ic_metrics::MetricsRegistry;
@@ -687,10 +685,11 @@ mod tests {
     };
     use ic_types::{
         artifact::IngressMessageId,
-        batch::IngressPayload,
+        batch::{CanisterCyclesCostSchedule, IngressPayload},
         ingress::{IngressState, IngressStatus},
         malicious_flags::MaliciousFlags,
         messages::{MessageId, SignedIngress},
+        state_manager::{StateManagerError, StateManagerResult},
         time::{expiry_time_from_now, UNIX_EPOCH},
         Height, RegistryVersion,
     };
@@ -1511,6 +1510,7 @@ mod tests {
                                         m1.content(),
                                         None,
                                         SMALL_APP_SUBNET_MAX_SIZE,
+                                        CanisterCyclesCostSchedule::Normal,
                                     )
                                     .cost(),
                             )
@@ -1674,32 +1674,30 @@ mod tests {
             /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let time = UNIX_EPOCH;
-                for sender in [IC_00, CanisterId::from(subnet_id)].iter() {
-                    // Message to check the status of a canister that doesn't exist.
-                    let msg = SignedIngressBuilder::new()
-                        .canister_id(*sender)
-                        .method_name("canister_status")
-                        .method_payload(CanisterIdRecord::from(canister_test_id(2)).encode())
-                        .expiry_time(time + MAX_INGRESS_TTL)
-                        .build();
+                // Message to check the status of a canister that doesn't exist.
+                let msg = SignedIngressBuilder::new()
+                    .canister_id(IC_00)
+                    .method_name("canister_status")
+                    .method_payload(CanisterIdRecord::from(canister_test_id(2)).encode())
+                    .expiry_time(time + MAX_INGRESS_TTL)
+                    .build();
 
-                    let payload = IngressPayload::from(vec![msg]);
-                    assert_matches!(
-                        ingress_manager.validate_ingress_payload(
-                            &payload,
-                            &HashSet::new(),
-                            &ValidationContext {
-                                time: UNIX_EPOCH,
-                                registry_version: RegistryVersion::from(1),
-                                certified_height: Height::from(0),
-                            },
-                        ),
-                        // Validation should fail since the canister that needs to pay for the
-                        // message doesn't exist.
-                        Err(ValidationError::InvalidArtifact(InvalidIngressPayloadReason::CanisterNotFound(canister_id)))
-                            if canister_id == canister_test_id(2)
-                    );
-                }
+                let payload = IngressPayload::from(vec![msg]);
+                assert_matches!(
+                    ingress_manager.validate_ingress_payload(
+                        &payload,
+                        &HashSet::new(),
+                        &ValidationContext {
+                            time: UNIX_EPOCH,
+                            registry_version: RegistryVersion::from(1),
+                            certified_height: Height::from(0),
+                        },
+                    ),
+                    // Validation should fail since the canister that needs to pay for the
+                    // message doesn't exist.
+                    Err(ValidationError::InvalidArtifact(InvalidIngressPayloadReason::CanisterNotFound(canister_id)))
+                        if canister_id == canister_test_id(2)
+                );
             },
         );
     }
@@ -1727,30 +1725,28 @@ mod tests {
             /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let time = UNIX_EPOCH;
-                for sender in [IC_00, CanisterId::from(subnet_id)].iter() {
-                    // Message to check the status of a canister that exists.
-                    let msg = SignedIngressBuilder::new()
-                        .canister_id(*sender)
-                        .method_name("canister_status")
-                        .method_payload(CanisterIdRecord::from(canister_test_id(2)).encode())
-                        .expiry_time(time + MAX_INGRESS_TTL)
-                        .build();
+                // Message to check the status of a canister that exists.
+                let msg = SignedIngressBuilder::new()
+                    .canister_id(IC_00)
+                    .method_name("canister_status")
+                    .method_payload(CanisterIdRecord::from(canister_test_id(2)).encode())
+                    .expiry_time(time + MAX_INGRESS_TTL)
+                    .build();
 
-                    let payload = IngressPayload::from(vec![msg]);
-                    // Validation should succeed since the canister being addressed
-                    // exists and has enough cycles.
-                    assert!(ingress_manager
-                        .validate_ingress_payload(
-                            &payload,
-                            &HashSet::new(),
-                            &ValidationContext {
-                                time: UNIX_EPOCH,
-                                registry_version: RegistryVersion::from(1),
-                                certified_height: Height::from(0),
-                            },
-                        )
-                        .is_ok());
-                }
+                let payload = IngressPayload::from(vec![msg]);
+                // Validation should succeed since the canister being addressed
+                // exists and has enough cycles.
+                assert!(ingress_manager
+                    .validate_ingress_payload(
+                        &payload,
+                        &HashSet::new(),
+                        &ValidationContext {
+                            time: UNIX_EPOCH,
+                            registry_version: RegistryVersion::from(1),
+                            certified_height: Height::from(0),
+                        },
+                    )
+                    .is_ok());
             },
         );
     }
@@ -1777,34 +1773,32 @@ mod tests {
             /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let time = UNIX_EPOCH;
-                for sender in [IC_00, CanisterId::from(subnet_id)].iter() {
-                    // Message to check the status of a canister that exists.
-                    let msg = SignedIngressBuilder::new()
-                        .canister_id(*sender)
-                        .method_name("canister_status")
-                        .method_payload(CanisterIdRecord::from(canister_test_id(2)).encode())
-                        .expiry_time(time + MAX_INGRESS_TTL)
-                        .build();
+                // Message to check the status of a canister that exists.
+                let msg = SignedIngressBuilder::new()
+                    .canister_id(IC_00)
+                    .method_name("canister_status")
+                    .method_payload(CanisterIdRecord::from(canister_test_id(2)).encode())
+                    .expiry_time(time + MAX_INGRESS_TTL)
+                    .build();
 
-                    let payload = IngressPayload::from(vec![msg]);
-                    // Validation should fail since the canister being addressed
-                    // doesn't have enough cycles.
-                    assert_matches!(ingress_manager
-                        .validate_ingress_payload(
-                            &payload,
-                            &HashSet::new(),
-                            &ValidationContext {
-                                time: UNIX_EPOCH,
-                                registry_version: RegistryVersion::from(1),
-                                certified_height: Height::from(0),
-                            },
-                        ),
-                        // Validation should fail since the canister that needs to pay for the
-                        // message doesn't have enough cycles.
-                        Err(ValidationError::InvalidArtifact(InvalidIngressPayloadReason::InsufficientCycles(err)))
-                            if err.canister_id == canister_test_id(2)
-                    );
-                }
+                let payload = IngressPayload::from(vec![msg]);
+                // Validation should fail since the canister being addressed
+                // doesn't have enough cycles.
+                assert_matches!(ingress_manager
+                    .validate_ingress_payload(
+                        &payload,
+                        &HashSet::new(),
+                        &ValidationContext {
+                            time: UNIX_EPOCH,
+                            registry_version: RegistryVersion::from(1),
+                            certified_height: Height::from(0),
+                        },
+                    ),
+                    // Validation should fail since the canister that needs to pay for the
+                    // message doesn't have enough cycles.
+                    Err(ValidationError::InvalidArtifact(InvalidIngressPayloadReason::InsufficientCycles(err)))
+                        if err.canister_id == canister_test_id(2)
+                );
             },
         );
     }
@@ -1969,63 +1963,61 @@ mod tests {
             /*ingress_pool_max_count=*/ None,
             |ingress_manager, _| {
                 let time = UNIX_EPOCH;
-                for sender in [IC_00, CanisterId::from(subnet_id)].iter() {
-                    // Management message without a payload. This is invalid because then we don't
-                    // know who pays for this.
-                    let msg = SignedIngressBuilder::new()
-                        .canister_id(*sender)
-                        .method_name("canister_status")
-                        .expiry_time(time + MAX_INGRESS_TTL)
-                        .build();
-                    let payload = IngressPayload::from(vec![msg]);
+                // Management message without a payload. This is invalid because then we don't
+                // know who pays for this.
+                let msg = SignedIngressBuilder::new()
+                    .canister_id(IC_00)
+                    .method_name("canister_status")
+                    .expiry_time(time + MAX_INGRESS_TTL)
+                    .build();
+                let payload = IngressPayload::from(vec![msg]);
 
-                    // Validation should fail since the canister being addressed
-                    // doesn't have enough cycles.
-                    assert_matches!(
-                        ingress_manager.validate_ingress_payload(
-                            &payload,
-                            &HashSet::new(),
-                            &ValidationContext {
-                                time: UNIX_EPOCH,
-                                registry_version: RegistryVersion::from(1),
-                                certified_height: Height::from(0),
-                            },
-                        ),
-                        // Validation should fail since the canister that needs to pay for the
-                        // message doesn't have enough cycles.
-                        Err(ValidationError::InvalidArtifact(
-                            InvalidIngressPayloadReason::InvalidManagementMessage
-                        ))
-                    );
+                // Validation should fail since the canister being addressed
+                // doesn't have enough cycles.
+                assert_matches!(
+                    ingress_manager.validate_ingress_payload(
+                        &payload,
+                        &HashSet::new(),
+                        &ValidationContext {
+                            time: UNIX_EPOCH,
+                            registry_version: RegistryVersion::from(1),
+                            certified_height: Height::from(0),
+                        },
+                    ),
+                    // Validation should fail since the canister that needs to pay for the
+                    // message doesn't have enough cycles.
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::InvalidManagementMessage
+                    ))
+                );
 
-                    // Management message with a non-existing method name. This is invalid because
-                    // then we don't know who pays for this.
-                    let msg = SignedIngressBuilder::new()
-                        .canister_id(*sender)
-                        .method_name("abc")
-                        .expiry_time(time + MAX_INGRESS_TTL)
-                        .build();
-                    let payload = IngressPayload::from(vec![msg]);
+                // Management message with a non-existing method name. This is invalid because
+                // then we don't know who pays for this.
+                let msg = SignedIngressBuilder::new()
+                    .canister_id(IC_00)
+                    .method_name("abc")
+                    .expiry_time(time + MAX_INGRESS_TTL)
+                    .build();
+                let payload = IngressPayload::from(vec![msg]);
 
-                    // Validation should fail since the canister being addressed
-                    // doesn't have enough cycles.
-                    assert_matches!(
-                        ingress_manager.validate_ingress_payload(
-                            &payload,
-                            &HashSet::new(),
-                            &ValidationContext {
-                                time: UNIX_EPOCH,
-                                registry_version: RegistryVersion::from(1),
-                                certified_height: Height::from(0),
-                            },
-                        ),
-                        // Validation should fail since the canister that needs to pay for the
-                        // message doesn't have enough cycles.
-                        Err(ValidationError::InvalidArtifact(
-                            InvalidIngressPayloadReason::InvalidManagementMessage
-                        ))
-                    );
-                }
+                // Validation should fail since the canister being addressed
+                // doesn't have enough cycles.
+                assert_matches!(
+                    ingress_manager.validate_ingress_payload(
+                        &payload,
+                        &HashSet::new(),
+                        &ValidationContext {
+                            time: UNIX_EPOCH,
+                            registry_version: RegistryVersion::from(1),
+                            certified_height: Height::from(0),
+                        },
+                    ),
+                    // Validation should fail since the canister that needs to pay for the
+                    // message doesn't have enough cycles.
+                    Err(ValidationError::InvalidArtifact(
+                        InvalidIngressPayloadReason::InvalidManagementMessage
+                    ))
+                );
             },
         );
     }

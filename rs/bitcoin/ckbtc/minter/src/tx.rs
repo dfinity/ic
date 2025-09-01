@@ -196,7 +196,7 @@ pub fn write_compact_size(n: usize, buf: &mut impl Buffer) {
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub struct SignedInput {
     pub previous_output: OutPoint,
     pub sequence: u32,
@@ -357,7 +357,7 @@ impl UnsignedTransaction {
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub struct SignedTransaction {
     pub inputs: Vec<SignedInput>,
     pub outputs: Vec<TxOut>,
@@ -407,7 +407,7 @@ impl SignedTransaction {
         let base_tx_size = self.base_serialized_len();
         let total_tx_size = self.serialized_len();
         let tx_weight = base_tx_size * 3 + total_tx_size;
-        (tx_weight + 3) / 4
+        tx_weight.div_ceil(4)
     }
 }
 

@@ -1,3 +1,12 @@
+//! This benchmark runs nightly in CI, and the results are available in Grafana.
+//! See: `schedule-rust-bench.yml`
+//!
+//! To run the benchmark locally:
+//!
+//! ```shell
+//! bazel run //rs/embedders:compilation_bench
+//! ```
+
 use candid::Encode;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
@@ -154,7 +163,7 @@ fn print_table(data: Vec<Vec<String>>) {
 /// on 2B instructions per second).
 fn compilation_cost(c: &mut Criterion) {
     let binaries = generate_binaries();
-    let group = c.benchmark_group("compilation-cost");
+    let group = c.benchmark_group("embedders:compilation/compilation-cost");
     let config = EmbeddersConfig::default();
 
     let mut table = vec![];
@@ -182,7 +191,7 @@ fn wasm_compilation(c: &mut Criterion) {
     set_production_rayon_threads();
 
     let binaries = generate_binaries();
-    let mut group = c.benchmark_group("compilation");
+    let mut group = c.benchmark_group("embedders:compilation/compilation");
     let config = EmbeddersConfig::default();
     for (name, wasm) in binaries {
         let embedder = WasmtimeEmbedder::new(config.clone(), no_op_logger());
@@ -206,7 +215,7 @@ fn wasm_deserialization(c: &mut Criterion) {
     set_production_rayon_threads();
 
     let binaries = generate_binaries();
-    let mut group = c.benchmark_group("deserialization");
+    let mut group = c.benchmark_group("embedders:compilation/deserialization");
     for (name, wasm) in binaries {
         let config = EmbeddersConfig::default();
         let embedder = WasmtimeEmbedder::new(config, no_op_logger());
@@ -234,7 +243,7 @@ fn wasm_validation_instrumentation(c: &mut Criterion) {
     set_production_rayon_threads();
 
     let binaries = generate_binaries();
-    let mut group = c.benchmark_group("validation-instrumentation");
+    let mut group = c.benchmark_group("embedders:compilation/validation-instrumentation");
     let config = EmbeddersConfig::default();
     for (name, wasm) in binaries {
         let embedder = WasmtimeEmbedder::new(config.clone(), no_op_logger());
@@ -260,6 +269,7 @@ fn execution(c: &mut Criterion) {
     for (name, wasm) in binaries {
         embedders_bench::query_bench(
             c,
+            "embedders:compilation/query",
             &name,
             wasm.as_slice(),
             &Encode!(&()).unwrap(),
@@ -271,12 +281,10 @@ fn execution(c: &mut Criterion) {
     }
 }
 
-criterion_group!(
-    benchmarks,
-    compilation_cost,
-    wasm_compilation,
-    wasm_deserialization,
-    wasm_validation_instrumentation,
-    execution,
-);
+criterion_group! {
+    name = benchmarks;
+    config = Criterion::default().sample_size(10);
+    targets = compilation_cost, wasm_compilation, wasm_deserialization,
+        wasm_validation_instrumentation, execution
+}
 criterion_main!(benchmarks);

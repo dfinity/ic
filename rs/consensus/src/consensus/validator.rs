@@ -1,16 +1,14 @@
 //! This module encapsulates functions required for validating consensus
 //! artifacts.
-
-use crate::{
-    consensus::{
-        check_protocol_version,
-        metrics::ValidatorMetrics,
-        status::{self, Status},
-        ConsensusMessageId,
-    },
-    idkg,
+#![allow(clippy::result_large_err)]
+use crate::consensus::{
+    check_protocol_version,
+    metrics::ValidatorMetrics,
+    status::{self, Status},
+    ConsensusMessageId,
 };
 use ic_consensus_dkg as dkg;
+use ic_consensus_idkg as idkg;
 use ic_consensus_utils::{
     active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
     crypto::ConsensusCrypto,
@@ -29,12 +27,13 @@ use ic_interfaces::{
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{StateHashError, StateManager, StateManagerError};
+use ic_interfaces_state_manager::{StateHashError, StateManager};
 use ic_logger::{trace, warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
+        dkg::{DkgPayloadValidationFailure, InvalidDkgPayloadReason},
         Block, BlockMetadata, BlockPayload, BlockProposal, CatchUpContent, CatchUpPackage,
         CatchUpShareContent, Committee, ConsensusMessage, ConsensusMessageHashable,
         EquivocationProof, FinalizationContent, HasCommittee, HasHash, HasHeight, HasRank,
@@ -45,8 +44,10 @@ use ic_types::{
     registry::RegistryClientError,
     replica_config::ReplicaConfig,
     signature::{BasicSigned, MultiSignature, MultiSignatureShare, ThresholdSignatureShare},
+    state_manager::StateManagerError,
     Height, NodeId, RegistryVersion, SubnetId,
 };
+use idkg::{IDkgPayloadValidationFailure, InvalidIDkgPayloadReason};
 use std::{
     collections::{BTreeMap, HashSet},
     sync::{Arc, RwLock},
@@ -75,8 +76,8 @@ enum ValidationFailure {
     CryptoError(CryptoError),
     RegistryClientError(RegistryClientError),
     PayloadValidationFailed(PayloadValidationFailure),
-    DkgPayloadValidationFailed(dkg::DkgPayloadValidationFailure),
-    IDkgPayloadValidationFailed(idkg::IDkgPayloadValidationFailure),
+    DkgPayloadValidationFailed(DkgPayloadValidationFailure),
+    IDkgPayloadValidationFailed(IDkgPayloadValidationFailure),
     DkgSummaryNotFound(Height),
     RandomBeaconNotFound(Height),
     StateHashError(StateHashError),
@@ -101,8 +102,8 @@ enum InvalidArtifactReason {
     SignerNotInThresholdCommittee(NodeId),
     SignerNotInMultiSigCommittee(NodeId),
     InvalidPayload(InvalidPayloadReason),
-    InvalidDkgPayload(dkg::InvalidDkgPayloadReason),
-    InvalidIDkgPayload(idkg::InvalidIDkgPayloadReason),
+    InvalidDkgPayload(InvalidDkgPayloadReason),
+    InvalidIDkgPayload(InvalidIDkgPayloadReason),
     InsufficientSignatures,
     CannotVerifyBlockHeightZero,
     NonEmptyPayloadPastUpgradePoint,
@@ -1671,13 +1672,13 @@ impl Validator {
         }
 
         let summary = block.payload.as_ref().as_summary();
-        let registry_version = if let Some(idkg) = summary.idkg.as_ref() {
+        let registry_version = if summary.idkg.is_some() {
             // Should succeed as we already got the hash above
             let state = self
                 .state_manager
                 .get_state_at(height)
                 .map_err(ValidationFailure::StateManagerError)?;
-            get_oldest_idkg_state_registry_version(idkg, state.get_ref())
+            get_oldest_idkg_state_registry_version(state.get_ref())
         } else {
             None
         };
@@ -1758,7 +1759,7 @@ impl Validator {
     fn dedup_change_actions(&self, name: &str, actions: Mutations) -> Mutations {
         let mut change_set = Mutations::new();
         for action in actions {
-            change_set.dedup_push(action).unwrap_or_else(|action| {
+            if let Some(duplicate_action) = change_set.dedup_push(action) {
                 self.metrics
                     .duplicate_artifact
                     .with_label_values(&[name])
@@ -1767,9 +1768,9 @@ impl Validator {
                     self.log,
                     "Duplicated {} detected in changeset {:?}",
                     name,
-                    action
+                    duplicate_action
                 )
-            })
+            }
         }
         change_set
     }
@@ -1896,14 +1897,7 @@ impl Validator {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::{
-        consensus::block_maker::get_block_maker_delay,
-        idkg::test_utils::{
-            add_available_quadruple_to_payload, empty_idkg_payload,
-            fake_ecdsa_idkg_master_public_key_id, fake_signature_request_context_with_pre_sig,
-            fake_state_with_signature_requests,
-        },
-    };
+    use crate::consensus::block_maker::get_block_maker_delay;
     use assert_matches::assert_matches;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
@@ -1923,7 +1917,16 @@ pub mod test {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
-    use ic_test_utilities_consensus::{assert_changeset_matches_pattern, fake::*, matches_pattern};
+    use ic_test_utilities_consensus::{
+        assert_changeset_matches_pattern,
+        fake::*,
+        idkg::{
+            empty_idkg_payload, fake_ecdsa_idkg_master_public_key_id,
+            fake_signature_request_context_with_registry_version,
+            fake_state_with_signature_requests,
+        },
+        matches_pattern,
+    };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::{
@@ -1938,11 +1941,11 @@ pub mod test {
             NotarizationShare, Payload, RandomBeaconContent, RandomTapeContent, SummaryPayload,
         },
         crypto::{BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
+        messages::CallbackId,
         replica_config::ReplicaConfig,
         signature::ThresholdSignature,
         CryptoHashOfState, ReplicaVersion, Time,
     };
-    use idkg::test_utils::request_id;
     use std::sync::{Arc, RwLock};
 
     pub fn assert_block_valid(results: &[ChangeAction], block: &BlockProposal) {
@@ -2148,26 +2151,34 @@ pub mod test {
 
             let height = Height::from(0);
             let key_id = fake_ecdsa_idkg_master_public_key_id();
-            // Create three quadruple Ids and contexts, quadruple "2" will remain unmatched.
+            // Create three quadruple Ids and contexts, context "2" will remain unmatched.
             let pre_sig_id1 = PreSigId(1);
-            let pre_sig_id2 = PreSigId(2);
             let pre_sig_id3 = PreSigId(3);
 
             let contexts = vec![
-                fake_signature_request_context_with_pre_sig(
-                    request_id(1, height),
-                    key_id.clone(),
-                    Some(pre_sig_id1),
+                (
+                    CallbackId::new(1),
+                    fake_signature_request_context_with_registry_version(
+                        Some(pre_sig_id1),
+                        key_id.inner(),
+                        RegistryVersion::from(3),
+                    ),
                 ),
-                fake_signature_request_context_with_pre_sig(
-                    request_id(2, height),
-                    key_id.clone(),
-                    None,
+                (
+                    CallbackId::new(2),
+                    fake_signature_request_context_with_registry_version(
+                        None,
+                        key_id.inner(),
+                        RegistryVersion::from(1),
+                    ),
                 ),
-                fake_signature_request_context_with_pre_sig(
-                    request_id(3, height),
-                    key_id.clone(),
-                    Some(pre_sig_id3),
+                (
+                    CallbackId::new(3),
+                    fake_signature_request_context_with_registry_version(
+                        Some(pre_sig_id3),
+                        key_id.inner(),
+                        RegistryVersion::from(2),
+                    ),
                 ),
             ];
 
@@ -2208,12 +2219,7 @@ pub mod test {
             let block = proposal.content.as_mut();
             block.context.certified_height = block.height();
 
-            let mut idkg = empty_idkg_payload(subnet_test_id(0));
-            // Add the three quadruples using registry version 3, 1 and 2 in order
-            add_available_quadruple_to_payload(&mut idkg, pre_sig_id1, RegistryVersion::from(3));
-            add_available_quadruple_to_payload(&mut idkg, pre_sig_id2, RegistryVersion::from(1));
-            add_available_quadruple_to_payload(&mut idkg, pre_sig_id3, RegistryVersion::from(2));
-
+            let idkg = empty_idkg_payload(subnet_test_id(0));
             let dkg = block.payload.as_ref().as_summary().dkg.clone();
             block.payload = Payload::new(
                 ic_types::crypto::crypto_hash,

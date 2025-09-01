@@ -20,7 +20,7 @@ use ic_types::{
     CanisterId, CryptoHashOfState, Randomness, RegistryVersion, ReplicaVersion,
 };
 use setup::setup;
-use std::{collections::BTreeMap, convert::TryFrom, sync::Arc, thread::sleep, time::Duration};
+use std::{convert::TryFrom, sync::Arc, thread::sleep, time::Duration};
 
 fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -> Batch {
     Batch {
@@ -32,9 +32,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
             ..BatchMessages::default()
         },
         randomness: Randomness::from([0; 32]),
-        chain_key_subnet_public_keys: BTreeMap::new(),
-        idkg_pre_signature_ids: BTreeMap::new(),
-        ni_dkg_ids: BTreeMap::new(),
+        chain_key_data: Default::default(),
         registry_version: RegistryVersion::from(1),
         time: UNIX_EPOCH,
         consensus_responses: vec![],
@@ -50,9 +48,7 @@ fn build_batch_with_full_state_hash(message_routing: &dyn MessageRouting) -> Bat
         requires_full_state_hash: true,
         messages: BatchMessages::default(),
         randomness: Randomness::from([0; 32]),
-        chain_key_subnet_public_keys: BTreeMap::new(),
-        idkg_pre_signature_ids: BTreeMap::new(),
-        ni_dkg_ids: BTreeMap::new(),
+        chain_key_data: Default::default(),
         registry_version: RegistryVersion::from(1),
         time: UNIX_EPOCH,
         consensus_responses: vec![],
@@ -186,8 +182,6 @@ fn install_canister(
                 canister_id,
                 wasm,
                 vec![],
-                None,
-                None,
             )
             .encode(),
         )

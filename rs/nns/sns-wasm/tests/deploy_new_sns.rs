@@ -8,12 +8,12 @@ use ic_nervous_system_clients::canister_status::CanisterStatusType::Running;
 use ic_nervous_system_common::ONE_TRILLION;
 use ic_nervous_system_proto::pb::v1::Canister as NervousSystemProtoCanister;
 use ic_nns_constants::{
-    GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
-    SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
+    GOVERNANCE_CANISTER_ID, NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use ic_nns_test_utils::{
     sns_wasm,
-    state_test_helpers::{self, set_controllers, set_up_universal_canister, update_with_sender},
+    state_test_helpers::{set_controllers, set_up_universal_canister, update_with_sender},
 };
 use ic_sns_init::pb::v1::{DappCanisters, SnsInitPayload};
 use ic_sns_root::{CanisterSummary, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
@@ -32,7 +32,6 @@ pub mod common;
 #[test]
 fn test_canisters_are_created_and_installed() {
     // Step 1: Set up NNS
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let state_machine = set_up_state_machine_with_nns();
 
     // Step 2: Add cycles and canister WASMs to SNS-WASM.
@@ -166,7 +165,6 @@ fn test_canisters_are_created_and_installed() {
 /// simulate failures executing basic IC00 operations
 #[test]
 fn test_deploy_cleanup_on_wasm_install_failure() {
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = set_up_state_machine_with_nns();
 
     // Add cycles to the SNS-W canister to deploy an SNS.
@@ -193,17 +191,22 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
         sns_init_payload,
     );
 
-    let root = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 1);
-    let governance = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 2);
-    let ledger = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 3);
-    let swap = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 4);
-    let index = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 5);
+    let highest_nns_created_canister_index = NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET;
+
+    let root = canister_test_id(highest_nns_created_canister_index + 1);
+    let governance = canister_test_id(highest_nns_created_canister_index + 2);
+    let ledger = canister_test_id(highest_nns_created_canister_index + 3);
+    let swap = canister_test_id(highest_nns_created_canister_index + 4);
+    let index = canister_test_id(highest_nns_created_canister_index + 5);
     let error_message = response.error.clone().unwrap().message;
-    let expected_error = "Error installing Governance WASM: Failed to install WASM on canister \
-        qsgjb-riaaa-aaaaa-aaaga-cai: error code 5: Error from Canister qsgjb-riaaa-aaaaa-aaaga-cai: \
-        Canister called `ic0.trap` with message: 'did not find blob on stack";
+    let expected_error = format!(
+        "Error installing Governance WASM: Failed to install WASM on canister \
+        {}: error code 5: Error from Canister {}: \
+        Canister called `ic0.trap` with message: 'did not find blob on stack",
+        governance, governance
+    );
     assert!(
-        error_message.contains(expected_error),
+        error_message.contains(&expected_error),
         "Response error \"{error_message}\" does not contain expected error \"{expected_error}\""
     );
 
@@ -231,12 +234,10 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
         }
     );
 
-    // No canisters should exist above SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET because we deleted
+    // No canisters should exist above highest_nns_created_canister_index because we deleted
     // those canisters.
     for i in 1..=5 {
-        assert!(
-            !machine.canister_exists(canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + i))
-        );
+        assert!(!machine.canister_exists(canister_test_id(highest_nns_created_canister_index + i)));
     }
 
     // 15_000_000_000_000 cycles are burned creating the canisters before the failure
@@ -250,7 +251,6 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
 
 #[test]
 fn test_deploy_adds_cycles_to_target_canisters() {
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = set_up_state_machine_with_nns();
 
     // Add cycles to the SNS-W canister to deploy an SNS.
@@ -271,11 +271,13 @@ fn test_deploy_adds_cycles_to_target_canisters() {
         sns_init_payload,
     );
 
-    let root = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 1);
-    let governance = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 2);
-    let ledger = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 3);
-    let swap = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 4);
-    let index = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 5);
+    let highest_nns_created_canister_index = NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET;
+
+    let root = canister_test_id(highest_nns_created_canister_index + 1);
+    let governance = canister_test_id(highest_nns_created_canister_index + 2);
+    let ledger = canister_test_id(highest_nns_created_canister_index + 3);
+    let swap = canister_test_id(highest_nns_created_canister_index + 4);
+    let index = canister_test_id(highest_nns_created_canister_index + 5);
 
     assert_eq!(
         response,
@@ -314,7 +316,6 @@ fn test_deploy_adds_cycles_to_target_canisters() {
 #[test]
 fn test_deploy_sns_and_transfer_dapps() {
     // Setup the state machine
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = set_up_state_machine_with_nns();
 
     // Add cycles to the SNS-W canister to deploy the SNS
@@ -355,11 +356,13 @@ fn test_deploy_sns_and_transfer_dapps() {
         sns_init_payload,
     );
 
-    let root_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 5);
-    let governance_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 6);
-    let ledger_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 7);
-    let swap_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 8);
-    let index_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 9);
+    let highest_nns_created_canister_index = NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET;
+
+    let root_canister_id = canister_test_id(highest_nns_created_canister_index + 5);
+    let governance_canister_id = canister_test_id(highest_nns_created_canister_index + 6);
+    let ledger_canister_id = canister_test_id(highest_nns_created_canister_index + 7);
+    let swap_canister_id = canister_test_id(highest_nns_created_canister_index + 8);
+    let index_canister_id = canister_test_id(highest_nns_created_canister_index + 9);
 
     assert_eq!(
         response,

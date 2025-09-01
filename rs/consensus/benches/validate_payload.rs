@@ -53,7 +53,7 @@ use ic_test_utilities_types::{
 };
 use ic_types::{
     batch::{BatchPayload, IngressPayload, ValidationContext},
-    consensus::{certification::*, *},
+    consensus::{certification::*, dkg::DkgSummary, *},
     crypto::Signed,
     ingress::{IngressState, IngressStatus},
     signature::*,
@@ -110,7 +110,7 @@ where
             IngressHistoryReaderImpl::new(Arc::clone(&state_manager) as Arc<_>);
 
         let committee = vec![node_test_id(0)];
-        let summary = dkg::Summary::fake();
+        let summary = DkgSummary::fake();
         let mut consensus_pool = ConsensusPoolImpl::new(
             node_test_id(0),
             subnet_test_id(0),

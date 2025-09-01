@@ -3,7 +3,7 @@
 //! In one shell:
 //!
 //! ```
-//! bazel run //rs/nns/test_utils/prepare_golden_state --
+//! bazel run //rs/nns/test_utils/prepare_golden_state:watch_and_prepare --
 //! --state-dir-path=/some/directory --state-source=nns
 //! ```
 //!

@@ -1,7 +1,9 @@
 use ic_crypto_internal_csp::Csp;
 use ic_interfaces::time_source::SysTimeSource;
 use ic_limits::INITIAL_NOTARY_DELAY;
-use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, KeyConfig, SubnetRecord, SubnetType};
+use ic_protobuf::registry::subnet::v1::{
+    CanisterCyclesCostSchedule, ChainKeyConfig, KeyConfig, SubnetRecord, SubnetType,
+};
 use ic_protobuf::types::v1 as pb_types;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use rand::rngs::OsRng;
@@ -1111,7 +1113,9 @@ impl EcdsaSubnetConfig {
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: key_rotation_period
                         .map(|key_rotation_period| key_rotation_period.as_millis() as u64),
+                    max_parallel_pre_signature_transcripts_in_creation: None,
                 }),
+                canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             },
         }
     }

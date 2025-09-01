@@ -2,10 +2,10 @@ use crate::tx::{GasFeeEstimate, TransactionPrice};
 use proptest::strategy::Strategy;
 
 mod estimate_transaction_price {
-    use crate::eth_rpc::FeeHistory;
-    use crate::numeric::{BlockNumber, WeiPerGas};
+    use crate::numeric::WeiPerGas;
     use crate::tx::{estimate_transaction_fee, GasFeeEstimate, TransactionFeeEstimationError};
     use assert_matches::assert_matches;
+    use evm_rpc_client::{FeeHistory, Nat256};
     use proptest::collection::vec;
     use proptest::prelude::any;
     use proptest::{prop_assert_eq, proptest};
@@ -64,7 +64,7 @@ mod estimate_transaction_price {
         assert_matches!(result, Err(TransactionFeeEstimationError::Overflow(_)));
     }
 
-    fn fee_history<U: Into<WeiPerGas>, V: Into<WeiPerGas>>(
+    fn fee_history<U: Into<Nat256>, V: Into<Nat256>>(
         base_fee_per_gas: Vec<U>,
         reward: Vec<V>,
     ) -> FeeHistory {
@@ -73,9 +73,11 @@ mod estimate_transaction_price {
             reward.len() + 1,
             "base_fee_per_gas must contain a value for the next block"
         );
+        let default_gas_used_ratio = vec![1.; reward.len()];
         FeeHistory {
-            oldest_block: BlockNumber::new(0x10f73fc),
+            oldest_block: 0x10f73fc_u32.into(),
             base_fee_per_gas: base_fee_per_gas.into_iter().map(|x| x.into()).collect(),
+            gas_used_ratio: default_gas_used_ratio,
             reward: reward.into_iter().map(|x| vec![x.into()]).collect(),
         }
     }

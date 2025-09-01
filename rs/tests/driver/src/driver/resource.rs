@@ -12,9 +12,7 @@ use crate::driver::ic::{ImageSizeGiB, VmAllocationStrategy, VmResources};
 use crate::driver::nested::NestedNode;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{
-    get_empty_disk_img_sha256, get_empty_disk_img_url, get_ic_os_img_sha256, get_ic_os_img_url,
-    get_mainnet_ic_os_img_url, get_malicious_ic_os_img_sha256, get_malicious_ic_os_img_url,
-    HasIcDependencies,
+    get_empty_disk_img_sha256, get_empty_disk_img_url, get_guestos_img_sha256, get_guestos_img_url,
 };
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
 use crate::driver::universal_vm::UniversalVm;
@@ -22,7 +20,6 @@ use crate::k8s::tnet::TNet;
 use crate::util::block_on;
 use anyhow;
 use serde::{Deserialize, Serialize};
-use slog::{info, warn};
 use std::collections::BTreeMap;
 use std::fs;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -30,6 +27,9 @@ use url::Url;
 
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(6);
 const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
+
+pub const HOSTOS_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(32);
+pub const HOSTOS_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(33554432); // 32GiB
 
 /// A declaration of resources needed to instantiate a InternetComputer.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
@@ -140,6 +140,7 @@ impl ResourceGroup {
 pub struct AllocatedVm {
     pub name: String,
     pub group_name: String,
+    pub hostname: String,
     pub ipv6: Ipv6Addr,
     pub mac6: String,
     pub ipv4: Option<Ipv4Addr>,
@@ -152,33 +153,8 @@ pub fn get_resource_request(
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<ResourceRequest> {
-    let (ic_os_img_sha256, ic_os_img_url) = {
-        if config.has_malicious_behaviours() {
-            warn!(
-                test_env.logger(),
-                "Using malicious guestos image for IC config."
-            );
-            (
-                get_malicious_ic_os_img_sha256()?,
-                get_malicious_ic_os_img_url()?,
-            )
-        } else if config.with_mainnet_config {
-            warn!(
-                test_env.logger(),
-                "Using mainnet guestos image for IC config."
-            );
-            (
-                test_env.get_mainnet_ic_os_img_sha256()?,
-                get_mainnet_ic_os_img_url()?,
-            )
-        } else {
-            info!(
-                test_env.logger(),
-                "Using tip-of-branch guestos image for IC config."
-            );
-            (get_ic_os_img_sha256()?, get_ic_os_img_url()?)
-        }
-    };
+    let (ic_os_img_sha256, ic_os_img_url) = (get_guestos_img_sha256(), get_guestos_img_url());
+
     let mut res_req = ResourceRequest::new(ImageType::IcOsImage, ic_os_img_url, ic_os_img_sha256);
     let group_setup = GroupSetup::read_attribute(test_env);
     let default_vm_resources = group_setup.default_vm_resources;
@@ -226,7 +202,7 @@ pub fn get_resource_request_for_nested_nodes(
 /// The latest hash can be retrieved by downloading the SHA256SUMS file from:
 /// https://hydra-int.dfinity.systems/job/dfinity-ci-build/farm/universal-vm.img.x86_64-linux/latest
 const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
-    "807fd5d3d1c5fb71000bec1a1d5b10e7bcd063abb4186dc9954d8b6b614ef15d";
+    "36977fe6e829631376dd0bc4b1a8e05b53a7e3a0248a6373f1d7fbdae4bc00ed";
 
 pub fn get_resource_request_for_universal_vm(
     universal_vm: &UniversalVm,
@@ -342,10 +318,16 @@ pub fn allocate_resources(
                 let (vm_name, created_vm) = thread
                     .join()
                     .expect("Couldn't join on the associated thread");
-                let VMCreateResponse { ipv6, mac6, .. } = created_vm?;
+                let VMCreateResponse {
+                    hostname,
+                    ipv6,
+                    mac6,
+                    ..
+                } = created_vm?;
                 res_group.add_vm(AllocatedVm {
                     name: vm_name,
                     group_name: group_name.clone(),
+                    hostname,
                     ipv4: None,
                     ipv6,
                     mac6,
@@ -355,11 +337,16 @@ pub fn allocate_resources(
         InfraProvider::K8s => {
             for (vm_name, created_vm) in vm_responses {
                 let VMCreateResponse {
-                    ipv6, mac6, ipv4, ..
+                    hostname,
+                    ipv6,
+                    mac6,
+                    ipv4,
+                    ..
                 } = created_vm;
                 res_group.add_vm(AllocatedVm {
                     name: vm_name,
                     group_name: group_name.clone(),
+                    hostname,
                     ipv4,
                     ipv6,
                     mac6,
@@ -405,12 +392,9 @@ fn vm_spec_from_nested_node(
 ) -> VmSpec {
     VmSpec {
         name: node.name.clone(),
-        vcpus: default_vm_resources
-            .and_then(|vm_resources| vm_resources.vcpus)
-            .unwrap_or(DEFAULT_VCPUS_PER_VM),
-        memory_kibibytes: default_vm_resources
-            .and_then(|vm_resources| vm_resources.memory_kibibytes)
-            .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM),
+        // Note that the nested GuestOS VM uses half the vCPUs and memory of this host VM.
+        vcpus: HOSTOS_VCPUS_PER_VM,
+        memory_kibibytes: HOSTOS_MEMORY_KIB_PER_VM,
         boot_image: BootImage::GroupDefault,
         boot_image_minimal_size_gibibytes: default_vm_resources
             .and_then(|vm_resources| vm_resources.boot_image_minimal_size_gibibytes),

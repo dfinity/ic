@@ -24,7 +24,6 @@ pub struct Config {
     pub http_request_timeout_secs: u64,
     pub incoming_source: IncomingSource,
     pub logger: LoggerConfig,
-    /// Socks proxy docs: https://github.com/dfinity/ic/blob/master/ic-os/boundary-guestos/docs/Components.adoc#user-content-socks-proxy
     /// Proxy url is validated and needs to have scheme, host and port specified. I.e socks5://socksproxy.com:1080
     /// `Option<String>` can't be used because the decision on using a proxy is based on the subnet and this information
     /// is not present at adapter startup. So to enable/disable the proxy there exists a `socks_proxy_allowed` field in

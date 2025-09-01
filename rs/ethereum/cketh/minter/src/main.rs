@@ -1,9 +1,9 @@
+#![allow(deprecated)]
 use crate::dashboard::DashboardPaginationParameters;
 use candid::Nat;
 use dashboard::DashboardTemplate;
 use ic_canister_log::log;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::{validate_address_as_destination, AddressValidationError};
 use ic_cketh_minter::deposit::scrape_logs;
 use ic_cketh_minter::endpoints::ckerc20::{
@@ -47,6 +47,7 @@ use ic_cketh_minter::{
     SCRAPING_ETH_LOGS_INTERVAL,
 };
 use ic_ethereum_types::Address;
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
@@ -177,7 +178,7 @@ async fn eip_1559_transaction_price(
                     if ckerc20_ledger_id == read_state(|s| s.cketh_ledger_id) {
                         CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT
                     } else {
-                        ic_cdk::trap(&format!(
+                        ic_cdk::trap(format!(
                             "ERROR: Unsupported ckERC20 token ledger {}",
                             ckerc20_ledger_id
                         ))
@@ -241,7 +242,7 @@ async fn get_minter_info() -> MinterInfo {
             deposit_with_subaccount_helper_contract_address,
             supported_ckerc20_tokens,
             minimum_withdrawal_amount: Some(s.cketh_minimum_withdrawal_amount.into()),
-            ethereum_block_height: Some(s.ethereum_block_height.into()),
+            ethereum_block_height: Some(s.ethereum_block_height.clone()),
             last_observed_block_number: s.last_observed_block_number.map(|n| n.into()),
             eth_balance: Some(s.eth_balance.eth_balance().into()),
             last_gas_fee_estimate: s.last_transaction_price_estimate.as_ref().map(
@@ -256,7 +257,7 @@ async fn get_minter_info() -> MinterInfo {
             last_erc20_scraped_block_number,
             last_deposit_with_subaccount_scraped_block_number,
             cketh_ledger_id: Some(s.cketh_ledger_id),
-            evm_rpc_id: s.evm_rpc_id,
+            evm_rpc_id: Some(s.evm_rpc_id),
         }
     })
 }
@@ -271,7 +272,7 @@ async fn withdraw_eth(
 ) -> Result<RetrieveEthRequest, WithdrawalError> {
     let caller = validate_caller_not_anonymous();
     let _guard = retrieve_withdraw_guard(caller).unwrap_or_else(|e| {
-        ic_cdk::trap(&format!(
+        ic_cdk::trap(format!(
             "Failed retrieving guard for principal {}: {:?}",
             caller, e
         ))
@@ -279,7 +280,7 @@ async fn withdraw_eth(
 
     let destination = validate_address_as_destination(&recipient).map_err(|e| match e {
         AddressValidationError::Invalid { .. } | AddressValidationError::NotSupported(_) => {
-            ic_cdk::trap(&e.to_string())
+            ic_cdk::trap(e.to_string())
         }
         AddressValidationError::Blocked(address) => WithdrawalError::RecipientAddressBlocked {
             address: address.to_string(),
@@ -399,7 +400,7 @@ async fn withdraw_erc20(
     validate_ckerc20_active();
     let caller = validate_caller_not_anonymous();
     let _guard = retrieve_withdraw_guard(caller).unwrap_or_else(|e| {
-        ic_cdk::trap(&format!(
+        ic_cdk::trap(format!(
             "Failed retrieving guard for principal {}: {:?}",
             caller, e
         ))
@@ -407,7 +408,7 @@ async fn withdraw_erc20(
 
     let destination = validate_address_as_destination(&recipient).map_err(|e| match e {
         AddressValidationError::Invalid { .. } | AddressValidationError::NotSupported(_) => {
-            ic_cdk::trap(&e.to_string())
+            ic_cdk::trap(e.to_string())
         }
         AddressValidationError::Blocked(address) => WithdrawErc20Error::RecipientAddressBlocked {
             address: address.to_string(),
@@ -556,7 +557,7 @@ async fn estimate_erc20_transaction_fee() -> Option<Wei> {
 #[query]
 fn is_address_blocked(address_string: String) -> bool {
     let address = Address::from_str(&address_string)
-        .unwrap_or_else(|e| ic_cdk::trap(&format!("invalid recipient address: {:?}", e)));
+        .unwrap_or_else(|e| ic_cdk::trap(format!("invalid recipient address: {:?}", e)));
     ic_cketh_minter::blocklist::is_blocked(&address)
 }
 
@@ -565,13 +566,13 @@ async fn add_ckerc20_token(erc20_token: AddCkErc20Token) {
     let orchestrator_id = read_state(|s| s.ledger_suite_orchestrator_id)
         .unwrap_or_else(|| ic_cdk::trap("ERROR: ERC-20 feature is not activated"));
     if orchestrator_id != ic_cdk::caller() {
-        ic_cdk::trap(&format!(
+        ic_cdk::trap(format!(
             "ERROR: only the orchestrator {} can add ERC-20 tokens",
             orchestrator_id
         ));
     }
     let ckerc20_token = erc20::CkErc20Token::try_from(erc20_token)
-        .unwrap_or_else(|e| ic_cdk::trap(&format!("ERROR: {}", e)));
+        .unwrap_or_else(|e| ic_cdk::trap(format!("ERROR: {}", e)));
     mutate_state(|s| process_event(s, EventType::AddedCkErc20Token(ckerc20_token)));
 }
 
@@ -1016,8 +1017,6 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "Last max fee per gas",
                 )?;
 
-                ic_cketh_minter::eth_rpc::encode_metrics(w)?;
-
                 Ok(())
             })
         }
@@ -1025,6 +1024,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         match encode_metrics(&mut writer) {
             Ok(()) => HttpResponseBuilder::ok()
                 .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Cache-Control", "no-store")
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {

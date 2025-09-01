@@ -78,6 +78,17 @@ def rust_canbench(name, results_file, add_test = False, opt = "3", noise_thresho
         args = ["--update"],
     )
 
+    native.sh_binary(
+        name = name + "_debug",
+        testonly = True,
+        srcs = [
+            "//bazel:canbench.sh",
+        ],
+        data = data,
+        env = env,
+        args = ["--debug"],
+    )
+
     if add_test:
         native.sh_test(
             name = name + "_test",

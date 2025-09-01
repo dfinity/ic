@@ -1,5 +1,6 @@
 use crate::{common::LOG_PREFIX, registry::Registry};
 
+use ic_cdk::println;
 use ic_protobuf::registry::node_rewards::v2::{
     NodeRewardsTable, UpdateNodeRewardsTableProposalPayload,
 };

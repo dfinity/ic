@@ -153,7 +153,7 @@ async fn tests_for_illegal_data_buffer_access(agent: &ic_agent::Agent, canister_
     assert!(
         matches!(
             ret_val,
-            Err(AgentError::UncertifiedReject(RejectResponse {reject_message, .. })) if reject_message.contains(containing_str)
+            Err(AgentError::UncertifiedReject { reject: RejectResponse {reject_message, .. }, .. }) if reject_message.contains(containing_str)
         ),
         "msg_caller with caller large length 128 was accepted"
     );
@@ -380,7 +380,7 @@ pub fn malicious_intercanister_calls(env: TestEnv) {
             .call_and_wait()
             .await;
 
-        assert!(matches!(ret_val, Err(AgentError::CertifiedReject(_)),));
+        assert!(matches!(ret_val, Err(AgentError::CertifiedReject { .. })));
 
         // Wait for few seconds before reading the data.
         for _ in 0..NR_SLEEPS {

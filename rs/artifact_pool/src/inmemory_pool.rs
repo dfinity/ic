@@ -308,9 +308,10 @@ pub mod test {
     use super::*;
     use ic_interfaces::consensus_pool::ValidatedArtifact;
     use ic_test_utilities_consensus::{fake::*, make_genesis};
+    use ic_types::consensus::dkg::DkgSummary;
 
-    fn make_summary(genesis_height: Height) -> ic_types::consensus::dkg::Summary {
-        let mut summary = ic_types::consensus::dkg::Summary::fake();
+    fn make_summary(genesis_height: Height) -> DkgSummary {
+        let mut summary = DkgSummary::fake();
         summary.height = genesis_height;
         summary
     }

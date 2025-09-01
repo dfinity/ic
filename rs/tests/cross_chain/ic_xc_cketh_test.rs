@@ -342,6 +342,7 @@ fn minter_init_args(ecdsa_key_id: &EcdsaKeyId, cketh_ledger: Principal) -> Minte
         minimum_withdrawal_amount: Nat::from(30_000_000_000_000_000_u64),
         next_transaction_nonce: Nat::from(0_u8),
         last_scraped_block_number: Nat::from(0_u8),
+        evm_rpc_id: None,
     }
 }
 
@@ -815,7 +816,12 @@ fn deploy_smart_contract(
     logger: &slog::Logger,
 ) -> (Address, BlockNumber) {
     let sender_private_key = sender.private_key();
-    let json_output = foundry.block_on_bash_script(&format!(r#"docker run --net {DOCKER_NETWORK_NAME} --rm -v /config/{filename}:/contracts/{filename} foundry "forge create --json --rpc-url http://anvil:{FOUNDRY_PORT} --private-key {sender_private_key} /contracts/{filename}:{contract_name} --constructor-args {constructor_args}""#)).unwrap();
+    let cmd = format!("\
+        docker run --net {DOCKER_NETWORK_NAME} --rm \
+        -v /config/{filename}:/contracts/{filename} \
+        foundry \"forge create --json --rpc-url http://anvil:{FOUNDRY_PORT} --broadcast --private-key {sender_private_key} /contracts/{filename}:{contract_name} --constructor-args {constructor_args}\"\
+    ");
+    let json_output = foundry.block_on_bash_script(&cmd).unwrap();
     info!(
         logger,
         "Deployed {filename} with constructor args {constructor_args}: {}", json_output

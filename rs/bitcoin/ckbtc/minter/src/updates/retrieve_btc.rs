@@ -22,7 +22,7 @@ use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use num_traits::cast::ToPrimitive;
 
-const MAX_CONCURRENT_PENDING_REQUESTS: usize = 1000;
+const MAX_CONCURRENT_PENDING_REQUESTS: usize = 5000;
 
 /// The arguments of the [retrieve_btc] endpoint.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
@@ -247,7 +247,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         read_state(|s| s.retrieve_btc_status(block_index))
     );
 
-    schedule_now(TaskType::ProcessLogic, &IC_CANISTER_RUNTIME);
+    schedule_now(TaskType::ProcessLogic(false), &IC_CANISTER_RUNTIME);
 
     Ok(RetrieveBtcOk { block_index })
 }
@@ -351,7 +351,7 @@ pub async fn retrieve_btc_with_approval(
         read_state(|s| s.retrieve_btc_status(block_index))
     );
 
-    schedule_now(TaskType::ProcessLogic, &IC_CANISTER_RUNTIME);
+    schedule_now(TaskType::ProcessLogic(false), &IC_CANISTER_RUNTIME);
 
     Ok(RetrieveBtcOk { block_index })
 }
@@ -422,11 +422,11 @@ async fn burn_ckbtcs(user: Principal, amount: u64, memo: Memo) -> Result<u64, Re
                 "cannot burn ckBTC: the ledger fails with: {} (error code {})", message, error_code
             )))
         }
-        Err(TransferError::BadFee { expected_fee }) => ic_cdk::trap(&format!(
+        Err(TransferError::BadFee { expected_fee }) => ic_cdk::trap(format!(
             "unreachable: the ledger demands the fee of {} even though the fee field is unset",
             expected_fee
         )),
-        Err(TransferError::Duplicate{ duplicate_of }) => ic_cdk::trap(&format!(
+        Err(TransferError::Duplicate{ duplicate_of }) => ic_cdk::trap(format!(
             "unreachable: the ledger reports duplicate ({}) even though the create_at_time field is unset",
             duplicate_of
         )),
@@ -436,7 +436,7 @@ async fn burn_ckbtcs(user: Principal, amount: u64, memo: Memo) -> Result<u64, Re
         Err(TransferError::TooOld) => ic_cdk::trap(
             "unreachable: the ledger reports TooOld even though the create_at_time field is unset"
         ),
-        Err(TransferError::BadBurn { min_burn_amount }) => ic_cdk::trap(&format!(
+        Err(TransferError::BadBurn { min_burn_amount }) => ic_cdk::trap(format!(
             "the minter is misconfigured: retrieve_btc_min_amount {} is less than ledger's min_burn_amount {}",
             read_state(|s| s.retrieve_btc_min_amount),
             min_burn_amount
@@ -495,11 +495,11 @@ async fn burn_ckbtcs_icrc2(
                 "cannot burn ckBTC: the ledger fails with: {} (error code {})", message, error_code
             )))
         }
-        Err(TransferFromError::BadFee { expected_fee }) => ic_cdk::trap(&format!(
+        Err(TransferFromError::BadFee { expected_fee }) => ic_cdk::trap(format!(
             "unreachable: the ledger demands the fee of {} even though the fee field is unset",
             expected_fee
         )),
-        Err(TransferFromError::Duplicate { duplicate_of }) => ic_cdk::trap(&format!(
+        Err(TransferFromError::Duplicate { duplicate_of }) => ic_cdk::trap(format!(
             "unreachable: the ledger reports duplicate ({}) even though the create_at_time field is unset",
             duplicate_of
         )),
@@ -509,7 +509,7 @@ async fn burn_ckbtcs_icrc2(
         Err(TransferFromError::TooOld) => ic_cdk::trap(
             "unreachable: the ledger reports TooOld even though the create_at_time field is unset"
         ),
-        Err(TransferFromError::BadBurn { min_burn_amount }) => ic_cdk::trap(&format!(
+        Err(TransferFromError::BadBurn { min_burn_amount }) => ic_cdk::trap(format!(
             "the minter is misconfigured: retrieve_btc_min_amount {} is less than ledger's min_burn_amount {}",
             read_state(|s| s.retrieve_btc_min_amount),
             min_burn_amount

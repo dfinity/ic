@@ -78,7 +78,7 @@ type UpgradeArg = record {
     num_subnet_nodes: opt nat16;
 };
 
-type CheckArg = variant {
+type CheckArg = opt variant {
     InitArg : InitArg;
     UpgradeArg: opt UpgradeArg;
 };

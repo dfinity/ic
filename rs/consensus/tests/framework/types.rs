@@ -4,10 +4,8 @@ use ic_artifact_pool::{
     consensus_pool::ConsensusPoolImpl, dkg_pool, idkg_pool,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus::{
-    consensus::{ConsensusBouncer, ConsensusImpl},
-    idkg,
-};
+use ic_consensus::consensus::{ConsensusBouncer, ConsensusImpl};
+use ic_consensus_idkg::IDkgImpl;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
@@ -70,6 +68,7 @@ pub const PRIORITY_FN_REFRESH_INTERVAL: Duration = Duration::from_secs(3);
 /// delivered to peers, or to a timer expired event that should trigger
 /// consensus on_state_change.
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Input {
     Message(Message),
     TimerExpired(Time),
@@ -110,6 +109,7 @@ impl Eq for Input {}
 pub type Output = Message;
 
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum InputMessage {
     Consensus(ConsensusMessage),
     Dkg(Box<DkgMessage>),
@@ -311,7 +311,7 @@ pub struct ComponentModifier {
     >,
     pub(crate) idkg: Box<
         dyn Fn(
-            idkg::IDkgImpl,
+            IDkgImpl,
         ) -> Box<
             dyn PoolMutationsProducer<idkg_pool::IDkgPoolImpl, Mutations = IDkgChangeSet>,
         >,
@@ -322,7 +322,7 @@ impl Default for ComponentModifier {
     fn default() -> Self {
         Self {
             consensus: Box::new(|x: ConsensusImpl| Box::new(x)),
-            idkg: Box::new(|x: idkg::IDkgImpl| Box::new(x)),
+            idkg: Box::new(|x: IDkgImpl| Box::new(x)),
         }
     }
 }
@@ -339,7 +339,7 @@ pub fn apply_modifier_consensus(
 
 pub fn apply_modifier_idkg(
     modifier: &Option<ComponentModifier>,
-    idkg: idkg::IDkgImpl,
+    idkg: IDkgImpl,
 ) -> Box<dyn PoolMutationsProducer<idkg_pool::IDkgPoolImpl, Mutations = IDkgChangeSet>> {
     match modifier {
         Some(f) => (f.idkg)(idkg),

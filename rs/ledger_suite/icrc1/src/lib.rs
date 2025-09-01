@@ -437,7 +437,7 @@ impl<Tokens: TokensType> Transaction<Tokens> {
                 to,
                 spender,
                 amount,
-                fee: fee.map(From::from),
+                fee,
             },
             created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
             memo,

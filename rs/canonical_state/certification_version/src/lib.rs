@@ -2,13 +2,13 @@ use strum_macros::{EnumCount, EnumIter};
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, EnumCount, EnumIter)]
 pub enum CertificationVersion {
-    /// Added `flags` to `StreamHeader`. Defined `StreamHeaderFlagBits::ResponsesOnly` flag.
-    V17 = 17,
-    /// Added `deadline` fields to `Request` and `Response`.
-    V18 = 18,
     /// Defined `reject_signals`, a struct containing 7 flavors of reject signals.
     /// Deprecated `reject_signals_deltas`.
     V19 = 19,
+    /// Excluded loopback stream from the certified state.
+    V20 = 20,
+    /// Add `canister_ranges` subtree to the certified state.
+    V21 = 21,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -40,19 +40,19 @@ impl std::convert::TryFrom<u32> for CertificationVersion {
 
 /// The Canonical State certification version that should be used for newly
 /// computed states.
-pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V19;
+pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V21;
 
 /// Minimum supported certification version.
 ///
 /// The replica will panic if requested to certify using a version lower than
 /// this.
-pub const MIN_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V17;
+pub const MIN_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V19;
 
 /// Maximum supported certification version.
 ///
 /// The replica will panic if requested to certify using a version higher than
 /// this.
-pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V19;
+pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V21;
 
 /// Returns a list of all certification versions from `MIN_SUPPORTED_CERTIFICATION_VERSION`
 /// up to `MAX_SUPPORTED_CERTIFICATION_VERSION`.
@@ -80,7 +80,7 @@ fn convert_from_u32_succeeds_for_all_supported_certification_versions() {
         Err(UnsupportedCertificationVersion(v))
     );
     // Non-existent version should fail.
-    let v = CertificationVersion::iter().last().unwrap() as u32 + 1;
+    let v = CertificationVersion::iter().next_back().unwrap() as u32 + 1;
     assert_eq!(
         CertificationVersion::try_from(v),
         Err(UnsupportedCertificationVersion(v))

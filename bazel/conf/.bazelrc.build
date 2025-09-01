@@ -4,15 +4,13 @@
 # To require no rustfmt issues, pass --config=fmt.
 # To require no clippy issues, pass --config=clippy. Without this, warnings will still be generated.
 # To enable both of the above, pass --config=lint.
-# --config=ci implies --config=lint
-build:ci --config=lint
 # --config=lint implies both --config=fmt and --config=clippy.
 build:lint --config=fmt
 build:lint --config=clippy
 # rust-clippy
 build:clippy --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect
 build:clippy --output_groups=+clippy_checks
-build --@rules_rust//:clippy.toml=//:clippy.toml --@rules_rust//:clippy_flags=-D,warnings,-D,clippy::all,-D,clippy::mem_forget,-C,debug-assertions=off
+build --@rules_rust//:clippy.toml=//:clippy.toml --@rules_rust//:clippy_flags=-D,warnings,-D,clippy::all,-D,clippy::mem_forget,-C,debug-assertions=off,-A,clippy::uninlined_format_args
 # rustfmt
 build:fmt --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect
 build:fmt --output_groups=+rustfmt_checks
@@ -45,13 +43,23 @@ build --experimental_repository_downloader_retries=3 # https://bazel.build/refer
 
 common --flag_alias=release_build=//bazel:release_build
 common --flag_alias=s3_endpoint=//ci/src/artifacts:s3_endpoint
-common --flag_alias=s3_upload=//ci/src/artifacts:s3_upload
 common --flag_alias=k8s=//rs/tests:k8s
 common --flag_alias=timeout_value=//bazel:timeout_value
 common --flag_alias=hermetic_cc=//bazel:hermetic_cc
 
 common:stamped --workspace_status_command='$(pwd)/bazel/workspace_status.sh --stamp'
-common:release --config=stamped --s3_upload=True
+
+# configure some tests to retry automatically, best used unattened (not locally).
+# default all tests to fail ...
+#   ... after three attempts for tests marked as flaky
+#   ... after three attempts for all tests in //rs/tests
+#   ... after the first attempt for other tests
+#   see also:
+#     https://bazel.build/reference/command-line-reference#build-flag--flaky_test_attempts
+#
+# (NOTE: for convenience, applied to 'common' instead of just 'test' so that it doesn't
+# fail on 'bazel build')
+common:flaky_retry --flaky_test_attempts=default --flaky_test_attempts=//rs/tests/.*@3
 
 # Exclude system tests by default
 # https://github.com/bazelbuild/bazel/issues/8439
@@ -59,11 +67,8 @@ build --build_tag_filters="-system_test,-fuzz_test"
 test --test_tag_filters="-system_test,-fuzz_test"
 test:alltests --test_tag_filters=""
 test:paritytests --test_tag_filters="-system_test"
-build:ci --build_tag_filters="-system_test,-fuzz_test"
-build:ci --verbose_failures
 
 test --test_output=errors
-test --test_env=RUST_BACKTRACE=full
 
 test:precommit --build_tests_only --test_tag_filters="smoke"
 
@@ -73,38 +78,20 @@ test:systest --test_output=streamed --test_tag_filters=
 build:testnet --build_tag_filters=
 test:testnet --test_output=streamed --test_tag_filters=
 
-# TODO(IDX-2374): enable alltests in CI when we will have actual system tests.
-#test:ci --config=alltests
-
-# See the following for the exact semantics of --flaky_test_attempts:
-# https://bazel.build/reference/command-line-reference#flag--flaky_test_attempts
-# Locally we want a flaky test to fail explicitly on the first failure and not be retried.
-test    --flaky_test_attempts=1
-# On CI run tests marked as flaky up to 3 times.
-test:ci --flaky_test_attempts=default
-# On CI run all system-tests up to 3 times since they're known to be the most flaky since they require non-deterministic resources like the Internet.
-test:ci --flaky_test_attempts=//rs/tests/.*@3
+# Set all tests (including those marked as flaky) to fail explicitly on the
+# first try (can be overriden). This is useful when developing locally to
+# spot flakiness.
+#
+# see also:
+#   https://bazel.build/reference/command-line-reference#flag--flaky_test_attempts
+test --flaky_test_attempts=1
 
 # So that developers can build in debug mode.
 build:dev --compilation_mode=fastbuild
-build:macos_ci --build_tag_filters="-system_test,-fuzz_test"
-
-# A config to get faster compilation feedback by skipping code generation.
-# We aim to do essentially the same thing as cargo check (https://doc.rust-lang.org/cargo/commands/cargo-check.html), which is to only emit metadata(.rmeta) files.
-# We do this by combining pipelined compilation and requesting only metadata files via --output_groups.
-#
-# pipelined_compilation=True means that we now build and depend on metadata files(`.rmeta`s)
-#   For more information on what pipelined compilation is, see https://internals.rust-lang.org/t/evaluating-pipelined-rustc-compilation/10199
-# TODO: consider always enabling this once we've confirmed it deterministically doesn't fail
-build:check --@rules_rust//rust/settings:pipelined_compilation=True
-# By requesting only the output group containing the metadata files, we don't run actions that do full compilation (e.g. codegen, linking)
-# and instead only run the ones that output metadata files
-build:check --output_groups=build_metadata
 
 # Fuzzing configuration
-build:fuzzing --action_env="SANITIZERS_ENABLED=1"
-# sanitizers are only supported in nightly
-build:fuzzing --@rules_rust//rust/toolchain/channel=nightly
+# fuzzers use nightly features so we tell rustc to allow nightly features
+build:fuzzing --@rules_rust//rust/settings:extra_rustc_env=RUSTC_BOOTSTRAP=1 --@rules_rust//rust/settings:extra_exec_rustc_env=RUSTC_BOOTSTRAP=1
 build:fuzzing --build_tag_filters=fuzz_test
 # Ignoring transitions for now since it doesn't add any additional improvement to current setup
 build:fuzzing --//bazel:enable_fuzzing_code=True
@@ -124,7 +111,7 @@ build:afl --config=fuzzing
 # For more context see: https://github.com/dfinity/ic/pull/3508
 build:afl --hermetic_cc=false
 build:afl --build_tag_filters=afl
-run:afl --run_under="//bin:afl_wrapper"
+run:afl --run_under="//bin/fuzzing:afl_wrapper"
 
 # Fuzzing w/ Canister Sandbox configuration
 # NOTE: This is only for --config=fuzzing
@@ -147,9 +134,21 @@ common --noexperimental_inmemory_dotd_files
 # This is particularly helpful for canbench, but other tests that follow this
 # convention would also benefit. If the test does not support this, this "almost
 # certainly" does no harm.
-test --test_env=CLICOLOR_FORCE=true
+common --test_env=CLICOLOR_FORCE=true
+
+# Show full backtrack on failure
+common --test_env=RUST_BACKTRACE=full
+
+# Give canceled actions some more time to cleanup
+common --local_termination_grace_seconds=90
 
 # Speed up compilation with zig cc
-# Currently this is disabled as it breaks pocket-ic tests as the port files
-# collide across tests.
-# build --sandbox_add_mount_pair=/tmp
+# zig cc compiles the standard library on demand, so a shared cache makes a big
+# difference by cutting out duplicated work.
+
+# Set the cache path for all environments
+build --repo_env=HERMETIC_CC_TOOLCHAIN_CACHE_PREFIX=/tmp/zig-cache
+# Share /tmp/zig-cache across targets
+build --sandbox_add_mount_pair=/tmp/zig-cache
+# Allow writes to the shared cache
+build --sandbox_writable_path=/tmp/zig-cache

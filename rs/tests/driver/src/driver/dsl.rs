@@ -1,11 +1,5 @@
 #![allow(dead_code)]
-#[rustfmt::skip]
-
-use std::{
-    collections::BTreeMap,
-    panic::UnwindSafe,
-    path::{Path},
-};
+use std::{collections::BTreeMap, panic::UnwindSafe, path::Path};
 
 use crate::driver::{
     pot_dsl::{PotSetupFn, SysTestFn},
@@ -17,6 +11,13 @@ use slog::Logger;
 macro_rules! systest {
     ($a:path) => {
         ic_system_test_driver::driver::dsl::TestFunction::new(std::stringify!($a), $a)
+    };
+
+    ($function:path; $($args:expr),+) => {
+        ic_system_test_driver::driver::dsl::TestFunction::new(
+            std::stringify!($function($($args),+)),
+            |env| ($function(env, $($args),+)),
+        )
     };
 }
 

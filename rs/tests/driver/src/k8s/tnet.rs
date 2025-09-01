@@ -1,6 +1,7 @@
 use rand::seq::SliceRandom;
 use regex::Regex;
 use slog::Logger;
+use std::cmp::min;
 use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
@@ -360,15 +361,19 @@ impl TNet {
             }
         );
 
+        // We make reservation for 45 vcpus only if VM uses 64 vcpus because there are
+        // already other k8s resources having resource requests that prevents reservation to succeeds.
+        // Note that VM still gets 64 vcpus.
+        let vcpus = min(45, vm_req.vcpus.get()).to_string();
+        // Same as above, we make reservation for less memory if VM uses more then memory then specified below
+        // because there are already other k8s resources with resource requests that prevent this reservation to succeeds.
+        let mem = min(422142680, vm_req.memory_kibibytes.get()).to_string();
         let node = create_reservation(
             vm_name.clone(),
             vm_name.clone(),
             self.unique_name.clone().expect("missing unique name"),
             "1h".to_string().into(),
-            Some((
-                vm_req.vcpus.to_string(),
-                vm_req.memory_kibibytes.to_string() + "Ki",
-            )),
+            Some((vcpus, mem + "Ki")),
         )
         .await?;
 
@@ -391,9 +396,19 @@ impl TNet {
                 "set -xe; \
                 mkdir -p /tnet/{vm_name}; \
                 curl --user-agent curl-k8s-test --retry 10 --retry-delay 1 -o /tnet/{vm_name}/img.tar.zst {image_url}; \
+                file /tnet/{vm_name}/img.tar.zst | grep -i 'zstandard' || exit 1; \
                 tar -x --zstd -vf /tnet/{vm_name}/img.tar.zst -C /tnet/{vm_name}; \
-                curl --user-agent curl-k8s-test --retry 20 --retry-delay 3 -o /tnet/{vm_name}/config_disk.img.zst {config_image_url}; \
-                unzstd -o /tnet/{vm_name}/config_disk.img /tnet/{vm_name}/config_disk.img.zst; \
+                file /tnet/{vm_name}/disk.img | grep -q 'DOS/MBR boot sector' || exit 1; \
+                for i in $(seq 1 12); do \
+                    curl --user-agent curl-k8s-test --retry 3 --retry-delay 3 -o /tnet/{vm_name}/config_disk.img.zst {config_image_url}; \
+                    if ! file /tnet/{vm_name}/config_disk.img.zst | grep -i 'zstandard'; then \
+                        sleep 20; \
+                        continue; \
+                    fi; \
+                    unzstd -o /tnet/{vm_name}/config_disk.img /tnet/{vm_name}/config_disk.img.zst; \
+                    break; \
+                done; \
+                test -f /tnet/{vm_name}/config_disk.img || exit 1; \
                 chmod -R 777 /tnet/{vm_name}; \
                 rm -f /tnet/{vm_name}/img.tar.zst /tnet/{vm_name}/img.tar",
                 vm_name = vm_name,
@@ -402,7 +417,7 @@ impl TNet {
             );
             create_job(
                 &vm_name.clone(),
-                "dfinity/util:0.1",
+                "dfinity/util:0.2",
                 vec!["/bin/sh", "-c"],
                 vec![&args],
                 "/srv/tnet".into(),
@@ -428,7 +443,7 @@ impl TNet {
             );
             create_job(
                 &vm_name.clone(),
-                "dfinity/util:0.1",
+                "dfinity/util:0.2",
                 vec!["/bin/sh", "-c"],
                 vec![&args],
                 "/srv/tnet".into(),

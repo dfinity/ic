@@ -1,11 +1,11 @@
 use core::future::Future;
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_canister_client_sender::Sender;
+use ic_canister_client_sender::Sender as CanisterClientSender;
 use ic_config::{crypto::CryptoConfig, transport::TransportConfig, Config};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_interfaces::execution_environment::{
-    IngressHistoryReader, QueryExecutionError, QueryExecutionService,
+    IngressHistoryReader, QueryExecutionError, QueryExecutionInput, QueryExecutionService,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
@@ -53,7 +53,7 @@ use std::{
     thread::sleep,
     time::{Duration, Instant},
 };
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::Sender;
 use tower::ServiceExt;
 
 const CYCLES_BALANCE: u128 = 1 << 120;
@@ -65,14 +65,14 @@ const CYCLES_BALANCE: u128 = 1 << 120;
 /// time.
 #[allow(clippy::await_holding_lock)]
 fn process_ingress(
-    ingress_tx: &UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    ingress_tx: &Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     ingress_hist_reader: &dyn IngressHistoryReader,
     msg: SignedIngress,
     time_limit: Duration,
 ) -> Result<WasmResult, UserError> {
     let msg_id = msg.id();
     ingress_tx
-        .send(UnvalidatedArtifactMutation::Insert((msg, node_test_id(1))))
+        .try_send(UnvalidatedArtifactMutation::Insert((msg, node_test_id(1))))
         .unwrap();
 
     let start = Instant::now();
@@ -152,7 +152,7 @@ where
 /// function calls instead of http calls.
 pub struct LocalTestRuntime {
     pub query_handler: Arc<Mutex<QueryExecutionService>>,
-    pub ingress_sender: UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    pub ingress_sender: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     pub ingress_history_reader: Arc<dyn IngressHistoryReader>,
     pub state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     pub node_id: NodeId,
@@ -263,6 +263,7 @@ pub fn get_ic_config() -> IcConfig {
         /* nns_subnet_id= */ Some(subnet_index),
         /* release_package_url= */ None,
         /* release_package_sha256_hex= */ None,
+        /* guest_launch_measurements= */ None,
         /* provisional_whitelist */ Some(provisional_whitelist),
         None,
         None,
@@ -298,7 +299,7 @@ where
         let data_provider = Arc::new(data_provider);
         let fake_registry_client = Arc::new(FakeRegistryClient::new(data_provider.clone()));
         fake_registry_client.update_to_latest_version();
-        let registry = fake_registry_client.clone() as Arc<dyn RegistryClient + Send + Sync>;
+        let registry = fake_registry_client.clone();
         let crypto = setup_crypto_provider(
             &config.crypto,
             rt.handle().clone(),
@@ -406,8 +407,6 @@ impl LocalTestRuntime {
             *canister_id,
             wat::parse_str(wat).expect("couldn't convert wat -> wasm"),
             payload,
-            None,
-            None,
         ))
     }
 
@@ -464,8 +463,6 @@ impl LocalTestRuntime {
             canister_id,
             wat::parse_str(wat).expect("couldn't convert wat -> wasm"),
             payload,
-            None,
-            None,
         )
     }
 
@@ -475,17 +472,8 @@ impl LocalTestRuntime {
         canister_id: &CanisterId,
         wasm: Vec<u8>,
         payload: Vec<u8>,
-        compute_allocation: Option<u64>,
-        memory_allocation: Option<u64>,
     ) -> Result<WasmResult, UserError> {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Install,
-            *canister_id,
-            wasm,
-            payload,
-            compute_allocation,
-            memory_allocation,
-        );
+        let args = InstallCodeArgs::new(CanisterInstallMode::Install, *canister_id, wasm, payload);
 
         self.install_canister_helper(args)
     }
@@ -503,8 +491,6 @@ impl LocalTestRuntime {
         let (canister_id, res) = self.create_and_install_canister_wasm(
             UNIVERSAL_CANISTER_WASM.to_vec(),
             payload.into(),
-            None,
-            None,
             num_cycles,
         );
         res.unwrap();
@@ -528,20 +514,12 @@ impl LocalTestRuntime {
         &self,
         wasm: Vec<u8>,
         payload: Vec<u8>,
-        compute_allocation: Option<u64>,
-        memory_allocation: Option<u64>,
         num_cycles: u128,
     ) -> (CanisterId, Result<WasmResult, UserError>) {
         let canister_id = self.create_canister_with_cycles(num_cycles).unwrap();
         (
             canister_id,
-            self.install_canister_wasm(
-                &canister_id,
-                wasm,
-                payload,
-                compute_allocation,
-                memory_allocation,
-            ),
+            self.install_canister_wasm(&canister_id, wasm, payload),
         )
     }
 
@@ -623,8 +601,11 @@ impl LocalTestRuntime {
             thread::sleep(Duration::from_millis(100));
         }
         let query_svc = self.query_handler.lock().unwrap().clone();
-
-        let result = match query_svc.oneshot((query, None)).await.unwrap() {
+        let input = QueryExecutionInput {
+            query,
+            certificate_delegation_with_metadata: None,
+        };
+        let result = match query_svc.oneshot(input).await.unwrap() {
             Ok((result, _)) => result,
             Err(QueryExecutionError::CertifiedStateUnavailable) => {
                 panic!("Certified state unavailable for query call.")
@@ -661,7 +642,7 @@ impl LocalTestRuntime {
         canister_id: CanisterId,
         method_name: M,
         payload: P,
-        sender: &Sender,
+        sender: &CanisterClientSender,
     ) -> Result<WasmResult, UserError> {
         process_ingress(
             &self.ingress_sender,

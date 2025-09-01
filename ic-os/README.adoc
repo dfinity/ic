@@ -2,12 +2,11 @@
 
 == Introduction
 
-IC-OS is an umbrella term for all the operating systems within the IC, including SetupOS, HostOS, GuestOS, and Boundary-guestOS.
+IC-OS is an umbrella term for all the operating systems within the IC, including SetupOS, HostOS, GuestOS.
 
 * SetupOS: Responsible for booting a new replica node and installing HostOS and GuestOS.
 * HostOS: The operating system that runs on the host machine. Its main responsibility is to launch and run the GuestOS in a virtual machine. In terms of its capabilities, it is intentionally limited by design to not perform any trusted capabilities.
 * GuestOS: The operating system that runs inside a virtual machine on the HostOS. The core IC protocol is executed within the GuestOS.
-* Boundary-GuestOS: The operating system that runs on boundary nodes. It contains all the services necessary to fulfill the two main tasks of the boundary nodes: (1) route ICP API requests to a healthy replica of the right subnet (`ic-boundary`); and (2) translate HTTP requests into ICP API requests to allow direct access to dapps from the browser.
 
 == Managing IC-OS files
 
@@ -33,8 +32,7 @@ Each image has its own build targets, which are variations of the image:
 
 * SetupOS: `prod`, `dev`
 * HostOS: `prod`, `dev`
-* GuestOS: `prod`, `dev`, `dev-malicious`
-* BoundaryGuestOS: `prod`, `dev`
+* GuestOS: `prod`, `dev`, `dev-malicious`, `recovery`
 
 The difference between production and development images is that the console can be accessed on `dev` images, but not on `prod` images.
 
@@ -44,9 +42,9 @@ Note: The username and password for all IC-OS `dev` images are set to `root`
 
 Use the following command to build images:
 
-   $ bazel build //ic-os/{setupos,hostos,guestos,boundary-guestos}/envs/<TARGET>/...
+   $ bazel build //ic-os/{setupos,hostos,guestos}/envs/<TARGET>/...
 
-All IC-OS image build outputs are stored under `/ic/bazel-bin/ic-os/{setupos,hostos,guestos,boundary-guestos}/envs/<TARGET>`
+All IC-OS image build outputs are stored under `/ic/bazel-bin/ic-os/{setupos,hostos,guestos}/envs/<TARGET>`
 
 Example:
 
@@ -70,14 +68,14 @@ The docker build process is split into two dockerfiles. This split is necessary 
 
 *Dockerfile.base*
 
-  ic/ic-os/{setupos,hostos,guestos,boundary-guestos}/context/Dockerfile.base
+  ic/ic-os/{setupos,hostos,guestos}/context/Dockerfile.base
 
    ** The Dockerfile.base takes care of installing all upstream Ubuntu packages.
    ** Because the versions of these packages can change at any given time (as updates are published regularly), in order to maintain build determinism, once a week, the CI pipeline builds a new base image for each OS. The result is published on the DFINITY public https://hub.docker.com/u/dfinity[Docker Hub].
 
 *Dockerfile*
 
-  ic/ic-os/{setupos,hostos,guestos,boundary-guestos}/context/Dockerfile
+  ic/ic-os/{setupos,hostos,guestos}/context/Dockerfile
 
    ** The +Dockerfile+ builds off the published base image and takes care of configuring and assembling the main disk-image.
    ** Any instruction in this file needs to be reproducible in itself.
@@ -93,19 +91,10 @@ This means that some development and testing could be done on the docker image i
 
 As a caching optimization, additional IC services, configuration, scripts and binaries are added to the image late in the build process.
 
-== IC-OS Directory Organization
-
-* *components/*: This directory contains scripts and components that are copied to the target IC-OS.
-** For instructions on how to make changes to the OS, refer to the link:components/README.adoc#[components/ documentation]
-
-* *bootloader/*: This directory contains everything related to building EFI firmware and the GRUB bootloader image. 
-
-* *scripts/*: This directory contains build and utility scripts for the IC-OS.
-
 == Adding a new dependency to an IC-OS image
 
 To add a new package to an IC-OS image you need to:
 
-   * Update the list of packages to install in `ic/ic-os/{setupos,hostos,guestos,boundary-guestos}/context/packages.common`
+   * Update the list of packages to install in `ic/ic-os/{setupos,hostos,guestos}/context/packages.common`
    ** Commit the changes and wait for CI to publish the base image
-   * Update the base image hash in `ic/ic-os/{setupos,hostos,guestos,boundary-guestos}/context/docker-base.<env>`
+   * Update the base image hash in `ic/ic-os/{setupos,hostos,guestos}/context/docker-base.<env>`

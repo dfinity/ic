@@ -5,7 +5,6 @@ use crate::{
     InternalHttpQueryHandler,
 };
 use ic_base_types::CanisterId;
-use ic_config::execution_environment::MINIMUM_FREEZING_THRESHOLD;
 use ic_error_types::ErrorCode;
 use ic_interfaces::execution_environment::{SystemApiCallCounters, SystemApiCallId};
 use ic_registry_subnet_type::SubnetType;
@@ -16,7 +15,10 @@ use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
-    messages::{CanisterTask, Query, QuerySource},
+    messages::{
+        CanisterTask, CertificateDelegationFormat, CertificateDelegationMetadata, Query,
+        QuerySource,
+    },
     time, MemoryDiskBytes,
 };
 use ic_types_test_utils::ids::subnet_test_id;
@@ -218,6 +220,7 @@ fn query_cache_reports_memory_bytes_metric_on_invalidation() {
         receiver: a_id,
         method_name: "method".into(),
         method_payload: vec![],
+        certificate_delegation_format: None,
     };
 
     // Assert initial cache state.
@@ -334,6 +337,7 @@ fn query_cache_returns_different_results_for_different_sources() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         );
         assert_eq!(query_cache_metrics(&test).misses.get(), 1);
         let caller = if a_id == b_id {
@@ -358,6 +362,7 @@ fn query_cache_returns_different_results_for_different_sources() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         );
         assert_eq!(query_cache_metrics(&test).misses.get(), 2);
         let caller = if a_id == b_id {
@@ -399,6 +404,46 @@ fn query_cache_returns_different_results_for_different_method_names() {
     let res_2 = test.non_replicated_query(id, "f2", vec![]);
     assert_eq!(query_cache_metrics(&test).misses.get(), 2);
     assert_eq!(res_1, res_2);
+}
+
+#[test]
+fn query_cache_returns_different_results_for_different_certificate_delegation_formats() {
+    let mut test = builder_with_query_caching().build();
+    let id = test.canister_from_wat(QUERY_CACHE_WAT).unwrap();
+    let method_name = "f1";
+    let method_payload = vec![];
+
+    let res_1 = test.non_replicated_query_with_certificate_delegation_metadata(
+        id,
+        method_name,
+        method_payload.clone(),
+        None,
+    );
+    assert_eq!(query_cache_metrics(&test).misses.get(), 1);
+    assert_eq!(res_1, Ok(WasmResult::Reply(b"42".to_vec())));
+
+    let res_2 = test.non_replicated_query_with_certificate_delegation_metadata(
+        id,
+        method_name,
+        method_payload.clone(),
+        Some(CertificateDelegationMetadata {
+            format: CertificateDelegationFormat::Flat,
+        }),
+    );
+    assert_eq!(query_cache_metrics(&test).misses.get(), 2);
+
+    let res_3 = test.non_replicated_query_with_certificate_delegation_metadata(
+        id,
+        method_name,
+        method_payload.clone(),
+        Some(CertificateDelegationMetadata {
+            format: CertificateDelegationFormat::Tree,
+        }),
+    );
+    assert_eq!(query_cache_metrics(&test).misses.get(), 3);
+
+    assert_eq!(res_1, res_2);
+    assert_eq!(res_2, res_3);
 }
 
 #[test]
@@ -1340,9 +1385,9 @@ fn query_cache_returns_different_results_on_canister_going_above_freezing_thresh
         assert_eq!(1, m.misses.get());
         assert_eq!(1, m.invalidated_entries_by_transient_error.get());
 
-        // Decrease the freezing threshold, so the query should be successful.
+        // Remove the freezing threshold.
         // The update setting message, so it invalidates the cache entry.
-        test.update_freezing_threshold(b_id, MINIMUM_FREEZING_THRESHOLD.into())
+        test.update_freezing_threshold(b_id, 0.into())
             .expect("The settings update must succeed.");
 
         // Run the same query for the second time.
@@ -1478,6 +1523,8 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::CanisterSelfSize
         | SystemApiCallId::CanisterStatus
         | SystemApiCallId::CanisterVersion
+        | SystemApiCallId::RootKeySize
+        | SystemApiCallId::RootKeyCopy
         | SystemApiCallId::CertifiedDataSet
         | SystemApiCallId::CostCall
         | SystemApiCallId::CostCreateCanister
@@ -1493,7 +1540,6 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::GlobalTimerSet
         | SystemApiCallId::InReplicatedExecution
         | SystemApiCallId::IsController
-        | SystemApiCallId::MintCycles
         | SystemApiCallId::MintCycles128
         | SystemApiCallId::MsgArgDataCopy
         | SystemApiCallId::MsgArgDataSize
@@ -1526,6 +1572,12 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::StableRead
         | SystemApiCallId::StableSize
         | SystemApiCallId::StableWrite
+        | SystemApiCallId::EnvVarCount
+        | SystemApiCallId::EnvVarNameSize
+        | SystemApiCallId::EnvVarNameCopy
+        | SystemApiCallId::EnvVarNameExists
+        | SystemApiCallId::EnvVarValueSize
+        | SystemApiCallId::EnvVarValueCopy
         | SystemApiCallId::Time
         | SystemApiCallId::Trap
         | SystemApiCallId::TryGrowWasmMemory => {

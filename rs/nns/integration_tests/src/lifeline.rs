@@ -8,7 +8,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     install_code::CanisterInstallMode as GovernanceCanisterInstallMode,
     manage_neuron_response::Command as CommandResponse, InstallCodeRequest, MakeProposalRequest,
     ProposalActionRequest, ProposalStatus, Vote,
@@ -16,7 +16,7 @@ use ic_nns_governance_api::pb::v1::{
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
-        get_pending_proposals, get_root_canister_status, nns_cast_vote,
+        get_pending_proposals, get_root_canister_status, nns_cast_vote_or_panic,
         nns_governance_get_proposal_info_as_anonymous, nns_governance_make_proposal,
         nns_wait_for_proposal_execution, setup_nns_canisters, state_machine_builder_for_nns_tests,
         update_with_sender,
@@ -106,7 +106,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
     assert_eq!(pending_proposals.len(), 1);
 
     // Cast votes.
-    nns_cast_vote(
+    nns_cast_vote_or_panic(
         &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
         ic_nns_common::pb::v1::NeuronId {
@@ -208,7 +208,7 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
     assert_eq!(pending_proposals.len(), 1);
 
     // Cast votes.
-    nns_cast_vote(
+    nns_cast_vote_or_panic(
         &state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL,
         ic_nns_common::pb::v1::NeuronId {

@@ -1,9 +1,9 @@
+pub mod proto;
+
 use crate::ExecutionTask;
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::ExecutionRoundType;
 use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
-use ic_protobuf::proxy::ProxyDecodeError;
-use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_types::CanisterId;
 use ic_types::NumBytes;
 use num_traits::SaturatingSub;
@@ -97,9 +97,18 @@ impl TaskQueue {
             }
     }
 
-    /// This function is used only in tests.
     pub fn peek_hook_status(&self) -> OnLowWasmMemoryHookStatus {
         self.on_low_wasm_memory_hook_status
+    }
+
+    /// This function should only be used to restore the hook status
+    /// when loading a canister snapshot.
+    /// Otherwise, invalid state transitions might happen.
+    pub fn set_on_low_wasm_memory_hook_status_from_snapshot(
+        &mut self,
+        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    ) {
+        self.on_low_wasm_memory_hook_status = on_low_wasm_memory_hook_status;
     }
 
     /// `check_dts_invariants` should only be called after round execution.
@@ -251,49 +260,12 @@ impl TaskQueue {
     }
 }
 
-impl From<&TaskQueue> for pb::TaskQueue {
-    fn from(item: &TaskQueue) -> Self {
-        Self {
-            paused_or_aborted_task: item.paused_or_aborted_task.as_ref().map(|task| task.into()),
-            on_low_wasm_memory_hook_status: pb::OnLowWasmMemoryHookStatus::from(
-                &item.on_low_wasm_memory_hook_status,
-            )
-            .into(),
-            queue: item.queue.iter().map(|task| task.into()).collect(),
-        }
-    }
-}
-
-impl TryFrom<pb::TaskQueue> for TaskQueue {
-    type Error = ProxyDecodeError;
-
-    fn try_from(item: pb::TaskQueue) -> Result<Self, Self::Error> {
-        Ok(Self {
-            paused_or_aborted_task: item
-                .paused_or_aborted_task
-                .map(|task| task.try_into())
-                .transpose()?,
-            on_low_wasm_memory_hook_status: pb::OnLowWasmMemoryHookStatus::try_from(
-                item.on_low_wasm_memory_hook_status,
-            )
-            .map_err(|e| ProxyDecodeError::Other(
-                format!("Error while trying to decode pb::TaskQueue::on_low_wasm_memory_hook_status, {:?}", e)))?
-            .try_into()?,
-            queue: item
-                .queue
-                .into_iter()
-                .map(|task| task.try_into())
-                .collect::<Result<VecDeque<_>, _>>()?,
-        })
-    }
-}
-
 /// Condition for `OnLowWasmMemoryHook` is satisfied if the following holds:
 ///
 /// 1. In the case of `memory_allocation`
-///     `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
+///    `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
 /// 2. Without memory allocation
-///     `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
+///    `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
 ///
 /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
 pub fn is_low_wasm_memory_hook_condition_satisfied(

@@ -1,8 +1,13 @@
 use crate::pb::v1::Subaccount as SubaccountProto;
-use std::convert::TryInto;
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+use ic_nervous_system_temporary::Temporary;
+use std::{cell::Cell, convert::TryInto};
 
 mod cached_upgrade_steps;
 pub mod canister_control;
+pub mod extensions;
+pub(crate) mod follower_index;
+pub mod following;
 pub mod governance;
 pub mod init;
 pub mod logs;
@@ -15,6 +20,30 @@ pub mod topics;
 mod treasury;
 pub mod types;
 pub mod upgrade_journal;
+
+pub mod icrc_ledger_helper;
+pub mod storage;
+
+// Feature flag for SNS Extensions
+thread_local! {
+    static SNS_EXTENSIONS_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+}
+
+pub fn is_sns_extensions_enabled() -> bool {
+    SNS_EXTENSIONS_ENABLED.get()
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_sns_extensions() -> Temporary {
+    Temporary::new(&SNS_EXTENSIONS_ENABLED, true)
+}
+
+/// Only integration tests should use this.
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_sns_extensions() -> Temporary {
+    Temporary::new(&SNS_EXTENSIONS_ENABLED, false)
+}
 
 trait Len {
     fn len(&self) -> usize;

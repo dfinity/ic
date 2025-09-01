@@ -1,5 +1,5 @@
 use crate::candid::{encode_upgrade_args, UpgradeArgs};
-use crate::canister::TargetCanister;
+use crate::canister::{DownloadableFile, TargetCanister};
 use candid::Principal;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
@@ -82,6 +82,7 @@ impl GitRepository {
             .iter()
             .map(|canister| {
                 encode_upgrade_args(
+                    canister,
                     &self.candid_file(canister),
                     args.clone().unwrap_or(canister.default_upgrade_args()),
                 )
@@ -93,21 +94,30 @@ impl GitRepository {
         self.dir.path().join(canister.candid_file())
     }
 
-    pub fn parse_canister_id_batch(&self, canisters: &[TargetCanister]) -> Vec<Principal> {
-        canisters
-            .iter()
-            .map(|canister| self.parse_canister_id(canister))
-            .collect()
+    pub async fn parse_canister_id_batch(&self, canisters: &[TargetCanister]) -> Vec<Principal> {
+        let mut fut = Vec::with_capacity(canisters.len());
+        for canister in canisters {
+            fut.push(self.parse_canister_id(canister));
+        }
+        futures::future::join_all(fut).await
     }
 
-    pub fn parse_canister_id(&self, canister: &TargetCanister) -> Principal {
-        let canister_ids: serde_json::Value = {
-            let path = self.dir.path().join(canister.canister_ids_json_file());
-            let canister_ids_file =
-                File::open(&path).unwrap_or_else(|_| panic!("failed to open {:?}", path));
-            let reader = BufReader::new(canister_ids_file);
-            serde_json::from_reader(reader).expect("failed to parse json")
-        };
+    pub async fn parse_canister_id(&self, canister: &TargetCanister) -> Principal {
+        let canister_ids: serde_json::Value = match canister.canister_ids_json_file() {
+            DownloadableFile::Local { path } => {
+                let full_path = self.dir.path().join(&path);
+                let canister_ids_file = File::open(&full_path)
+                    .unwrap_or_else(|_| panic!("failed to open {:?}", &full_path));
+                serde_json::from_reader(BufReader::new(canister_ids_file))
+            }
+            DownloadableFile::Remote { url } => {
+                let resp = reqwest::get(url).await.expect("request failed");
+                let body = resp.text().await.expect("body invalid");
+                serde_json::from_reader(BufReader::new(body.as_bytes()))
+            }
+        }
+        .expect("failed to parse json");
+
         let canister_id = canister_ids
             .as_object()
             .unwrap()

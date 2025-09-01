@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -19,5 +19,24 @@ rust_library(
         "//rs/utils",
         "//rs/utils/validate_eq",
         "@crate_index//:serde",
+    ],
+)
+
+rust_test(
+    name = "wasm_types_test",
+    crate = ":wasm_types",
+    proc_macro_deps = [
+        # Keep sorted.
+        "//rs/utils/validate_eq_derive",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/sha2",
+        "//rs/sys",
+        "//rs/types/types",
+        "//rs/utils",
+        "//rs/utils/validate_eq",
+        "@crate_index//:serde",
+        "@crate_index//:tempfile",
     ],
 )

@@ -9,7 +9,8 @@ documentation.workspace = true
 [dependencies]
 candid = { workspace = true }
 dfn_core = { path = "../dfn_core" }
-ic-base-types = {path="../../types/base_types"}
+ic-base-types = { path = "../../types/base_types" }
+ic-http-types = { path = "../../../packages/ic-http-types" }
 on_wire = { path = "../on_wire" }
 serde = { workspace = true }
 

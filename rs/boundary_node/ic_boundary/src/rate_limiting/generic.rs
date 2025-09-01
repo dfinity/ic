@@ -19,19 +19,20 @@ use axum::{
     response::IntoResponse,
 };
 use candid::Principal;
-use ic_bn_lib::http::ConnInfo;
-use ic_canister_client::Agent;
-use ic_types::CanisterId;
-use ipnet::IpNet;
-use prometheus::{
+use ic_agent::Agent;
+use ic_bn_lib::prometheus::{
     register_int_counter_vec_with_registry, register_int_gauge_with_registry, IntCounterVec,
     IntGauge, Registry,
 };
+use ic_bn_lib::{http::ConnInfo, tasks::Run};
+use ic_types::CanisterId;
+use ipnet::IpNet;
 use rate_limits_api::v1::{Action, IpPrefixes, RateLimitRule, RequestType as RequestTypeRule};
 use ratelimit::Ratelimiter;
 use strum::{Display, IntoStaticStr};
 #[allow(clippy::disallowed_types)]
 use tokio::sync::{watch, Mutex};
+use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use super::{
@@ -43,10 +44,9 @@ use super::{
 };
 
 use crate::{
-    core::Run,
-    persist::RouteSubnet,
-    routes::{ErrorCause, RateLimitCause, RequestContext, RequestType},
-    snapshot::RegistrySnapshot,
+    errors::{ErrorCause, RateLimitCause},
+    routes::{RequestContext, RequestType},
+    snapshot::{RegistrySnapshot, Subnet},
 };
 
 // Converts between different request types
@@ -418,8 +418,8 @@ impl GenericLimiter {
 }
 
 #[async_trait]
-impl Run for Arc<GenericLimiter> {
-    async fn run(&mut self) -> Result<(), Error> {
+impl Run for GenericLimiter {
+    async fn run(&self, token: CancellationToken) -> Result<(), Error> {
         let mut interval = tokio::time::interval(self.opts.poll_interval);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
@@ -428,6 +428,10 @@ impl Run for Arc<GenericLimiter> {
         loop {
             tokio::select! {
                 biased;
+
+                _ = token.cancelled() => {
+                    return Ok(());
+                }
 
                 Ok(()) = channel.changed(), if self.opts.autoscale => {
                     let snapshot = channel.borrow_and_update().clone();
@@ -463,7 +467,7 @@ impl Run for Arc<GenericLimiter> {
 pub async fn middleware(
     State(state): State<Arc<GenericLimiter>>,
     Extension(ctx): Extension<Arc<RequestContext>>,
-    Extension(subnet): Extension<Arc<RouteSubnet>>,
+    Extension(subnet): Extension<Arc<Subnet>>,
     Extension(conn_info): Extension<Arc<ConnInfo>>,
     request: Request<Body>,
     next: Next,
@@ -497,20 +501,19 @@ pub async fn middleware(
 #[cfg(test)]
 mod test {
     use super::*;
+    use anyhow::bail;
+    use ic_bn_lib::principal;
     use indoc::indoc;
     use std::str::FromStr;
 
-    use crate::{
-        principal,
-        snapshot::{generate_stub_snapshot, ApiBoundaryNode},
-    };
+    use crate::snapshot::{generate_stub_snapshot, ApiBoundaryNode};
 
     struct BrokenFetcher;
 
     #[async_trait]
     impl FetchesRules for BrokenFetcher {
         async fn fetch_rules(&self) -> Result<Vec<RateLimitRule>, Error> {
-            Err(anyhow::anyhow!("boo"))
+            bail!("boo")
         }
     }
 
@@ -632,9 +635,9 @@ mod test {
             &Registry::new(),
         ));
 
-        let mut runner = limiter.clone();
+        let limiter_clone = limiter.clone();
         tokio::spawn(async move {
-            let _ = runner.run().await;
+            let _ = limiter_clone.run(CancellationToken::new()).await;
         });
 
         limiter.apply_rules(rules.clone(), 1);

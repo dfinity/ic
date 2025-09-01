@@ -11,4 +11,11 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-06-06: Proposal 136889
+
+http://dashboard.internetcomputer.org/proposal/136889
+
+* This ensures that this canister will be ready for chunked registry records/mutations.
+
+
 END

@@ -2,7 +2,7 @@
 
 == Introduction
 
-'HostOS' refers to the operating system running on the host machine. Its main responsibility is to launch and run the GuestOS in a virtual machine. 
+'HostOS' refers to the operating system running on the host machine. Its main responsibility is to launch and run the GuestOS in a virtual machine.
 
 In terms of its capabilities, HostOS is intentionally limited by design to not perform any trusted capabilities—anything related to the Internet Computer Protocol (replica, orchestrator, etc).
 
@@ -74,24 +74,9 @@ In addition to the regular, built-in Ubuntu user accounts, the following users a
 
 === Virtual Machines
 
-All virtual machines are configured using the libvirt XML format. The configuration template is located at:
+All virtual machines are configured using the libvirt XML format. The configuration is created by the code in `config::guest_vm_config`.
 
-`/opt/ic/share/<machine-type>.xml.template`
-
-This template is used to generate the actual XML configuration. The systemd service `generate-guestos-config.service` executes this step, which is necessary to inject the deterministically generated MAC address.
-
-==== CPU Topology
-
-The following CPU topology is defined in the libvirt XML template:
-
-  <vcpu placement='static'>64</vcpu>
-  <cpu mode='host-passthrough' migratable='off'>
-    <cache mode='passthrough'/>
-    <topology sockets='2' cores='16' threads='2'/>
-    <feature policy="require" name="topoext"/>
-  </cpu>
-
-This configuration ensures that the physical CPU topology is reflected in the virtual machine, and the mapping is done accordingly.
+The GuestOS VM is configured with CPU passthrough. This configuration allows the GuestOS to directly access the physical CPU features and capabilities.
 
 == Firewall
 

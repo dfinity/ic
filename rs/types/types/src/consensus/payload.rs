@@ -1,7 +1,12 @@
 //! Defines consensus payload types.
 use crate::{
     batch::BatchPayload,
-    consensus::{dkg, hashed::Hashed, idkg, thunk::Thunk},
+    consensus::{
+        dkg::{DkgDataPayload, DkgPayload, DkgSummary},
+        hashed::Hashed,
+        idkg,
+        thunk::Thunk,
+    },
     crypto::CryptoHashOf,
     *,
 };
@@ -17,7 +22,7 @@ use std::sync::Arc;
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct DataPayload {
     pub batch: BatchPayload,
-    pub dkg: dkg::DkgDataPayload,
+    pub dkg: DkgDataPayload,
     pub idkg: idkg::Payload,
 }
 
@@ -25,7 +30,7 @@ pub struct DataPayload {
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct SummaryPayload {
-    pub dkg: dkg::Summary,
+    pub dkg: DkgSummary,
     pub idkg: idkg::Summary,
 }
 
@@ -237,14 +242,14 @@ impl AsRef<BlockPayload> for Payload {
     }
 }
 
-impl From<dkg::Payload> for BlockPayload {
-    fn from(payload: dkg::Payload) -> BlockPayload {
+impl From<DkgPayload> for BlockPayload {
+    fn from(payload: DkgPayload) -> BlockPayload {
         match payload {
-            dkg::Payload::Summary(summary) => BlockPayload::Summary(SummaryPayload {
+            DkgPayload::Summary(summary) => BlockPayload::Summary(SummaryPayload {
                 dkg: summary,
                 idkg: None,
             }),
-            dkg::Payload::Data(dkg) => BlockPayload::Data(DataPayload {
+            DkgPayload::Data(dkg) => BlockPayload::Data(DataPayload {
                 batch: BatchPayload::default(),
                 dkg,
                 idkg: idkg::Payload::default(),

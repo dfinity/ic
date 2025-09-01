@@ -63,7 +63,7 @@ fn test_int_map_bounds() {
         let (start, end) = m.bounds(&i);
         if (70..=700).contains(&i) {
             assert_eq!(start, Some((&((i / 7) * 7), &0)));
-            assert_eq!(end, Some((&(((i + 6) / 7) * 7), &0)));
+            assert_eq!(end, Some((&(i.div_ceil(7) * 7), &0)));
         } else if i < 70 {
             assert_eq!(start, None);
             assert_eq!(end, Some((&70, &0)));
@@ -400,7 +400,7 @@ fn test_u128_values(
 
         #[inline]
         fn as_int(&self) -> u128 {
-            (self.0 as u128) << 64 | self.1 as u128
+            ((self.0 as u128) << 64) | self.1 as u128
         }
     }
 

@@ -19,6 +19,15 @@ pub enum ApalacheError {
     SetupError(String),
 }
 
+impl ApalacheError {
+    pub fn is_likely_mismatch(&self) -> bool {
+        match self {
+            ApalacheError::CheckFailed(Some(code), _) => *code == 12,
+            _ => false,
+        }
+    }
+}
+
 impl std::fmt::Debug for ApalacheError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -187,6 +196,7 @@ pub struct PredicateDescription {
     pub predicate_parameters: Vec<String>,
 }
 
+#[allow(clippy::result_large_err)]
 pub fn check_tla_code_link(
     apalache: &Path,
     predicate: PredicateDescription,

@@ -72,7 +72,7 @@ pub mod crypto;
 pub mod funds;
 pub mod hostos_version;
 pub mod ingress;
-pub mod malicious_behaviour;
+pub mod malicious_behavior;
 pub mod malicious_flags;
 pub mod messages;
 pub mod methods;
@@ -81,6 +81,7 @@ pub mod registry;
 pub mod replica_config;
 pub mod replica_version;
 pub mod signature;
+pub mod state_manager;
 pub mod state_sync;
 pub mod time;
 pub mod xnet;
@@ -100,6 +101,7 @@ pub use ic_base_types::{
 pub use ic_crypto_internal_types::NodeIndex;
 use ic_management_canister_types_private::GlobalTimer;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::state::canister_snapshot_bits::v1 as pb_snapshot_bits;
 use ic_protobuf::state::canister_state_bits::v1 as pb_state_bits;
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, DisplayerOf, Id};
@@ -162,6 +164,10 @@ pub fn node_id_into_protobuf(id: NodeId) -> pb::NodeId {
 /// as both `Id` and `pb::NodeId` are defined in other crates.
 pub fn node_id_try_from_option(value: Option<pb::NodeId>) -> Result<NodeId, ProxyDecodeError> {
     let value: pb::NodeId = value.ok_or(ProxyDecodeError::MissingField("NodeId"))?;
+    node_id_try_from_protobuf(value)
+}
+
+pub fn node_id_try_from_protobuf(value: pb::NodeId) -> Result<NodeId, ProxyDecodeError> {
     let principal_id: PrincipalId =
         try_from_option_field(value.principal_id, "NodeId::PrincipalId")?;
     Ok(NodeId::from(principal_id))
@@ -325,6 +331,28 @@ pub enum CanisterTimer {
     Inactive,
     /// The canister timer is set at the specific time.
     Active(Time),
+}
+
+impl From<CanisterTimer> for pb_snapshot_bits::CanisterTimer {
+    fn from(value: CanisterTimer) -> Self {
+        match value {
+            CanisterTimer::Inactive => pb_snapshot_bits::CanisterTimer {
+                global_timer_nanos: None,
+            },
+            CanisterTimer::Active(time) => pb_snapshot_bits::CanisterTimer {
+                global_timer_nanos: Some(time.as_nanos_since_unix_epoch()),
+            },
+        }
+    }
+}
+
+impl From<pb_snapshot_bits::CanisterTimer> for CanisterTimer {
+    fn from(value: pb_snapshot_bits::CanisterTimer) -> Self {
+        match value.global_timer_nanos {
+            Some(nanos) => CanisterTimer::Active(Time::from_nanos_since_unix_epoch(nanos)),
+            None => CanisterTimer::Inactive,
+        }
+    }
 }
 
 impl From<GlobalTimer> for CanisterTimer {

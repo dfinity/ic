@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::{decode_one, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_btc_checker::{
@@ -9,8 +10,8 @@ use ic_btc_checker::{
     INITIAL_MAX_RESPONSE_BYTES,
 };
 use ic_btc_interface::Txid;
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_cdk::api::call::RejectionCode;
+use ic_http_types::{HttpRequest, HttpResponse};
 use ic_management_canister_types::CanisterId;
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use ic_test_utilities_load_wasm::load_wasm;
@@ -19,7 +20,8 @@ use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use pocket_ic::{
     common::rest::{
         CanisterHttpHeader, CanisterHttpReject, CanisterHttpReply, CanisterHttpRequest,
-        CanisterHttpResponse, MockCanisterHttpResponse, RawMessageId,
+        CanisterHttpResponse, EmptyConfig, MockCanisterHttpResponse, NonmainnetFeatures,
+        RawMessageId,
     },
     query_candid, PocketIc, PocketIcBuilder, RejectCode, RejectResponse,
 };
@@ -62,9 +64,13 @@ impl Setup {
         let controller = PrincipalId::new_user_test_id(1).0;
         // Enable nonmainnet_features to avoid CanisterInstallCodeRateLimited error
         // for canister upgrades
+        let nonmainnet_features = NonmainnetFeatures {
+            disable_canister_execution_rate_limiting: Some(EmptyConfig::default()),
+            ..Default::default()
+        };
         let env = PocketIcBuilder::new()
             .with_application_subnet()
-            .with_nonmainnet_features(true)
+            .with_nonmainnet_features(nonmainnet_features)
             .build();
 
         let init_arg = InitArg {
@@ -419,6 +425,18 @@ fn test_check_transaction_passed() {
             ..UpgradeArg::default()
         })))
         .unwrap(),
+        Some(setup.controller),
+    )
+    .unwrap();
+
+    test_normal_operation("check_transaction_str", check_transaction_str_args.clone());
+
+    // Test empty argument upgrade
+    env.tick();
+    env.upgrade_canister(
+        setup.btc_checker_canister,
+        btc_checker_wasm(),
+        Encode!().unwrap(),
         Some(setup.controller),
     )
     .unwrap();

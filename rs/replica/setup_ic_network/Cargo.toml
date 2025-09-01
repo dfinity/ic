@@ -14,6 +14,7 @@ ic-config = { path = "../../config" }
 ic-consensus = { path = "../../consensus" }
 ic-consensus-certification = { path = "../../consensus/certification" }
 ic-consensus-dkg = { path = "../../consensus/dkg" }
+ic-consensus-idkg = { path = "../../consensus/idkg" }
 ic-consensus-manager = { path = "../../p2p/consensus_manager" }
 ic-consensus-utils = { path = "../../consensus/utils" }
 ic-consensus-vetkd = { path = "../../consensus/vetkd" }
@@ -32,6 +33,7 @@ ic-peer-manager = { path = "../../p2p/peer_manager" }
 ic-quic-transport = { path = "../../p2p/quic_transport" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-state-manager = { path = "../../state_manager" }
 ic-state-sync-manager = { path = "../../p2p/state_sync_manager" }
 ic-types = { path = "../../types/types" }

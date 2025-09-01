@@ -1,12 +1,12 @@
+#![allow(deprecated)]
 use crate::logs::DEBUG;
 use async_trait::async_trait;
 use candid::{CandidType, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
-use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder, CreateCanisterArgs,
-    InstallCodeArgs,
+use ic_management_canister_types::{
+    CanisterIdRecord, CanisterInstallMode, CanisterSettings, CreateCanisterArgs, InstallCodeArgs,
 };
 use serde::de::DeserializeOwned;
 use std::fmt;
@@ -193,11 +193,7 @@ impl CanisterRuntime for IcCanisterRuntime {
     }
 
     fn global_timer_set(&self, timestamp: u64) {
-        // SAFETY: setting the global timer is always safe; it does not
-        // mutate any canister memory.
-        unsafe {
-            ic0::global_timer_set(timestamp as i64);
-        }
+        ic0::global_timer_set(timestamp);
     }
 
     async fn create_canister(
@@ -212,11 +208,10 @@ impl CanisterRuntime for IcCanisterRuntime {
             controllers.len()
         );
         let create_args = CreateCanisterArgs {
-            settings: Some(
-                CanisterSettingsArgsBuilder::new()
-                    .with_controllers(controllers.into_iter().map(|p| p.into()).collect())
-                    .build(),
-            ),
+            settings: Some(CanisterSettings {
+                controllers: controllers.into_iter().map(Into::into).collect(),
+                ..Default::default()
+            }),
             ..Default::default()
         };
         let result: CanisterIdRecord = self
@@ -227,7 +222,7 @@ impl CanisterRuntime for IcCanisterRuntime {
             )
             .await?;
 
-        Ok(result.get_canister_id().get().into())
+        Ok(result.canister_id)
     }
 
     async fn stop_canister(&self, canister_id: Principal) -> Result<(), CallError> {
@@ -260,11 +255,9 @@ impl CanisterRuntime for IcCanisterRuntime {
     ) -> Result<(), CallError> {
         let install_code = InstallCodeArgs {
             mode: CanisterInstallMode::Install,
-            canister_id: PrincipalId::from(canister_id),
+            canister_id: PrincipalId::from(canister_id).into(),
             wasm_module,
             arg,
-            compute_allocation: None,
-            memory_allocation: None,
             sender_canister_version: None,
         };
 
@@ -279,12 +272,10 @@ impl CanisterRuntime for IcCanisterRuntime {
         wasm_module: Vec<u8>,
     ) -> Result<(), CallError> {
         let install_code = InstallCodeArgs {
-            mode: CanisterInstallMode::Upgrade,
-            canister_id: PrincipalId::from(canister_id),
+            mode: CanisterInstallMode::Upgrade(None),
+            canister_id: PrincipalId::from(canister_id).into(),
             wasm_module,
             arg: Encode!(&()).unwrap(),
-            compute_allocation: None,
-            memory_allocation: None,
             sender_canister_version: None,
         };
 

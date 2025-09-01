@@ -1,8 +1,8 @@
+#![allow(deprecated)]
 use candid::Principal;
 use ic_btc_interface::Utxo;
 use ic_canister_log::export as export_logs;
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{init, post_upgrade, query, update};
+use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::dashboard::build_dashboard;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
@@ -27,6 +27,7 @@ use ic_ckbtc_minter::{
     storage, {Log, LogEntry, Priority},
 };
 use ic_ckbtc_minter::{MinterInfo, IC_CANISTER_RUNTIME};
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use icrc_ledger_types::icrc1::account::Account;
 use std::str::FromStr;
 
@@ -48,7 +49,7 @@ fn init(args: MinterArg) {
 }
 
 fn setup_tasks() {
-    schedule_now(TaskType::ProcessLogic, &IC_CANISTER_RUNTIME);
+    schedule_now(TaskType::ProcessLogic(true), &IC_CANISTER_RUNTIME);
     schedule_now(TaskType::RefreshFeePercentiles, &IC_CANISTER_RUNTIME);
 }
 
@@ -111,10 +112,15 @@ fn check_anonymous_caller() {
 
 #[export_name = "canister_global_timer"]
 fn timer() {
-    #[cfg(feature = "self_check")]
-    ok_or_die(check_invariants());
+    // ic_ckbtc_minter::timer invokes ic_cdk::spawn
+    // which must be wrapped in in_executor_context
+    // as required by the new ic-cdk-executor.
+    ic_cdk::futures::in_executor_context(|| {
+        #[cfg(feature = "self_check")]
+        ok_or_die(check_invariants());
 
-    ic_ckbtc_minter::timer(IC_CANISTER_RUNTIME);
+        ic_ckbtc_minter::timer(IC_CANISTER_RUNTIME);
+    });
 }
 
 #[post_upgrade]
@@ -132,7 +138,6 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
 
 #[update]
 async fn get_btc_address(args: GetBtcAddressArgs) -> String {
-    check_anonymous_caller();
     updates::get_btc_address::get_btc_address(args).await
 }
 
@@ -213,7 +218,8 @@ fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
         ic_ckbtc_minter::estimate_retrieve_btc_fee(
             &s.available_utxos,
             arg.amount,
-            s.last_fee_per_vbyte[50],
+            s.estimate_median_fee_per_vbyte()
+                .expect("Bitcoin current fee percentiles not retrieved yet."),
         )
     })
 }
@@ -245,6 +251,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         match encode_metrics(&mut writer) {
             Ok(()) => HttpResponseBuilder::ok()
                 .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Cache-Control", "no-store")
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {

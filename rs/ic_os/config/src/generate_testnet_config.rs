@@ -1,10 +1,8 @@
 use anyhow::Result;
 use macaddr::MacAddr6;
 use std::net::{Ipv4Addr, Ipv6Addr};
-use std::path::PathBuf;
 use url::Url;
 
-use crate::serialize_and_write_config;
 use config_types::*;
 
 #[derive(Default)]
@@ -25,10 +23,9 @@ pub struct GenerateTestnetConfigArgs {
     pub node_reward_type: Option<String>,
     pub mgmt_mac: Option<MacAddr6>,
     pub deployment_environment: Option<DeploymentEnvironment>,
-    pub elasticsearch_hosts: Option<String>,
-    pub elasticsearch_tags: Option<String>,
     pub use_nns_public_key: Option<bool>,
     pub nns_urls: Option<Vec<String>>,
+    pub enable_trusted_execution_environment: Option<bool>,
     pub use_node_operator_private_key: Option<bool>,
     pub use_ssh_authorized_keys: Option<bool>,
 
@@ -73,10 +70,9 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         node_reward_type,
         mgmt_mac,
         deployment_environment,
-        elasticsearch_hosts,
-        elasticsearch_tags,
         use_nns_public_key,
         nns_urls,
+        enable_trusted_execution_environment,
         use_node_operator_private_key,
         use_ssh_authorized_keys,
         inject_ic_crypto,
@@ -169,11 +165,6 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
 
     let deployment_environment = deployment_environment.unwrap_or(DeploymentEnvironment::Testnet);
 
-    let logging = Logging {
-        elasticsearch_hosts,
-        elasticsearch_tags,
-    };
-
     let use_nns_public_key = use_nns_public_key.unwrap_or(true);
 
     let nns_urls = match nns_urls {
@@ -188,14 +179,18 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
 
     let use_ssh_authorized_keys = use_ssh_authorized_keys.unwrap_or(true);
 
+    let enable_trusted_execution_environment =
+        enable_trusted_execution_environment.unwrap_or(false);
+
     let icos_settings = ICOSSettings {
         node_reward_type,
         mgmt_mac,
         deployment_environment,
-        logging,
+        logging: Logging {},
         use_nns_public_key,
         nns_urls,
         use_node_operator_private_key,
+        enable_trusted_execution_environment,
         use_ssh_authorized_keys,
         icos_dev_settings: ICOSDevSettings::default(),
     };
@@ -242,29 +237,20 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         network_settings,
         icos_settings,
         guestos_settings,
+        guest_vm_type: GuestVMType::Default,
+        upgrade_config: GuestOSUpgradeConfig::default(),
+        trusted_execution_environment_config: None,
     };
 
     Ok(guestos_config)
 }
 
-/// Generates and writes a serialized GuestOSConfig to guestos_config_json_path.
+/// Generate and print GuestOSConfig for tests.
 /// Any required config fields that aren't specified will receive dummy values.
-pub fn generate_testnet_config(
-    config: GenerateTestnetConfigArgs,
-    guestos_config_json_path: PathBuf,
-) -> Result<()> {
+pub fn generate_testnet_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSConfig> {
     let guestos_config = create_guestos_config(config)?;
-
     println!("GuestOSConfig: {:?}", guestos_config);
-
-    serialize_and_write_config(&guestos_config_json_path, &guestos_config)?;
-
-    println!(
-        "GuestOSConfig has been written to {}",
-        guestos_config_json_path.display()
-    );
-
-    Ok(())
+    Ok(guestos_config)
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 use candid::{Decode, Encode};
 use ic_base_types::CanisterId;
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_http_types::{HttpRequest, HttpResponse};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,

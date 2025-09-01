@@ -1,7 +1,8 @@
 use crate::address;
 use crate::state;
 use crate::tx::DisplayAmount;
-use ic_btc_interface::{Network, Txid};
+use crate::Network;
+use ic_btc_interface::Txid;
 use icrc_ledger_types::icrc1::account::Account;
 use state::CkBtcMinterState;
 use std::io::Write;
@@ -392,7 +393,7 @@ pub fn build_submitted_transactions(s: &CkBtcMinterState) -> String {
                     .unwrap();
 
                     write!(buf, "<td rowspan='{}'>", rowspan).unwrap();
-                    for req in &tx.requests {
+                    for req in tx.requests.iter() {
                         write!(
                             buf,
                             "<table>

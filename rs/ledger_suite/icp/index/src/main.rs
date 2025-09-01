@@ -1,10 +1,11 @@
-use candid::{candid_method, Principal};
+#![allow(deprecated)]
+use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_canister_log::{export as export_logs, log};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::caller;
-use ic_cdk_macros::{init, post_upgrade, query};
+use ic_cdk::{init, post_upgrade, query};
 use ic_cdk_timers::TimerId;
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icp_index::logs::{P0, P1};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
@@ -115,14 +116,14 @@ impl Storable for State {
     fn to_bytes(&self) -> Cow<[u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(self, &mut buf).unwrap_or_else(|err| {
-            ic_cdk::api::trap(&format!("{:?}", err));
+            ic_cdk::api::trap(format!("{:?}", err));
         });
         Cow::Owned(buf)
     }
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         ciborium::de::from_reader(&bytes[..]).unwrap_or_else(|err| {
-            ic_cdk::api::trap(&format!("{:?}", err));
+            ic_cdk::api::trap(format!("{:?}", err));
         })
     }
 
@@ -144,7 +145,7 @@ impl Storable for AccountIdentifierDataType {
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         if bytes.len() != 1 {
-            ic_cdk::api::trap(&format!(
+            ic_cdk::api::trap(format!(
                 "Expected a single byte for AccountDataType but found {}",
                 bytes.len()
             ));
@@ -152,7 +153,7 @@ impl Storable for AccountIdentifierDataType {
         if bytes[0] == 0x00 {
             Self::Balance
         } else {
-            ic_cdk::api::trap(&format!("Unknown AccountDataType {}", bytes[0]));
+            ic_cdk::api::trap(format!("Unknown AccountDataType {}", bytes[0]));
         }
     }
 
@@ -177,7 +178,7 @@ fn mutate_state(f: impl FnOnce(&mut State)) {
             borrowed.set(state)
         })
         .unwrap_or_else(|err| {
-            ic_cdk::api::trap(&format!("{:?}", err));
+            ic_cdk::api::trap(format!("{:?}", err));
         });
 }
 
@@ -233,7 +234,6 @@ fn balance_key(account_identifier: AccountIdentifier) -> (AccountIdentifierDataT
 }
 
 #[init]
-#[candid_method(init)]
 fn init(init_arg: InitArg) {
     // stable memory initialization
     mutate_state(|state| {
@@ -441,7 +441,7 @@ fn process_balance_changes(block_index: BlockIndex, block: &Block) -> Result<(),
 fn debit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount: u64) {
     change_balance(account_identifier, |balance| {
         if balance < amount {
-            ic_cdk::trap(&format!("Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
+            ic_cdk::trap(format!("Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
                 block_index, account_identifier, balance, amount))
         }
         balance - amount
@@ -451,7 +451,7 @@ fn debit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount:
 fn credit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount: u64) {
     change_balance(account_identifier, |balance| {
         if u64::MAX - balance < amount {
-            ic_cdk::trap(&format!("Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
+            ic_cdk::trap(format!("Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
                 block_index, account_identifier, balance, amount))
         }
         balance + amount
@@ -484,7 +484,6 @@ fn account_identifier_block_ids_key(
 }
 
 #[query]
-#[candid_method(query)]
 fn ledger_id() -> Principal {
     with_state(|state| state.ledger_id)
 }
@@ -573,7 +572,6 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
 }
 
 #[query]
-#[candid_method(query)]
 fn get_blocks(
     req: icrc_ledger_types::icrc3::blocks::GetBlocksRequest,
 ) -> ic_icp_index::GetBlocksResponse {
@@ -591,7 +589,6 @@ fn get_blocks(
 }
 
 #[query]
-#[candid_method(query)]
 fn get_account_identifier_transactions(
     arg: GetAccountIdentifierTransactionsArgs,
 ) -> GetAccountIdentifierTransactionsResult {
@@ -616,7 +613,7 @@ fn get_account_identifier_transactions(
     for id in indices {
         let block = with_blocks(|blocks| {
             blocks.get(id).unwrap_or_else(|| {
-                ic_cdk::api::trap(&format!(
+                ic_cdk::api::trap(format!(
                     "Block {} not found in the block log, account_identifier blocks map is corrupted!",
                     id
                 ));
@@ -624,7 +621,7 @@ fn get_account_identifier_transactions(
         });
         let settled_transaction = SettledTransaction::from(decode_encoded_block(id, EncodedBlock::from(block))
             .unwrap_or_else(|_| {
-                ic_cdk::api::trap(&format!(
+                ic_cdk::api::trap(format!(
                     "Block {} not found in the block log, account_identifier blocks map is corrupted!",id))
             }));
         let transaction_with_idx = SettledTransactionWithId {
@@ -643,7 +640,6 @@ fn get_account_identifier_transactions(
 }
 
 #[query]
-#[candid_method(query)]
 fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransactionsResult {
     get_account_identifier_transactions(GetAccountIdentifierTransactionsArgs {
         account_identifier: AccountIdentifier::from(arg.account),
@@ -659,8 +655,10 @@ fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransa
     })
 }
 
-#[candid_method(query)]
-#[query(decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -669,6 +667,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         match encode_metrics(&mut writer) {
             Ok(()) => HttpResponseBuilder::ok()
                 .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Cache-Control", "no-store")
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
@@ -706,20 +705,27 @@ fn http_request(req: HttpRequest) -> HttpResponse {
     }
 }
 
+// Manually add a dummy method so that the Candid interface can be properly generated:
+//   `http_request: (HttpRequest) -> (HttpResponse) query;`
+// Without this dummy method, it will be `http_request: (blob) -> (HttpResponse) query;`
+// because of the `decode_with` option used above.
+#[::candid::candid_method(query, rename = "http_request")]
+#[allow(unused_variables)]
+fn __candid_method_http_request(request: HttpRequest) -> HttpResponse {
+    panic!("candid dummy function called")
+}
+
 #[query]
-#[candid_method(query)]
 fn get_account_identifier_balance(account_identifier: AccountIdentifier) -> u64 {
     get_balance(account_identifier)
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_balance_of(account: Account) -> u64 {
     get_balance(AccountIdentifier::from(account))
 }
 
 #[query]
-#[candid_method(query)]
 fn status() -> Status {
     let num_blocks_synced = with_blocks(|blocks| blocks.len());
     Status { num_blocks_synced }

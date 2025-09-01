@@ -1,7 +1,9 @@
 use super::CanisterInput;
 use crate::page_map::int_map::{AsInt, MutableIntMap};
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
-use ic_protobuf::state::queues::v1 as pb_queues;
+use crate::{
+    CLASS_BEST_EFFORT, CLASS_GUARANTEED_RESPONSE, CONTEXT_INBOUND, CONTEXT_OUTBOUND, KIND_REQUEST,
+    KIND_RESPONSE,
+};
 use ic_types::messages::{
     CallbackId, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
 };
@@ -15,6 +17,7 @@ use std::ops::{AddAssign, SubAssign};
 use std::sync::Arc;
 use std::time::Duration;
 
+pub mod proto;
 #[cfg(test)]
 pub(super) mod tests;
 
@@ -31,8 +34,16 @@ pub(super) enum Kind {
 }
 
 impl Kind {
-    // Message kind bit (request or response).
+    /// Message kind bit (request or response).
     const BIT: u64 = 1;
+
+    /// Returns a string representation to be used as metric label value.
+    pub(super) fn to_label_value(self) -> &'static str {
+        match self {
+            Self::Request => KIND_REQUEST,
+            Self::Response => KIND_RESPONSE,
+        }
+    }
 }
 
 impl From<&RequestOrResponse> for Kind {
@@ -53,8 +64,16 @@ pub(super) enum Context {
 }
 
 impl Context {
-    // Message context bit (inbound or outbound).
+    /// Message context bit (inbound or outbound).
     const BIT: u64 = 1 << 1;
+
+    /// Returns a string representation to be used as metric label value.
+    pub(super) fn to_label_value(self) -> &'static str {
+        match self {
+            Self::Inbound => CONTEXT_INBOUND,
+            Self::Outbound => CONTEXT_OUTBOUND,
+        }
+    }
 }
 
 /// Bit encoding the message class (guaranteed response vs best-effort).
@@ -66,8 +85,16 @@ pub(super) enum Class {
 }
 
 impl Class {
-    // Message class bit (guaranteed response vs best-effort).
+    /// Message class bit (guaranteed response vs best-effort).
     const BIT: u64 = 1 << 2;
+
+    /// Returns a string representation to be used as metric label value.
+    pub(super) fn to_label_value(self) -> &'static str {
+        match self {
+            Self::GuaranteedResponse => CLASS_GUARANTEED_RESPONSE,
+            Self::BestEffort => CLASS_BEST_EFFORT,
+        }
+    }
 }
 
 impl From<&RequestOrResponse> for Class {
@@ -146,7 +173,7 @@ impl AsInt for (CoarseTime, Id) {
 
     #[inline]
     fn as_int(&self) -> u128 {
-        (self.0.as_secs_since_unix_epoch() as u128) << 64 | self.1 .0 as u128
+        ((self.0.as_secs_since_unix_epoch() as u128) << 64) | self.1 .0 as u128
     }
 }
 
@@ -155,7 +182,7 @@ impl AsInt for (usize, Id) {
 
     #[inline]
     fn as_int(&self) -> u128 {
-        (self.0 as u128) << 64 | self.1 .0 as u128
+        ((self.0 as u128) << 64) | self.1 .0 as u128
     }
 }
 
@@ -171,7 +198,7 @@ where
     /// Constructs a new `Reference<T>` of the given `class` and `kind`.
     fn new(class: Class, kind: Kind, generator: u64) -> Self {
         Self(
-            T::context() as u64 | class as u64 | kind as u64 | generator << Id::BITMASK_LEN,
+            T::context() as u64 | class as u64 | kind as u64 | (generator << Id::BITMASK_LEN),
             PhantomData,
         )
     }
@@ -282,6 +309,27 @@ pub(super) enum SomeReference {
     Outbound(OutboundReference),
 }
 
+impl SomeReference {
+    fn id(&self) -> Id {
+        match self {
+            Self::Inbound(reference) => reference.into(),
+            Self::Outbound(reference) => reference.into(),
+        }
+    }
+
+    pub(super) fn kind(&self) -> Kind {
+        self.id().kind()
+    }
+
+    pub(super) fn context(&self) -> Context {
+        self.id().context()
+    }
+
+    pub(super) fn class(&self) -> Class {
+        self.id().class()
+    }
+}
+
 impl From<Id> for SomeReference {
     fn from(id: Id) -> SomeReference {
         match id.context() {
@@ -291,56 +339,9 @@ impl From<Id> for SomeReference {
     }
 }
 
-impl<T> TryFrom<u64> for Reference<T>
-where
-    T: ToContext,
-{
-    type Error = ProxyDecodeError;
-    fn try_from(item: u64) -> Result<Self, Self::Error> {
-        let id = Id(item);
-        if id.context() == T::context() {
-            Ok(Reference(item, PhantomData))
-        } else {
-            Err(ProxyDecodeError::Other(format!(
-                "Mismatched reference context: {}",
-                item
-            )))
-        }
-    }
-}
-
-impl<T> From<&Reference<T>> for u64 {
-    fn from(item: &Reference<T>) -> Self {
-        item.0
-    }
-}
-
 /// Helper for encoding / decoding `pb_queues::canister_queues::CallbackReference`.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub(super) struct CallbackReference(pub(super) InboundReference, pub(super) CallbackId);
-
-impl From<CallbackReference> for pb_queues::canister_queues::CallbackReference {
-    fn from(item: CallbackReference) -> Self {
-        Self {
-            id: item.0 .0,
-            callback_id: item.1.get(),
-        }
-    }
-}
-
-impl TryFrom<pb_queues::canister_queues::CallbackReference> for CallbackReference {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb_queues::canister_queues::CallbackReference) -> Result<Self, Self::Error> {
-        let reference = Reference(item.id, PhantomData);
-        if reference.is_inbound_best_effort_response() {
-            Ok(CallbackReference(reference, item.callback_id.into()))
-        } else {
-            Err(ProxyDecodeError::Other(
-                "Not an inbound best-effort response".to_string(),
-            ))
-        }
-    }
-}
 
 /// A pool of canister messages, guaranteed response and best effort, with
 /// built-in support for time-based expiration and load shedding.
@@ -828,80 +829,6 @@ impl MessagePool {
             }
         });
         (expected_deadline_queue, expected_size_queue)
-    }
-}
-
-impl From<&MessagePool> for pb_queues::MessagePool {
-    fn from(item: &MessagePool) -> Self {
-        use pb_queues::message_pool::*;
-
-        Self {
-            messages: item
-                .messages
-                .iter()
-                .map(|(id, message)| Entry {
-                    id: id.0,
-                    message: Some(message.into()),
-                })
-                .collect(),
-            outbound_guaranteed_request_deadlines: item
-                .outbound_guaranteed_request_deadlines
-                .iter()
-                .map(|(id, deadline)| MessageDeadline {
-                    deadline_seconds: deadline.as_secs_since_unix_epoch(),
-                    id: id.0,
-                })
-                .collect(),
-            message_id_generator: item.message_id_generator,
-        }
-    }
-}
-
-impl TryFrom<pb_queues::MessagePool> for MessagePool {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb_queues::MessagePool) -> Result<Self, Self::Error> {
-        let message_count = item.messages.len();
-
-        let messages: MutableIntMap<_, _> = item
-            .messages
-            .into_iter()
-            .map(|entry| {
-                let id = Id(entry.id);
-                let message = try_from_option_field(entry.message, "MessagePool::Entry::message")?;
-                Ok((id, message))
-            })
-            .collect::<Result<_, Self::Error>>()?;
-        if messages.len() != message_count {
-            return Err(ProxyDecodeError::Other("Duplicate Id".to_string()));
-        }
-        let message_stats = Self::calculate_message_stats(&messages);
-
-        let outbound_guaranteed_request_deadlines = item
-            .outbound_guaranteed_request_deadlines
-            .into_iter()
-            .map(|entry| {
-                let id = Id(entry.id);
-                let deadline = CoarseTime::from_secs_since_unix_epoch(entry.deadline_seconds);
-                (id, deadline)
-            })
-            .collect();
-
-        let (deadline_queue, size_queue) =
-            Self::calculate_priority_queues(&messages, &outbound_guaranteed_request_deadlines);
-
-        let res = Self {
-            messages,
-            outbound_guaranteed_request_deadlines,
-            message_stats,
-            deadline_queue,
-            size_queue,
-            message_id_generator: item.message_id_generator,
-        };
-
-        // Ensure that we've built a valid `MessagePool`.
-        res.check_invariants().map_err(ProxyDecodeError::Other)?;
-
-        Ok(res)
     }
 }
 

@@ -23,6 +23,7 @@ use ic_types::{
     messages::{HttpRequest, HttpRequestContent},
     RegistryVersion, SubnetId, Time,
 };
+use ic_utils::str::StrEllipsize;
 use ic_validator::{
     CanisterIdSet, HttpRequestVerifier, HttpRequestVerifierImpl, RequestValidationError,
 };
@@ -41,7 +42,7 @@ pub const CONTENT_TYPE_TEXT: &str = "text/plain; charset=utf-8";
 /// If the request body is not received/parsed within
 /// `max_request_receive_seconds`, then the request will be rejected and
 /// [`408 Request Timeout`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/408) will be returned to the user.
-pub(crate) const MAX_REQUEST_RECEIVE_TIMEOUT: Duration = Duration::from_secs(300);
+const MAX_REQUEST_RECEIVE_TIMEOUT: Duration = Duration::from_secs(300);
 
 pub(crate) fn get_root_threshold_public_key(
     log: &ReplicaLogger,
@@ -250,10 +251,12 @@ pub(crate) fn validation_error_to_http_error<C: std::fmt::Debug + HttpRequestCon
 ) -> HttpError {
     let message_id = request.id();
     match err {
-        RequestValidationError::InvalidSignature(_) => {
+        RequestValidationError::InvalidRequestExpiry(_)
+        | RequestValidationError::InvalidSignature(_) => {
+            let request_ellipsized = format!("{:?}", request).ellipsize(1024, 90);
             info!(
                 log,
-                "msg_id: {}, err: {}, request: {:?}", message_id, err, request
+                "msg_id: {}, err: {}, request: {}", message_id, err, request_ellipsized,
             )
         }
         _ => info!(log, "msg_id: {}, err: {}", message_id, err),

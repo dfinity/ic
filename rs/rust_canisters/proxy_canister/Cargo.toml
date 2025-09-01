@@ -7,8 +7,8 @@ edition = "2021"
 
 [dependencies]
 candid = { workspace = true }
+futures = { workspace = true }
 ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 serde = { workspace = true }
 

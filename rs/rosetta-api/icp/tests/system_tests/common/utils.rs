@@ -7,12 +7,12 @@ use ic_icp_rosetta_client::RosettaClient;
 use ic_ledger_core::block::BlockType;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_constants::LEDGER_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::GovernanceError;
-use ic_nns_governance_api::pb::v1::ListNeurons;
-use ic_nns_governance_api::pb::v1::ListNeuronsResponse;
+use ic_nns_governance_api::{GovernanceError, ListNeurons, ListNeuronsResponse};
 use ic_rosetta_api::convert::to_hash;
-use icp_ledger::GetBlocksArgs;
-use icp_ledger::QueryEncodedBlocksResponse;
+use icp_ledger::{
+    AccountIdentifier, BinaryAccountBalanceArgs, GetBlocksArgs, QueryEncodedBlocksResponse, Tokens,
+};
+use pocket_ic::nonblocking::PocketIc;
 use rosetta_core::identifiers::NetworkIdentifier;
 use std::sync::Arc;
 use url::Url;
@@ -194,7 +194,7 @@ pub async fn list_neurons(agent: &Agent) -> ListNeuronsResponse {
     .unwrap()
 }
 
-pub async fn update_neuron(agent: &Agent, neuron: ic_nns_governance_api::pb::v1::Neuron) {
+pub async fn update_neuron(agent: &Agent, neuron: ic_nns_governance_api::Neuron) {
     let result = Decode!(
         &agent
             .update(&GOVERNANCE_CANISTER_ID.into(), "update_neuron")
@@ -206,4 +206,31 @@ pub async fn update_neuron(agent: &Agent, neuron: ic_nns_governance_api::pb::v1:
     )
     .unwrap();
     assert!(result.is_none(), "Failed to update neuron: {:?}", result);
+}
+
+// Get the balance by directly calling the PocketIC, without agent. Useful
+// if the agent time is behind the PocketIC time due to advanving the PocketIC time.
+pub async fn account_balance(pocket_ic: &PocketIc, account: &AccountIdentifier) -> Tokens {
+    let arg = Encode!(&BinaryAccountBalanceArgs {
+        account: account.to_address(),
+    })
+    .unwrap();
+    match pocket_ic
+        .query_call(
+            candid::Principal::from(LEDGER_CANISTER_ID),
+            candid::Principal::anonymous(),
+            "account_balance",
+            arg,
+        )
+        .await
+    {
+        Err(err) => {
+            panic!(
+                "failed to get the balance of account id: {}, error msg: {}",
+                account, err
+            );
+        }
+        Ok(res) => Decode!(&res, Tokens)
+            .unwrap_or_else(|_| panic!("error decoding account_balance response")),
+    }
 }

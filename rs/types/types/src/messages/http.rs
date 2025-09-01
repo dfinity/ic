@@ -6,11 +6,11 @@ use super::{query::QuerySource, Blob};
 use crate::{
     crypto::SignedBytesWithoutDomainSeparator,
     messages::{
-        message_id::hash_of_map, MessageId, Query, ReadState, SignedIngressContent, UserSignature,
+        message_id::hash_key_val, MessageId, Query, ReadState, SignedIngressContent, UserSignature,
     },
     Height, Time, UserId,
 };
-use ic_base_types::{CanisterId, CanisterIdError, NodeId, PrincipalId};
+use ic_base_types::{hash_of_map, CanisterId, CanisterIdError, NodeId, PrincipalId};
 use ic_crypto_tree_hash::{MixedHashTree, Path};
 use maplit::btreemap;
 #[cfg(test)]
@@ -57,7 +57,7 @@ pub(crate) fn representation_independent_hash_call_or_query(
     if let Some(some_nonce) = nonce {
         map.insert("nonce".to_string(), Bytes(some_nonce.to_vec()));
     }
-    hash_of_map(&map)
+    hash_of_map(&map, |key, value| hash_key_val(key.as_str(), value))
 }
 
 pub(crate) fn representation_independent_hash_read_state(
@@ -85,7 +85,7 @@ pub(crate) fn representation_independent_hash_read_state(
     if let Some(some_nonce) = nonce {
         map.insert("nonce".to_string(), Bytes(some_nonce.to_vec()));
     }
-    hash_of_map(&map)
+    hash_of_map(&map, |key, value| hash_key_val(key.as_str(), value))
 }
 
 /// Describes the fields of a canister update call as defined in
@@ -335,23 +335,20 @@ impl HttpRequestContent for Query {
     }
 
     fn sender(&self) -> UserId {
-        match self.source {
-            QuerySource::User { user_id, .. } => user_id,
-            QuerySource::Anonymous => UserId::from(PrincipalId::default()),
-        }
+        self.source.user_id()
     }
 
     fn ingress_expiry(&self) -> u64 {
         match self.source {
             QuerySource::User { ingress_expiry, .. } => ingress_expiry,
-            QuerySource::Anonymous => 0,
+            QuerySource::System => 0,
         }
     }
 
     fn nonce(&self) -> Option<Vec<u8>> {
         match &self.source {
             QuerySource::User { nonce, .. } => nonce.clone(),
-            QuerySource::Anonymous => None,
+            QuerySource::System => None,
         }
     }
 }
@@ -527,7 +524,7 @@ impl SignedBytesWithoutDomainSeparator for Delegation {
             );
         }
 
-        hash_of_map(&map).to_vec()
+        hash_of_map(&map, |key, value| hash_key_val(key, value)).to_vec()
     }
 }
 
@@ -633,7 +630,9 @@ impl QueryResponseHash {
             }
         };
 
-        let hash = hash_of_map(&self_map_representation);
+        let hash = hash_of_map(&self_map_representation, |key, value| {
+            hash_key_val(key.as_str(), value)
+        });
 
         Self(hash)
     }
@@ -711,6 +710,21 @@ pub struct Certificate {
     pub signature: Blob,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub delegation: Option<CertificateDelegation>,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+pub enum CertificateDelegationFormat {
+    /// Delegation with the canister ranges in the `/subnet/{subnet_id}/canister_ranges` path.
+    Flat,
+    /// Delegation with the canister ranges in the `/canister_ranges/{subnet_id}` path.
+    Tree,
+    /// Delegation with the canister ranges pruned out.
+    Pruned,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+pub struct CertificateDelegationMetadata {
+    pub format: CertificateDelegationFormat,
 }
 
 /// A `CertificateDelegation` as defined in `<https://internetcomputer.org/docs/current/references/ic-interface-spec#certification-delegation>`

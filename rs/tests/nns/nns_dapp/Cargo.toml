@@ -17,6 +17,7 @@ ic-base-types = { path = "../../../types/base_types" }
 candid = { workspace = true }
 serde = { workspace = true }
 slog = { workspace = true }
+url = { workspace = true }
 
 [lib]
 name = "nns_dapp"

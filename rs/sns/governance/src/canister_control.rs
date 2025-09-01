@@ -93,8 +93,6 @@ async fn install_code(
         canister_id: canister_id.get(),
         wasm_module: wasm,
         arg,
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: env.canister_version(),
     };
 

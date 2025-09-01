@@ -1,6 +1,5 @@
 use super::{delivery::*, execution::*, types::*};
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus::idkg;
 use ic_consensus_certification::{CertificationCrypto, CertifierImpl};
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
@@ -178,7 +177,7 @@ impl<'a> ConsensusRunner<'a> {
             deps.metrics_registry.clone(),
             replica_logger.clone(),
         );
-        let idkg = idkg::IDkgImpl::new(
+        let idkg = ic_consensus_idkg::IDkgImpl::new(
             deps.replica_config.node_id,
             deps.consensus_pool.read().unwrap().get_block_cache(),
             consensus_crypto,

@@ -44,6 +44,11 @@ pub struct UpgradeArgs {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[deprecated(note = "use btc_checker_principal instead")]
     pub kyt_principal: Option<CanisterId>,
+
+    /// The expiration duration (in seconds) for cached entries in
+    /// the get_utxos cache.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub get_utxos_cache_expiration_seconds: Option<u64>,
 }
 
 pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
@@ -64,7 +69,7 @@ pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
     log!(P0, "[upgrade]: replaying {} events", count_events());
 
     let state = replay::<CheckInvariantsImpl>(events()).unwrap_or_else(|e| {
-        ic_cdk::trap(&format!(
+        ic_cdk::trap(format!(
             "[upgrade]: failed to replay the event log: {:?}",
             e
         ))

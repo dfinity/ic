@@ -13,7 +13,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
-    "//rs/canister_client/read_state_response_parser",
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
@@ -28,6 +28,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icp/ledger_canister_blocks_synchronizer:ledger_canister_blocks_synchronizer_lib",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
+    "//rs/sys",
     "//rs/types/types",
     "@crate_index//:actix-rt",
     "@crate_index//:actix-web",
@@ -67,7 +68,6 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ed25519",
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//packages/pocket-ic",
     "//rs/ledger_suite/icp/test_utils",
     "//rs/ledger_suite/icrc1",
@@ -84,7 +84,6 @@ DEV_DEPENDENCIES = [
     "//rs/rosetta-api/icp/test_utils",
     "//rs/types/base_types",
     "@crate_index//:futures",
-    "@crate_index//:ic-cdk",
     "@crate_index//:num-traits",
     "@crate_index//:proptest",
     "@crate_index//:prost",
@@ -97,7 +96,7 @@ MACRO_DEV_DEPENDENCIES = []
 ALIASES = {
 }
 
-ROSETTA_VERSION = "2.1.3"
+ROSETTA_VERSION = "2.1.7"
 
 rust_library(
     name = "rosetta-api",
@@ -137,8 +136,10 @@ rust_test(
 )
 
 rust_test_suite_with_extra_srcs(
-    name = "rosetta-api-tests",
-    srcs = glob(["tests/*.rs"]),
+    name = "rosetta-api-cli-tests",
+    srcs = [
+        "tests/rosetta_cli_tests.rs",
+    ],
     aliases = ALIASES,
     data = glob([
         "tests/*.json",
@@ -152,6 +153,7 @@ rust_test_suite_with_extra_srcs(
     },
     extra_srcs = ["tests/test_utils/mod.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # rosetta-cli is not available on MacOS
     version = ROSETTA_VERSION,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

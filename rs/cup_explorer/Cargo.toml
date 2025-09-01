@@ -9,12 +9,27 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+clap = { workspace = true }
 hex = { workspace = true }
+ic-base-types = { path = "../types/base_types/" }
 ic-canister-client = { path = "../canister_client" }
+ic-config = { path = "../config" }
+ic-crypto = { path = "../crypto" }
+ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
+ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
+ic-interfaces = { path = "../interfaces" }
+ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-protobuf = { path = "../protobuf" }
+ic-registry-client = { path = "../registry/client" }
+ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
 ic-types = { path = "../types/types" }
 prost = { workspace = true }
-reqwest = { workspace = true }
+serde = { workspace = true }
+slog = { workspace = true }
+slog-async = { workspace = true }
+slog-term = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true }
+url = { workspace = true }

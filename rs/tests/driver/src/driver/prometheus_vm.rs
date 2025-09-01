@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use maplit::hashmap;
 use reqwest::Url;
 use serde::Serialize;
@@ -18,6 +18,7 @@ use crate::driver::{
     constants::SSH_USERNAME,
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
+    ic_gateway_vm::HasIcGatewayVm,
     log_events,
     resource::{DiskImage, ImageType},
     test_env::TestEnv,
@@ -37,15 +38,13 @@ use crate::k8s::config::TNET_DNS_SUFFIX;
 use crate::k8s::tnet::TNet;
 use crate::retry_with_msg;
 
-use super::boundary_node::BoundaryNodeVm;
-
 const PROMETHEUS_VM_NAME: &str = "prometheus";
 
 /// The SHA-256 hash of the Prometheus VM disk image.
 /// The latest hash can be retrieved by downloading the SHA256SUMS file from:
 /// https://hydra-int.dfinity.systems/job/dfinity-ci-build/farm/universal-vm.img-prometheus.x86_64-linux/latest
 const DEFAULT_PROMETHEUS_VM_IMG_SHA256: &str =
-    "4c288cebafb59e6c6b1611475cef1f4963aec61b6af798dd47d8c5264af15b8f";
+    "3af874174d48f5c9a59c9bc54dd73cbfc65b17b952fbacd7611ee07d19de369b";
 
 fn get_default_prometheus_vm_img_url() -> String {
     format!("http://download.proxy-global.dfinity.network:8080/farm/prometheus-vm/{DEFAULT_PROMETHEUS_VM_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst")
@@ -61,6 +60,7 @@ const REPLICA_METRICS_PORT: u16 = 9090;
 const ORCHESTRATOR_METRICS_PORT: u16 = 9091;
 const NODE_EXPORTER_METRICS_PORT: u16 = 9100;
 const IC_BOUNDARY_METRICS_PORT: u16 = 9324;
+const IC_GATEWAY_METRICS_PORT: u16 = 9325;
 
 const PROMETHEUS_DOMAIN_NAME: &str = "prometheus";
 const GRAFANA_DOMAIN_NAME: &str = "grafana";
@@ -82,8 +82,7 @@ const BITCOIN_WATCHDOG_MAINNET_CANISTER_PROMETHEUS_TARGET: &str =
     "bitcoin_watchdog_mainnet_canister.json";
 const BITCOIN_WATCHDOG_TESTNET_CANISTER_PROMETHEUS_TARGET: &str =
     "bitcoin_watchdog_testnet_canister.json";
-const BN_PROMETHEUS_TARGET: &str = "boundary_nodes.json";
-const BN_EXPORTER_PROMETHEUS_TARGET: &str = "boundary_nodes_exporter.json";
+const IC_GATEWAY_PROMETHEUS_TARGET: &str = "ic_gateways.json";
 const IC_BOUNDARY_PROMETHEUS_TARGET: &str = "ic_boundary.json";
 const GRAFANA_DASHBOARDS: &str = "grafana_dashboards";
 
@@ -161,7 +160,11 @@ impl PrometheusVm {
     ///
     /// This process automatically discovers all `*.json` files, which are interpreted as Grafana dashboards. It then copies these files to a destination, where they will be sent to the Prometheus VM for use with the testnets. The expected name of the dashboards directory is determined by reading the `commonAnnotations.k8s-sidecar-target-directory` path from the `kustomize.yaml` file. This value specifies the location where the dashboards should be placed so that the links don't get broken.
     fn transform_dashboards_root_dir(logger: Logger, destination: &Path) -> Result<()> {
-        let dashboards_root = PathBuf::from_str(&std::env::var("IC_DASHBOARDS_DIR")?)?;
+        let dashboards_root = PathBuf::from_str(
+            &std::env::var("IC_DASHBOARDS_DIR")
+                .context("Failed to load `IC_DASHBOARDS_DIR` env variable")?,
+        )
+        .context("Failed to create PathBuf from the content of `IC_DASHBOARDS_DIR` env variable")?;
 
         for directory in dashboards_root.read_dir().map_err(|e| {
             anyhow::anyhow!(
@@ -278,8 +281,7 @@ fi
         if let Err(e) = Self::transform_dashboards_root_dir(log.clone(), &grafana_dashboards_src) {
             warn!(
                 log,
-                "Failed to sync k8s dashboards to grafana. Error: {}",
-                e.to_string()
+                "Failed to sync k8s dashboards to grafana. Error: {e:#}"
             )
         } else {
             debug!(log, "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ...");
@@ -372,9 +374,9 @@ pub trait HasPrometheus {
     fn sync_with_prometheus(&self);
 
     /// Retrieves a topology snapshot by name, converts it into p8s scraping target
-    /// JSON files and scps them to the prometheus VM. If `playnet_url` is specified, add a
+    /// JSON files and scps them to the prometheus VM. If `playnet_domain` is specified, add a
     /// scraping target for NNS canisters (currently only the ICP ledger) to the prometheus VM.
-    fn sync_with_prometheus_by_name(&self, name: &str, playnet_url: Option<String>);
+    fn sync_with_prometheus_by_name(&self, name: &str, playnet_domain: Option<String>);
 
     /// Downloads prometheus' data directory to the test artifacts
     /// such that we can run a local p8s on that later.
@@ -383,25 +385,16 @@ pub trait HasPrometheus {
     /// This allows this function to be used in a finalizer where no prometheus
     /// server has been setup.
     fn download_prometheus_data_dir_if_exists(&self);
-
-    /// Get the playnet URL of the boundary node with the given name.
-    fn get_playnet_url(&self, boundary_node_name: &str) -> Option<String>;
 }
 
 impl HasPrometheus for TestEnv {
-    fn get_playnet_url(&self, boundary_node_name: &str) -> Option<String> {
-        self.get_deployed_boundary_node(boundary_node_name)
-            .ok()
-            .and_then(|bn| bn.get_snapshot().ok()?.get_playnet())
-    }
-
     fn sync_with_prometheus(&self) {
         self.sync_with_prometheus_by_name("", None)
     }
 
-    fn sync_with_prometheus_by_name(&self, name: &str, mut playnet_url: Option<String>) {
+    fn sync_with_prometheus_by_name(&self, name: &str, mut playnet_domain: Option<String>) {
         if InfraProvider::read_attribute(self) == InfraProvider::K8s {
-            playnet_url = None;
+            playnet_domain = None;
         }
 
         let vm_name = PROMETHEUS_VM_NAME.to_string();
@@ -412,15 +405,17 @@ impl HasPrometheus for TestEnv {
             prometheus_config_dir.clone(),
             group_name.clone(),
             self.topology_snapshot_by_name(name),
-            &playnet_url,
+            &playnet_domain,
         )
         .expect("Failed to synchronize prometheus config with the latest IC topology!");
-        sync_prometheus_config_dir_with_boundary_nodes(
+        sync_prometheus_config_dir_with_ic_gateways(
             self,
             prometheus_config_dir.clone(),
             group_name,
         )
-        .expect("Failed to synchronize prometheus config with the last deployments of the boundary nodes");
+        .expect(
+            "Failed to synchronize prometheus config with the last deployments of the ic-gateways",
+        );
         // Setup an SSH session to the prometheus VM which we'll use to scp the JSON files.
         let deployed_prometheus_vm = self.get_deployed_universal_vm(&vm_name).unwrap();
         let session = deployed_prometheus_vm
@@ -431,11 +426,10 @@ impl HasPrometheus for TestEnv {
             REPLICA_PROMETHEUS_TARGET,
             ORCHESTRATOR_PROMETHEUS_TARGET,
             NODE_EXPORTER_PROMETHEUS_TARGET,
-            BN_PROMETHEUS_TARGET,
-            BN_EXPORTER_PROMETHEUS_TARGET,
             IC_BOUNDARY_PROMETHEUS_TARGET,
+            IC_GATEWAY_PROMETHEUS_TARGET,
         ];
-        if playnet_url.is_some() {
+        if playnet_domain.is_some() {
             target_json_files.push(LEDGER_CANISTER_PROMETHEUS_TARGET);
             target_json_files.push(BITCOIN_MAINNET_CANISTER_PROMETHEUS_TARGET);
             target_json_files.push(BITCOIN_TESTNET_CANISTER_PROMETHEUS_TARGET);
@@ -492,11 +486,14 @@ impl HasPrometheus for TestEnv {
         let create_tarball_script = &format!(
             r#"
 set -e
+# Stop p8s so we can create a clean tarball of its data directory without concurrent writes going on:
 sudo systemctl stop prometheus.service
 sudo tar -cf "{tarball_full_path:?}" \
     --sparse \
     --use-compress-program="zstd --threads=0 -10" \
     -C /var/lib/prometheus .
+# Start p8s again because users might still want to use it if they started their test with --keepalive:
+sudo systemctl start prometheus.service
     "#,
         );
         let session = deployed_prometheus_vm
@@ -529,12 +526,10 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
     let prometheus_config_dir = config_dir.join(PROMETHEUS_CONFIG_DIR_NAME);
     fs::create_dir_all(prometheus_config_dir.clone())?;
 
-    let boundary_nodes_scraping_targets_path =
-        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(BN_PROMETHEUS_TARGET);
-    let boundary_nodes_exporter_scraping_targets_path =
-        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(BN_EXPORTER_PROMETHEUS_TARGET);
     let ic_boundary_scraping_targets_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(IC_BOUNDARY_PROMETHEUS_TARGET);
+    let ic_gateways_scraping_targets_path =
+        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(IC_GATEWAY_PROMETHEUS_TARGET);
     let replica_scraping_targets_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(REPLICA_PROMETHEUS_TARGET);
     let orchestrator_scraping_targets_path =
@@ -558,27 +553,35 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
         "global": {"scrape_interval": scrape_interval_str},
         "scrape_configs": [
             {
-                "job_name": "boundary_nodes",
-                "file_sd_configs": [{"files": [boundary_nodes_scraping_targets_path]}],
-            },
-            {
-                "job_name": "boundary_nodes_exporter",
-                "file_sd_configs": [{"files": [boundary_nodes_exporter_scraping_targets_path]}],
+                "job_name": "ic_gateways",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
+                "file_sd_configs": [{"files": [ic_gateways_scraping_targets_path]}],
             },
             {
                 "job_name": "ic_boundary",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "file_sd_configs": [{"files": [ic_boundary_scraping_targets_path]}],
             },
-            {"job_name": "replica", "file_sd_configs": [{"files": [replica_scraping_targets_path]}]},
-            {"job_name": "orchestrator", "file_sd_configs": [{"files": [orchestrator_scraping_targets_path]}]},
+            {
+                "job_name": "replica",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
+                "file_sd_configs": [{"files": [replica_scraping_targets_path]}]
+            },
+            {
+                "job_name": "orchestrator",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
+                "file_sd_configs": [{"files": [orchestrator_scraping_targets_path]}]
+            },
             {
                 "job_name": "node_exporter",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "file_sd_configs": [{"files": [node_exporter_scraping_targets_path]}],
                 "scheme": "https",
                 "tls_config": {"insecure_skip_verify": true},
             },
             {
                 "job_name": "ledger-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "honor_timestamps": true,
                 "metrics_path": "/metrics",
                 "scheme": "https",
@@ -588,6 +591,7 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
             },
             {
                 "job_name": "bitcoin-mainnet-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "honor_timestamps": true,
                 "metrics_path": "/metrics",
                 "scheme": "https",
@@ -597,6 +601,7 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
             },
             {
                 "job_name": "bitcoin-testnet-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "honor_timestamps": true,
                 "metrics_path": "/metrics",
                 "scheme": "https",
@@ -606,6 +611,7 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
             },
             {
                 "job_name": "bitcoin-watchdog-mainnet-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "honor_timestamps": true,
                 "metrics_path": "/metrics",
                 "scheme": "https",
@@ -615,6 +621,7 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
             },
             {
                 "job_name": "bitcoin-watchdog-testnet-canister",
+                "fallback_scrape_protocol": "PrometheusText0.0.4",
                 "honor_timestamps": true,
                 "metrics_path": "/metrics",
                 "scheme": "https",
@@ -630,52 +637,41 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
     Ok(())
 }
 
-fn sync_prometheus_config_dir_with_boundary_nodes(
+fn sync_prometheus_config_dir_with_ic_gateways(
     env: &TestEnv,
     prometheus_config_dir: PathBuf,
     group_name: String,
 ) -> Result<()> {
-    let mut boundary_nodes_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
-    let mut boundary_nodes_exporter_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
+    let mut ic_gateways_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
 
-    let bns: Vec<(String, Ipv6Addr)> = env
-        .get_deployed_boundary_nodes()
+    let ic_gateways: Vec<(String, Ipv6Addr)> = env
+        .get_deployed_ic_gateways()?
         .into_iter()
-        .map(|bn| {
-            let vm = bn.get_vm().unwrap();
-            (vm.hostname, vm.ipv6)
+        .map(|gateway| {
+            let allocated_vm = gateway.get_vm();
+            Ok((allocated_vm.name, allocated_vm.ipv6))
         })
-        .collect();
+        .collect::<Result<_>>()?;
 
-    for (name, ipv6) in bns.iter() {
+    for (name, ipv6) in ic_gateways.iter() {
         let labels: HashMap<String, String> = [
             ("ic".to_string(), group_name.clone()),
-            ("ic_boundary_node".to_string(), name.to_string()),
+            ("gateways".to_string(), name.to_string()),
         ]
         .iter()
         .cloned()
         .collect();
-        boundary_nodes_p8s_static_configs.push(PrometheusStaticConfig {
-            targets: vec![format!("[{:?}]:{:?}", ipv6, IC_BOUNDARY_METRICS_PORT)],
-            labels: labels.clone(),
-        });
-        boundary_nodes_exporter_p8s_static_configs.push(PrometheusStaticConfig {
-            targets: vec![format!("[{:?}]:{:?}", ipv6, NODE_EXPORTER_METRICS_PORT)],
+        ic_gateways_p8s_static_configs.push(PrometheusStaticConfig {
+            targets: vec![format!("[{:?}]:{:?}", ipv6, IC_GATEWAY_METRICS_PORT)],
             labels: labels.clone(),
         });
     }
-    for (name, p8s_static_configs) in &[
-        (BN_PROMETHEUS_TARGET, boundary_nodes_p8s_static_configs),
-        (
-            BN_EXPORTER_PROMETHEUS_TARGET,
-            boundary_nodes_exporter_p8s_static_configs,
-        ),
-    ] {
-        ::serde_json::to_writer(
-            &File::create(prometheus_config_dir.join(name))?,
-            &p8s_static_configs,
-        )?;
-    }
+
+    ::serde_json::to_writer(
+        &File::create(prometheus_config_dir.join(IC_GATEWAY_PROMETHEUS_TARGET))?,
+        &ic_gateways_p8s_static_configs,
+    )?;
+
     Ok(())
 }
 
@@ -683,7 +679,7 @@ fn sync_prometheus_config_dir(
     prometheus_config_dir: PathBuf,
     group_name: String,
     topology_snapshot: TopologySnapshot,
-    playnet_url: &Option<String>,
+    playnet_domain: &Option<String>,
 ) -> Result<()> {
     let mut replica_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
     let mut ic_boundary_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
@@ -754,12 +750,12 @@ fn sync_prometheus_config_dir(
         });
     }
 
-    if let Some(playnet_url) = playnet_url {
+    if let Some(domain) = playnet_domain {
         // ICP ledger canister
         serde_json::to_writer(
             &File::create(prometheus_config_dir.join(LEDGER_CANISTER_PROMETHEUS_TARGET))?,
             &vec![PrometheusStaticConfig {
-                targets: vec![format!("ryjl3-tyaaa-aaaaa-aaaba-cai.raw.{}", playnet_url)],
+                targets: vec![format!("ryjl3-tyaaa-aaaaa-aaaba-cai.raw.{}", domain)],
                 labels: hashmap! {"ic".to_string() => group_name.clone(), "token".to_string() => "icp".to_string()},
             }],
         )?;
@@ -785,7 +781,7 @@ fn sync_prometheus_config_dir(
             serde_json::to_writer(
                 &File::create(prometheus_config_dir.join(prometheus_target))?,
                 &vec![PrometheusStaticConfig {
-                    targets: vec![format!("{canister_id}.raw.{playnet_url}")],
+                    targets: vec![format!("{canister_id}.raw.{domain}")],
                     labels: hashmap! {"ic".to_string() => group_name.clone()},
                 }],
             )?;

@@ -4,6 +4,8 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//rs/ic_os/config:config_lib_dev",
+    "//rs/ic_os/config_types",
     "//rs/prep",
     "//rs/registry/subnet_type",
     "//rs/tests/driver:ic-system-test-driver",

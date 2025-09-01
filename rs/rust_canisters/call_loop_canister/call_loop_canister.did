@@ -1,0 +1,4 @@
+service : {
+  // Takes the total number of bytes to send in a single message (in megabytes).
+  send_calls : (nat32) -> ();
+}

@@ -44,6 +44,7 @@ use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, NodeId, RegistryVersion};
 use metrics::RegistryreplicatorMetrics;
 use std::{
+    future::Future,
     io::{Error, ErrorKind},
     net::SocketAddr,
     sync::{
@@ -52,7 +53,7 @@ use std::{
     },
     time::Duration,
 };
-use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use url::Url;
 
 pub mod args;
@@ -299,14 +300,14 @@ impl RegistryReplicator {
         );
     }
 
-    /// Calls [`Self::poll()`] asynchronously and spawns a background task that
-    /// continuously polls for updates.
-    /// The background task is stopped when the object is dropped.
+    /// Initializes the registry local store asynchronously and returns a future that
+    /// continuously polls for registry updates.
     pub async fn start_polling(
         &self,
         nns_urls: Vec<Url>,
         nns_pub_key: Option<ThresholdSigPublicKey>,
-    ) -> Result<JoinHandle<()>, Error> {
+        cancellation_token: CancellationToken,
+    ) -> Result<impl Future<Output = ()>, Error> {
         if self.started.swap(true, Ordering::Relaxed) {
             return Err(Error::new(
                 ErrorKind::AlreadyExists,
@@ -333,8 +334,10 @@ impl RegistryReplicator {
         let registry_client = self.registry_client.clone();
         let cancelled = Arc::clone(&self.cancelled);
         let poll_delay = self.poll_delay;
-        info!(logger, "Spawning background thread.");
-        let handle = tokio::spawn(async move {
+
+        let future = async move {
+            // TODO: consider having only one way of cancelling this future,
+            // instead of having both `cancelled` and `cancellation_token`.
             while !cancelled.load(Ordering::Relaxed) {
                 let timer = metrics.poll_duration.start_timer();
                 // The relevant I/O-operation of the poll() function is querying
@@ -353,10 +356,15 @@ impl RegistryReplicator {
                 metrics
                     .registry_version
                     .set(registry_client.get_latest_version().get() as i64);
-                tokio::time::sleep(poll_delay).await;
+
+                tokio::select! {
+                   _ = tokio::time::sleep(poll_delay) => {}
+                   _ = cancellation_token.cancelled() => break
+                };
             }
-        });
-        Ok(handle)
+        };
+
+        Ok(future)
     }
 
     /// Requests latest version and certified changes from the

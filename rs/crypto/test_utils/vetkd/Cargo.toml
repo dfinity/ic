@@ -1,0 +1,13 @@
+[package]
+name = "ic-crypto-test-utils-vetkd"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ic-crypto-internal-bls12-381-type = { path = "../../internal/crypto_lib/bls12_381/type" }
+ic-crypto-internal-bls12-381-vetkd = { path = "../../internal/crypto_lib/bls12_381/vetkd" }
+rand_chacha = { workspace = true }
+
+[dev-dependencies]
+ic-vetkeys = { workspace = true }
+rand = { workspace = true }

@@ -4,7 +4,7 @@ use canister_test::*;
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client_sender::Sender;
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
+use ic_http_types::{HttpRequest, HttpResponse};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_ledger_core::{
@@ -25,7 +25,6 @@ use on_wire::bytes;
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
 use std::convert::TryFrom;
-use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
 use std::{
     collections::{HashMap, HashSet},
@@ -755,7 +754,7 @@ fn archived_blocks_ranges() {
 }
 
 #[test]
-fn notify_timeout_test() {
+fn notify_trap_test() {
     local_test_e(|r| async move {
         let proj = Project::new();
         let mut accounts = HashMap::new();
@@ -765,17 +764,9 @@ fn notify_timeout_test() {
             Tokens::from_tokens(100).unwrap(),
         );
 
-        let test_canister = proj
-            .cargo_bin("test-notified", &[])
-            .install_(&r, Vec::new())
-            .await?;
-
         let minting_account = create_sender(0);
 
-        let mut send_whitelist = HashSet::new();
-        send_whitelist.insert(test_canister.canister_id());
-
-        let ledger_canister = proj
+        let test_canister = proj
             .cargo_bin("ledger-canister", &["notify-method"])
             .install(&r)
             .bytes(
@@ -785,104 +776,12 @@ fn notify_timeout_test() {
                             .unwrap()
                             .into(),
                     )
-                    .initial_values(accounts)
-                    // A tiny notification window so notifications will fail.
-                    .transaction_window(Duration::from_millis(1))
-                    .send_whitelist(send_whitelist)
                     .build()
                     .unwrap())
                 .unwrap(),
             )
             .await?;
 
-        let block_height: BlockIndex = ledger_canister
-            .update_from_sender(
-                "send_pb",
-                protobuf,
-                SendArgs {
-                    from_subaccount: None,
-                    to: test_canister.canister_id().into(),
-                    amount: Tokens::from_tokens(1).unwrap(),
-                    fee: DEFAULT_TRANSFER_FEE,
-                    memo: Memo(0),
-                    created_at_time: None,
-                },
-                &sender,
-            )
-            .await?;
-
-        let notify = NotifyCanisterArgs {
-            block_height,
-            max_fee: DEFAULT_TRANSFER_FEE,
-            from_subaccount: None,
-            to_canister: test_canister.canister_id(),
-            to_subaccount: None,
-        };
-
-        let r1: Result<(), String> = ledger_canister
-            .update_from_sender("notify_pb", protobuf, notify.clone(), &sender)
-            .await;
-
-        assert!(
-            r1.as_ref().unwrap_err().contains("that is more than"),
-            "Notifying after duration should return an error containing \"that is more than\". Instead got {:?}",
-            r1
-        );
-
-        Ok(())
-    });
-}
-
-#[test]
-fn notify_test() {
-    local_test_e(|r| async move {
-        let proj = Project::new();
-        let mut accounts = HashMap::new();
-        let sender = create_sender(100);
-        accounts.insert(
-            sender.get_principal_id().into(),
-            Tokens::from_tokens(100).unwrap(),
-        );
-
-        let test_canister = proj
-            .cargo_bin("test-notified", &[])
-            .install_(&r, Vec::new())
-            .await?;
-
-        let test_canister_2 = proj
-            .cargo_bin("test-notified", &[])
-            .install_(&r, Vec::new())
-            .await?;
-
-        let minting_account = create_sender(0);
-
-        let mut send_whitelist = HashSet::new();
-        send_whitelist.insert(test_canister.canister_id());
-
-        let (node_max_memory_size_bytes, max_message_size_bytes): (usize, usize) = {
-            let blocks_per_archive_node = 8;
-
-            let blocks_per_archive_call = 3;
-
-            let e = example_block().encode();
-            println!("[test] encoded block size: {}", e.size_bytes());
-            (
-                e.size_bytes() * blocks_per_archive_node,
-                e.size_bytes() * blocks_per_archive_call,
-            )
-        };
-
-        let archive_options = ArchiveOptions {
-            node_max_memory_size_bytes: Some(node_max_memory_size_bytes as u64),
-            max_message_size_bytes: Some(max_message_size_bytes as u64),
-            controller_id: CanisterId::from_u64(876).into(),
-            more_controller_ids: None,
-            trigger_threshold: 8,
-            num_blocks_to_archive: 3,
-            cycles_for_archive_creation: Some(0),
-            max_transactions_per_response: None,
-        };
-
         let ledger_canister = proj
             .cargo_bin("ledger-canister", &["notify-method"])
             .install(&r)
@@ -894,9 +793,6 @@ fn notify_test() {
                             .into(),
                     )
                     .initial_values(accounts)
-                    .archive_options(archive_options)
-                    .max_message_size_bytes(max_message_size_bytes)
-                    .send_whitelist(send_whitelist)
                     .build()
                     .unwrap())
                 .unwrap(),
@@ -945,17 +841,9 @@ fn notify_test() {
             to_subaccount: None,
         };
 
-        assert!(get_metrics(&ledger_canister)
-            .await
-            .contains("ledger_notify_method_calls 0"));
-
         let r1: Result<(), String> = ledger_canister
             .update_from_sender("notify_pb", protobuf, notify.clone(), &sender)
             .await;
-
-        assert!(get_metrics(&ledger_canister)
-            .await
-            .contains("ledger_notify_method_calls 1"));
 
         let r2: Result<(), String> = ledger_canister
             .update_from_sender(
@@ -967,81 +855,21 @@ fn notify_test() {
             .await
             .map(|b| Decode!(&b, ()).unwrap());
 
-        assert!(get_metrics(&ledger_canister)
-            .await
-            .contains("ledger_notify_method_calls 2"));
-
         let r3: Result<(), String> = ledger_canister
             .update_from_sender("notify_pb", protobuf, notify.clone(), &sender)
             .await;
 
         assert!(get_metrics(&ledger_canister)
             .await
-            .contains("ledger_notify_method_calls 3"));
+            .contains("ledger_notify_method_calls 0"));
 
-        let count: u32 = Decode!(
-            &test_canister
-                .query_("check_counter", bytes, Encode!(&()).unwrap())
-                .await?,
-            u32
-        )
-        .unwrap();
-
-        assert_eq!(
-            Err(
-                "Canister rejected with message: Notification failed with message \'Rejected\'"
-                    .to_string()
-            ),
-            r1
-        );
-
-        assert_eq!(r2, Ok(()));
-
-        println!("{:?}", r3);
-        // This is vague because it contains stuff like src spans as it's a panic.
-        assert!(r3
-            .unwrap_err()
-            .contains("notification state is already true"));
-
-        assert_eq!(2, count);
-
-        // Notification of non whitelisted target should fail.
-        let block_height: BlockIndex = ledger_canister
-            .update_from_sender(
-                "send_pb",
-                protobuf,
-                SendArgs {
-                    from_subaccount: None,
-                    to: test_canister_2.canister_id().into(),
-                    amount: Tokens::from_tokens(1).unwrap(),
-                    fee: DEFAULT_TRANSFER_FEE,
-                    memo: Memo(0),
-                    created_at_time: None,
-                },
-                &sender,
-            )
-            .await?;
-
-        let notify_not_whitelisted = NotifyCanisterArgs {
-            block_height,
-            max_fee: DEFAULT_TRANSFER_FEE,
-            from_subaccount: None,
-            to_canister: test_canister_2.canister_id(),
-            to_subaccount: None,
-        };
-
-        let r4: Result<(), String> = ledger_canister
-            .update_from_sender("notify_pb", protobuf, notify_not_whitelisted, &sender)
-            .await;
-
-        // The notify method failed - the counter was not increased.
-        assert!(get_metrics(&ledger_canister)
-            .await
-            .contains("ledger_notify_method_calls 3"));
-
-        assert!(r4
-            .unwrap_err()
-            .contains("Notifying non-whitelisted canister is not allowed"));
+        for r in [r1, r2, r3] {
+            assert!(
+                r.as_ref().unwrap_err().contains("Please migrate to the CMC notify flow"),
+                "Notifying after duration should return an error containing \"Please migrate to the CMC notify flow\". Instead got {:?}",
+                r
+            );
+        }
 
         Ok(())
     });
@@ -1051,19 +879,7 @@ fn notify_test() {
 fn notify_disabled_test() {
     local_test_e(|r| async move {
         match r {
-            Runtime::Local(ref local_runtime) => {
-                let longer_ingress_runtime = Runtime::Local(LocalTestRuntime {
-                    ingress_time_limit: Duration::from_secs(1000),
-                    query_handler: local_runtime.query_handler.clone(),
-                    ingress_sender: local_runtime.ingress_sender.clone(),
-                    ingress_history_reader: local_runtime.ingress_history_reader.clone(),
-                    state_reader: local_runtime.state_reader.clone(),
-                    node_id: local_runtime.node_id,
-                    nonce: Mutex::new(local_runtime.get_nonce() - 1),
-                    registry_data_provider: local_runtime.registry_data_provider.clone(),
-                    registry_client: local_runtime.registry_client.clone(),
-                });
-
+            Runtime::Local(ref _local_runtime) => {
                 let proj = Project::new();
                 let mut accounts = HashMap::new();
                 let sender = create_sender(100);
@@ -1072,12 +888,23 @@ fn notify_disabled_test() {
                     Tokens::from_tokens(100).unwrap(),
                 );
 
-                let test_canister = proj
-                    .cargo_bin("test-notified", &[])
-                    .install_(&longer_ingress_runtime, Vec::new())
-                    .await?;
-
                 let minting_account = create_sender(0);
+
+                let test_canister = proj
+                    .cargo_bin("ledger-canister", &["notify-method"])
+                    .install(&r)
+                    .bytes(
+                        Encode!(&LedgerCanisterInitPayload::builder()
+                            .minting_account(
+                                CanisterId::try_from(minting_account.get_principal_id())
+                                    .unwrap()
+                                    .into(),
+                            )
+                            .build()
+                            .unwrap())
+                        .unwrap(),
+                    )
+                    .await?;
 
                 let mut send_whitelist = HashSet::new();
                 send_whitelist.insert(test_canister.canister_id());
@@ -1292,8 +1119,7 @@ fn sub_account_test() {
 }
 
 #[test]
-#[should_panic(expected = "Sending from 2vxsx-fae is not allowed")]
-fn check_anonymous_cannot_send() {
+fn check_anonymous_can_send() {
     local_test_e(|r| async move {
         let proj = Project::new();
         let sub_account = |x| Some(Subaccount([x; 32]));
@@ -1318,8 +1144,8 @@ fn check_anonymous_cannot_send() {
             )
             .await?;
 
-        // Send a payment from an anonymous user, should fail.
-        let _: BlockIndex = ledger_canister
+        // Send a payment from an anonymous user, should succeed.
+        let block_index: BlockIndex = ledger_canister
             .update_(
                 "send_pb",
                 protobuf,
@@ -1333,6 +1159,8 @@ fn check_anonymous_cannot_send() {
                 },
             )
             .await?;
+        assert_eq!(block_index, 1);
+
         Ok(())
     })
 }
@@ -2391,52 +2219,6 @@ async fn ledger_assert_num_nodes(ledger: &Canister<'_>, num_expected: usize) -> 
     println!("[test] retrieved {} archive nodes", nodes.len());
     assert_eq!(nodes.len(), num_expected);
     nodes
-}
-
-#[test]
-fn call_with_cleanup() {
-    local_test_e(|r| async move {
-        let proj = Project::new();
-
-        let test_canister = proj
-            .cargo_bin("test-notified", &[])
-            .install_(&r, Vec::new())
-            .await?;
-
-        // Check the dirty call behaves badly.
-        let r: Result<(), String> = test_canister
-            .update_("dirty_call", bytes, Encode!(&()).unwrap())
-            .await
-            .map(|b| Decode!(&b, ()).unwrap());
-        println!("{:?}", r);
-        assert!(r.unwrap_err().contains("Failed successfully"),);
-
-        let r: Result<(), String> = test_canister
-            .update_("dirty_call", bytes, Encode!(&()).unwrap())
-            .await
-            .map(|b| Decode!(&b, ()).unwrap());
-        println!("{:?}", r);
-        assert_eq!(r, Ok(()));
-
-        let r: Result<(), String> = test_canister
-            .update_("clean_call", bytes, Encode!(&()).unwrap())
-            .await
-            .map(|b| Decode!(&b, ()).unwrap());
-        println!("{:?}", r);
-
-        assert!(r.unwrap_err().contains("Failed successfully"));
-
-        let r: Result<(), String> = test_canister
-            .update_("clean_call", bytes, Encode!(&()).unwrap())
-            .await
-            .map(|b| Decode!(&b, ()).unwrap());
-        println!("{:?}", r);
-        assert!(
-            r.unwrap_err().contains("Failed successfully"),
-            "The lock was not released so it can't successfully fail"
-        );
-        Ok(())
-    })
 }
 
 #[test]

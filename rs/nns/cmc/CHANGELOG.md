@@ -11,6 +11,34 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-08-15: Proposal 137918
+
+http://dashboard.internetcomputer.org/proposal/137918
+
+## Changed
+
+The CMC's `set_authorized_subnetwork_list` method is now also callable by the Subnet Rental Canister, in addition to the NNS Governance Canister.
+
+
+# 2025-07-25: Proposal 137583
+
+http://dashboard.internetcomputer.org/proposal/137583
+
+## Changed
+
+* Cycles Minting Limit is not enforced for the Subnet Rental Canister when it is topping up itself.
+  This is necessary for the canister to mint large amounts of cycles to pay for the subnet rentals.
+
+
+# 2025-05-31: Proposal 136797
+
+http://dashboard.internetcomputer.org/proposal/136797
+
+## Changed
+
+- Use the mint_cycles128 system API, so larger amounts of cycles can now be minted.
+
+
 # 2025-02-07: Proposal 135205
 
 http://dashboard.internetcomputer.org/proposal/135205

@@ -292,7 +292,7 @@ mod ingress_expiry {
     }
 
     #[test]
-    fn should_not_error_when_anonymous_query_expired() {
+    fn should_not_error_when_system_query_expired() {
         let verifier = verifier_at_time(CURRENT_TIME).build();
         let request = HttpRequestBuilder::new_query()
             .with_authentication(AuthenticationScheme::Anonymous)

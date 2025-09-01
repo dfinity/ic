@@ -8,7 +8,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 
 ### Added
+- The function `start_server` and its input type `StartServerParams` to manually start a PocketIC server.
+- The function `PocketIcBuilder::with_all_icp_features` to specify that all ICP features (supported by PocketIC) should be enabled.
+- The function `PocketIc::upgrade_eop_canister` to upgrade a Motoko EOP canister.
+- The function `PocketIcBuilder::with_icp_features` to specify that selected ICP features (supported by PocketIC) should be enabled.
+- The function `PocketIcBuilder::with_initial_timestamp` to specify the initial timestamp of the newly created PocketIC instance.
+- The function `PocketIcBuilder::with_auto_progress` to specify that the new instance should make progress automatically,
+  i.e., PocketIC should periodically update the time of the instance to the real time and execute rounds on the subnets.
+
+### Removed
+- The field `node_ids` from `SubnetConfig`. Node ids can always be retrieved from the registry.
+
+
+
+## 9.0.2 - 2025-06-06
+
+(Only PocketIC server version bump to v9.0.3.)
+
+
+
+## 9.0.1 - 2025-05-27
+
+(Only PocketIC server version bump to v9.0.2.)
+
+
+
+## 9.0.0 - 2025-04-30
+
+### Changed
+- Bumped `ic-management-canister-types` to v0.3.0.
+
+
+
+## 8.0.0 - 2025-04-23
+
+### Added
 - The function `PocketIc::auto_progress_enabled` to determine whether the automatic progress was enabled for the PocketIC instance.
+- The struct `PocketIcState` encapsulating the state of a PocketIC instance persisted in a temporary directory (`PocketIcState::new`)
+  or in a directory on disk (`PocketIcState::new_from_path`).
+  A temporary directory is managed by `PocketIcState` (i.e., it is deleted automatically when `PocketIcState` is dropped)
+  unless consumed into a `PathBuf` using `PocketIcState::into_path`.
+  The directory on disk used in `PocketIcState::new_from_path` is persisted after `PocketIcState` is dropped.
+- The function `PocketIcBuilder::with_read_only_state` to specify a state from which the PocketIC instance is initialized.
+  The provided state is not modified (i.e., it is read-only).
+- The function `PocketIcBuilder::with_state` to specify a state from which the PocketIC instance is initialized
+  and in which changes to the PocketIC instance are persisted.
+  This state must be empty if `PocketIcBuilder::with_read_only_state` is used.
+- The function `PocketIc::drop_and_take_state` to drop a PocketIC instance and get its final state if the instance was created
+  using `PocketIcBuilder::with_state` or `PocketIcBuilder::with_state_dir`.
+- The type `Time` used by the functions `PocketIc::get_time`, `PocketIc::set_time`, and `PocketIc::set_certified_time`.
 
 ### Removed
 - The module `management_canister` used to contain interface types of the IC management canister. Those types have since been published on crates.io as `ic-management-canister-types`, so PocketIC can depend on that and remove the redundant types.

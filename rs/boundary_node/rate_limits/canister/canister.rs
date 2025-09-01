@@ -1,3 +1,6 @@
+#![allow(unused_imports)]
+#![allow(deprecated)]
+
 use crate::access_control::{AccessLevelResolver, WithAuthorization};
 use crate::add_config::{AddsConfig, ConfigAdder};
 use crate::confidentiality_formatting::{
@@ -12,9 +15,9 @@ use crate::metrics::{
 use crate::state::{init_version_and_config, with_canister_state, CanisterApi};
 use candid::Principal;
 use ic_canister_log::{export as export_logs, log};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::call::call;
-use ic_cdk_macros::{init, inspect_message, post_upgrade, query, update};
+use ic_cdk::{init, inspect_message, post_upgrade, query, update};
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use rate_limits_api::{
     AddConfigResponse, ApiBoundaryNodeIdRecord, DiscloseRulesArg, DiscloseRulesResponse,
@@ -178,7 +181,10 @@ fn disclose_rules(args: DiscloseRulesArg) -> DiscloseRulesResponse {
     Ok(())
 }
 
-#[query(decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => with_canister_state(|state| {
@@ -230,6 +236,16 @@ fn http_request(request: HttpRequest) -> HttpResponse {
         }
         _ => HttpResponseBuilder::not_found().build(),
     }
+}
+
+// Manually add a dummy method so that the Candid interface can be properly generated:
+//   `http_request: (HttpRequest) -> (HttpResponse) query;`
+// Without this dummy method, it will be `http_request: (blob) -> (HttpResponse) query;`
+// because of the `decode_with` option used above.
+#[::candid::candid_method(query, rename = "http_request")]
+#[allow(unused_variables)]
+fn __candid_method_http_request(request: HttpRequest) -> HttpResponse {
+    panic!("candid dummy function called")
 }
 
 fn periodically_poll_api_boundary_nodes(interval: u64, canister_api: Arc<dyn CanisterApi>) {

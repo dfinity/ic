@@ -2,7 +2,7 @@
 name = "ic-icrc-rosetta"
 description = "Build Once. Integrate Your Blockchain Everywhere. "
 default-run = "ic-icrc-rosetta"
-version = "1.1.2"
+version = "1.2.5"
 authors.workspace = true
 edition.workspace = true
 documentation.workspace = true
@@ -17,6 +17,7 @@ axum = { workspace = true }
 candid = { workspace = true }
 ciborium = { workspace = true }
 clap = { workspace = true }
+futures = { workspace = true }
 hex = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
@@ -67,6 +68,7 @@ ic-icrc-rosetta-runner = { path = "runner" }
 ic-ledger-suite-state-machine-tests = { path = "../../ledger_suite/tests/sm-tests" }
 ic-icrc1-test-utils = { path = "../../ledger_suite/icrc1/test_utils" }
 ic-ledger-canister-core = { path = "../../ledger_suite/common/ledger_canister_core" }
+ic-management-canister-types = { workspace = true }
 ic-rosetta-test-utils = { path = "../icp/test_utils" }
 ic-test-utilities-load-wasm = { path = "../../test_utilities/load_wasm" }
 ic-utils = { workspace = true }
@@ -81,3 +83,7 @@ path = "tests/integration_tests.rs"
 [[test]]
 name = "system_tests"
 path = "tests/system_tests.rs"
+
+[[test]]
+name = "multitoken_system_tests"
+path = "tests/multitoken_system_tests.rs"

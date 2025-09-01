@@ -24,7 +24,7 @@ criterion_main!(benches);
 criterion_group!(benches, crypto_tecdsa_benchmarks);
 
 fn crypto_tecdsa_benchmarks(criterion: &mut Criterion) {
-    let number_of_nodes = [1, 4, 13, 28, 40];
+    let number_of_nodes = [1, 4, 13, 34, 40];
 
     let test_cases = generate_test_cases(&number_of_nodes);
 

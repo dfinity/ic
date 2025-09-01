@@ -151,7 +151,7 @@ get too old. One reason to run recent builds is so that the next release
 does not have a huge amount of changes in it.'
         fi
     else
-        print_yellow 'No unreleased_changelog.md file for ${CANISTER_NAME}.' >&2
+        print_yellow "No unreleased_changelog.md found at ${UNRELEASED_CHANGELOG_PATH} for ${CANISTER_NAME} " >&2
         print_yellow 'The "Features & Fixes" section will need to be written by hand.' >&2
     fi
 
@@ -464,6 +464,11 @@ EOF
 ## Example: $1 directory_with_new_proposals/*
 ## Example: $1 proposal_1.md proposal_2.md
 generate_forum_post_nns_upgrades() {
+    if [ $# -eq 0 ]; then
+        echo "No proposal files provided"
+        exit 1
+    fi
+
     PROPOSAL_FILES=$(ls "$@")
 
     THIS_FRIDAY=$(date -d "next Friday" +'%Y-%m-%d' 2>/dev/null || date -v+Fri +%Y-%m-%d)
@@ -498,6 +503,11 @@ EOF
 ## Example: $1 directory_with_new_proposals/*
 ## Example: $1 proposal_1.md proposal_2.md
 generate_forum_post_sns_wasm_publish() {
+    if [ $# -eq 0 ]; then
+        echo "No proposal files provided"
+        exit 1
+    fi
+
     PROPOSAL_FILES=$(ls "$@")
 
     THIS_FRIDAY=$(date -d "next Friday" +'%Y-%m-%d' 2>/dev/null || date -v+Fri +%Y-%m-%d)

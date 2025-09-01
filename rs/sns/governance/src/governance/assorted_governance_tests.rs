@@ -2,16 +2,18 @@
 //! here, so that Bazel does not recompile the whole production crate each time the tests are run.
 //! The name of this file is indeed too generic; feel free to factor specific tests out into
 //! more appropriate locations, or create new file modules for them, whatever makes more sense.
-
-use super::test_helpers::{
-    basic_governance_proto, canister_status_for_test,
-    canister_status_from_management_canister_for_test, DoNothingLedger, A_MOTION_PROPOSAL,
-    A_NEURON, A_NEURON_ID, A_NEURON_PRINCIPAL_ID, TEST_ARCHIVES_CANISTER_IDS,
-    TEST_DAPP_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID, TEST_INDEX_CANISTER_ID,
-    TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID, TEST_SWAP_CANISTER_ID,
-};
-use super::*;
 use crate::{
+    extensions::{ExtensionSpec, ExtensionType, ExtensionVersion},
+    governance::{
+        test_helpers::{
+            basic_governance_proto, canister_status_for_test,
+            canister_status_from_management_canister_for_test, DoNothingLedger, A_MOTION_PROPOSAL,
+            A_NEURON, A_NEURON_ID, A_NEURON_PRINCIPAL_ID, TEST_ARCHIVES_CANISTER_IDS,
+            TEST_DAPP_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID, TEST_INDEX_CANISTER_ID,
+            TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID, TEST_SWAP_CANISTER_ID,
+        },
+        *,
+    },
     pb::v1::{
         governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
         manage_neuron_response,
@@ -27,12 +29,15 @@ use crate::{
         GetWasmResponse, ListUpgradeStep, ListUpgradeStepsRequest, ListUpgradeStepsResponse,
         SnsCanisterType, SnsVersion, SnsWasm,
     },
-    topics::{ListTopicsResponse, NervousSystemFunctions, TopicInfo},
+    storage::cache_registered_extension,
+    topics::{
+        ListTopicsResponse, NervousSystemFunctions, RegisteredExtensionOperationSpec, TopicInfo,
+    },
     types::test_helpers::NativeEnvironment,
 };
 use assert_matches::assert_matches;
 use async_trait::async_trait;
-use candid::Principal;
+use candid::{Nat, Principal};
 use futures::{join, FutureExt};
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_canisters::cmc::FakeCmc;
@@ -51,7 +56,8 @@ use ic_sns_governance_api::pb::v1::topics::Topic;
 use ic_sns_governance_token_valuation::{Token, ValuationFactors};
 use ic_sns_test_utils::itest_helpers::UserInfo;
 use ic_test_utilities_types::ids::canister_test_id;
-use maplit::{btreemap, btreeset};
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
+use maplit::btreemap;
 use pretty_assertions::assert_eq;
 use proptest::prelude::{prop_assert, proptest};
 use std::{
@@ -84,6 +90,29 @@ impl ICRC1Ledger for AlwaysSucceedingLedger {
 
     fn canister_id(&self) -> CanisterId {
         CanisterId::from_u64(42)
+    }
+
+    async fn icrc2_approve(
+        &self,
+        _spender: Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 }
 
@@ -161,6 +190,27 @@ async fn test_perform_transfer_sns_treasury_funds_execution_fails_when_another_c
         }
 
         fn canister_id(&self) -> CanisterId {
+            unimplemented!()
+        }
+
+        async fn icrc2_approve(
+            &self,
+            _spender: Account,
+            _amount: u64,
+            _expires_at: Option<u64>,
+            _fee: u64,
+            _from_subaccount: Option<Subaccount>,
+            _expected_allowance: Option<u64>,
+        ) -> Result<Nat, NervousSystemError> {
+            Err(NervousSystemError {
+                error_message: "Not Implemented".to_string(),
+            })
+        }
+
+        async fn icrc3_get_blocks(
+            &self,
+            _args: Vec<GetBlocksRequest>,
+        ) -> Result<GetBlocksResult, NervousSystemError> {
             unimplemented!()
         }
     }
@@ -289,6 +339,27 @@ async fn test_neuron_operations_exclude_one_another() {
         }
 
         fn canister_id(&self) -> CanisterId {
+            unimplemented!()
+        }
+
+        async fn icrc2_approve(
+            &self,
+            _spender: Account,
+            _amount: u64,
+            _expires_at: Option<u64>,
+            _fee: u64,
+            _from_subaccount: Option<Subaccount>,
+            _expected_allowance: Option<u64>,
+        ) -> Result<Nat, NervousSystemError> {
+            Err(NervousSystemError {
+                error_message: "Not Implemented".to_string(),
+            })
+        }
+
+        async fn icrc3_get_blocks(
+            &self,
+            _args: Vec<GetBlocksRequest>,
+        ) -> Result<GetBlocksResult, NervousSystemError> {
             unimplemented!()
         }
     }
@@ -647,7 +718,7 @@ proptest! {
 ) {
         // To make the math easy, we'll do the same trick we did in the previous test, where increase the `adjusted_wait_for_quiet_deadline_increase_seconds`
         // by the smallest time where any flip in the vote will cause a deadline increase.
-        let adjusted_wait_for_quiet_deadline_increase_seconds = wait_for_quiet_deadline_increase_seconds + (initial_voting_period_seconds + 1) / 2;
+        let adjusted_wait_for_quiet_deadline_increase_seconds = wait_for_quiet_deadline_increase_seconds + initial_voting_period_seconds.div_ceil(2);
         // We'll also use the `time` parameter to tell us what fraction of the `initial_voting_period_seconds` to test at.
         let now_seconds = (time * initial_voting_period_seconds as f32) as u64;
         let mut proposal = ProposalData {
@@ -680,8 +751,8 @@ proptest! {
             .wait_for_quiet_state
             .unwrap()
             .current_deadline_timestamp_seconds;
-        dbg!(new_deadline , initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + (now_seconds + 1) / 2);
-        prop_assert!(new_deadline == initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + (now_seconds + 1) / 2);
+        dbg!(new_deadline , initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + now_seconds.div_ceil(2));
+        prop_assert!(new_deadline == initial_voting_period_seconds + wait_for_quiet_deadline_increase_seconds + now_seconds.div_ceil(2));
     }
 }
 
@@ -1520,8 +1591,6 @@ fn setup_env_for_sns_upgrade_to_next_version_test(
                     canister_id: canister_id.get(),
                     wasm_module: vec![9, 8, 7, 6, 5, 4, 3, 2],
                     arg: Encode!().unwrap(),
-                    compute_allocation: None,
-                    memory_allocation: None, // local const in install_code()
                     sender_canister_version: None,
                 })
                 .unwrap(),
@@ -4623,247 +4692,6 @@ fn test_effective_maturity_modulation_basis_points() {
     assert!(err.error_message.contains("retriev"));
 }
 
-/// Main Narrative:
-///
-/// 1. There are three neurons. One votes directly. The other two follow the (direct) voter.
-/// 2. The difference between the two follower neurons is what they follow on:
-///   * catch-all/fallback: This neuron does nothing on critical proposals.
-///   * TransferSnsTreasuryFunds: This neuron only acts on TransferSnsTreasuryFunds proposals.
-/// 3. There are two proposals that the (direct) voter neuron votes on:
-///   * Motion: Here, only the first follower neuron follows.
-///   * TransferSnsTreasuryFunds: Here, only the second follower neuron follows, even though
-///     the first follower neuron uses catch-all/fallback following.
-///
-/// What the first follower neuron does is the most interesting, because what we are trying to
-/// demonstrate here is that catch-all/fallback following applies iff the proposal is
-/// normal/non-critical. Whereas, the second follower neuron is there more as a sanity check, to
-/// witness that specific (i.e. non-catch-all/non-fallback) following still happens.
-///
-/// There is actually a third follower neuron, but this one is even less interesting than the
-/// second. This one is a "super follower" in that this uses a (disjoint) union of the following
-/// of the first two follower neurons.
-///
-/// There is also a third proposal: a critical proposal, but with a different function ID that
-/// nobody specifically follows. Here, only direct voting causes a ballot to be filled in. This
-/// is another sanity test, which we throw in as a "bonus", because it's pretty cheap to add.
-#[test]
-fn test_cast_vote_and_cascade_follow_critical_vs_normal_proposals() {
-    // Step 1: Prepare the world.
-
-    let proposal_id = ProposalId { id: 42 };
-
-    let voting_neuron_id = NeuronId { id: vec![1] };
-    let follows_on_catch_all_neuron_id = NeuronId { id: vec![2] };
-    let follows_on_transfer_sns_treasury_funds_neuron_id = NeuronId { id: vec![3] };
-    let follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id = NeuronId { id: vec![4] };
-
-    let non_critical_function_id = u64::from(&Action::Motion(Default::default()));
-    let critical_function_id = u64::from(&Action::TransferSnsTreasuryFunds(Default::default()));
-
-    let fallback_pseudo_function_id = u64::from(&Action::Unspecified(Default::default()));
-    // This needs to be consistent with neurons (below).
-    let function_followee_index = btreemap! {
-        fallback_pseudo_function_id => btreemap! {
-            voting_neuron_id.to_string() => btreeset! {
-                follows_on_catch_all_neuron_id.clone(),
-                follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.clone(),
-            },
-        },
-
-        critical_function_id => btreemap! {
-            voting_neuron_id.to_string() => btreeset! {
-                follows_on_transfer_sns_treasury_funds_neuron_id.clone(),
-                follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.clone(),
-            },
-        },
-    };
-
-    let voting_neuron = Neuron {
-        id: Some(voting_neuron_id.clone()),
-        cached_neuron_stake_e8s: E8, // voting power
-        ..Default::default()
-    };
-    let follows_on_catch_all_neuron = Neuron {
-        id: Some(follows_on_catch_all_neuron_id.clone()),
-        cached_neuron_stake_e8s: E8, // voting power
-        followees: btreemap! {
-            fallback_pseudo_function_id => Followees {
-                followees: vec![voting_neuron_id.clone()],
-            },
-        },
-        ..Default::default()
-    };
-    let follows_on_transfer_sns_treasury_funds_neuron = Neuron {
-        id: Some(follows_on_transfer_sns_treasury_funds_neuron_id.clone()),
-        cached_neuron_stake_e8s: E8, // voting power
-        followees: btreemap! {
-            critical_function_id => Followees {
-                followees: vec![voting_neuron_id.clone()],
-            },
-        },
-        ..Default::default()
-    };
-    let follows_on_catch_all_and_transfer_sns_treasury_funds_neuron = Neuron {
-        id: Some(follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.clone()),
-        cached_neuron_stake_e8s: E8, // voting power
-        followees: btreemap! {
-            fallback_pseudo_function_id => Followees {
-                followees: vec![voting_neuron_id.clone()],
-            },
-            critical_function_id => Followees {
-                followees: vec![voting_neuron_id.clone()],
-            },
-        },
-        ..Default::default()
-    };
-    let neurons = btreemap! {
-        voting_neuron_id.to_string()
-            => voting_neuron,
-
-        follows_on_catch_all_neuron_id.to_string()
-            => follows_on_catch_all_neuron,
-
-        follows_on_transfer_sns_treasury_funds_neuron_id.to_string()
-            => follows_on_transfer_sns_treasury_funds_neuron,
-
-        follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.to_string()
-            => follows_on_catch_all_and_transfer_sns_treasury_funds_neuron,
-    };
-
-    // Step 2: Run code under test.
-
-    // We loop over Votes, because the behavior is "the same" in both cases: under following,
-    // the direction of the vote is consistent (it would be a bit insane if voting Yes caused
-    // another neuron to vote No, and vice versa).
-    for vote_of_neuron in [Vote::Yes, Vote::No] {
-        let now_seconds = 123_456_789;
-
-        let empty_ballot = Ballot {
-            vote: Vote::Unspecified as i32,
-            voting_power: E8,
-            cast_timestamp_seconds: now_seconds,
-        };
-        let filled_in_ballot = Ballot {
-            vote: vote_of_neuron as i32,
-            ..empty_ballot
-        };
-
-        // Code under test.
-        let cast_vote_and_cascade_follow = |function_id, proposal_criticality| {
-            // Give all neurons an empty ballot.
-            let mut ballots = [
-                &voting_neuron_id,
-                &follows_on_catch_all_neuron_id,
-                &follows_on_transfer_sns_treasury_funds_neuron_id,
-                &follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id,
-            ]
-            .into_iter()
-            .map(|neuron_id| (neuron_id.to_string(), empty_ballot))
-            .collect::<BTreeMap<String, Ballot>>();
-
-            // voter neuron votes, and the code under test deduces all of the implications of
-            // following (or at least, tries to).
-            Governance::cast_vote_and_cascade_follow(
-                &proposal_id,
-                &voting_neuron_id,
-                vote_of_neuron,
-                function_id,
-                &function_followee_index,
-                &neurons,
-                now_seconds,
-                &mut ballots,
-                proposal_criticality,
-            );
-
-            ballots
-        };
-
-        // Step 2A: Consider following on non-critical proposal. Here catch-all/fallback
-        // following should be used.
-        let non_critical_ballots =
-            cast_vote_and_cascade_follow(non_critical_function_id, ProposalCriticality::Normal);
-
-        // Step 3: Inspect results.
-
-        // Step 3A: Non-critical proposal.
-        assert_eq!(
-            non_critical_ballots,
-            btreemap! {
-                voting_neuron_id.to_string()
-                    // Direct vote.
-                    => filled_in_ballot,
-
-                follows_on_catch_all_neuron_id.to_string()
-                    // Thanks to catch-all/fallback following.
-                    => filled_in_ballot,
-
-                follows_on_transfer_sns_treasury_funds_neuron_id.to_string()
-                    // Because this only follows specifically on TransferSnsTreasuryFunds.
-                    => empty_ballot,
-
-                follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.to_string()
-                    // Thanks to catch-all/fallback following, although from just this case, it
-                    // is unclear why this happens (you need to look at behavior on many
-                    // different proposals to explain the behavior of this neuron).
-                    => filled_in_ballot,
-            }
-        );
-
-        // Step 2B: Critical proposal following. Here catch-all/fallback following should NOT be
-        // used.
-        let critical_ballots =
-            cast_vote_and_cascade_follow(critical_function_id, ProposalCriticality::Critical);
-
-        // Step 3B: Critical proposal.
-        assert_eq!(
-            critical_ballots,
-            btreemap! {
-                voting_neuron_id.to_string()
-                    => filled_in_ballot,
-
-                // Perhaps, surprisingly, even though this neuron follows on
-                // "catch-all/fallback", that does not apply here, because the proposal is
-                // "critical".
-                follows_on_catch_all_neuron_id.to_string()
-                    => empty_ballot,
-
-                // Unsurprisingly, this neuron follows, because it specifically follows on
-                // proposals of this type.
-                follows_on_transfer_sns_treasury_funds_neuron_id.to_string()
-                    => filled_in_ballot,
-
-                // Even less surprisingly, this also follows for similar reasons.
-                follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.to_string()
-                    => filled_in_ballot,
-            }
-        );
-
-        // Step 2C: A different critical proposal -> only direct voting happens here.
-        let function_id = u64::from(&Action::DeregisterDappCanisters(Default::default()));
-        let no_following_ballots =
-            cast_vote_and_cascade_follow(function_id, ProposalCriticality::Critical);
-
-        // Step 3C: A different critical proposal.
-        assert_eq!(
-            no_following_ballots,
-            btreemap! {
-                // Only direct vote.
-                voting_neuron_id.to_string()
-                    => filled_in_ballot,
-
-                // No following.
-                follows_on_catch_all_neuron_id.to_string()
-                    => empty_ballot,
-                follows_on_transfer_sns_treasury_funds_neuron_id.to_string()
-                    => empty_ballot,
-                // Even this "super follower" doesn't follow here.
-                follows_on_catch_all_and_transfer_sns_treasury_funds_neuron_id.to_string()
-                    => empty_ballot,
-            }
-        );
-    }
-}
-
 #[test]
 fn test_list_topics() {
     use crate::pb::v1::NervousSystemFunction;
@@ -4931,6 +4759,19 @@ fn test_list_topics() {
         Box::new(FakeCmc::new()),
     );
 
+    let registered_spec = ExtensionSpec {
+        name: "KongSwap".to_string(),
+        version: ExtensionVersion(1),
+        topic: Topic::TreasuryAssetManagement.into(),
+        extension_type: ExtensionType::TreasuryManager,
+    };
+
+    let deposit_operation_spec = registered_spec.get_operation("deposit").unwrap();
+    let withdraw_operation_spec = registered_spec.get_operation("withdraw").unwrap();
+
+    cache_registered_extension(CanisterId::from_u64(100_001), registered_spec.clone());
+    cache_registered_extension(CanisterId::from_u64(100_002), registered_spec);
+
     // Call the API under test
     let ListTopicsResponse {
         topics: topic_infos,
@@ -4987,7 +4828,8 @@ fn test_list_topics() {
                     function_1,
                 ],
             },
-            is_critical: false,
+            extension_operations: vec![],
+            is_critical: true,
         },
         TopicInfo {
             topic: Topic::SnsFrameworkManagement,
@@ -5024,6 +4866,7 @@ fn test_list_topics() {
                     function_2
                 ],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo {
@@ -5071,6 +4914,7 @@ fn test_list_topics() {
                 ],
                 custom_functions: vec![],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo {
@@ -5081,12 +4925,13 @@ fn test_list_topics() {
                 native_functions: vec![],
                 custom_functions: vec![],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo {
             topic: Topic::Governance,
             name: "Governance".to_string(),
-            description: "Proposals that represent community polls or other forms of community opinion but don’t have any immediate effect in terms of code changes.".to_string(),
+            description: "Proposals that represent community polls or other forms of community opinion but don't have any immediate effect in terms of code changes.".to_string(),
             functions: NervousSystemFunctions {
                 native_functions: vec![
                     NervousSystemFunction {
@@ -5104,6 +4949,7 @@ fn test_list_topics() {
                 ],
                 custom_functions: vec![],
             },
+            extension_operations: vec![],
             is_critical: false,
         },
         TopicInfo {
@@ -5139,6 +4985,12 @@ fn test_list_topics() {
                 ],
                 custom_functions: vec![],
             },
+            extension_operations: vec![
+                RegisteredExtensionOperationSpec { canister_id: CanisterId::from_u64(100_001), spec:  deposit_operation_spec.clone() },
+                RegisteredExtensionOperationSpec { canister_id: CanisterId::from_u64(100_001), spec:  withdraw_operation_spec.clone() },
+                RegisteredExtensionOperationSpec { canister_id: CanisterId::from_u64(100_002), spec:  deposit_operation_spec },
+                RegisteredExtensionOperationSpec { canister_id: CanisterId::from_u64(100_002), spec:  withdraw_operation_spec },
+            ],
             is_critical: true,
         },
         TopicInfo {
@@ -5195,9 +5047,34 @@ fn test_list_topics() {
                             ),
                         ),
                     },
+                    NervousSystemFunction {
+                        id: 17,
+                        name: "Register SNS extension".to_string(),
+                        description: Some(
+                            "Proposal to register a new SNS extension.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 19,
+                        name: "Upgrade SNS extension".to_string(),
+                        description: Some(
+                            "Proposal to upgrade the WASM of a registered SNS extension.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
                 ],
                 custom_functions: vec![],
             },
+            extension_operations: vec![],
             is_critical: true,
         },
     ];

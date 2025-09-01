@@ -1,12 +1,15 @@
+#![allow(deprecated)]
 use candid::{candid_method, Decode};
-use dfn_core::stable;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk::api::{
-    call::{arg_data_raw, reply, reply_raw},
-    caller, print,
+use ic_cdk::{
+    api::{
+        call::{arg_data_raw, reply, reply_raw},
+        caller, print,
+    },
+    futures::{in_executor_context, in_query_executor_context},
+    post_upgrade, query,
 };
-use ic_cdk::query;
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icp_archive::ArchiveUpgradeArgument;
 use ic_ledger_canister_core::range_utils;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
@@ -27,15 +30,6 @@ use icp_ledger::{
 };
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, cell::RefCell};
-
-#[derive(Debug, Deserialize, Serialize)]
-struct ArchiveNodeState {
-    pub max_memory_size_bytes: usize,
-    pub block_height_offset: u64,
-    pub blocks: Vec<EncodedBlock>,
-    pub total_block_size: usize,
-    pub ledger_canister_id: CanisterId,
-}
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 struct ArchiveState {
@@ -58,14 +52,14 @@ impl Storable for ArchiveState {
     fn to_bytes(&self) -> Cow<[u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(self, &mut buf).unwrap_or_else(|err| {
-            ic_cdk::api::trap(&format!("{:?}", err));
+            ic_cdk::api::trap(format!("{:?}", err));
         });
         Cow::Owned(buf)
     }
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         ciborium::de::from_reader(&bytes[..]).unwrap_or_else(|err| {
-            ic_cdk::api::trap(&format!("{:?}", err));
+            ic_cdk::api::trap(format!("{:?}", err));
         })
     }
 
@@ -138,7 +132,7 @@ fn max_memory_size_bytes() -> u64 {
 
 fn set_max_memory_size_bytes(max_memory_size_bytes: u64) {
     if max_memory_size_bytes < total_block_size() {
-        ic_cdk::trap(&format!(
+        ic_cdk::trap(format!(
             "Cannot set max_memory_size_bytes to {}, because it is lower than total_block_size {}.",
             max_memory_size_bytes,
             total_block_size()
@@ -212,7 +206,7 @@ fn blocks_len() -> u64 {
 fn append_block(block: &EncodedBlock) {
     BLOCKS.with_borrow_mut(|blocks| match blocks.append(&block.0) {
         Ok(_) => {}
-        Err(e) => ic_cdk::trap(&format!(
+        Err(e) => ic_cdk::trap(format!(
             "Could not append block to stable block log: {:?}",
             e
         )),
@@ -274,36 +268,38 @@ fn get_block(block_height: BlockIndex) -> BlockRes {
 
 #[export_name = "canister_query get_block_pb"]
 fn get_block_() {
-    ic_cdk::setup();
-    let arg: BlockIndex =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode get_block_pb argument");
-    let res = to_proto_bytes(get_block(arg)).expect("failed to encode get_block_pb response");
-    reply_raw(&res)
+    in_query_executor_context(|| {
+        let arg: BlockIndex =
+            from_proto_bytes(arg_data_raw()).expect("failed to decode get_block_pb argument");
+        let res = to_proto_bytes(get_block(arg)).expect("failed to encode get_block_pb response");
+        reply_raw(&res)
+    })
 }
 
 #[export_name = "canister_init"]
 fn main() {
-    ic_cdk::setup();
-    let bytes = arg_data_raw();
-    let (archive_canister_id, block_height_offset, opt_max_size) =
-        Decode!(&bytes, ic_base_types::CanisterId, u64, Option<u64>)
-            .expect("failed to decode init arguments");
-    init(archive_canister_id, block_height_offset, opt_max_size);
+    in_executor_context(|| {
+        let bytes = arg_data_raw();
+        let (archive_canister_id, block_height_offset, opt_max_size) =
+            Decode!(&bytes, ic_base_types::CanisterId, u64, Option<u64>)
+                .expect("failed to decode init arguments");
+        init(archive_canister_id, block_height_offset, opt_max_size);
+    })
 }
 
 #[export_name = "canister_update remaining_capacity"]
 fn remaining_capacity_() {
-    ic_cdk::setup();
-    reply((remaining_capacity(),))
+    in_executor_context(|| reply((remaining_capacity(),)))
 }
 
 #[export_name = "canister_update append_blocks"]
 fn append_blocks_() {
-    ic_cdk::setup();
-    let blocks = Decode!(&arg_data_raw(), Vec<EncodedBlock>)
-        .expect("failed to decode append_blocks argument");
-    append_blocks(blocks);
-    reply(());
+    in_executor_context(|| {
+        let blocks = Decode!(&arg_data_raw(), Vec<EncodedBlock>)
+            .expect("failed to decode append_blocks argument");
+        append_blocks(blocks);
+        reply(());
+    })
 }
 
 /// Get multiple blocks by *offset into the container* (not BlockIndex) and
@@ -314,53 +310,55 @@ fn append_blocks_() {
 /// 100.
 #[export_name = "canister_query iter_blocks_pb"]
 fn iter_blocks_() {
-    ic_cdk::setup();
-    let IterBlocksArgs { start, length } =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode iter_blocks_pb argument");
-    let length = length.min(icp_ledger::max_blocks_per_request(&PrincipalId::from(
-        caller(),
-    )));
-    let blocks_len = blocks_len() as usize;
-    let start = start.min(blocks_len);
-    let end = std::cmp::min(start + length, blocks_len);
-    let mut blocks = vec![];
-    for index in start..end {
-        blocks.push(get_block_stable(index as u64).unwrap());
-    }
-    let res_proto =
-        to_proto_bytes(IterBlocksRes(blocks)).expect("failed to encode iter_blocks_pb response");
-    reply_raw(&res_proto)
+    in_query_executor_context(|| {
+        let IterBlocksArgs { start, length } =
+            from_proto_bytes(arg_data_raw()).expect("failed to decode iter_blocks_pb argument");
+        let length = length.min(icp_ledger::max_blocks_per_request(&PrincipalId::from(
+            caller(),
+        )));
+        let blocks_len = blocks_len() as usize;
+        let start = start.min(blocks_len);
+        let end = std::cmp::min(start + length, blocks_len);
+        let mut blocks = vec![];
+        for index in start..end {
+            blocks.push(get_block_stable(index as u64).unwrap());
+        }
+        let res_proto = to_proto_bytes(IterBlocksRes(blocks))
+            .expect("failed to encode iter_blocks_pb response");
+        reply_raw(&res_proto)
+    })
 }
 
 /// Get multiple Blocks by BlockIndex and length. If the query is outside the
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_blocks_pb"]
 fn get_blocks_() {
-    ic_cdk::setup();
-    let GetBlocksArgs { start, length } =
-        from_proto_bytes(arg_data_raw()).expect("failed to decode get_blocks_pb argument");
-    let from_offset = block_height_offset();
-    let length = length
-        .min(usize::MAX as u64)
-        .min(icp_ledger::max_blocks_per_request(&PrincipalId::from(caller())) as u64);
-    let local_blocks_range = from_offset..from_offset + blocks_len();
-    let requested_range = start..start + length;
-    if !range_utils::is_subrange(&requested_range, &local_blocks_range) {
-        let res = GetBlocksRes(Err(format!("Requested blocks outside the range stored in the archive node. Requested [{} .. {}]. Available [{} .. {}].",
+    in_query_executor_context(|| {
+        let GetBlocksArgs { start, length } =
+            from_proto_bytes(arg_data_raw()).expect("failed to decode get_blocks_pb argument");
+        let from_offset = block_height_offset();
+        let length = length
+            .min(usize::MAX as u64)
+            .min(icp_ledger::max_blocks_per_request(&PrincipalId::from(caller())) as u64);
+        let local_blocks_range = from_offset..from_offset + blocks_len();
+        let requested_range = start..start + length;
+        if !range_utils::is_subrange(&requested_range, &local_blocks_range) {
+            let res = GetBlocksRes(Err(format!("Requested blocks outside the range stored in the archive node. Requested [{} .. {}]. Available [{} .. {}].",
                 requested_range.start, requested_range.end, local_blocks_range.start, local_blocks_range.end)));
-        let res_proto = to_proto_bytes(res).expect("failed to encode get_blocks_pb response");
+            let res_proto = to_proto_bytes(res).expect("failed to encode get_blocks_pb response");
+            reply_raw(&res_proto);
+            return;
+        }
+        let mut blocks = vec![];
+        let offset_requested_range =
+            requested_range.start - from_offset..requested_range.end - from_offset;
+        for index in offset_requested_range {
+            blocks.push(get_block_stable(index).unwrap());
+        }
+        let res_proto = to_proto_bytes(GetBlocksRes(Ok(blocks)))
+            .expect("failed to encode get_blocks_pb response");
         reply_raw(&res_proto);
-        return;
-    }
-    let mut blocks = vec![];
-    let offset_requested_range =
-        requested_range.start - from_offset..requested_range.end - from_offset;
-    for index in offset_requested_range {
-        blocks.push(get_block_stable(index).unwrap());
-    }
-    let res_proto =
-        to_proto_bytes(GetBlocksRes(Ok(blocks))).expect("failed to encode get_blocks_pb response");
-    reply_raw(&res_proto);
+    })
 }
 
 #[candid_method(query, rename = "get_blocks")]
@@ -376,69 +374,31 @@ fn get_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> GetBlocksResult
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_blocks"]
 fn get_blocks_candid_() {
-    ic_cdk::setup();
-    let args =
-        Decode!(&arg_data_raw(), GetBlocksArgs).expect("failed to decode get_blocks argument");
-    reply((get_blocks(args),));
+    in_query_executor_context(|| {
+        let args =
+            Decode!(&arg_data_raw(), GetBlocksArgs).expect("failed to decode get_blocks argument");
+        reply((get_blocks(args),));
+    })
 }
 
-#[export_name = "canister_post_upgrade"]
-fn post_upgrade() {
-    ic_cdk::setup();
-
+#[post_upgrade]
+fn post_upgrade(upgrade_arg: Option<ArchiveUpgradeArgument>) {
     set_last_upgrade_timestamp(ic_cdk::api::time());
 
-    let args = arg_data_raw();
-    let arg_max_memory_size_bytes = if args.is_empty() {
-        print("Upgrading archive without an upgrade argument.");
-        None
-    } else {
-        match Decode!(&args, ArchiveUpgradeArgument) {
-            Ok(args) => args.max_memory_size_bytes,
-            Err(e) => {
-                ic_cdk::trap(&format!("Unable to decode archive upgrade argument: {}", e));
-            }
-        }
+    let arg_max_memory_size_bytes = match upgrade_arg {
+        Some(upgrade_arg) => upgrade_arg.max_memory_size_bytes,
+        None => None,
     };
 
-    let bytes = stable::get();
-    let state: ArchiveNodeState = match ciborium::de::from_reader(std::io::Cursor::new(&bytes)) {
-        Ok(state) => state,
-        Err(_) => {
-            // Already migrated to stable structures
-            assert_eq!(stable_memory_version(), MEMORY_VERSION_MEM_MGR_INSTALLED);
-            if let Some(max_memory_size_bytes) = arg_max_memory_size_bytes {
-                print(format!(
-                    "Changing the max_memory_size_bytes to {}",
-                    max_memory_size_bytes
-                ));
-                set_max_memory_size_bytes(max_memory_size_bytes);
-            }
-            print("Archive state already migrated to stable structures, exiting post_upgrade.");
-            return;
-        }
-    };
-
-    assert_eq!(stable_memory_version(), MEMORY_VERSION_NO_MEM_MGR);
-    set_stable_memory_version();
-
-    for block in &state.blocks {
-        append_block(block);
+    // We do not support migration from scratch stable memory anymore
+    assert_eq!(stable_memory_version(), MEMORY_VERSION_MEM_MGR_INSTALLED);
+    if let Some(max_memory_size_bytes) = arg_max_memory_size_bytes {
+        print(format!(
+            "Changing the max_memory_size_bytes to {}",
+            max_memory_size_bytes
+        ));
+        set_max_memory_size_bytes(max_memory_size_bytes);
     }
-
-    set_ledger_canister_id(state.ledger_canister_id);
-    set_block_height_offset(state.block_height_offset);
-    match arg_max_memory_size_bytes {
-        Some(max_memory_size_bytes) => {
-            print(format!(
-                "Changing the max_memory_size_bytes to {}",
-                max_memory_size_bytes
-            ));
-            set_max_memory_size_bytes(max_memory_size_bytes);
-        }
-        None => set_max_memory_size_bytes(state.max_memory_size_bytes as u64),
-    }
-    assert_eq!(state.total_block_size as u64, total_block_size());
 }
 
 fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
@@ -486,7 +446,10 @@ fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     Ok(())
 }
 
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -495,6 +458,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         match encode_metrics(&mut writer) {
             Ok(()) => HttpResponseBuilder::ok()
                 .header("Content-Type", "text/plain; version=0.0.4")
+                .header("Cache-Control", "no-store")
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
@@ -545,16 +509,18 @@ fn read_encoded_blocks(start: u64, length: usize) -> Result<Vec<EncodedBlock>, G
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_encoded_blocks"]
 fn get_encoded_blocks_blocks_() {
-    ic_cdk::setup();
-    let args = Decode!(&arg_data_raw(), GetBlocksArgs)
-        .expect("failed to decode get_encoded_blocks argument");
-    reply((get_encoded_blocks(args),));
+    in_query_executor_context(|| {
+        let args = Decode!(&arg_data_raw(), GetBlocksArgs)
+            .expect("failed to decode get_encoded_blocks argument");
+        reply((get_encoded_blocks(args),));
+    })
 }
 
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]
 fn get_canidid_interface() {
-    ic_cdk::setup();
-    reply((include_str!(env!("LEDGER_ARCHIVE_DID_PATH")),));
+    in_query_executor_context(|| {
+        reply((include_str!(env!("LEDGER_ARCHIVE_DID_PATH")),));
+    })
 }
 
 #[test]

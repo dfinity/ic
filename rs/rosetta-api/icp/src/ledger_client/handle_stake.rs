@@ -1,5 +1,5 @@
 use crate::{errors::ApiError, ledger_client::OperationOutput};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshResult,
     ClaimOrRefreshNeuronFromAccountResponse,
 };

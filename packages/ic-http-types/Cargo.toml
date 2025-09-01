@@ -1,0 +1,18 @@
+[package]
+name = "ic-http-types"
+version = "0.1.0"
+license = "Apache-2.0"
+description = "HTTP request and response types for the Internet Computer"
+repository = "https://github.com/dfinity/ic"
+documentation = "https://docs.rs/ic-http-types"
+readme = "README.md"
+categories = ["api-bindings", "web-programming", "development-tools"]
+keywords = ["icp", "http", "smart-contract", "internet-computer"]
+include = ["src", "Cargo.toml", "CHANGELOG.md", "README.md", "LICENSE"]
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+serde = { workspace = true }
+serde_bytes = { workspace = true }

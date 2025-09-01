@@ -1,7 +1,8 @@
+#![allow(deprecated)]
 use crate::address::ecdsa_public_key_to_address;
+use crate::endpoints::CandidBlockTag;
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
 use crate::eth_logs::{EventSource, ReceivedEvent};
-use crate::eth_rpc::BlockTag;
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
 use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
@@ -58,7 +59,7 @@ pub struct State {
     pub log_scrapings: LogScrapings,
     pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
     pub cketh_minimum_withdrawal_amount: Wei,
-    pub ethereum_block_height: BlockTag,
+    pub ethereum_block_height: CandidBlockTag,
     pub first_scraped_block_number: BlockNumber,
     pub last_observed_block_number: Option<BlockNumber>,
     pub events_to_mint: BTreeMap<EventSource, ReceivedEvent>,
@@ -93,7 +94,7 @@ pub struct State {
 
     /// Canister ID of the EVM RPC canister that
     /// handles communication with Ethereum
-    pub evm_rpc_id: Option<Principal>,
+    pub evm_rpc_id: Principal,
 
     /// ERC-20 tokens that the minter can mint:
     /// - primary key: ledger ID for the ckERC20 token
@@ -175,7 +176,7 @@ impl State {
     pub fn minter_address(&self) -> Option<Address> {
         let pubkey = PublicKey::deserialize_sec1(&self.ecdsa_public_key.as_ref()?.public_key)
             .unwrap_or_else(|e| {
-                ic_cdk::trap(&format!("failed to decode minter's public key: {:?}", e))
+                ic_cdk::trap(format!("failed to decode minter's public key: {:?}", e))
             });
         Some(ecdsa_public_key_to_address(&pubkey))
     }
@@ -445,8 +446,8 @@ impl State {
         self.ethereum_network
     }
 
-    pub const fn ethereum_block_height(&self) -> BlockTag {
-        self.ethereum_block_height
+    pub fn ethereum_block_height(&self) -> CandidBlockTag {
+        self.ethereum_block_height.clone()
     }
 
     fn upgrade(&mut self, upgrade_args: UpgradeArg) -> Result<(), InvalidStateError> {
@@ -528,17 +529,13 @@ impl State {
             );
         }
         if let Some(block_height) = ethereum_block_height {
-            self.ethereum_block_height = block_height.into();
+            self.ethereum_block_height = block_height;
         }
         if let Some(orchestrator_id) = ledger_suite_orchestrator_id {
             self.ledger_suite_orchestrator_id = Some(orchestrator_id);
         }
         if let Some(evm_id) = evm_rpc_id {
-            if evm_id == Principal::management_canister() {
-                self.evm_rpc_id = None;
-            } else {
-                self.evm_rpc_id = Some(evm_id);
-            }
+            self.evm_rpc_id = evm_id;
         }
         self.validate_config()
     }
@@ -585,15 +582,13 @@ impl State {
     }
 
     pub fn max_block_spread_for_logs_scraping(&self) -> u16 {
-        if self.evm_rpc_id.is_some() {
-            // Limit set by the EVM-RPC canister itself, see
-            // https://github.com/internet-computer-protocol/evm-rpc-canister/blob/3cce151d4c1338d83e6741afa354ccf11dff41e8/src/candid_rpc.rs#L192
-            500_u16
-        } else {
-            // The maximum block spread is introduced by Cloudflare limits.
-            // https://developers.cloudflare.com/web3/ethereum-gateway/
-            799_u16
-        }
+        // Limit set by the EVM-RPC canister itself, see
+        // https://github.com/internet-computer-protocol/evm-rpc-canister/blob/3cce151d4c1338d83e6741afa354ccf11dff41e8/src/candid_rpc.rs#L192
+        500_u16
+    }
+
+    pub const fn evm_rpc_id(&self) -> Principal {
+        self.evm_rpc_id
     }
 }
 
@@ -622,7 +617,7 @@ pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
 
     fn to_public_key(response: &EcdsaPublicKeyResponse) -> PublicKey {
         PublicKey::deserialize_sec1(&response.public_key).unwrap_or_else(|e| {
-            ic_cdk::trap(&format!("failed to decode minter's public key: {:?}", e))
+            ic_cdk::trap(format!("failed to decode minter's public key: {:?}", e))
         })
     }
 
@@ -644,7 +639,7 @@ pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
     })
     .await
     .unwrap_or_else(|(error_code, message)| {
-        ic_cdk::trap(&format!(
+        ic_cdk::trap(format!(
             "failed to get minter's public key: {} (error code = {:?})",
             message, error_code,
         ))

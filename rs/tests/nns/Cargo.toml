@@ -14,7 +14,6 @@ ic-agent = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-config = { path = "../../config" }
-ic-mainnet-nns-recovery = { path = "../../tests/nns/ic_mainnet_nns_recovery" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
@@ -55,16 +54,12 @@ prost = { workspace = true }
 url = { workspace = true }
 
 [[bin]]
-name = "nns_upgrade_test"
-path = "nns_upgrade_test.rs"
-
-[[bin]]
 name = "certified_registry_test"
 path = "certified_registry_test.rs"
 
 [[bin]]
-name = "create_subnet_pre_master_test"
-path = "create_subnet_pre_master_test.rs"
+name = "create_subnet_test"
+path = "create_subnet_test.rs"
 
 # [[bin]]
 # name = "nns_canister_uninstall_test"

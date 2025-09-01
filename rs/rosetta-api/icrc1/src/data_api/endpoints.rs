@@ -1,7 +1,7 @@
 use super::services::{self, initial_sync_is_completed};
 use crate::{
-    common::{types::Error, utils::utils::verify_network_id},
-    AppState,
+    common::{types::Error, utils::utils::get_state_from_network_id},
+    MultiTokenAppState,
 };
 use axum::{extract::State, http::StatusCode, response::Result, Json};
 use ic_rosetta_api::models::MempoolResponse;
@@ -11,8 +11,12 @@ use std::sync::Arc;
 // This endpoint is used to determine whether ICRC Rosetta is ready to be querried for data.
 // It returns Status Code 200 if an initial sync of the blockchain has been done
 // This means that no gaps in the blockchain exist and the genesis block has already been fetched
-pub async fn ready(State(state): State<Arc<AppState>>) -> (StatusCode, Json<()>) {
-    if initial_sync_is_completed(&state.storage, state.synched.clone()) {
+pub async fn ready(State(state): State<Arc<MultiTokenAppState>>) -> (StatusCode, Json<()>) {
+    if state
+        .token_states
+        .values()
+        .all(|state| initial_sync_is_completed(&state.storage, state.synched.clone()))
+    {
         (StatusCode::OK, Json(()))
     } else {
         (StatusCode::SERVICE_UNAVAILABLE, Json(()))
@@ -24,19 +28,23 @@ pub async fn health() -> (StatusCode, Json<()>) {
 }
 
 pub async fn network_list(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<MultiTokenAppState>>,
     _request: Json<MetadataRequest>,
 ) -> Json<NetworkListResponse> {
-    Json(services::network_list(
-        &state.icrc1_agent.ledger_canister_id,
-    ))
+    let response = services::network_list(
+        &state
+            .token_states
+            .values()
+            .map(|state| state.icrc1_agent.ledger_canister_id)
+            .collect::<Vec<_>>(),
+    );
+    Json(response)
 }
-
 pub async fn network_options(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<MultiTokenAppState>>,
     request: Json<NetworkRequest>,
 ) -> Result<Json<NetworkOptionsResponse>> {
-    verify_network_id(&request.0.network_identifier, &state)
+    let state = get_state_from_network_id(&request.0.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
     Ok(Json(services::network_options(
         &state.icrc1_agent.ledger_canister_id,
@@ -44,19 +52,19 @@ pub async fn network_options(
 }
 
 pub async fn network_status(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<MultiTokenAppState>>,
     request: Json<NetworkRequest>,
 ) -> Result<Json<NetworkStatusResponse>> {
-    verify_network_id(&request.0.network_identifier, &state)
+    let state = get_state_from_network_id(&request.0.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
     Ok(Json(services::network_status(&state.storage)?))
 }
 
 pub async fn block(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<MultiTokenAppState>>,
     request: Json<BlockRequest>,
 ) -> Result<Json<BlockResponse>> {
-    verify_network_id(&request.network_identifier, &state)
+    let state = get_state_from_network_id(&request.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
     Ok(Json(services::block(
         &state.storage,
@@ -67,10 +75,10 @@ pub async fn block(
 }
 
 pub async fn block_transaction(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<MultiTokenAppState>>,
     request: Json<BlockTransactionRequest>,
 ) -> Result<Json<BlockTransactionResponse>> {
-    verify_network_id(&request.0.network_identifier, &state)
+    let state = get_state_from_network_id(&request.0.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
     Ok(Json(services::block_transaction(
         &state.storage,
@@ -82,43 +90,44 @@ pub async fn block_transaction(
 }
 
 pub async fn mempool(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<MultiTokenAppState>>,
     request: Json<NetworkRequest>,
 ) -> Result<Json<MempoolResponse>> {
-    verify_network_id(&request.0.network_identifier, &state)
+    get_state_from_network_id(&request.0.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
     Ok(Json(MempoolResponse::new(vec![])))
 }
 
 pub async fn mempool_transaction(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<MultiTokenAppState>>,
     request: Json<MempoolTransactionRequest>,
 ) -> Result<Json<MempoolTransactionResponse>> {
-    verify_network_id(&request.0.network_identifier, &state)
+    get_state_from_network_id(&request.0.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
     Err(Error::mempool_transaction_missing().into())
 }
 
 pub async fn account_balance(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<MultiTokenAppState>>,
     Json(request): Json<AccountBalanceRequest>,
 ) -> Result<Json<AccountBalanceResponse>> {
-    verify_network_id(&request.network_identifier, &state)
+    let state = get_state_from_network_id(&request.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
-    Ok(Json(services::account_balance(
+    Ok(Json(services::account_balance_with_metadata(
         &state.storage,
         &request.account_identifier,
         &request.block_identifier,
+        &request.metadata,
         state.metadata.decimals,
         state.metadata.symbol.clone(),
     )?))
 }
 
 pub async fn search_transactions(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<MultiTokenAppState>>,
     Json(request): Json<SearchTransactionsRequest>,
 ) -> Result<Json<SearchTransactionsResponse>> {
-    verify_network_id(&request.network_identifier, &state)
+    let state = get_state_from_network_id(&request.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
     Ok(Json(services::search_transactions(
         &state.storage,
@@ -129,10 +138,10 @@ pub async fn search_transactions(
 }
 
 pub async fn call(
-    State(state): State<Arc<AppState>>,
+    State(state): State<Arc<MultiTokenAppState>>,
     Json(request): Json<CallRequest>,
 ) -> Result<Json<CallResponse>> {
-    verify_network_id(&request.network_identifier, &state)
+    let state = get_state_from_network_id(&request.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
     Ok(Json(services::call(
         &state.storage,

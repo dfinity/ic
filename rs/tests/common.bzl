@@ -5,15 +5,14 @@ Common dependencies for system-tests.
 load("@mainnet_icos_versions//:defs.bzl", "mainnet_icos_versions")
 load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
 
-GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev:version.txt"
+MAINNET_NNS_SUBNET_REVISION = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["version"]
 
-GUESTOS_RUNTIME_DEPS = [
-    GUESTOS_DEV_VERSION,
-    "//ic-os/components:hostos-scripts/build-bootstrap-config-image.sh",
-]
-
-MAINNET_NNS_SUBNET_REVISION = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]
-MAINNET_APPLICATION_SUBNET_REVISION = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]
+# TODO(NODE-1682): Switch mainnet_nns_setupos_disk_image to use dev image once published release is available.
+MAINNET_NNS_SUBNET_HASH = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]["update_img_hash"]
+MAINNET_APPLICATION_SUBNET_REVISION = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["version"]
+MAINNET_APPLICATION_SUBNET_HASH = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]["update_img_hash_dev"]
+MAINNET_LATEST_HOSTOS_REVISION = mainnet_icos_versions["hostos"]["latest_release"]["version"]
+MAINNET_LATEST_HOSTOS_HASH = mainnet_icos_versions["hostos"]["latest_release"]["update_img_hash_dev"]
 
 MAINNET_ENV = {
     "MAINNET_NNS_SUBNET_REVISION_ENV": MAINNET_NNS_SUBNET_REVISION,
@@ -52,6 +51,10 @@ NNS_CANISTER_WASM_PROVIDERS = {
     "sns-wasm-canister": {
         "tip-of-branch": "//rs/nns/sns-wasm:sns-wasm-canister",
         "mainnet": "@mainnet_nns_sns-wasm-canister//file",
+    },
+    "node-rewards": {
+        "tip-of-branch": "//rs/node_rewards/canister:node-rewards-canister",
+        "mainnet": "@mainnet_node-rewards-canister//file",
     },
 }
 
@@ -147,8 +150,8 @@ UNIVERSAL_VM_RUNTIME_DEPS = [
 
 GRAFANA_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS
 
-BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
-    "//ic-os/boundary-guestos:scripts/build-bootstrap-config-image.sh",
+IC_GATEWAY_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [
+    "//rs/tests:ic_gateway_uvm_config_image",
 ]
 
 COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:counter.wat"]
@@ -161,24 +164,34 @@ XNET_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/xnet_test:xnet-test-cani
 
 STATESYNC_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/statesync_test:statesync-test-canister"]
 
-IC_MAINNET_NNS_RECOVERY_RUNTIME_DEPS = GUESTOS_RUNTIME_DEPS + \
-                                       NNS_CANISTER_RUNTIME_DEPS + \
-                                       BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + \
-                                       GRAFANA_RUNTIME_DEPS + [
-    "//rs/sns/cli:sns",
-    "//rs/tests:recovery/binaries",
-    "//rs/tests/nns:secret_key.pem",
-    "@dfx",
-    "@idl2json",
-    "@sns_quill//:sns-quill",
-    "@candid//:didc",
-    "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
-]
-
 UNIVERSAL_CANISTER_RUNTIME_DEPS = [
     "//rs/universal_canister/impl:universal_canister.wasm.gz",
 ]
 
 UNIVERSAL_CANISTER_ENV = {
     "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+}
+
+MESSAGE_CANISTER_RUNTIME_DEPS = [
+    "//rs/tests/test_canisters/message:message.wasm.gz",
+]
+
+MESSAGE_CANISTER_ENV = {
+    "MESSAGE_CANISTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/message:message.wasm.gz)",
+}
+
+SIGNER_CANISTER_RUNTIME_DEPS = [
+    "//rs/tests/test_canisters/signer:signer.wasm.gz",
+]
+
+SIGNER_CANISTER_ENV = {
+    "SIGNER_CANISTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/signer:signer.wasm.gz)",
+}
+
+IMPERSONATE_UPSTREAMS_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [
+    "//rs/tests:impersonate_upstreams_uvm_config_image",
+]
+
+IMPERSONATE_UPSTREAMS_ENV = {
+    "IMPERSONATE_UPSTREAMS_UVM_CONFIG_PATH": "$(rootpath //rs/tests:impersonate_upstreams_uvm_config_image)",
 }

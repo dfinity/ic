@@ -15,6 +15,7 @@ use ic_system_test_driver::generic_workload_engine::metrics::{
     LoadTestMetrics, LoadTestMetricsProvider, RequestOutcome,
 };
 use ic_system_test_driver::util::{assert_canister_counter_with_retries, MetricsFetcher};
+use ic_types::ReplicaVersion;
 
 use futures::future::join_all;
 use slog::{error, info, Logger};
@@ -340,7 +341,7 @@ impl std::ops::Sub for HistogramMetrics {
 }
 
 pub async fn persist_metrics(
-    ic_version: String,
+    ic_version: ReplicaVersion,
     metrics: TestMetrics,
     message_size: usize,
     rps: f64,
@@ -351,7 +352,7 @@ pub async fn persist_metrics(
 ) {
     // elastic search url
     const ES_URL: &str =
-        "https://elasticsearch.ch1-obsdev1.dfinity.network/ci-consensus-performance-test/_doc";
+        "https://elasticsearch.testnet.dfinity.network/ci-consensus-performance-test/_doc";
 
     let timestamp =
         chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now()).to_rfc3339();

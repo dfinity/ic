@@ -1,0 +1,53 @@
+[package]
+name = "ic-nns-delegation-manager"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+
+[[bench]]
+name = "nns_delegation_reader"
+harness = false
+
+[dependencies]
+axum = { workspace = true }
+futures = { workspace = true }
+http-body-util = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+ic-certification = { path = "../../certification" }
+ic-config = { path = "../../config" }
+ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
+ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-registry-client-helpers = { path = "../../registry/helpers" }
+ic-types = { path = "../../types/types" }
+prometheus = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+serde_cbor = { workspace = true }
+slog = { workspace = true }
+tokio = { workspace = true }
+tokio-rustls = { workspace = true }
+tokio-util = { workspace = true }
+tower = { workspace = true }
+
+[dev-dependencies]
+assert_matches = { workspace = true }
+axum-server = { workspace = true }
+criterion = { workspace = true }
+ic-certification-test-utils = { path = "../../certification/test-utils" }
+ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
+ic-nns-delegation-manager-test-utils = { path = "test_utils" }
+ic-registry-client-fake = { path = "../../registry/fake" }
+ic-registry-keys = { path = "../../registry/keys" }
+ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
+ic-test-utilities-registry = { path = "../../test_utilities/registry" }
+ic-test-utilities-types = { path = "../../test_utilities/types" }
+pprof = { workspace = true }
+rcgen = { workspace = true }
+rustls = { workspace = true }

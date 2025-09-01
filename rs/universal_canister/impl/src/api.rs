@@ -61,6 +61,8 @@ mod ic0 {
         pub fn stable64_grow(additional_pages: u64) -> u64;
         pub fn stable64_read(dst: u64, offset: u64, size: u64) -> ();
         pub fn stable64_write(offset: u64, src: u64, size: u64) -> ();
+        pub fn root_key_size() -> u32;
+        pub fn root_key_copy(dst: u32, offset: u32, size: u32) -> ();
         pub fn certified_data_set(src: u32, size: u32) -> ();
         pub fn data_certificate_present() -> u32;
         pub fn data_certificate_size() -> u32;
@@ -71,7 +73,6 @@ mod ic0 {
         pub fn global_timer_set(timestamp: u64) -> u64;
         pub fn canister_version() -> u64;
 
-        pub fn mint_cycles(amount: u64) -> u64;
         pub fn mint_cycles128(amount_high: u64, amount_low: u64, dst: u32) -> ();
 
         pub fn is_controller(src: u32, size: u32) -> u32;
@@ -345,6 +346,23 @@ pub fn stable64_write(offset: u64, data: &[u8]) {
     }
 }
 
+pub fn root_key_size() -> u32 {
+    unsafe { ic0::root_key_size() }
+}
+
+pub fn root_key_copy(offset: u32, size: u32) -> Vec<u8> {
+    let mut bytes = vec![0; size as usize];
+    unsafe {
+        ic0::root_key_copy(bytes.as_mut_ptr() as u32, offset, size);
+    }
+    bytes
+}
+
+/// Returns the root key.
+pub fn root_key() -> Vec<u8> {
+    root_key_copy(0, root_key_size())
+}
+
 pub fn certified_data_set(data: &[u8]) {
     unsafe {
         ic0::certified_data_set(data.as_ptr() as u32, data.len() as u32);
@@ -413,11 +431,6 @@ pub fn trap_with(message: &str) -> ! {
     unsafe {
         ic0::trap(message.as_ptr() as u32, message.len() as u32);
     }
-}
-
-/// Mint cycles (only works on CMC).
-pub fn mint_cycles(amount: u64) -> u64 {
-    unsafe { ic0::mint_cycles(amount) }
 }
 
 /// Mint cycles (only works on CMC).

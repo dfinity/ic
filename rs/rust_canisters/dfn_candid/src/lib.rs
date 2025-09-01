@@ -4,6 +4,7 @@ pub use candid::{
     utils::{ArgumentDecoder, ArgumentEncoder},
 };
 use candid::{CandidType, DecoderConfig};
+use ic_http_types::HttpRequest;
 use on_wire::witness;
 use on_wire::{FromWire, IntoWire, NewType};
 use serde::de::DeserializeOwned;
@@ -12,6 +13,16 @@ pub struct Candid<T>(pub T);
 
 pub trait HasCandidDecoderConfig {
     fn decoding_quota() -> usize;
+}
+
+impl HasCandidDecoderConfig for HttpRequest {
+    fn decoding_quota() -> usize {
+        // Note: we use a decoding quota of 10000 corresponding to roughly 10 KB of decoded data incl. overhead,
+        // as we don't expect larger HTTP requests in NNS canisters,
+        // see the Candid [cost model](https://github.com/dfinity/candid/blob/f324a1686d6f2bd4fba9307a37f8e3f90cc7222b/rust/candid/src/de.rs#L170)
+        // for more details.
+        10_000
+    }
 }
 
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.

@@ -350,7 +350,7 @@ fn should_fail_parsing_ec_keys_on_unsupported_curves() {
 }
 
 fn new_secp256r1_pk_der<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
-    let sk = ic_crypto_ecdsa_secp256r1::PrivateKey::generate_using_rng(rng);
+    let sk = ic_secp256r1::PrivateKey::generate_using_rng(rng);
     sk.public_key().serialize_der()
 }
 
@@ -363,7 +363,7 @@ fn ecdsa_secp256r1_signature_and_public_key<R: Rng + CryptoRng>(
     request_id: &MessageId,
     rng: &mut R,
 ) -> (BasicSigOf<MessageId>, UserPublicKey) {
-    let sk = ic_crypto_ecdsa_secp256r1::PrivateKey::generate_using_rng(rng);
+    let sk = ic_secp256r1::PrivateKey::generate_using_rng(rng);
 
     let signature: BasicSigOf<MessageId> = {
         let bytes_to_sign = {

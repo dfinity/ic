@@ -3,7 +3,7 @@ use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
 };
-use ic_nns_governance_api::pb::v1::{GovernanceError, NodeProvider, UpdateNodeProvider};
+use ic_nns_governance_api::{GovernanceError, NodeProvider, UpdateNodeProvider};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::add_node_provider,
@@ -47,7 +47,7 @@ fn test_update_node_provider() {
         assert_eq!(get_node_provider_by_caller_result.unwrap(), node_provider_1);
 
         let update = UpdateNodeProvider {
-            reward_account: Some(node_provider_1_account.into()),
+            reward_account: Some(node_provider_1_account.into_proto_with_checksum()),
         };
 
         let update_node_provider_result: Result<(), GovernanceError> = nns_canisters
@@ -78,7 +78,7 @@ fn test_update_node_provider() {
 
         let expected_node_provider = NodeProvider {
             id: Some(node_provider_id_1),
-            reward_account: Some(node_provider_1_account.into()),
+            reward_account: Some(node_provider_1_account.into_proto_with_checksum()),
         };
 
         assert_eq!(

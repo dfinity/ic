@@ -4,20 +4,22 @@
 #
 from __future__ import annotations
 
+import atexit
 import os
 import shutil
+import signal
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 import invoke
 from loguru import logger as log
-from simple_parsing import ArgumentParser, field, flag
+from simple_parsing import ArgumentParser, field
 
-from toolchains.sysimage.container_utils import (
-    generate_container_command,
+from toolchains.sysimage.utils import (
     path_owned_by_root,
-    process_temp_sys_dir_args,
+    purge_podman,
     remove_image,
     take_ownership_of_file,
 )
@@ -36,12 +38,6 @@ class Args:
 
     # Output file. Will be saved as a tar archive
     output: str
-
-    # "Container engine (podman) will use the specified dir to store its system files. It will remove the files before exiting.
-    temp_container_sys_dir: Optional[str]
-
-    # Create and mount a tmpfs to store its system files. It will be unmounted before exiting.
-    tmpfs_container_sys_dir: bool = flag(default=False)
 
     build_args: List[str] = field(default_factory=list)
     """Container build time variables.
@@ -93,22 +89,33 @@ def main():
     args = parser.parse_args()
 
     log.info(f"Using args: {args}")
-    temp_sys_dir = process_temp_sys_dir_args(args.fancy.temp_container_sys_dir, args.fancy.tmpfs_container_sys_dir)
 
     build_args = list(args.fancy.build_args or [])
-    context_dir = os.getenv("ICOS_TMPDIR")
-    if not context_dir:
-        raise RuntimeError("ICOS_TMPDIR env variable not available, should be set in BUILD script.")
+    context_dir = tempfile.mkdtemp()
 
     # Add all context files directly into dir
     for context_file in args.context_files:
         shutil.copy(context_file, context_dir)
 
-    container_cmd = generate_container_command("sudo podman ", temp_sys_dir)
+    if "TMPFS_TMPDIR" in os.environ:
+        tmpdir = os.environ.get("TMPFS_TMPDIR")
+    else:
+        log.info("TMPFS_TMPDIR env variable not available, this may be slower than expected")
+        tmpdir = os.environ.get("TMPDIR")
+
+    root = tempfile.mkdtemp(dir=tmpdir)
+    run_root = tempfile.mkdtemp(dir=tmpdir)
+    container_cmd = f"sudo podman --root {root} --runroot {run_root}"
+
+    atexit.register(lambda: purge_podman(container_cmd))
+    signal.signal(signal.SIGTERM, lambda: purge_podman(container_cmd))
+    signal.signal(signal.SIGINT, lambda: purge_podman(container_cmd))
 
     build_image(container_cmd, args.fancy.image_tag, args.fancy.dockerfile, context_dir, build_args)
     save_image(container_cmd, args.fancy.image_tag, args.fancy.output)
     remove_image(container_cmd, args.fancy.image_tag)  # No harm removing if in the tmp dir
+
+    # tempfile cleanup is handled by proc_wrapper.sh
 
 
 if __name__ == "__main__":

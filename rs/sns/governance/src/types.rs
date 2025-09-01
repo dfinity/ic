@@ -1,4 +1,5 @@
 use crate::{
+    following::TOPICS,
     governance::{Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
     logs::INFO,
     pb::{
@@ -24,16 +25,17 @@ use crate::{
                 self, DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
             nervous_system_function::FunctionType,
-            neuron::{Followees, TopicFollowees},
+            neuron::{FolloweesForTopic, TopicFollowees},
             proposal::Action,
             ChunkedCanisterWasm, ClaimSwapNeuronsError, ClaimSwapNeuronsResponse,
             ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters, Empty,
-            ExecuteGenericNervousSystemFunction, GovernanceError, ManageDappCanisterSettings,
-            ManageLedgerParameters, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens, Motion,
-            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronIds,
-            NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId,
-            RegisterDappCanisters, RewardEvent, SnsVersion, TransferSnsTreasuryFunds,
-            UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+            ExecuteGenericNervousSystemFunction, Followee, GovernanceError,
+            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuronResponse,
+            ManageSnsMetadata, MintSnsTokens, Motion, NervousSystemFunction,
+            NervousSystemParameters, Neuron, NeuronId, NeuronIds, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, ProposalId, RegisterDappCanisters,
+            RewardEvent, SnsVersion, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
+            UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
         },
     },
     proposal::ValidGenericNervousSystemFunction,
@@ -58,7 +60,6 @@ use ic_sns_governance_api::format_full_hash;
 use ic_sns_governance_proposal_criticality::{ProposalCriticality, VotingDurationParameters};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
 use lazy_static::lazy_static;
-use maplit::btreemap;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     convert::TryFrom,
@@ -136,6 +137,15 @@ pub mod native_action_ids {
     /// SetTopicsForCustomProposals Action.
     pub const SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION: u64 = 16;
 
+    /// RegisterExtension Action.
+    pub const REGISTER_EXTENSION: u64 = 17;
+
+    /// ExecuteExtensionOperation Action.
+    pub const EXECUTE_EXTENSION_OPERATION: u64 = 18;
+
+    /// UpgradeExtension Action.
+    pub const UPGRADE_EXTENSION: u64 = 19;
+
     // When adding something to this list, make sure to update the below function.
     pub fn nervous_system_functions() -> Vec<NervousSystemFunction> {
         vec![
@@ -155,6 +165,9 @@ pub mod native_action_ids {
             NervousSystemFunction::manage_dapp_canister_settings(),
             NervousSystemFunction::advance_sns_target_version(),
             NervousSystemFunction::set_topics_for_custom_proposals(),
+            NervousSystemFunction::register_extension(),
+            NervousSystemFunction::execute_extension_operation(),
+            NervousSystemFunction::upgrade_extension(),
         ]
     }
 }
@@ -1072,11 +1085,17 @@ impl NervousSystemFunction {
         )
     }
 
-    /// The special case if for `EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION` which wraps custom
-    /// proposals of this SNS. While technically being a native function, this one does not have
-    /// its own topic.
+    /// The special cases are for:
+    /// - `EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION` which wraps custom
+    ///   proposals of this SNS While technically being a native function
+    /// - `EXECUTE_EXTENSION_OPERATION` which are custom functions for extensions
+    ///   which have their own topics defined on the extension operation spec
     pub fn needs_topic(&self) -> bool {
-        self.id != native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION
+        ![
+            native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
+            native_action_ids::EXECUTE_EXTENSION_OPERATION,
+        ]
+        .contains(&self.id)
     }
 
     fn unspecified() -> NervousSystemFunction {
@@ -1150,6 +1169,28 @@ impl NervousSystemFunction {
         }
     }
 
+    fn execute_extension_operation() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::EXECUTE_EXTENSION_OPERATION,
+            name: "Execute SNS extension operation".to_string(),
+            description: Some(
+                "Proposal to execute an operation on a registered SNS extension.".to_string(),
+            ),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
+    fn upgrade_extension() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::UPGRADE_EXTENSION,
+            name: "Upgrade SNS extension".to_string(),
+            description: Some(
+                "Proposal to upgrade the WASM of a registered SNS extension.".to_string(),
+            ),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
     fn upgrade_sns_to_next_version() -> NervousSystemFunction {
         NervousSystemFunction {
             id: native_action_ids::UPGRADE_SNS_TO_NEXT_VERSION,
@@ -1187,6 +1228,15 @@ impl NervousSystemFunction {
             id: native_action_ids::REGISTER_DAPP_CANISTERS,
             name: "Register dapp canisters".to_string(),
             description: Some("Proposal to register a dapp canister with the SNS.".to_string()),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
+    fn register_extension() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::REGISTER_EXTENSION,
+            name: "Register SNS extension".to_string(),
+            description: Some("Proposal to register a new SNS extension.".to_string()),
             function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
         }
     }
@@ -1275,6 +1325,10 @@ impl From<Action> for NervousSystemFunction {
                 NervousSystemFunction::execute_generic_nervous_system_function()
             }
 
+            Action::ExecuteExtensionOperation(_) => {
+                NervousSystemFunction::execute_extension_operation()
+            }
+
             Action::UpgradeSnsToNextVersion(_) => {
                 NervousSystemFunction::upgrade_sns_to_next_version()
             }
@@ -1283,6 +1337,8 @@ impl From<Action> for NervousSystemFunction {
                 NervousSystemFunction::transfer_sns_treasury_funds()
             }
             Action::RegisterDappCanisters(_) => NervousSystemFunction::register_dapp_canisters(),
+            Action::RegisterExtension(_) => NervousSystemFunction::register_extension(),
+            Action::UpgradeExtension(_) => NervousSystemFunction::upgrade_extension(),
             Action::DeregisterDappCanisters(_) => {
                 NervousSystemFunction::deregister_dapp_canisters()
             }
@@ -1450,6 +1506,14 @@ impl ManageNeuronResponse {
         ManageNeuronResponse {
             command: Some(manage_neuron_response::Command::Follow(
                 manage_neuron_response::FollowResponse {},
+            )),
+        }
+    }
+
+    pub fn set_following_response() -> Self {
+        ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::SetFollowing(
+                manage_neuron_response::SetFollowingResponse {},
             )),
         }
     }
@@ -1859,7 +1923,10 @@ impl From<&Action> for u64 {
                 native_action_ids::REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION
             }
             Action::ExecuteGenericNervousSystemFunction(proposal) => proposal.function_id,
+            Action::ExecuteExtensionOperation(_) => native_action_ids::EXECUTE_EXTENSION_OPERATION,
             Action::RegisterDappCanisters(_) => native_action_ids::REGISTER_DAPP_CANISTERS,
+            Action::RegisterExtension(_) => native_action_ids::REGISTER_EXTENSION,
+            Action::UpgradeExtension(_) => native_action_ids::UPGRADE_EXTENSION,
             Action::DeregisterDappCanisters(_) => native_action_ids::DEREGISTER_DAPP_CANISTERS,
             Action::ManageSnsMetadata(_) => native_action_ids::MANAGE_SNS_METADATA,
             Action::TransferSnsTreasuryFunds(_) => native_action_ids::TRANSFER_SNS_TREASURY_FUNDS,
@@ -2038,7 +2105,7 @@ impl Drop for LedgerUpdateLock {
         // may be inconsistent with the internal state of governance.  In that case,
         // we want to prevent further operations with that neuron until the issue can be
         // investigated and resolved, which will require code changes.
-        if ic_cdk::api::call::is_recovering_from_trap() {
+        if ic_cdk::futures::is_recovering_from_trap() {
             return;
         }
         // It's always ok to dereference the governance when a LedgerUpdateLock
@@ -2285,30 +2352,56 @@ impl NeuronRecipe {
         Ok(permissions)
     }
 
-    /// Adds `self.followees` entries in `base_followees` that are
-    /// keyed by `function_ids_to_follow`.
-    pub(crate) fn construct_followees(&self) -> BTreeMap<u64, Followees> {
+    pub(crate) fn construct_topic_followees(&self) -> TopicFollowees {
         let Some(followees) = &self.followees else {
-            return btreemap! {};
+            return TopicFollowees::default();
         };
+
         let followees = &followees.neuron_ids;
 
+        // There's a root neuron without any following set up out of the box.
         if followees.is_empty() {
-            btreemap! {}
-        } else {
-            let catch_all = u64::from(&Action::Unspecified(Empty {}));
-            let followees = Followees {
-                followees: followees.clone(),
-            };
-            btreemap! { catch_all => followees }
+            return TopicFollowees::default();
         }
-    }
 
-    // TODO[NNS1-3676]: Provide a proper implementation for this function once new SNSs are
-    // TODO[NNS1-3676]: to begin using topics-based following.
-    pub(crate) fn construct_topic_followees(&self) -> TopicFollowees {
+        let root_neuron_alias = |followee_neuron_index, num_followees| {
+            if num_followees == 1 {
+                "Neuron-basket-main".to_string()
+            } else {
+                // This is not currently used, as each neuron basket has a single root neuron.
+                format!("Followee-{}", followee_neuron_index)
+            }
+        };
+
+        // All other neurons follow on all available topics.
+        let topic_id_to_followees = TOPICS
+            .iter()
+            .map(|topic| {
+                let topic = i32::from(*topic);
+                let num_followees = followees.len();
+
+                let followees = followees
+                    .iter()
+                    .enumerate()
+                    .map(|(followee_neuron_index, followee_neuron_id)| {
+                        let alias = Some(root_neuron_alias(followee_neuron_index, num_followees));
+                        let neuron_id = Some(followee_neuron_id.clone());
+
+                        Followee { neuron_id, alias }
+                    })
+                    .collect();
+
+                let followees_per_topic = FolloweesForTopic {
+                    followees,
+                    topic: Some(topic),
+                };
+
+                (topic, followees_per_topic)
+            })
+            .collect();
+
         TopicFollowees {
-            topic_id_to_followees: btreemap! {},
+            topic_id_to_followees,
         }
     }
 
@@ -2538,6 +2631,7 @@ impl From<MintSnsTokens> for Action {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Wasm {
     Bytes(Vec<u8>),
     Chunked {
@@ -2545,6 +2639,35 @@ pub enum Wasm {
         store_canister_id: CanisterId,
         chunk_hashes_list: Vec<Vec<u8>>,
     },
+}
+
+impl TryFrom<ChunkedCanisterWasm> for Wasm {
+    type Error = String;
+
+    fn try_from(chunked_canister_wasm: ChunkedCanisterWasm) -> Result<Self, Self::Error> {
+        let ChunkedCanisterWasm {
+            wasm_module_hash,
+            store_canister_id,
+            chunk_hashes_list,
+        } = chunked_canister_wasm;
+
+        if wasm_module_hash.is_empty() {
+            return Err("ChunkedCanisterWasm.wasm_module_hash cannot be empty".to_string());
+        }
+
+        let Some(store_canister_id) = store_canister_id else {
+            return Err("ChunkedCanisterWasm.store_canister_id cannot be None".to_string());
+        };
+
+        let store_canister_id = CanisterId::try_from_principal_id(store_canister_id)
+            .map_err(|err| format!("Invalid store_canister_id: {err}"))?;
+
+        Ok(Wasm::Chunked {
+            wasm_module_hash,
+            store_canister_id,
+            chunk_hashes_list,
+        })
+    }
 }
 
 /// Validates that the specified byte sequence meets the following requirements:
@@ -2706,23 +2829,33 @@ impl Wasm {
         }
     }
 
-    pub fn description(&self) -> String {
+    pub fn sha256sum(&self) -> Vec<u8> {
         match self {
             Self::Bytes(bytes) => {
-                let canister_wasm_sha256 = {
-                    let mut state = Sha256::new();
-                    state.write(&bytes[..]);
-                    let sha = state.finish();
-                    sha.to_vec()
-                };
+                let mut state = Sha256::new();
+                state.write(&bytes[..]);
+                state.finish().to_vec()
+            }
+            Self::Chunked {
+                wasm_module_hash, ..
+            } => wasm_module_hash.clone(),
+        }
+    }
+
+    pub fn description(&self) -> String {
+        let wasm_module_hash = self.sha256sum();
+        let wasm_module_hash = format_full_hash(&wasm_module_hash);
+
+        match self {
+            Self::Bytes(bytes) => {
                 format!(
                     "Embedded module with {} bytes and SHA256 `{}`.",
                     bytes.len(),
-                    format_full_hash(&canister_wasm_sha256)
+                    wasm_module_hash,
                 )
             }
             Self::Chunked {
-                wasm_module_hash,
+                wasm_module_hash: _, // computed above
                 store_canister_id,
                 chunk_hashes_list,
             } => {
@@ -2730,7 +2863,7 @@ impl Wasm {
                     "Remote module stored on canister {} with SHA256 `{}`. \
                      Split into {} chunks:\n  - {}",
                     store_canister_id.get(),
-                    format_full_hash(wasm_module_hash),
+                    wasm_module_hash,
                     chunk_hashes_list.len(),
                     chunk_hashes_list
                         .iter()
@@ -2784,6 +2917,36 @@ impl TryFrom<&UpgradeSnsControlledCanister> for Wasm {
                 "{ERR_PREFIX}: Either .new_canister_wasm or \
                      .chunked_canister_wasm (but not both) must be specified."
             )),
+        }
+    }
+}
+
+impl TryFrom<&crate::pb::v1::Wasm> for Wasm {
+    type Error = String;
+
+    fn try_from(wasm_wrapper: &crate::pb::v1::Wasm) -> Result<Self, Self::Error> {
+        let Some(wasm) = &wasm_wrapper.wasm else {
+            return Err("wasm.wasm field is required".to_string());
+        };
+
+        match wasm {
+            crate::pb::v1::wasm::Wasm::Bytes(bytes) => Ok(Self::Bytes(bytes.clone())),
+            crate::pb::v1::wasm::Wasm::Chunked(ChunkedCanisterWasm {
+                wasm_module_hash,
+                store_canister_id,
+                chunk_hashes_list,
+            }) => {
+                let Some(store_canister_id) = store_canister_id else {
+                    return Err("wasm.chunked.store_canister_id must be specified.".to_string());
+                };
+                let store_canister_id = CanisterId::try_from_principal_id(*store_canister_id)
+                    .map_err(|err| format!("wasm.chunked.store_canister_id: {err}"))?;
+                Ok(Self::Chunked {
+                    wasm_module_hash: wasm_module_hash.clone(),
+                    store_canister_id,
+                    chunk_hashes_list: chunk_hashes_list.clone(),
+                })
+            }
         }
     }
 }
@@ -3071,7 +3234,7 @@ pub mod test_helpers {
         /// circuit", i.e. return ResourceExhausted instead of doing the "real
         /// work". Most tests do not attempt exercise the special "running out of
         /// memory" condition; therefore, it makes sense for this to always
-        /// always return NoIssue.
+        /// return NoIssue.
         fn heap_growth_potential(&self) -> crate::types::HeapGrowthPotential {
             HeapGrowthPotential::NoIssue
         }

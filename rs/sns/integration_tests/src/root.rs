@@ -13,7 +13,8 @@ use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_test_utils::state_test_helpers::{get_controllers, set_controllers, update_with_sender};
 use ic_sns_root::{
-    pb::v1::SnsRootCanister, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
+    pb::v1::{Extensions, SnsRootCanister},
+    GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
 };
 use ic_sns_test_utils::{
     itest_helpers::{
@@ -40,6 +41,9 @@ fn test_get_status() {
                 ledger_canister_id: Some(PrincipalId::new_user_test_id(43)),
                 swap_canister_id: Some(PrincipalId::new_user_test_id(44)),
                 dapp_canister_ids: vec![],
+                extensions: Some(Extensions {
+                    extension_canister_ids: vec![],
+                }),
                 archive_canister_ids: vec![],
                 index_canister_id: Some(PrincipalId::new_user_test_id(45)),
                 testflight: false,
@@ -315,8 +319,6 @@ fn test_root_restarts_governance_on_stop_canister_timeout() {
         canister_id: GOVERNANCE_CANISTER_ID,
         wasm_module,
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         chunked_canister_wasm: None,
     };
 

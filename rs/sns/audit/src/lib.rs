@@ -6,7 +6,7 @@ use ic_nervous_system_agent::{
     CallCanisters,
 };
 use ic_nns_common::pb::v1::ProposalId;
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
     get_neurons_fund_audit_info_response, GovernanceError, NeuronsFundAuditInfo,
 };
 use ic_sns_swap::pb::v1::sns_neuron_recipe::Investor;

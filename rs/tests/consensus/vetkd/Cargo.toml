@@ -8,6 +8,8 @@ documentation.workspace = true
 
 [dependencies]
 canister-test = { path = "../../../rust_canisters/canister_test" }
+ic-config = { path = "../../../config" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
 ic-management-canister-types-private = { path = "../../../types/management_canister_types" }
 ic-nns-constants = { path = "../../../nns/constants" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
@@ -15,9 +17,10 @@ ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
 ic_consensus_system_test_utils = { path = "../utils" }
 ic_consensus_threshold_sig_system_test_utils = { path = "../tecdsa/utils" }
-ic-vetkd-utils = { path = "../../../../packages/ic-vetkd-utils" }
+ic-vetkeys = { workspace = true }
 anyhow = { workspace = true }
 futures = { workspace = true }
+rand = { workspace = true }
 slog = { workspace = true }
 tokio = { workspace = true }
 

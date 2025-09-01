@@ -11,6 +11,11 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nervous_system_proto::pb::v1::{Percentage, Principals};
 use ic_sns_governance::pb::v1::governance::CachedUpgradeSteps;
+use ic_sns_governance::pb::v1::manage_neuron::SetFollowing;
+use ic_sns_governance::pb::v1::neuron::{FolloweesForTopic, TopicFollowees};
+use ic_sns_governance::pb::v1::{
+    Followee, ListProposals, ListProposalsResponse, Topic, TopicSelector,
+};
 use ic_sns_governance::{
     governance::{
         MATURITY_DISBURSEMENT_DELAY_SECONDS, UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS,
@@ -52,7 +57,7 @@ use ic_sns_governance::{
     sns_upgrade::{ListUpgradeStep, ListUpgradeStepsResponse, SnsVersion},
     types::native_action_ids,
 };
-use maplit::btreemap;
+use maplit::{btreemap, btreeset};
 use pretty_assertions::assert_eq;
 use std::collections::{BTreeMap, HashSet};
 use strum::IntoEnumIterator;
@@ -307,6 +312,7 @@ fn test_disburse_maturity_succeeds_to_self() {
     env.gov_fixture
         .advance_time_by(6 * ONE_DAY_SECONDS)
         .temporarily_disable_sns_upgrades()
+        .disable_update_cached_metrics()
         .run_periodic_tasks_now();
 
     let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
@@ -417,6 +423,7 @@ fn test_disburse_maturity_succeeds_to_other() {
     // Advance time by a few days, but without triggering disbursal finalization.
     env.gov_fixture
         .advance_time_by(6 * ONE_DAY_SECONDS)
+        .disable_update_cached_metrics()
         .temporarily_disable_sns_upgrades()
         .run_periodic_tasks_now();
 
@@ -512,7 +519,8 @@ fn test_disburse_maturity_succeeds_with_multiple_operations() {
     // Advance time, to trigger disbursal finalization.
     env.gov_fixture
         .advance_time_by(7 * ONE_DAY_SECONDS + 10)
-        .temporarily_disable_sns_upgrades();
+        .temporarily_disable_sns_upgrades()
+        .disable_update_cached_metrics();
 
     let mut remaining_maturity_e8s = earned_maturity_e8s;
     for (i, (percentage, destination)) in percentage_and_destination.iter().enumerate() {
@@ -1458,6 +1466,135 @@ fn test_list_nervous_system_function_contain_all_proposal_actions() {
          native proposal actions in response {:?}",
         missing_actions
     );
+}
+
+#[test]
+fn list_proposals_filter_by_topic() {
+    // Prepare the world.
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
+
+    for proposal in [
+        ProposalData {
+            id: Some(ProposalId { id: 1 }),
+            topic: Some(Topic::CriticalDappOperations as i32),
+            ..ProposalData::default()
+        },
+        ProposalData {
+            id: Some(ProposalId { id: 2 }),
+            topic: Some(Topic::TreasuryAssetManagement as i32),
+            ..ProposalData::default()
+        },
+        ProposalData {
+            id: Some(ProposalId { id: 3 }),
+            topic: None,
+            ..ProposalData::default()
+        },
+        ProposalData {
+            id: Some(ProposalId { id: 4 }),
+            topic: Some(Topic::SnsFrameworkManagement as i32),
+            ..ProposalData::default()
+        },
+    ] {
+        canister_fixture.directly_insert_proposal_data(proposal);
+    }
+
+    let test_cases = [
+        (
+            "List all proposals",
+            ListProposals {
+                include_topics: vec![],
+                ..Default::default()
+            },
+            vec![4, 3, 2, 1],
+        ),
+        (
+            "List proposals without topics",
+            ListProposals {
+                include_topics: vec![TopicSelector { topic: None }],
+                ..Default::default()
+            },
+            vec![3],
+        ),
+        (
+            "Select one topic",
+            ListProposals {
+                include_topics: vec![TopicSelector {
+                    topic: Some(Topic::TreasuryAssetManagement as i32),
+                }],
+                ..Default::default()
+            },
+            vec![2],
+        ),
+        (
+            "Select two topics",
+            ListProposals {
+                include_topics: vec![
+                    TopicSelector {
+                        topic: Some(Topic::SnsFrameworkManagement as i32),
+                    },
+                    TopicSelector {
+                        topic: Some(Topic::TreasuryAssetManagement as i32),
+                    },
+                ],
+                ..Default::default()
+            },
+            vec![4, 2],
+        ),
+        (
+            "Select three topics",
+            ListProposals {
+                include_topics: vec![
+                    TopicSelector {
+                        topic: Some(Topic::CriticalDappOperations as i32),
+                    },
+                    TopicSelector {
+                        topic: Some(Topic::SnsFrameworkManagement as i32),
+                    },
+                    TopicSelector {
+                        topic: Some(Topic::TreasuryAssetManagement as i32),
+                    },
+                ],
+                ..Default::default()
+            },
+            vec![4, 2, 1],
+        ),
+        (
+            "Select three topics and proposals with no topic",
+            ListProposals {
+                include_topics: vec![
+                    TopicSelector { topic: None },
+                    TopicSelector {
+                        topic: Some(Topic::CriticalDappOperations as i32),
+                    },
+                    TopicSelector {
+                        topic: Some(Topic::SnsFrameworkManagement as i32),
+                    },
+                    TopicSelector {
+                        topic: Some(Topic::TreasuryAssetManagement as i32),
+                    },
+                ],
+                ..Default::default()
+            },
+            vec![4, 3, 2, 1],
+        ),
+    ];
+
+    for (label, request, expected) in test_cases {
+        let ListProposalsResponse {
+            proposals,
+            include_ballots_by_caller: _,
+            include_topic_filtering: _,
+        } = canister_fixture
+            .governance
+            .list_proposals(&request, &PrincipalId::new_anonymous());
+
+        let observed = proposals
+            .iter()
+            .map(|proposal| proposal.id.unwrap().id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(observed, expected, "Test case: {}", label);
+    }
 }
 
 #[test]
@@ -2645,6 +2782,7 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
     // This is supposed to cause Governance to poll CMC for the maturity modulation.
     canister_fixture
         .temporarily_disable_sns_upgrades()
+        .disable_update_cached_metrics()
         .run_periodic_tasks_now();
 
     // Get the Neuron and assert its maturity is set as expected
@@ -2735,6 +2873,7 @@ async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
     // This is supposed to cause Governance to poll CMC for the maturity modulation.
     canister_fixture
         .temporarily_disable_sns_upgrades()
+        .disable_update_cached_metrics()
         .run_periodic_tasks_now();
 
     let current_basis_points = canister_fixture
@@ -3357,4 +3496,443 @@ fn test_deregister_dapp_has_higher_voting_thresholds() {
         proposal_data.minimum_yes_proportion_of_total.unwrap(),
         Percentage::from_basis_points(2000)
     );
+}
+
+#[test]
+fn test_set_following() {
+    // Boilerplate variables.
+    let my_principal = PrincipalId::new_user_test_id(1000);
+    let my_sns_neuron_id = neuron_id(my_principal, 0);
+    let my_sns_neuron_id_as_btree_set = btreeset! { my_sns_neuron_id.clone() };
+
+    let another_principal = PrincipalId::new_user_test_id(1000);
+    let another_neuron_id = neuron_id(another_principal, 0);
+
+    let expected_followee = Followee {
+        neuron_id: Some(another_neuron_id.clone()),
+        alias: Some("Bob Dylan".to_string()),
+    };
+
+    let cleared_topic_following_for_all_non_critical_proposals = [
+        Topic::SnsFrameworkManagement,
+        Topic::DappCanisterManagement,
+        Topic::ApplicationBusinessLogic,
+        Topic::Governance,
+    ]
+    .iter()
+    .map(|topic| FolloweesForTopic {
+        followees: vec![],
+        topic: Some(*topic as i32),
+    })
+    .collect::<Vec<_>>();
+
+    let test_cases = [
+        (
+            "Trivial case.",
+            vec![],
+            vec![],
+            None,
+            btreemap! {},
+            btreemap! {},
+        ),
+        (
+            "Smoke test (does the test harness work as expected?)",
+            vec![
+                Follow {
+                    function_id: 1, // E.g., MOTION (essentially, any non-critical proposal type).
+                    followees: vec![another_neuron_id.clone()],
+                }
+            ],
+            vec![],
+            None,
+            btreemap! {
+                1 => Followees { followees: vec![another_neuron_id.clone()] }
+            },
+            btreemap! {},
+        ),
+        (
+            "Set following for the first time.",
+            vec![],
+            vec![SetFollowing {
+                topic_following: vec![FolloweesForTopic {
+                    followees: vec![expected_followee.clone()],
+                    topic: Some(Topic::Governance as i32),
+                }],
+            }],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    Topic::Governance as i32 => FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::Governance as i32),
+                    }
+                }
+            }),
+            btreemap! {},
+            btreemap! {
+                Topic::Governance => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                }
+            },
+        ),
+        (
+            "Set following for the first time.",
+            vec![],
+            vec![SetFollowing {
+                topic_following: vec![FolloweesForTopic {
+                    followees: vec![expected_followee.clone()],
+                    topic: Some(Topic::Governance as i32),
+                }],
+            },
+            SetFollowing {
+                topic_following: vec![FolloweesForTopic {
+                    followees: vec![],
+                    topic: Some(Topic::Governance as i32),
+                }],
+            }],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {}
+            }),
+            btreemap! {},
+            btreemap! {
+                Topic::Governance => btreemap! {}
+            },
+        ),
+        (
+            "Set following works incrementally.",
+            vec![],
+            vec![
+                SetFollowing {
+                    topic_following: vec![FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::Governance as i32),
+                    }],
+                },
+                SetFollowing {
+                    topic_following: vec![FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::TreasuryAssetManagement as i32),
+                    }],
+                },
+            ],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    Topic::Governance as i32 => FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::Governance as i32),
+                    },
+                    Topic::TreasuryAssetManagement as i32 => FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::TreasuryAssetManagement as i32),
+                    },
+                }
+            }),
+            btreemap! {},
+            btreemap! {
+                Topic::Governance => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                },
+                Topic::TreasuryAssetManagement => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                }
+            },
+        ),
+        (
+            "Topic following clears legacy following for that topic.",
+            vec![
+                Follow {
+                    function_id: 1, // E.g., MOTION (essentially, any non-critical proposal type).
+                    followees: vec![another_neuron_id.clone()],
+                }
+            ],
+            vec![
+                SetFollowing {
+                    topic_following: vec![FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        // MOTION is in `Topic::Governance`.
+                        topic: Some(Topic::Governance as i32),
+                    }],
+                },
+            ],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    Topic::Governance as i32 => FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::Governance as i32),
+                    },
+                }
+            }),
+            // Legacy following is cleared.
+            btreemap! {},
+            btreemap! {
+                Topic::Governance => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                }
+            },
+        ),
+        (
+            "Topic following does not clear legacy following for other topics.",
+            vec![
+                Follow {
+                    function_id: 1, // E.g., MOTION (essentially, any non-critical proposal type).
+                    followees: vec![another_neuron_id.clone()],
+                }
+            ],
+            vec![
+                SetFollowing {
+                    topic_following: vec![FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        // MOTION is in `Topic::Governance` (not `Topic::ApplicationBusinessLogic`).
+                        topic: Some(Topic::ApplicationBusinessLogic as i32),
+                    }],
+                },
+            ],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    Topic::ApplicationBusinessLogic as i32 => FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::ApplicationBusinessLogic as i32),
+                    },
+                }
+            }),
+            // Legacy following is preserved.
+            btreemap! {
+                1 => Followees { followees: vec![another_neuron_id.clone()] }
+            },
+            btreemap! {
+                Topic::ApplicationBusinessLogic => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                }
+            },
+        ),
+        (
+            "Specifying following for all non-critical topics in one command clears catch-all following.",
+            vec![
+                Follow {
+                    function_id: 0, // catch-all
+                    followees: vec![another_neuron_id.clone()],
+                }
+            ],
+            vec![
+                SetFollowing {
+                    topic_following: cleared_topic_following_for_all_non_critical_proposals.clone(),
+                },
+            ],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {}
+            }),
+            // catch-all following is cleared.
+            btreemap! {},
+            btreemap! {},
+        ),
+        (
+            "Specifying fewer than all non-critical topics doesn't clear catch-all following.",
+            vec![
+                Follow {
+                    function_id: 0, // catch-all
+                    followees: vec![another_neuron_id.clone()],
+                }
+            ],
+            vec![
+                SetFollowing {
+                    // Remove one non-critical topic and add the two critical ones.
+                    topic_following: cleared_topic_following_for_all_non_critical_proposals
+                        .iter()
+                        .skip(1)
+                        .cloned()
+                        .chain(vec![
+                            FolloweesForTopic {
+                                followees: vec![],
+                                topic: Some(Topic::TreasuryAssetManagement as i32),
+                            },
+                            FolloweesForTopic {
+                                followees: vec![],
+                                topic: Some(Topic::CriticalDappOperations as i32),
+                            },
+                        ].into_iter())
+                        .collect()
+                },
+            ],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {}
+            }),
+            // catch-all following is preserved.
+            btreemap! {
+                0 => Followees { followees: vec![another_neuron_id.clone()] }
+            },
+            btreemap! {},
+        ),
+        (
+            "Setting following for all non-critical topics in two commands clears catch-all following.",
+            vec![
+                Follow {
+                    function_id: 0, // catch-all
+                    followees: vec![another_neuron_id.clone()],
+                }
+            ],
+            vec![
+                SetFollowing {
+                    topic_following: cleared_topic_following_for_all_non_critical_proposals
+                        .iter()
+                        .take(2)
+                        .cloned()
+                        .map(|mut followees_for_topic| {
+                            followees_for_topic.followees = vec![expected_followee.clone()];
+                            followees_for_topic
+                        })
+                        .collect()
+                },
+                SetFollowing {
+                    topic_following: cleared_topic_following_for_all_non_critical_proposals
+                        .iter()
+                        .skip(2)
+                        .cloned()
+                        .map(|mut followees_for_topic| {
+                            followees_for_topic.followees = vec![expected_followee.clone()];
+                            followees_for_topic
+                        })
+                        .collect()
+                },
+            ],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    Topic::SnsFrameworkManagement as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::SnsFrameworkManagement as i32) },
+                    Topic::DappCanisterManagement as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::DappCanisterManagement as i32) },
+                    Topic::ApplicationBusinessLogic as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::ApplicationBusinessLogic as i32) },
+                    Topic::Governance as i32 => FolloweesForTopic { followees: vec![expected_followee.clone()], topic: Some(Topic::Governance as i32) },
+                }
+            }),
+            // catch-all following is cleared.
+            btreemap! {},
+            btreemap! {
+                Topic::SnsFrameworkManagement => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                },
+                Topic::DappCanisterManagement => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                },
+                Topic::ApplicationBusinessLogic => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                },
+                Topic::Governance => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                }
+            },
+        ),
+        (
+            "Complex scenario.",
+            vec![
+                Follow {
+                    function_id: 0, // catch-all
+                    followees: vec![another_neuron_id.clone()],
+                },
+                Follow {
+                    function_id: 1, // E.g., MOTION (essentially, any non-critical proposal type).
+                    followees: vec![another_neuron_id.clone()],
+                }
+            ],
+            vec![
+                // Follow on `Topic::Governance` (clears legacy following on MOTION proposals).
+                SetFollowing {
+                    topic_following: vec![FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::Governance as i32),
+                    }],
+                },
+                // Set up some topic following for a critical topic.
+                SetFollowing {
+                    topic_following: vec![FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::CriticalDappOperations as i32),
+                    }],
+                },
+                // Clear all part of the non-critical topic following. This should remove
+                // following on `Topic::Governance` but preserve `Topic::CriticalDappOperations`.
+                SetFollowing {
+                    topic_following: cleared_topic_following_for_all_non_critical_proposals
+                        .iter()
+                        .skip(1)
+                        .cloned()
+                        .collect()
+                },
+            ],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {
+                    Topic::CriticalDappOperations as i32 => FolloweesForTopic {
+                        followees: vec![expected_followee.clone()],
+                        topic: Some(Topic::CriticalDappOperations as i32),
+                    }
+                }
+            }),
+            // legacy following on MOTION proposals is cleared; catch-all following is preserved.
+            btreemap! {
+                0 => Followees { followees: vec![another_neuron_id.clone()] }
+            },
+            btreemap! {
+                Topic::CriticalDappOperations => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                },
+                Topic::Governance => btreemap! {},
+            },
+        )
+    ];
+
+    // Follow is the legacy command, set_following is the new command.
+    for (
+        label,
+        follow_commands,
+        set_following_commands,
+        expected_topic_followees,
+        expected_followees,
+        expected_topic_follower_index,
+    ) in test_cases
+    {
+        // Prepare the world.
+        let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
+            .add_neuron(NeuronBuilder::new(
+                my_sns_neuron_id.clone(),
+                E8 * 1000,
+                NeuronPermission::all(&my_principal),
+            ))
+            .create();
+
+        for follow in follow_commands {
+            canister_fixture
+                .governance
+                .follow(&my_sns_neuron_id, &my_principal, &follow)
+                .unwrap();
+        }
+
+        // Run code under test.
+        for set_following in set_following_commands {
+            canister_fixture
+                .governance
+                .set_following(&my_sns_neuron_id, &my_principal, &set_following)
+                .unwrap();
+        }
+
+        // Check the results.
+        let Neuron {
+            followees,
+            topic_followees,
+            ..
+        } = canister_fixture.get_neuron(&my_sns_neuron_id);
+
+        assert_eq!(
+            topic_followees, expected_topic_followees,
+            "unexpected topic_followees: {}",
+            label
+        );
+
+        assert_eq!(
+            followees, expected_followees,
+            "unexpected followees: {}",
+            label
+        );
+
+        assert_eq!(
+            canister_fixture.governance.topic_follower_index, expected_topic_follower_index,
+            "unexpected topic_follower_index: {}",
+            label
+        );
+    }
 }

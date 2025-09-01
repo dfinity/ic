@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use candid::Nat;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_canisters::ledger::ICRC1Ledger;
@@ -19,6 +20,7 @@ use ic_sns_swap::{
     },
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
@@ -322,6 +324,29 @@ impl ICRC1Ledger for MockLedger {
 
     fn canister_id(&self) -> CanisterId {
         CanisterId::from_u64(1)
+    }
+
+    async fn icrc2_approve(
+        &self,
+        _spender: Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
+    }
+
+    async fn icrc3_get_blocks(
+        &self,
+        _args: Vec<GetBlocksRequest>,
+    ) -> Result<GetBlocksResult, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 }
 

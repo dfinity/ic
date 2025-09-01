@@ -10,6 +10,10 @@ Install args hash: `{{install_args.args_sha256_hex()}}`
 
 Target canister: `{{canister_id}}`
 
+{% if !canister.forum_discussion().is_empty() -%}
+Forum discussion: {{canister.forum_discussion()}}
+
+{% endif -%}
 ---
 
 ## Motivation
@@ -21,9 +25,6 @@ TODO: THIS MUST BE FILLED OUT
 ```
 git fetch
 git checkout {{at}}
-{% if let Some(dir) = canister.repo_dir() -%}
-cd {{dir.as_path().display()}}
-{% endif -%}
 {{install_args.didc_encode_cmd()}} | xxd -r -p | sha256sum
 ```
 

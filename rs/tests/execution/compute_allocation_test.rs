@@ -116,9 +116,9 @@ pub fn total_compute_allocation_cannot_be_exceeded(env: TestEnv) {
             reply_data: &[u8],
         ) -> Result<(Principal, Vec<u8>), AgentError> {
             let created_canister = universal_canister
-                .update(wasm().call(management::create_canister(
-                    Cycles::from(10_000_000_000_000_000u128).into_parts(),
-                )))
+                .update(wasm().call(management::create_canister(Cycles::from(
+                    10_000_000_000_000_000u128,
+                ))))
                 .await
                 .map(|res| {
                     Decode!(res.as_slice(), CreateCanisterResult)

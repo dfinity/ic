@@ -2,7 +2,7 @@ use anyhow::Result;
 use assert_json_diff::assert_json_eq;
 use ic_ledger_core::Tokens;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance_api::pb::v1::{neuron::DissolveState, Neuron};
+use ic_nns_governance_api::{neuron::DissolveState, Neuron};
 use ic_rosetta_api::{
     convert::neuron_subaccount_bytes_from_public_key,
     request::{request_result::RequestResult, Request},

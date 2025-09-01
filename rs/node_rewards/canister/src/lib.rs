@@ -6,12 +6,7 @@
 // 5. Simple Organization
 
 pub mod canister;
+pub mod metrics;
+pub mod registry_querier;
 pub mod storage;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn dummy_test_to_confirm_tests_are_being_run() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+pub mod telemetry;

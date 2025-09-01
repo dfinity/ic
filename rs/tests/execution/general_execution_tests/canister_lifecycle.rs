@@ -27,10 +27,10 @@ AKA:: Testcase 2.4
 
 
 end::catalog[] */
+#![allow(deprecated)]
 
 use candid::{Decode, Encode};
 use ic_agent::{agent::RejectCode, export::Principal, identity::Identity};
-use ic_config::execution_environment::MINIMUM_FREEZING_THRESHOLD;
 use ic_management_canister_types_private::{
     CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CreateCanisterArgs,
     EmptyBlob, Payload,
@@ -40,6 +40,7 @@ use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use ic_system_test_driver::types::*;
 use ic_system_test_driver::util::*;
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{Cycles, PrincipalId};
 use ic_universal_canister::{call_args, management, wasm, CallInterface, UNIVERSAL_CANISTER_WASM};
 use ic_utils::call::AsyncCall;
@@ -226,7 +227,11 @@ pub fn update_settings_of_frozen_canister(env: TestEnv) {
                 balance_after < balance_before
                     && balance_before - balance_after
                         > cycles_account_manager
-                            .ingress_induction_cost_from_bytes(NumBytes::new(bytes.len() as u64), 1)
+                            .ingress_induction_cost_from_bytes(
+                                NumBytes::new(bytes.len() as u64),
+                                1,
+                                CanisterCyclesCostSchedule::Normal
+                            )
                             .get()
             );
         }
@@ -246,10 +251,8 @@ pub fn create_canister_with_one_controller(env: TestEnv) {
             let canister_b = canister_a
                 .update(
                     wasm().call(
-                        management::create_canister(
-                            Cycles::from(2_000_000_000_000u64).into_parts(),
-                        )
-                        .with_controllers(vec![canister_a.canister_id()]),
+                        management::create_canister(Cycles::from(2_000_000_000_000u64))
+                            .with_controllers(vec![canister_a.canister_id()]),
                     ),
                 )
                 .await
@@ -301,9 +304,9 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
             // A creates C
             info!(logger, "Canister A attempts to create canister C.");
             let canister_c = canister_a
-                .update(wasm().call(management::create_canister(
-                    Cycles::from(2_000_000_000_000u64).into_parts(),
-                )))
+                .update(wasm().call(management::create_canister(Cycles::from(
+                    2_000_000_000_000u64,
+                ))))
                 .await
                 .map(|res| {
                     Decode!(res.as_slice(), CreateCanisterResult)
@@ -446,10 +449,8 @@ pub fn create_canister_with_no_controllers(env: TestEnv) {
             let canister_b = canister_a
                 .update(
                     wasm().call(
-                        management::create_canister(
-                            Cycles::from(2_000_000_000_000u64).into_parts(),
-                        )
-                        .with_controllers(Vec::<Principal>::new()), // No controllers
+                        management::create_canister(Cycles::from(2_000_000_000_000u64))
+                            .with_controllers(Vec::<Principal>::new()), // No controllers
                     ),
                 )
                 .await
@@ -490,10 +491,8 @@ pub fn create_canister_with_multiple_controllers(env: TestEnv) {
             let canister_c = canister_a
                 .update(
                     wasm().call(
-                        management::create_canister(
-                            Cycles::from(2_000_000_000_000u64).into_parts(),
-                        )
-                        .with_controllers(controllers.clone()),
+                        management::create_canister(Cycles::from(2_000_000_000_000u64))
+                            .with_controllers(controllers.clone()),
                     ),
                 )
                 .await
@@ -579,10 +578,8 @@ pub fn create_canister_with_too_many_controllers_fails(env: TestEnv) {
             let response = canister_a
                 .update(
                     wasm().call(
-                        management::create_canister(
-                            Cycles::from(2_000_000_000_000u64).into_parts(),
-                        )
-                        .with_controllers(controllers),
+                        management::create_canister(Cycles::from(2_000_000_000_000u64))
+                            .with_controllers(controllers),
                     ),
                 )
                 .await;
@@ -832,9 +829,9 @@ pub fn canister_can_manage_other_canister(env: TestEnv) {
             .await;
 
             let canister_b = canister_a
-                .update(wasm().call(management::create_canister(
-                    Cycles::from(2_000_000_000_000u64).into_parts(),
-                )))
+                .update(wasm().call(management::create_canister(Cycles::from(
+                    2_000_000_000_000u64,
+                ))))
                 .await
                 .map(|res| {
                     Decode!(res.as_slice(), CreateCanisterResult)
@@ -882,9 +879,9 @@ pub fn canister_can_manage_other_canister_batched(env: TestEnv) {
             )
             .await;
             let canister_b = canister_a
-                .update(wasm().call(management::create_canister(
-                    Cycles::from(2_000_000_000_000u64).into_parts(),
-                )))
+                .update(wasm().call(management::create_canister(Cycles::from(
+                    2_000_000_000_000u64,
+                ))))
                 .await
                 .map(|res| {
                     Decode!(res.as_slice(), CreateCanisterResult)
@@ -1113,7 +1110,7 @@ pub fn create_canister_with_freezing_threshold(env: TestEnv) {
                 UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
                     .await;
 
-            for valid_value in [u64::MAX, MINIMUM_FREEZING_THRESHOLD].iter() {
+            for valid_value in [u64::MAX, 0].iter() {
                 // Create the canister with the freezing threshold set.
                 let new_canister_id = canister
                     .forward_with_cycles_to(
@@ -1184,10 +1181,8 @@ pub fn create_canister_with_invalid_freezing_threshold_fails(env: TestEnv) {
                     canister
                         .update(
                             wasm().call(
-                                management::create_canister(
-                                    Cycles::from(2_000_000_000_000u64).into_parts(),
-                                )
-                                .with_freezing_threshold(invalid_value.clone()),
+                                management::create_canister(Cycles::from(2_000_000_000_000u64))
+                                    .with_freezing_threshold(invalid_value.clone()),
                             ),
                         )
                         .await,

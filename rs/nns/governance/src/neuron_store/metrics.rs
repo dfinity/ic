@@ -56,6 +56,7 @@ pub(crate) struct NeuronMetrics {
     pub(crate) dissolving_neurons_e8s_buckets_ect: HashMap<u64, f64>,
     pub(crate) not_dissolving_neurons_e8s_buckets_seed: HashMap<u64, f64>,
     pub(crate) not_dissolving_neurons_e8s_buckets_ect: HashMap<u64, f64>,
+    pub(crate) spawning_neurons_count: u64,
 
     // Much of the above could also be done like this, but we leave such refactoring as an exercise
     // to the reader.
@@ -253,46 +254,8 @@ impl NeuronStore {
         voting_power_economics: &VotingPowerEconomics,
         now_seconds: u64,
     ) -> NeuronMetrics {
-        let mut metrics = if self.allow_active_neurons_in_stable_memory {
-            NeuronMetrics::default()
-        } else {
-            // If we are not using stable memory for all neurons, we still assume
-            // these base level metrics
-            NeuronMetrics {
-                garbage_collectable_neurons_count: with_stable_neuron_store(
-                    |stable_neuron_store| stable_neuron_store.len() as u64,
-                ),
-                ..Default::default()
-            }
-        };
+        let mut metrics = NeuronMetrics::default();
 
-        if self.allow_active_neurons_in_stable_memory {
-            self.compute_neuron_metrics_all_stable(
-                &mut metrics,
-                neuron_minimum_stake_e8s,
-                voting_power_economics,
-                now_seconds,
-            );
-        }
-        // During migration, some neurons may be in the heap, so we need to compute
-        // metrics for them as well.
-        self.compute_neuron_metrics_current(
-            &mut metrics,
-            neuron_minimum_stake_e8s,
-            voting_power_economics,
-            now_seconds,
-        );
-
-        metrics
-    }
-
-    pub(crate) fn compute_neuron_metrics_all_stable(
-        &self,
-        metrics: &mut NeuronMetrics,
-        neuron_minimum_stake_e8s: u64,
-        voting_power_economics: &VotingPowerEconomics,
-        now_seconds: u64,
-    ) {
         with_stable_neuron_store(|stable_neuron_store| {
             let neuron_sections = NeuronSections {
                 // This is needed for `Neuron::visibility``
@@ -368,7 +331,9 @@ impl NeuronStore {
                 let bucket = dissolve_delay_seconds / (6 * ONE_MONTH_SECONDS);
                 match neuron.state(now_seconds) {
                     NeuronState::Unspecified => (),
-                    NeuronState::Spawning => (),
+                    NeuronState::Spawning => {
+                        metrics.spawning_neurons_count += 1;
+                    }
                     NeuronState::Dissolved => {
                         metrics.dissolved_neurons_count += 1;
                         metrics.dissolved_neurons_e8s += neuron.cached_neuron_stake_e8s;
@@ -466,180 +431,9 @@ impl NeuronStore {
             metrics.total_locked_e8s = metrics
                 .total_staked_e8s
                 .saturating_sub(metrics.dissolved_neurons_e8s);
-        })
-    }
+        });
 
-    pub(crate) fn compute_neuron_metrics_current(
-        &self,
-        metrics: &mut NeuronMetrics,
-        neuron_minimum_stake_e8s: u64,
-        voting_power_economics: &VotingPowerEconomics,
-        now_seconds: u64,
-    ) {
-        for neuron in self.heap_neurons.values() {
-            metrics.increment_non_self_authenticating_controller_neuron_subset_metrics(
-                voting_power_economics,
-                now_seconds,
-                neuron,
-            );
-            metrics.increment_public_neuron_subset_metrics(
-                voting_power_economics,
-                now_seconds,
-                neuron,
-            );
-            metrics
-                .increment_declining_voting_power_or_fully_lost_voting_power_neuron_subset_metrics(
-                    voting_power_economics,
-                    now_seconds,
-                    neuron,
-                );
-
-            metrics.total_staked_e8s += neuron.minted_stake_e8s();
-            metrics.total_staked_maturity_e8s_equivalent +=
-                neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
-            metrics.total_maturity_e8s_equivalent += neuron.maturity_e8s_equivalent;
-
-            if Self::is_active_neurons_fund_neuron(neuron, now_seconds) {
-                metrics.neurons_fund_total_active_neurons += 1;
-            }
-
-            if neuron.joined_community_fund_timestamp_seconds.unwrap_or(0) > 0 {
-                metrics.community_fund_total_staked_e8s += neuron.minted_stake_e8s();
-                metrics.community_fund_total_maturity_e8s_equivalent +=
-                    neuron.maturity_e8s_equivalent;
-            }
-
-            if neuron.is_inactive(now_seconds) {
-                metrics.garbage_collectable_neurons_count += 1;
-            }
-
-            if 0 < neuron.cached_neuron_stake_e8s
-                && neuron.cached_neuron_stake_e8s < neuron_minimum_stake_e8s
-            {
-                metrics.neurons_with_invalid_stake_count += 1;
-            }
-
-            let dissolve_delay_seconds = neuron.dissolve_delay_seconds(now_seconds);
-
-            if dissolve_delay_seconds < 6 * ONE_MONTH_SECONDS {
-                metrics.neurons_with_less_than_6_months_dissolve_delay_count += 1;
-                metrics.neurons_with_less_than_6_months_dissolve_delay_e8s +=
-                    neuron.minted_stake_e8s();
-            }
-
-            if neuron.is_seed_neuron() {
-                metrics.seed_neuron_count += 1;
-                metrics.total_staked_e8s_seed += neuron.minted_stake_e8s();
-                metrics.total_staked_maturity_e8s_equivalent_seed +=
-                    neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
-            }
-
-            if neuron.is_ect_neuron() {
-                metrics.ect_neuron_count += 1;
-                metrics.total_staked_e8s_ect += neuron.minted_stake_e8s();
-                metrics.total_staked_maturity_e8s_equivalent_ect +=
-                    neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
-            }
-
-            let bucket = dissolve_delay_seconds / (6 * ONE_MONTH_SECONDS);
-            match neuron.state(now_seconds) {
-                NeuronState::Unspecified => (),
-                NeuronState::Spawning => (),
-                NeuronState::Dissolved => {
-                    metrics.dissolved_neurons_count += 1;
-                    metrics.dissolved_neurons_e8s += neuron.cached_neuron_stake_e8s;
-                }
-                NeuronState::Dissolving => {
-                    {
-                        // Neurons with minted stake count metrics
-                        increment_e8s_bucket(
-                            &mut metrics.dissolving_neurons_e8s_buckets,
-                            bucket,
-                            neuron.minted_stake_e8s(),
-                        );
-                        increment_count_bucket(
-                            &mut metrics.dissolving_neurons_count_buckets,
-                            bucket,
-                        );
-
-                        metrics.dissolving_neurons_count += 1;
-                    }
-                    {
-                        // Staked maturity metrics
-                        let increment = neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
-                        increment_e8s_bucket(
-                            &mut metrics.dissolving_neurons_staked_maturity_e8s_equivalent_buckets,
-                            bucket,
-                            increment,
-                        );
-                        metrics.dissolving_neurons_staked_maturity_e8s_equivalent_sum += increment;
-                    }
-                    {
-                        if neuron.is_seed_neuron() {
-                            increment_e8s_bucket(
-                                &mut metrics.dissolving_neurons_e8s_buckets_seed,
-                                bucket,
-                                neuron.minted_stake_e8s(),
-                            );
-                        } else if neuron.is_ect_neuron() {
-                            increment_e8s_bucket(
-                                &mut metrics.dissolving_neurons_e8s_buckets_ect,
-                                bucket,
-                                neuron.minted_stake_e8s(),
-                            );
-                        }
-                    }
-                }
-                NeuronState::NotDissolving => {
-                    {
-                        // Neurons with minted stake count metrics
-                        increment_e8s_bucket(
-                            &mut metrics.not_dissolving_neurons_e8s_buckets,
-                            bucket,
-                            neuron.minted_stake_e8s(),
-                        );
-
-                        increment_count_bucket(
-                            &mut metrics.not_dissolving_neurons_count_buckets,
-                            bucket,
-                        );
-                        metrics.not_dissolving_neurons_count += 1;
-                    }
-                    {
-                        // Staked maturity metrics
-                        let increment = neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
-                        increment_e8s_bucket(
-                            &mut metrics
-                                .not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets,
-                            bucket,
-                            increment,
-                        );
-                        metrics.not_dissolving_neurons_staked_maturity_e8s_equivalent_sum +=
-                            increment;
-                    }
-                    {
-                        if neuron.is_seed_neuron() {
-                            increment_e8s_bucket(
-                                &mut metrics.not_dissolving_neurons_e8s_buckets_seed,
-                                bucket,
-                                neuron.minted_stake_e8s(),
-                            );
-                        } else if neuron.is_ect_neuron() {
-                            increment_e8s_bucket(
-                                &mut metrics.not_dissolving_neurons_e8s_buckets_ect,
-                                bucket,
-                                neuron.minted_stake_e8s(),
-                            );
-                        }
-                    }
-                }
-            }
-        }
-
-        // Compute total amount of locked ICP.
-        metrics.total_locked_e8s = metrics
-            .total_staked_e8s
-            .saturating_sub(metrics.dissolved_neurons_e8s);
+        metrics
     }
 }
 

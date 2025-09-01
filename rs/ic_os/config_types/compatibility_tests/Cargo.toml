@@ -1,0 +1,16 @@
+[package]
+name = "config_types_compatibility_lib"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+config_types = { path = ".." }
+serde = { workspace = true }
+serde_json = { workspace = true }
+url = { workspace = true }
+macaddr = { workspace = true }
+anyhow = { workspace = true }
+
+[[bin]]
+name = "generate_config_types_fixture"
+path = "src/main.rs"

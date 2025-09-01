@@ -5,19 +5,24 @@
 # Other related links: https://github.com/bazelbuild/rules_rust/issues/2529
 #                      https://github.com/Asana/cc-rs
 diff --git a/src/lib.rs b/src/lib.rs
-index f75b951..8e770a7 100644
+index 260b850..83fa53f 100644
 --- a/src/lib.rs
 +++ b/src/lib.rs
-@@ -2091,6 +2091,12 @@ impl Build {
-                         target.versioned_llvm_target(None)
-                     };
+@@ -2262,6 +2262,17 @@ impl Build {
  
-+                    let llvm_target = match llvm_target.clone() {
-+                        std::borrow::Cow::Borrowed("x86_64-unknown-linux-gnu") => "x86_64-linux-gnu",
-+                        std::borrow::Cow::Borrowed("wasm32-unknown-unknown") => "wasm32-freestanding-musl",
-+                        _other => &llvm_target,
+                     let clang_target =
+                         target.llvm_target(&self.get_raw_target()?, version.as_deref());
++
++                    let clang_target = match &clang_target {
++                        std::borrow::Cow::Borrowed("x86_64-unknown-linux-gnu") => {
++                            "x86_64-linux-gnu"
++                        }
++                        std::borrow::Cow::Borrowed("wasm32-unknown-unknown") => {
++                            "wasm32-freestanding-musl"
++                        }
++                        _other => &clang_target,
 +                    };
 +
-                     // Pass `--target` with the LLVM target to properly
-                     // configure Clang even when cross-compiling.
-                     cmd.push_cc_arg(format!("--target={llvm_target}").into());
+                     cmd.push_cc_arg(format!("--target={clang_target}").into());
+                 }
+             }

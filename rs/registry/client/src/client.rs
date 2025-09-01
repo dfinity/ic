@@ -4,7 +4,7 @@
 use crossbeam_channel::{RecvTimeoutError, Sender, TrySendError};
 pub use ic_interfaces_registry::{
     empty_zero_registry_record, RegistryClient, RegistryClientVersionedResult,
-    RegistryDataProvider, RegistryTransportRecord, POLLING_PERIOD, ZERO_REGISTRY_VERSION,
+    RegistryDataProvider, RegistryRecord, POLLING_PERIOD, ZERO_REGISTRY_VERSION,
 };
 use ic_metrics::MetricsRegistry;
 pub use ic_types::{
@@ -188,7 +188,7 @@ impl Drop for PollThread {
 
 #[derive(Clone)]
 struct CacheState {
-    records: Vec<RegistryTransportRecord>,
+    records: Vec<RegistryRecord>,
     timestamps: BTreeMap<RegistryVersion, Time>,
     latest_version: RegistryVersion,
 }
@@ -202,7 +202,7 @@ impl CacheState {
         }
     }
 
-    fn update(&mut self, records: Vec<RegistryTransportRecord>, new_version: RegistryVersion) {
+    fn update(&mut self, records: Vec<RegistryRecord>, new_version: RegistryVersion) {
         assert!(new_version > self.latest_version);
         self.timestamps.insert(new_version, current_time());
         for record in records {
@@ -628,7 +628,7 @@ mod tests {
         fn get_updates_since(
             &self,
             _version: RegistryVersion,
-        ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
+        ) -> Result<Vec<RegistryRecord>, RegistryDataProviderError> {
             self.poll_counter.fetch_add(1, Ordering::Relaxed);
             Ok(vec![])
         }
@@ -655,7 +655,7 @@ mod tests {
         fn get_updates_since(
             &self,
             version: RegistryVersion,
-        ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
+        ) -> Result<Vec<RegistryRecord>, RegistryDataProviderError> {
             let mut res = self.data_provider.get_updates_since(version)?;
             res.retain(|r| r.version <= version + self.changelog_size);
             Ok(res)

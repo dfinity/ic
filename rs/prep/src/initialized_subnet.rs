@@ -6,11 +6,11 @@ use std::{
 
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::registry::{
-    crypto::v1::{ChainKeySigningSubnetList, PublicKey},
+    crypto::v1::{ChainKeyEnabledSubnetList, PublicKey},
     subnet::v1::{CatchUpPackageContents, SubnetRecord},
 };
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_chain_key_signing_subnet_list_key,
+    make_catch_up_package_contents_key, make_chain_key_enabled_subnet_list_key,
     make_crypto_threshold_signing_pubkey_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -89,7 +89,7 @@ impl InitializedSubnet {
                 self.subnet_threshold_signing_public_key.clone(),
             );
 
-            // enable subnet chain key signing
+            // enable subnet chain key
             if let Some(chain_key_config) = &self.subnet_config.chain_key_config {
                 for key_id in chain_key_config
                     .key_configs
@@ -101,9 +101,9 @@ impl InitializedSubnet {
                     write_registry_entry(
                         data_provider,
                         subnet_path.as_path(),
-                        make_chain_key_signing_subnet_list_key(&key_id).as_ref(),
+                        make_chain_key_enabled_subnet_list_key(&key_id).as_ref(),
                         version,
-                        ChainKeySigningSubnetList {
+                        ChainKeyEnabledSubnetList {
                             subnets: vec![subnet_id_into_protobuf(subnet_id)],
                         },
                     );

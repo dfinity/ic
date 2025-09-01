@@ -7,8 +7,8 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
-    messages::{Query, QuerySource},
-    Cycles, MemoryDiskBytes, PrincipalId, Time, UserId,
+    messages::{CertificateDelegationFormat, CertificateDelegationMetadata, Query},
+    Cycles, MemoryDiskBytes, Time, UserId,
 };
 use ic_utils_lru_cache::LruCache;
 use prometheus::{Histogram, IntCounter, IntGauge};
@@ -138,6 +138,24 @@ pub(crate) struct EntryKey {
     pub method_name: String,
     /// Receiving canister method payload (argument).
     pub method_payload: Vec<u8>,
+    /// Format of the certificate delegation.
+    pub certificate_delegation_format: Option<CertificateDelegationFormat>,
+}
+
+impl EntryKey {
+    pub fn new(
+        query: &Query,
+        certificate_delegation_metadata: Option<CertificateDelegationMetadata>,
+    ) -> Self {
+        Self {
+            source: query.source.user_id(),
+            receiver: query.receiver,
+            method_name: query.method_name.clone(),
+            method_payload: query.method_payload.clone(),
+            certificate_delegation_format: certificate_delegation_metadata
+                .map(|metadata| metadata.format),
+        }
+    }
 }
 
 impl MemoryDiskBytes for EntryKey {
@@ -147,20 +165,6 @@ impl MemoryDiskBytes for EntryKey {
 
     fn disk_bytes(&self) -> usize {
         0
-    }
-}
-
-impl From<&Query> for EntryKey {
-    fn from(query: &Query) -> Self {
-        Self {
-            source: match query.source {
-                QuerySource::User { user_id, .. } => user_id,
-                QuerySource::Anonymous => UserId::from(PrincipalId::default()),
-            },
-            receiver: query.receiver,
-            method_name: query.method_name.clone(),
-            method_payload: query.method_payload.clone(),
-        }
     }
 }
 

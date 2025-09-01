@@ -51,7 +51,7 @@ def test_can_handle_finding():
                 "ic/proj1",
                 None,
                 None,
-                {"ic/proj1/subproj": [Team.BOUNDARY_NODE_TEAM], "ic/proj1": [Team.BOUNDARY_NODE_TEAM]},
+                {"ic/proj1/subproj": [Team.NODE_TEAM], "ic/proj1": [Team.NODE_TEAM]},
             )
         ]
     )
@@ -78,10 +78,10 @@ def test_store_findings():
     sf1 = SlackFinding("repo", "scanner", "did", "dvers", ["proj1", "proj2"])
     f1 = Finding("repo", "scanner", Dependency("did", "dname", "dvers"), [v1], [], ["proj1", "proj3"], [])
     v1_events = [
-        SlackVulnerabilityEvent.vuln_added("vid", SLACK_CHANNEL_CONFIG_BY_TEAM[Team.BOUNDARY_NODE_TEAM].channel_id),
+        SlackVulnerabilityEvent.vuln_added("vid", SLACK_CHANNEL_CONFIG_BY_TEAM[Team.NODE_TEAM].channel_id),
         SlackVulnerabilityEvent.vuln_removed("vid", SLACK_CHANNEL_CONFIG_BY_TEAM[Team.NODE_TEAM].channel_id),
         SlackVulnerabilityEvent.dep_added(
-            "vid", SLACK_CHANNEL_CONFIG_BY_TEAM[Team.BOUNDARY_NODE_TEAM].channel_id, f1.id(), ["proj3"]
+            "vid", SLACK_CHANNEL_CONFIG_BY_TEAM[Team.NODE_TEAM].channel_id, f1.id(), ["proj3"]
         ),
         SlackVulnerabilityEvent.dep_removed(
             "vid", SLACK_CHANNEL_CONFIG_BY_TEAM[Team.NODE_TEAM].channel_id, sf1.id(), ["proj2"]
@@ -91,11 +91,9 @@ def test_store_findings():
     v_old = Vulnerability("vid_old", "vname_old", "vdesc_old", 8)
     sf_old = SlackFinding("repo", "scanner", "did_old", "dvers_old", ["proj3"])
     v_old_events = [
-        SlackVulnerabilityEvent.vuln_removed(
-            "vid_old", SLACK_CHANNEL_CONFIG_BY_TEAM[Team.BOUNDARY_NODE_TEAM].channel_id
-        ),
+        SlackVulnerabilityEvent.vuln_removed("vid_old", SLACK_CHANNEL_CONFIG_BY_TEAM[Team.NODE_TEAM].channel_id),
         SlackVulnerabilityEvent.dep_removed(
-            "vid_old", SLACK_CHANNEL_CONFIG_BY_TEAM[Team.BOUNDARY_NODE_TEAM].channel_id, sf_old.id(), ["proj3"]
+            "vid_old", SLACK_CHANNEL_CONFIG_BY_TEAM[Team.NODE_TEAM].channel_id, sf_old.id(), ["proj3"]
         ),
     ]
 
@@ -123,7 +121,7 @@ def test_store_findings():
     projects = [
         Project("proj1", "proj1", None, Team.NODE_TEAM),
         Project("proj2", "proj2", None, Team.NODE_TEAM),
-        Project("proj3", "proj3", None, Team.BOUNDARY_NODE_TEAM),
+        Project("proj3", "proj3", None, Team.NODE_TEAM),
     ]
     slack_api = Mock()
     loader = Mock()
@@ -142,7 +140,7 @@ def test_store_findings():
             v_new.id, SLACK_CHANNEL_CONFIG_BY_TEAM[Team.NODE_TEAM].channel_id, f_new.id(), f_new.projects
         ),
     ]
-    assert slack_api.send_message.call_count == 2
+    assert slack_api.send_message.call_count == 1
 
 
 def test_filter_findings():

@@ -33,7 +33,7 @@
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
     registry_helper::RegistryHelper,
-    utils::http_endpoint_to_url,
+    utils::https_endpoint_to_url,
 };
 use http_body_util::{BodyExt, Full};
 use hyper::{body::Bytes, Method, Request};
@@ -179,7 +179,7 @@ impl CatchUpPackageProvider {
             );
             None
         })?;
-        let mut uri = http_endpoint_to_url(&http, &self.logger)?;
+        let mut uri = https_endpoint_to_url(&http, &self.logger)?;
         uri.path_segments_mut()
             .ok()?
             .push("_")

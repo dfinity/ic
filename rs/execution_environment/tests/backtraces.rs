@@ -26,23 +26,26 @@ const IC0_TRAP_ERROR: &str =
 
 const IC0_TRAP_BACKTRACE: &str = r#"
 Canister Backtrace:
-ic_cdk::api::trap
-ic_cdk::printer::set_panic_hook::{{closure}}
+ic_cdk_executor::set_panic_hook::{{closure}}::{{closure}}
 std::panicking::rust_panic_with_hook
 std::panicking::begin_panic_handler::{{closure}}
 std::sys::backtrace::__rust_end_short_backtrace
-rust_begin_unwind
+__rustc::rust_begin_unwind
 core::panicking::panic_fmt
 _wasm_backtrace_canister::ic0_trap::inner_2
 _wasm_backtrace_canister::ic0_trap::inner
 _wasm_backtrace_canister::ic0_trap::outer
+_wasm_backtrace_canister::ic0_trap
+ic_cdk_executor::in_executor_context
+canister_update ic0_trap
 "#;
 
 fn env_with_backtrace_canister_and_visibility(
     feature_enabled: FlagStatus,
     visibility: LogVisibilityV2,
+    canister_name: &str,
 ) -> (StateMachine, CanisterId) {
-    let wasm = canister_test::Project::cargo_bin_maybe_from_env("backtrace_canister", &[]);
+    let wasm = canister_test::Project::cargo_bin_maybe_from_env(canister_name, &[]);
     let mut hypervisor_config = HypervisorConfig::default();
     hypervisor_config
         .embedders_config
@@ -76,7 +79,11 @@ fn env_with_backtrace_canister_and_visibility(
 }
 
 fn env_with_backtrace_canister(feature_enabled: FlagStatus) -> (StateMachine, CanisterId) {
-    env_with_backtrace_canister_and_visibility(feature_enabled, LogVisibilityV2::Controllers)
+    env_with_backtrace_canister_and_visibility(
+        feature_enabled,
+        LogVisibilityV2::Controllers,
+        "backtrace_canister",
+    )
 }
 
 /// Check that calling `method` returns an error with code `code`, `message` and
@@ -148,6 +155,41 @@ fn no_backtrace_without_feature() {
 }
 
 #[test]
+fn no_backtrace_without_name_section() {
+    let (env, canister_id) = env_with_backtrace_canister_and_visibility(
+        FlagStatus::Enabled,
+        LogVisibilityV2::Controllers,
+        "backtrace_canister_without_names",
+    );
+    let result = env
+        .execute_ingress_as(
+            CONTROLLER,
+            canister_id,
+            "unreachable",
+            Encode!(&()).unwrap(),
+        )
+        .unwrap_err();
+    result.assert_contains(
+        ErrorCode::CanisterTrapped,
+        "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped: unreachable",
+    );
+    assert!(
+        !result.description().contains("Backtrace"),
+        "Result message: {} cointains unexpected 'Backtrace'",
+        result.description(),
+    );
+    let logs = env.canister_log(canister_id);
+    for log in logs.records() {
+        let log = std::str::from_utf8(&log.content).unwrap();
+        assert!(
+            !log.contains("Backtrace"),
+            "Canister log: {} cointains unexpected 'Backtrace'",
+            log,
+        );
+    }
+}
+
+#[test]
 fn oob_backtrace() {
     let (env, canister_id) = env_with_backtrace_canister(FlagStatus::Enabled);
     assert_error(
@@ -189,7 +231,7 @@ fn backtrace_test_stable_oob() {
         "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped: ",
         r#"stable memory out of bounds
 Canister Backtrace:
-ic0::ic0::stable64_write
+ic0::sys::stable64_write
 _wasm_backtrace_canister::stable_oob::inner_2
 _wasm_backtrace_canister::stable_oob::inner
 _wasm_backtrace_canister::stable_oob::outer
@@ -212,8 +254,11 @@ mod visibility {
         error_code: ErrorCode,
         backtrace: &str,
     ) {
-        let (env, canister_id) =
-            env_with_backtrace_canister_and_visibility(FlagStatus::Enabled, visibility);
+        let (env, canister_id) = env_with_backtrace_canister_and_visibility(
+            FlagStatus::Enabled,
+            visibility,
+            "backtrace_canister",
+        );
         // Call from anonymous principal
         let result = env
             .execute_ingress_as(caller, canister_id, method, Encode!(&()).unwrap())

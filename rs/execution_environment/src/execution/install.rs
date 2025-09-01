@@ -13,20 +13,22 @@ use crate::execution::install_code::{
 };
 use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::PrincipalId;
-use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
+use ic_embedders::{
+    wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult},
+    wasmtime_embedder::system_api::ApiType,
+};
 use ic_interfaces::execution_environment::WasmExecutionOutput;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState,
 };
-use ic_system_api::ApiType;
 use ic_types::funds::Cycles;
 use ic_types::messages::{CanisterCall, RequestMetadata};
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 
 /// Installs a new code in canister. The algorithm consists of five stages:
 /// - Stage 0: validate input.
-/// - Stage 1: create a new execution state based on the new Wasm code, clear certified data, deactivate global timer, and bump canister version.
+/// - Stage 1: create a new execution state based on the new Wasm code, clear certified data and canister logs, deactivate global timer, and bump canister version.
 /// - Stage 2: invoke the `start()` method (if present).
 /// - Stage 3: invoke the `canister_init()` method (if present).
 /// - Stage 4: finalize execution and refund execution cycles.
@@ -42,7 +44,7 @@ use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 ///   │
 ///   │
 ///   ▼
-/// [create new execution state, clear certified data, deactivate global timer, and bump canister version]
+/// [create new execution state, clear certified data and canister logs, deactivate global timer, and bump canister version]
 ///   │
 ///   │
 ///   │                   exceeded slice
@@ -80,7 +82,7 @@ pub(crate) fn execute_install(
     let mut helper = InstallCodeHelper::new(&clean_canister, &original);
 
     // Stage 0: validate input.
-    if let Err(err) = helper.validate_input(&original, &round, round_limits) {
+    if let Err(err) = helper.validate_input(&original) {
         let instructions_left = helper.instructions_left();
         return finish_err(
             clean_canister,
@@ -92,7 +94,7 @@ pub(crate) fn execute_install(
         );
     }
 
-    // Stage 1: create a new execution state based on the new Wasm binary, clear certified data, deactivate global timer, and bump canister version.
+    // Stage 1: create a new execution state based on the new Wasm binary, clear certified data and canister logs, deactivate global timer, and bump canister version.
     let canister_id = helper.canister().canister_id();
     let layout = canister_layout(&original.canister_layout_path, &canister_id);
     let context_sender = context.sender();
@@ -127,7 +129,6 @@ pub(crate) fn execute_install(
             stable_memory_handling: MemoryHandling::Replace,
             main_memory_handling: MemoryHandling::Replace,
         },
-        &original,
     ) {
         let instructions_left = helper.instructions_left();
         return finish_err(
@@ -140,6 +141,7 @@ pub(crate) fn execute_install(
         );
     }
     helper.clear_certified_data();
+    helper.clear_log();
     helper.deactivate_global_timer();
     helper.bump_canister_version();
     helper.add_canister_change(round.time, context.origin, context.mode, module_hash.into());
@@ -173,6 +175,7 @@ pub(crate) fn execute_install(
             RequestMetadata::for_new_call_tree(original.time),
             round_limits,
             round.network_topology,
+            round.cost_schedule,
         );
 
         match wasm_execution_result {
@@ -294,6 +297,7 @@ fn install_stage_2b_continue_install_after_start(
         RequestMetadata::for_new_call_tree(original.time),
         round_limits,
         round.network_topology,
+        round.cost_schedule,
     );
     match wasm_execution_result {
         WasmExecutionResult::Finished(slice, output, canister_state_changes) => {
@@ -391,7 +395,6 @@ impl PausedInstallCodeExecution for PausedInitExecution {
             self.paused_helper,
             &self.original,
             &round,
-            round_limits,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {
@@ -494,7 +497,6 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
             self.paused_helper,
             &self.original,
             &round,
-            round_limits,
         ) {
             Ok(helper) => helper,
             Err((err, instructions_left, new_canister_log)) => {

@@ -1,6 +1,0 @@
-test query/wasm32/ic0_data_certificate_size() ... bench:    73674568 ns/iter (+/- 3247289)
-test query/wasm64/ic0_data_certificate_size() ... bench:    73594055 ns/iter (+/- 1665261)
-test query/wasm32/ic0_data_certificate_copy()/1B ... bench:   144269499 ns/iter (+/- 2702785)
-test query/wasm64/ic0_data_certificate_copy()/1B ... bench:   139803934 ns/iter (+/- 3726063)
-test query/wasm32/ic0_data_certificate_copy()/64B ... bench:   142428176 ns/iter (+/- 1922216)
-test query/wasm64/ic0_data_certificate_copy()/64B ... bench:   139980020 ns/iter (+/- 2928015)

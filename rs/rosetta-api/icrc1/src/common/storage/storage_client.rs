@@ -2,16 +2,59 @@ use super::storage_operations;
 use crate::common::storage::types::{MetadataEntry, RosettaBlock};
 use anyhow::{bail, Result};
 use candid::Nat;
+use ic_base_types::CanisterId;
 use icrc_ledger_types::icrc1::account::Account;
+use rosetta_core::metrics::RosettaMetrics;
 use rusqlite::{Connection, OpenFlags};
 use serde_bytes::ByteBuf;
 use std::cmp::Ordering;
 use std::{path::Path, sync::Mutex};
 use tracing::warn;
 
+#[derive(Debug, Clone)]
+pub struct TokenInfo {
+    pub symbol: String,
+    pub decimals: u8,
+    pub ledger_id: CanisterId,
+    pub rosetta_metrics: RosettaMetrics,
+}
+
+// We use format "[symbol]-[canisterId[:5]]" so that it covers cases in which
+// we track tokens with the same symbols while keeping it short by only showing
+// the first 5 characters of the canister ID.
+fn display_name(symbol: String, ledger_id: CanisterId) -> String {
+    format!(
+        "{}-{}",
+        symbol,
+        ledger_id
+            .to_string()
+            .as_str()
+            .chars()
+            .take(5)
+            .collect::<String>()
+    )
+}
+
+impl TokenInfo {
+    pub fn new(symbol: String, decimals: u8, ledger_id: CanisterId) -> Self {
+        let canister_id_str = ledger_id.to_string();
+        Self {
+            symbol: symbol.clone(),
+            decimals,
+            ledger_id,
+            rosetta_metrics: RosettaMetrics::new(display_name(symbol, ledger_id), canister_id_str),
+        }
+    }
+
+    pub fn display_name(&self) -> String {
+        display_name(self.symbol.clone(), self.ledger_id)
+    }
+}
+
 #[derive(Debug)]
 pub struct StorageClient {
     storage_connection: Mutex<Connection>,
+    token_info: Option<TokenInfo>,
 }
 
 impl StorageClient {
@@ -37,9 +80,26 @@ impl StorageClient {
         Self::new(connection)
     }
 
+    pub fn get_token_display_name(&self) -> String {
+        if let Some(token_info) = &self.token_info {
+            token_info.display_name()
+        } else {
+            "unkown".to_string()
+        }
+    }
+
+    pub fn get_metrics(&self) -> RosettaMetrics {
+        if let Some(token_info) = &self.token_info {
+            token_info.rosetta_metrics.clone()
+        } else {
+            RosettaMetrics::new("unknown".to_string(), "unknown".to_string())
+        }
+    }
+
     fn new(connection: rusqlite::Connection) -> anyhow::Result<Self> {
         let storage_client = Self {
             storage_connection: Mutex::new(connection),
+            token_info: None,
         };
         storage_client
             .storage_connection
@@ -47,7 +107,18 @@ impl StorageClient {
             .unwrap()
             .execute("PRAGMA foreign_keys = 1", [])?;
         storage_client.create_tables()?;
+
+        // Run the fee collector balances repair if needed
+        tracing::info!(
+            "Storage initialization: Checking if fee collector balance repair is needed"
+        );
+        storage_client.repair_fee_collector_balances()?;
+
         Ok(storage_client)
+    }
+
+    pub fn initialize(&mut self, token_info: TokenInfo) {
+        self.token_info = Some(token_info);
     }
 
     pub fn does_blockchain_have_gaps(&self) -> anyhow::Result<bool> {
@@ -185,112 +256,7 @@ impl StorageClient {
 
     fn create_tables(&self) -> Result<(), rusqlite::Error> {
         let open_connection = self.storage_connection.lock().unwrap();
-        open_connection.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS metadata (
-                key TEXT PRIMARY KEY,
-                value BLOB NOT NULL
-            );
-            "#,
-            [],
-        )?;
-        open_connection.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS blocks (
-                idx INTEGER NOT NULL PRIMARY KEY,
-                hash BLOB NOT NULL,
-                serialized_block BLOB NOT NULL,
-                parent_hash BLOB,
-                timestamp INTEGER,
-                verified BOOLEAN,
-                tx_hash BLOB NOT NULL,
-                operation_type VARCHAR(255) NOT NULL,
-                from_principal BLOB,
-                from_subaccount BLOB,
-                to_principal BLOB,
-                to_subaccount BLOB,
-                spender_principal BLOB,
-                spender_subaccount BLOB,
-                memo BLOB,
-                amount TEXT,
-                expected_allowance TEXT,
-                fee TEXT,
-                transaction_created_at_time INTEGER,
-                approval_expires_at INTEGER
-            )
-            "#,
-            [],
-        )?;
-        open_connection.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS account_balances (
-                block_idx INTEGER NOT NULL,
-                principal BLOB NOT NULL,
-                subaccount BLOB NOT NULL,
-                amount TEXT NOT NULL,
-                PRIMARY KEY(principal,subaccount,block_idx)
-            )
-            "#,
-            [],
-        )?;
-
-        // The counters table entry needs to have a unique name, so that we don't end up with
-        // multiple entries for the same counter.
-        open_connection.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS counters (name TEXT PRIMARY KEY, value INTEGER NOT NULL)
-            "#,
-            [],
-        )?;
-
-        // Set the initial counter value for `SyncedBlocks` to the number of blocks in the blocks
-        // table. If the counter already exists, the value will not be updated.
-        open_connection.execute(
-            r#"
-            INSERT OR IGNORE INTO counters (name, value) VALUES ("SyncedBlocks", (SELECT COUNT(*) FROM blocks))
-            "#,
-            [],
-        )?;
-
-        // The trigger increments the counter of `SyncedBlocks` by 1 whenever a new block is
-        // inserted into the blocks table. For transactions that call `INSERT OR IGNORE` and try to
-        // insert a block that already exists, the trigger will not be executed. The trigger is
-        // executed once for each row that is inserted.
-        open_connection.execute(
-            r#"
-            CREATE TRIGGER IF NOT EXISTS SyncedBlocksUpdate AFTER INSERT ON blocks
-                BEGIN
-                    UPDATE counters SET value = value + 1 WHERE name = "SyncedBlocks";
-                END
-            "#,
-            [],
-        )?;
-
-        open_connection.execute(
-            r#"
-            CREATE INDEX IF NOT EXISTS block_idx_account_balances
-            ON account_balances(block_idx)
-            "#,
-            [],
-        )?;
-
-        open_connection.execute(
-            r#"
-        CREATE INDEX IF NOT EXISTS tx_hash_index
-        ON blocks(tx_hash)
-        "#,
-            [],
-        )?;
-
-        open_connection.execute(
-            r#"
-        CREATE INDEX IF NOT EXISTS block_hash_index
-        ON blocks(hash)
-        "#,
-            [],
-        )?;
-
-        Ok(())
+        super::schema::create_tables(&open_connection)
     }
 
     // Populates the blocks and transactions table by the Rosettablocks provided
@@ -335,9 +301,37 @@ impl StorageClient {
         storage_operations::get_account_balance_at_highest_block_idx(&open_connection, account)
     }
 
+    // Retrieves the aggregated balance of all subaccounts for a given principal at a specific block height
+    pub fn get_aggregated_balance_for_principal_at_block_idx(
+        &self,
+        principal: &ic_base_types::PrincipalId,
+        block_idx: u64,
+    ) -> anyhow::Result<Nat> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::get_aggregated_balance_for_principal_at_block_idx(
+            &open_connection,
+            principal,
+            block_idx,
+        )
+    }
+
     pub fn get_block_count(&self) -> anyhow::Result<u64> {
         let open_connection = self.storage_connection.lock().unwrap();
         storage_operations::get_block_count(&open_connection)
+    }
+
+    /// Repairs account balances for databases created before the fee collector block index fix.
+    /// This function identifies Transfer operations that used fee_collector_block_index but didn't
+    /// properly credit the fee collector, and adds the missing fee credits.
+    ///
+    /// This is safe to run multiple times - it will only add missing credits and won't duplicate them.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if the repair was successful, or an error if the repair failed.
+    pub fn repair_fee_collector_balances(&self) -> anyhow::Result<()> {
+        let mut open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::repair_fee_collector_balances(&mut open_connection)
     }
 }
 
@@ -484,7 +478,7 @@ mod tests {
            }
 
           #[test]
-          fn test_deriving_gaps_from_storage(blockchain in valid_blockchain_with_gaps_strategy::<U256>(1000)){
+          fn test_deriving_gaps_from_storage(blockchain in valid_blockchain_with_gaps_strategy::<U256>(1000).no_shrink()){
               let storage_client_memory = StorageClient::new_in_memory().unwrap();
               let mut rosetta_blocks = vec![];
               for i in 0..blockchain.0.len() {

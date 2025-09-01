@@ -1,7 +1,7 @@
 mod proto;
 
 use candid::CandidType;
-use ic_base_types::{CanisterId, CanisterIdError, PrincipalId, SubnetId};
+use ic_base_types::{CanisterId, CanisterIdError, SubnetId};
 use ic_protobuf::proxy::ProxyDecodeError;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
@@ -55,7 +55,7 @@ impl CanisterIdRange {
     /// * `self.start` if `previous_canister_id` is `None`.
     /// * `self.start` if `previous_canister_id < self.start`.
     /// * `None` if `previous_canister_id >= self.end`
-    ///    or the entire range of 64 bit integers is exhausted.
+    ///   or the entire range of 64 bit integers is exhausted.
     /// * `previous_canister_id + 1` otherwise.
     pub fn generate_canister_id(
         &self,
@@ -314,6 +314,14 @@ impl RoutingTable {
         Ok(())
     }
 
+    pub fn assign_canister(&mut self, canister_id: CanisterId, destination: SubnetId) {
+        let range = CanisterIdRange {
+            start: canister_id,
+            end: canister_id,
+        };
+        self.assign_range(range, destination);
+    }
+
     /// Assigns a canister ID range to the destination subnet.
     ///
     /// Notes:
@@ -517,30 +525,6 @@ impl RoutingTable {
         }
 
         Ok(())
-    }
-
-    /// Returns the `SubnetId` that the given `principal_id` is assigned to or
-    /// `None` if an assignment cannot be found.
-    pub fn route(&self, principal_id: PrincipalId) -> Option<SubnetId> {
-        // Check if the given `principal_id` is a subnet.
-        // Note that the following assumes that all known subnets are in the routing
-        // table, even if they're empty (i.e. no canister exists on them). In the
-        // future, if this assumption does not hold, the list of existing
-        // subnets should be taken from the rest of the registry (which should
-        // be the absolute source of truth).
-        if let Some(subnet_id) = self.0.values().find(|x| x.get() == principal_id) {
-            return Some(*subnet_id);
-        }
-
-        // If the `principal_id` was not a subnet, it must be a `CanisterId` (otherwise
-        // we can't route to it).
-        match CanisterId::try_from(principal_id) {
-            Ok(canister_id) => {
-                lookup_in_ranges(&self.0, canister_id).map(|(_range, subnet_id)| subnet_id)
-            }
-            // Cannot route to any subnet as we couldn't convert to a `CanisterId`.
-            Err(_) => None,
-        }
     }
 
     /// Returns the corresponding `CanisterIdRange` and `SubnetId` that the given `canister_id` is assigned to

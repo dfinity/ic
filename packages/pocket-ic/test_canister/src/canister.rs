@@ -1,4 +1,5 @@
-use candid::{define_function, CandidType, Principal};
+#![allow(deprecated)]
+use candid::{define_function, CandidType, Nat, Principal};
 use ic_cdk::api::call::{accept_message, arg_data_raw, reject, RejectionCode};
 use ic_cdk::api::instruction_counter;
 use ic_cdk::api::management_canister::ecdsa::{
@@ -10,6 +11,8 @@ use ic_cdk::api::management_canister::http_request::{
     TransformArgs, TransformContext, TransformFunc,
 };
 use ic_cdk::{inspect_message, query, trap, update};
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::Memo;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 
@@ -158,23 +161,23 @@ async fn sign_with_schnorr(
     key_id: SchnorrKeyId,
     aux: Option<SignWithSchnorrAux>,
 ) -> Result<Vec<u8>, String> {
-    let internal_request = SignWithSchnorrArgument {
+    let request = SignWithSchnorrArgument {
         message,
         derivation_path,
         key_id,
         aux,
     };
 
-    let (internal_reply,): (SignWithSchnorrResponse,) = ic_cdk::api::call::call_with_payment(
+    let (reply,): (SignWithSchnorrResponse,) = ic_cdk::api::call::call_with_payment(
         Principal::management_canister(),
         "sign_with_schnorr",
-        (internal_request,),
-        25_000_000_000,
+        (request,),
+        26_153_846_153,
     )
     .await
     .map_err(|e| format!("sign_with_schnorr failed {e:?}"))?;
 
-    Ok(internal_reply.signature)
+    Ok(reply.signature)
 }
 
 // ECDSA interface
@@ -220,19 +223,114 @@ async fn sign_with_ecdsa(
         .signature)
 }
 
+// vetKd interface
+
+#[derive(CandidType, Serialize, Deserialize, Debug)]
+pub enum VetKdCurve {
+    #[serde(rename = "bls12_381_g2")]
+    #[allow(non_camel_case_types)]
+    Bls12_381_G2,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Debug)]
+pub struct VetKdKeyId {
+    pub curve: VetKdCurve,
+    pub name: String,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Debug)]
+pub struct VetKdPublicKeyArgument {
+    pub canister_id: Option<Principal>,
+    pub context: Vec<u8>,
+    pub key_id: VetKdKeyId,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Debug)]
+pub struct VetKdPublicKeyResponse {
+    pub public_key: Vec<u8>,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Debug)]
+pub struct VetKdDeriveKeyArgument {
+    pub context: Vec<u8>,
+    pub input: Vec<u8>,
+    pub key_id: VetKdKeyId,
+    pub transport_public_key: Vec<u8>,
+}
+
+#[derive(CandidType, Serialize, Deserialize, Debug)]
+pub struct VetKdDeriveKeyResponse {
+    pub encrypted_key: Vec<u8>,
+}
+
+#[update]
+async fn vetkd_public_key(
+    canister_id: Option<Principal>,
+    context: Vec<u8>,
+    name: String,
+) -> Result<Vec<u8>, String> {
+    let request = VetKdPublicKeyArgument {
+        canister_id,
+        context,
+        key_id: VetKdKeyId {
+            curve: VetKdCurve::Bls12_381_G2,
+            name,
+        },
+    };
+
+    let (res,): (VetKdPublicKeyResponse,) = ic_cdk::call(
+        Principal::management_canister(),
+        "vetkd_public_key",
+        (request,),
+    )
+    .await
+    .map_err(|e| format!("vetkd_public_key failed {}", e.1))?;
+
+    Ok(res.public_key)
+}
+
+#[update]
+async fn vetkd_derive_key(
+    context: Vec<u8>,
+    input: Vec<u8>,
+    name: String,
+    transport_public_key: Vec<u8>,
+) -> Result<Vec<u8>, String> {
+    let request = VetKdDeriveKeyArgument {
+        context,
+        input,
+        key_id: VetKdKeyId {
+            curve: VetKdCurve::Bls12_381_G2,
+            name,
+        },
+        transport_public_key,
+    };
+
+    let (reply,): (VetKdDeriveKeyResponse,) = ic_cdk::api::call::call_with_payment(
+        Principal::management_canister(),
+        "vetkd_derive_key",
+        (request,),
+        26_153_846_153,
+    )
+    .await
+    .map_err(|e| format!("vetkd_derive_key failed {e:?}"))?;
+
+    Ok(reply.encrypted_key)
+}
+
 // canister HTTP outcalls
 
 #[update]
-async fn canister_http() -> Result<HttpResponse, (RejectionCode, String)> {
+async fn canister_http(http_server_addr: String) -> Result<HttpResponse, (RejectionCode, String)> {
     let arg: CanisterHttpRequestArgument = CanisterHttpRequestArgument {
-        url: "https://example.com".to_string(),
+        url: http_server_addr,
         max_response_bytes: None,
         method: HttpMethod::GET,
         headers: vec![],
         body: None,
         transform: None,
     };
-    let cycles = 20_849_238_800; // magic number derived from the error message when setting this to zero
+    let cycles = 100_000_000_000; // enough cycles for any canister http outcall
     canister_http_outcall(arg, cycles).await.map(|resp| resp.0)
 }
 
@@ -245,10 +343,10 @@ async fn transform(transform_args: TransformArgs) -> HttpResponse {
 }
 
 #[update]
-async fn canister_http_with_transform() -> HttpResponse {
+async fn canister_http_with_transform(http_server_addr: String) -> HttpResponse {
     let context = b"this is my transform context".to_vec();
     let arg: CanisterHttpRequestArgument = CanisterHttpRequestArgument {
-        url: "https://example.com".to_string(),
+        url: http_server_addr,
         max_response_bytes: None,
         method: HttpMethod::GET,
         headers: vec![],
@@ -261,7 +359,7 @@ async fn canister_http_with_transform() -> HttpResponse {
             context,
         }),
     };
-    let cycles = 20_849_431_200; // magic number derived from the error message when setting this to zero
+    let cycles = 100_000_000_000; // enough cycles for any canister http outcall
     canister_http_outcall(arg, cycles).await.unwrap().0
 }
 
@@ -379,6 +477,39 @@ fn trap_query() {
 #[update]
 fn trap_update() {
     trap("trap in update method");
+}
+
+// deposit cycles to the cycles ledger
+#[update]
+async fn deposit_cycles_to_cycles_ledger(beneficiary: Principal, cycles: u128) {
+    #[derive(CandidType)]
+    struct DepositArg {
+        to: Account,
+        memo: Option<Memo>,
+    }
+
+    #[derive(CandidType, Deserialize)]
+    struct DepositResult {
+        block_index: Nat,
+        balance: Nat,
+    }
+
+    let cycles_ledger_id = Principal::from_text("um5iw-rqaaa-aaaaq-qaaba-cai").unwrap();
+    let deposit_arg = DepositArg {
+        to: Account {
+            owner: beneficiary,
+            subaccount: None,
+        },
+        memo: None,
+    };
+    ic_cdk::api::call::call_with_payment128::<_, (DepositResult,)>(
+        cycles_ledger_id,
+        "deposit",
+        (deposit_arg,),
+        cycles,
+    )
+    .await
+    .unwrap();
 }
 
 fn main() {}

@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_registry_local_registry::LocalRegistry;
-use ic_sys::fs::{sync_path, write_atomically};
+use ic_sys::fs::{sync_path, write_atomically, Clobber};
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use serde::de::DeserializeOwned;
@@ -82,9 +82,8 @@ impl TestEnv {
         if let Some(parent_dir) = path.parent() {
             fs::create_dir_all(parent_dir)?;
         }
-        write_atomically(&path, |buf| {
-            serde_json::to_writer(buf, t)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+        write_atomically(&path, Clobber::Yes, |buf| {
+            serde_json::to_writer(buf, t).map_err(|e| std::io::Error::other(e.to_string()))
         })
         .with_context(|| format!("{:?}: Could not write json object.", path))
     }

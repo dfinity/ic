@@ -19,8 +19,6 @@ where
         canister_id: canister_id.get(),
         wasm_module,
         arg,
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 

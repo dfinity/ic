@@ -10,12 +10,10 @@ use ic_artifact_pool::{
     ingress_pool::IngressPoolImpl,
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
-use ic_consensus::{
-    consensus::{ConsensusBouncer, ConsensusImpl},
-    idkg,
-};
+use ic_consensus::consensus::{ConsensusBouncer, ConsensusImpl};
 use ic_consensus_certification::{CertificationCrypto, CertifierBouncer, CertifierImpl};
 use ic_consensus_dkg::DkgBouncer;
+use ic_consensus_idkg::{IDkgBouncer, IDkgStatsImpl};
 use ic_consensus_manager::{AbortableBroadcastChannel, AbortableBroadcastChannelBuilder};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_consensus_vetkd::VetKdPayloadBuilderImpl;
@@ -29,7 +27,7 @@ use ic_https_outcalls_consensus::{
 use ic_ingress_manager::{bouncer::IngressBouncer, IngressManager, RandomStateKind};
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
-    consensus_pool::{ConsensusBlockCache, ConsensusPoolCache},
+    consensus_pool::ConsensusPoolCache,
     execution_environment::IngressHistoryReader,
     messaging::{MessageRouting, XNetPayloadBuilder},
     p2p::{artifact_manager::JoinGuard, state_sync::StateSyncClient},
@@ -43,6 +41,7 @@ use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::create_udp_socket;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{
@@ -62,10 +61,7 @@ use std::{
     str::FromStr,
     sync::{Arc, Mutex, RwLock},
 };
-use tokio::sync::{
-    mpsc::{unbounded_channel, UnboundedSender},
-    watch,
-};
+use tokio::sync::{mpsc::Sender, watch};
 use tower_http::trace::TraceLayer;
 
 /// [IC-1718]: Whether the `hashes-in-blocks` feature is enabled. If the flag is set to `true`, we
@@ -108,7 +104,7 @@ impl ArtifactPools {
             config.clone(),
             log.clone(),
             metrics_registry.clone(),
-            Box::new(idkg::IDkgStatsImpl::new(metrics_registry.clone())),
+            Box::new(IDkgStatsImpl::new(metrics_registry.clone())),
         );
         idkg_pool.add_initial_dealings(catch_up_package);
         let idkg_pool = Arc::new(RwLock::new(idkg_pool));
@@ -142,7 +138,7 @@ struct Bouncers {
     consensus: Arc<ConsensusBouncer>,
     certifier: Arc<CertifierBouncer>,
     dkg: Arc<DkgBouncer>,
-    idkg: Arc<idkg::IDkgBouncer>,
+    idkg: Arc<IDkgBouncer>,
     https_outcalls: Arc<CanisterHttpGossipImpl>,
 }
 
@@ -154,7 +150,6 @@ impl Bouncers {
         time_source: Arc<dyn TimeSource>,
         message_router: Arc<dyn MessageRouting>,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-        consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Self {
         let ingress = Arc::new(IngressBouncer::new(time_source.clone()));
@@ -164,10 +159,10 @@ impl Bouncers {
             metrics_registry,
             consensus_pool_cache.clone(),
         ));
-        let idkg = Arc::new(idkg::IDkgBouncer::new(
+        let idkg = Arc::new(IDkgBouncer::new(
             metrics_registry,
             subnet_id,
-            consensus_block_cache,
+            consensus_pool_cache.clone(),
             state_reader.clone(),
         ));
 
@@ -211,7 +206,6 @@ impl AbortableBroadcastChannels {
         artifact_pools: &ArtifactPools,
     ) -> (Self, AbortableBroadcastChannelBuilder) {
         let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
-        let consensus_block_cache = consensus_pool.read().unwrap().get_block_cache();
         let bouncers = Bouncers::new(
             log,
             metrics_registry,
@@ -219,7 +213,6 @@ impl AbortableBroadcastChannels {
             time_source.clone(),
             message_router.clone(),
             consensus_pool_cache.clone(),
-            consensus_block_cache,
             state_reader.clone(),
         );
 
@@ -253,7 +246,6 @@ impl AbortableBroadcastChannels {
         };
 
         let ingress = {
-            #[allow(clippy::disallowed_methods)]
             let assembler = ic_artifact_downloader::FetchArtifact::new(
                 log.clone(),
                 rt_handle.clone(),
@@ -344,6 +336,7 @@ pub fn setup_consensus_and_p2p(
     malicious_flags: MaliciousFlags,
     node_id: NodeId,
     subnet_id: SubnetId,
+    subnet_type: SubnetType,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_sync_client: Arc<dyn StateSyncClient<Message = StateSyncMessage>>,
@@ -365,7 +358,7 @@ pub fn setup_consensus_and_p2p(
     max_certified_height_tx: watch::Sender<Height>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
-    UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     Vec<Box<dyn JoinGuard>>,
 ) {
     let time_source = Arc::new(SysTimeSource::new());
@@ -447,6 +440,7 @@ pub fn setup_consensus_and_p2p(
         metrics_registry,
         node_id,
         subnet_id,
+        subnet_type,
         artifact_pools,
         channels,
         Arc::clone(&consensus_crypto) as Arc<_>,
@@ -478,6 +472,7 @@ fn start_consensus(
     metrics_registry: &MetricsRegistry,
     node_id: NodeId,
     subnet_id: SubnetId,
+    subnet_type: SubnetType,
     artifact_pools: ArtifactPools,
     abortable_broadcast_channels: AbortableBroadcastChannels,
     // ConsensusCrypto is an extension of the Crypto trait and we can
@@ -502,7 +497,7 @@ fn start_consensus(
     time_source: Arc<dyn TimeSource>,
 ) -> (
     Arc<RwLock<IngressPoolImpl>>,
-    UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     Vec<Box<dyn JoinGuard>>,
 ) {
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
@@ -588,11 +583,9 @@ fn start_consensus(
         consensus_pool.clone(),
         metrics_registry.clone(),
     ));
-    #[allow(clippy::disallowed_methods)]
-    let (user_ingress_tx, user_ingress_rx) = unbounded_channel();
+    let user_ingress_tx = abortable_broadcast_channels.ingress.inbound_tx.clone();
     join_handles.push(create_ingress_handlers(
         abortable_broadcast_channels.ingress,
-        user_ingress_rx,
         Arc::clone(&time_source) as Arc<_>,
         Arc::clone(&artifact_pools.ingress_pool),
         ingress_manager,
@@ -647,7 +640,7 @@ fn start_consensus(
     );
     join_handles.push(create_artifact_handler(
         abortable_broadcast_channels.idkg,
-        idkg::IDkgImpl::new(
+        ic_consensus_idkg::IDkgImpl::new(
             node_id,
             consensus_pool.read().unwrap().get_block_cache(),
             Arc::clone(&consensus_crypto),
@@ -668,6 +661,7 @@ fn start_consensus(
             Arc::clone(&consensus_crypto),
             Arc::clone(&consensus_pool_cache),
             ReplicaConfig { subnet_id, node_id },
+            subnet_type,
             Arc::clone(&registry_client),
             metrics_registry.clone(),
             log.clone(),

@@ -1,7 +1,8 @@
+#![allow(deprecated)]
 use async_trait::async_trait;
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::call::{CallResult, RejectionCode};
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_management_canister_types_private::{
     CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CreateCanisterArgs, InstallCodeArgs,
     Method, UpdateSettingsArgs,
@@ -121,8 +122,6 @@ impl CanisterApi for CanisterApiImpl {
             canister_id: target_canister.get(),
             wasm_module: wasm,
             arg: init_payload,
-            compute_allocation: None,
-            memory_allocation: None,
             sender_canister_version: Some(ic_cdk::api::canister_version()),
         };
         let install_res: CallResult<()> =
@@ -478,7 +477,10 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     Ok(())
 }
 
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),

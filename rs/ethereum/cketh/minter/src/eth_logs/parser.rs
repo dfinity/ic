@@ -4,9 +4,10 @@ use crate::eth_logs::{
     RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
     RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
 };
-use crate::eth_rpc::{Data, FixedSizeData, LogEntry};
+use crate::eth_rpc::Hash;
 use crate::numeric::{BlockNumber, Erc20Value, Wei};
 use candid::Principal;
+use evm_rpc_client::{Hex, Hex32, LogEntry};
 use ic_ethereum_types::Address;
 
 /// Parse an Ethereum log event into a `ReceivedEvent`.
@@ -37,15 +38,14 @@ impl LogParser for ReceivedEthLogParser {
         ensure_topics(
             &entry,
             |topics| {
-                topics.len() == 3
-                    && topics.first() == Some(&FixedSizeData(RECEIVED_ETH_EVENT_TOPIC))
+                topics.len() == 3 && topics.first() == Some(&Hex32::from(RECEIVED_ETH_EVENT_TOPIC))
             },
             event_source,
         )?;
         let from_address = parse_address(&entry.topics[1], event_source)?;
         let principal = parse_principal(&entry.topics[2], event_source)?;
 
-        let [value_bytes] = parse_data_into_32_byte_words(entry.data, event_source)?;
+        let [value_bytes] = parse_hex_into_32_byte_words(entry.data, event_source)?;
         let EventSource {
             transaction_hash,
             log_index,
@@ -75,7 +75,7 @@ impl LogParser for ReceivedErc20LogParser {
             &entry,
             |topics| {
                 topics.len() == 4
-                    && topics.first() == Some(&FixedSizeData(RECEIVED_ERC20_EVENT_TOPIC))
+                    && topics.first() == Some(&Hex32::from(RECEIVED_ERC20_EVENT_TOPIC))
             },
             event_source,
         )?;
@@ -83,7 +83,7 @@ impl LogParser for ReceivedErc20LogParser {
         let from_address = parse_address(&entry.topics[2], event_source)?;
         let principal = parse_principal(&entry.topics[3], event_source)?;
 
-        let [value_bytes] = parse_data_into_32_byte_words(entry.data, event_source)?;
+        let [value_bytes] = parse_hex_into_32_byte_words(entry.data, event_source)?;
         let EventSource {
             transaction_hash,
             log_index,
@@ -115,7 +115,7 @@ impl LogParser for ReceivedEthOrErc20LogParser {
             |topics| {
                 topics.len() == 4
                     && topics.first()
-                        == Some(&FixedSizeData(
+                        == Some(&Hex32::from(
                             RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
                         ))
             },
@@ -125,7 +125,7 @@ impl LogParser for ReceivedEthOrErc20LogParser {
         let from_address = parse_address(&entry.topics[2], event_source)?;
         let principal = parse_principal(&entry.topics[3], event_source)?;
         let [value_bytes, subaccount_bytes] =
-            parse_data_into_32_byte_words(entry.data, event_source)?;
+            parse_hex_into_32_byte_words(entry.data, event_source)?;
         let subaccount = LedgerSubaccount::from_bytes(subaccount_bytes);
         let EventSource {
             transaction_hash,
@@ -164,22 +164,29 @@ impl LogParser for ReceivedEthOrErc20LogParser {
 fn ensure_not_pending(entry: &LogEntry) -> Result<(BlockNumber, EventSource), ReceivedEventError> {
     let _block_hash = entry
         .block_hash
+        .as_ref()
         .ok_or(ReceivedEventError::PendingLogEntry)?;
     let block_number = entry
         .block_number
+        .clone()
         .ok_or(ReceivedEventError::PendingLogEntry)?;
     let transaction_hash = entry
         .transaction_hash
+        .clone()
         .ok_or(ReceivedEventError::PendingLogEntry)?;
     let _transaction_index = entry
         .transaction_index
+        .as_ref()
         .ok_or(ReceivedEventError::PendingLogEntry)?;
-    let log_index = entry.log_index.ok_or(ReceivedEventError::PendingLogEntry)?;
+    let log_index = entry
+        .log_index
+        .clone()
+        .ok_or(ReceivedEventError::PendingLogEntry)?;
     Ok((
-        block_number,
+        block_number.into(),
         EventSource {
-            transaction_hash,
-            log_index,
+            transaction_hash: Hash(transaction_hash.into()),
+            log_index: log_index.into(),
         },
     ))
 }
@@ -205,7 +212,7 @@ fn ensure_topics<P>(
     event_source: EventSource,
 ) -> Result<(), ReceivedEventError>
 where
-    P: FnOnce(&[FixedSizeData]) -> bool,
+    P: FnOnce(&[Hex32]) -> bool,
 {
     if !predicate(&entry.topics) {
         return Err(ReceivedEventError::InvalidEventSource {
@@ -217,20 +224,22 @@ where
 }
 
 fn parse_address(
-    address: &FixedSizeData,
+    address: &Hex32,
     event_source: EventSource,
 ) -> Result<Address, ReceivedEventError> {
-    Address::try_from(&address.0).map_err(|err| ReceivedEventError::InvalidEventSource {
+    let array: &[u8; 32] = &address.clone().into();
+
+    Address::try_from(array).map_err(|err| ReceivedEventError::InvalidEventSource {
         source: event_source,
         error: EventSourceError::InvalidEvent(format!("Invalid address in log entry: {}", err)),
     })
 }
 
 fn parse_principal(
-    principal: &FixedSizeData,
+    principal: &Hex32,
     event_source: EventSource,
 ) -> Result<Principal, ReceivedEventError> {
-    parse_principal_from_slice(&principal.0).map_err(|_err| {
+    parse_principal_from_slice(principal.as_ref()).map_err(|_err| {
         ReceivedEventError::InvalidEventSource {
             source: event_source,
             error: EventSourceError::InvalidPrincipal {
@@ -240,11 +249,11 @@ fn parse_principal(
     })
 }
 
-fn parse_data_into_32_byte_words<const N: usize>(
-    data: Data,
+fn parse_hex_into_32_byte_words<const N: usize>(
+    data: Hex,
     event_source: EventSource,
 ) -> Result<[[u8; 32]; N], ReceivedEventError> {
-    let data = data.0;
+    let data = data.as_ref();
     if data.len() != 32 * N {
         return Err(ReceivedEventError::InvalidEventSource {
             source: event_source,

@@ -28,6 +28,7 @@ DEPENDENCIES = [
     "//rs/p2p/quic_transport",
     "//rs/p2p/state_sync_manager",
     "//rs/registry/helpers",
+    "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/state_manager",
     "//rs/types/types",
@@ -39,11 +40,13 @@ DEPENDENCIES = [
 NONMALICIOUS_DEPENDENCIES = [
     # Keep sorted.
     "//rs/consensus:consensus",
+    "//rs/consensus/idkg",
 ]
 
 MALICIOUS_DEPENDENCIES = [
     # Keep sorted.
     "//rs/consensus:malicious_consensus",
+    "//rs/consensus/idkg:malicious_idkg",
 ]
 
 rust_library(

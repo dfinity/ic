@@ -5,7 +5,7 @@ use crate::routing::demux::Demux;
 use crate::routing::stream_builder::StreamBuilder;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::execution_environment::{
-    ChainKeyData, ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
+    ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
 use ic_interfaces::time_source::system_time_now;
 use ic_logger::{error, fatal, ReplicaLogger};
@@ -123,10 +123,7 @@ impl StateMachine for StateMachineImpl {
         }
 
         // Time out expired messages.
-        let (timed_out_messages, lost_cycles) = state.time_out_messages();
-        self.metrics
-            .timed_out_messages_total
-            .inc_by(timed_out_messages as u64);
+        let lost_cycles = state.time_out_messages(&self.metrics);
         state
             .metadata
             .subnet_metrics
@@ -184,11 +181,7 @@ impl StateMachine for StateMachineImpl {
         let state_after_execution = self.scheduler.execute_round(
             state_with_messages,
             batch.randomness,
-            ChainKeyData {
-                master_public_keys: batch.chain_key_subnet_public_keys,
-                idkg_pre_signature_ids: batch.idkg_pre_signature_ids,
-                nidkg_ids: batch.ni_dkg_ids,
-            },
+            batch.chain_key_data,
             &batch.replica_version,
             ExecutionRound::from(batch.batch_number.get()),
             round_summary,
@@ -214,12 +207,10 @@ impl StateMachine for StateMachineImpl {
 
         let since = Instant::now();
         // Shed enough messages to stay below the best-effort message memory limit.
-        let (shed_messages, shed_message_bytes, lost_cycles) = state_after_stream_builder
-            .enforce_best_effort_message_limit(self.best_effort_message_memory_capacity);
-        self.metrics.shed_messages_total.inc_by(shed_messages);
-        self.metrics
-            .shed_message_bytes_total
-            .inc_by(shed_message_bytes.get());
+        let lost_cycles = state_after_stream_builder.enforce_best_effort_message_limit(
+            self.best_effort_message_memory_capacity,
+            &self.metrics,
+        );
         state_after_stream_builder
             .metadata
             .subnet_metrics

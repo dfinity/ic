@@ -20,6 +20,62 @@ use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 
+/// Enum representing the different counter types used in the ICRC1 Rosetta storage system.
+/// Each counter serves a specific purpose for tracking state and ensuring data integrity.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RosettaCounter {
+    /// Tracks the number of blocks that have been synchronized and stored in the database.
+    ///
+    /// - **Type**: INTEGER
+    /// - **Initial value**: Set to the current count of blocks in the blocks table
+    /// - **Updates**: Automatically incremented by 1 via database trigger when new blocks are inserted
+    /// - **Usage**: Used by `get_block_count()` to efficiently retrieve the total number of synced blocks
+    /// - **Reset**: Can be reset to match actual block count via `reset_blocks_counter()`
+    SyncedBlocks,
+
+    /// Flag indicating whether the fee collector balance repair has been completed.
+    ///
+    /// - **Type**: INTEGER (used as boolean flag)
+    /// - **Value**: Set to 1 when the `repair_fee_collector_balances()` function has been executed
+    /// - **Usage**: Prevents redundant execution of the balance repair process
+    /// - **Context**: Used to fix account balances for databases created before the fee collector
+    ///   block index fix (https://github.com/dfinity/ic/pull/5304) was implemented
+    /// - **One-time operation**: Once set, this counter prevents the repair from running again
+    CollectorBalancesFixed,
+}
+
+impl RosettaCounter {
+    /// Returns the string name used to identify this counter in the database.
+    pub fn name(&self) -> &'static str {
+        match self {
+            RosettaCounter::SyncedBlocks => "SyncedBlocks",
+            RosettaCounter::CollectorBalancesFixed => "CollectorBalancesFixed",
+        }
+    }
+
+    /// Returns the default initial value for this counter.
+    pub fn default_value(&self) -> i64 {
+        match self {
+            RosettaCounter::SyncedBlocks => 0, // Will be set to actual block count during initialization
+            RosettaCounter::CollectorBalancesFixed => 0, // Flag starts as false (0)
+        }
+    }
+
+    /// Returns whether this counter represents a boolean flag (0/1 values only).
+    pub fn is_flag(&self) -> bool {
+        match self {
+            RosettaCounter::SyncedBlocks => false,
+            RosettaCounter::CollectorBalancesFixed => true,
+        }
+    }
+}
+
+impl std::fmt::Display for RosettaCounter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct RosettaBlock {
     pub index: u64,
@@ -91,6 +147,10 @@ impl RosettaBlock {
 
     pub fn get_fee_collector(&self) -> Option<Account> {
         self.block.fee_collector
+    }
+
+    pub fn get_fee_collector_block_index(&self) -> Option<u64> {
+        self.block.fee_collector_block_index
     }
 
     pub fn get_icrc1_block(&self) -> IcrcBlock {

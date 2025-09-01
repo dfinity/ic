@@ -388,8 +388,12 @@ impl ConsensusPool for UncachedConsensusPoolImpl {
         self
     }
 
-    fn build_block_chain(&self, start: &Block, end: &Block) -> Arc<dyn ConsensusBlockChain> {
-        Arc::new(ConsensusBlockChainImpl::new(self, start, end))
+    fn build_block_chain(&self, start_height: Height, end: Block) -> Arc<dyn ConsensusBlockChain> {
+        Arc::new(ConsensusBlockChainImpl::new_from_cache(
+            self,
+            start_height,
+            end,
+        ))
     }
 
     fn block_instant(&self, _hash: &CryptoHashOf<Block>) -> Option<Instant> {
@@ -673,8 +677,12 @@ impl ConsensusPool for ConsensusPoolImpl {
         self.cache.as_ref()
     }
 
-    fn build_block_chain(&self, start: &Block, end: &Block) -> Arc<dyn ConsensusBlockChain> {
-        Arc::new(ConsensusBlockChainImpl::new(self, start, end))
+    fn build_block_chain(&self, start_height: Height, end: Block) -> Arc<dyn ConsensusBlockChain> {
+        Arc::new(ConsensusBlockChainImpl::new_from_cache(
+            self,
+            start_height,
+            end,
+        ))
     }
 
     fn block_instant(&self, hash: &CryptoHashOf<Block>) -> Option<Instant> {
@@ -1051,7 +1059,7 @@ mod tests {
     use ic_types::{
         artifact::IdentifiableArtifact,
         batch::ValidationContext,
-        consensus::{BlockProposal, RandomBeacon},
+        consensus::{dkg::DkgSummary, BlockProposal, RandomBeacon},
         crypto::{crypto_hash, CryptoHash, CryptoHashOf},
         time::UNIX_EPOCH,
         RegistryVersion, ReplicaVersion,
@@ -1104,7 +1112,7 @@ mod tests {
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_test_id(0),
-                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                make_genesis(DkgSummary::fake()),
                 pool_config,
                 ic_metrics::MetricsRegistry::new(),
                 no_op_logger(),
@@ -1163,7 +1171,7 @@ mod tests {
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_test_id(0),
-                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                make_genesis(DkgSummary::fake()),
                 pool_config,
                 ic_metrics::MetricsRegistry::new(),
                 no_op_logger(),
@@ -1243,7 +1251,7 @@ mod tests {
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_test_id(0),
-                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                make_genesis(DkgSummary::fake()),
                 pool_config,
                 ic_metrics::MetricsRegistry::new(),
                 no_op_logger(),
@@ -1313,7 +1321,7 @@ mod tests {
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_test_id(0),
-                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                make_genesis(DkgSummary::fake()),
                 pool_config,
                 ic_metrics::MetricsRegistry::new(),
                 no_op_logger(),
@@ -1346,7 +1354,7 @@ mod tests {
             let mut pool = new_from_cup_without_bytes(
                 node,
                 subnet_test_id(0),
-                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                make_genesis(DkgSummary::fake()),
                 pool_config,
                 ic_metrics::MetricsRegistry::new(),
                 no_op_logger(),
@@ -1504,7 +1512,7 @@ mod tests {
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_test_id(0),
-                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                make_genesis(DkgSummary::fake()),
                 pool_config,
                 ic_metrics::MetricsRegistry::global(),
                 no_op_logger(),
@@ -1631,7 +1639,7 @@ mod tests {
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_id,
-                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                make_genesis(DkgSummary::fake()),
                 pool_config,
                 ic_metrics::MetricsRegistry::new(),
                 no_op_logger(),
@@ -1745,7 +1753,7 @@ mod tests {
             );
             let proposal_non_final = BlockProposal::fake(block, node_test_id(333));
 
-            let genesis_cup = make_genesis(ic_types::consensus::dkg::Summary::fake());
+            let genesis_cup = make_genesis(DkgSummary::fake());
             let mut cup = genesis_cup.clone();
             cup.content.random_beacon = hashed::Hashed::new(
                 ic_types::crypto::crypto_hash,
@@ -1987,7 +1995,7 @@ mod tests {
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_id,
-                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                make_genesis(DkgSummary::fake()),
                 pool_config,
                 ic_metrics::MetricsRegistry::new(),
                 no_op_logger(),
@@ -2251,7 +2259,7 @@ mod tests {
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_test_id(0),
-                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                make_genesis(DkgSummary::fake()),
                 pool_config,
                 ic_metrics::MetricsRegistry::new(),
                 no_op_logger(),

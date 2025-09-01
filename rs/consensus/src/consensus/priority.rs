@@ -5,6 +5,8 @@ use ic_interfaces::{
 };
 use ic_types::{artifact::ConsensusMessageId, consensus::ConsensusMessageHash, Height};
 
+use crate::consensus::ACCEPTABLE_NOTARIZATION_CUP_GAP;
+
 /// Return a bouncer function that matches the given consensus pool.
 pub fn new_bouncer(
     pool: &dyn ConsensusPool,
@@ -33,11 +35,6 @@ pub fn new_bouncer(
 /// We do not need to request artifacts that are too far ahead.
 const LOOK_AHEAD: u64 = 10;
 
-/// In order to have a bound on the validated consensus pool, we don't validate
-/// artifacts with a height greater than the given value above the next pending CUP.
-/// The only exception to this are CUPs, which have no upper bound on the height.
-const ACCEPTABLE_VALIDATION_CUP_GAP: u64 = 70;
-
 /// The actual bouncer computation utilizing cached BlockSets instead of
 /// having to read from the pool every time when it is called.
 fn compute_bouncer(
@@ -54,10 +51,10 @@ fn compute_bouncer(
     if height < expected_batch_height.min(cup_height) {
         return Unwanted;
     }
-    // Stash non-CUP artifacts, as long as they're too far ahead of the next CUP height.
-    // This prevents nodes that have fallen behind to exceed their validated pool bounds.
+    // Stash non-CUP artifacts, as long as they're too far ahead of the next pending CUP height.
+    // This prevents nodes that have fallen behind from exceeding their validated pool bounds.
     if !matches!(id.hash, ConsensusMessageHash::CatchUpPackage(_))
-        && height > next_cup_height + Height::new(ACCEPTABLE_VALIDATION_CUP_GAP)
+        && height > next_cup_height + Height::new(ACCEPTABLE_NOTARIZATION_CUP_GAP)
     {
         return MaybeWantsLater;
     }
@@ -135,9 +132,9 @@ mod tests {
     };
 
     #[test]
-    fn test_bouncer_for_validation_cup_gap() {
+    fn test_bouncer_for_validation_gap() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            let dkg_interval = ACCEPTABLE_VALIDATION_CUP_GAP + 29;
+            let dkg_interval = 499;
             let committee = (0..4).map(node_test_id).collect::<Vec<_>>();
             let Dependencies { mut pool, .. } = dependencies_with_subnet_params(
                 pool_config,
@@ -152,7 +149,7 @@ mod tests {
 
             // Advance pool *without* producing CUP to the maximum height beyond
             // which we don't validate non-CUP artifacts anymore.
-            let max_validation_height = dkg_interval + ACCEPTABLE_VALIDATION_CUP_GAP + 1;
+            let max_validation_height = dkg_interval + ACCEPTABLE_NOTARIZATION_CUP_GAP + 1;
             pool.advance_round_normal_operation_no_cup_n(max_validation_height);
 
             let expected_batch_height = Height::from(1);

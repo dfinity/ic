@@ -1,7 +1,8 @@
+#![allow(deprecated)]
 use ic_cdk::api::management_canister::main::{
     canister_status, CanisterIdRecord, CanisterStatusResponse,
 };
-use ic_cdk_macros::{init, post_upgrade, query, update};
+use ic_cdk::{init, post_upgrade, query, update};
 use ic_ledger_suite_orchestrator::candid::Erc20Contract as CandidErc20Contract;
 use ic_ledger_suite_orchestrator::candid::{ManagedCanisterIds, OrchestratorArg, OrchestratorInfo};
 use ic_ledger_suite_orchestrator::lifecycle;
@@ -17,7 +18,7 @@ mod dashboard;
 #[query]
 fn canister_ids(contract: CandidErc20Contract) -> Option<ManagedCanisterIds> {
     let contract = Erc20Token::try_from(contract)
-        .unwrap_or_else(|e| ic_cdk::trap(&format!("Invalid ERC-20 contract: {:?}", e)));
+        .unwrap_or_else(|e| ic_cdk::trap(format!("Invalid ERC-20 contract: {:?}", e)));
     let token_id = TokenId::from(contract);
     read_state(|s| s.managed_canisters(&token_id).cloned()).map(ManagedCanisterIds::from)
 }
@@ -59,7 +60,11 @@ fn get_orchestrator_info() -> OrchestratorInfo {
 
 #[export_name = "canister_global_timer"]
 fn timer() {
-    ic_ledger_suite_orchestrator::scheduler::timer(IC_CANISTER_RUNTIME);
+    // ic_ledger_suite_orchestrator::scheduler::timer invokes ic_cdk::futures::spawn_017_compat
+    // which must be wrapped in in_executor_context as required by the new ic-cdk-executor.
+    ic_cdk::futures::in_executor_context(|| {
+        ic_ledger_suite_orchestrator::scheduler::timer(IC_CANISTER_RUNTIME);
+    });
 }
 
 #[init]
@@ -101,12 +106,10 @@ async fn get_canister_status() -> CanisterStatusResponse {
 }
 
 #[query(hidden = true)]
-fn http_request(
-    req: ic_canisters_http_types::HttpRequest,
-) -> ic_canisters_http_types::HttpResponse {
+fn http_request(req: ic_http_types::HttpRequest) -> ic_http_types::HttpResponse {
     use askama::Template;
     use dashboard::DashboardTemplate;
-    use ic_canisters_http_types::HttpResponseBuilder;
+    use ic_http_types::HttpResponseBuilder;
 
     if ic_cdk::api::in_replicated_execution() {
         ic_cdk::trap("update call rejected");
@@ -253,6 +256,7 @@ fn http_request(
             match encode_metrics(&mut writer) {
                 Ok(()) => HttpResponseBuilder::ok()
                     .header("Content-Type", "text/plain; version=0.0.4")
+                    .header("Cache-Control", "no-store")
                     .with_body_and_content_length(writer.into_inner())
                     .build(),
                 Err(err) => {

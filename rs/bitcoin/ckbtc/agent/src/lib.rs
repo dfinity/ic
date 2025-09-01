@@ -1,6 +1,5 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
-use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_ckbtc_minter::queries::RetrieveBtcStatusRequest;
 use ic_ckbtc_minter::state::eventlog::{Event, GetEventsArg};
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
@@ -9,6 +8,7 @@ use ic_ckbtc_minter::updates::{
     retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk},
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
+use ic_http_types::{HttpRequest, HttpResponse};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use std::collections::BTreeMap;
 

@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use bitcoin::{consensus::Decodable, Address, Transaction};
 use candid::Nat;
 use ic_btc_checker::{
@@ -10,9 +11,9 @@ use ic_btc_checker::{
 };
 use ic_btc_interface::Txid;
 use ic_canister_log::{export as export_logs, log};
-use ic_canisters_http_types as http;
 use ic_cdk::api::call::RejectionCode;
 use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
+use ic_http_types as http;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt;
@@ -69,10 +70,10 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
     let config = get_config();
     let btc_network = config.btc_network();
     let address = Address::from_str(args.address.trim())
-        .unwrap_or_else(|err| ic_cdk::trap(&format!("Invalid Bitcoin address: {}", err)))
+        .unwrap_or_else(|err| ic_cdk::trap(format!("Invalid Bitcoin address: {}", err)))
         .require_network(btc_network.clone().into())
         .unwrap_or_else(|err| {
-            ic_cdk::trap(&format!("Not a Bitcoin {} address: {}", btc_network, err))
+            ic_cdk::trap(format!("Not a Bitcoin {} address: {}", btc_network, err))
         });
 
     match config.check_mode {
@@ -161,26 +162,26 @@ fn transform(raw: TransformArgs) -> HttpResponse {
 }
 
 #[ic_cdk::init]
-fn init(arg: CheckArg) {
+fn init(arg: Option<CheckArg>) {
     match arg {
-        CheckArg::InitArg(init_arg) => set_config(
+        Some(CheckArg::InitArg(init_arg)) => set_config(
             Config::new_and_validate(
                 init_arg.btc_network,
                 init_arg.check_mode,
                 init_arg.num_subnet_nodes,
             )
-            .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err))),
+            .unwrap_or_else(|err| ic_cdk::trap(format!("error creating config: {}", err))),
         ),
-        CheckArg::UpgradeArg(_) => {
+        _ => {
             ic_cdk::trap("cannot init canister state without init args");
         }
     }
 }
 
 #[ic_cdk::post_upgrade]
-fn post_upgrade(arg: CheckArg) {
+fn post_upgrade(arg: Option<CheckArg>) {
     match arg {
-        CheckArg::UpgradeArg(arg) => {
+        Some(CheckArg::UpgradeArg(arg)) => {
             let old_config = get_config();
             let num_subnet_nodes = arg
                 .as_ref()
@@ -192,10 +193,13 @@ fn post_upgrade(arg: CheckArg) {
                 .unwrap_or(old_config.check_mode);
             let config =
                 Config::new_and_validate(old_config.btc_network(), check_mode, num_subnet_nodes)
-                    .unwrap_or_else(|err| ic_cdk::trap(&format!("error creating config: {}", err)));
+                    .unwrap_or_else(|err| ic_cdk::trap(format!("error creating config: {}", err)));
             set_config(config);
         }
-        CheckArg::InitArg(_) => ic_cdk::trap("cannot upgrade canister state without upgrade args"),
+        Some(CheckArg::InitArg(_)) => {
+            ic_cdk::trap("cannot upgrade canister state without upgrade args")
+        }
+        _ => (), // config remains unchanged if no upgrade argument is specified
     }
 }
 
@@ -289,6 +293,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
 
         http::HttpResponseBuilder::ok()
             .header("Content-Type", "text/plain; version=0.0.4")
+            .header("Cache-Control", "no-store")
             .with_body_and_content_length(writer.into_inner())
             .build()
     } else if req.path() == "/logs" {

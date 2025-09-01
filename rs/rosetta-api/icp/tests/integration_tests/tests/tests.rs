@@ -22,8 +22,9 @@ use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
 use rosetta_core::objects::ObjectMap;
 use serde::Deserialize;
 use std::path::PathBuf;
+use std::process::Command;
 use std::thread::sleep;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use tempfile::TempDir;
 use url::Url;
 
@@ -546,7 +547,8 @@ async fn test_rosetta_blocks_enabled_after_first_block() {
     ])
     .await;
 
-    let rosetta_block1_expected_time_ts = TimeStamp::from(env.pocket_ic.get_time().await);
+    let system_time: SystemTime = env.pocket_ic.get_time().await.try_into().unwrap();
+    let rosetta_block1_expected_time_ts = TimeStamp::from(system_time);
     let rosetta_block1_expected_time_millis =
         rosetta_block1_expected_time_ts.as_nanos_since_unix_epoch() / 1_000_000;
 
@@ -704,7 +706,8 @@ async fn test_rosetta_blocks_dont_contain_transactions_duplicates() {
     ])
     .await;
 
-    let rosetta_block1_expected_time_ts = TimeStamp::from(env.pocket_ic.get_time().await);
+    let system_time: SystemTime = env.pocket_ic.get_time().await.try_into().unwrap();
+    let rosetta_block1_expected_time_ts = TimeStamp::from(system_time);
     let rosetta_block1_expected_time_millis =
         rosetta_block1_expected_time_ts.as_nanos_since_unix_epoch() / 1_000_000;
 
@@ -1321,4 +1324,16 @@ async fn test_network_status_single_genesis_transaction() {
         network_status.genesis_block_identifier,
         genesis_block.block_identifier
     );
+}
+
+#[test]
+fn test_mainnet_and_env_flag_set_returns_error() {
+    let output = Command::new(get_rosetta_path())
+        .args(["--environment", "test", "--mainnet"])
+        .output()
+        .expect("Failed to execute binary");
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Cannot specify both --mainnet and --environment flags"));
 }

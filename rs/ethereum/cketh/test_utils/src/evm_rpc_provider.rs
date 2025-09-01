@@ -1,6 +1,7 @@
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, strum_macros::EnumIter)]
 pub enum JsonRpcProvider {
-    //order is top-to-bottom and must match order used in production
+    // Order is top-to-bottom and must match order used in production.
+    // See: <https://github.com/dfinity/evm-rpc-canister/blob/8f000154020ba870e824927ef040d46d0663228e/src/rpc_client/mod.rs#L72>
     Provider1,
     Provider2,
     Provider3,
@@ -10,10 +11,11 @@ pub enum JsonRpcProvider {
 impl JsonRpcProvider {
     pub fn url(&self) -> &str {
         match self {
+            // URLs should either include a trailing '/' or specify a path
             JsonRpcProvider::Provider1 => "https://ethereum.blockpi.network/v1/rpc/public",
-            JsonRpcProvider::Provider2 => "https://ethereum-rpc.publicnode.com",
-            JsonRpcProvider::Provider3 => "https://cloudflare-eth.com/v1/mainnet",
-            JsonRpcProvider::Provider4 => "https://eth.llamarpc.com",
+            JsonRpcProvider::Provider2 => "https://rpc.ankr.com/eth",
+            JsonRpcProvider::Provider3 => "https://ethereum-rpc.publicnode.com/",
+            JsonRpcProvider::Provider4 => "https://eth.llamarpc.com/",
         }
     }
 }

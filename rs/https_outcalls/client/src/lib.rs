@@ -11,13 +11,10 @@ use ic_interfaces::execution_environment::QueryExecutionService;
 use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_registry_subnet_type::SubnetType;
-use ic_types::{
-    canister_http::{CanisterHttpRequest, CanisterHttpResponse},
-    messages::CertificateDelegation,
-};
-use std::{convert::TryFrom, sync::Arc};
-use tokio::{net::UnixStream, sync::OnceCell};
+use ic_nns_delegation_manager::NNSDelegationReader;
+use ic_types::canister_http::{CanisterHttpRequest, CanisterHttpResponse};
+use std::convert::TryFrom;
+use tokio::net::UnixStream;
 use tonic::transport::{Endpoint, Uri};
 use tower::service_fn;
 
@@ -28,8 +25,7 @@ pub fn setup_canister_http_client(
     query_handler: QueryExecutionService,
     max_canister_http_requests_in_flight: usize,
     log: ReplicaLogger,
-    subnet_type: SubnetType,
-    delegation_from_nns: Arc<OnceCell<CertificateDelegation>>,
+    nns_delegation_reader: NNSDelegationReader,
 ) -> Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send> {
     match adapter_config.https_outcalls_uds_path {
         None => {
@@ -76,8 +72,8 @@ pub fn setup_canister_http_client(
                         query_handler,
                         max_canister_http_requests_in_flight,
                         metrics_registry.clone(),
-                        subnet_type,
-                        delegation_from_nns,
+                        nns_delegation_reader,
+                        log,
                     ))
                 }
                 Err(e) => {

@@ -2,13 +2,14 @@
 /// Common System API benchmark functions, types, constants.
 ///
 use criterion::{BatchSize, Criterion};
-use ic_config::embedders::{BestEffortResponsesFeature, Config as EmbeddersConfig, FeatureFlags};
+use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::execution_environment::{
     Config, CANISTER_GUARANTEED_CALLBACK_QUOTA, SUBNET_CALLBACK_SOFT_LIMIT,
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
+use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::RejectCode;
 use ic_execution_environment::{
     as_round_instructions, CompilationCostHandling, ExecutionEnvironment, Hypervisor,
@@ -24,7 +25,6 @@ use ic_nns_constants::CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology, ReplicatedState};
-use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_execution_environment::generate_network_topology;
 use ic_test_utilities_state::canister_from_exec_state;
@@ -41,7 +41,7 @@ use lazy_static::lazy_static;
 use std::{convert::TryFrom, path::Path, sync::Arc};
 
 pub const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(500_000_000_000);
-// Note: this canister ID is required for the `ic0_mint_cycles()`
+// Note: this canister ID is required for the `ic0_mint_cycles128()`
 pub const LOCAL_CANISTER_ID: u64 = CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
 pub const REMOTE_CANISTER_ID: u64 = 1;
 pub const USER_ID: u64 = 0;
@@ -56,11 +56,12 @@ pub enum Wasm64 {
 }
 
 lazy_static! {
-    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory = SubnetAvailableMemory::new(
-        SUBNET_MEMORY_CAPACITY,
-        SUBNET_MEMORY_CAPACITY,
-        SUBNET_MEMORY_CAPACITY
-    );
+    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
+        SubnetAvailableMemory::new_for_testing(
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY
+        );
 }
 
 /// Pieces needed to execute a benchmark.
@@ -162,7 +163,6 @@ where
             MAX_NUM_INSTRUCTIONS,
             MAX_NUM_INSTRUCTIONS,
         ),
-        canister_memory_limit: canister_state.memory_limit(NumBytes::new(u64::MAX)),
         wasm_memory_limit: None,
         memory_allocation: canister_state.memory_allocation(),
         canister_guaranteed_callback_quota: CANISTER_GUARANTEED_CALLBACK_QUOTA as u64,
@@ -225,7 +225,6 @@ fn run_benchmark<G, I, W, R>(
                             expected_ops,
                             expected_ops / 1_000_000
                         );
-                        println!("    WAT: {}", wat.as_ref());
                         bench_args = Some(get_execution_args(exec_env, wat.as_ref()));
                     }
                     bench_args.as_ref().unwrap().clone()
@@ -256,17 +255,12 @@ where
         own_subnet_id,
         subnet_configs.cycles_account_manager_config,
     ));
-    let mut embedders_config = EmbeddersConfig {
-        feature_flags: FeatureFlags {
-            best_effort_responses: BestEffortResponsesFeature::Enabled,
-            wasm64: FlagStatus::Enabled,
-            ..FeatureFlags::default()
-        },
+
+    let embedders_config = EmbeddersConfig {
+        // Set up larger heap, of 8GB for the Wasm64 feature.
+        max_wasm64_memory_size: NumBytes::from(8 * 1024 * 1024 * 1024),
         ..EmbeddersConfig::default()
     };
-
-    // Set up larger heap, of 8GB for the Wasm64 feature.
-    embedders_config.max_wasm64_memory_size = NumBytes::from(8 * 1024 * 1024 * 1024);
 
     let config = Config {
         embedders_config,
@@ -315,6 +309,9 @@ where
         subnet_configs
             .scheduler_config
             .canister_snapshot_baseline_instructions,
+        subnet_configs
+            .scheduler_config
+            .canister_snapshot_data_baseline_instructions,
     );
     for Benchmark(id, wat, expected_ops) in benchmarks {
         run_benchmark(

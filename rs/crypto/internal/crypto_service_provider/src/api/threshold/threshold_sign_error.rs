@@ -35,7 +35,7 @@ impl From<ClibThresholdSignError> for CspThresholdSignError {
 impl From<CspSecretKeyConversionError> for CspThresholdSignError {
     fn from(sk_conversion_error: CspSecretKeyConversionError) -> Self {
         match sk_conversion_error {
-            CspSecretKeyConversionError::WrongSecretKeyType {} => {
+            CspSecretKeyConversionError::WrongSecretKeyType => {
                 CspThresholdSignError::WrongSecretKeyType {}
             }
         }

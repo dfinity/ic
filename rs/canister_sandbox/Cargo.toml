@@ -25,7 +25,6 @@ ic-metrics = { path = "../monitoring/metrics" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-sys = { path = "../sys" }
-ic-system-api = { path = "../system_api" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 ic-wasm-types = { path = "../types/wasm_types" }
@@ -43,6 +42,7 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
+tempfile = { workspace = true }
 threadpool = { workspace = true }
 which = "4.2.2"
 
@@ -62,7 +62,6 @@ rand = { workspace = true }
 rstest = { workspace = true }
 slog-async = { workspace = true }
 slog-term = { workspace = true }
-tempfile = { workspace = true }
 wat = { workspace = true }
 
 [features]
