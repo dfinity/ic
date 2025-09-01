@@ -4136,6 +4136,13 @@ impl Governance {
         // Acquire the lock before doing anything meaningful.
         self.minting_node_provider_rewards = true;
 
+        let monthly_node_provider_rewards = self.get_monthly_node_provider_rewards().await?;
+        let _ = self
+            .reward_node_providers(&monthly_node_provider_rewards.rewards)
+            .await;
+        self.update_most_recent_monthly_node_provider_rewards(monthly_node_provider_rewards);
+
+        // TODO: Remove after simulation completed
         match self
             .simulate_get_node_providers_performance_based_rewards()
             .await
@@ -4146,11 +4153,6 @@ impl Governance {
                 LOG_PREFIX, e,
             ),
         }
-        let monthly_node_provider_rewards = self.get_monthly_node_provider_rewards().await?;
-        let _ = self
-            .reward_node_providers(&monthly_node_provider_rewards.rewards)
-            .await;
-        self.update_most_recent_monthly_node_provider_rewards(monthly_node_provider_rewards);
 
         // Release the lock before committing the result.
         self.minting_node_provider_rewards = false;
