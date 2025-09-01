@@ -196,7 +196,7 @@ impl HttpHandlerMetrics {
                 },
 
             ),
-            // TODO: rename the metric names
+            // TODO(CON-1576): rename the metric names and add `api_version` label to them
             sync_call_certificate_status_total: metrics_registry.int_counter_vec(
                 "replica_http_call_v3_certificate_status_total",
                 "The count of certificate states returned by the /{v3,v4}/.../call endpoint. I.e. replied, rejected, unknown, etc.",
