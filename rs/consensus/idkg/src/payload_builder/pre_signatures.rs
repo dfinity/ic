@@ -572,9 +572,13 @@ fn start_pre_signature_in_creation(
 /// in creation is reached for this payload.
 pub(super) fn make_new_pre_signatures_by_priority(
     chain_key_config: &ChainKeyConfig,
+    // The payload that new pre-signatures should be started in
     idkg_payload: &mut idkg::IDkgPayload,
-    mut total_pre_signatures: BTreeMap<IDkgMasterPublicKeyId, usize>,
+    // The total number of existing pre-signatures in the state and
+    // the blockchain up to (including) the parent of this payload
+    total_pre_signatures_up_to_parent: BTreeMap<IDkgMasterPublicKeyId, usize>,
 ) {
+    let mut total_pre_signatures = total_pre_signatures_up_to_parent;
     // Add available and ongoing pre-signatures of this payload to the counter
     // tracking the stash sizes.
     idkg_payload
@@ -1297,17 +1301,18 @@ pub(super) mod tests {
             /*should_create_key_transcript=*/ true,
         );
 
-        // Step 1: ECDSA stash is full, we should start 19 schnorr pre-signatures in creation
+        // Setup: ECDSA stash is full, we should start 19 schnorr pre-signatures in creation
         let payload_capacity = 19;
+        // Simulate a full ECDSA stash by setting the max size to 0, the Schnorr stash has a capacity of 100
+        let stash_capacity =
+            BTreeMap::from_iter([(key_ids[0].clone(), 0), (key_ids[1].clone(), 100)]);
         make_new_pre_signatures_by_priority(
-            &make_config(
-                Some(payload_capacity),
-                BTreeMap::from_iter([(key_ids[0].clone(), 0), (key_ids[1].clone(), 100)]),
-            ),
+            &make_config(Some(payload_capacity), stash_capacity),
             &mut payload,
-            BTreeMap::new(),
+            BTreeMap::new(), // There are no pre-signatures in the stash
         );
 
+        // There should now be 19 ongoing Schnorr pre-signatures in the payload
         assert_eq!(
             payload.consumed_pre_sig_capacity(),
             payload_capacity as usize
@@ -1316,15 +1321,14 @@ pub(super) mod tests {
         assert_eq!(count.len(), 1);
         assert_eq!(count[&key_ids[1]], 19);
 
-        // Step 2: ECDSA stash has space (highest priority), but there is not enough capacity in the payload
+        // Test: ECDSA stash has space (highest priority), but there is not enough capacity in the payload
         let payload_capacity = 20;
+        // Now both stashes have a max size of 100
+        let stash_capacity = key_ids.iter().cloned().map(|id| (id, 100)).collect();
         make_new_pre_signatures_by_priority(
-            &make_config(
-                Some(payload_capacity),
-                key_ids.iter().cloned().map(|id| (id, 100)).collect(),
-            ),
-            &mut payload,
-            BTreeMap::new(),
+            &make_config(Some(payload_capacity), stash_capacity),
+            &mut payload, // The payload still contains the 19 ongoing Schnorr pre-signatures in creation
+            BTreeMap::new(), // There are no pre-signatures in the stash
         );
 
         // The open capacity should not have been consumed by another Schnorr pre-signature
