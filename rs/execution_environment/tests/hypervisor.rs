@@ -8986,42 +8986,6 @@ fn cost_vetkd_derive_key_fails_bad_key_name() {
 }
 
 #[test]
-fn legacy_cycles_balance() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(1_u128 << 62)
-        .build();
-    let canister_id = test.universal_canister().unwrap();
-    let res = test
-        .ingress(
-            canister_id,
-            "update",
-            wasm().cycles_balance().reply_int64().build(),
-        )
-        .unwrap();
-    match res {
-        WasmResult::Reply(data) => {
-            let balance = u64::from_le_bytes(data.try_into().unwrap());
-            balance_is_roughly(balance.into(), 1_u128 << 62);
-        }
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
-    };
-    let res = test
-        .ingress(
-            canister_id,
-            "update",
-            wasm().cycles_balance128().append_and_reply().build(),
-        )
-        .unwrap();
-    match res {
-        WasmResult::Reply(data) => {
-            let balance = u128::from_le_bytes(data.try_into().unwrap());
-            balance_is_roughly(balance, 1_u128 << 62);
-        }
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
-    };
-}
-
-#[test]
 fn legacy_cycles_balance_traps_if_balance_too_large() {
     let mut test = ExecutionTestBuilder::new()
         .with_initial_canister_cycles(1_u128 << 65)
@@ -9062,7 +9026,8 @@ fn get_balance_twice() {
             canister_id,
             "update",
             wasm()
-                .cycles_balance128()
+                .cycles_balance()
+                .int64_to_blob()
                 .reply_data_append()
                 .cycles_balance128()
                 .reply_data_append()
@@ -9072,10 +9037,10 @@ fn get_balance_twice() {
         .unwrap();
     match res {
         WasmResult::Reply(data) => {
-            let balance1 = u128::from_le_bytes(data[0..16].try_into().unwrap());
-            let balance2 = u128::from_le_bytes(data[16..32].try_into().unwrap());
-            assert_eq!(balance1, balance2);
-            balance_is_roughly(balance1, 1_u128 << 62);
+            let balance1 = u64::from_le_bytes(data[0..8].try_into().unwrap());
+            let balance2 = u128::from_le_bytes(data[8..24].try_into().unwrap());
+            assert_eq!(balance1 as u128, balance2);
+            balance_is_roughly(balance1.into(), 1_u128 << 62);
         }
         WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
     };
@@ -9279,7 +9244,9 @@ fn relay_before_accept_traps() {
         )
         .msg_cycles_accept(1_i64 << 60)
         .build();
-    let call_args = CallArgs::default().other_side(relay_before_accept).on_reject(wasm().reject_message().reject().build());
+    let call_args = CallArgs::default()
+        .other_side(relay_before_accept)
+        .on_reject(wasm().reject_message().reject().build());
     let res = test
         .ingress(
             canister_1,
