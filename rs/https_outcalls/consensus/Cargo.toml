@@ -23,6 +23,7 @@ ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
 prometheus = { workspace = true }
 rand = { workspace = true }
+rayon = { workspace = true }
 slog = { workspace = true }
 
 [dev-dependencies]

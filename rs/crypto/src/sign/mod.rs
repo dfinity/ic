@@ -177,10 +177,9 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
         result
     }
 
-    fn verify_basic_sig_batch(
+    fn verify_multi_sig_batch(
         &self,
-        signature: &BasicSignatureBatch<H>,
-        message: &H,
+        batches_by_message: &[(&H, &BasicSignatureBatch<H>)],
         registry_version: RegistryVersion,
     ) -> CryptoResult<()> {
         let log_id = get_log_id(&self.logger);
@@ -189,23 +188,22 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
             crypto.trait_name => "BasicSigVerifier",
             crypto.method_name => "verify_basic_sig_batch",
         );
-        debug!(logger;
-            crypto.description => "start",
-            crypto.registry_version => registry_version.get(),
-            crypto.signature => format!("{:?}", signature.signatures_map),
-        );
+        // debug!(logger;
+        //     crypto.description => "start",
+        //     crypto.registry_version => registry_version.get(),
+        //     crypto.signature => format!("{:?}", signature.signatures_map),
+        // );
         let start_time = self.metrics.now();
-        let result = BasicSigVerifierInternal::verify_basic_sig_batch(
+        let result = BasicSigVerifierInternal::verify_multi_message_sig_batch(
             self.vault.as_ref(),
             self.registry_client.as_ref(),
-            signature,
-            message,
+            batches_by_message,
             registry_version,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::BasicSignature,
             MetricsScope::Full,
-            "verify_basic_sig_batch",
+            "verify_multi_sig_batch",
             MetricsResult::from(&result),
             start_time,
         );
@@ -215,6 +213,15 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
             crypto.error => log_err(result.as_ref().err()),
         );
         result
+    }
+
+    fn verify_basic_sig_batch(
+        &self,
+        signature: &BasicSignatureBatch<H>,
+        message: &H,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<()> {
+        self.verify_multi_sig_batch(&[(message, signature)], registry_version)
     }
 }
 
