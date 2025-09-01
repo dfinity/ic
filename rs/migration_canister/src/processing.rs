@@ -371,19 +371,6 @@ impl ProcessingResult<RequestState, RequestState> {
     }
 }
 
-impl ProcessingResult<RequestState, Infallible> {
-    fn transition(self, old_state: RequestState) {
-        match self {
-            ProcessingResult::Success(new_state) => {
-                remove_request(&old_state);
-                insert_request(new_state);
-            }
-            ProcessingResult::NoProgress => {}
-            ProcessingResult::FatalFailure(_) => {}
-        }
-    }
-}
-
 // Processing a `RequestState::Failure` successfully results in an `Event::Failed`.
 impl ProcessingResult<Event, Infallible> {
     fn transition(self, old_state: RequestState) {
