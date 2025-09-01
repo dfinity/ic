@@ -7,7 +7,6 @@ use crate::{
 };
 pub(super) use errors::IDkgPayloadError;
 use errors::MembershipError;
-use ic_config::{flag_status::FlagStatus, subnet_config::STORE_PRE_SIGNATURES_IN_STATE};
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_crypto::retrieve_mega_public_key_from_registry;
 use ic_interfaces::idkg::IDkgPool;
@@ -22,7 +21,7 @@ use ic_types::{
     consensus::{
         idkg::{
             self, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId, IDkgPayload,
-            MasterKeyTranscript, TranscriptAttributes,
+            MasterKeyTranscript, TranscriptAttributes, STORE_PRE_SIGNATURES_IN_STATE,
         },
         Block, HasHeight,
     },
@@ -261,7 +260,7 @@ fn create_summary_payload_helper(
     idkg_payload: &IDkgPayload,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
-    store_pre_signatures_in_state: FlagStatus,
+    store_pre_signatures_in_state: bool,
 ) -> Result<idkg::Summary, IDkgPayloadError> {
     let mut key_transcripts = BTreeMap::new();
     let mut new_key_transcripts = BTreeSet::new();
@@ -353,7 +352,7 @@ fn create_summary_payload_helper(
 
     idkg_summary.idkg_transcripts.clear();
 
-    if store_pre_signatures_in_state == FlagStatus::Enabled {
+    if store_pre_signatures_in_state {
         // If pre-signatures are stored in replicated state, then we purge available pre-signatures of the
         // parent payload, because they were already delivered with the previous payload.
         idkg_summary.available_pre_signatures.clear();
@@ -679,7 +678,7 @@ pub(crate) fn create_data_payload_helper_2(
     signature_builder: &dyn ThresholdSignatureBuilder,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
-    store_pre_signatures_in_state: FlagStatus,
+    store_pre_signatures_in_state: bool,
 ) -> Result<(), IDkgPayloadError> {
     // Check if we are creating a new key, if so, start using it immediately.
     for key_transcript in idkg_payload.key_transcripts.values_mut() {
@@ -691,7 +690,7 @@ pub(crate) fn create_data_payload_helper_2(
 
     idkg_payload.uid_generator.update_height(height)?;
 
-    if store_pre_signatures_in_state == FlagStatus::Enabled {
+    if store_pre_signatures_in_state {
         // If pre-signatures are stored in replicated state, then we purge available pre-signatures of the
         // parent payload, because they were already delivered with the previous payload.
         idkg_payload.available_pre_signatures.clear();
@@ -717,7 +716,7 @@ pub(crate) fn create_data_payload_helper_2(
         store_pre_signatures_in_state,
     );
 
-    if store_pre_signatures_in_state == FlagStatus::Disabled {
+    if !store_pre_signatures_in_state {
         // If pre-signatures are stored on the blockchain, we may only purge pre-signatures for
         // rotated key transcripts, once we are sure that they haven't been paired with ongoing
         // requests. Since we stop delivering pre-signatures for rotated transcripts once we reach
@@ -772,7 +771,7 @@ pub(crate) fn create_data_payload_helper_2(
     .into_iter()
     .flatten();
 
-    if store_pre_signatures_in_state == FlagStatus::Enabled {
+    if store_pre_signatures_in_state {
         // If pre-signatures are stored in the state, then we additionally
         // consider the total number of existing pre-signatures in the state
         // and all previous payloads when starting the creation of new ones.
@@ -966,14 +965,14 @@ mod tests {
     fn test_pre_signature_recreation_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_pre_signature_recreation(&key_id, FlagStatus::Disabled);
-            test_pre_signature_recreation(&key_id, FlagStatus::Enabled);
+            test_pre_signature_recreation(&key_id, false);
+            test_pre_signature_recreation(&key_id, true);
         }
     }
 
     fn test_pre_signature_recreation(
         key_id: &IDkgMasterPublicKeyId,
-        store_pre_signatures_in_state: FlagStatus,
+        store_pre_signatures_in_state: bool,
     ) {
         const PRE_SIGNATURES_TO_CREATE_IN_ADVANCE: u32 = 5;
         let valid_keys = BTreeSet::from([key_id.clone()]);
@@ -1025,7 +1024,7 @@ mod tests {
         )
         .unwrap();
 
-        if store_pre_signatures_in_state == FlagStatus::Disabled {
+        if !store_pre_signatures_in_state {
             // The two pre-signature remain in available_pre_signatures.
             assert_eq!(idkg_payload.available_pre_signatures.len(), 2);
             assert!(idkg_payload
@@ -1058,14 +1057,14 @@ mod tests {
     fn test_signing_request_timeout_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_signing_request_timeout(&key_id, FlagStatus::Disabled);
-            test_signing_request_timeout(&key_id, FlagStatus::Enabled);
+            test_signing_request_timeout(&key_id, false);
+            test_signing_request_timeout(&key_id, true);
         }
     }
 
     fn test_signing_request_timeout(
         key_id: &IDkgMasterPublicKeyId,
-        store_pre_signatures_in_state: FlagStatus,
+        store_pre_signatures_in_state: bool,
     ) {
         let expired_time = UNIX_EPOCH + Duration::from_secs(10);
         let expiry_time = UNIX_EPOCH + Duration::from_secs(11);
@@ -1119,7 +1118,7 @@ mod tests {
             if context.message().contains("request expired")
         );
 
-        if store_pre_signatures_in_state == FlagStatus::Disabled {
+        if !store_pre_signatures_in_state {
             // When pre-signatures are stored on chain, contexts can only be expired once they were
             // matched with a pre-signatures. Thersfore, there is no agreement for the expired, but
             // unmatched context.
@@ -1157,14 +1156,14 @@ mod tests {
     fn test_request_with_invalid_key_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_request_with_invalid_key(&key_id, FlagStatus::Disabled);
-            test_request_with_invalid_key(&key_id, FlagStatus::Enabled);
+            test_request_with_invalid_key(&key_id, false);
+            test_request_with_invalid_key(&key_id, true);
         }
     }
 
     fn test_request_with_invalid_key(
         valid_key_id: &IDkgMasterPublicKeyId,
-        store_pre_signatures_in_state: FlagStatus,
+        store_pre_signatures_in_state: bool,
     ) {
         let invalid_key_id: IDkgMasterPublicKeyId = key_id_with_name(valid_key_id, "invalid")
             .try_into()
@@ -1232,14 +1231,14 @@ mod tests {
     fn test_signature_is_only_delivered_once_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_signature_is_only_delivered_once(&key_id, FlagStatus::Disabled);
-            test_signature_is_only_delivered_once(&key_id, FlagStatus::Enabled);
+            test_signature_is_only_delivered_once(&key_id, false);
+            test_signature_is_only_delivered_once(&key_id, true);
         }
     }
 
     fn test_signature_is_only_delivered_once(
         key_id: &IDkgMasterPublicKeyId,
-        store_pre_signatures_in_state: FlagStatus,
+        store_pre_signatures_in_state: bool,
     ) {
         let (mut idkg_payload, _env) = set_up_idkg_payload_with_keys(vec![key_id.clone()]);
         let pre_sig_id = create_available_pre_signature(&mut idkg_payload, key_id.clone(), 13);
@@ -1876,14 +1875,14 @@ mod tests {
     fn test_no_creation_after_successful_creation_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_no_creation_after_successful_creation(&key_id, FlagStatus::Disabled);
-            test_no_creation_after_successful_creation(&key_id, FlagStatus::Enabled);
+            test_no_creation_after_successful_creation(&key_id, false);
+            test_no_creation_after_successful_creation(&key_id, true);
         }
     }
 
     fn test_no_creation_after_successful_creation(
         key_id: &IDkgMasterPublicKeyId,
-        store_pre_signatures_in_state: FlagStatus,
+        store_pre_signatures_in_state: bool,
     ) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();
@@ -2022,14 +2021,14 @@ mod tests {
     fn test_incomplete_reshare_doesnt_purge_pre_signatures_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_incomplete_reshare_doesnt_purge_pre_signatures(&key_id, FlagStatus::Disabled);
-            test_incomplete_reshare_doesnt_purge_pre_signatures(&key_id, FlagStatus::Enabled);
+            test_incomplete_reshare_doesnt_purge_pre_signatures(&key_id, false);
+            test_incomplete_reshare_doesnt_purge_pre_signatures(&key_id, true);
         }
     }
 
     fn test_incomplete_reshare_doesnt_purge_pre_signatures(
         key_id: &IDkgMasterPublicKeyId,
-        store_pre_signatures_in_state: FlagStatus,
+        store_pre_signatures_in_state: bool,
     ) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();
@@ -2179,7 +2178,7 @@ mod tests {
                 0
             );
             // pre-signatures and xnet reshares should still be unchanged:
-            if store_pre_signatures_in_state == FlagStatus::Disabled {
+            if !store_pre_signatures_in_state {
                 // Pre-signatures are maintained on chain
                 assert_eq!(
                     payload_0.available_pre_signatures.len(),
@@ -2307,7 +2306,7 @@ mod tests {
             // Now, pre-signatures and xnet reshares should be purged
             assert!(payload_4.pre_signatures_in_creation.is_empty());
             assert!(payload_4.ongoing_xnet_reshares.is_empty());
-            if store_pre_signatures_in_state == FlagStatus::Disabled {
+            if !store_pre_signatures_in_state {
                 // Available pre-signatures cannot be purged yet,
                 // as we don't know if they are matched to ongoing signature requests.
                 assert!(!payload_4.available_pre_signatures.is_empty());
@@ -2395,14 +2394,14 @@ mod tests {
     fn test_if_next_in_creation_continues_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_if_next_in_creation_continues(&key_id, FlagStatus::Disabled);
-            test_if_next_in_creation_continues(&key_id, FlagStatus::Enabled);
+            test_if_next_in_creation_continues(&key_id, false);
+            test_if_next_in_creation_continues(&key_id, true);
         }
     }
 
     fn test_if_next_in_creation_continues(
         key_id: &IDkgMasterPublicKeyId,
-        store_pre_signatures_in_state: FlagStatus,
+        store_pre_signatures_in_state: bool,
     ) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let Dependencies {
@@ -2554,14 +2553,14 @@ mod tests {
     fn test_next_in_creation_with_initial_dealings_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_next_in_creation_with_initial_dealings(&key_id, FlagStatus::Disabled);
-            test_next_in_creation_with_initial_dealings(&key_id, FlagStatus::Enabled);
+            test_next_in_creation_with_initial_dealings(&key_id, false);
+            test_next_in_creation_with_initial_dealings(&key_id, true);
         }
     }
 
     fn test_next_in_creation_with_initial_dealings(
         key_id: &IDkgMasterPublicKeyId,
-        store_pre_signatures_in_state: FlagStatus,
+        store_pre_signatures_in_state: bool,
     ) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut rng = reproducible_rng();

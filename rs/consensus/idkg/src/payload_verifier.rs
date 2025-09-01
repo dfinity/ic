@@ -679,7 +679,6 @@ mod test {
         test_utils::*,
     };
     use assert_matches::assert_matches;
-    use ic_config::flag_status::FlagStatus;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         dummy_values::dummy_dealings, CanisterThresholdSigTestEnvironment,
     };
@@ -933,14 +932,14 @@ mod test {
     fn test_validate_new_signature_agreements_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_validate_new_signature_agreements(&key_id, FlagStatus::Disabled);
-            test_validate_new_signature_agreements(&key_id, FlagStatus::Enabled);
+            test_validate_new_signature_agreements(&key_id, false);
+            test_validate_new_signature_agreements(&key_id, true);
         }
     }
 
     fn test_validate_new_signature_agreements(
         key_id: &IDkgMasterPublicKeyId,
-        store_pre_signatures_in_state: FlagStatus,
+        store_pre_signatures_in_state: bool,
     ) {
         let subnet_id = subnet_test_id(0);
         let crypto = &CryptoReturningOk::default();

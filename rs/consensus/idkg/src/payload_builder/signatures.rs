@@ -1,5 +1,4 @@
 use crate::{metrics::IDkgPayloadMetrics, signer::ThresholdSignatureBuilder};
-use ic_config::flag_status::FlagStatus;
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext;
@@ -38,7 +37,7 @@ pub(crate) fn update_signature_agreements(
     payload: &mut idkg::IDkgPayload,
     valid_keys: &BTreeSet<IDkgMasterPublicKeyId>,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
-    store_pre_signatures_in_state: FlagStatus,
+    store_pre_signatures_in_state: bool,
 ) {
     let all_random_ids = all_requests
         .values()
@@ -85,7 +84,7 @@ pub(crate) fn update_signature_agreements(
             continue;
         }
 
-        let pre_sig_id = if store_pre_signatures_in_state == FlagStatus::Disabled {
+        let pre_sig_id = if !store_pre_signatures_in_state {
             // If pre-signatures are stored on the blockchain, then that means
             // we can only reject expired requests once the request was matched with a
             // pre-signature. Otherwise the context may be matched with a pre-signature
@@ -209,11 +208,11 @@ mod tests {
 
     #[test]
     fn test_update_signature_agreements_reporting_with_flags() {
-        test_update_signature_agreements_reporting(FlagStatus::Disabled);
-        test_update_signature_agreements_reporting(FlagStatus::Enabled);
+        test_update_signature_agreements_reporting(false);
+        test_update_signature_agreements_reporting(true);
     }
 
-    fn test_update_signature_agreements_reporting(store_pre_signatures_in_state: FlagStatus) {
+    fn test_update_signature_agreements_reporting(store_pre_signatures_in_state: bool) {
         let delivered_pseudo_random_id = pseudo_random_id(0);
         let old_pseudo_random_id = pseudo_random_id(1);
         let new_pseudo_random_id = pseudo_random_id(2);
@@ -260,21 +259,21 @@ mod tests {
     fn test_update_signature_agreements_success_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_update_signature_agreements_success(&key_id, FlagStatus::Disabled);
-            test_update_signature_agreements_success(&key_id, FlagStatus::Enabled);
+            test_update_signature_agreements_success(&key_id, false);
+            test_update_signature_agreements_success(&key_id, true);
         }
     }
 
     fn test_update_signature_agreements_success(
         key_id: &IDkgMasterPublicKeyId,
-        store_pre_signatures_in_state: FlagStatus,
+        store_pre_signatures_in_state: bool,
     ) {
         let subnet_id = subnet_test_id(0);
         let mut idkg_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
         let valid_keys = BTreeSet::from_iter([key_id.clone()]);
         let pre_sig_ids = (0..4)
             .map(|i| {
-                if store_pre_signatures_in_state == FlagStatus::Disabled {
+                if !store_pre_signatures_in_state {
                     // If pre-signatures aren't stored in the state, then we expect them to exist
                     // in the payload
                     create_available_pre_signature(&mut idkg_payload, key_id.clone(), i as u8)
@@ -337,7 +336,7 @@ mod tests {
             store_pre_signatures_in_state,
         );
 
-        if store_pre_signatures_in_state == FlagStatus::Disabled {
+        if !store_pre_signatures_in_state {
             // Only the pre-signature for the completed request should be removed
             assert_eq!(idkg_payload.available_pre_signatures.len(), 3);
             assert!(!idkg_payload
@@ -361,12 +360,12 @@ mod tests {
 
     #[test]
     fn test_update_signature_agreements_ignores_vetkd_contexts_with_flags() {
-        test_update_signature_agreements_ignores_vetkd_contexts(FlagStatus::Disabled);
-        test_update_signature_agreements_ignores_vetkd_contexts(FlagStatus::Enabled);
+        test_update_signature_agreements_ignores_vetkd_contexts(false);
+        test_update_signature_agreements_ignores_vetkd_contexts(true);
     }
 
     fn test_update_signature_agreements_ignores_vetkd_contexts(
-        store_pre_signatures_in_state: FlagStatus,
+        store_pre_signatures_in_state: bool,
     ) {
         let subnet_id = subnet_test_id(0);
         let ecdsa_key_id = fake_ecdsa_idkg_master_public_key_id();
@@ -376,7 +375,7 @@ mod tests {
         let valid_keys = BTreeSet::from_iter([ecdsa_key_id.clone()]);
         let pre_sig_ids = (0..2)
             .map(|i| {
-                if store_pre_signatures_in_state == FlagStatus::Disabled {
+                if !store_pre_signatures_in_state {
                     // If pre-signatures aren't stored in the state, then we expect them to exist
                     // in the payload
                     create_available_pre_signature(&mut idkg_payload, ecdsa_key_id.clone(), i as u8)
@@ -433,7 +432,7 @@ mod tests {
             store_pre_signatures_in_state,
         );
 
-        if store_pre_signatures_in_state == FlagStatus::Disabled {
+        if !store_pre_signatures_in_state {
             // Only the pre-signature for the completed request should be removed
             assert_eq!(idkg_payload.available_pre_signatures.len(), 1);
             assert!(!idkg_payload
