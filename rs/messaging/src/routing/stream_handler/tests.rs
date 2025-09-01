@@ -2672,8 +2672,7 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
             // The expected state should be unchanged...
             let mut expected_state = state.clone();
 
-            // ...except that the stream should have `signals_end` incremented for the 2 messages and
-            // reject signals.
+            // ...except that the stream should have 4 new signals, including a reject for the request.
             let outgoing_stream = state.get_stream(&REMOTE_SUBNET);
             let expected_stream = stream_from_config(StreamConfig {
                 begin: 21,
