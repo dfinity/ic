@@ -1682,13 +1682,15 @@ pub(super) fn instrument(
 
     // inject instructions counter decrementation
     use rayon::prelude::*;
-    module.code_sections.par_iter_mut().for_each(|func_body| {
-        inject_metering(
-            &mut func_body.instructions,
-            &special_indices,
-            metering_type,
-            main_memory_type,
-        );
+    module.code_sections.par_chunks_mut(100).for_each(|bodies| {
+        for func_body in bodies {
+            inject_metering(
+                &mut func_body.instructions,
+                &special_indices,
+                metering_type,
+                main_memory_type,
+            );
+        }
     });
 
     // Collect all the function types of the locally defined functions inside the

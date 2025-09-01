@@ -14970,6 +14970,7 @@ dependencies = [
 name = "ic-wasm-transform"
 version = "0.9.0"
 dependencies = [
+ "rayon",
  "wasm-encoder 0.228.0",
  "wasmparser 0.228.0",
  "wasmprinter 0.228.0",

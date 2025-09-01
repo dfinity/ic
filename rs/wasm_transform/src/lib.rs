@@ -192,7 +192,7 @@ impl<'a> Module<'a> {
         let mut functions = vec![];
         let mut elements = vec![];
         let mut code_section_count = 0;
-        let mut code_sections = vec![];
+        let mut code_section_readers = vec![];
         let mut globals = vec![];
         let mut exports = vec![];
         let mut start = None;
@@ -280,36 +280,7 @@ impl<'a> Module<'a> {
                     code_section_count = count as usize;
                 }
                 Payload::CodeSectionEntry(body) => {
-                    let locals_reader = body.get_locals_reader()?;
-                    let locals = locals_reader.into_iter().collect::<Result<Vec<_>, _>>()?;
-                    let instructions = body
-                        .get_operators_reader()?
-                        .into_iter()
-                        .collect::<Result<Vec<_>, _>>()?;
-                    if let Some(last) = instructions.last() {
-                        if let Operator::End = last {
-                        } else {
-                            return Err(Error::MissingFunctionEnd {
-                                func_range: body.range(),
-                            });
-                        }
-                    }
-                    if !enable_multi_memory
-                        && instructions.iter().any(|i| match i {
-                            Operator::MemoryGrow { mem } | Operator::MemorySize { mem } => {
-                                mem.to_le_bytes()[0] != 0
-                            }
-                            _ => false,
-                        })
-                    {
-                        return Err(Error::InvalidMemoryReservedByte {
-                            func_range: body.range(),
-                        });
-                    }
-                    code_sections.push(Body {
-                        locals,
-                        instructions,
-                    });
+                    code_section_readers.push(body);
                 }
                 Payload::CustomSection(custom_section_reader) => {
                     if let wasmparser::KnownCustom::Name(subsection) =
@@ -357,6 +328,53 @@ impl<'a> Module<'a> {
                 | _ => {}
             }
         }
+        // Always use rayon to map over code_section_readers in parallel and create a Body out of each one.
+        let code_sections_result: Result<Vec<Body>, Error> = {
+            use rayon::prelude::*;
+            code_section_readers
+                .par_chunks(100)
+                .map(|bodies| {
+                    bodies
+                        .iter()
+                        .map(|body| {
+                            let locals_reader = body.get_locals_reader()?;
+                            let locals =
+                                locals_reader.into_iter().collect::<Result<Vec<_>, _>>()?;
+                            let instructions = body
+                                .get_operators_reader()?
+                                .into_iter()
+                                .collect::<Result<Vec<_>, _>>()?;
+                            if let Some(last) = instructions.last() {
+                                if let Operator::End = last {
+                                } else {
+                                    return Err(Error::MissingFunctionEnd {
+                                        func_range: body.range(),
+                                    });
+                                }
+                            }
+                            if !enable_multi_memory
+                                && instructions.iter().any(|i| match i {
+                                    Operator::MemoryGrow { mem } | Operator::MemorySize { mem } => {
+                                        mem.to_le_bytes()[0] != 0
+                                    }
+                                    _ => false,
+                                })
+                            {
+                                return Err(Error::InvalidMemoryReservedByte {
+                                    func_range: body.range(),
+                                });
+                            }
+                            Ok(Body {
+                                locals,
+                                instructions,
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .flatten()
+                .collect::<Result<Vec<_>, _>>()
+        };
+        let code_sections = code_sections_result?;
         if code_section_count != code_sections.len() || code_section_count != functions.len() {
             return Err(Error::IncorrectCodeCounts {
                 function_section_count: functions.len(),
