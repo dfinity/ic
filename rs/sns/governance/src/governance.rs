@@ -96,7 +96,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::SpanStats;
 use ic_ledger_core::Tokens;
-use ic_management_canister_types_private::{
+use ic_management_canister_types::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
 use ic_nervous_system_canisters::cmc::CMC;

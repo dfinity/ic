@@ -1,6 +1,6 @@
 use futures::future::join_all;
 use ic_base_types::CanisterId;
-use ic_management_canister_types_private::CanisterInstallMode;
+use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_agent::{
     helpers::{
         await_with_timeout,

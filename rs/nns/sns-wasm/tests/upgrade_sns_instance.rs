@@ -3,7 +3,7 @@ use candid::{Decode, Encode, Nat};
 use canister_test::Project;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger::LedgerArgument;
-use ic_management_canister_types_private::{CanisterIdRecord, CanisterInstallMode};
+use ic_management_canister_types::{CanisterIdRecord, CanisterInstallMode};
 use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
 use ic_nervous_system_common::{ledger::compute_neuron_staking_subaccount, DEFAULT_TRANSFER_FEE};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};

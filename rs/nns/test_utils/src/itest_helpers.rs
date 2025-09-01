@@ -16,7 +16,7 @@ use dfn_candid::{candid_one, CandidOne};
 use futures::{future::join_all, FutureExt};
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
-use ic_management_canister_types_private::CanisterInstallMode;
+use ic_management_canister_types::CanisterInstallMode;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::{
     init::LifelineCanisterInitPayload,

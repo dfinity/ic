@@ -1583,8 +1583,8 @@ fn setup_env_for_sns_upgrade_to_next_version_test(
             env.require_call_canister_invocation(
                 CanisterId::ic_00(),
                 "install_code",
-                Encode!(&ic_management_canister_types_private::InstallCodeArgs {
-                    mode: ic_management_canister_types_private::CanisterInstallMode::Upgrade,
+                Encode!(&ic_management_canister_types::InstallCodeArgs {
+                    mode: ic_management_canister_types::CanisterInstallMode::Upgrade,
                     canister_id: canister_id.get(),
                     wasm_module: vec![9, 8, 7, 6, 5, 4, 3, 2],
                     arg: Encode!().unwrap(),
