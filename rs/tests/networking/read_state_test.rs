@@ -31,10 +31,10 @@ Success::
   principal than who made the original request with request ID R;
 . Read state requests for two paths /request_status/R and /request_status/S with two different request
   IDs R and S are rejected with 400 (while requesting each of the two paths in isolation would succeed);
-. Read state requests for the path /canister_ranges/{subnet_id} succeed and return a correct list of canister
-  ranges assigned to the subnet. Both /api/v2/subnet/{subnet_id}/read_state and
-  /api/v2/canister/{canister_id}/read_state endpoints are tested.
-
+. Read state requests at `/api/v2/subnet/{subnet_id}/read_state` for the path `/canister_ranges/{subnet_id}`
+  succeed and return a correct list of canister ranges assigned to the subnet.
+. Read state requests at `/api/v2/canister/{canister_id}/read_state` for the path `/canister_ranges/{subnet_id}`
+  should fail because the path is disallowed.
 end::catalog[] */
 
 use std::collections::BTreeSet;
@@ -682,7 +682,7 @@ fn test_request_path_access(env: TestEnv) {
 }
 
 /// Queries the `api/v2/canister/{canister_id}/read_state` endpoint for the canister ranges,
-/// and compares the result with the canister ranges obtained from the registry.
+/// and makes sure the requests fails.
 fn test_canister_canister_ranges_paths(env: TestEnv) {
     let subnet = get_first_app_subnet(&env);
     let node = subnet.nodes().next().unwrap();
