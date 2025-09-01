@@ -1,8 +1,11 @@
 use candid::{CandidType, Deserialize, Principal};
-use ic_node_rewards_canister_protobuf::pb::rewards_calculator::v1::NodeProviderRewards;
+use ic_node_rewards_canister_protobuf::pb::rewards_calculator::v1::{
+    NodeProviderRewards, RewardsCalculatorVersion,
+};
 
 #[derive(CandidType, Clone, Deserialize)]
 pub struct GetNodeProviderRewardsCalculationRequest {
+    pub rewards_calculator_version: RewardsCalculatorVersion,
     pub from_nanos: u64,
     pub to_nanos: u64,
     pub provider_id: Principal,

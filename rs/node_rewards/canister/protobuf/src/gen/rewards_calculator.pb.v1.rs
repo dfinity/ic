@@ -146,3 +146,38 @@ pub struct SubnetsFailureRateKey {
     #[prost(message, optional, tag = "2")]
     pub subnet_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum RewardsCalculatorVersion {
+    V1 = 0,
+}
+impl RewardsCalculatorVersion {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::V1 => "REWARDS_CALCULATOR_VERSION_V1",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "REWARDS_CALCULATOR_VERSION_V1" => Some(Self::V1),
+            _ => None,
+        }
+    }
+}
