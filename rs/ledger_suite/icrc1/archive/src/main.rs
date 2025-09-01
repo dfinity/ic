@@ -75,7 +75,7 @@ thread_local! {
 }
 
 /// Configuration of the archive node.
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone)]
 struct ArchiveConfig {
     /// The maximum number of bytes archive can use to store encoded blocks.
     max_memory_size_bytes: u64,
@@ -86,6 +86,17 @@ struct ArchiveConfig {
     ledger_id: Principal,
     /// The maximum number of transactions returned by [get_transactions].
     max_transactions_per_response: u64,
+    /// The type of tokens this archive supports (U64 or U256).
+    #[serde(default = "undefined_token_type")]
+    pub token_type: String,
+}
+
+pub fn wasm_token_type() -> String {
+    Tokens::TYPE.to_string()
+}
+
+pub fn undefined_token_type() -> String {
+    "UNDEFINED".to_string()
 }
 
 // NOTE: the default configuration is dysfunctional, but it's convenient to have
@@ -97,6 +108,7 @@ impl Default for ArchiveConfig {
             block_index_offset: 0,
             ledger_id: Principal::management_canister(),
             max_transactions_per_response: DEFAULT_MAX_TRANSACTIONS_PER_GET_TRANSACTION_RESPONSE,
+            token_type: wasm_token_type(),
         }
     }
 }
@@ -118,6 +130,17 @@ impl Storable for ArchiveConfig {
 /// A helper function to access the configuration.
 fn with_archive_opts<R>(f: impl FnOnce(&ArchiveConfig) -> R) -> R {
     CONFIG.with(|cell| f(cell.borrow().get()))
+}
+
+fn set_token_type() {
+    CONFIG.with(|cell| {
+        let curr_conf = cell.borrow().get().clone();
+        let new_conf = ArchiveConfig {
+            token_type: wasm_token_type(),
+            ..curr_conf
+        };
+        assert!(cell.borrow_mut().set(new_conf).is_ok());
+    });
 }
 
 /// A helper function to access the memory manager.
@@ -160,6 +183,7 @@ fn init(
                 block_index_offset,
                 ledger_id,
                 max_transactions_per_response,
+                token_type: wasm_token_type(),
             })
             .expect("failed to set archive config");
     });
@@ -185,6 +209,16 @@ fn post_upgrade() {
     // the upgrade if the initialization traps.
     let max_memory_size_bytes = with_archive_opts(|opts| opts.max_memory_size_bytes);
     with_blocks(|blocks| assert!(blocks.log_size_bytes() <= max_memory_size_bytes));
+
+    // Set the token_type, if it was not set previously.
+    if with_archive_opts(|opts| opts.token_type.clone()) == undefined_token_type() {
+        set_token_type();
+    }
+    // Check if the token_type stored in the archive state matches the current wasm's token_type.
+    let token_type = with_archive_opts(|opts| opts.token_type.clone());
+    if token_type != wasm_token_type() {
+        panic!("Incompatible token type, the upgraded archive token type is {}, current wasm token type is {}", token_type, wasm_token_type());
+    }
 }
 
 #[update]
