@@ -88,8 +88,8 @@
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_test": {
-    "sha256": "1f64096b1a2b2189ce0364f386e06e5278c53f77ce93b65744a8c4af5de6ea16",
-    "tag": "release-2025-08-28"
+    "sha256": "7f3675de5bb8ba4cdbc7b53030c26c07dce14e6231f6d5bcc0e6fba1f01a699c",
+    "tag": "release-2025-08-29"
   },
   "ledger": {
     "rev": "fed75e2a5d21eae03b0ac017582640bc4264bae3",
