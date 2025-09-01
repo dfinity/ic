@@ -2204,7 +2204,7 @@ fn can_reject_all_ingress_messages() {
     let caller = test.universal_canister().unwrap();
     let res = test
         .ingress(
-            canister,
+            caller,
             "update",
             wasm().inter_update(canister, CallArgs::default()).build(),
         )
@@ -2238,7 +2238,7 @@ fn trap_instead_of_accepting_message() {
     let err = test
         .should_accept_ingress_message(canister, "", vec![])
         .unwrap_err();
-    assert_eq!(ErrorCode::CanisterTrapped, err.code());
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
 }
 
 #[test]
@@ -2253,6 +2253,7 @@ fn inspect_method_name() {
                 wasm()
                     .msg_method_name()
                     .trap_if_eq("update", "no no no")
+                    .accept_message()
                     .build(),
             )
             .reply()
@@ -2262,7 +2263,7 @@ fn inspect_method_name() {
     let err = test
         .should_accept_ingress_message(canister, "update", vec![])
         .unwrap_err();
-    assert_eq!(ErrorCode::CanisterTrapped, err.code());
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
     test.should_accept_ingress_message(canister, "", vec![])
         .unwrap();
 }
@@ -2281,6 +2282,7 @@ fn inspect_caller() {
                 wasm()
                     .caller()
                     .trap_if_eq(user_id.get(), "no no no")
+                    .accept_message()
                     .build(),
             )
             .reply()
@@ -2290,7 +2292,7 @@ fn inspect_caller() {
     let err = test
         .should_accept_ingress_message(canister, "update", vec![])
         .unwrap_err();
-    assert_eq!(ErrorCode::CanisterTrapped, err.code());
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
     test.set_user_id(user_test_id(0));
     test.should_accept_ingress_message(canister, "", vec![])
         .unwrap();
@@ -2308,6 +2310,7 @@ fn inspect_arg_data() {
                 wasm()
                     .msg_arg_data_copy(0, 3)
                     .trap_if_eq(b"arg", "no no no")
+                    .accept_message()
                     .build(),
             )
             .reply()
@@ -2317,7 +2320,7 @@ fn inspect_arg_data() {
     let err = test
         .should_accept_ingress_message(canister, "update", b"arg".to_vec())
         .unwrap_err();
-    assert_eq!(ErrorCode::CanisterTrapped, err.code());
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
     test.should_accept_ingress_message(canister, "update", b"foo".to_vec())
         .unwrap();
 }
@@ -2479,7 +2482,9 @@ fn management_message_with_forbidden_method_is_not_accepted() {
 #[test]
 fn management_message_with_invalid_sender_is_not_accepted() {
     let mut test = ExecutionTestBuilder::new().build();
+    test.set_user_id(user_test_id(0));
     let canister = test.universal_canister().unwrap();
+    test.set_user_id(user_test_id(1));
     let arg: CanisterIdRecord = canister.into();
     let err = test
         .should_accept_ingress_message(IC_00, "canister_status", Encode!(&arg).unwrap())

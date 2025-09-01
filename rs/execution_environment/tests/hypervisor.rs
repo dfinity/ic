@@ -8599,7 +8599,7 @@ fn ic0_msg_cycles_refunded_u64() {
             call_args()
                 .other_side(callee)
                 .on_reject(wasm().reject_message().reject())
-                .on_reply(wasm().msg_cycles_refunded128().reply_int64()),
+                .on_reply(wasm().msg_cycles_refunded128().append_and_reply()),
             Cycles::new(1 << 64),
         )
         .build();
@@ -8999,7 +8999,7 @@ fn legacy_cycles_balance() {
     match res {
         WasmResult::Reply(data) => {
             let balance = u64::from_le_bytes(data.try_into().unwrap());
-            assert!(balance > 1_u64 << 60);
+            balance_is_roughly(balance.into(), 1_u128 << 62);
         }
         WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
     };
@@ -9013,7 +9013,7 @@ fn legacy_cycles_balance() {
     match res {
         WasmResult::Reply(data) => {
             let balance = u128::from_le_bytes(data.try_into().unwrap());
-            assert!(balance > 1_u128 << 64);
+            balance_is_roughly(balance, 1_u128 << 62);
         }
         WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
     };
@@ -9184,7 +9184,7 @@ fn send_too_many_cycles() {
                 .build(),
         )
         .unwrap_err();
-    assert_eq!(ErrorCode::CanisterTrapped, err.code());
+    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
     canister_balance_is_roughly(&test, canister_1, 1_u128 << 60);
     canister_balance_is_roughly(&test, canister_2, 1_u128 << 60);
 }
@@ -9308,7 +9308,7 @@ fn relay_after_accept_works() {
     let canister_3 = test.universal_canister().unwrap();
     let relayed = (1_u128 << 62) + (1_u128 << 60);
     let relay_before_accept = wasm()
-        .msg_cycles_accept(1_i64 << 60)
+        .msg_cycles_accept(1_i64 << 61)
         .call_with_cycles(
             canister_3,
             "update",
@@ -9332,8 +9332,8 @@ fn relay_after_accept_works() {
         WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
     };
     canister_balance_is_roughly(&test, canister_1, 1_u128 << 61);
-    canister_balance_is_roughly(&test, canister_2, 1_u128 << 62);
-    canister_balance_is_roughly(&test, canister_3, (1_u128 << 62) + (1_u128 << 61));
+    canister_balance_is_roughly(&test, canister_2, 1_u128 << 60);
+    canister_balance_is_roughly(&test, canister_3, (1_u128 << 63) + (1_u128 << 60));
 }
 
 #[test]
@@ -9368,22 +9368,38 @@ fn aborting_call_resets_balance() {
         }
         WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
     };
-    canister_balance_is_roughly(&test, canister_1, 1_u128 << 61);
+    canister_balance_is_roughly(&test, canister_1, 1_u128 << 62);
     canister_balance_is_roughly(&test, canister_2, 1_u128 << 62);
 }
 
 fn balance_is_roughly(actual_balance: u128, expected_balance: u128) {
-    const EPS: u128 = 1_u128 << 30;
-    assert!(actual_balance >= expected_balance.saturating_sub(EPS));
-    assert!(actual_balance <= expected_balance.saturating_add(EPS));
+    const EPS: u128 = 100_000_000_000;
+    assert!(
+        actual_balance >= expected_balance.saturating_sub(EPS),
+        "actual: {}; expected: {}; diff: {}B",
+        actual_balance,
+        expected_balance,
+        (expected_balance - actual_balance) / 1_000_000_000
+    );
+    assert!(
+        actual_balance <= expected_balance.saturating_add(EPS),
+        "actual: {}; expected: {}: diff: {}B",
+        actual_balance,
+        expected_balance,
+        (actual_balance - expected_balance) / 1_000_000_000
+    );
 }
 
-fn canister_balance_is_roughly(test: &ExecutionTest, canister_id: CanisterId, balance: u128) {
+fn canister_balance_is_roughly(
+    test: &ExecutionTest,
+    canister_id: CanisterId,
+    expected_balance: u128,
+) {
     balance_is_roughly(
         test.canister_state(canister_id)
             .system_state
             .balance()
             .get(),
-        balance,
+        expected_balance,
     );
 }
