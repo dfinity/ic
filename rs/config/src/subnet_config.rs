@@ -6,7 +6,9 @@ use std::time::Duration;
 use crate::{execution_environment::SUBNET_HEAP_DELTA_CAPACITY, flag_status::FlagStatus};
 use ic_base_types::NumBytes;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{Cycles, ExecutionRound, NumInstructions};
+use ic_types::{
+    consensus::idkg::STORE_PRE_SIGNATURES_IN_STATE, Cycles, ExecutionRound, NumInstructions,
+};
 use serde::{Deserialize, Serialize};
 
 const GIB: u64 = 1024 * 1024 * 1024;
@@ -176,13 +178,6 @@ pub const DEFAULT_CANISTERS_SNAPSHOT_DATA_BASELINE_INSTRUCTIONS: NumInstructions
 /// as well as larger heap sizes that lead to larger application working sets.
 pub const WASM64_INSTRUCTION_COST_OVERHEAD: u128 = 2;
 
-/// If enabled, pre-signature artifacts required to serve canister threshold signature requests
-/// (tECDSA/tSchnorr) will be stored in the pre-signature stash residing in replicated state.
-/// This means they will be immediately purged from the blockchain once delivered.
-/// If disabled, pre-signatures remain on the blockchain, until they are consumed by a signature
-/// request.
-pub const STORE_PRE_SIGNATURES_IN_STATE: FlagStatus = FlagStatus::Enabled;
-
 /// The per subnet type configuration for the scheduler component
 #[derive(Clone, Deserialize, Serialize)]
 pub struct SchedulerConfig {
@@ -321,7 +316,11 @@ impl SchedulerConfig {
                 DEFAULT_CANISTERS_SNAPSHOT_BASELINE_INSTRUCTIONS,
             canister_snapshot_data_baseline_instructions:
                 DEFAULT_CANISTERS_SNAPSHOT_DATA_BASELINE_INSTRUCTIONS,
-            store_pre_signatures_in_state: STORE_PRE_SIGNATURES_IN_STATE,
+            store_pre_signatures_in_state: if STORE_PRE_SIGNATURES_IN_STATE {
+                FlagStatus::Enabled
+            } else {
+                FlagStatus::Disabled
+            },
         }
     }
 
@@ -366,7 +365,11 @@ impl SchedulerConfig {
             upload_wasm_chunk_instructions: NumInstructions::from(0),
             canister_snapshot_baseline_instructions: NumInstructions::from(0),
             canister_snapshot_data_baseline_instructions: NumInstructions::from(0),
-            store_pre_signatures_in_state: STORE_PRE_SIGNATURES_IN_STATE,
+            store_pre_signatures_in_state: if STORE_PRE_SIGNATURES_IN_STATE {
+                FlagStatus::Enabled
+            } else {
+                FlagStatus::Disabled
+            },
         }
     }
 
