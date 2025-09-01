@@ -78,6 +78,8 @@ pub const SNS_CREATION_FEE: u64 = 180 * ONE_TRILLION;
 // The number of nanoseconds per second.
 pub const NANO_SECONDS_PER_SECOND: u64 = 1_000_000_000;
 
+pub const NANOS_PER_DAY: u64 = 24 * 60 * 60 * NANO_SECONDS_PER_SECOND;
+
 /// Maximum allowed number of SNS neurons for direct swap participants that an SNS may create.
 /// This constant must not exceed `NervousSystemParameters::MAX_NUMBER_OF_NEURONS_CEILING`.
 pub const MAX_NEURONS_FOR_DIRECT_PARTICIPANTS: u64 = 100_000;

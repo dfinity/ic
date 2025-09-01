@@ -84,7 +84,8 @@ use ic_cdk::spawn;
 use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::{
-    ledger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
+    ledger, NervousSystemError, NANOS_PER_DAY, NANO_SECONDS_PER_SECOND, ONE_DAY_SECONDS,
+    ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
 use ic_nervous_system_proto::pb::v1::{GlobalTimeOfDay, Principals};
@@ -104,6 +105,9 @@ use ic_nns_governance_api::{
 };
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
+};
+use ic_node_rewards_canister_api::providers_rewards::{
+    GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -4132,6 +4136,16 @@ impl Governance {
         // Acquire the lock before doing anything meaningful.
         self.minting_node_provider_rewards = true;
 
+        match self
+            .simulate_get_node_providers_performance_based_rewards()
+            .await
+        {
+            Ok(()) => println!("Performance based rewards simulation executed"),
+            Err(e) => println!(
+                "{}Error when simulating performance based node rewards in run_periodic_tasks: {}",
+                LOG_PREFIX, e,
+            ),
+        }
         let monthly_node_provider_rewards = self.get_monthly_node_provider_rewards().await?;
         let _ = self
             .reward_node_providers(&monthly_node_provider_rewards.rewards)
@@ -7789,6 +7803,59 @@ impl Governance {
             registry_version: Some(registry_version),
             node_providers: self.heap_data.node_providers.clone(),
         })
+    }
+
+    /// Simulate Performance Based rewards call
+    async fn simulate_get_node_providers_performance_based_rewards(
+        &self,
+    ) -> Result<(), GovernanceError> {
+        let latest_monthly_node_provider_rewards = &self
+            .get_most_recent_monthly_node_provider_rewards()
+            .unwrap();
+        let from_nanos = latest_monthly_node_provider_rewards.timestamp * NANO_SECONDS_PER_SECOND;
+        let yesterday_nanos = self.env.now() * NANO_SECONDS_PER_SECOND - NANOS_PER_DAY;
+
+        let response: Vec<u8> = self
+            .env
+            .call_canister_method(
+                NODE_REWARDS_CANISTER_ID,
+                "get_node_providers_rewards",
+                Encode!(&GetNodeProvidersRewardsRequest {
+                    from_nanos,
+                    to_nanos: yesterday_nanos
+                })
+                .unwrap(),
+            )
+            .await
+            .map_err(|(code, msg)| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Error calling 'get_node_providers_rewards': code: {:?}, message: {}",
+                        code, msg
+                    ),
+                )
+            })?;
+
+        let response = Decode!(&response, GetNodeProvidersRewardsResponse).map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Cannot decode return type from get_node_providers_rewards \
+                    as GetNodeProvidersRewardsResponse'. Error: {}",
+                    err,
+                ),
+            )
+        })?;
+
+        let _rewards = response.map_err(|err_msg| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Error calling 'get_node_providers_rewards': {}", err_msg),
+            )
+        })?;
+
+        Ok(())
     }
 
     /// A helper for the Registry's get_node_providers_monthly_xdr_rewards method
