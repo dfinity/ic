@@ -384,42 +384,6 @@ pub fn test(env: TestEnv) {
             icpts_to_cycles.to_cycles(nns_amount).get()
         );
 
-<<<<<<< HEAD
-        // remove when ledger notify goes away
-        {
-            let nns_amount = Tokens::new(2, 0).unwrap();
-            user1
-                .transfer(
-                    Tokens::from_e8s(nns_amount.get_e8s() + DEFAULT_TRANSFER_FEE.get_e8s()),
-                    controller_user.principal_id(),
-                )
-                .await;
-            let new_canister_id = controller_user
-                .create_canister_ledger(nns_amount)
-                .await
-                .unwrap();
-
-            /* Check the controller / cycles balance. */
-            let new_canister_status: CanisterStatusResultV2 = nns
-                .get_management_canister_with_effective_canister_id(new_canister_id.into())
-                .update_from_sender(
-                    "canister_status",
-                    candid_one,
-                    CanisterIdRecord::from(new_canister_id),
-                    &Sender::from_keypair(&controller_user_keypair),
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(new_canister_status.controllers(), vec![controller_pid]);
-            assert_eq!(
-                new_canister_status.cycles(),
-                icpts_to_cycles.to_cycles(nns_amount).get()
-            );
-        }
-
-=======
->>>>>>> master
         /* Try upgrading the cycles minting canister. This should
          * preserve its state (such as the principal -> subnets
          * mappings). Note: we first update to a dummy canister
