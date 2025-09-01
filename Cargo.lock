@@ -9802,7 +9802,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc-rosetta"
-version = "1.2.5"
+version = "1.2.6"
 dependencies = [
  "anyhow",
  "axum 0.8.4",
