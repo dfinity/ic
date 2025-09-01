@@ -491,6 +491,9 @@ jobs:
             fi
             ci/bazel-scripts/targets.py build "${targets_args[@]}" >"$targets"
 
+            echo "Considering the following $(wc <"$targets" -l) targets:"
+            cat "$targets"
+
             ARGS=()
 
             if grep -q '^//ic-os' <"$targets"; then
