@@ -12,6 +12,7 @@ use crate::forum::DiscourseClient;
 use crate::git::{GitCommitHash, GitRepository};
 use crate::ic_admin::ProposalFiles;
 use crate::proposal::{InstallProposalTemplate, ProposalTemplate, UpgradeProposalTemplate};
+use ::candid::Principal;
 use clap::{Parser, Subcommand};
 use ic_admin::IcAdminArgs;
 use std::collections::{BTreeMap, BTreeSet};
@@ -206,6 +207,10 @@ async fn main() {
         } => {
             let dashboard = DashboardClient::new();
             let proposal = dashboard.retrieve_proposal(proposal_id).await;
+            let canister_id = Principal::from_text(proposal.payload.canister_id)
+                .expect("ERROR: invalid canister ID");
+            let target_canister = TargetCanister::find_by_id(&canister_id)
+                .unwrap_or_else(|| panic!("ERROR: no known target canister for {canister_id}"));
             let forum_client =
                 DiscourseClient::new("https://forum.dfinity.org".to_string(), api_user, api_key);
             panic!("BOOM!: {proposal:?}")

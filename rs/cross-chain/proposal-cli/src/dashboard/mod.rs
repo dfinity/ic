@@ -4,9 +4,10 @@ mod responses;
 #[cfg(test)]
 mod tests;
 
-use crate::dashboard::responses::{CanisterInfo, ProposalInfo};
+use crate::dashboard::responses::CanisterInfo;
 use candid::Principal;
 use reqwest::StatusCode;
+pub(crate) use responses::ProposalInfo;
 use std::collections::BTreeSet;
 use std::time::Duration;
 

@@ -1,30 +1,105 @@
+use crate::canister::TargetCanister;
+use crate::dashboard::ProposalInfo;
+use candid::Principal;
 use maplit::btreeset;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::str::FromStr;
 use std::time::Duration;
 
+type ProposalId = u64;
+
 #[derive(Clone, PartialEq, Eq)]
-enum ForumPost {
-    ApplicationCanisterManagement { title: String, body: String },
+enum ForumTopic {
+    /// A new topic in the application canister management category for the given proposals.
+    /// A single post may cover multiple proposals (e.g. a topic to cover a new ckBTC ledger suite,
+    /// which involves 3 proposals: for the ledger, index and archive canisters).
+    ApplicationCanisterManagement {
+        proposals: BTreeMap<ProposalId, UpgradeProposalSummary>,
+    },
 }
 
-impl ForumPost {
-    fn title(&self) -> &String {
+impl ForumTopic {
+    fn for_upgrade_proposals<I: IntoIterator<Item = ProposalInfo>>(
+        proposals: I,
+    ) -> Result<ForumTopic, String> {
+        let mut summaries = BTreeMap::new();
+        for proposal in proposals.into_iter() {
+            let proposal_id = proposal.proposal_id;
+            let summary = UpgradeProposalSummary::try_from(proposal)?;
+            summaries.insert(proposal_id, summary);
+        }
+        Ok(ForumTopic::ApplicationCanisterManagement {
+            proposals: summaries,
+        })
+    }
+}
+
+impl TryFrom<ProposalInfo> for UpgradeProposalSummary {
+    type Error = String;
+
+    fn try_from(proposal: ProposalInfo) -> Result<Self, Self::Error> {
+        let canister_id = Principal::from_text(proposal.payload.canister_id)
+            .map_err(|e| format!("Failed to parse canister ID: {}", e))?;
+        let canister = TargetCanister::find_by_id(&canister_id)
+            .ok_or_else(|| format!("ERROR: no known target canister for {canister_id}"))?;
+        let install_mode = proposal.payload.install_mode_name.parse()?;
+        Ok(Self {
+            canister,
+            install_mode,
+        })
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
+struct UpgradeProposalSummary {
+    canister: TargetCanister,
+    install_mode: CanisterInstallMode,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+enum CanisterInstallMode {
+    Unspecified,
+    Install,
+    Reinstall,
+    Upgrade,
+}
+
+impl FromStr for CanisterInstallMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "CANISTER_INSTALL_MODE_UNSPECIFIED" => Ok(Self::Unspecified),
+            "CANISTER_INSTALL_MODE_INSTALL" => Ok(Self::Install),
+            "CANISTER_INSTALL_MODE_REINSTALL" => Ok(Self::Reinstall),
+            "CANISTER_INSTALL_MODE_UPGRADE" => Ok(Self::Upgrade),
+            _ => Err(format!("Unknown install mode: {}", s)),
+        }
+    }
+}
+
+impl ForumTopic {
+    fn title(&self) -> String {
         match self {
-            ForumPost::ApplicationCanisterManagement { title, .. } => title,
+            ForumTopic::ApplicationCanisterManagement { proposals } => {
+                todo!()
+            }
         }
     }
 
-    fn body(&self) -> &String {
+    fn body(&self) -> String {
         match self {
-            ForumPost::ApplicationCanisterManagement { body, .. } => body,
+            ForumTopic::ApplicationCanisterManagement { proposals } => {
+                todo!()
+            }
         }
     }
 
     fn category(&self) -> u64 {
         match &self {
-            ForumPost::ApplicationCanisterManagement { .. } => {
+            ForumTopic::ApplicationCanisterManagement { .. } => {
                 // Category "NNS proposal discussions"
                 // https://forum.dfinity.org/c/governance/nns-proposal-discussions/76
                 76
