@@ -8,6 +8,7 @@ mod proposal;
 
 use crate::canister::TargetCanister;
 use crate::dashboard::DashboardClient;
+use crate::forum::DiscourseClient;
 use crate::git::{GitCommitHash, GitRepository};
 use crate::ic_admin::ProposalFiles;
 use crate::proposal::{InstallProposalTemplate, ProposalTemplate, UpgradeProposalTemplate};
@@ -82,6 +83,10 @@ enum Commands {
         /// ID of the proposal.
         #[arg(long)]
         proposal_id: u64,
+        /// API key to submit the post
+        api_key: String,
+        /// Username associated with the API key
+        api_user: String,
     },
 }
 
@@ -194,9 +199,15 @@ async fn main() {
                 }
             }
         }
-        Commands::CreateForumPost { proposal_id } => {
+        Commands::CreateForumPost {
+            proposal_id,
+            api_key,
+            api_user,
+        } => {
             let dashboard = DashboardClient::new();
             let proposal = dashboard.retrieve_proposal(proposal_id).await;
+            let forum_client =
+                DiscourseClient::new("https://forum.dfinity.org".to_string(), api_user, api_key);
             panic!("BOOM!: {proposal:?}")
         }
     }
