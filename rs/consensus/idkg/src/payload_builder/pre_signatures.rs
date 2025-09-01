@@ -619,21 +619,32 @@ pub(super) fn make_new_pre_signatures_by_priority(
             return;
         }
 
+        // The maximum number of transcripts that we want to work on in parallel
+        // in any given payload.
         let max_capacity = chain_key_config
             .max_parallel_pre_signature_transcripts_in_creation
             .unwrap_or(20) as usize;
+
+        // Each ongoing pre-signature in creation consumes some of the maximum capacity.
+        // For instance, Schnorr pre-signatures consist of a single transcript, and
+        // therefore consume 1 transcript in capacity. ECDSA pre-signatures require working
+        // on two transcripts in parallel, and therefore consume 2 capacity points.
         let available_pre_sig_capacity =
             max_capacity.saturating_sub(idkg_payload.consumed_pre_sig_capacity());
 
-        // There isn't enough capacity to create a pre-signature of the highest
-        // priority in this payload. Note that there may be enough capacity to
-        // create a pre-signature of lower priority. However, we return and wait
-        // until enough capacity becomes available for the highest priority, so
-        // we don't starve their creation.
+        // There isn't enough capacity to create a pre-signature of the highest priority
+        // in this payload. Note that the following situation may occur:
+        // The emptiest stash asks for an ECDSA pre-signature, however, there is only
+        // enough capacity to create a Schnorr pre-signature. In that case, we should not
+        // start a new Schnorr pre-signature, and instead wait until enough capacity exists
+        // in the payload to start the creation of a new ECDSA pre-signature, which has
+        // the highest priority. This is to prevent the creation of ECDSA pre-signatures
+        // being starved.
         if emptiest_stash.key_id.required_pre_sig_capacity() > available_pre_sig_capacity {
             return;
         }
 
+        // If there is enough capacity, start the new pre-signature and add it to the payload.
         let uid_generator = &mut idkg_payload.uid_generator;
         let pre_signature = start_pre_signature_in_creation(
             emptiest_stash.key_id,
@@ -644,7 +655,7 @@ pub(super) fn make_new_pre_signatures_by_priority(
             .pre_signatures_in_creation
             .insert(uid_generator.next_pre_signature_id(), pre_signature);
 
-        // Re-insert the updated stash into the queue
+        // Re-insert the updated stash into the priority queue.
         emptiest_stash.count += 1;
         priority_queue.push(emptiest_stash);
     }
