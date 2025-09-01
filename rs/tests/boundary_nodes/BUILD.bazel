@@ -110,6 +110,7 @@ system_test_nns(
     proc_macro_deps = ["@crate_index//:async-trait"],
     tags = [
         "k8s",
+        "long_test",  # the P90 duration was over 5 minutes for the week starting on 2025-08-25.
     ],
     runtime_deps = [
         "//rs/boundary_node/rate_limits:rate_limit_canister",
