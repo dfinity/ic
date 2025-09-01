@@ -1,4 +1,4 @@
-use crate::registry::Registry;
+use crate::registry::{Registry, Version};
 use candid::{CandidType, Deserialize};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use serde::Serialize;
