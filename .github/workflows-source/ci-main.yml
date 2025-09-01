@@ -173,21 +173,8 @@ jobs:
             BASE_SHA='${{ github.event.pull_request.base.sha }}'
             HEAD_SHA='${{ github.event.pull_request.head.sha }}'
 
-            # Determine which tests to skip
-            EXCLUDED_TEST_TAGS=(
-                system_test_large
-                system_test_benchmark
-                fuzz_test
-                fi_tests_nightly
-                nns_tests_nightly
-                pocketic_tests_nightly
-            )
-
-            # Prepend tags with '-' and join them with commas for Bazel
-            TEST_TAG_FILTERS=$(IFS=,; echo "${EXCLUDED_TEST_TAGS[*]/#/-}")
             # Determine bazel_args based on event type or branch name
             bazel_args=(
-              "--test_tag_filters=$TEST_TAG_FILTERS"
               --config=lint # enable lint checks
               --config=flaky_retry # auto retry eg systests
               )

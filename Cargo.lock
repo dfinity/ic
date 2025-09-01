@@ -841,6 +841,43 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
+name = "attestation"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "attestation_testing",
+ "candid",
+ "config_types",
+ "der 0.7.9",
+ "ic-interfaces-registry",
+ "ic-protobuf",
+ "ic-registry-client-helpers",
+ "ic-types",
+ "ic_sev",
+ "itertools 0.12.1",
+ "pem 1.1.1",
+ "prost 0.13.4",
+ "prost-build 0.13.4",
+ "ring 0.17.14",
+ "serde",
+ "sev",
+ "thiserror 2.0.12",
+ "tonic",
+]
+
+[[package]]
+name = "attestation_testing"
+version = "0.0.0"
+dependencies = [
+ "ic-interfaces-registry-mocks",
+ "ic-protobuf",
+ "ic-registry-keys",
+ "ic-types",
+ "mockall",
+ "prost 0.13.4",
+]
+
+[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2590,8 +2627,6 @@ dependencies = [
  "fs_extra",
  "get_if_addrs",
  "ic-config",
- "ic-types",
- "ic_sev",
  "macaddr",
  "network",
  "once_cell",
@@ -8999,46 +9034,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-drun"
-version = "0.9.0"
-dependencies = [
- "clap 4.5.27",
- "futures",
- "hex",
- "ic-canister-sandbox-backend-lib",
- "ic-config",
- "ic-crypto-test-utils-ni-dkg",
- "ic-cycles-account-manager",
- "ic-error-types 0.2.0",
- "ic-execution-environment",
- "ic-http-endpoints-metrics",
- "ic-interfaces",
- "ic-interfaces-state-manager",
- "ic-management-canister-types-private",
- "ic-messaging",
- "ic-metrics",
- "ic-protobuf",
- "ic-registry-client",
- "ic-registry-keys",
- "ic-registry-proto-data-provider",
- "ic-registry-provisional-whitelist",
- "ic-registry-routing-table",
- "ic-registry-subnet-type",
- "ic-state-machine-tests",
- "ic-state-manager",
- "ic-test-utilities-consensus",
- "ic-test-utilities-registry",
- "ic-test-utilities-types",
- "ic-types",
- "rand 0.8.5",
- "slog",
- "slog-term",
- "tokio",
- "tower 0.5.2",
- "wasmparser 0.228.0",
-]
-
-[[package]]
 name = "ic-dummy-getrandom-for-wasm"
 version = "0.1.0"
 dependencies = [
@@ -9049,12 +9044,12 @@ dependencies = [
 name = "ic-ed25519"
 version = "0.3.0"
 dependencies = [
- "candid",
  "curve25519-dalek",
  "ed25519-dalek",
  "hex",
  "hex-literal 0.4.1",
  "hkdf",
+ "ic_principal",
  "pem 1.1.1",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -9807,7 +9802,7 @@ dependencies = [
 
 [[package]]
 name = "ic-icrc-rosetta"
-version = "1.2.5"
+version = "1.2.6"
 dependencies = [
  "anyhow",
  "axum 0.8.4",
@@ -13057,10 +13052,10 @@ version = "0.2.0"
 dependencies = [
  "bip32 0.5.3",
  "bitcoin 0.28.2",
- "candid",
  "hex",
  "hex-literal 0.4.1",
  "hmac",
+ "ic_principal",
  "k256 0.13.4",
  "num-bigint 0.4.6",
  "pem 1.1.1",
@@ -15350,6 +15345,7 @@ dependencies = [
  "sev",
  "sha2 0.10.9",
  "tempfile",
+ "tokio",
  "x509-cert",
 ]
 
@@ -20465,6 +20461,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-common-test-keys",
+ "ic-nervous-system-integration-tests",
  "ic-nervous-system-string",
  "ic-nervous-system-temporary",
  "ic-nervous-system-time-helpers",
@@ -20499,6 +20496,7 @@ dependencies = [
  "leb128",
  "maplit",
  "on_wire",
+ "pocket-ic",
  "prost 0.13.4",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
@@ -24506,6 +24504,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "ic-http-utils",
+ "mockall",
  "reqwest 0.12.15",
  "rusb",
  "serde",

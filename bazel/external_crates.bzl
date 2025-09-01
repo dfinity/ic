@@ -489,6 +489,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "der": crate.spec(
                 version = "0.7",
                 default_features = False,
+                features = ["derive"],
             ),
             "derive-new": crate.spec(
                 version = "^0.7.0",

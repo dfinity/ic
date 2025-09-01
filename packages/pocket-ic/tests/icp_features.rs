@@ -1068,6 +1068,7 @@ async fn with_all_icp_features_and_nns_subnet_state() {
             nns: Some(SubnetSpec::default().with_state_dir(state_dir_path_buf)),
             ..Default::default()
         },
+        http_gateway_config: None,
         state_dir: None,
         nonmainnet_features: None,
         log_level: None,

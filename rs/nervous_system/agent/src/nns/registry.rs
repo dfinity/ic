@@ -1,7 +1,10 @@
 use crate::CallCanisters;
 use ic_base_types::{CanisterId, SubnetId};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
-use registry_canister::pb::v1::GetSubnetForCanisterRequest;
+use registry_canister::{
+    mutations::do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload,
+    pb::v1::GetSubnetForCanisterRequest,
+};
 
 pub mod requests;
 
@@ -27,4 +30,11 @@ pub async fn get_subnet_for_canister<C: CallCanisters>(
         .expect("SubnetForCanister.subnet_id was not specified.");
 
     Ok(SubnetId::from(subnet_id))
+}
+
+pub async fn swap_node_in_subnet_directly<C: CallCanisters>(
+    agent: &C,
+    payload: SwapNodeInSubnetDirectlyPayload,
+) -> Result<(), C::Error> {
+    agent.call(REGISTRY_CANISTER_ID, payload).await
 }

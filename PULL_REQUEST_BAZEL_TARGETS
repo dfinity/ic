@@ -71,3 +71,7 @@ rs/recovery/src/*.rs //rs/tests/consensus/subnet_recovery/...
                      //rs/tests/nested:nns_recovery_test
 
 rs/recovery/subnet_splitting/*.rs //rs/tests/consensus:subnet_splitting_test_colocate
+
+rs/bitcoin/* //rs/tests/ckbtc:adapter_basics_test
+
+rs/boundary_node/rate_limits/* //rs/tests/boundary_nodes:rate_limit_canister_test
