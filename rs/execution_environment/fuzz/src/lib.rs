@@ -1,11 +1,13 @@
 use ic_canister_sandbox_backend_lib::{
-    canister_sandbox_main, compiler_sandbox::compiler_sandbox_main,
+    embed_sandbox_signature, SANDBOX_MAGIC_BYTES, SANDBOX_SECTION_NAME, canister_sandbox_main, compiler_sandbox::compiler_sandbox_main,
     launcher::sandbox_launcher_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG,
     RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
 use libfuzzer_sys::test_input_wrap;
 use std::ffi::CString;
 use std::os::raw::c_char;
+
+// embed_sandbox_signature!();
 
 #[cfg(target_os = "linux")]
 use {

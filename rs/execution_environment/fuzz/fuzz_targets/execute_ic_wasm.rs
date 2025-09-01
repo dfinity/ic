@@ -8,6 +8,7 @@ use ic_types::{CanisterId, Cycles, NumBytes};
 use libfuzzer_sys::fuzz_target;
 use std::cell::RefCell;
 use wasm_fuzzers::ic_wasm::ICWasmModule;
+use ic_canister_sandbox_backend_lib::{embed_sandbox_signature, SANDBOX_MAGIC_BYTES, SANDBOX_SECTION_NAME};
 
 thread_local! {
     static ENV: RefCell<(ExecutionTest, CanisterId)> = RefCell::new(setup_env());
@@ -27,6 +28,13 @@ const HELLO_WORLD_WAT: [u8; 61] = [
 
 // To run the fuzzer,
 // bazel run --config=sandbox_fuzzing //rs/execution_environment/fuzz:execute_with_wasm_executor_system_api_call
+
+// embed_sandbox_signature!();
+
+#[unsafe(no_mangle)]
+#[unsafe(link_section = ".data.static")]
+#[used]
+static SANDBOX_SIGNATURE: [u8; 8] = SANDBOX_MAGIC_BYTES;
 
 fn main() {
     let features = fuzzer_sandbox::SandboxFeatures {

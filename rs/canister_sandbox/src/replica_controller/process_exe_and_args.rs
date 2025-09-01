@@ -8,6 +8,7 @@ use std::{
     process::Command,
 };
 
+use object::{Object, ObjectSection};
 use once_cell::sync::OnceCell;
 
 use crate::{
@@ -111,7 +112,13 @@ fn create_child_process_argv(krate: SandboxCrate) -> Option<Vec<String>> {
     // 1. If the current binary supports running the sandbox mode, then use it.
     // This is important for `ic-replay` and `drun` where we do not control
     // the location of the sandbox binary.
-    if RUNNABLE_AS_SANDBOX.contains(&current_binary_name) {
+    
+    // if RUNNABLE_AS_SANDBOX.contains(&current_binary_name) {
+    //     
+    //     
+    // }
+
+    if check_binary_signature(current_binary_path.clone()) {
         let exec_path = current_binary_path.to_str()?.to_string();
         return Some(vec![exec_path, krate.run_as_flag().to_string()]);
     }
@@ -133,6 +140,29 @@ fn create_child_process_argv(krate: SandboxCrate) -> Option<Vec<String>> {
 /// Get the path of the current running binary.
 fn current_binary_path() -> Option<PathBuf> {
     std::env::args().next().map(PathBuf::from)
+}
+
+fn check_binary_signature(binary_path: PathBuf) -> bool {
+    let mut signature_found = false;
+
+    if let Ok(data) = std::fs::read(binary_path) {
+        if let Ok(obj_file) = object::File::parse(&*data) {
+            for section in obj_file.sections() {
+                if let Ok(name) = section.name() {
+                    println!("section name: {name}");
+                    if name == crate::SANDBOX_SECTION_NAME { 
+                        if let Ok(data) = section.data() {
+                            if *data == crate::SANDBOX_MAGIC_BYTES[..] {   
+                                signature_found = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    signature_found
 }
 
 /// Only for testing purposes.

@@ -1,5 +1,5 @@
 {
-  "checksum": "4f1c5ed2f312010711b5d0b4b03233772f13409c395474d67228247cbae20b0d",
+  "checksum": "a396630a628011714b33b2c1469264b2c838b71ff6962a343dd3f355b65b375d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21280,6 +21280,10 @@
             {
               "id": "num_cpus 1.16.0",
               "target": "num_cpus"
+            },
+            {
+              "id": "object 0.37.3",
+              "target": "object"
             },
             {
               "id": "once_cell 1.21.3",
@@ -50142,6 +50146,106 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "object 0.37.3": {
+      "name": "object",
+      "version": "0.37.3",
+      "package_url": "https://github.com/gimli-rs/object",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/object/0.37.3/download",
+          "sha256": "ff76201f031d8863c38aa7f905eca4f53abbfa15f609db4277d44cd8938f33fe"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "object",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "object",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "archive",
+            "coff",
+            "compression",
+            "default",
+            "elf",
+            "macho",
+            "pe",
+            "read",
+            "read_core",
+            "std",
+            "unaligned",
+            "xcoff"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "flate2 1.1.2",
+              "target": "flate2"
+            },
+            {
+              "id": "memchr 2.7.4",
+              "target": "memchr"
+            },
+            {
+              "id": "object 0.37.3",
+              "target": "build_script_build"
+            },
+            {
+              "id": "ruzstd 0.8.1",
+              "target": "ruzstd"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.37.3"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "ocsp-stapler 0.4.5": {
       "name": "ocsp-stapler",
       "version": "0.4.5",
@@ -67782,6 +67886,61 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "ruzstd 0.8.1": {
+      "name": "ruzstd",
+      "version": "0.8.1",
+      "package_url": "https://github.com/KillingSpark/zstd-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ruzstd/0.8.1/download",
+          "sha256": "3640bec8aad418d7d03c72ea2de10d5c646a598f9883c7babc160d91e3c1b26c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ruzstd",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ruzstd",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "hash",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "twox-hash 2.1.1",
+              "target": "twox_hash"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.8.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "ryu 1.0.15": {
       "name": "ryu",
       "version": "1.0.15",
@@ -82833,6 +82992,50 @@
       ],
       "license_file": "LICENSE.txt"
     },
+    "twox-hash 2.1.1": {
+      "name": "twox-hash",
+      "version": "2.1.1",
+      "package_url": "https://github.com/shepmaster/twox-hash",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/twox-hash/2.1.1/download",
+          "sha256": "8b907da542cbced5261bd3256de1b3a1bf340a3d37f93425a07362a1d687de56"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "twox_hash",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "twox_hash",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "xxhash64"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "2.1.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE.txt"
+    },
     "typed-arena 2.0.2": {
       "name": "typed-arena",
       "version": "2.0.2",
@@ -94885,6 +95088,7 @@
     "num-rational 0.2.4",
     "num-traits 0.2.19",
     "num_cpus 1.16.0",
+    "object 0.37.3",
     "once_cell 1.21.3",
     "openssh-keys 0.5.0",
     "opentelemetry 0.27.0",

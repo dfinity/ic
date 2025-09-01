@@ -50,6 +50,7 @@ rust_fuzz_test_binary(
 SYSTEM_API_FUZZ_DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
+    "//rs/canister_sandbox:backend_lib",
     "//rs/embedders/fuzz:wasm_fuzzers",
     "//rs/test_utilities/execution_environment",
     "//rs/types/management_canister_types",
