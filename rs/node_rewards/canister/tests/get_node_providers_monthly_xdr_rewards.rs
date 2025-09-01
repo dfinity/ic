@@ -8,6 +8,7 @@ use ic_node_rewards_canister_api::provider_rewards_calculation::{
     GetHistoricalRewardPeriodsResponse, GetNodeProviderRewardsCalculationRequest,
     GetNodeProviderRewardsCalculationResponse,
 };
+use ic_node_rewards_canister_protobuf::pb::rewards_calculator::v1::RewardsCalculatorVersion;
 use ic_types::PrincipalId;
 use pocket_ic::common::rest::IcpFeatures;
 use pocket_ic::nonblocking::{query_candid, update_candid, PocketIc};
@@ -79,6 +80,7 @@ async fn get_node_provider_rewards_calculation_is_only_callable_in_nonreplicated
 
     for historical in [false, true] {
         let request = GetNodeProviderRewardsCalculationRequest {
+            rewards_calculator_version: RewardsCalculatorVersion::V1,
             from_nanos: past_time_nanos,
             to_nanos: past_time_nanos,
             provider_id: Principal::anonymous(),
