@@ -92,8 +92,8 @@
     "tag": "release-2025-08-29"
   },
   "ledger": {
-    "rev": "fed75e2a5d21eae03b0ac017582640bc4264bae3",
-    "sha256": "324bfd929805a930cbf6b5f29b4a858ea84452bb551771df7303c769aecb1439"
+    "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
+    "sha256": "51f4be010f23064137defacd627ffbec024c5133210c68ca3b80ab8f257101d6"
   },
   "lifeline": {
     "rev": "b5192581ccd35b67fe5a1f795ead9cbcd25956d6",
