@@ -115,7 +115,12 @@ mod test {
         let response = registry.do_migrate_canisters(request);
 
         // currently just empty response.
-        assert_eq!(MigrateCanistersResponse {}, response);
+        assert_eq!(
+            MigrateCanistersResponse {
+                registry_version: registry.latest_version()
+            },
+            response
+        );
 
         let updated_routing_table = registry.get_routing_table_or_panic(registry.latest_version());
 
