@@ -740,6 +740,7 @@ mod tests {
         include_bytes!("../testdata/nftables_boundary_node_app_subnet.conf.golden");
     const NFTABLES_BOUNDARY_NODE_SYSTEM_SUBNET_GOLDEN_BYTES: &[u8] =
         include_bytes!("../testdata/nftables_boundary_node_system_subnet.conf.golden");
+    const API_BOUNDARY_NODE_ID: u64 = 3003;
 
     #[test]
     fn test_firewall_rule_compilation() {
@@ -876,9 +877,14 @@ mod tests {
 
     #[test]
     fn nftables_golden_boundary_node_system_subnet_test() {
+        // pick the node id such that the API BN's SOCKS proxy serves system subnet nodes
+        // the assert checks that
+        let api_bn_id_for_system_subnet = node_test_id(0);
+        assert!(api_bn_id_for_system_subnet < node_test_id(API_BOUNDARY_NODE_ID));
+
         golden_test(
             Role::BoundaryNode,
-            node_test_id(0), // pick the node id such that the API BN's SOCKS proxy serves system subnet nodes
+            api_bn_id_for_system_subnet,
             NFTABLES_BOUNDARY_NODE_SYSTEM_SUBNET_GOLDEN_BYTES,
             "boundary_node",
         );
@@ -886,9 +892,14 @@ mod tests {
 
     #[test]
     fn nftables_golden_boundary_node_app_subnet_test() {
+        // pick the node id such that the API BN's SOCKS proxy serves app subnet nodes
+        // the assert checks that
+        let api_bn_id_for_app_subnet = node_test_id(1234);
+        assert!(api_bn_id_for_app_subnet > node_test_id(API_BOUNDARY_NODE_ID));
+
         golden_test(
             Role::BoundaryNode,
-            node_test_id(1234), // pick the node id such that the API BN's SOCKS proxy serves app subnet nodes
+            api_bn_id_for_app_subnet,
             NFTABLES_BOUNDARY_NODE_APP_SUBNET_GOLDEN_BYTES,
             "boundary_node",
         );
@@ -1065,7 +1076,7 @@ mod tests {
         );
 
         // Add an API boundary node
-        let api_boundary_node_id = node_test_id(3003);
+        let api_boundary_node_id = node_test_id(API_BOUNDARY_NODE_ID);
         add_node_record(
             &registry_data_provider,
             registry_version,
