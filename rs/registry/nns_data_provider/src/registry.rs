@@ -343,7 +343,7 @@ impl RegistryCanister {
                 nonce,
             )
             .await
-            .map_err(|err| ic_registry_transport::Error::UnknownError(err))?
+            .map_err(ic_registry_transport::Error::UnknownError)?
         {
             Some(_) => Ok(()),
             None => Err(ic_registry_transport::Error::UnknownError(
