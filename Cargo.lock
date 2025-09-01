@@ -9034,46 +9034,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-drun"
-version = "0.9.0"
-dependencies = [
- "clap 4.5.27",
- "futures",
- "hex",
- "ic-canister-sandbox-backend-lib",
- "ic-config",
- "ic-crypto-test-utils-ni-dkg",
- "ic-cycles-account-manager",
- "ic-error-types 0.2.0",
- "ic-execution-environment",
- "ic-http-endpoints-metrics",
- "ic-interfaces",
- "ic-interfaces-state-manager",
- "ic-management-canister-types-private",
- "ic-messaging",
- "ic-metrics",
- "ic-protobuf",
- "ic-registry-client",
- "ic-registry-keys",
- "ic-registry-proto-data-provider",
- "ic-registry-provisional-whitelist",
- "ic-registry-routing-table",
- "ic-registry-subnet-type",
- "ic-state-machine-tests",
- "ic-state-manager",
- "ic-test-utilities-consensus",
- "ic-test-utilities-registry",
- "ic-test-utilities-types",
- "ic-types",
- "rand 0.8.5",
- "slog",
- "slog-term",
- "tokio",
- "tower 0.5.2",
- "wasmparser 0.228.0",
-]
-
-[[package]]
 name = "ic-dummy-getrandom-for-wasm"
 version = "0.1.0"
 dependencies = [
