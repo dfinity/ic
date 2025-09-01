@@ -132,17 +132,6 @@ fn with_archive_opts<R>(f: impl FnOnce(&ArchiveConfig) -> R) -> R {
     CONFIG.with(|cell| f(cell.borrow().get()))
 }
 
-fn set_token_type() {
-    CONFIG.with(|cell| {
-        let curr_conf = cell.borrow().get().clone();
-        let new_conf = ArchiveConfig {
-            token_type: wasm_token_type(),
-            ..curr_conf
-        };
-        assert!(cell.borrow_mut().set(new_conf).is_ok());
-    });
-}
-
 /// A helper function to access the memory manager.
 fn with_memory_manager<R>(f: impl FnOnce(&MemoryManager<Memory>) -> R) -> R {
     MEMORY_MANAGER.with(|cell| f(&cell.borrow()))
@@ -200,6 +189,24 @@ fn init(
     })
 }
 
+/// Verifies that the `token_type` stored in the ledger state is the same as to
+/// `token_type` of the current wasm. If the ledger state's `token_type` is undefined
+/// it is set to the current wasm's `token_type`.
+fn verify_token_type() {
+    CONFIG.with(|cell| {
+        let curr_conf = cell.borrow().get().clone();
+        if curr_conf.token_type == undefined_token_type() {
+            let new_conf = ArchiveConfig {
+                token_type: wasm_token_type(),
+                ..curr_conf
+            };
+            assert!(cell.borrow_mut().set(new_conf).is_ok());
+        } else if curr_conf.token_type != wasm_token_type() {
+            panic!("Incompatible token type, the upgraded archive token type is {}, current wasm token type is {}", curr_conf.token_type, wasm_token_type());
+        }
+    });
+}
+
 #[post_upgrade]
 fn post_upgrade() {
     // NB. we do not need to do anything to decode the values from the stable
@@ -210,15 +217,11 @@ fn post_upgrade() {
     let max_memory_size_bytes = with_archive_opts(|opts| opts.max_memory_size_bytes);
     with_blocks(|blocks| assert!(blocks.log_size_bytes() <= max_memory_size_bytes));
 
-    // Set the token_type, if it was not set previously.
-    if with_archive_opts(|opts| opts.token_type.clone()) == undefined_token_type() {
-        set_token_type();
-    }
-    // Check if the token_type stored in the archive state matches the current wasm's token_type.
-    let token_type = with_archive_opts(|opts| opts.token_type.clone());
-    if token_type != wasm_token_type() {
-        panic!("Incompatible token type, the upgraded archive token type is {}, current wasm token type is {}", token_type, wasm_token_type());
-    }
+    // Ensure that the archive is upgraded with the correct wasm (U64 or U256).
+    // The check does not work if the archive is older and does not have
+    // the `token_type` set in its config. In that case, `token_type`
+    // is set to the current wasm's token type.
+    verify_token_type();
 }
 
 #[update]
