@@ -18,6 +18,7 @@ use ic_node_rewards_canister_protobuf::pb::ic_node_rewards::v1::{
 };
 use ic_node_rewards_canister_protobuf::pb::rewards_calculator::v1::{
     NodeProviderRewards as NodeProviderRewardsProto, NodeProviderRewardsKey,
+    RewardsCalculatorVersion,
 };
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
@@ -615,7 +616,7 @@ fn test_get_node_providers_rewards() {
     .unwrap();
 
     let inner_results = CANISTER_TEST
-        .with_borrow(|canister| canister.calculate_rewards::<TestState>(request))
+        .with_borrow(|canister| canister.calculate_rewards::<TestState>(request, None))
         .unwrap();
     let expected: BTreeMap<PrincipalId, NodeProviderRewards> =
         serde_json::from_str(EXPECTED_TEST_1).unwrap();
@@ -732,6 +733,7 @@ fn test_get_node_provider_rewards_calculation_historical() {
 
     for (provider_id, expected_rewards) in expected {
         let request = GetNodeProviderRewardsCalculationRequest {
+            rewards_calculator_version: RewardsCalculatorVersion::V1,
             from_nanos: from.unix_ts_at_day_end(),
             to_nanos: to.unix_ts_at_day_end(),
             provider_id: provider_id.0,
