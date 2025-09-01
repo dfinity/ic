@@ -690,6 +690,15 @@ pub mod node {
             self.crypto_component
                 .verify_basic_sig_batch(signature_batch, message, registry_version)
         }
+
+        fn verify_multi_sig_batch(
+                &self,
+                batch: &[(&T, &BasicSignatureBatch<T>)],
+                registry_version: RegistryVersion,
+            ) -> CryptoResult<()> {
+            self.crypto_component
+                .verify_multi_sig_batch(batch, registry_version)
+        }
     }
 
     fn create_crypto_component_with_sign_mega_and_multisign_keys_in_registry<R: Rng + CryptoRng>(
