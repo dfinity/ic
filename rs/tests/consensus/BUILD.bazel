@@ -192,6 +192,7 @@ system_test_nns(
     name = "cup_explorer_test",
     tags = [
         "k8s",
+        "long_test",  # The P90 duration was over 6 minutes for the week starting on 2025-08-25.
     ],
     deps = [
         # Keep sorted.
