@@ -226,7 +226,7 @@ pub async fn process_updated(
     // TODO: this version of the CDK does not include registry_version in the response to subnet_info.
     // if source_subnet_info.registry_version >= registry_version && target_subnet_info.registry_version >= registry_version {}
     let now = time();
-    if now - stopped_since < 3 * 60 * 1000_000_000 {
+    if now - stopped_since < 3 * 60 * 1_000_000_000 {
         return ProcessingResult::NoProgress;
     }
     ProcessingResult::Success(RequestState::RoutingTableChangeAccepted {
@@ -260,15 +260,15 @@ async fn process_failed(request: RequestState) -> ProcessingResult<Event, Infall
     };
 
     let res1 = set_original_controllers(
-        request.source.clone(),
+        request.source,
         request.source_original_controllers.clone(),
-        request.source_subnet.clone(),
+        request.source_subnet,
     )
     .await;
     let res2 = set_original_controllers(
-        request.target.clone(),
+        request.target,
         request.target_original_controllers.clone(),
-        request.target_subnet.clone(),
+        request.target_subnet,
     )
     .await;
 
