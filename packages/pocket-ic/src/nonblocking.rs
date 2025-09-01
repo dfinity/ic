@@ -208,7 +208,7 @@ impl PocketIc {
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
             icp_features: Some(icp_features),
-            allow_incomplete_state: Some(false),
+            allow_incomplete_state: None,
             initial_time,
         };
 
