@@ -523,6 +523,9 @@ enum SubCommand {
     // Submit a root proposal to the root canister to upgrade the governance canister.
     SubmitRootProposalToUpgradeGovernanceCanister(SubmitRootProposalToUpgradeGovernanceCanisterCmd),
 
+    /// Swap nodes in subnet directly, without governance.
+    SwapNodeInSubnetDirectly(SwapNodeInSubnetDirectlyCmd),
+
     /// Update local registry store by pulling from remote URL
     UpdateRegistryLocalStore(UpdateRegistryLocalStoreCmd),
 
@@ -2593,6 +2596,18 @@ struct SubmitRootProposalToUpgradeGovernanceCanisterCmd {
     wasm_module_sha256: String,
 }
 
+#[derive(Parser)]
+struct SwapNodeInSubnetDirectlyCmd {
+    /// Represents the node principal id of a node which will be removed from a subnet.
+    #[clap(long)]
+    pub old_node_id: PrincipalId,
+
+    /// Represents the node principal id of a node which will be added to a subnet in
+    /// place of the `old_node_id`.
+    #[clap(long)]
+    pub new_node_id: PrincipalId,
+}
+
 /// Sub-command to vote on a root proposal to upgrade the governance canister.
 #[derive(Parser)]
 struct VoteOnRootProposalToUpgradeGovernanceCanisterCmd {
@@ -3783,6 +3798,7 @@ async fn main() {
             SubCommand::ProposeToUpdateSubnetType(_) => (),
             SubCommand::ProposeToUpdateXdrIcpConversionRate(_) => (),
             SubCommand::SubmitRootProposalToUpgradeGovernanceCanister(_) => (),
+            SubCommand::SwapNodeInSubnetDirectly(_) => (),
             SubCommand::VoteOnRootProposalToUpgradeGovernanceCanister(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
@@ -4543,6 +4559,13 @@ async fn main() {
                 ),
             )
             .await
+        }
+        SubCommand::SwapNodeInSubnetDirectly(cmd) => {
+            registry_canister
+                .swap_node_in_subnet_directly(cmd.old_node_id, cmd.new_node_id)
+                .await
+                .unwrap();
+            println!("Nodes swapped.");
         }
         SubCommand::GetPendingRootProposalsToUpgradeGovernanceCanister => {
             get_pending_root_proposals_to_upgrade_governance_canister(make_canister_client(

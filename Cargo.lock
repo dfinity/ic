@@ -12513,6 +12513,7 @@ dependencies = [
  "pretty_assertions",
  "prost 0.13.4",
  "rand 0.8.5",
+ "registry-canister",
  "serde",
  "tokio",
  "tree-deserializer",

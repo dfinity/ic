@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/registry/canister/api",
     "//rs/registry/transport",
+    "//rs/registry/canister",
     "//rs/tree_deserializer",
     "//rs/types/types",
     "@crate_index//:candid",

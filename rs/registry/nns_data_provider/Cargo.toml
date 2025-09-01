@@ -24,6 +24,7 @@ rand = { workspace = true }
 serde = { workspace = true }
 tree-deserializer = { path = "../../tree_deserializer" }
 url = { workspace = true }
+registry-canister = { path = "../canister" }
 
 [dev-dependencies]
 futures-util = { workspace = true }
