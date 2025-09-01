@@ -717,11 +717,12 @@ pub(crate) fn create_data_payload_helper_2(
     );
 
     if !store_pre_signatures_in_state {
-        // If pre-signatures are stored on the blockchain, we may only purge pre-signatures for
-        // rotated key transcripts, once we are sure that they haven't been paired with ongoing
+        // If pre-signatures are stored on the blockchain, then we may only purge pre-signatures
+        // for rotated key transcripts once we are sure that they haven't been paired with ongoing
         // requests. Since we stop delivering pre-signatures for rotated transcripts once we reach
-        // the summary height, we know that any unmatched pre-signature corresponding to an old
-        // key transcript will never be matched in the future, and is therefore safe to delete.
+        // the summary height, we know that once the summary height is certified, any unmatched
+        // pre-signature corresponding to an old key transcript will never be matched in the future
+        // and is therefore safe to delete.
         if matches!(certified_height, CertifiedHeight::ReachedSummaryHeight) {
             pre_signatures::purge_old_key_pre_signatures(idkg_payload, &all_signing_requests);
         }
@@ -772,9 +773,9 @@ pub(crate) fn create_data_payload_helper_2(
     .flatten();
 
     if store_pre_signatures_in_state {
-        // If pre-signatures are stored in the state, then we additionally
-        // consider the total number of existing pre-signatures in the state
-        // and all previous payloads when starting the creation of new ones.
+        // If pre-signatures are stored in the state, then we consider the total number of existing
+        // pre-signatures in the state and all previous payloads when starting the creation of new ones.
+        // New pre-signatures are started for the proportionally emptiest stash.
         pre_signatures::make_new_pre_signatures_by_priority(
             chain_key_config,
             idkg_payload,
@@ -1025,7 +1026,8 @@ mod tests {
         .unwrap();
 
         if !store_pre_signatures_in_state {
-            // The two pre-signature remain in available_pre_signatures.
+            // If pre-signatures are stored on the blockchain, then
+            // the two initial pre-signature remain in available_pre_signatures.
             assert_eq!(idkg_payload.available_pre_signatures.len(), 2);
             assert!(idkg_payload
                 .available_pre_signatures
@@ -1042,7 +1044,8 @@ mod tests {
                 PRE_SIGNATURES_TO_CREATE_IN_ADVANCE - 1
             );
         } else {
-            // The available pre-signatures should be purged (they were delivered with the parent payload)
+            // If pre-signatures are stored in the state, then
+            // the available pre-signatures should be purged (they were delivered with the parent payload)
             assert!(idkg_payload.available_pre_signatures.is_empty());
             // The state and previous payloads already contain 2 pre-signatures, therefore
             // PRE_SIGNATURES_TO_CREATE_IN_ADVANCE-2 pre-signatures should be started
@@ -1120,7 +1123,7 @@ mod tests {
 
         if !store_pre_signatures_in_state {
             // When pre-signatures are stored on chain, contexts can only be expired once they were
-            // matched with a pre-signatures. Thersfore, there is no agreement for the expired, but
+            // matched with a pre-signatures. Therefore, there is no agreement for the expired but
             // unmatched context.
             assert_eq!(idkg_payload.signature_agreements.len(), 1);
 
@@ -1132,7 +1135,7 @@ mod tests {
             );
         } else {
             // When pre-signatures are stored in the state, contexts should be expired regardless if
-            // the were matched or not
+            // they were matched or not
             assert_eq!(idkg_payload.signature_agreements.len(), 2);
 
             // The expired context without matched pre-signature should receive a reject response
@@ -1147,7 +1150,7 @@ mod tests {
                 if context.message().contains("request expired")
             );
 
-            // No pre-signatures should be deleted
+            // No pre-signatures should be deleted when calling `update_signature_agreements`
             assert_eq!(idkg_payload.available_pre_signatures.len(), 2);
         }
     }
@@ -2311,7 +2314,7 @@ mod tests {
                 // as we don't know if they are matched to ongoing signature requests.
                 assert!(!payload_4.available_pre_signatures.is_empty());
             } else {
-                // When storeing pre-signatures in the state, they should be delivered
+                // When storing pre-signatures in the state, they should be delivered
                 // in one payload, and then deleted in the next.
                 assert!(payload_4.available_pre_signatures.is_empty());
             }

@@ -88,8 +88,9 @@ pub(crate) fn update_signature_agreements(
             // If pre-signatures are stored on the blockchain, then that means
             // we can only reject expired requests once the request was matched with a
             // pre-signature. Otherwise the context may be matched with a pre-signature
-            // at the next certified state height. In that case, the pre-signature would
-            // not be removed and may be used again for a different request.
+            // at a subsequent state height (before the rejection here is executed).
+            // In that case, the pre-signature would not be removed from the payload,
+            // and would be used again for a different request, which shouldn't to happen.
             match context.matched_pre_signature {
                 Some((pre_sig_id, _)) => Some(pre_sig_id),
                 None => continue,
@@ -278,6 +279,8 @@ mod tests {
                     // in the payload
                     create_available_pre_signature(&mut idkg_payload, key_id.clone(), i as u8)
                 } else {
+                    // If pre-signatures are stored in the state, they are not expected to still be
+                    // in the payload
                     idkg_payload.uid_generator.next_pre_signature_id()
                 }
             })
@@ -337,7 +340,9 @@ mod tests {
         );
 
         if !store_pre_signatures_in_state {
-            // Only the pre-signature for the completed request should be removed
+            // If pre-signatures are stored on the blockchain, then the pre-signature
+            // for the completed request should be removed, after a response to the
+            // request is generated.
             assert_eq!(idkg_payload.available_pre_signatures.len(), 3);
             assert!(!idkg_payload
                 .available_pre_signatures
@@ -380,6 +385,8 @@ mod tests {
                     // in the payload
                     create_available_pre_signature(&mut idkg_payload, ecdsa_key_id.clone(), i as u8)
                 } else {
+                    // If pre-signatures are stored in the state, they are not expected to still be
+                    // in the payload
                     idkg_payload.uid_generator.next_pre_signature_id()
                 }
             })
@@ -433,7 +440,9 @@ mod tests {
         );
 
         if !store_pre_signatures_in_state {
-            // Only the pre-signature for the completed request should be removed
+            // If pre-signatures are stored on the blockchain, then the pre-signature
+            // for the completed request should be removed, after a response to the
+            // request is generated.
             assert_eq!(idkg_payload.available_pre_signatures.len(), 1);
             assert!(!idkg_payload
                 .available_pre_signatures
