@@ -17,7 +17,9 @@ impl Registry {
             target_subnet_id,
         ));
 
-        MigrateCanistersResponse {}
+        MigrateCanistersResponse {
+            registry_version: self.latest_version(),
+        }
     }
 
     fn validate_payload(
@@ -51,7 +53,9 @@ pub struct MigrateCanistersPayload {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, CandidType, Deserialize, Serialize)]
-pub struct MigrateCanistersResponse {}
+pub struct MigrateCanistersResponse {
+    registry_version: Version,
+}
 
 #[cfg(test)]
 mod test {
