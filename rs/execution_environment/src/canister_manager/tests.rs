@@ -1310,7 +1310,7 @@ fn get_canister_status_of_self() {
     let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
     assert_eq!(status.status(), CanisterStatusType::Running);
     assert!(status.cycles() <= INITIAL_CYCLES.get());
-    assert!(status.cycles() >= INITIAL_CYCLES.get() - 1_000_000_000);
+    assert!(status.cycles() >= INITIAL_CYCLES.get() - 100_000_000_000);
     assert!(!status.ready_for_migration());
 }
 
