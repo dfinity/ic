@@ -1028,13 +1028,9 @@ impl StreamHandlerImpl {
         }
     }
 
-    /// Checks whether a message addressed to a canister known not to be hosted by `self.subnet_id`
-    /// should be rejected (as opposed to silently dropped) according to the `self.canister_migrations`.
-    ///
-    /// Reject signals for `Responses` and reject responses for requests addressed
-    /// to receivers not hosted by `self.subnet_id` are only produced if both the
-    /// known host and `self.subnet_id` are on the path of a canister migration
-    /// including `msg.receiver()`.
+    /// Checks whether the receiver of the given message (known not to be hosted by 
+    /// `self.subnet_id`) is part of a canister migration between the known host
+    /// subnet and this subnet (in any order).
     fn is_receiver_canister_migrating(
         &self,
         msg: &RequestOrResponse,
