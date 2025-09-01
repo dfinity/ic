@@ -98,7 +98,10 @@ type NodeProviderRewards = record {
   nodes_results: vec NodeResults;
 };
 
+type RewardsCalculatorVersion = variant { V1 };
+
 type GetNodeProviderRewardsCalculationRequest = record {
+  rewards_calculator_version: RewardsCalculatorVersion;
   from_nanos: nat64;
   to_nanos: nat64;
   provider_id: principal;
