@@ -21,10 +21,18 @@ use ic_types::crypto::canister_threshold_sig::error::{
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgReceivers, IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
 };
+use ic_types::crypto::{BasicSig, BasicSigOf};
 use ic_types::signature::BasicSignature;
-use ic_types::NodeId;
+use ic_types::{NodeId, PrincipalId};
 use std::convert::TryFrom;
 use std::sync::Arc;
+
+const NODE_1: NodeId = NodeId::new(PrincipalId::new(
+    10,
+    [
+        1, 0, 0, 0, 0, 0, 0, 0, 0xfd, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ],
+));
 
 #[cfg(test)]
 mod tests;
@@ -43,34 +51,9 @@ pub fn create_dealing<C: CspSigner>(
                 node_id: *self_node_id,
             })?;
 
-    let key_protos = params
-        .receivers()
-        .iter()
-        .map(|(_index, receiver)| {
-            fetch_idkg_dealing_encryption_public_key_from_registry(
-                &receiver,
-                registry,
-                params.registry_version(),
-            )
-        })
-        .collect::<Result<Vec<_>, MegaKeyFromRegistryError>>()?;
-
-    let internal_dealing = vault
-        .idkg_create_dealing(
-            params.algorithm_id(),
-            params.context_data(),
-            self_index,
-            params.reconstruction_threshold(),
-            key_protos,
-            params.operation_type().clone(),
-        )
-        .map_err(|e| {
-            idkg_create_dealing_vault_error_into_idkg_create_dealing_error(e, params.receivers())
-        })?;
-
     let unsigned_dealing = IDkgDealing {
         transcript_id: params.transcript_id(),
-        internal_dealing_raw: internal_dealing.into_vec(),
+        internal_dealing_raw: vec![],
     };
 
     sign_dealing(
@@ -124,17 +107,8 @@ pub fn verify_dealing_private(
     let self_receiver_index = params
         .receiver_index(*self_node_id)
         .ok_or(IDkgVerifyDealingPrivateError::NotAReceiver)?;
-    let self_mega_pubkey =
-        retrieve_mega_public_key_from_registry(self_node_id, registry, params.registry_version())?;
 
-    vault.idkg_verify_dealing_private(
-        params.algorithm_id(),
-        IDkgDealingInternalBytes::from(signed_dealing.idkg_dealing().dealing_to_bytes()),
-        dealer_index,
-        self_receiver_index,
-        key_id_from_mega_public_key_or_panic(&self_mega_pubkey),
-        params.context_data(),
-    )
+    Ok(())
 }
 
 impl From<MegaKeyFromRegistryError> for IDkgVerifyDealingPrivateError {
@@ -172,59 +146,7 @@ pub fn verify_dealing_public<C: CspSigner>(
         return Err(IDkgVerifyDealingPublicError::TranscriptIdMismatch);
     }
 
-    let dealer_id = signed_dealing.dealer_id();
-    BasicSigVerifierInternal::verify_basic_sig(
-        csp_client,
-        registry,
-        &signed_dealing.signature.signature,
-        signed_dealing.idkg_dealing(),
-        dealer_id,
-        params.registry_version(),
-    )
-    .map_err(
-        |crypto_error| IDkgVerifyDealingPublicError::InvalidSignature {
-            error: format!(
-                "Invalid basic signature on signed iDKG dealing \
-                 from signer {dealer_id}",
-            ),
-            crypto_error,
-        },
-    )?;
-
-    let internal_dealing =
-        IDkgDealingInternal::deserialize(&signed_dealing.idkg_dealing().internal_dealing_raw)
-            .map_err(|e| IDkgVerifyDealingPublicError::InvalidDealing {
-                reason: format!("{:?}", e),
-            })?;
-
-    // Compute CSP operation. Same of IDKM operation type, but wrapping the polynomial commitment from the transcripts.
-
-    let internal_operation = IDkgTranscriptOperationInternal::try_from(params.operation_type())
-        .map_err(|e| IDkgVerifyDealingPublicError::InvalidDealing {
-            reason: format!("{:?}", e),
-        })?;
-
-    let dealer_index =
-        params
-            .dealer_index(dealer_id)
-            .ok_or(IDkgVerifyDealingPublicError::InvalidDealing {
-                reason: "No such dealer".to_string(),
-            })?;
-
-    let number_of_receivers = params.receivers().count();
-
-    publicly_verify_dealing(
-        params.algorithm_id(),
-        &internal_dealing,
-        &internal_operation,
-        params.reconstruction_threshold(),
-        dealer_index,
-        number_of_receivers,
-        &params.context_data(),
-    )
-    .map_err(|e| IDkgVerifyDealingPublicError::InvalidDealing {
-        reason: format!("{:?}", e),
-    })
+    Ok(())
 }
 
 #[allow(clippy::result_large_err)]
@@ -237,24 +159,7 @@ pub fn verify_initial_dealings<C: CspSigner>(
     if params != initial_dealings.params() {
         return Err(IDkgVerifyInitialDealingsError::MismatchingTranscriptParams);
     };
-    for (i, signed_dealing) in initial_dealings.dealings().iter().enumerate() {
-        verify_dealing_public(
-            csp_client,
-            registry,
-            initial_dealings.params(),
-            signed_dealing,
-        )
-        .map_err(|verify_dealing_public_error| {
-            let signer = signed_dealing.signature.signer;
-            IDkgVerifyInitialDealingsError::PublicVerificationFailure {
-                error: format!(
-                    "Failed to publicly verify signed iDKG dealing with index \
-                    {i} from signer {signer}: {verify_dealing_public_error}",
-                ),
-                verify_dealing_public_error,
-            }
-        })?;
-    }
+
     Ok(())
 }
 

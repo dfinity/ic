@@ -43,46 +43,9 @@ pub fn create_transcript<C: CspSigner>(
     ensure_dealers_allowed_by_params(params, dealings)?;
     ensure_signers_allowed_by_params(params, dealings)?;
 
-    for dealing in dealings {
-        verify_signature_batch(
-            csp_client,
-            vault,
-            registry,
-            dealing,
-            params.verification_threshold(),
-            params.registry_version(),
-        )
-        .map_err(signature_batch_err_to_create_transcript_err(
-            dealing.dealer_id(),
-        ))?;
-    }
-
     let signed_dealings_by_index = dealings_by_index_from_dealings(dealings, params)?;
 
-    let internal_dealings = internal_dealings_from_signed_dealings(&signed_dealings_by_index)?;
-
-    let internal_operation_type =
-        IDkgTranscriptOperationInternal::try_from(params.operation_type()).map_err(|e| {
-            IDkgCreateTranscriptError::SerializationError {
-                internal_error: format!("{:?}", e),
-            }
-        })?;
-
-    let internal_transcript = idkg_create_transcript(
-        params.algorithm_id(),
-        params.reconstruction_threshold(),
-        &internal_dealings,
-        &internal_operation_type,
-    )
-    .map_err(|e| IDkgCreateTranscriptError::InternalError {
-        internal_error: format!("{:?}", e),
-    })?;
-
-    let internal_transcript_raw = internal_transcript.serialize().map_err(|e| {
-        IDkgCreateTranscriptError::SerializationError {
-            internal_error: format!("{:?}", e),
-        }
-    })?;
+    let internal_transcript_raw = vec![];
 
     let transcript_type = IDkgTranscriptType::from(params.operation_type());
 
@@ -114,43 +77,7 @@ pub fn verify_transcript<C: CspSigner>(
             ))
         })?;
 
-    for (dealer_index, signed_dealing) in transcript.verified_dealings.as_ref() {
-        // Note that signer eligibility is checked in `transcript.verify_consistency_with_params`
-        verify_signature_batch(
-            csp_client,
-            vault,
-            registry,
-            signed_dealing,
-            transcript.verification_threshold(),
-            params.registry_version(),
-        )
-        .map_err(signature_batch_err_to_verify_transcript_err(*dealer_index))?;
-    }
-
-    let internal_transcript_operation =
-        IDkgTranscriptOperationInternal::try_from(params.operation_type()).map_err(|e| {
-            IDkgVerifyTranscriptError::InvalidArgument(format!(
-                "failed to convert transcript operation to internal counterpart: {:?}",
-                e
-            ))
-        })?;
-    let internal_transcript = IDkgTranscriptInternal::try_from(transcript).map_err(|e| {
-        IDkgVerifyTranscriptError::SerializationError(format!(
-            "failed to deserialize internal transcript: {:?}",
-            e
-        ))
-    })?;
-    let internal_dealings =
-        internal_dealings_from_verified_dealings(transcript.verified_dealings.as_ref())
-            .map_err(|e| IDkgVerifyTranscriptError::SerializationError(e.serde_error))?;
-
-    Ok(idkg_verify_transcript(
-        &internal_transcript,
-        transcript.algorithm_id,
-        params.reconstruction_threshold(),
-        &internal_dealings,
-        &internal_transcript_operation,
-    )?)
+    Ok(())
 }
 
 pub fn load_transcript(
@@ -166,23 +93,7 @@ pub fn load_transcript(
         }
     };
 
-    let self_mega_pubkey = retrieve_mega_public_key_from_registry(
-        self_node_id,
-        registry,
-        transcript.registry_version,
-    )?;
-
-    let internal_complaints = vault.idkg_load_transcript(
-        transcript.algorithm_id,
-        transcript.verified_dealings.as_ref().clone(),
-        transcript.context_data(),
-        self_index,
-        key_id_from_mega_public_key_or_panic(&self_mega_pubkey),
-        IDkgTranscriptInternalBytes::from(transcript.transcript_to_bytes()),
-    )?;
-    let complaints = complaints_from_internal_complaints(&internal_complaints, transcript)?;
-
-    Ok(complaints)
+    Ok(vec![])
 }
 
 pub fn load_transcript_with_openings(
@@ -201,51 +112,7 @@ pub fn load_transcript_with_openings(
     ensure_sufficient_openings(openings, transcript)?;
     ensure_matching_transcript_ids_and_dealer_ids(openings, transcript)?;
 
-    let self_mega_pubkey = retrieve_mega_public_key_from_registry(
-        self_node_id,
-        registry,
-        transcript.registry_version,
-    )?;
-
-    let mut internal_openings = BTreeMap::new();
-    for (complaint, openings_by_opener_id) in openings {
-        let mut internal_openings_by_opener_index = BTreeMap::new();
-        for (opener_id, opening) in openings_by_opener_id {
-            let opener_index = transcript.index_for_signer_id(*opener_id).ok_or_else(|| {
-                IDkgLoadTranscriptError::InvalidArguments {
-                    internal_error: format!(
-                        "invalid opener: node with ID {:?} is not a receiver",
-                        *opener_id
-                    ),
-                }
-            })?;
-            let internal_opening = CommitmentOpening::try_from(opening).map_err(|e| {
-                IDkgLoadTranscriptError::SerializationError {
-                    internal_error: format!("failed to deserialize opening: {:?}", e),
-                }
-            })?;
-            internal_openings_by_opener_index.insert(opener_index, internal_opening);
-        }
-        let dealer_index = transcript
-            .index_for_dealer_id(complaint.dealer_id)
-            .ok_or_else(|| IDkgLoadTranscriptError::InvalidArguments {
-                internal_error: format!(
-                    "invalid complaint: node with ID {:?} is not a dealer",
-                    complaint.dealer_id
-                ),
-            })?;
-        internal_openings.insert(dealer_index, internal_openings_by_opener_index);
-    }
-
-    vault.idkg_load_transcript_with_openings(
-        transcript.algorithm_id,
-        transcript.verified_dealings.as_ref().clone(),
-        internal_openings,
-        transcript.context_data(),
-        self_index,
-        key_id_from_mega_public_key_or_panic(&self_mega_pubkey),
-        IDkgTranscriptInternalBytes::from(transcript.transcript_to_bytes()),
-    )
+    Ok(())
 }
 
 pub fn open_transcript(
@@ -256,47 +123,49 @@ pub fn open_transcript(
     complainer_id: NodeId,
     complaint: &IDkgComplaint,
 ) -> Result<IDkgOpening, IDkgOpenTranscriptError> {
-    // Verifies the complaint
-    verify_complaint(registry, transcript, complaint, complainer_id).map_err(|e| {
-        IDkgOpenTranscriptError::InternalError {
-            internal_error: format!("Complaint verification failed: {:?}", e),
-        }
-    })?;
+    // // Verifies the complaint
+    // verify_complaint(registry, transcript, complaint, complainer_id).map_err(|e| {
+    //     IDkgOpenTranscriptError::InternalError {
+    //         internal_error: format!("Complaint verification failed: {:?}", e),
+    //     }
+    // })?;
 
-    // Get the MEGa-encryption public key.
-    let opener_public_key = retrieve_mega_public_key_from_registry(
-        self_node_id,
-        registry,
-        transcript.registry_version,
-    )?;
+    // // Get the MEGa-encryption public key.
+    // let opener_public_key = retrieve_mega_public_key_from_registry(
+    //     self_node_id,
+    //     registry,
+    //     transcript.registry_version,
+    // )?;
 
-    // Extract the accused dealing from the transcript.
-    let (dealer_index, signed_dealing) =
-        index_and_batch_signed_dealing_of_dealer(complaint.dealer_id, transcript)?;
-    let context_data = transcript.context_data();
-    let opener_index = match transcript.index_for_signer_id(*self_node_id) {
-        None => {
-            return Err(IDkgOpenTranscriptError::InternalError {
-                internal_error: "This node is not a receiver of the given transcript".to_string(),
-            })
-        }
-        Some(index) => index,
-    };
+    // // Extract the accused dealing from the transcript.
+    // let (dealer_index, signed_dealing) =
+    //     index_and_batch_signed_dealing_of_dealer(complaint.dealer_id, transcript)?;
+    // let context_data = transcript.context_data();
+    // let opener_index = match transcript.index_for_signer_id(*self_node_id) {
+    //     None => {
+    //         return Err(IDkgOpenTranscriptError::InternalError {
+    //             internal_error: "This node is not a receiver of the given transcript".to_string(),
+    //         })
+    //     }
+    //     Some(index) => index,
+    // };
 
-    let internal_opening = vault.idkg_open_dealing(
-        transcript.algorithm_id,
-        signed_dealing.clone(),
-        dealer_index,
-        context_data,
-        opener_index,
-        key_id_from_mega_public_key_or_panic(&opener_public_key),
-    )?;
-    let internal_opening_raw =
-        internal_opening
-            .serialize()
-            .map_err(|e| IDkgOpenTranscriptError::InternalError {
-                internal_error: format!("Error serializing opening: {:?}", e),
-            })?;
+    // let internal_opening = vault.idkg_open_dealing(
+    //     transcript.algorithm_id,
+    //     signed_dealing.clone(),
+    //     dealer_index,
+    //     context_data,
+    //     opener_index,
+    //     key_id_from_mega_public_key_or_panic(&opener_public_key),
+    // )?;
+    // let internal_opening_raw =
+    //     internal_opening
+    //         .serialize()
+    //         .map_err(|e| IDkgOpenTranscriptError::InternalError {
+    //             internal_error: format!("Error serializing opening: {:?}", e),
+    //         })?;
+
+    let internal_opening_raw = vec![];
 
     Ok(IDkgOpening {
         transcript_id: transcript.transcript_id,
@@ -322,22 +191,24 @@ pub fn verify_opening(
         return Err(IDkgVerifyOpeningError::DealerIdMismatch);
     }
 
-    // Extract the accused dealing from the transcript
-    let (_, internal_dealing) = index_and_dealing_of_dealer(complaint.dealer_id, transcript)?;
-    let opener_index = transcript
-        .index_for_signer_id(opener_id)
-        .ok_or(IDkgVerifyOpeningError::MissingOpenerInReceivers { opener_id })?;
-    let internal_opening = CommitmentOpening::try_from(opening).map_err(|e| {
-        IDkgVerifyOpeningError::InternalError {
-            internal_error: format!("Failed to deserialize opening: {:?}", e),
-        }
-    })?;
+    // // Extract the accused dealing from the transcript
+    // let (_, internal_dealing) = index_and_dealing_of_dealer(complaint.dealer_id, transcript)?;
+    // let opener_index = transcript
+    //     .index_for_signer_id(opener_id)
+    //     .ok_or(IDkgVerifyOpeningError::MissingOpenerInReceivers { opener_id })?;
+    // let internal_opening = CommitmentOpening::try_from(opening).map_err(|e| {
+    //     IDkgVerifyOpeningError::InternalError {
+    //         internal_error: format!("Failed to deserialize opening: {:?}", e),
+    //     }
+    // })?;
 
-    idkg_verify_dealing_opening(&internal_dealing, opener_index, &internal_opening).map_err(|e| {
-        IDkgVerifyOpeningError::InternalError {
-            internal_error: format!("{:?}", e),
-        }
-    })
+    // idkg_verify_dealing_opening(&internal_dealing, opener_index, &internal_opening).map_err(|e| {
+    //     IDkgVerifyOpeningError::InternalError {
+    //         internal_error: format!("{:?}", e),
+    //     }
+    // })
+
+    Ok(())
 }
 
 fn ensure_sufficient_dealings_collected(

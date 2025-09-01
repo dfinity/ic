@@ -670,7 +670,7 @@ impl Metrics {
             crypto_lock_acquisition_duration_seconds: r.histogram_vec(
                 "crypto_lock_acquisition_duration_seconds",
                 "Histogram of crypto lock acquisition times",
-                vec![0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0],
+                vec![0.0001, 0.001, 0.01, 0.1, 0.3, 0.5, 0.7, 1.0, 2.0, 3.0, 5.0, 7.0, 10.0],
                 &["name", "access"],
             ),
             crypto_duration_seconds: durations,

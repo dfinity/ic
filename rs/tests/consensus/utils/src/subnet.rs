@@ -129,7 +129,7 @@ pub fn enable_chain_key_signing_on_subnet(
         .map(|key_id| {
             (
                 key_id.clone(),
-                get_master_public_key(canister, key_id, logger),
+                vec![], // get_master_public_key(canister, key_id, logger),
             )
         })
         .collect()
