@@ -20,7 +20,11 @@ use crate::{
     Event, RequestState, ValidationError,
 };
 use futures::future::join_all;
-use ic_cdk::{api::time, println};
+use ic_cdk::{
+    api::time,
+    management_canister::{subnet_info, SubnetInfoArgs},
+    println,
+};
 
 /// Given a lock tag, a filter predicate on `RequestState` and a processor function,
 /// invokes the processor on all requests in the given state concurrently and
@@ -199,14 +203,37 @@ pub async fn process_updated(
     let RequestState::UpdatedRoutingTable {
         request,
         stopped_since,
-        registry_version,
+        registry_version: _,
     } = request
     else {
         println!("Error: list_by UpdatedRoutingTable returned bad variant");
         return ProcessingResult::NoProgress;
     };
-
-    todo!()
+    // call both subnets
+    let Ok(_source_subnet_info) = subnet_info(&SubnetInfoArgs {
+        subnet_id: request.source_subnet,
+    })
+    .await
+    else {
+        return ProcessingResult::NoProgress;
+    };
+    let Ok(_target_subnet_info) = subnet_info(&SubnetInfoArgs {
+        subnet_id: request.target_subnet,
+    })
+    .await
+    else {
+        return ProcessingResult::NoProgress;
+    };
+    // TODO: this version of the CDK does not include registry_version in the response to subnet_info.
+    // if source_subnet_info.registry_version >= registry_version && target_subnet_info.registry_version >= registry_version {}
+    let now = time();
+    if now - stopped_since < 3 * 60 * 1000_000_000 {
+        return ProcessingResult::NoProgress;
+    }
+    ProcessingResult::Success(RequestState::RoutingTableChangeAccepted {
+        request,
+        stopped_since,
+    })
 }
 
 // ----------------------------------------------------------------------------

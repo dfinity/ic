@@ -14,7 +14,7 @@ use crate::{
     canister_state::{max_active_requests, num_active_requests},
     processing::{
         process_accepted, process_all_failed, process_all_generic, process_controllers_changed,
-        process_renamed, process_stopped,
+        process_renamed, process_stopped, process_updated,
     },
 };
 
@@ -256,6 +256,13 @@ pub fn start_timers() {
             "renamed_target",
             |r| matches!(r, RequestState::RenamedTarget { .. }),
             process_renamed,
+        ))
+    });
+    set_timer_interval(interval, || {
+        spawn(process_all_generic(
+            "updated_routing_table",
+            |r| matches!(r, RequestState::UpdatedRoutingTable { .. }),
+            process_updated,
         ))
     });
 
