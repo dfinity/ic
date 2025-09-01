@@ -25,3 +25,4 @@ x509-cert = { workspace = true }
 [dev-dependencies]
 pem = { workspace = true }
 rcgen = { workspace = true }
+tokio = { workspace = true }
