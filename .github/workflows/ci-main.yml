@@ -174,11 +174,14 @@ jobs:
               targets_args+=("--base=$BASE_SHA" "--head=$HEAD_SHA")
             fi
             "${CI_PROJECT_DIR:-}"/ci/bazel-scripts/targets.py test "${targets_args[@]}" >"$target_pattern_file"
+            num_targets=$(wc <"$target_pattern_file" -l)
             # if bazel targets is empty we don't need to run any tests
-            if [ $(wc <"$target_pattern_file" -l) -eq 0 ]; then
-              echo "No bazel targets to build"
+            if [ "$num_targets" -eq 0 ]; then
+              echo "No bazel targets to test"
               exit 0
             fi
+            echo "Testing the following $num_targets targets:"
+            cat "$target_pattern_file"
             bazel_args+=( --target_pattern_file="$target_pattern_file" )
 
             echo "Building as user: $(whoami)"
