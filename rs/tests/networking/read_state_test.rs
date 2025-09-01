@@ -681,8 +681,8 @@ fn test_request_path_access(env: TestEnv) {
     assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 400);
 }
 
-// Queries the `api/v2/canister/{canister_id}/read_state` endpoint for the canister ranges,
-// and compares the result with the canister ranges obtained from the registry.
+/// Queries the `api/v2/canister/{canister_id}/read_state` endpoint for the canister ranges,
+/// and compares the result with the canister ranges obtained from the registry.
 fn test_canister_canister_ranges_paths(env: TestEnv) {
     let subnet = get_first_app_subnet(&env);
     let node = subnet.nodes().next().unwrap();
@@ -693,19 +693,22 @@ fn test_canister_canister_ranges_paths(env: TestEnv) {
         subnet.subnet_id.get_ref().as_slice().into(),
     ];
 
-    let cert = read_state_with_identity_and_canister_id(
+    let err = read_state_with_identity_and_canister_id(
         &env,
         vec![path.clone()],
         get_identity(),
         effective_canister_id,
     )
-    .expect("Failed to read state");
+    .expect_err(
+        "/canister_ranges path should not be fetchable from \
+        the /api/v2/canister/<canister_id>/read_state endpoint",
+    );
 
-    validate_canister_ranges(&subnet, &path, &cert);
+    assert_matches!(err, AgentError::HttpError(payload) if payload.status == 404);
 }
 
-// Queries the `api/v2/subnet/{subnet_id}/read_state` endpoint for the canister ranges.
-// and compares the result with the canister ranges obtained from the registry.
+/// Queries the `api/v2/subnet/{subnet_id}/read_state` endpoint for the canister ranges.
+/// and compares the result with the canister ranges obtained from the registry.
 fn test_subnet_canister_ranges_paths(env: TestEnv) {
     let subnet = get_first_app_subnet(&env);
 
