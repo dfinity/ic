@@ -66,10 +66,15 @@ struct MigrateCanistersArgs {
     target_subnet_id: Principal,
 }
 
+#[derive(Clone, Debug, CandidType, Deserialize)]
+struct MigrateCanisterResponse {
+    registry_version: u64,
+}
+
 pub async fn migrate_canister(
     source: Principal,
     target_subnet: Principal,
-) -> ProcessingResult<(), Infallible> {
+) -> ProcessingResult<u64, Infallible> {
     let args = MigrateCanistersArgs {
         canister_ids: vec![source],
         target_subnet_id: target_subnet,
@@ -86,6 +91,6 @@ pub async fn migrate_canister(
             println!("Call `migrate_canisters` for {:?} failed: {:?}", source, e);
             ProcessingResult::NoProgress
         }
-        Ok(_) => ProcessingResult::Success(()),
+        Ok(_) => ProcessingResult::Success(42 /* TODO */),
     }
 }

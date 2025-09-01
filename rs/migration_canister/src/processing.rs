@@ -183,16 +183,30 @@ pub async fn process_renamed(
         return ProcessingResult::NoProgress;
     };
 
-    // let registry_version =
-
     migrate_canister(request.source, request.target_subnet)
         .await
-        .map_success(|_| RequestState::UpdatedRoutingTable {
+        .map_success(|registry_version| RequestState::UpdatedRoutingTable {
             request,
             stopped_since,
-            registry_version: todo!(),
+            registry_version,
         })
         .or_retry()
+}
+
+pub async fn process_updated(
+    request: RequestState,
+) -> ProcessingResult<RequestState, RequestState> {
+    let RequestState::UpdatedRoutingTable {
+        request,
+        stopped_since,
+        registry_version,
+    } = request
+    else {
+        println!("Error: list_by UpdatedRoutingTable returned bad variant");
+        return ProcessingResult::NoProgress;
+    };
+
+    todo!()
 }
 
 // ----------------------------------------------------------------------------
@@ -283,6 +297,8 @@ impl<S, F> ProcessingResult<S, F>
 where
     F: std::fmt::Debug,
 {
+    /// Turns any `FatalFailure` into a `NoProgress`.
+    ///
     /// Use for results of infallible calls to ensure retrying in the presence of bugs.
     pub fn or_retry<T>(self) -> ProcessingResult<S, T> {
         match self {

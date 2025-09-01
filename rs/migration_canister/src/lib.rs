@@ -14,7 +14,7 @@ use crate::{
     canister_state::{max_active_requests, num_active_requests},
     processing::{
         process_accepted, process_all_failed, process_all_generic, process_controllers_changed,
-        process_stopped,
+        process_renamed, process_stopped,
     },
 };
 
@@ -119,7 +119,6 @@ pub enum RequestState {
         stopped_since: u64,
     },
 
-    // TODO: need a state here to store registry_version
     /// Called registry `migrate_canisters`.
     ///
     /// Record the new registry version.
@@ -250,6 +249,13 @@ pub fn start_timers() {
             "stopped",
             |r| matches!(r, RequestState::StoppedAndReady { .. }),
             process_stopped,
+        ))
+    });
+    set_timer_interval(interval, || {
+        spawn(process_all_generic(
+            "renamed_target",
+            |r| matches!(r, RequestState::RenamedTarget { .. }),
+            process_renamed,
         ))
     });
 
