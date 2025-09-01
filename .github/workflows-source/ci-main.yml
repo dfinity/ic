@@ -206,7 +206,7 @@ jobs:
             num_targets=$(wc <"$target_pattern_file" -l)
             # if bazel targets is empty we don't need to run any tests
             if [ "$num_targets" -eq 0 ]; then
-              echo "No bazel targets to test"
+              echo "No bazel targets"
               exit 0
             fi
             echo "Testing the following $num_targets targets:"
