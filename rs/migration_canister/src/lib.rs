@@ -13,8 +13,8 @@ use std::{borrow::Cow, time::Duration};
 use crate::{
     canister_state::{max_active_requests, num_active_requests},
     processing::{
-        process_accepted, process_all_failed, process_all_generic, process_controllers_changed,
-        process_renamed, process_stopped, process_updated,
+        process_accepted, process_all_by_predicate, process_all_failed,
+        process_controllers_changed, process_renamed, process_stopped, process_updated,
     },
 };
 
@@ -231,35 +231,35 @@ impl Storable for Event {
 pub fn start_timers() {
     let interval = Duration::from_secs(1);
     set_timer_interval(interval, || {
-        spawn(process_all_generic(
+        spawn(process_all_by_predicate(
             "accepted",
             |r| matches!(r, RequestState::Accepted { .. }),
             process_accepted,
         ))
     });
     set_timer_interval(interval, || {
-        spawn(process_all_generic(
+        spawn(process_all_by_predicate(
             "controllers_changed",
             |r| matches!(r, RequestState::ControllersChanged { .. }),
             process_controllers_changed,
         ))
     });
     set_timer_interval(interval, || {
-        spawn(process_all_generic(
+        spawn(process_all_by_predicate(
             "stopped",
             |r| matches!(r, RequestState::StoppedAndReady { .. }),
             process_stopped,
         ))
     });
     set_timer_interval(interval, || {
-        spawn(process_all_generic(
+        spawn(process_all_by_predicate(
             "renamed_target",
             |r| matches!(r, RequestState::RenamedTarget { .. }),
             process_renamed,
         ))
     });
     set_timer_interval(interval, || {
-        spawn(process_all_generic(
+        spawn(process_all_by_predicate(
             "updated_routing_table",
             |r| matches!(r, RequestState::UpdatedRoutingTable { .. }),
             process_updated,

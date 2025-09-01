@@ -28,7 +28,7 @@ use std::{convert::Infallible, future::Future, iter::zip};
 /// Given a lock tag, a filter predicate on `RequestState` and a processor function,
 /// invokes the processor on all requests in the given state concurrently and
 /// transitions the result into either the next state, an error or a retry.
-pub async fn process_all_generic<F>(
+pub async fn process_all_by_predicate<F>(
     tag: &str,
     predicate: impl Fn(&RequestState) -> bool,
     processor: impl Fn(RequestState) -> F,
