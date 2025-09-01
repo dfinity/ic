@@ -1028,7 +1028,7 @@ impl StreamHandlerImpl {
         }
     }
 
-    /// Checks whether the receiver of the given message (known not to be hosted by 
+    /// Checks whether the receiver of the given message (known not to be hosted by
     /// `self.subnet_id`) is part of a canister migration between the known host
     /// subnet and this subnet (in any order).
     fn is_receiver_canister_migrating(
