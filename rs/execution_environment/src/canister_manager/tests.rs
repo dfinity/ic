@@ -88,7 +88,7 @@ use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, SubnetId, UserId,
 };
-use ic_universal_canister::PayloadBuilder;
+use ic_universal_canister::{CallArgs, PayloadBuilder};
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
@@ -1531,6 +1531,45 @@ fn delete_stopped_canister_succeeds() {
     test.delete_canister(canister_id).unwrap();
     // Canister should no longer be there.
     assert!(test.state().canister_state(&canister_id).is_none());
+}
+
+#[test]
+fn delete_canister_via_inter_canister_call() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_u128 << 62)
+        .build();
+
+    let canister_1 = test.universal_canister().unwrap();
+    let canister_2 = test.universal_canister().unwrap();
+
+    let _ = test.stop_canister(canister_2);
+    test.process_stopping_canisters();
+    assert_eq!(
+        test.canister_state(canister_2).status(),
+        CanisterStatusType::Stopped
+    );
+
+    test.set_controller(canister_2, canister_1.get()).unwrap();
+    let delete_canister_args = CanisterIdRecord::from(canister_2).encode();
+    let call_args = CallArgs::default().other_side(delete_canister_args);
+    test.ingress(
+        canister_1,
+        "update",
+        wasm()
+            .call_with_cycles(
+                IC_00,
+                Method::DeleteCanister,
+                call_args,
+                Cycles::from(1_u128 << 61),
+            )
+            .build(),
+    )
+    .unwrap();
+
+    // cycles attached to mgmt canister call are refunded, but cycles from the deleted canister are not refunded
+    let canister_1_balance = test.canister_state(canister_1).system_state.balance().get();
+    assert!(canister_1_balance <= 1_u128 << 62);
+    assert!(canister_1_balance >= (1_u128 << 62) - 100_000_000_000);
 }
 
 #[test]
