@@ -240,6 +240,7 @@ system_test_nns(
     tags = [
         "colocate",
         "k8s",
+        "long_test",  # the P90 duration was over 7 minutes for the week starting on 2025-08-25.
     ],
     runtime_deps =
         UNIVERSAL_VM_RUNTIME_DEPS +
