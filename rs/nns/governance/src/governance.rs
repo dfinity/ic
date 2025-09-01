@@ -7811,7 +7811,10 @@ impl Governance {
     ) -> Result<(), GovernanceError> {
         let latest_monthly_node_provider_rewards = &self
             .get_most_recent_monthly_node_provider_rewards()
-            .unwrap();
+            .ok_or(GovernanceError::new_with_message(
+                ErrorType::Unspecified,
+                "No latest monthly node provider rewards found".to_string(),
+            ))?;
         let from_nanos = latest_monthly_node_provider_rewards.timestamp * NANO_SECONDS_PER_SECOND;
         let yesterday_nanos = self.env.now() * NANO_SECONDS_PER_SECOND - NANOS_PER_DAY;
 
