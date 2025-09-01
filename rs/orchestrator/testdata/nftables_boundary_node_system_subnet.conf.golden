@@ -89,7 +89,7 @@ table ip6 filter {
     ct state { established, related } accept
     ip6 saddr { ::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff } ct state new tcp dport 443 accept
 
-    ip6 saddr {fd5b:693c:f8ea::1} ct state { new } tcp dport {1080} accept # nodes for SOCKS proxy
+    ip6 saddr {a4c2:7f91:3db6:1e8c:5a4f:cc92:b37:6e41} ct state { new } tcp dport {1080} accept # nodes for SOCKS proxy
 ip6 saddr {::ffff:5.5.5.5} ct state { new } tcp dport {1005} accept # node_gwp4o-eaaaa-aaaaa-aaaap-2ai
 ip6 saddr {::ffff:7.7.7.7} ct state { new } tcp dport {1007} accept # api_boundary_nodes
 ip6 saddr {::ffff:6.6.6.6} ct state { new } tcp dport {1006} accept # global

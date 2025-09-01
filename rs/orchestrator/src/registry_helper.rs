@@ -162,6 +162,17 @@ impl RegistryHelper {
         Ok(ips.unwrap_or_default())
     }
 
+    pub(crate) fn get_app_subnet_nodes_ip_addresses(
+        &self,
+        version: RegistryVersion,
+    ) -> OrchestratorResult<Vec<IpAddr>> {
+        let ips = self
+            .registry_client
+            .get_app_subnet_nodes_ip_addresses(version)?;
+
+        Ok(ips.unwrap_or_default())
+    }
+
     pub(crate) fn get_system_subnet_nodes_ip_addresses(
         &self,
         version: RegistryVersion,

@@ -45,7 +45,7 @@ pub trait FirewallRegistry {
     fn get_ip_addresses_for_node_ids(
         &self,
         version: RegistryVersion,
-        node_ids: Vec<NodeId>,
+        node_ids: &[NodeId],
     ) -> RegistryClientResult<Vec<IpAddr>>;
 }
 
@@ -127,7 +127,7 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
             .flatten()
             .collect();
 
-        self.get_ip_addresses_for_node_ids(version, system_subnet_node_ids)
+        self.get_ip_addresses_for_node_ids(version, &system_subnet_node_ids)
     }
 
     /// Get the IP addresses of all app subnet nodes in the registry, for endpoints used for core protocol services (p2p, xnet, api)
@@ -157,20 +157,20 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
             .flatten()
             .collect();
 
-        self.get_ip_addresses_for_node_ids(version, app_subnet_node_ids)
+        self.get_ip_addresses_for_node_ids(version, &app_subnet_node_ids)
     }
 
     /// Get the IP addresses of the specified nodes
     fn get_ip_addresses_for_node_ids(
         &self,
         version: RegistryVersion,
-        node_ids: Vec<NodeId>,
+        node_ids: &[NodeId],
     ) -> RegistryClientResult<Vec<IpAddr>> {
         let mut node_endpoints: HashSet<IpAddr> = HashSet::new();
 
         for node_id in node_ids {
             if let Some(node_record) = deserialize_registry_value::<NodeRecord>(
-                self.get_value(&make_node_record_key(node_id), version),
+                self.get_value(&make_node_record_key(*node_id), version),
             )? {
                 if let Some(ip_addr) = node_record
                     .xnet
