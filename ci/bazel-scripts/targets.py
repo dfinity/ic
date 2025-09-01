@@ -44,7 +44,15 @@ EXCLUDED_TAGS = [
 
 # Return all bazel targets (//...) sans the long_tests (if --skip_long_tests is specified)
 # in case any file is modified matching any of the following globs:
-all_targets_globs = ["*.bazel", "*.bzl", "bazel/*", ".bazelrc", ".bazelversion", "mainnet-*-revisions.json", ".github/*"]
+all_targets_globs = [
+    "*.bazel",
+    "*.bzl",
+    "bazel/*",
+    ".bazelrc",
+    ".bazelversion",
+    "mainnet-*-revisions.json",
+    ".github/*",
+]
 
 
 def log(*args, **kwargs):
