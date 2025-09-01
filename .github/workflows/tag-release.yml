@@ -82,8 +82,8 @@ jobs:
             update-os-img.tar.gz
             ic-admin-x86_64-linux.gz
             ic-admin-x86_64-darwin.gz
-            drun-x86_64-linux.gz
-            drun-x86_64-darwin.gz
             pocket-ic-x86_64-linux.gz
             pocket-ic-x86_64-darwin.gz
+            pocket-ic-arm64-linux.gz
+            pocket-ic-arm64-darwin.gz
             sha256sums.txt
