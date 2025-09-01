@@ -1,9 +1,7 @@
 //! This module contains the request processing methods.
 //! They are scheduled every few seconds with a timer.
-//! Each method processes a specific type of request, and it may
-//! process several requests in sequence before terminating.
-
-use std::{convert::Infallible, future::Future, iter::zip};
+//! Each method processes a specific type of request, and may
+//! process several requests concurrently.
 
 use crate::{
     canister_state::{
@@ -25,6 +23,7 @@ use ic_cdk::{
     management_canister::{subnet_info, SubnetInfoArgs},
     println,
 };
+use std::{convert::Infallible, future::Future, iter::zip};
 
 /// Given a lock tag, a filter predicate on `RequestState` and a processor function,
 /// invokes the processor on all requests in the given state concurrently and
