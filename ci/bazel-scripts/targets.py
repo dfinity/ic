@@ -234,17 +234,16 @@ def check():
             if result.returncode != 0:
                 indented_error_msg = f"{indentation}" + f"\n{indentation}".join(result.stderr.strip().splitlines())
                 errors.append(f"Pattern '{pattern}' has problematic target '{target}':\n{indented_error_msg}")
-            else:
-                if len(result.stdout.splitlines()) == 0:
-                    errors.append(
-                        f"Pattern '{pattern}' with target '{target}' results in no targets after excluding all manual targets!"
-                        + (
-                            f"\n{indentation}It might be you're including the manual non-colocated variant of a system-test."
-                            + f"\n{indentation}Try '{target}_colocate' instead."
-                        )
-                        if target.startswith("//rs/tests")
-                        else ""
+            elif len(result.stdout.splitlines()) == 0:
+                errors.append(
+                    f"Pattern '{pattern}' with target '{target}' results in no targets after excluding all manual targets!"
+                    + (
+                        f"\n{indentation}It might be you're including the manual non-colocated variant of a system-test."
+                        + f"\n{indentation}Try '{target}_colocate' instead."
                     )
+                    if target.startswith("//rs/tests")
+                    else ""
+                )
 
     n = len(errors)
     if n > 0:
