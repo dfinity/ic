@@ -11,18 +11,18 @@ pub struct PeerManagerMetrics {
 }
 
 impl PeerManagerMetrics {
-    /// The constructor returns a `GossipMetrics` instance.
+    /// The constructor returns a `PeerManagerMetrics` instance.
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
             topology_updates: metrics_registry.int_counter(
                 "peer_manager_topology_updates_total",
                 "Number of times registry is checked for topology updates.",
             ),
-            earliest_registry_version: metrics_registry.int_counter(
+            earliest_registry_version: metrics_registry.int_gauge(
                 "peer_manager_topology_earliest_registry_version",
                 "Registry version of the earliest relevant subnet topology.",
             ),
-            latest_registry_version: metrics_registry.int_counter(
+            latest_registry_version: metrics_registry.int_gauge(
                 "peer_manager_topology_latest_registry_version",
                 "Registry version of the latest relevant subnet topology.",
             ),
