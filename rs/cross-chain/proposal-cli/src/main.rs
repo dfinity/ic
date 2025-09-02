@@ -213,7 +213,6 @@ async fn main() {
                 .unwrap_or_else(|| panic!("ERROR: no known target canister for {canister_id}"));
             let forum_client =
                 DiscourseClient::new("https://forum.dfinity.org".to_string(), api_user, api_key);
-            panic!("BOOM!: {proposal:?}")
         }
     }
 }

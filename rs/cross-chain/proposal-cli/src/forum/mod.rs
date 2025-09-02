@@ -1,16 +1,21 @@
+#[cfg(test)]
+mod tests;
+
 use crate::canister::TargetCanister;
 use crate::dashboard::ProposalInfo;
 use candid::Principal;
+use core::fmt;
 use maplit::btreeset;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Formatter;
 use std::str::FromStr;
 use std::time::Duration;
 
 type ProposalId = u64;
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum ForumTopic {
     /// A new topic in the application canister management category for the given proposals.
     /// A single post may cover multiple proposals (e.g. a topic to cover a new ckBTC ledger suite,
@@ -30,6 +35,10 @@ impl ForumTopic {
             let summary = UpgradeProposalSummary::try_from(proposal)?;
             summaries.insert(proposal_id, summary);
         }
+        assert!(
+            !summaries.is_empty(),
+            "BUG: no forum topic needed if there is no proposal"
+        );
         Ok(ForumTopic::ApplicationCanisterManagement {
             proposals: summaries,
         })
@@ -52,13 +61,13 @@ impl TryFrom<ProposalInfo> for UpgradeProposalSummary {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct UpgradeProposalSummary {
     canister: TargetCanister,
     install_mode: CanisterInstallMode,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd)]
 enum CanisterInstallMode {
     Unspecified,
     Install,
@@ -80,20 +89,48 @@ impl FromStr for CanisterInstallMode {
     }
 }
 
+impl fmt::Display for CanisterInstallMode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CanisterInstallMode::Unspecified => write!(f, "manage"),
+            CanisterInstallMode::Install => write!(f, "install"),
+            CanisterInstallMode::Reinstall => write!(f, "reinstall"),
+            CanisterInstallMode::Upgrade => write!(f, "upgrade"),
+        }
+    }
+}
+
 impl ForumTopic {
     fn title(&self) -> String {
         match self {
             ForumTopic::ApplicationCanisterManagement { proposals } => {
-                todo!()
+                let proposal_ids: Vec<_> = proposals.keys().collect();
+                let canister_names: Vec<_> =
+                    proposals.values().map(|c| c.canister.to_string()).collect();
+                let summary_install_mode = {
+                    let install_modes: BTreeSet<_> =
+                        proposals.values().map(|s| s.install_mode).collect();
+                    let aggregate_install_mode = if install_modes.len() != 1 {
+                        &CanisterInstallMode::Unspecified
+                    } else {
+                        install_modes.first().unwrap()
+                    };
+                    aggregate_install_mode.to_string()
+                };
+                format!(
+                    "{} {} to {} the {}",
+                    pluralize("Proposal", proposals.len()),
+                    display_sequence(proposal_ids.as_slice()),
+                    summary_install_mode,
+                    display_sequence(canister_names.as_slice()),
+                )
             }
         }
     }
 
     fn body(&self) -> String {
         match self {
-            ForumTopic::ApplicationCanisterManagement { proposals } => {
-                todo!()
-            }
+            ForumTopic::ApplicationCanisterManagement { proposals } => "".to_string(),
         }
     }
 
@@ -112,8 +149,28 @@ impl ForumTopic {
     }
 }
 
+fn pluralize(word: &str, count: usize) -> String {
+    if count < 2 {
+        return word.to_string();
+    }
+    format!("{word}s")
+}
+
+fn display_sequence<T: fmt::Display>(seq: &[T]) -> String {
+    let result = seq
+        .iter()
+        .map(|item| item.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    if seq.len() < 2 {
+        return result;
+    }
+    format!("({result})")
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Tag {
+    /// [Application canister management](https://forum.dfinity.org/tags/c/governance/nns-proposal-discussions/76/application-canister-mgmt) tag.
     ApplicationCanisterMgmt,
 }
 
@@ -126,12 +183,27 @@ impl Tag {
 }
 
 /// Create a new topic (first forum post in a thread)
-#[derive(Clone, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct CreateTopicRequest {
     title: String,
     raw: String,
     category: u64,
     tags: Vec<String>,
+}
+
+impl From<ForumTopic> for CreateTopicRequest {
+    fn from(topic: ForumTopic) -> Self {
+        Self {
+            title: topic.title(),
+            raw: topic.body(),
+            category: topic.category(),
+            tags: topic
+                .tags()
+                .into_iter()
+                .map(|t| t.id().to_string())
+                .collect(),
+        }
+    }
 }
 
 /// Response returned upon successful creation of a new topic.

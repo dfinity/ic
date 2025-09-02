@@ -7,7 +7,7 @@ mod tests;
 use crate::dashboard::responses::CanisterInfo;
 use candid::Principal;
 use reqwest::StatusCode;
-pub(crate) use responses::ProposalInfo;
+pub(crate) use responses::{ProposalInfo, ProposalPayloadInfo};
 use std::collections::BTreeSet;
 use std::time::Duration;
 
