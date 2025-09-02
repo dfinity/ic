@@ -8,8 +8,7 @@ use exchange_rate_canister::{
     RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
 };
 use ic_cdk::{
-    api::call::{arg_data_raw, reply_raw, CallResult, ManualReply},
-    futures::{in_executor_context, spawn_017_compat},
+    api::call::{reply_raw, CallResult, ManualReply},
     heartbeat, init, post_upgrade, pre_upgrade, println, query, update,
 };
 use ic_crypto_tree_hash::{
@@ -38,12 +37,12 @@ use ic_nns_constants::{
 };
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use icp_ledger::{
-    AccountIdentifier, Block, BlockIndex, BlockRes, CyclesResponse, Memo, Operation, SendArgs,
-    Subaccount, Tokens, Transaction, TransactionNotification, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, Block, BlockIndex, BlockRes, Memo, Operation, SendArgs, Subaccount, Tokens,
+    Transaction, TransactionNotification, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
-use on_wire::{FromWire, IntoWire, NewType};
+use on_wire::IntoWire;
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -1915,42 +1914,6 @@ async fn issue_automatic_refund_if_memo_not_offerred(
 ///
 /// The only fields used are
 ///     * from: This is taken as the sender.
-///     * to_subaccount: This is used to infer the creator/controller.
-///
-/// It is assumed that memo == MEMO_CREATE_CANISTER. (However, behavior is the same if that
-/// assumption does not hold.)
-fn authorize_sender_to_create_canister_via_ledger_notify(
-    transaction_notification: &TransactionNotification,
-) -> Result<PrincipalId, String> {
-    let sender = transaction_notification.from;
-
-    let creator = {
-        let to_subaccount = transaction_notification.to_subaccount.ok_or_else(|| {
-            format!(
-                "Transfer has no destination subaccount:\n{:#?}",
-                transaction_notification,
-            )
-        })?;
-
-        PrincipalId::try_from(&to_subaccount).map_err(|err| {
-            format!(
-                "Cannot determine creator principal from ICP transfer to Cycles \
-                 Minting Canister destination subaccount {}: {}",
-                to_subaccount, err,
-            )
-        })?
-    };
-
-    if sender == creator {
-        return Ok(creator);
-    }
-
-    Err(format!(
-        "Principal {} sent ICP to the Cycles Minting Canister on behalf of {} \
-         in order to create a canister, but this is not allowed (anymore).",
-        sender, creator,
-    ))
-}
 
 // If conversion fails, log and return an error
 fn tokens_to_cycles(amount: Tokens) -> Result<Cycles, NotifyError> {
