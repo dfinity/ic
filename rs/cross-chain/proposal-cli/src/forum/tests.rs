@@ -1,4 +1,4 @@
-use crate::dashboard::{ProposalInfo, ProposalPayloadInfo};
+use crate::dashboard::responses::{ProposalInfo, ProposalPayloadInfo};
 use crate::forum::{CreateTopicRequest, ForumTopic};
 
 #[test]
@@ -18,12 +18,10 @@ fn should_have_correct_content_when_creating_topic_for_multiple_proposals() {
             title: "Proposals (137359, 137360, 137361) to upgrade the (ckBTC index, ckBTC ledger, ckBTC archive)".to_string(),
             raw: "\
             Hi everyone :waving_hand:\n\n\
-
             Please use this forum thread to discuss the following proposals:\n\
             * Proposal [137359](https://dashboard.internetcomputer.org/proposal/137359): upgrade the ckBTC index\n\
             * Proposal [137360](https://dashboard.internetcomputer.org/proposal/137360): upgrade the ckBTC ledger\n\
             * Proposal [137361](https://dashboard.internetcomputer.org/proposal/137361): upgrade the ckBTC archive\n\n\
-
             :information_source: All listed proposals should contain the necessary information to verify them.\
             ".to_string(),
             category:76,
@@ -44,10 +42,8 @@ fn should_have_correct_content_when_creating_topic_for_single_proposals() {
             title: "Proposal 137360 to upgrade the ckBTC ledger".to_string(),
             raw: "\
             Hi everyone :waving_hand:\n\n\
-
             Please use this forum thread to discuss the following proposal:\n\
             * Proposal [137360](https://dashboard.internetcomputer.org/proposal/137360): upgrade the ckBTC ledger\n\n\
-
             :information_source: All listed proposals should contain the necessary information to verify them.\
             ".to_string(),
             category: 76,

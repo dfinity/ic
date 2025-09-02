@@ -1,13 +1,13 @@
 //! Retrieve data from the public ICP dashboard REST API
 //! https://ic-api.internetcomputer.org/api/v3/swagger
-mod responses;
+pub(crate) mod responses;
+
 #[cfg(test)]
 mod tests;
 
-use crate::dashboard::responses::CanisterInfo;
+use crate::dashboard::responses::{CanisterInfo, ProposalInfo};
 use candid::Principal;
 use reqwest::StatusCode;
-pub(crate) use responses::{ProposalInfo, ProposalPayloadInfo};
 use std::collections::BTreeSet;
 use std::time::Duration;
 
@@ -47,11 +47,19 @@ impl DashboardClient {
         futures::future::join_all(fut).await
     }
 
+    pub async fn retrieve_proposal_batch(&self, proposal_ids: &[u64]) -> Vec<ProposalInfo> {
+        let mut fut = Vec::with_capacity(proposal_ids.len());
+        for proposal_id in proposal_ids {
+            fut.push(self.retrieve_proposal(proposal_id));
+        }
+        futures::future::join_all(fut).await
+    }
+
     /// Retrieve a given proposal by ID.
     ///
     /// When the proposal was recently submitted, the dashboard API may need some time
     /// to catch up, so that retries are maybe necessary.
-    pub async fn retrieve_proposal(&self, proposal_id: u64) -> ProposalInfo {
+    pub async fn retrieve_proposal(&self, proposal_id: &u64) -> ProposalInfo {
         let url = format!("{}/proposals/{}", self.base_url, proposal_id);
         let num_retries = 5;
         let sleep_duration = Duration::from_secs(5);
@@ -60,8 +68,7 @@ impl DashboardClient {
             match response.status() {
                 StatusCode::OK => {
                     let proposal: ProposalInfo = response.json().await.unwrap();
-                    assert_eq!(proposal.proposal_id, proposal_id);
-                    println!("Found proposal {proposal_id}");
+                    assert_eq!(&proposal.proposal_id, proposal_id);
                     return proposal;
                 }
                 StatusCode::NOT_FOUND => {

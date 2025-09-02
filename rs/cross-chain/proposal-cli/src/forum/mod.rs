@@ -2,7 +2,7 @@
 mod tests;
 
 use crate::canister::TargetCanister;
-use crate::dashboard::ProposalInfo;
+use crate::dashboard::responses::ProposalInfo;
 use candid::Principal;
 use core::fmt;
 use maplit::btreeset;
@@ -16,7 +16,7 @@ use std::time::Duration;
 type ProposalId = u64;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum ForumTopic {
+pub enum ForumTopic {
     /// A new topic in the application canister management category for the given proposals.
     /// A single post may cover multiple proposals (e.g. a topic to cover a new ckBTC ledger suite,
     /// which involves 3 proposals: for the ledger, index and archive canisters).
@@ -26,7 +26,7 @@ enum ForumTopic {
 }
 
 impl ForumTopic {
-    fn for_upgrade_proposals<I: IntoIterator<Item = ProposalInfo>>(
+    pub fn for_upgrade_proposals<I: IntoIterator<Item = ProposalInfo>>(
         proposals: I,
     ) -> Result<ForumTopic, String> {
         let mut summaries = BTreeMap::new();
@@ -62,7 +62,7 @@ impl TryFrom<ProposalInfo> for UpgradeProposalSummary {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct UpgradeProposalSummary {
+pub struct UpgradeProposalSummary {
     canister: TargetCanister,
     install_mode: CanisterInstallMode,
 }
