@@ -1,7 +1,7 @@
 use ic_canister_sandbox_backend_lib::{
-    canister_sandbox_main, compiler_sandbox::compiler_sandbox_main, embed_sandbox_signature,
+    canister_sandbox_main, compiler_sandbox::compiler_sandbox_main,
     launcher::sandbox_launcher_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG,
-    RUN_AS_SANDBOX_LAUNCHER_FLAG, SANDBOX_MAGIC_BYTES,
+    RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
 use libfuzzer_sys::test_input_wrap;
 use std::ffi::CString;
@@ -9,6 +9,7 @@ use std::os::raw::c_char;
 
 #[cfg(target_os = "linux")]
 use {
+    ic_canister_sandbox_backend_lib::{embed_sandbox_signature, SANDBOX_MAGIC_BYTES},
     nix::{
         sys::ptrace, sys::ptrace::Options, sys::wait::waitpid, sys::wait::WaitPidFlag,
         sys::wait::WaitStatus, unistd::fork, unistd::ForkResult, unistd::Pid,
