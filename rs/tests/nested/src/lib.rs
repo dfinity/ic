@@ -479,7 +479,6 @@ pub fn nns_recovery_test(env: TestEnv) {
 
     // Define faulty and healthy nodes, pick a DFINITY-owned node (could be healthy or faulty)
     let mut nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
-    nns_nodes.shuffle(&mut rand::thread_rng());
     let f = (SUBNET_SIZE - 1) / 3;
     let faulty_nodes = &nns_nodes[..(f + 1)];
     let healthy_nodes = &nns_nodes[(f + 1)..];
