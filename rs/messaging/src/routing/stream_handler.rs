@@ -936,35 +936,34 @@ impl StreamHandlerImpl {
                 Accept(msg_cycles)
             }
 
-            // Receiver is not hosted by this subnet; it is only possible
-            // that this message was sent by a subnet with a routing table claiming otherwise, so it is
-            // migrating.
-            Some(_) if matches!(msg, RequestOrResponse::Request(_)) => {
-                self.observe_inducted_message_status(
-                    msg_type,
-                    LABEL_VALUE_CANISTER_LIKELY_MIGRATED,
-                );
-                Reject(RejectReason::CanisterMigrating, msg)
-            }
-
-            // Receiver is not and was not (according to `migrating_canisters`) recently
-            // hosted by this subnet.
             host_subnet => {
-                error!(
-                    self.log,
-                    "{}: Dropping misrouted message (receiver {} is hosted by {:?}): {:?}",
-                    CRITICAL_ERROR_RECEIVER_SUBNET_MISMATCH,
-                    msg.receiver(),
-                    host_subnet,
-                    msg
-                );
-                self.observe_inducted_message_status(
-                    msg_type,
-                    LABEL_VALUE_RECEIVER_SUBNET_MISMATCH,
-                );
-                self.metrics.critical_error_receiver_subnet_mismatch.inc();
-                // Cycles are lost.
-                Accept(msg.cycles())
+                if matches!(msg, RequestOrResponse::Request(_)) {
+                    // Request receiver is not hosted by this subnet; it is only possible that this
+                    // message was sent by a subnet with a routing table claiming otherwise,
+                    // so it is migrating.
+                    self.observe_inducted_message_status(
+                        msg_type,
+                        LABEL_VALUE_CANISTER_LIKELY_MIGRATED,
+                    );
+                    Reject(RejectReason::CanisterMigrating, msg)
+                } else {
+                    // Response from a mismatching subnet is dropped.
+                    error!(
+                        self.log,
+                        "{}: Dropping misrouted message (receiver {} is hosted by {:?}): {:?}",
+                        CRITICAL_ERROR_RECEIVER_SUBNET_MISMATCH,
+                        msg.receiver(),
+                        host_subnet,
+                        msg
+                    );
+                    self.observe_inducted_message_status(
+                        msg_type,
+                        LABEL_VALUE_RECEIVER_SUBNET_MISMATCH,
+                    );
+                    self.metrics.critical_error_receiver_subnet_mismatch.inc();
+                    // Cycles are lost.
+                    Accept(msg.cycles())
+                }
             }
         }
     }
