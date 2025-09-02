@@ -209,8 +209,12 @@ jobs:
               echo "No bazel targets"
               exit 0
             fi
-            echo "Testing the following $num_targets targets:"
-            cat "$target_pattern_file"
+            # the target list can get quite big, so we wrap it in details/summary
+            {
+              echo '<details><summary>Tested '"$num_targets"' targets</summary>';
+              cat "$target_pattern_file"
+              echo '</details>';
+            } >>"$GITHUB_STEP_SUMMARY"
             bazel_args+=( --target_pattern_file="$target_pattern_file" )
 
             echo "Building as user: $(whoami)"
@@ -490,9 +494,13 @@ jobs:
               targets_args+=("--base=$BASE_SHA" "--head=$HEAD_SHA")
             fi
             ci/bazel-scripts/targets.py build "${targets_args[@]}" >"$targets"
-
-            echo "Considering the following $(wc <"$targets" -l) targets:"
-            cat "$targets"
+            num_targets=$(wc <"$targets" -l)
+            # the target list can get quite big, so we wrap it in details/summary
+            {
+              echo '<details><summary>Considered '"$num_targets"' targets</summary>';
+              cat "$targets"
+              echo '</details>';
+            } >>"$GITHUB_STEP_SUMMARY"
 
             ARGS=()
 
