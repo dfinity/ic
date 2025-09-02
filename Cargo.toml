@@ -3,6 +3,8 @@
 members = [
     "packages/canlog",
     "packages/canlog_derive",
+    "packages/ic-deterministic-heap-bytes",
+    "packages/ic-deterministic-heap-bytes-derive",
     "packages/ic-dummy-getrandom-for-wasm",
     "packages/ic-ed25519",
     "packages/ic-error-types",
@@ -136,7 +138,6 @@ members = [
     "rs/cycles_account_manager",
     "rs/depcheck",
     "rs/determinism_test",
-    "rs/drun",
     "rs/embedders",
     "rs/embedders/benches/embedders_bench",
     "rs/ethereum/cketh/minter",
@@ -159,6 +160,8 @@ members = [
     "rs/https_outcalls/consensus",
     "rs/https_outcalls/service",
     "rs/http_utils",
+    "rs/ic_os/attestation",
+    "rs/ic_os/attestation/testing",
     "rs/ic_os/build_tools/dflate",
     "rs/ic_os/build_tools/diroid",
     "rs/ic_os/build_tools/inject_files",
@@ -211,12 +214,14 @@ members = [
     "rs/ledger_suite/icrc1/index-ng",
     "rs/ledger_suite/icrc1/ledger",
     "rs/ledger_suite/icrc1/test_utils",
+    "rs/ledger_suite/icrc1/test_utils/icrc3_test_ledger",
     "rs/ledger_suite/icrc1/tokens_u256",
     "rs/ledger_suite/icrc1/tokens_u64",
     "rs/ledger_suite/tests/sm-tests",
     "rs/limits",
     "rs/memory_tracker",
     "rs/messaging",
+    "rs/migration_canister",
     "rs/monitoring/adapter_metrics/client",
     "rs/monitoring/adapter_metrics/server",
     "rs/monitoring/adapter_metrics/service",
@@ -585,13 +590,13 @@ axum-server = { version = "0.7.2", features = ["tls-rustls-no-provider"] }
 backoff = "0.4"
 base64 = { version = "0.13.1" }
 bincode = "1.3.3"
-bitcoin = { version = "0.32.5", features = ["default", "rand", "serde"] }
-bitcoincore-rpc = "0.19.0"
+bitcoin = { git = "https://github.com/dfinity/rust-dogecoin", rev = "b5125f00d9d1e6c553d83ee54ee9d6203da8e0db", features = ["default", "rand", "serde"] }
 # build-info and build-info-build MUST be kept in sync!
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default-features = false }
 bytes = "1.9.0"
-candid = { version = "0.10.6" }
+canbench-rs = "0.2.1"
+candid = { version = "0.10.17" }
 candid_parser = { version = "0.1.2" }
 chrono = { version = "0.4.38", default-features = false, features = [
     "alloc",
@@ -611,7 +616,7 @@ curve25519-dalek = { version = "4.1.3", features = [
     "group",
     "precomputed-tables",
 ] }
-der = { version = "0.7", default-features = false }
+der = { version = "0.7", default-features = false, features = ["derive"] }
 derive-new = "0.7.0"
 devicemapper = "0.34"
 dfx-core = { version = "0.1.4" }
@@ -625,9 +630,12 @@ ed25519-dalek = { version = "2.1.1", features = [
     "hazmat",
 ] }
 ethnum = { version = "1.3.2", features = ["serde"] }
+evm_rpc_types = { version = "2.0.0" }
 flate2 = "1.0.31"
+fs_extra = "1.2.0"
 futures = "0.3.31"
 futures-util = "0.3.31"
+get_if_addrs = "0.5.3"
 getrandom = { version = "0.2", features = ["custom"] }
 goldenfile = "1.8.0"
 gpt = "4.1"
@@ -654,10 +662,10 @@ ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "620fb49a238b3
     "acme_alpn",
 ] }
 ic-btc-interface = "0.2.2"
-ic-canister-sig-creation = { git = "https://github.com/dfinity/ic-canister-sig-creation", rev = "7f9e931954637526295269155881207f6c832d6d" }
+ic-canister-sig-creation = "1.3.0"
 ic-cbor = "3"
-ic-cdk = "0.17.2"
-ic-cdk-timers = "0.11.0"
+ic-cdk = "0.18.7"
+ic-cdk-timers = "0.12.2"
 ic-certificate-verification = "3"
 ic-certification = "3"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "b78562340bd00f05f9c055dcba3ec0f74758c927", default-features = false }
@@ -670,7 +678,7 @@ ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.40.1" }
 ic-utils = { version = "0.40.1", features = ["raw"] }
-ic-vetkeys = { git = "https://github.com/dfinity/vetkeys", rev = "5885675b6ccb5269cfac9740dc3da6f14f75347f" }
+ic-vetkeys = "0.4.0"
 ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
     "groups",
     "pairings",
@@ -684,6 +692,7 @@ indexmap = "2.10.0"
 inferno = "0.12.0"
 ipnet = { version = "2.10.1", features = ["serde"] }
 itertools = "0.12.0"
+jsonrpc = { version = "0.18.0", features = ["minreq_http"] }
 k256 = { version = "0.13.4", default-features = false, features = [
     "arithmetic",
     "ecdsa",
@@ -724,6 +733,7 @@ p256 = { version = "0.13.2", default-features = false, features = [
     "pem",
     "pkcs8",
 ] }
+p384 = "0.13"
 pairing = "0.23"
 parking_lot = "0.12.3"
 paste = "1.0.15"
@@ -745,6 +755,7 @@ proptest-derive = "0.5.0"
 prost = "0.13.3"
 prost-build = "0.13.3"
 protobuf = "2.28.0"
+ring = { version = "^0.17.7", features = ["std"] }
 quinn = { version = "0.11.5", default-features = false, features = [
     "ring",
     "log",
@@ -755,9 +766,11 @@ quinn-udp = "0.5.5"
 quote = "1.0.37"
 rand = { version = "0.8.5", features = ["small_rng"] }
 rand_chacha = "0.3.1"
+raw-cpuid = "11.5"
 rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"
+serde_regex = "1.1.0"
 reqwest = { version = "0.12.15", default-features = false, features = [
     "blocking",
     "http2",
@@ -769,9 +782,9 @@ reqwest = { version = "0.12.15", default-features = false, features = [
     "stream",
 ] }
 rolling-file = "0.2.0"
-rsa = { version = "0.9.6", features = ["sha2"] }
+rsa = { version = "0.9.6", features = ["sha2", "getrandom"] }
 rstest = "0.19.0"
-rust-ini = "0.21.2"
+rust-ini = "0.21.1"
 rustc-demangle = { version = "0.1.16" }
 rustls = { version = "0.23.18", default-features = false, features = [
     "ring",
@@ -873,3 +886,4 @@ zstd = "0.13.2"
 default-features = false
 features = ["exe"]
 version = "^0.8.1"
+

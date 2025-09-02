@@ -13,7 +13,7 @@ use crate::{
         observe_conn_error, observe_read_to_end_error, observe_stopped_error, observe_write_error,
         QuicTransportMetrics, INFALIBBLE,
     },
-    ConnId, MessagePriority, ResetStreamOnDrop, MAX_MESSAGE_SIZE_BYTES,
+    ConnId, MessagePriority, P2PError, ResetStreamOnDrop, MAX_MESSAGE_SIZE_BYTES,
 };
 
 static CONN_ID_SEQ: AtomicU64 = AtomicU64::new(1);
@@ -53,7 +53,7 @@ impl ConnectionHandle {
     /// where connections can be managed directly by the caller.
     ///
     /// Note: The method is cancel-safe.
-    pub async fn rpc(&self, request: Request<Bytes>) -> Result<Response<Bytes>, anyhow::Error> {
+    pub async fn rpc(&self, request: Request<Bytes>) -> Result<Response<Bytes>, P2PError> {
         let _timer = self
             .metrics
             .connection_handle_duration_seconds
@@ -131,7 +131,7 @@ impl ConnectionHandle {
 }
 
 // The function returns infallible error.
-fn to_response(response_bytes: Vec<u8>) -> Result<Response<Bytes>, anyhow::Error> {
+fn to_response(response_bytes: Vec<u8>) -> Result<Response<Bytes>, P2PError> {
     let response_proto = pb::HttpResponse::decode(response_bytes.as_slice())?;
     let status: u16 = response_proto.status_code.try_into()?;
 

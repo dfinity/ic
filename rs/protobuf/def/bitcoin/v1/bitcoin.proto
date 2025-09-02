@@ -93,9 +93,12 @@ message BitcoinAdapterResponse {
 
 enum Network {
   NETWORK_UNSPECIFIED = 0;
-  NETWORK_TESTNET = 1;
-  NETWORK_MAINNET = 2;
-  NETWORK_REGTEST = 3;
+  NETWORK_BITCOIN_TESTNET = 1;
+  NETWORK_BITCOIN_MAINNET = 2;
+  NETWORK_BITCOIN_REGTEST = 3;
+  NETWORK_DOGECOIN_MAINNET = 4;
+  NETWORK_DOGECOIN_TESTNET = 5;
+  NETWORK_DOGECOIN_REGTEST = 6;
 }
 
 // A request to retrieve new blocks from the specified Bitcoin network.

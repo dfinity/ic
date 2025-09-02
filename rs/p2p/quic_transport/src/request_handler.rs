@@ -28,7 +28,7 @@ use crate::{
         observe_conn_error, observe_read_to_end_error, observe_stopped_error, observe_write_error,
         QuicTransportMetrics, ERROR_TYPE_APP, INFALIBBLE, STREAM_TYPE_BIDI,
     },
-    ConnId, ResetStreamOnDrop, MAX_MESSAGE_SIZE_BYTES,
+    ConnId, P2PError, ResetStreamOnDrop, MAX_MESSAGE_SIZE_BYTES,
 };
 
 const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
@@ -109,7 +109,7 @@ async fn handle_bi_stream(
     router: Router,
     mut send_stream_guard: ResetStreamOnDrop,
     recv_stream: RecvStream,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), P2PError> {
     // Note that the 'recv_stream' is dropped before we call any method on the 'send_stream'
     let mut request = read_request(recv_stream, &metrics).await?;
     request.extensions_mut().insert::<NodeId>(peer_id);
@@ -159,7 +159,7 @@ async fn handle_bi_stream(
 async fn read_request(
     mut recv_stream: RecvStream,
     metrics: &QuicTransportMetrics,
-) -> Result<Request<Body>, anyhow::Error> {
+) -> Result<Request<Body>, P2PError> {
     let request_bytes = recv_stream
         .read_to_end(MAX_MESSAGE_SIZE_BYTES)
         .await
@@ -197,7 +197,7 @@ async fn read_request(
     Ok(request_builder.body(Body::from(body_bytes))?)
 }
 
-async fn to_response_bytes(response: Response<Body>) -> Result<Vec<u8>, anyhow::Error> {
+async fn to_response_bytes(response: Response<Body>) -> Result<Vec<u8>, P2PError> {
     let (parts, body) = response.into_parts();
     // Check for axum error in body
     // TODO: Think about this. What is the error that can happen here?

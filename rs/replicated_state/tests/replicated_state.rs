@@ -1,9 +1,8 @@
 use assert_matches::assert_matches;
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_btc_interface::Network;
 use ic_btc_replica_types::{
     BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, BitcoinReject,
-    GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, SendTransactionRequest,
+    GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, Network, SendTransactionRequest,
 };
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{
@@ -753,7 +752,7 @@ fn insert_bitcoin_response() {
         SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
             request: RequestBuilder::default().build(),
             payload: GetSuccessorsRequestInitial {
-                network: Network::Regtest,
+                network: Network::BitcoinRegtest,
                 anchor: vec![],
                 processed_block_hashes: vec![],
             },
@@ -787,7 +786,7 @@ fn insert_bitcoin_get_successor_reject_response() {
         SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
             request: RequestBuilder::default().build(),
             payload: GetSuccessorsRequestInitial {
-                network: Network::Regtest,
+                network: Network::BitcoinRegtest,
                 anchor: vec![],
                 processed_block_hashes: vec![],
             },
@@ -821,7 +820,7 @@ fn insert_bitcoin_send_transaction_reject_response() {
         SubnetCallContext::BitcoinSendTransactionInternal(BitcoinSendTransactionInternalContext {
             request: RequestBuilder::default().build(),
             payload: SendTransactionRequest {
-                network: Network::Regtest,
+                network: Network::BitcoinRegtest,
                 transaction: vec![],
             },
             time: UNIX_EPOCH,

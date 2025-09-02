@@ -596,8 +596,8 @@ http_file(
 http_file(
     name = "kongswap-adaptor-canister",
     downloaded_file_path = "kongswap-adaptor-canister.wasm.gz",
-    sha256 = "672d43889981632afc89ead7f9c7d1a7901fd4e589a3990b762234f3115661d1",
-    url = "https://github.com/dfinity/sns-kongswap-adaptor/releases/download/vrc-20250730-095528-d25cac3/kongswap-adaptor-canister.wasm.gz",
+    sha256 = "4b3445ff18b417364a25c733f377eb0eb5943dea8781de73c226023657642ad1",
+    url = "https://github.com/dfinity/sns-kongswap-adaptor/releases/download/vrc-20250821-094346-bab9aa4/kongswap-adaptor-canister.wasm.gz",
 )
 
 # Cycles Ledger canister
@@ -820,6 +820,20 @@ filegroup(
     ],
 )
 
+http_archive(
+    name = "dogecoin_core_linux_x86",
+    build_file_content = """
+package(default_visibility = ["//visibility:public"])
+filegroup(
+    name = "dogecoind",
+    srcs = ["bin/dogecoind"],
+)
+""",
+    sha256 = "4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8",
+    strip_prefix = "dogecoin-1.14.9",
+    url = "https://github.com/dogecoin/dogecoin/releases/download/v1.14.9/dogecoin-1.14.9-x86_64-linux-gnu.tar.gz",
+)
+
 http_file(
     name = "bitcoin_example_canister",
     downloaded_file_path = "basic_bitcoin.wasm.gz",
@@ -834,8 +848,8 @@ http_file(
     # ci/container/container-run.sh
     # bazel build //publish/binaries:pocket-ic.gz
     # sha256sum bazel-bin/publish/binaries/pocket-ic.gz
-    sha256 = "399596330c40a76effbbd20660ce8e892d5d74f3de6380cad4aac1598b9d6394",
-    url = "https://download.dfinity.systems/ic/c36a05a9d367bb6ba9068444e6d6f53e7911f1b0/binaries/x86_64-linux/pocket-ic.gz",
+    sha256 = "237272216498074e5250a0685813b96632963ff9abbc51a7030d9b625985028d",
+    url = "https://github.com/dfinity/pocketic/releases/download/9.0.1/pocket-ic-x86_64-linux.gz",
 )
 
 # Management canister candid interface

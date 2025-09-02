@@ -1,9 +1,10 @@
 use crate::common::rest::{
     ApiResponse, AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest,
     CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
-    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpFeatures, InstanceConfig, InstanceId,
-    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
-    RawCanisterResult, RawCycles, RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId,
+    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpFeatures, InitialTime, InstanceConfig,
+    InstanceHttpGatewayConfig, InstanceId, MockCanisterHttpResponse, NonmainnetFeatures,
+    RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult,
+    RawCycles, RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId,
     RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
     RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
 };
@@ -135,10 +136,12 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
         read_only_state_dir: Option<PathBuf>,
         mut state_dir: Option<PocketIcState>,
-        nonmainnet_features: bool,
+        nonmainnet_features: NonmainnetFeatures,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
+        initial_time: Option<InitialTime>,
+        http_gateway_config: Option<InstanceHttpGatewayConfig>,
     ) -> Self {
         let server_url = if let Some(server_url) = server_url {
             server_url
@@ -194,24 +197,26 @@ impl PocketIc {
 
         let instance_config = InstanceConfig {
             subnet_config_set,
+            http_gateway_config,
             #[cfg(not(windows))]
             state_dir: state_dir.as_ref().map(|state_dir| state_dir.state_dir()),
             #[cfg(windows)]
             state_dir: state_dir
                 .as_ref()
                 .map(|state_dir| wsl_path(&state_dir.state_dir(), "state directory").into()),
-            nonmainnet_features,
+            nonmainnet_features: Some(nonmainnet_features),
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
             icp_features: Some(icp_features),
             allow_incomplete_state: Some(false),
+            initial_time,
         };
 
         let test_driver_pid = std::process::id();
         let log_guard = setup_tracing(test_driver_pid);
 
         let reqwest_client = reqwest::Client::new();
-        let instance_id = match reqwest_client
+        let (instance_id, http_gateway_info) = match reqwest_client
             .post(server_url.join("instances").unwrap())
             .json(&instance_config)
             .send()
@@ -221,7 +226,11 @@ impl PocketIc {
             .await
             .expect("Could not parse response for create instance request")
         {
-            CreateInstanceResponse::Created { instance_id, .. } => instance_id,
+            CreateInstanceResponse::Created {
+                instance_id,
+                http_gateway_info,
+                ..
+            } => (instance_id, http_gateway_info),
             CreateInstanceResponse::Error { message } => panic!("{}", message),
         };
         debug!("instance_id={} New instance created.", instance_id);
@@ -229,7 +238,7 @@ impl PocketIc {
         Self {
             instance_id,
             max_request_time_ms,
-            http_gateway: None,
+            http_gateway: http_gateway_info,
             server_url,
             reqwest_client,
             owns_instance: true,

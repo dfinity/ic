@@ -228,8 +228,8 @@ pub fn create_summary_payload(
 
     let block_reader = block_chain_reader(
         pool_reader,
-        &prev_summary_block,
-        parent_block,
+        prev_summary_block.height(),
+        parent_block.clone(),
         idkg_payload_metrics,
         log,
     )?;
@@ -481,21 +481,31 @@ pub fn create_data_payload(
         .dkg_summary_block(parent_block)
         .ok_or_else(|| IDkgPayloadError::ConsensusSummaryBlockNotFound(parent_block.height()))?;
 
+    // In case the certified height is below the summary height, add the heights in
+    // between to the blockchain. This is needed to calculate the total number of pre-
+    // signatures in the certified state and every block since then.
+    // Note that blocks below the summary are not guaranteed to exist, because they are
+    // purged once the CUP exists. However, if the CUP exists, that implies there is
+    // already a finalized block b with b.certified_height >= summary_height, which means
+    // we should not be creating a block referencing a lower certified height here.
+    let start_height = context
+        .certified_height
+        .increment()
+        .min(summary_block.height());
     // The notarized tip(parent) may be ahead of the finalized tip, and
     // the last few blocks may have references to heights after the finalized
     // tip. So use the chain ending at the parent to resolve refs, rather than the
     // finalized chain.
     let block_reader = block_chain_reader(
         pool_reader,
-        &summary_block,
-        parent_block,
+        start_height,
+        parent_block.clone(),
         Some(idkg_payload_metrics),
         log,
     )?;
     let idkg_pool = idkg_pool.read().unwrap();
 
     let signature_builder = ThresholdSignatureBuilderImpl::new(
-        &block_reader,
         crypto,
         idkg_pool.deref(),
         idkg_payload_metrics,
@@ -1266,8 +1276,8 @@ mod tests {
             let mut reshare_refs = BTreeMap::new();
             reshare_refs.insert(*reshare_key_transcript_ref.as_ref(), reshare_key_transcript);
 
-            let inputs_1 = create_sig_inputs_with_height(91, summary_height, key_id.clone().into());
-            let inputs_2 = create_sig_inputs_with_height(92, summary_height, key_id.clone().into());
+            let inputs_1 = create_pre_sig_ref_with_height(91, summary_height, &key_id);
+            let inputs_2 = create_pre_sig_ref_with_height(92, summary_height, &key_id);
             let summary_block = create_summary_block_with_transcripts(
                 key_id.clone(),
                 subnet_id,
@@ -1280,14 +1290,12 @@ mod tests {
                 ],
             );
             add_block(summary_block, summary_height.get(), &mut pool);
-            let presig_1 = inputs_2.sig_inputs_ref.pre_signature().unwrap();
+            let presig_1 = inputs_2.pre_signature_ref;
 
             // Create payload blocks with transcripts
             let payload_height_1 = Height::new(10);
-            let inputs_1 =
-                create_sig_inputs_with_height(93, payload_height_1, key_id.clone().into());
-            let inputs_2 =
-                create_sig_inputs_with_height(94, payload_height_1, key_id.clone().into());
+            let inputs_1 = create_pre_sig_ref_with_height(93, payload_height_1, &key_id);
+            let inputs_2 = create_pre_sig_ref_with_height(94, payload_height_1, &key_id);
             let (reshare_key_transcript, reshare_key_transcript_ref, _) =
                 generate_key_transcript(&key_id, &env, &mut rng, payload_height_1);
             let mut reshare_refs = BTreeMap::new();
@@ -1307,7 +1315,7 @@ mod tests {
                 payload_height_1.get() - summary_height.get(),
                 &mut pool,
             );
-            let presig_2 = inputs_2.sig_inputs_ref.pre_signature().unwrap();
+            let presig_2 = inputs_2.pre_signature_ref;
 
             // Create a payload block with references to these past blocks
             let mut idkg_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
@@ -1428,8 +1436,8 @@ mod tests {
             }
             let block_reader = block_chain_reader(
                 &pool_reader,
-                &pool_reader.get_highest_finalized_summary_block(),
-                &parent_block,
+                pool_reader.get_highest_finalized_summary_block().height(),
+                parent_block.clone(),
                 None,
                 &no_op_logger(),
             )
@@ -1521,8 +1529,8 @@ mod tests {
             let mut reshare_refs = BTreeMap::new();
             reshare_refs.insert(*reshare_key_transcript_ref.as_ref(), reshare_key_transcript);
 
-            let inputs_1 = create_sig_inputs_with_height(91, summary_height, key_id.clone().into());
-            let inputs_2 = create_sig_inputs_with_height(92, summary_height, key_id.clone().into());
+            let inputs_1 = create_pre_sig_ref_with_height(91, summary_height, &key_id);
+            let inputs_2 = create_pre_sig_ref_with_height(92, summary_height, &key_id);
             let summary_block = create_summary_block_with_transcripts(
                 key_id.clone(),
                 subnet_id,
@@ -1537,14 +1545,12 @@ mod tests {
             let b = add_block(summary_block, summary_height.get(), &mut pool);
             assert_proposal_conversion(b);
 
-            let presig_1 = inputs_2.sig_inputs_ref.pre_signature().unwrap();
+            let presig_1 = inputs_2.pre_signature_ref;
 
             // Create payload blocks with transcripts
             let payload_height_1 = Height::new(10);
-            let inputs_1 =
-                create_sig_inputs_with_height(93, payload_height_1, key_id.clone().into());
-            let inputs_2 =
-                create_sig_inputs_with_height(94, payload_height_1, key_id.clone().into());
+            let inputs_1 = create_pre_sig_ref_with_height(93, payload_height_1, &key_id);
+            let inputs_2 = create_pre_sig_ref_with_height(94, payload_height_1, &key_id);
             let (reshare_key_transcript, reshare_key_transcript_ref, _) =
                 generate_key_transcript(&key_id, &env, &mut rng, payload_height_1);
             let mut reshare_refs = BTreeMap::new();
@@ -1567,7 +1573,7 @@ mod tests {
             );
             assert_proposal_conversion(b);
 
-            let presig_2 = inputs_2.sig_inputs_ref.pre_signature().unwrap();
+            let presig_2 = inputs_2.pre_signature_ref;
 
             // Create a payload block with references to these past blocks
             let mut idkg_payload = empty_idkg_payload_with_key_ids(subnet_id, vec![key_id.clone()]);
@@ -1662,8 +1668,8 @@ mod tests {
             summary.single_key_transcript_mut().current = Some(current_key_transcript);
             let block_reader = block_chain_reader(
                 &pool_reader,
-                &pool_reader.get_highest_finalized_summary_block(),
-                &parent_block,
+                pool_reader.get_highest_finalized_summary_block().height(),
+                parent_block.clone(),
                 None,
                 &no_op_logger(),
             )
@@ -1992,7 +1998,7 @@ mod tests {
             let algorithm = AlgorithmId::from(key_id.inner());
             let test_inputs = match key_id.inner() {
                 MasterPublicKeyId::Ecdsa(_) => {
-                    TestSigInputs::from(&generate_tecdsa_protocol_inputs(
+                    TestPreSigRef::from(&generate_tecdsa_protocol_inputs(
                         &env,
                         &dealers,
                         &receivers,
@@ -2005,7 +2011,7 @@ mod tests {
                     ))
                 }
                 MasterPublicKeyId::Schnorr(_) => {
-                    TestSigInputs::from(&generate_tschnorr_protocol_inputs(
+                    TestPreSigRef::from(&generate_tschnorr_protocol_inputs(
                         &env,
                         &dealers,
                         &receivers,
@@ -2022,7 +2028,7 @@ mod tests {
             };
             payload_0.available_pre_signatures.insert(
                 payload_0.uid_generator.next_pre_signature_id(),
-                test_inputs.sig_inputs_ref.pre_signature().unwrap(),
+                test_inputs.pre_signature_ref,
             );
             for (transcript_ref, transcript) in test_inputs.idkg_transcripts {
                 block_reader.add_transcript(transcript_ref, transcript);

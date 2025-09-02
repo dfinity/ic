@@ -102,7 +102,6 @@ haskell_binary(
         ":IC-Crypto-Ed25519",
         ":IC-Crypto-Secp256k1",
         ":IC-Crypto-WebAuthn",
-        ":IC-DRun-Parse",
         ":IC-HTTP-CBOR",
         ":IC-HTTP-GenR",
         ":IC-HTTP-GenR-Parse",
@@ -125,7 +124,6 @@ haskell_binary(
         ":IC-Test-Options",
         ":IC-Test-Secp256k1",
         ":IC-Test-Spec",
-        ":IC-Test-Spec-Timer",
         ":IC-Test-Spec-Utils",
         ":IC-Test-Universal",
         ":IC-Test-WebAuthn",
@@ -549,17 +547,6 @@ haskell_library(
 )
 
 haskell_library(
-    name = "IC-DRun-Parse",
-    srcs = ["src/IC/DRun/Parse.hs"],
-    src_strip_prefix = "src",
-    target_compatible_with = ["@platforms//os:linux"],
-    deps = STACK_DEPS + [
-        "@haskell-candid//:candid",
-        "@miracl-core//:lib",
-    ],
-)
-
-haskell_library(
     name = "IC-Test-Secp256k1",
     srcs = ["src/IC/Test/Secp256k1.hs"],
     src_strip_prefix = "src",
@@ -593,7 +580,6 @@ haskell_library(
         ":IC-Test-Agent-SafeCalls",
         ":IC-Test-Agent-UnsafeCalls",
         ":IC-Test-Agent-UserCalls",
-        ":IC-Test-Spec-Timer",
         ":IC-Test-Spec-Utils",
         ":IC-Test-Universal",
         ":IC-Types",
@@ -630,22 +616,6 @@ haskell_library(
         ":IC-Test-Agent-UnsafeCalls",
         ":IC-Test-Universal",
         ":IC-Utils",
-        "@haskell-candid//:candid",
-        "@miracl-core//:lib",
-    ],
-)
-
-haskell_library(
-    name = "IC-Test-Spec-Timer",
-    srcs = ["src/IC/Test/Spec/Timer.hs"],
-    src_strip_prefix = "src",
-    target_compatible_with = ["@platforms//os:linux"],
-    deps = STACK_DEPS + [
-        ":IC-Management",
-        ":IC-Test-Agent",
-        ":IC-Test-Agent-UnsafeCalls",
-        ":IC-Test-Spec-Utils",
-        ":IC-Test-Universal",
         "@haskell-candid//:candid",
         "@miracl-core//:lib",
     ],

@@ -977,34 +977,32 @@ fn can_reject_module_with_custom_sections_too_big() {
 
 #[test]
 fn can_reject_module_with_duplicate_custom_sections() {
-    let mut module = wasm_encoder::Module::new();
-    module.section(&wasm_encoder::CustomSection {
-        name: Cow::Borrowed("icp:private custom1"),
-        data: Cow::Borrowed(&[0, 1]),
-    });
-    module.section(&wasm_encoder::CustomSection {
-        name: Cow::Borrowed("icp:public custom2"),
-        data: Cow::Borrowed(&[0, 2]),
-    });
-    module.section(&wasm_encoder::CustomSection {
-        name: Cow::Borrowed("icp:public custom1"),
-        data: Cow::Borrowed(&[0, 3]),
-    });
-    let wasm = BinaryEncodedWasm::new(module.finish());
+    for visibility_1 in ["public", "private"] {
+        for visibility_2 in ["public", "private"] {
+            let mut module = wasm_encoder::Module::new();
+            module.section(&wasm_encoder::CustomSection {
+                name: Cow::Borrowed(&format!("icp:{} custom1", visibility_1)),
+                data: Cow::Borrowed(&[0, 1]),
+            });
+            module.section(&wasm_encoder::CustomSection {
+                name: Cow::Borrowed("icp:public custom2"),
+                data: Cow::Borrowed(&[0, 2]),
+            });
+            module.section(&wasm_encoder::CustomSection {
+                name: Cow::Borrowed(&format!("icp:{} custom1", visibility_2)),
+                data: Cow::Borrowed(&[0, 3]),
+            });
+            let wasm = BinaryEncodedWasm::new(module.finish());
 
-    // Rejects the module because of duplicate custom section names.
-    assert_eq!(
-        validate_wasm_binary(
-            &wasm,
-            &EmbeddersConfig {
-                max_custom_sections: 5,
-                ..Default::default()
-            }
-        ),
-        Err(WasmValidationError::InvalidCustomSection(
-            "Invalid custom section: name custom1 already exists".to_string()
-        ))
-    );
+            // Rejects the module because of duplicate custom section names.
+            assert_eq!(
+                validate_wasm_binary(&wasm, &EmbeddersConfig::default(),),
+                Err(WasmValidationError::InvalidCustomSection(
+                    "Invalid custom section: name custom1 already exists".to_string()
+                ))
+            );
+        }
+    }
 }
 
 #[test]
@@ -1393,16 +1391,8 @@ fn wasm_with_multiple_code_sections_is_invalid() {
 #[test]
 fn test_wasm64_initial_wasm_memory_size_validation() {
     use crate::WasmValidationError::InitialWasm64MemoryTooLarge;
-    use ic_config::embedders::FeatureFlags;
-    use ic_config::flag_status::FlagStatus;
 
-    let embedders_config = EmbeddersConfig {
-        feature_flags: FeatureFlags {
-            wasm64: FlagStatus::Enabled,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
+    let embedders_config = EmbeddersConfig::default();
     let allowed_wasm_memory_size_in_pages =
         embedders_config.max_wasm64_memory_size.get() / WASM_PAGE_SIZE as u64;
     let declared_wasm_memory_size_in_pages = allowed_wasm_memory_size_in_pages + 10;
@@ -1425,16 +1415,7 @@ fn test_wasm64_initial_wasm_memory_size_validation() {
 
 #[test]
 fn test_validate_table64() {
-    use ic_config::embedders::FeatureFlags;
-    use ic_config::flag_status::FlagStatus;
-
-    let embedders_config = EmbeddersConfig {
-        feature_flags: FeatureFlags {
-            wasm64: FlagStatus::Enabled,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
+    let embedders_config = EmbeddersConfig::default();
 
     let wasm = wat2wasm(
         r#"(module

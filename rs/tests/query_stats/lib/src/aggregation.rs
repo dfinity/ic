@@ -66,7 +66,7 @@ fn query_stats_fault_tolerance(env: TestEnv, query_range: Range<usize>, expect_s
         // NOTE: The `round_robin_query_call` below sometimes fails, if we
         // execute it immidiately and one of the nodes is slightly behind,
         // such that the Universal canister does not exist on that node yet
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        tokio::time::sleep(Duration::from_secs(5)).await;
 
         // Do a query call against all nodes
         round_robin_query_call(&uc_id, &agents[query_range.clone()]).await;

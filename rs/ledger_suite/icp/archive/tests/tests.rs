@@ -207,7 +207,7 @@ fn large_http_request() {
         .unwrap_err();
     assert!(err
         .reject_message
-        .contains("failed to decode call arguments"));
+        .contains("Decoding cost exceeds the limit"));
 }
 
 #[test]

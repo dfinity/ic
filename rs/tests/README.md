@@ -35,7 +35,7 @@ In order to run system tests, enter the build docker container:
 ```
 To launch a test target (`my_test_target` in this case) within the docker run:
 ```
-devenv-container$ bazel test --config=systest //rs/tests:my_test_target
+devenv-container$ bazel test --test_output=streamed //rs/tests:my_test_target
 ```
 
 In the docker container, you can also use `ict` to start tests.

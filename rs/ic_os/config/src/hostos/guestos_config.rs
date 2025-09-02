@@ -1,22 +1,29 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, ensure, Result};
 use config_types::{
     DeterministicIpv6Config, FixedIpv6Config, GuestOSConfig, GuestOSUpgradeConfig, GuestVMType,
     HostOSConfig, Ipv6Config, TrustedExecutionEnvironmentConfig,
 };
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
-use ic_sev::host::HostSevCertificateProvider;
 use std::net::Ipv6Addr;
 use utils::to_cidr;
 
 /// Generate the GuestOS configuration based on the provided HostOS configuration.
 /// If hostos_config.icos_settings.enable_trusted_execution_environment is true,
-/// sev_certificate_provider must be provided for fetching the AMD SEV-SNP certificate chain.
+/// sev_certificate_chain_pem must be provided.
 pub fn generate_guestos_config(
     hostos_config: &HostOSConfig,
     guest_vm_type: GuestVMType,
-    sev_certificate_provider: &mut HostSevCertificateProvider,
+    sev_certificate_chain_pem: Option<String>,
 ) -> Result<GuestOSConfig> {
+    ensure!(
+        !hostos_config
+            .icos_settings
+            .enable_trusted_execution_environment
+            || sev_certificate_chain_pem.is_some(),
+        "If enable_trusted_execution_environment is enabled, SEV cert chain must be provided."
+    );
+
     // TODO: We won't have to modify networking between the hostos and
     // guestos config after completing the networking revamp (NODE-1327)
     let Ipv6Config::Deterministic(deterministic_ipv6_config) =
@@ -33,7 +40,7 @@ pub fn generate_guestos_config(
         GuestVMType::Default => (NodeType::GuestOS, NodeType::UpgradeGuestOS),
         GuestVMType::Upgrade => (NodeType::UpgradeGuestOS, NodeType::GuestOS),
         GuestVMType::Unknown => {
-            anyhow::bail!("GuestVMType::Unknown is not a valid type for generating GuestOS config");
+            bail!("GuestVMType::Unknown is not a valid type for generating GuestOS config");
         }
     };
 
@@ -58,10 +65,8 @@ pub fn generate_guestos_config(
         peer_guest_vm_address: Some(peer_ipv6_address),
     };
 
-    let trusted_execution_environment_config = sev_certificate_provider
-        .load_certificate_chain_pem()
-        .context("Failed to load SEV certificate chain")?
-        .map(|certificate_chain| TrustedExecutionEnvironmentConfig {
+    let trusted_execution_environment_config =
+        sev_certificate_chain_pem.map(|certificate_chain| TrustedExecutionEnvironmentConfig {
             sev_cert_chain_pem: certificate_chain,
         });
 
@@ -100,7 +105,6 @@ mod tests {
         DeploymentEnvironment, DeterministicIpv6Config, HostOSConfig, ICOSSettings, Ipv6Config,
         NetworkSettings,
     };
-    use ic_sev::host::testing::mock_host_sev_certificate_provider;
     use std::net::Ipv6Addr;
 
     fn hostos_config_for_test() -> HostOSConfig {
@@ -135,12 +139,8 @@ mod tests {
     fn test_successful_conversion() {
         let hostos_config = hostos_config_for_test();
 
-        let guestos_config = generate_guestos_config(
-            &hostos_config,
-            GuestVMType::Default,
-            &mut HostSevCertificateProvider::new_disabled(),
-        )
-        .unwrap();
+        let guestos_config =
+            generate_guestos_config(&hostos_config, GuestVMType::Default, None).unwrap();
 
         assert_eq!(guestos_config.config_version, hostos_config.config_version);
         assert_eq!(
@@ -181,12 +181,8 @@ mod tests {
                 gateway: "2001:db8::1".parse().unwrap(),
             });
 
-        let guestos_config = generate_guestos_config(
-            &hostos_config,
-            GuestVMType::Upgrade,
-            &mut HostSevCertificateProvider::new_disabled(),
-        )
-        .unwrap();
+        let guestos_config =
+            generate_guestos_config(&hostos_config, GuestVMType::Upgrade, None).unwrap();
 
         if let Ipv6Config::Fixed(fixed) = &guestos_config.network_settings.ipv6_config {
             assert_eq!(fixed.address, "2001:db8::6802:94ff:feef:2978/64");
@@ -211,11 +207,7 @@ mod tests {
             gateway: "2001:db8::1".parse().unwrap(),
         });
 
-        let result = generate_guestos_config(
-            &hostos_config,
-            GuestVMType::Default,
-            &mut HostSevCertificateProvider::new_disabled(),
-        );
+        let result = generate_guestos_config(&hostos_config, GuestVMType::Default, None);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Deterministic"));
     }
@@ -227,15 +219,15 @@ mod tests {
         let result = generate_guestos_config(
             &hostos_config,
             GuestVMType::Default,
-            &mut mock_host_sev_certificate_provider()
-                .expect("Failed to create SEV cert provider")
-                .0,
+            Some("abc".to_string()),
         )
         .unwrap();
-        assert!(!result
-            .trusted_execution_environment_config
-            .expect("trusted_execution_environment_config should be populated")
-            .sev_cert_chain_pem
-            .is_empty());
+        assert_eq!(
+            result
+                .trusted_execution_environment_config
+                .expect("trusted_execution_environment_config should be populated")
+                .sev_cert_chain_pem,
+            "abc"
+        );
     }
 }

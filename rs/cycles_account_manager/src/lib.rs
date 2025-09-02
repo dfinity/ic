@@ -104,12 +104,6 @@ impl ResourceSaturation {
         }
     }
 
-    /// Creates a new `ResourceSaturation` like the `new()` constructor, but also
-    /// divides `usage`, `threshold`, and `capacity` by the given `scaling` factor.
-    pub fn new_scaled(usage: u64, threshold: u64, capacity: u64, scaling: u64) -> Self {
-        Self::new(usage / scaling, threshold / scaling, capacity / scaling)
-    }
-
     /// Returns the part of the usage that is above the threshold.
     pub fn usage_above_threshold(&self) -> u64 {
         self.usage.saturating_sub(self.threshold)
@@ -675,7 +669,7 @@ impl CyclesAccountManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> IngressInductionCost {
-        let paying_canister = match ingress.is_addressed_to_subnet(self.own_subnet_id) {
+        let paying_canister = match ingress.is_addressed_to_subnet() {
             // If a subnet message, get effective canister id who will pay for the message.
             true => {
                 if let Ok(Method::UpdateSettings) = Method::from_str(ingress.method_name()) {
@@ -735,36 +729,34 @@ impl CyclesAccountManager {
     }
 
     /// Amount to charge for an ECDSA signature.
-    pub fn ecdsa_signature_fee(&self, subnet_size: usize) -> Cycles {
-        self.scale_cost(
-            self.config.ecdsa_signature_fee,
-            subnet_size,
-            // If ecdsa keys are ever hosted on a rental subnet, this needs to be passed
-            // as an argument from the target subnet, just like subnet_size.
-            CanisterCyclesCostSchedule::Normal,
-        )
+    pub fn ecdsa_signature_fee(
+        &self,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
+        self.scale_cost(self.config.ecdsa_signature_fee, subnet_size, cost_schedule)
     }
 
     /// Amount to charge for a Schnorr signature.
-    pub fn schnorr_signature_fee(&self, subnet_size: usize) -> Cycles {
+    pub fn schnorr_signature_fee(
+        &self,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
         self.scale_cost(
             self.config.schnorr_signature_fee,
             subnet_size,
-            // If schnorr keys are ever hosted on a rental subnet, this needs to be passed
-            // as an argument from the target subnet, just like subnet_size.
-            CanisterCyclesCostSchedule::Normal,
+            cost_schedule,
         )
     }
 
     /// Amount to charge for vet KD.
-    pub fn vetkd_fee(&self, subnet_size: usize) -> Cycles {
-        self.scale_cost(
-            self.config.vetkd_fee,
-            subnet_size,
-            // If vetkd keys are ever hosted on a rental subnet, this needs to be passed
-            // as an argument from the target subnet, just like subnet_size.
-            CanisterCyclesCostSchedule::Normal,
-        )
+    pub fn vetkd_fee(
+        &self,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
+        self.scale_cost(self.config.vetkd_fee, subnet_size, cost_schedule)
     }
 
     ////////////////////////////////////////////////////////////////////////////

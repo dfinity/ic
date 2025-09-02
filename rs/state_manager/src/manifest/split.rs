@@ -80,7 +80,9 @@ pub fn split_manifest(
 
         if let Some(canister_id) = canister_id_from_path(path) {
             // Part of a canister state.
-            let subnet = routing_table.route(canister_id.get());
+            let subnet = routing_table
+                .lookup_entry(canister_id)
+                .map(|(_range, subnet_id)| subnet_id);
             if subnet == Some(subnet_a) {
                 // Retained on subnet A'.
                 manifest_a.append(file, chunks);
