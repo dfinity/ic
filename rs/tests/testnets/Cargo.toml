@@ -15,6 +15,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
 ic-xrc-types = "1.0.0"
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
+nested = { path = "../nested" }
 nns_dapp = { path = "../nns/nns_dapp" }
 os_qualification_utils = { path = "../dre/utils" }
 reqwest = { workspace = true }
@@ -83,3 +84,7 @@ path = "single_app_large_node_with_nns.rs"
 [[bin]]
 name = "small_with_query_stats"
 path = "small_with_query_stats.rs"
+
+[[bin]]
+name = "nested"
+path = "nested.rs"

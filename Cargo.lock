@@ -23237,6 +23237,7 @@ dependencies = [
  "ic-system-test-driver",
  "ic-xrc-types",
  "ic_consensus_system_test_utils",
+ "nested",
  "nns_dapp",
  "os_qualification_utils",
  "reqwest 0.12.15",
