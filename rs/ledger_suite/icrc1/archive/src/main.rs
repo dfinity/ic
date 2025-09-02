@@ -189,8 +189,8 @@ fn init(
     })
 }
 
-/// Verifies that the `token_type` stored in the ledger state is the same as to
-/// `token_type` of the current wasm. If the ledger state's `token_type` is undefined
+/// Verifies that the `token_type` stored in the archive state is the same as to
+/// `token_type` of the current wasm. If the archive state's `token_type` is undefined
 /// it is set to the current wasm's `token_type`.
 fn verify_token_type() {
     CONFIG.with(|cell| {
