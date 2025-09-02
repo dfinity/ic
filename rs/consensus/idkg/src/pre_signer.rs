@@ -575,7 +575,7 @@ impl IDkgPreSignerImpl {
             .map(|transcript_params| transcript_params.transcript_id)
             .collect::<BTreeSet<_>>();
 
-        let mut ret = Vec::new();
+        let ret = std::iter::empty();
         let current_height = block_reader.tip_height();
         let mut target_subnet_xnet_transcripts = BTreeSet::new();
         for transcript_params_ref in block_reader.target_subnet_xnet_transcripts() {
@@ -595,7 +595,7 @@ impl IDkgPreSignerImpl {
                 )
             })
             .map(|(id, _)| IDkgChangeAction::RemoveUnvalidated(id));
-        ret.extend(action);
+        let ret = ret.chain(action);
 
         // Validated dealings.
         let action = idkg_pool
@@ -610,7 +610,7 @@ impl IDkgPreSignerImpl {
                 )
             })
             .map(|(id, _)| IDkgChangeAction::RemoveValidated(id));
-        ret.extend(action);
+        let ret = ret.chain(action);
 
         // Unvalidated dealing support.
         let action = idkg_pool
@@ -625,7 +625,7 @@ impl IDkgPreSignerImpl {
                 )
             })
             .map(|(id, _)| IDkgChangeAction::RemoveUnvalidated(id));
-        ret.extend(action);
+        let ret = ret.chain(action);
 
         // Validated dealing support.
         let mut valid_dealing_supports = self.validated_dealing_supports.borrow_mut();
@@ -646,9 +646,9 @@ impl IDkgPreSignerImpl {
                 valid_dealing_supports.remove(&key);
                 IDkgChangeAction::RemoveValidated(id)
             });
-        ret.extend(action);
+        let ret = ret.chain(action);
 
-        ret
+        ret.collect()
     }
 
     /// Helper to create dealing
