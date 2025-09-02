@@ -51,10 +51,7 @@ DEPENDENCIES = [
     "@crate_index//:wasmtime-environ",
 ]
 
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-heap-bytes-derive",
-]
+MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     # Keep sorted.

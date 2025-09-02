@@ -21,7 +21,6 @@ rust_library(
     crate_name = "ic_base_types",
     proc_macro_deps = [
         # Keep sorted.
-        "//packages/ic-heap-bytes-derive",
         "@crate_index//:strum_macros",
     ],
     rustc_flags = select({

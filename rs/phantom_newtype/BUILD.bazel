@@ -5,10 +5,6 @@ package(default_visibility = ["//visibility:public"])
 rust_library(
     name = "phantom_newtype",
     srcs = glob(["src/**"]),
-    proc_macro_deps = [
-        # Keep sorted.
-        "//packages/ic-heap-bytes-derive",
-    ],
     deps = [
         # Keep sorted.
         "//packages/ic-heap-bytes",
