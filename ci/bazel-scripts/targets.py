@@ -18,7 +18,7 @@
 #
 # The script will print the bazel query to stderr which is useful for debugging:
 #   ci/bazel-scripts/targets.py --skip_long_tests --base=master test
-#   bazel query --keep_going '(((kind(".*_test", //...)) except attr(tags, long_test, //...)) + set(//pre-commit:shfmt-check //pre-commit:ruff-lint)) except attr(tags, manual, //...)'
+#   bazel query --keep_going '((((kind(".*_test", rdeps(//..., set("ci/bazel-scripts/targets.py")))) except attr(tags, long_test, //...)) + attr(tags, long_test, rdeps(//..., set("ci/bazel-scripts/targets.py"), 2))) + set(//pre-commit:ruff-lint)) except attr(tags, "manual|system_test_large|system_test_benchmark|fuzz_test|fi_tests_nightly|nns_tests_nightly|pocketic_tests_nightly", //...)'
 
 import argparse
 import fnmatch
