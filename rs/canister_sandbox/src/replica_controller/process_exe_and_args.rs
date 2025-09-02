@@ -21,12 +21,7 @@ const SANDBOX_EXECUTABLE_NAME: &str = "canister_sandbox";
 const LAUNCHER_EXECUTABLE_NAME: &str = "sandbox_launcher";
 
 // These binaries support running in the canister sandbox mode.
-const RUNNABLE_AS_SANDBOX: &[&str] = &[
-    "ic-replay",
-    "ic-recovery",
-    "pocket-ic",
-    "pocket-ic-server",
-];
+const RUNNABLE_AS_SANDBOX: &[&str] = &["ic-replay", "ic-recovery", "pocket-ic", "pocket-ic-server"];
 
 enum SandboxCrate {
     SandboxLauncher,
@@ -110,7 +105,7 @@ fn create_child_process_argv(krate: SandboxCrate) -> Option<Vec<String>> {
         return Some(vec![exec_path, krate.run_as_flag().to_string()]);
     }
 
-    // 2. An alternative solution for binaries that can service as a sandbox. 
+    // 2. An alternative solution for binaries that can serve as a sandbox.
     // The binary exports a section with the specified magic bytes.
     if check_binary_signature(current_binary_path.clone()) {
         let exec_path = current_binary_path.to_str()?.to_string();

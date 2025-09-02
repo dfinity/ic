@@ -48,8 +48,10 @@ pub struct SandboxFeatures {
 // See https://github.com/rust-fuzz/libfuzzer/blob/c8275d1517933765b56a6de61a371bb1cc4268cb/src/lib.rs#L62
 
 pub fn fuzzer_main(features: SandboxFeatures) {
-    // Compiler hack to prevent the section to be removed.
-    unsafe { core::ptr::read_volatile(&SANDBOX_SIGNATURE); }
+    // Compiler hack to prevent the section from being removed.
+    unsafe {
+        core::ptr::read_volatile(&SANDBOX_SIGNATURE);
+    }
 
     if std::env::args().any(|arg| arg == RUN_AS_CANISTER_SANDBOX_FLAG) {
         #[cfg(not(fuzzing))]
