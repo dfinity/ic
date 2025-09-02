@@ -30,7 +30,6 @@ DEPENDENCIES = [
     "@crate_index//:libflate",
     "@crate_index//:nix",
     "@crate_index//:num-traits",
-    "@crate_index//:object",
     "@crate_index//:once_cell",
     "@crate_index//:prometheus",
     "@crate_index//:rayon",
