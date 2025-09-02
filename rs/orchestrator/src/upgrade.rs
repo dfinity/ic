@@ -38,6 +38,7 @@ use std::{
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 
 #[must_use = "This may be a `Stop` variant, which should be handled"]
+#[derive(Clone, Debug)]
 pub(crate) enum OrchestratorControlFlow {
     /// The node is assigned to the subnet with the given subnet id.
     Assigned(SubnetId),
@@ -149,6 +150,10 @@ impl Upgrade {
             .reboot_duration
             .set(elapsed_time.as_secs() as i64);
         Ok(())
+    }
+
+    pub(crate) fn node_id(&self) -> NodeId {
+        self.node_id
     }
 
     /// Checks for a new release package, and if found, upgrades to this release
