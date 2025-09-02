@@ -2068,9 +2068,6 @@ impl PocketIc {
         initial_time: Option<Time>,
         auto_progress_enabled: bool,
     ) -> Result<Self, String> {
-        if let Some(ref icp_features) = icp_features {
-            subnet_configs = subnet_configs.try_with_icp_features(icp_features)?;
-        }
         if let Some(time) = initial_time {
             let systime: SystemTime = time.into();
             let minimum_systime = default_timestamp(&icp_features);
@@ -2143,6 +2140,9 @@ impl PocketIc {
                 })
                 .collect()
         } else {
+            if let Some(ref icp_features) = icp_features {
+                subnet_configs = subnet_configs.try_with_icp_features(icp_features)?;
+            }
             let fixed_range_subnets = subnet_configs.get_named();
             let flexible_subnets = {
                 let sys = subnet_configs.system.iter().map(|spec| {
