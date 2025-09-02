@@ -268,16 +268,18 @@ impl DiscourseClient {
         path: &str,
         request: Request,
     ) -> Result<Response, String> {
-        self.client
+        let response = self
+            .client
             .post(format!("{}/{}", self.forum_url, path))
             .json(&request)
             .header("Api-Key", &self.api_key)
             .header("Api-Username", &self.api_user)
             .send()
             .await
-            .map_err(|e| e.to_string())?
-            .json()
-            .await
-            .map_err(|e| e.to_string())
+            .map_err(|e| e.to_string())?;
+        if !response.status().is_success() {
+            return Err(format!("HTTP error: {:?}", response));
+        }
+        response.json().await.map_err(|e| e.to_string())
     }
 }
