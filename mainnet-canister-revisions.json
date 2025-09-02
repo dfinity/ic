@@ -104,8 +104,8 @@
     "tag": "release-candidate"
   },
   "node-rewards": {
-    "rev": "98b37bf4ffd2f46bc968018bb850a9753540877b",
-    "sha256": "5cb2b88b043007b297a084cfe51820e83df836227b76ae140b897cb25f40e945"
+    "rev": "e3857ed56a35a75170e6d93ed98b84c169860f72",
+    "sha256": "3d33e8501e05b3387346152808f0adcbf401a789cb1c11b475c4ae7092fe6384"
   },
   "registry": {
     "rev": "abbed6b27a69f85f3ff539ed9a214faa666e1299",
