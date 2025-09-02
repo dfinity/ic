@@ -324,7 +324,7 @@ impl IDkgPreSignerImpl {
                     None
                 }
             })
-            .flat_map(|(id, transcript_params, signed_dealing)| {
+            .filter_map(|(id, transcript_params, signed_dealing)| {
                 let dealing = signed_dealing.idkg_dealing();
                 if source_subnet_xnet_transcripts.contains(&dealing.transcript_id) {
                     self.metrics
@@ -732,7 +732,7 @@ impl IDkgPreSignerImpl {
         id: &IDkgMessageId,
         transcript_params: &IDkgTranscriptParams,
         signed_dealing: &SignedIDkgDealing,
-    ) -> IDkgChangeSet {
+    ) -> Option<IDkgChangeAction> {
         let dealing = signed_dealing.idkg_dealing();
         if let Err(error) =
             IDkgProtocol::verify_dealing_private(&*self.crypto, transcript_params, signed_dealing)
@@ -746,13 +746,13 @@ impl IDkgPreSignerImpl {
                     dealing,
                     error
                 );
-                return vec![IDkgChangeAction::HandleInvalid(
+                return Some(IDkgChangeAction::HandleInvalid(
                     id.clone(),
                     format!(
                         "Dealing private verification(permanent error): {}, error = {:?}",
                         dealing, error
                     ),
-                )];
+                ));
             } else {
                 self.metrics
                     .pre_sign_errors_inc("verify_dealing_private_transient");
@@ -762,7 +762,7 @@ impl IDkgPreSignerImpl {
                     dealing,
                     error
                 );
-                return Default::default();
+                return None;
             }
         }
 
@@ -781,7 +781,7 @@ impl IDkgPreSignerImpl {
                     );
                     self.metrics
                         .pre_sign_errors_inc("dealing_support_multi_sign");
-                    Default::default()
+                    None
                 },
                 |multi_sig_share| {
                     let dealing_support = IDkgDealingSupport {
@@ -791,9 +791,9 @@ impl IDkgPreSignerImpl {
                         sig_share: multi_sig_share,
                     };
                     self.metrics.pre_sign_metrics_inc("dealing_support_sent");
-                    vec![IDkgChangeAction::AddToValidated(
+                    Some(IDkgChangeAction::AddToValidated(
                         IDkgMessage::DealingSupport(dealing_support),
-                    )]
+                    ))
                 },
             )
     }
