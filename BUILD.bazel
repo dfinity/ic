@@ -100,10 +100,17 @@ alias(
     }),
 )
 
+genrule(
+    name = "dogecoind_stub",
+    outs = ["dogecoind_stub.txt"],
+    cmd = "echo 'Not supported on this platform.' > $@",
+)
+
 alias(
     name = "dogecoind",
     actual = select({
         "@bazel_tools//src/conditions:linux_x86_64": "@dogecoin_core_linux_x86//:dogecoind",
+        "//conditions:default": "//:dogecoind_stub",
     }),
 )
 

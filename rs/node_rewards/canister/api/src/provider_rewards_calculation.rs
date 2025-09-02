@@ -17,4 +17,4 @@ pub struct HistoricalRewardPeriod {
     pub to_nanos: u64,
     pub providers_rewarded: Vec<Principal>,
 }
-pub type GetHistoricalRewardPeriods = Vec<HistoricalRewardPeriod>;
+pub type GetHistoricalRewardPeriodsResponse = Result<Vec<HistoricalRewardPeriod>, String>;

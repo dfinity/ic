@@ -47,8 +47,6 @@ use icrc_ledger_types::{
 use slog::{debug, info, Logger};
 use std::time::{Duration, Instant};
 
-// pub type RpcClient = ic_btc_adapter_test_utils::rpc_client::RpcClient<BtcNetwork>;
-
 pub const UNIVERSAL_VM_NAME: &str = "btc-node";
 
 /// The timeout for operations that we expect to complete fast.

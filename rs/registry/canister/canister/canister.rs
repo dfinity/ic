@@ -49,6 +49,7 @@ use registry_canister::{
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
         do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
+        do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload,
         do_update_api_boundary_nodes_version::{
             DeployGuestosToSomeApiBoundaryNodes, UpdateApiBoundaryNodesVersionPayload,
         },
@@ -756,6 +757,19 @@ fn update_node_operator_config_directly() {
 #[candid_method(update, rename = "update_node_operator_config_directly")]
 fn update_node_operator_config_directly_(payload: UpdateNodeOperatorConfigDirectlyPayload) {
     registry_mut().do_update_node_operator_config_directly(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update swap_node_in_subnet_directly"]
+fn swap_node_in_subnet_directly() {
+    over(candid_one, |payload: SwapNodeInSubnetDirectlyPayload| {
+        swap_node_in_subnet_directly_(payload)
+    });
+}
+
+#[candid_method(update, rename = "swap_node_in_subnet_directly")]
+fn swap_node_in_subnet_directly_(payload: SwapNodeInSubnetDirectlyPayload) {
+    registry_mut().do_swap_node_in_subnet_directly(payload);
     recertify_registry();
 }
 

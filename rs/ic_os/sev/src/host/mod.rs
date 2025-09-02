@@ -2,8 +2,7 @@ use anyhow::{anyhow, Context, Result};
 use der::pem::LineEnding;
 use der::{Decode, Document};
 use firmware::SevHostFirmware;
-use reqwest::blocking::Response;
-use reqwest::Proxy;
+use reqwest::{Proxy, Response};
 use sev::firmware::host::{Identifier, SnpPlatformStatus};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -66,11 +65,12 @@ impl HostSevCertificateProvider {
 
     /// Returns the Host's SEV certificate chain as a PEM-formatted string if SEV firmware is
     /// enabled or None if SEV is disabled.
-    pub fn load_certificate_chain_pem(&mut self) -> Result<Option<String>> {
-        self.implementation
-            .as_mut()
-            .map(|impl_| impl_.load_certificate_chain_pem())
-            .transpose()
+    pub async fn load_certificate_chain_pem(&mut self) -> Result<Option<String>> {
+        if let Some(implementation) = &mut self.implementation {
+            Ok(Some(implementation.load_certificate_chain_pem().await?))
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -80,10 +80,10 @@ struct HostSevCertificateProviderImpl {
 }
 
 impl HostSevCertificateProviderImpl {
-    pub fn load_certificate_chain_pem(&mut self) -> Result<String> {
+    pub async fn load_certificate_chain_pem(&mut self) -> Result<String> {
         let chain_pem = format!(
             "{}{}{}",
-            self.load_vcek_pem()?,
+            self.load_vcek_pem().await?,
             std::str::from_utf8(sev::certs::snp::builtin::milan::ASK)
                 .expect("ASK PEM is invalid UTF-8"),
             std::str::from_utf8(sev::certs::snp::builtin::milan::ARK)
@@ -93,8 +93,8 @@ impl HostSevCertificateProviderImpl {
         Ok(chain_pem)
     }
 
-    fn load_vcek_pem(&mut self) -> Result<String> {
-        let vcek_der = self.load_vcek_der()?;
+    async fn load_vcek_pem(&mut self) -> Result<String> {
+        let vcek_der = self.load_vcek_der().await?;
 
         let vcek_pem = der::Document::from_der(&vcek_der)
             .context("Failed to parse VCEK")?
@@ -104,7 +104,7 @@ impl HostSevCertificateProviderImpl {
         Ok(vcek_pem)
     }
 
-    fn load_vcek_der(&mut self) -> Result<Vec<u8>> {
+    async fn load_vcek_der(&mut self) -> Result<Vec<u8>> {
         let status = self
             .sev_host_firmware
             .snp_platform_status()
@@ -129,7 +129,9 @@ impl HostSevCertificateProviderImpl {
             }
         }
 
-        let vcek_der = self.load_vcek_from_amd_key_server(&chip_id, &status)?;
+        let vcek_der = self
+            .load_vcek_from_amd_key_server(&chip_id, &status)
+            .await?;
         // Verify VCEK DER before saving to cache.
         Document::from_der(&vcek_der).context("Failed to parse downloaded VCEK")?;
 
@@ -172,16 +174,16 @@ impl HostSevCertificateProviderImpl {
         )
     }
 
-    fn load_vcek_from_amd_key_server(
+    async fn load_vcek_from_amd_key_server(
         &self,
         chip_id: &Identifier,
         status: &SnpPlatformStatus,
     ) -> Result<Vec<u8>> {
         let url = Self::get_kds_url(chip_id, status);
 
-        let response = match Self::load_url(&url, false) {
+        let response = match Self::load_url(&url, false).await {
             Ok(response) => Ok(response),
-            Err(err_no_proxy) => Self::load_url(&url, true).map_err(|err_proxy| {
+            Err(err_no_proxy) => Self::load_url(&url, true).await.map_err(|err_proxy| {
                 anyhow!(
                     "Could not connect \
                      Error without proxy: {err_no_proxy:?} \
@@ -193,13 +195,14 @@ impl HostSevCertificateProviderImpl {
         let vcek = response
             .with_context(|| format!("Could not fetch VCEK from {url}"))?
             .bytes()
+            .await
             .context("Could not extract VCEK from response")?;
 
         Ok(vcek.to_vec())
     }
 
-    fn load_url(url: &str, with_proxy: bool) -> reqwest::Result<Response> {
-        let mut builder = reqwest::blocking::Client::builder();
+    async fn load_url(url: &str, with_proxy: bool) -> reqwest::Result<Response> {
+        let mut builder = reqwest::Client::builder();
         if with_proxy {
             builder = builder.proxy(Proxy::all(SOCKS_PROXY)?);
         }
@@ -208,6 +211,7 @@ impl HostSevCertificateProviderImpl {
             .expect("reqwest Builder failed")
             .get(url)
             .send()
+            .await
     }
 
     fn get_kds_url(chip_id: &Identifier, status: &SnpPlatformStatus) -> String {
@@ -235,9 +239,10 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
     use testing::{mock_chip_id, mock_sev_host_firmware, mock_snp_platform_status};
+    use tokio::test;
 
     #[test]
-    fn test_helper_functions() {
+    async fn test_helper_functions() {
         let chip_id = mock_chip_id();
         let status = mock_snp_platform_status();
 
@@ -253,7 +258,7 @@ mod tests {
     }
 
     #[test]
-    fn test_certificate_chain_with_cache() {
+    async fn test_certificate_chain_with_cache() {
         // Filenames on ext4 must be <= 255 bytes
         assert!(MOCK_CACHE_FILENAME.len() <= 255);
 
@@ -289,6 +294,7 @@ mod tests {
 
         let chain_pem = provider
             .load_certificate_chain_pem()
+            .await
             .expect("Failed to load certificate chain")
             .expect("No certificate chain");
 
@@ -299,7 +305,7 @@ mod tests {
         );
     }
     #[test]
-    fn test_firmware_error() {
+    async fn test_firmware_error() {
         let temp_dir = TempDir::new().unwrap();
         let cache_dir = temp_dir.path().to_path_buf();
 
@@ -311,6 +317,7 @@ mod tests {
         assert!(
             HostSevCertificateProvider::new_for_test(cache_dir, Box::new(erroring_firmware))
                 .load_certificate_chain_pem()
+                .await
                 .expect_err("Expected error")
                 .to_string()
                 .contains("Failed to get SNP platform status")
@@ -318,7 +325,7 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_cached_certificate() {
+    async fn test_invalid_cached_certificate() {
         let temp_dir = TempDir::new().unwrap();
         let cache_dir = temp_dir.path().to_path_buf();
 
@@ -335,13 +342,14 @@ mod tests {
             Box::new(mock_sev_host_firmware())
         )
         .load_certificate_chain_pem()
+        .await
         .expect_err("Expected error")
         .to_string()
         .contains("Failed to parse VCEK"));
     }
 
     #[test]
-    fn test_load_from_amd_key_server() {
+    async fn test_load_from_amd_key_server() {
         let temp_dir = TempDir::new().unwrap();
         let cache_dir = temp_dir.path().to_path_buf();
 
@@ -353,6 +361,7 @@ mod tests {
         // First call should fetch from AMD server and cache
         let chain_pem = provider
             .load_certificate_chain_pem()
+            .await
             .expect("Could not load certificate chain")
             .expect("No certificate chain");
 

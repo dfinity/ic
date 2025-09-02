@@ -391,10 +391,16 @@ impl GuestVmService {
             )
         }
 
+        let sev_certificate_chain_pem = self
+            .sev_certificate_provider
+            .load_certificate_chain_pem()
+            .await
+            .context("Failed to load SEV certificate chain")?;
+
         assemble_config_media(
             &self.hostos_config,
             self.guest_vm_type,
-            &mut self.sev_certificate_provider,
+            sev_certificate_chain_pem,
             config_media.path(),
         )
         .context("Failed to assemble config media")?;
