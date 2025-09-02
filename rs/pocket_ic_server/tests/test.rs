@@ -126,6 +126,7 @@ fn test_creation_of_instance_extended() {
             ..Default::default()
         }
         .into(),
+        http_gateway_config: None,
         state_dir: None,
         nonmainnet_features: None,
         log_level: None,

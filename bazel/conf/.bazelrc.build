@@ -61,19 +61,16 @@ common:stamped --workspace_status_command='$(pwd)/bazel/workspace_status.sh --st
 # fail on 'bazel build')
 common:flaky_retry --flaky_test_attempts=default --flaky_test_attempts=//rs/tests/.*@3
 
-# Exclude system tests by default
+# Exclude fuzz tests by default
 # https://github.com/bazelbuild/bazel/issues/8439
-build --build_tag_filters="-system_test,-fuzz_test"
-test --test_tag_filters="-system_test,-fuzz_test"
-test:alltests --test_tag_filters=""
-test:paritytests --test_tag_filters="-system_test"
+build --build_tag_filters="-fuzz_test"
+test --test_tag_filters="-fuzz_test"
 
 test --test_output=errors
 
 test:precommit --build_tests_only --test_tag_filters="smoke"
 
-build:systest --build_tag_filters=
-test:systest --test_output=streamed --test_tag_filters=
+test:systest --test_output=streamed
 
 build:testnet --build_tag_filters=
 test:testnet --test_output=streamed --test_tag_filters=
