@@ -478,7 +478,7 @@ pub fn nns_recovery_test(env: TestEnv) {
     set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
 
     // Choose f+1 faulty nodes to break
-    let mut nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
+    let nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
     let f = (SUBNET_SIZE - 1) / 3;
     let faulty_nodes = &nns_nodes[..(f + 1)];
     let healthy_nodes = &nns_nodes[(f + 1)..];
