@@ -1959,9 +1959,10 @@ impl PocketIcSubnets {
                         "Failed to execute method {} on canister {}: {}",
                         method, canister_id, error
                     ),
-                    IngressState::Done => {
-                        panic!("Unexpected ingress status: Done (response has been pruned)")
-                    }
+                    IngressState::Done => panic!(
+                        "Failed to execute method {} on canister {}: response has been pruned",
+                        method, canister_id,
+                    ),
                     IngressState::Received | IngressState::Processing => (),
                 },
                 IngressStatus::Unknown => (),
