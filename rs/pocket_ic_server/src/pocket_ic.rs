@@ -1038,7 +1038,7 @@ impl PocketIcSubnets {
             let mutation_request_bytes = mutation_request.encode_to_vec();
             self.execute_ingress_on(
                 nns_subnet.clone(),
-                ROOT_CANISTER_ID.get(),
+                GOVERNANCE_CANISTER_ID.get(),
                 REGISTRY_CANISTER_ID,
                 "atomic_mutate".to_string(),
                 mutation_request_bytes,
