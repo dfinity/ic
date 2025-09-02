@@ -81,6 +81,7 @@ use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
 use ic_state_machine_tests::{
     add_global_registry_records, add_initial_registry_records, FakeVerifier, StateMachine,
     StateMachineBuilder, StateMachineConfig, StateMachineStateDir, SubmitIngressError, Subnets,
+    WasmResult,
 };
 use ic_state_manager::StateManagerImpl;
 use ic_types::batch::BlockmakerMetrics;
@@ -1929,18 +1930,22 @@ impl PocketIcSubnets {
                 subnet.state_machine.execute_round();
             }
             match subnet.state_machine.ingress_status(&msg_id) {
-                IngressStatus::Known {
-                    state: IngressState::Completed(_),
-                    ..
-                } => return,
-                IngressStatus::Known {
-                    state: IngressState::Failed(error),
-                    ..
-                } => panic!(
-                    "Failed to execute method {} on canister {}: {}",
-                    method, canister_id, error
-                ),
-                _ => (),
+                IngressStatus::Known { state, .. } => match state {
+                    IngressState::Completed(WasmResult::Reply(_)) => return,
+                    IngressState::Completed(WasmResult::Reject(error)) => panic!(
+                        "Failed to execute method {} on canister {}: {}",
+                        method, canister_id, error
+                    ),
+                    IngressState::Failed(error) => panic!(
+                        "Failed to execute method {} on canister {}: {}",
+                        method, canister_id, error
+                    ),
+                    IngressState::Done => {
+                        panic!("Unexpected ingress status: Done (response has been pruned)")
+                    }
+                    IngressState::Received | IngressState::Processing => (),
+                },
+                IngressStatus::Unknown => (),
             }
         }
         panic!(
