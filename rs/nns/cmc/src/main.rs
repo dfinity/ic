@@ -1905,16 +1905,6 @@ async fn issue_automatic_refund_if_memo_not_offerred(
     })
 }
 
-/// Returns Ok(controller/creator/sender) if sender == creator (aka controller).
-///
-/// That is, we disallow sending ICP on behalf of someone else; whereas, we used to allow it.
-///
-/// The reason for this restriction is that the creator might be authorized to create canisters on
-/// restricted subnets.
-///
-/// The only fields used are
-///     * from: This is taken as the sender.
-
 // If conversion fails, log and return an error
 fn tokens_to_cycles(amount: Tokens) -> Result<Cycles, NotifyError> {
     with_state(|state| {
@@ -2704,106 +2694,6 @@ mod tests {
             "{:#?}",
             caller_is_nns_dapp_result,
         );
-    }
-
-    #[test]
-    fn test_authorize_sender_to_create_canister_via_ledger_notify() {
-        // Happy case.
-        let creator = PrincipalId::new_user_test_id(777);
-        let ok_transaction_notification = TransactionNotification {
-            from: creator,
-            to_subaccount: Some(Subaccount::from(&creator)),
-
-            // These are not used.
-            memo: MEMO_CREATE_CANISTER, // Just for realism.
-            from_subaccount: None,
-            to: CanisterId::from_u64(111),
-            block_height: 222,
-            amount: Tokens::from_e8s(333),
-        };
-
-        // Evil case.
-        assert_eq!(
-            authorize_sender_to_create_canister_via_ledger_notify(&ok_transaction_notification,),
-            Ok(creator),
-        );
-
-        let evil = PrincipalId::new_user_test_id(666);
-        let evil_transaction_notification = TransactionNotification {
-            from: evil,
-            ..ok_transaction_notification.clone()
-        };
-
-        let evil_result =
-            authorize_sender_to_create_canister_via_ledger_notify(&evil_transaction_notification);
-
-        let evil_result = match evil_result {
-            Err(err) => err.to_lowercase(),
-            wrong => panic!("Evil result is supposed to be Err, but was {:?}", wrong),
-        };
-        for key_word in ["create", "canister", "on behalf of", "not allowed"] {
-            assert!(
-                evil_result.contains(key_word),
-                "{} not in {:?}",
-                key_word,
-                evil_result
-            );
-        }
-
-        // Invalid transfer case 1: no destination subaccount.
-        let no_destination_subaccount_transaction_notification = TransactionNotification {
-            to_subaccount: None,
-            ..ok_transaction_notification.clone()
-        };
-
-        let no_destination_subaccount_result =
-            authorize_sender_to_create_canister_via_ledger_notify(
-                &no_destination_subaccount_transaction_notification,
-            );
-
-        let no_destination_subaccount_result = match no_destination_subaccount_result {
-            Err(err) => err.to_lowercase(),
-            wrong => panic!(
-                "No destination subaccount result is supposed to be Err, but was {:?}",
-                wrong,
-            ),
-        };
-        for key_word in ["has no", "destination", "subaccount"] {
-            assert!(
-                no_destination_subaccount_result.contains(key_word),
-                "{} not in {:?}",
-                key_word,
-                no_destination_subaccount_result,
-            );
-        }
-
-        // Invalid transfer case 2: destination subaccount present, but does not map to (creator)
-        // principal.
-        let garbage_subaccount = [42_u8; 32];
-        let no_creator_transaction_notification = TransactionNotification {
-            to_subaccount: Some(Subaccount(garbage_subaccount)),
-            ..ok_transaction_notification
-        };
-
-        let no_creator_result = authorize_sender_to_create_canister_via_ledger_notify(
-            &no_creator_transaction_notification,
-        );
-
-        let no_creator_result = match no_creator_result {
-            Err(err) => err.to_lowercase(),
-            wrong => panic!(
-                "No destination subaccount result is supposed to be Err, but was {:?}",
-                wrong,
-            ),
-        };
-        for key_word in ["determine", "creator", "subaccount"] {
-            assert!(
-                no_creator_result.contains(key_word),
-                "{} not in {:?}",
-                key_word,
-                no_creator_result,
-            );
-        }
     }
 
     #[test]
