@@ -126,7 +126,7 @@ def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -
     # The files matching the all_targets_globs are typically not depended upon by any bazel target
     # but will determine which bazel targets there are in the first place so in case they're modified
     # simply return all bazel targets. Otherwise return all targets that depend on the modified files.
-    mfiles = " ".join(modified_files)
+    mfiles = " ".join(f'"{f}"' for f in modified_files)
     query = (
         "//..."
         if any(len(fnmatch.filter(modified_files, glob)) > 0 for glob in all_targets_globs)
