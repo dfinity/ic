@@ -2625,10 +2625,12 @@ fn legacy_induct_stream_slices_partial_success() {
     );
 }
 
-/// Tests that a message addressed to a canister that is not currently hosted by
-/// this subnet; and is not being migrated on a path containing both this subnet
-/// and its known host; request as is coming either due to canister migration
-/// or from a malicious subnet while a response is dropped.
+/// Tests that among messages addressed to canisters not currently hosted by
+/// this subnet; and not being migrated on a path containing both this subnet
+/// and its known host:
+///  * requests are rejected as they are likely to be coming from a manually
+///    migrated canister; and
+///  * responses are dropped as likely to be from a malicious subnet..
 #[test]
 fn induct_stream_slices_receiver_subnet_mismatch() {
     with_test_setup(
