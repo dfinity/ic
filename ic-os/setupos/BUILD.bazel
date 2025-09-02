@@ -83,21 +83,31 @@ genrule(
 # Extract the GuestOS image from SetupOS
 genrule(
     name = "mainnet-latest-guest-img",
-    srcs = ["@mainnet_latest_setupos_disk_image//file"],
+    srcs = [
+        "@mainnet_latest_setupos_disk_image//file",
+        "@mainnet_latest_guestos_update_image//file",
+    ],
     outs = ["mainnet-latest-guest-img.tar.zst"],
     cmd = """#!/bin/bash
         if [ "{guestos_version}" != "{setupos_version}" ]; then
-            echo "FAIL: We assume the latest HostOS and GuestOS releases are in line for this to work, and they are not."
-            exit 1
+            echo "WARNING: The latest HostOS and GuestOS releases are not in line, building an effictively latest image from components."
+            tmpimage=$$(mktemp)
+            $(location //rs/ic_os/build_tools/partition_tools:extract-guestos) --image $(location @mainnet_latest_setupos_disk_image//file) "$${{tmpimage}}"
+            $(location //rs/ic_os/build_tools/partition_tools:fuse-guestos) --image "$${{tmpimage}}" --update $(location @mainnet_latest_guestos_update_image//file) $@
+            rm -rf "$${{tmpimage}}"
+        else
+            $(location //rs/ic_os/build_tools/partition_tools:extract-guestos) --image $(location @mainnet_latest_setupos_disk_image//file) $@
         fi
-        $(location //rs/ic_os/build_tools/partition_tools:extract-guestos) --image $< $@
     """.format(
         guestos_version = MAINNET_LATEST_GUESTOS_REVISION,
         setupos_version = MAINNET_LATEST_HOSTOS_REVISION,
     ),
     tags = ["manual"],
     target_compatible_with = ["@platforms//os:linux"],
-    tools = ["//rs/ic_os/build_tools/partition_tools:extract-guestos"],
+    tools = [
+        "//rs/ic_os/build_tools/partition_tools:extract-guestos",
+        "//rs/ic_os/build_tools/partition_tools:fuse-guestos",
+    ],
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
@@ -107,21 +117,31 @@ genrule(
 # Extract the GuestOS image from SetupOS
 genrule(
     name = "mainnet-latest-guest-dev-img",
-    srcs = ["@mainnet_latest_setupos_dev_disk_image//file"],
+    srcs = [
+        "@mainnet_latest_setupos_dev_disk_image//file",
+        "@mainnet_latest_guestos_dev_disk_image//file",
+    ],
     outs = ["mainnet-latest-guest-dev-img.tar.zst"],
     cmd = """#!/bin/bash
         if [ "{guestos_version}" != "{setupos_version}" ]; then
-            echo "FAIL: We assume the latest HostOS and GuestOS releases are in line for this to work, and they are not."
-            exit 1
+            echo "WARNING: The latest HostOS and GuestOS releases are not in line, building an effictively latest image from components."
+            tmpimage=$$(mktemp)
+            $(location //rs/ic_os/build_tools/partition_tools:extract-guestos) --image $(location @mainnet_latest_setupos_dev_disk_image//file) "$${{tmpimage}}"
+            $(location //rs/ic_os/build_tools/partition_tools:fuse-guestos) --image "$${{tmpimage}}" --update $(location @mainnet_latest_guestos_dev_update_image//file) $@
+            rm -rf "$${{tmpimage}}"
+        else
+            $(location //rs/ic_os/build_tools/partition_tools:extract-guestos) --image $(location @mainnet_latest_setupos_dev_disk_image//file) $@
         fi
-        $(location //rs/ic_os/build_tools/partition_tools:extract-guestos) --image $< $@
     """.format(
         guestos_version = MAINNET_LATEST_GUESTOS_REVISION,
         setupos_version = MAINNET_LATEST_HOSTOS_REVISION,
     ),
     tags = ["manual"],
     target_compatible_with = ["@platforms//os:linux"],
-    tools = ["//rs/ic_os/build_tools/partition_tools:extract-guestos"],
+    tools = [
+        "//rs/ic_os/build_tools/partition_tools:extract-guestos",
+        "//rs/ic_os/build_tools/partition_tools:fuse-guestos",
+    ],
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
