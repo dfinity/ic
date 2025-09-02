@@ -1,3 +1,19 @@
+// The `nested` testnet is meant to interactively test the HostOS. In particular to test NNS subnet recovery by interacting with the host grub menu during boot.
+//
+// The driver will print how to reboot the host-1 VM and how to get to its console such that you can interact with its grub:
+//
+// ```
+// $ ict testnet create nested --lifetime-mins 10 --verbose
+// ...
+// 2025-09-02 18:35:22.985 INFO[log_instructions:rs/tests/testnets/nested.rs:16:0] To reboot the host VM run the following command:
+// 2025-09-02 18:35:22.985 INFO[log_instructions:rs/tests/testnets/nested.rs:17:0] curl -X PUT 'https://farm.dfinity.systems/group/nested--1756837630333/vm/host-1/reboot'
+// ...
+//     {
+//       "url": "https://farm.dfinity.systems/group/nested--1756837630333/vm/host-1/console/",
+//       "vm_name": "host-1"
+//     }
+// ```
+
 use anyhow::Result;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
