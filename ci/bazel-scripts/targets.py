@@ -22,6 +22,7 @@
 
 import argparse
 import fnmatch
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -181,8 +182,9 @@ def targets(command: str, skip_long_tests: bool, base: str | None, head: str | N
     excluded_tags_regex = "|".join(EXCLUDED_TAGS)
     query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...)'
 
-    log(f"bazel query --keep_going '{query}'")
-    result = subprocess.run(["bazel", "query", "--keep_going", query], stderr=subprocess.PIPE, text=True)
+    args = ["bazel", "query", "--keep_going", query]
+    log(shlex.join(args))
+    result = subprocess.run(args, stderr=subprocess.PIPE, text=True)
 
     # As described above, when the query contains files not tracked by bazel,
     # --keep_going will ignore them but will return the special exit code 3 which we ignore:
