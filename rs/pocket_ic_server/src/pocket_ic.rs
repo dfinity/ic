@@ -725,6 +725,7 @@ impl PocketIcSubnets {
     fn create_subnet(
         &mut self,
         subnet_config_info: SubnetConfigInfo,
+        update_system_canisters: bool,
     ) -> Result<SubnetConfigInternal, String> {
         let SubnetConfigInfo {
             ranges,
@@ -934,37 +935,39 @@ impl PocketIcSubnets {
         self.subnet_configs.push(subnet_config.clone());
 
         if let Some(icp_features) = self.icp_features.clone() {
-            // using `let IcpFeatures { }` with explicit field names
-            // to force an update after adding a new field to `IcpFeatures`
-            let IcpFeatures {
-                registry,
-                cycles_minting,
-                icp_token,
-                cycles_token,
-                nns_governance,
-                sns,
-                ii,
-            } = icp_features;
-            if registry {
-                self.update_registry();
-            }
-            if cycles_minting {
-                self.update_cmc();
-            }
-            if icp_token {
-                self.deploy_icp_token();
-            }
-            if cycles_token {
-                self.deploy_cycles_token();
-            }
-            if nns_governance {
-                self.deploy_nns_governance();
-            }
-            if sns {
-                self.deploy_sns();
-            }
-            if ii {
-                self.deploy_ii();
+            if update_system_canisters {
+                // using `let IcpFeatures { }` with explicit field names
+                // to force an update after adding a new field to `IcpFeatures`
+                let IcpFeatures {
+                    registry,
+                    cycles_minting,
+                    icp_token,
+                    cycles_token,
+                    nns_governance,
+                    sns,
+                    ii,
+                } = icp_features;
+                if registry {
+                    self.update_registry();
+                }
+                if cycles_minting {
+                    self.update_cmc(&subnet_kind);
+                }
+                if icp_token {
+                    self.deploy_icp_token();
+                }
+                if cycles_token {
+                    self.deploy_cycles_token();
+                }
+                if nns_governance {
+                    self.deploy_nns_governance();
+                }
+                if sns {
+                    self.deploy_sns();
+                }
+                if ii {
+                    self.deploy_ii();
+                }
             }
         }
 
@@ -1051,7 +1054,7 @@ impl PocketIcSubnets {
         self.synced_registry_version = self.registry_data_provider.latest_version();
     }
 
-    fn update_cmc(&mut self) {
+    fn update_cmc(&mut self, subnet_kind: &SubnetKind) {
         let nns_subnet = self
             .nns_subnet
             .clone()
@@ -1184,12 +1187,13 @@ impl PocketIcSubnets {
         );
 
         // add fiduciary subnet to CMC
-        let maybe_fiduciary_subnet_id = self
-            .subnet_configs
-            .iter()
-            .find(|subnet_config| matches!(subnet_config.subnet_kind, SubnetKind::Fiduciary))
-            .map(|subnet_config| subnet_config.subnet_id);
-        if let Some(fiduciary_subnet_id) = maybe_fiduciary_subnet_id {
+        if let SubnetKind::Fiduciary = subnet_kind {
+            let fiduciary_subnet_id = self
+                .subnet_configs
+                .iter()
+                .find(|subnet_config| matches!(subnet_config.subnet_kind, SubnetKind::Fiduciary))
+                .map(|subnet_config| subnet_config.subnet_id)
+                .unwrap();
             let update_subnet_type_args = UpdateSubnetTypeArgs::Add("fiduciary".to_string());
             // returns ()
             self.execute_ingress_on(
@@ -2112,6 +2116,7 @@ impl PocketIc {
 
         let mut range_gen = RangeGen::new();
 
+        let update_system_canisters = topology.is_none();
         let mut subnet_config_info: Vec<SubnetConfigInfo> = if let Some(topology) = topology {
             topology
                 .subnet_configs
@@ -2310,7 +2315,8 @@ impl PocketIc {
         );
         let mut subnet_configs = Vec::new();
         for subnet_config_info in subnet_config_info.into_iter() {
-            let subnet_config_internal = subnets.create_subnet(subnet_config_info)?;
+            let subnet_config_internal =
+                subnets.create_subnet(subnet_config_info, update_system_canisters)?;
             subnet_configs.push(subnet_config_internal);
         }
 
@@ -4178,15 +4184,18 @@ fn route(
                     // and all existing canister ranges within the PocketIC instance and thus we use
                     // `RangeGen::next_range()` to produce such a canister range.
                     let canister_allocation_range = pic.range_gen.next_range();
-                    pic.subnets.create_subnet(SubnetConfigInfo {
-                        ranges: vec![range],
-                        alloc_range: Some(canister_allocation_range),
-                        subnet_id: None,
-                        subnet_state_dir: None,
-                        subnet_kind,
-                        instruction_config,
-                        expected_state_time: None,
-                    })?;
+                    pic.subnets.create_subnet(
+                        SubnetConfigInfo {
+                            ranges: vec![range],
+                            alloc_range: Some(canister_allocation_range),
+                            subnet_id: None,
+                            subnet_state_dir: None,
+                            subnet_kind,
+                            instruction_config,
+                            expected_state_time: None,
+                        },
+                        true,
+                    )?;
                     pic.subnets
                         .persist_topology(pic.default_effective_canister_id);
                     Ok(pic.try_route_canister(canister_id).unwrap())
