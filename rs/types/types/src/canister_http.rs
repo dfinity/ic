@@ -43,7 +43,7 @@
 //! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
     artifact::{CanisterHttpResponseId, IdentifiableArtifact, PbArtifact},
-    crypto::{CryptoHashOf, Signed},
+    crypto::{CryptoHashOf, Signed, crypto_hash},
     messages::{CallbackId, RejectContext, Request},
     node_id_into_protobuf, node_id_try_from_protobuf,
     signature::*,
@@ -63,10 +63,7 @@ use ic_protobuf::{
 use rand::{Rng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::BTreeSet,
-    convert::{TryFrom, TryInto},
-    mem::size_of,
-    time::Duration,
+    cmp::Ordering, collections::BTreeSet, convert::{TryFrom, TryInto}, mem::size_of, time::Duration
 };
 use strum_macros::EnumIter;
 
@@ -550,6 +547,18 @@ pub struct CanisterHttpResponse {
     pub content: CanisterHttpResponseContent,
 }
 
+impl PartialOrd for CanisterHttpResponse {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for CanisterHttpResponse {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.id.cmp(&other.id)
+    }
+}
+
 impl CountBytes for CanisterHttpResponse {
     fn count_bytes(&self) -> usize {
         let CanisterHttpResponse {
@@ -701,7 +710,6 @@ impl CountBytes for CanisterHttpResponseDivergence {
 pub struct CanisterHttpResponseMetadata {
     pub id: CallbackId,
     pub timeout: Time,
-    pub content_hash: CryptoHashOf<CanisterHttpResponse>,
     pub registry_version: RegistryVersion,
     pub replica_version: ReplicaVersion,
 }
@@ -718,30 +726,126 @@ impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpResponseMe
     }
 }
 
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct ReplicatedHttpShare {
+    pub metadata: CanisterHttpResponseMetadata,
+    pub content_hash: CryptoHashOf<CanisterHttpResponse>,
+}
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub struct NonReplicatedHttpShare {
+    pub metadata: CanisterHttpResponseMetadata,
+    pub response: CanisterHttpResponse,
+}
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
+pub enum HttpOutcallShare {
+    Replicated(ReplicatedHttpShare),
+    NonReplicated(NonReplicatedHttpShare),
+}
+
+impl HttpOutcallShare {
+    pub fn get_metadata(&self) -> &CanisterHttpResponseMetadata {
+        match self {
+            HttpOutcallShare::Replicated(share) => &share.metadata,
+            HttpOutcallShare::NonReplicated(share) => &share.metadata,
+        }
+    }
+}
+
+impl CountBytes for HttpOutcallShare {
+    fn count_bytes(&self) -> usize {
+        match self {
+            HttpOutcallShare::Replicated(share) => {
+                size_of_val(&share.metadata) + size_of_val(&share.content_hash)
+            }
+            HttpOutcallShare::NonReplicated(share) => {
+                size_of_val(&share.metadata) + share.response.count_bytes()
+            }
+        }
+    }
+}
+
 /// A signature share of of [`CanisterHttpResponseMetadata`].
 ///
 /// This is the artifact that will actually be gossiped.
-pub type CanisterHttpResponseShare =
-    Signed<CanisterHttpResponseMetadata, BasicSignature<CanisterHttpResponseMetadata>>;
+pub type CanisterHttpResponseShare = Signed<HttpOutcallShare, BasicSignature<HttpOutcallShare>>;
 
 impl IdentifiableArtifact for CanisterHttpResponseShare {
     const NAME: &'static str = "canisterhttp";
+    //TODO(urgent): the share can get quite big, maybe try something different. 
     type Id = CanisterHttpResponseId;
     fn id(&self) -> Self::Id {
-        self.clone()
+        CanisterHttpResponseId { metadata: self.content.get_metadata().clone(), hash: crypto_hash(&self) }
     }
 }
 
 impl PbArtifact for CanisterHttpResponseShare {
-    type PbId = ic_protobuf::types::v1::CanisterHttpShare;
+    type PbId = ic_protobuf::types::v1::CanisterHttpResponseId;
     type PbIdError = ProxyDecodeError;
     type PbMessage = ic_protobuf::types::v1::CanisterHttpShare;
     type PbMessageError = ProxyDecodeError;
 }
 
 /// A signature of of [`CanisterHttpResponseMetadata`].
-pub type CanisterHttpResponseProof =
-    Signed<CanisterHttpResponseMetadata, BasicSignatureBatch<CanisterHttpResponseMetadata>>;
+#[derive(Clone, Eq, PartialEq, Debug, Hash, Deserialize, Serialize)]
+pub enum CanisterHttpResponseProof {
+    Replicated {
+        signatures: Signed<ReplicatedHttpShare, BasicSignatureBatch<ReplicatedHttpShare>>,
+    },
+    NonReplicated {
+        metadata: CanisterHttpResponseMetadata,
+        signature: BasicSignature<NonReplicatedHttpShare>, 
+    }
+}
+
+impl CanisterHttpResponseProof {
+
+    pub fn is_replicated(&self) -> bool {
+        matches!(self, CanisterHttpResponseProof::Replicated { .. })
+    }
+
+    pub fn get_hash(&self) -> Vec<u8> {
+        match self {
+            CanisterHttpResponseProof::Replicated { signatures } => {
+                signatures.content.content_hash.clone().get().0
+            }
+            CanisterHttpResponseProof::NonReplicated { metadata, signature } => {
+                //TODO(urgent): this is not right.
+                vec![]
+            }
+        }
+    }
+
+    pub fn get_metadata(&self) -> &CanisterHttpResponseMetadata {
+        match self {
+            CanisterHttpResponseProof::Replicated { signatures } => &signatures.content.metadata,
+            CanisterHttpResponseProof::NonReplicated { metadata, .. } => metadata,
+        }
+    }
+
+    pub fn get_signatures(&self) -> Vec<(Vec<u8>, Vec<u8>)> {
+        match self {
+            CanisterHttpResponseProof::Replicated { signatures } => {
+                signatures
+                    .signature
+                    .signatures_map
+                    .iter()
+                    .map(|(signer, signature)| (
+                        (*signer).get().into_vec(),
+                        signature.clone().get().0
+                    ))
+                    .collect()
+            }
+            CanisterHttpResponseProof::NonReplicated { signature, .. } => {
+                vec![(signature.signer.get().into_vec(), signature.signature.clone().get().0)]
+            }
+        }
+    }
+}
 
 impl CountBytes for CanisterHttpResponseProof {
     fn count_bytes(&self) -> usize {

@@ -554,6 +554,15 @@ pub struct CanisterHttpResponseMetadata {
     pub registry_version: u64,
     #[prost(string, tag = "5")]
     pub replica_version: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "6")]
+    pub full_response: ::core::option::Option<CanisterHttpResponse>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpResponseId {
+    #[prost(message, optional, tag = "1")]
+    pub metadata: ::core::option::Option<CanisterHttpResponseMetadata>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpResponseContent {
@@ -596,6 +605,8 @@ pub struct CanisterHttpResponseWithConsensus {
     pub replica_version: ::prost::alloc::string::String,
     #[prost(message, repeated, tag = "7")]
     pub signatures: ::prost::alloc::vec::Vec<CanisterHttpResponseSignature>,
+    #[prost(bool, optional, tag = "9")]
+    pub is_replicated: ::core::option::Option<bool>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterHttpShare {

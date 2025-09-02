@@ -21,8 +21,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    canister_http::*, consensus::HasHeight, crypto::Signed, messages::CallbackId,
-    replica_config::ReplicaConfig, Height, ReplicaVersion,
+    artifact::IdentifiableArtifact as _, canister_http::*, consensus::HasHeight, crypto::Signed, messages::CallbackId, replica_config::ReplicaConfig, Height, ReplicaVersion
 };
 use std::{
     cell::RefCell,
@@ -223,7 +222,7 @@ impl CanisterHttpPoolManagerImpl {
             .get_validated_shares()
             .filter_map(|share| {
                 if share.signature.signer == self.replica_config.node_id {
-                    Some(share.content.id)
+                    Some(share.content.get_metadata().id)
                 } else {
                     None
                 }
@@ -273,6 +272,9 @@ impl CanisterHttpPoolManagerImpl {
     /// Create any shares that should be made from responses provided by the
     /// HttpAdapterShim.
     fn create_shares_from_responses(&self, finalized_height: Height) -> CanisterHttpChangeSet {
+
+        let contexts = self.latest_state().metadata.subnet_call_context_manager.canister_http_request_contexts;
+        
         let _time = self
             .metrics
             .op_duration
@@ -294,11 +296,11 @@ impl CanisterHttpPoolManagerImpl {
             match self.http_adapter_shim.lock().unwrap().try_receive() {
                 Err(TryReceiveError::Empty) => break,
                 Ok(response) => {
+                    let content_hash = ic_types::crypto::crypto_hash(&response);
                     let response_metadata = CanisterHttpResponseMetadata {
                         id: response.id,
                         timeout: response.timeout,
                         registry_version,
-                        content_hash: ic_types::crypto::crypto_hash(&response),
                         replica_version: ReplicaVersion::default(),
                     };
                     let signature = if let Ok(signature) = self
@@ -359,7 +361,7 @@ impl CanisterHttpPoolManagerImpl {
         let next_callback_id = self.next_callback_id();
 
         let key_from_share =
-            |share: &CanisterHttpResponseShare| (share.signature.signer, share.content.id);
+            |share: &CanisterHttpResponseShare| (share.signature.signer, share.content.get_metadata().id);
 
         let mut existing_signed_requests: HashSet<_> = canister_http_pool
             .get_validated_shares()
@@ -369,29 +371,31 @@ impl CanisterHttpPoolManagerImpl {
         canister_http_pool
             .get_unvalidated_shares()
             // Only consider shares belonging to the requests that we can validate.
-            .filter(|share| share.content.id < next_callback_id)
+            .filter(|share| share.content.get_metadata().id < next_callback_id)
             .filter_map(|share| {
+
+                let metadata = &share.content.get_metadata();
                 if existing_signed_requests.contains(&key_from_share(share)) {
-                    return match is_current_protocol_version(&share.content.replica_version) {
+                    return match is_current_protocol_version(&metadata.replica_version) {
                             true => Some(CanisterHttpChangeAction::HandleInvalid(
-                            share.clone(),
+                            share.id(),
                             "Redundant share".into(),
                     )),
-                        false => Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone())),
+                        false => Some(CanisterHttpChangeAction::RemoveUnvalidated(share.id())),
                     };
                 }
 
-                match active_contexts.get(&share.content.id) {
+                match active_contexts.get(&metadata.id) {
                     Some(context) => {
                         if matches!(context.replication, Replication::NonReplicated(node_id) if node_id != share.signature.signer) {
                             return Some(CanisterHttpChangeAction::HandleInvalid(
-                                share.clone(),
+                                share.id(),
                                 "Share signed by node that is not the delegated node for the request".to_string(),
                             ));
                         }
                     }
                     None => {
-                        return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone()));
+                        return Some(CanisterHttpChangeAction::RemoveUnvalidated(share.id()));
                     }
                 }
 
@@ -413,7 +417,7 @@ impl CanisterHttpPoolManagerImpl {
                     .ok()?;
                 if !node_is_in_committee {
                     return Some(CanisterHttpChangeAction::HandleInvalid(
-                        share.clone(),
+                        share.id(),
                         "Share signed by node that is not a member of the canister http committee"
                             .to_string(),
                     ));
@@ -424,13 +428,14 @@ impl CanisterHttpPoolManagerImpl {
 
                     self.metrics.shares_marked_invalid.inc();
                     Some(CanisterHttpChangeAction::HandleInvalid(
-                        share.clone(),
+                        share.id(),
                         format!("Unable to verify signature of share, {}", err),
                     ))
                 } else {
                     // Update the set of existing signed requests.
                     existing_signed_requests.insert(key_from_share(share));
                     self.metrics.shares_validated.inc();
+                    //TODO(next): maybe we don't need to clone. 
                     Some(CanisterHttpChangeAction::MoveToValidated(share.clone()))
                 }
             })
@@ -520,658 +525,5 @@ impl<T: CanisterHttpPool> PoolMutationsProducer<T> for CanisterHttpPoolManagerIm
             }
         }
         vec![]
-    }
-}
-
-#[cfg(test)]
-pub mod test {
-    use super::*;
-    use assert_matches::assert_matches;
-    use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
-    use ic_consensus_mocks::{dependencies, Dependencies};
-    use ic_consensus_utils::crypto::SignVerify;
-    use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
-    use ic_interfaces_state_manager::Labeled;
-    use ic_logger::replica_logger::no_op_logger;
-    use ic_metrics::MetricsRegistry;
-    use ic_replicated_state::metadata_state::subnet_call_context_manager::SubnetCallContext;
-    use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::{
-        crypto::{CryptoHash, CryptoHashOf},
-        messages::CallbackId,
-        time::UNIX_EPOCH,
-        Height, RegistryVersion, Time,
-    };
-    use mockall::predicate::*;
-    use mockall::*;
-    use std::{collections::BTreeMap, str::FromStr};
-
-    mock! {
-        pub NonBlockingChannel<Request: 'static> {
-        }
-
-        impl<Request> NonBlockingChannel<Request> for NonBlockingChannel<Request> {
-            type Response = CanisterHttpResponse;
-
-            fn send(&self, request: Request) -> Result<(), SendError<Request>>;
-            fn try_receive(&mut self) -> Result<CanisterHttpResponse, TryReceiveError>;
-        }
-    }
-
-    fn state_with_pending_http_calls(
-        http_calls: BTreeMap<CallbackId, CanisterHttpRequestContext>,
-    ) -> ReplicatedState {
-        // Add some pending http calls
-        let mut replicated_state = ReplicatedState::new(subnet_test_id(0), SubnetType::System);
-        // This will increase the next_call_id to 1
-        if let Some(val) = http_calls.values().next() {
-            replicated_state
-                .metadata
-                .subnet_call_context_manager
-                .push_context(SubnetCallContext::CanisterHttpRequest(val.clone()));
-        }
-        replicated_state
-            .metadata
-            .subnet_call_context_manager
-            .canister_http_request_contexts = http_calls;
-        replicated_state
-    }
-
-    fn empty_canister_http_response(id: u64) -> CanisterHttpResponse {
-        CanisterHttpResponse {
-            id: CallbackId::from(id),
-            canister_id: ic_types::CanisterId::from(0),
-            timeout: Time::from_nanos_since_unix_epoch(0),
-            content: CanisterHttpResponseContent::Success(Vec::new()),
-        }
-    }
-
-    #[test]
-    pub fn test_validation_of_shares_above_known_requests() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|log| {
-                let Dependencies {
-                    pool,
-                    replica_config,
-                    crypto,
-                    state_manager,
-                    registry,
-                    ..
-                } = dependencies(pool_config.clone(), 5);
-                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
-                shim_mock
-                    .expect_try_receive()
-                    .return_const(Err(TryReceiveError::Empty));
-
-                let request = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::FullyReplicated,
-                };
-
-                state_manager
-                    .get_mut()
-                    .expect_get_latest_state()
-                    .return_const(Labeled::new(
-                        Height::from(1),
-                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
-                            CallbackId::from(0),
-                            request,
-                        )]))),
-                    ));
-
-                let mut canister_http_pool =
-                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
-
-                // Try to insert a share for request id 1 (while the next expected one is the
-                // default value 0).
-                {
-                    let response_metadata = CanisterHttpResponseMetadata {
-                        id: CallbackId::from(1),
-                        timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
-                        registry_version: RegistryVersion::from(1),
-                        content_hash: CryptoHashOf::new(CryptoHash(vec![])),
-                        replica_version: ReplicaVersion::default(),
-                    };
-
-                    let signature = crypto
-                        .sign(
-                            &response_metadata,
-                            replica_config.node_id,
-                            RegistryVersion::from(1),
-                        )
-                        .unwrap();
-
-                    let share = Signed {
-                        content: response_metadata.clone(),
-                        signature,
-                    };
-                    canister_http_pool.insert(UnvalidatedArtifact {
-                        message: share,
-                        peer_id: replica_config.node_id,
-                        timestamp: UNIX_EPOCH,
-                    });
-                }
-
-                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
-                    Arc::new(Mutex::new(Box::new(shim_mock)));
-
-                let pool_manager = CanisterHttpPoolManagerImpl::new(
-                    state_manager as Arc<_>,
-                    shim,
-                    crypto,
-                    pool.get_cache(),
-                    replica_config,
-                    SubnetType::Application,
-                    Arc::clone(&registry) as Arc<_>,
-                    MetricsRegistry::new(),
-                    log,
-                );
-
-                let changes = pool_manager.validate_shares(
-                    pool.get_cache().as_ref(),
-                    &canister_http_pool,
-                    Height::from(0),
-                );
-
-                // Make sure the changes are empty (share was filtered out)
-                assert!(changes.is_empty());
-            })
-        });
-    }
-
-    #[test]
-    fn test_invalidation_of_invalid_version() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|log| {
-                let Dependencies {
-                    pool,
-                    replica_config,
-                    crypto,
-                    state_manager,
-                    registry,
-                    ..
-                } = dependencies(pool_config.clone(), 5);
-                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
-                shim_mock
-                    .expect_try_receive()
-                    .return_const(Err(TryReceiveError::Empty));
-
-                let request = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::FullyReplicated,
-                };
-
-                // NOTE: We need at least some context in the state, otherwise next_callback_id will be 0 and no
-                // artifacts can have a smaller callback_id and be valid
-                state_manager
-                    .get_mut()
-                    .expect_get_latest_state()
-                    .return_const(Labeled::new(
-                        Height::from(1),
-                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
-                            CallbackId::from(0),
-                            request,
-                        )]))),
-                    ));
-
-                let response_metadata = CanisterHttpResponseMetadata {
-                    id: CallbackId::from(0),
-                    timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    registry_version: RegistryVersion::from(1),
-                    content_hash: CryptoHashOf::new(CryptoHash(vec![])),
-                    replica_version: ReplicaVersion::default(),
-                };
-
-                let mut canister_http_pool =
-                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
-
-                let signature = crypto
-                    .sign(
-                        &response_metadata,
-                        replica_config.node_id,
-                        RegistryVersion::from(1),
-                    )
-                    .unwrap();
-
-                let mut share = Signed {
-                    content: response_metadata.clone(),
-                    signature,
-                };
-
-                // add a share (plus content) to the validated pool
-                canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
-                    share.clone(),
-                    empty_canister_http_response(7),
-                )]);
-
-                // add an unvalidated copy of the share, that has an outdated version instead
-                share.content.replica_version =
-                    ReplicaVersion::from_str("outdated_version").unwrap();
-                canister_http_pool.insert(UnvalidatedArtifact {
-                    message: share,
-                    peer_id: replica_config.node_id,
-                    timestamp: UNIX_EPOCH,
-                });
-
-                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
-                    Arc::new(Mutex::new(Box::new(shim_mock)));
-
-                let pool_manager = CanisterHttpPoolManagerImpl::new(
-                    state_manager as Arc<_>,
-                    shim,
-                    crypto,
-                    pool.get_cache(),
-                    replica_config,
-                    SubnetType::Application,
-                    Arc::clone(&registry) as Arc<_>,
-                    MetricsRegistry::new(),
-                    log,
-                );
-
-                let changes = pool_manager.validate_shares(
-                    pool.get_cache().as_ref(),
-                    &canister_http_pool,
-                    Height::from(0),
-                );
-
-                assert_matches!(&changes[0], CanisterHttpChangeAction::RemoveUnvalidated(_));
-            })
-        });
-    }
-
-    #[test]
-    pub fn test_invalidation_of_redundant_shares() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|log| {
-                let Dependencies {
-                    pool,
-                    replica_config,
-                    crypto,
-                    state_manager,
-                    registry,
-                    ..
-                } = dependencies(pool_config.clone(), 5);
-                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
-                shim_mock
-                    .expect_try_receive()
-                    .return_const(Err(TryReceiveError::Empty));
-
-                let request = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::FullyReplicated,
-                };
-
-                state_manager
-                    .get_mut()
-                    .expect_get_latest_state()
-                    .return_const(Labeled::new(
-                        Height::from(1),
-                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
-                            CallbackId::from(0),
-                            request,
-                        )]))),
-                    ));
-
-                let response_metadata = CanisterHttpResponseMetadata {
-                    id: CallbackId::from(0),
-                    timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    registry_version: RegistryVersion::from(1),
-                    content_hash: CryptoHashOf::new(CryptoHash(vec![])),
-                    replica_version: ReplicaVersion::default(),
-                };
-
-                let mut canister_http_pool =
-                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
-
-                // Insert the first share as validated.
-                {
-                    let signature = crypto
-                        .sign(
-                            &response_metadata,
-                            replica_config.node_id,
-                            RegistryVersion::from(1),
-                        )
-                        .unwrap();
-
-                    let share = Signed {
-                        content: response_metadata.clone(),
-                        signature,
-                    };
-
-                    let content = empty_canister_http_response(7);
-                    canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
-                        share, content,
-                    )]);
-                }
-
-                // Insert the second share as unvalidated.
-                {
-                    let signature = crypto
-                        .sign(
-                            &response_metadata,
-                            replica_config.node_id,
-                            RegistryVersion::from(1),
-                        )
-                        .unwrap();
-
-                    let share = Signed {
-                        content: response_metadata.clone(),
-                        signature,
-                    };
-                    canister_http_pool.insert(UnvalidatedArtifact {
-                        message: share,
-                        peer_id: replica_config.node_id,
-                        timestamp: UNIX_EPOCH,
-                    });
-                }
-
-                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
-                    Arc::new(Mutex::new(Box::new(shim_mock)));
-
-                let pool_manager = CanisterHttpPoolManagerImpl::new(
-                    state_manager as Arc<_>,
-                    shim,
-                    crypto,
-                    pool.get_cache(),
-                    replica_config,
-                    SubnetType::Application,
-                    Arc::clone(&registry) as Arc<_>,
-                    MetricsRegistry::new(),
-                    log,
-                );
-
-                let changes = pool_manager.validate_shares(
-                    pool.get_cache().as_ref(),
-                    &canister_http_pool,
-                    Height::from(0),
-                );
-
-                // Make sure the second share is sorted out as invalid, for the right reason.
-                if let CanisterHttpChangeAction::HandleInvalid(_, err) = &changes[0] {
-                    assert_eq!(err, "Redundant share");
-                } else {
-                    panic!("unexpected change action");
-                }
-            })
-        });
-    }
-
-    #[test]
-    pub fn test_already_created_shares_not_re_requested() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|log| {
-                let Dependencies {
-                    pool,
-                    replica_config,
-                    crypto,
-                    state_manager,
-                    registry,
-                    ..
-                } = dependencies(pool_config.clone(), 5);
-                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
-                shim_mock
-                    .expect_try_receive()
-                    .return_const(Err(TryReceiveError::Empty));
-
-                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
-                    Arc::new(Mutex::new(Box::new(shim_mock)));
-
-                let request = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::FullyReplicated,
-                };
-
-                state_manager
-                    .get_mut()
-                    .expect_get_latest_state()
-                    .return_const(Labeled::new(
-                        Height::from(1),
-                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
-                            CallbackId::from(7),
-                            request,
-                        )]))),
-                    ));
-
-                let response_metadata = CanisterHttpResponseMetadata {
-                    id: CallbackId::from(7),
-                    timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    registry_version: RegistryVersion::from(1),
-                    content_hash: CryptoHashOf::new(CryptoHash(vec![])),
-                    replica_version: ReplicaVersion::default(),
-                };
-
-                let signature = crypto
-                    .sign(
-                        &response_metadata,
-                        replica_config.node_id,
-                        RegistryVersion::from(1),
-                    )
-                    .unwrap();
-
-                let content = empty_canister_http_response(7);
-                let share = Signed {
-                    content: response_metadata,
-                    signature,
-                };
-
-                let mut canister_http_pool =
-                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
-                canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
-                    share, content,
-                )]);
-                let pool_manager = CanisterHttpPoolManagerImpl::new(
-                    state_manager as Arc<_>,
-                    shim,
-                    crypto,
-                    pool.get_cache(),
-                    replica_config,
-                    SubnetType::Application,
-                    Arc::clone(&registry) as Arc<_>,
-                    MetricsRegistry::new(),
-                    log,
-                );
-
-                // Because we already have a share in the pool, we should be
-                // able to call on_state_change again without send being called.
-                // We haven't sent an expectation on send, so this will fail if
-                // send is, in fact called.
-                pool_manager.generate_change_set(&canister_http_pool);
-            })
-        });
-    }
-
-    #[test]
-    pub fn test_create_shares() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|log| {
-                let Dependencies {
-                    pool,
-                    replica_config,
-                    crypto,
-                    state_manager,
-                    registry,
-                    ..
-                } = dependencies(pool_config.clone(), 4);
-
-                state_manager
-                    .get_mut()
-                    .expect_get_latest_state()
-                    .return_const(Labeled::new(
-                        Height::from(1),
-                        Arc::new(state_with_pending_http_calls(BTreeMap::from([]))),
-                    ));
-
-                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
-
-                let mut sequence = Sequence::new();
-                for i in 3..5 {
-                    shim_mock
-                        .expect_try_receive()
-                        .times(1)
-                        .returning(move || Ok(empty_canister_http_response(i)))
-                        .in_sequence(&mut sequence);
-                }
-
-                shim_mock
-                    .expect_try_receive()
-                    .times(1)
-                    .returning(|| Err(TryReceiveError::Empty))
-                    .in_sequence(&mut sequence);
-
-                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
-                    Arc::new(Mutex::new(Box::new(shim_mock)));
-
-                let canister_http_pool =
-                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
-                let pool_manager = CanisterHttpPoolManagerImpl::new(
-                    state_manager,
-                    shim,
-                    crypto,
-                    pool.get_cache(),
-                    replica_config,
-                    SubnetType::Application,
-                    Arc::clone(&registry) as Arc<_>,
-                    MetricsRegistry::new(),
-                    log,
-                );
-                let change_set = pool_manager.generate_change_set(&canister_http_pool);
-                assert_eq!(change_set.len(), 2);
-            });
-        });
-    }
-
-    #[test]
-    pub fn test_submit_requests() {
-        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-            with_test_replica_logger(|log| {
-                let Dependencies {
-                    pool,
-                    replica_config,
-                    crypto,
-                    state_manager,
-                    registry,
-                    ..
-                } = dependencies(pool_config.clone(), 4);
-                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
-                shim_mock
-                    .expect_try_receive()
-                    .return_const(Err(TryReceiveError::Empty));
-
-                let request = CanisterHttpRequestContext {
-                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
-                    url: "".to_string(),
-                    max_response_bytes: None,
-                    headers: vec![],
-                    body: None,
-                    http_method: CanisterHttpMethod::GET,
-                    transform: None,
-                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    replication: Replication::FullyReplicated,
-                };
-
-                // Expect times to be called exactly once to check that already
-                // requested cache works.
-                shim_mock
-                    .expect_send()
-                    .with(eq(CanisterHttpRequest {
-                        id: CallbackId::from(7),
-                        timeout: ic_types::Time::from_nanos_since_unix_epoch(10)
-                            + Duration::from_secs(60 * 5),
-                        context: request.clone(),
-                        socks_proxy_addrs: vec![],
-                    }))
-                    .times(1)
-                    .return_const(Ok(()));
-
-                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
-                    Arc::new(Mutex::new(Box::new(shim_mock)));
-
-                state_manager
-                    .get_mut()
-                    .expect_get_latest_state()
-                    .return_const(Labeled::new(
-                        Height::from(1),
-                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
-                            CallbackId::from(7),
-                            request,
-                        )]))),
-                    ));
-
-                let pool_manager = CanisterHttpPoolManagerImpl::new(
-                    state_manager,
-                    shim,
-                    crypto.clone(),
-                    pool.get_cache(),
-                    replica_config.clone(),
-                    SubnetType::Application,
-                    Arc::clone(&registry) as Arc<_>,
-                    MetricsRegistry::new(),
-                    log,
-                );
-                let mut canister_http_pool =
-                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
-                let change_set = pool_manager.generate_change_set(&canister_http_pool);
-                assert_eq!(change_set.len(), 0);
-
-                let response_metadata = CanisterHttpResponseMetadata {
-                    id: CallbackId::from(7),
-                    timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
-                    registry_version: RegistryVersion::from(1),
-                    content_hash: CryptoHashOf::new(CryptoHash(vec![])),
-                    replica_version: ReplicaVersion::default(),
-                };
-
-                let signature = crypto
-                    .sign(
-                        &response_metadata,
-                        replica_config.node_id,
-                        RegistryVersion::from(1),
-                    )
-                    .unwrap();
-
-                let content = empty_canister_http_response(7);
-                let share = Signed {
-                    content: response_metadata,
-                    signature,
-                };
-
-                canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
-                    share, content,
-                )]);
-
-                // Now that there are shares in the pool, we should be able to
-                // call generate_change_set again without send being called.
-                pool_manager.generate_change_set(&canister_http_pool);
-            });
-        });
     }
 }

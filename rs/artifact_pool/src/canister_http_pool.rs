@@ -23,12 +23,11 @@ use prometheus::IntCounter;
 const POOL_CANISTER_HTTP: &str = "canister_http";
 const POOL_CANISTER_HTTP_CONTENT: &str = "canister_http_content";
 
-type ValidatedCanisterHttpPoolSection = PoolSection<CanisterHttpResponseShare, ()>;
+type ValidatedCanisterHttpPoolSection = PoolSection<CanisterHttpResponseId, CanisterHttpResponseShare>;
 
-type UnvalidatedCanisterHttpPoolSection = PoolSection<CanisterHttpResponseShare, ()>;
+type UnvalidatedCanisterHttpPoolSection = PoolSection<CanisterHttpResponseId, CanisterHttpResponseShare>;
 
-type ContentCanisterHttpPoolSection =
-    PoolSection<CryptoHashOf<CanisterHttpResponse>, CanisterHttpResponse>;
+type ContentCanisterHttpPoolSection = PoolSection<CryptoHashOf<CanisterHttpResponse>, CanisterHttpResponse>;
 
 pub struct CanisterHttpPoolImpl {
     validated: ValidatedCanisterHttpPoolSection,
@@ -63,11 +62,11 @@ impl CanisterHttpPoolImpl {
 
 impl CanisterHttpPool for CanisterHttpPoolImpl {
     fn get_validated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_> {
-        Box::new(self.validated.keys())
+        Box::new(self.validated.values())
     }
 
     fn get_unvalidated_shares(&self) -> Box<dyn Iterator<Item = &CanisterHttpResponseShare> + '_> {
-        Box::new(self.unvalidated.keys())
+        Box::new(self.unvalidated.values())
     }
 
     fn get_response_content_items(
@@ -162,13 +161,19 @@ impl MutablePool<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
 
 impl ValidatedPoolReader<CanisterHttpResponseShare> for CanisterHttpPoolImpl {
     fn get(&self, id: &CanisterHttpResponseId) -> Option<CanisterHttpResponseShare> {
-        self.validated.get(id).map(|()| id.clone())
+        self.validated.get(id).map(|id| id.clone())
     }
 }
 
 impl HasLabel for CanisterHttpResponse {
     fn label(&self) -> &str {
         "canister_http_response"
+    }
+}
+
+impl HasLabel for CanisterHttpResponseShare {
+    fn label(&self) -> &str {
+        "canister_http_response_share"
     }
 }
 
@@ -196,19 +201,6 @@ mod tests {
             message,
             peer_id: node_test_id(0),
             timestamp: UNIX_EPOCH,
-        }
-    }
-
-    fn fake_share(id: u64) -> CanisterHttpResponseShare {
-        Signed {
-            content: CanisterHttpResponseMetadata {
-                id: CallbackId::from(id),
-                timeout: UNIX_EPOCH,
-                content_hash: CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
-                registry_version: RegistryVersion::from(id),
-                replica_version: ReplicaVersion::default(),
-            },
-            signature: BasicSignature::fake(node_test_id(id)),
         }
     }
 

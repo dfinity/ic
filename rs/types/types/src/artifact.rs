@@ -1,12 +1,12 @@
 //! Artifact related types.
 use crate::{
-    canister_http::CanisterHttpResponseShare,
+    canister_http::{CanisterHttpResponseMetadata, CanisterHttpResponseShare},
     consensus::{
         certification::{CertificationMessage, CertificationMessageHash},
         idkg::IDkgArtifactId,
         ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable, HasHash, HasHeight,
     },
-    crypto::{crypto_hash, CryptoHash},
+    crypto::{crypto_hash, CryptoHash, CryptoHashOf},
     messages::{MessageId, SignedIngress},
     Height, NodeId, Time,
 };
@@ -245,4 +245,8 @@ pub type IDkgMessageId = IDkgArtifactId;
 // -----------------------------------------------------------------------------
 // CanisterHttp artifacts
 
-pub type CanisterHttpResponseId = CanisterHttpResponseShare;
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+pub struct CanisterHttpResponseId {
+    pub metadata: CanisterHttpResponseMetadata,
+    pub hash: CryptoHashOf<CanisterHttpResponseShare>,
+}

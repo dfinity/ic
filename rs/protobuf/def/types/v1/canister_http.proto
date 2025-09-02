@@ -29,6 +29,12 @@ message CanisterHttpResponseMetadata {
   bytes content_hash = 3;
   uint64 registry_version = 4;
   string replica_version = 5;
+  optional CanisterHttpResponse full_response = 6;
+}
+
+message CanisterHttpResponseId {
+  CanisterHttpResponseMetadata metadata = 1;
+  bytes hash = 2;
 }
 
 message CanisterHttpResponseContent {
@@ -60,6 +66,7 @@ message CanisterHttpResponseWithConsensus {
   reserved 5;
   reserved 6;
   repeated CanisterHttpResponseSignature signatures = 7;
+  optional bool is_replicated = 9;
 }
 
 message CanisterHttpShare {
