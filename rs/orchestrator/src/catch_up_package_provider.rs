@@ -346,6 +346,7 @@ impl CatchUpPackageProvider {
         };
 
         match status {
+            // Replicas should return `NO_CONTENT` if their own CUP isn't higher than `param`
             StatusCode::NO_CONTENT => Ok(None),
             StatusCode::OK => pb::CatchUpPackage::decode(&bytes[..])
                 .map_err(|e| format!("Failed to deserialize CUP from protobuf: {:?}", e))
