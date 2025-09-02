@@ -2725,7 +2725,7 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
             ]);
             assert_eq!(0, metrics.fetch_inducted_payload_sizes_stats().count);
             metrics.assert_eq_critical_errors(CriticalErrorCounts {
-                receiver_subnet_mismatch: 3,
+                receiver_subnet_mismatch: 2,
                 ..CriticalErrorCounts::default()
             });
         },
