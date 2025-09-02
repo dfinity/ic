@@ -335,7 +335,22 @@ impl IDkgPreSignerImpl {
                         signed_dealing,
                     );
                 }
-                self.crypto_create_dealing_support(&id, &transcript_params, &signed_dealing)
+                let action =
+                    self.crypto_create_dealing_support(&id, &transcript_params, &signed_dealing);
+
+                if let Some(IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(
+                    ref support,
+                ))) = action
+                {
+                    // Record our share in the map of validated dealing supports
+                    self.validated_dealing_supports
+                        .borrow_mut()
+                        .entry(IDkgValidatedDealingSupportIdentifier::from(support))
+                        .or_default()
+                        .insert(support.sig_share.signer);
+                }
+
+                action
             })
             .collect()
     }
@@ -2063,12 +2078,35 @@ mod tests {
                     &id,
                     &NODE_2,
                 ));
+
+                assert_eq!(pre_signer.validated_dealing_supports.borrow().len(), 1);
+                assert!(pre_signer
+                    .validated_dealing_supports
+                    .borrow()
+                    .iter()
+                    .next()
+                    .is_some_and(
+                        |(support_identifier, signers)| support_identifier.transcript_id == id
+                            && *signers == BTreeSet::from([NODE_1])
+                    ));
+
                 idkg_pool.apply(change_set);
 
                 // Since we already issued support for the dealing, it should not produce any
                 // more support.
                 let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
                 assert!(change_set.is_empty());
+
+                assert_eq!(pre_signer.validated_dealing_supports.borrow().len(), 1);
+                assert!(pre_signer
+                    .validated_dealing_supports
+                    .borrow()
+                    .iter()
+                    .next()
+                    .is_some_and(
+                        |(support_identifier, signers)| support_identifier.transcript_id == id
+                            && *signers == BTreeSet::from([NODE_1])
+                    ));
             })
         })
     }
@@ -2117,6 +2155,8 @@ mod tests {
                 // Sending support should be deferred until registry version exists locally
                 let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
                 assert!(change_set.is_empty());
+
+                assert!(pre_signer.validated_dealing_supports.borrow().is_empty());
             })
         })
     }
@@ -2156,7 +2196,9 @@ mod tests {
                 // the dealing is considered invalid.
                 let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
-                assert!(is_handle_invalid(&change_set, &dealing.message_id()))
+                assert!(is_handle_invalid(&change_set, &dealing.message_id()));
+
+                assert!(pre_signer.validated_dealing_supports.borrow().is_empty());
             })
         })
     }
@@ -2190,6 +2232,8 @@ mod tests {
                     TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
                 let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
                 assert!(change_set.is_empty());
+
+                assert!(pre_signer.validated_dealing_supports.borrow().is_empty());
             })
         })
     }
@@ -2213,6 +2257,8 @@ mod tests {
                     TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![]);
                 let change_set = pre_signer.send_dealing_support(&idkg_pool, &block_reader);
                 assert!(change_set.is_empty());
+
+                assert!(pre_signer.validated_dealing_supports.borrow().is_empty());
             })
         })
     }
