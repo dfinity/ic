@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use assert_matches::assert_matches;
 use bitcoin::util::psbt::serialize::Deserialize;
 use bitcoin::{Address as BtcAddress, Network as BtcNetwork};
@@ -14,6 +15,7 @@ use ic_btc_interface::{
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
+use ic_ckbtc_minter::reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason};
 use ic_ckbtc_minter::state::eventlog::{Event, EventType};
 use ic_ckbtc_minter::state::{BtcRetrievalStatusV2, Mode, RetrieveBtcStatus, RetrieveBtcStatusV2};
 use ic_ckbtc_minter::updates::get_btc_address::GetBtcAddressArgs;
@@ -25,8 +27,9 @@ use ic_ckbtc_minter::updates::update_balance::{
     PendingUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
 };
 use ic_ckbtc_minter::{
-    Log, MinterInfo, Network, CKBTC_LEDGER_MEMO_SIZE, MIN_RELAY_FEE_PER_VBYTE,
-    MIN_RESUBMISSION_DELAY, UTXOS_COUNT_THRESHOLD,
+    Log, MinterInfo, Network, CKBTC_LEDGER_MEMO_SIZE, MAX_NUM_INPUTS_IN_TRANSACTION,
+    MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY,
+    REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS, UTXOS_COUNT_THRESHOLD,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
@@ -932,6 +935,45 @@ impl CkBtcSetup {
         .unwrap()
     }
 
+    pub fn deposit_utxos_with_value(
+        &self,
+        account: impl Into<Account>,
+        values: &[u64],
+    ) -> BTreeSet<Utxo> {
+        assert!(
+            values.len() < u16::MAX as usize,
+            "Adapt logic below to create more unique UTXOs!"
+        );
+        let account = account.into();
+        let utxos = values
+            .iter()
+            .enumerate()
+            .map(|(i, &value)| {
+                let mut txid = vec![0; 32];
+                txid[0] = (i % 256) as u8;
+                txid[1] = (i / 256) as u8;
+                Utxo {
+                    height: 0,
+                    outpoint: OutPoint {
+                        txid: vec_to_txid(txid),
+                        vout: 1,
+                    },
+                    value,
+                }
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(values.len(), utxos.len());
+
+        self.deposit_utxos(account, utxos.clone().into_iter().collect());
+
+        let known_utxos = self
+            .get_known_utxos(account)
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        assert!(utxos.is_subset(&known_utxos));
+        utxos
+    }
+
     pub fn deposit_utxo(&self, account: impl Into<Account>, utxo: Utxo) {
         self.deposit_utxos(account, vec![utxo])
     }
@@ -1251,25 +1293,7 @@ impl CkBtcSetup {
     }
 
     pub fn print_minter_events(&self) {
-        use ic_ckbtc_minter::state::eventlog::{Event, GetEventsArg};
-        let events = Decode!(
-            &assert_reply(
-                self.env
-                    .query(
-                        self.minter_id,
-                        "get_events",
-                        Encode!(&GetEventsArg {
-                            start: 0,
-                            length: 2000,
-                        })
-                        .unwrap()
-                    )
-                    .expect("failed to query minter events")
-            ),
-            Vec<Event>
-        )
-        .unwrap();
-        println!("{:#?}", events);
+        println!("{:#?}", self.get_events());
     }
 
     pub fn print_minter_logs(&self) {
@@ -1363,6 +1387,45 @@ impl CkBtcSetup {
 
     pub fn check_minter_metrics(self) -> MetricsAssert<Self> {
         MetricsAssert::from_http_query(self)
+    }
+
+    pub fn upgrade_with(&self, upgrade_args: Option<UpgradeArgs>) {
+        let encoded_args = match upgrade_args {
+            None => Encode!(&()),
+            Some(args) => Encode!(&Some(MinterArg::Upgrade(Some(args)))),
+        }
+        .unwrap();
+        self.env
+            .upgrade_canister(self.minter_id, minter_wasm(), encoded_args)
+            .unwrap();
+    }
+
+    pub fn assert_ledger_transaction_reimbursement_correct(
+        &self,
+        burn_index: u64,
+        reimbursement_block_index: u64,
+    ) {
+        let get_transaction_request = GetTransactionsRequest {
+            start: reimbursement_block_index.into(),
+            length: 1_u8.into(),
+        };
+        let res = self.get_transactions(get_transaction_request);
+        if res.transactions.len() != 1 {
+            self.print_minter_logs();
+            self.print_minter_events();
+            panic!("Reimbursement transaction {reimbursement_block_index} for withdrawal {burn_index} not found!");
+        }
+        let memo = res.transactions[0].mint.clone().unwrap().memo.unwrap();
+        use ic_ckbtc_minter::memo::MintMemo;
+
+        let decoded_data = minicbor::decode::<MintMemo>(&memo.0).expect("failed to decode memo");
+        assert_eq!(
+            decoded_data,
+            MintMemo::ReimburseWithdrawal {
+                withdrawal_id: burn_index,
+            },
+            "memo not found in mint"
+        );
     }
 }
 
@@ -1509,19 +1572,10 @@ fn test_min_retrieval_amount_custom() {
 
     // Test changing min_retrieve_fee when upgrade
     let min_amount = 123_456;
-    let upgrade_args = UpgradeArgs {
+    ckbtc.upgrade_with(Some(UpgradeArgs {
         retrieve_btc_min_amount: Some(min_amount),
         ..Default::default()
-    };
-    let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
-    assert!(ckbtc
-        .env
-        .upgrade_canister(
-            ckbtc.minter_id,
-            minter_wasm(),
-            Encode!(&minter_arg).unwrap()
-        )
-        .is_ok());
+    }));
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
     assert_eq!(retrieve_btc_min_amount, min_amount);
 }
@@ -1538,27 +1592,12 @@ fn test_transaction_resubmission_finalize_new() {
     // Create many utxos that exceeds threshold by 2 so that after consuming
     // one, the remaining available count is still greater than the threshold.
     // This is to make sure utxo count optimization is triggered.
-    let count = UTXOS_COUNT_THRESHOLD + 2;
-    let utxos = (0..count)
-        .map(|i| {
-            let mut txid = vec![0; 32];
-            txid[0] = (i % 256) as u8;
-            txid[1] = (i / 256) as u8;
-            Utxo {
-                height: 0,
-                outpoint: OutPoint {
-                    txid: vec_to_txid(txid),
-                    vout: 1,
-                },
-                value: deposit_value,
-            }
-        })
-        .collect::<Vec<_>>();
-    ckbtc.deposit_utxos(user, utxos);
+    const COUNT: usize = UTXOS_COUNT_THRESHOLD + 2;
+    let _deposited_utxos = ckbtc.deposit_utxos_with_value(user, &[deposit_value; COUNT]);
 
     assert_eq!(
         ckbtc.balance_of(user),
-        Nat::from(count as u64 * (deposit_value - CHECK_FEE))
+        Nat::from(COUNT as u64 * (deposit_value - CHECK_FEE))
     );
 
     // Step 2: request a withdrawal
@@ -2309,5 +2348,112 @@ fn test_retrieve_btc_with_approval_fail() {
     assert_eq!(
         ckbtc.retrieve_btc_status_v2_by_account(Some(user_account)),
         vec![]
+    );
+}
+
+#[test]
+fn should_cancel_and_reimburse_large_withdrawal() {
+    let ckbtc = CkBtcSetup::new();
+    let user = Principal::from(ckbtc.caller);
+    let subaccount: Option<[u8; 32]> = Some([1; 32]);
+    let user_account = Account {
+        owner: user,
+        subaccount,
+    };
+
+    // Step 1: deposit a lot of small UTXOs
+    const NUM_UXTOS: usize = 2_000;
+    let deposit_value = 100_000_u64;
+    let _deposited_utxos =
+        ckbtc.deposit_utxos_with_value(user_account, &[deposit_value; NUM_UXTOS]);
+    let balance_after_deposit = ckbtc.balance_of(user_account);
+    assert_eq!(
+        balance_after_deposit,
+        Nat::from(NUM_UXTOS as u64 * (deposit_value - CHECK_FEE))
+    );
+
+    let withdrawal_amount = 1_800 * deposit_value;
+    ckbtc.approve_minter(user, withdrawal_amount, subaccount);
+    let balance_before_withdrawal = ckbtc.balance_of(user_account);
+
+    let RetrieveBtcOk { block_index } = ckbtc
+        .retrieve_btc_with_approval(
+            WITHDRAWAL_ADDRESS.to_string(),
+            withdrawal_amount,
+            subaccount,
+        )
+        .expect("retrieve_btc failed");
+
+    let balance_after_withdrawal = ckbtc.balance_of(user_account);
+    assert_eq!(
+        balance_after_withdrawal,
+        balance_before_withdrawal.clone() - Nat::from(withdrawal_amount)
+    );
+
+    assert_eq!(
+        ckbtc.retrieve_btc_status_v2(block_index),
+        RetrieveBtcStatusV2::Pending
+    );
+
+    ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
+
+    let mempool = ckbtc.mempool();
+    assert_eq!(
+        mempool.len(),
+        0,
+        "no transaction should appear when being reimbursed"
+    );
+
+    let reimbursement_block_index = block_index + 1;
+    let reimbursement_amount =
+        withdrawal_amount - REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS;
+
+    assert_matches!(
+        ckbtc.retrieve_btc_status_v2(block_index),
+        RetrieveBtcStatusV2::Reimbursed(reimbursement) if
+        reimbursement.account == user_account &&
+        reimbursement.amount == reimbursement_amount &&
+        reimbursement.mint_block_index == reimbursement_block_index
+    );
+
+    let mut events = ckbtc.get_events();
+    assert_eq!(
+        events.iter().find(|event| {
+            matches!(
+                event.payload,
+                EventType::SentBtcTransaction { .. } | EventType::ReplacedBtcTransaction { .. }
+            )
+        }),
+        None,
+        "BUG: should not have issued any Bitcoin transaction when too many inputs are used"
+    );
+    let reimbursed_event = events.pop().unwrap();
+    assert_eq!(
+        reimbursed_event.payload,
+        EventType::ReimbursedWithdrawal {
+            burn_block_index: block_index,
+            mint_block_index: reimbursement_block_index
+        }
+    );
+    let schedule_reimbursement_event = events.pop().unwrap();
+    assert_eq!(
+        schedule_reimbursement_event.payload,
+        EventType::ScheduleWithdrawalReimbursement {
+            account: user_account,
+            amount: reimbursement_amount,
+            reason: WithdrawalReimbursementReason::InvalidTransaction(
+                InvalidTransactionError::TooManyInputs {
+                    num_inputs: 1800,
+                    max_num_inputs: MAX_NUM_INPUTS_IN_TRANSACTION,
+                }
+            ),
+            burn_block_index: block_index,
+        }
+    );
+
+    ckbtc.assert_ledger_transaction_reimbursement_correct(block_index, reimbursement_block_index);
+    assert_eq!(
+        ckbtc.balance_of(user_account),
+        balance_before_withdrawal.clone() - REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS
     );
 }

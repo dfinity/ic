@@ -37,8 +37,8 @@ use ic_gateway::{setup_router, Cli};
 use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, NodeId, PrincipalId, SubnetId};
 use itertools::Itertools;
 use pocket_ic::common::rest::{
-    CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig, HttpGatewayDetails,
-    HttpGatewayInfo, Topology,
+    AutoProgressConfig, CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig,
+    HttpGatewayDetails, HttpGatewayInfo, InstanceHttpGatewayConfig, Topology,
 };
 use pocket_ic::RejectResponse;
 use reqwest::Url;
@@ -556,13 +556,18 @@ impl ApiState {
         Self::read_result(self.graph.clone(), state_label, op_id)
     }
 
-    pub async fn add_instance<F>(&self, f: F) -> Result<(InstanceId, Topology), String>
+    pub async fn add_instance<F>(
+        &self,
+        create_instance_from_seed: F,
+        auto_progress: Option<AutoProgressConfig>,
+        instance_http_gateway_config: Option<InstanceHttpGatewayConfig>,
+    ) -> Result<(InstanceId, Topology, Option<HttpGatewayInfo>), String>
     where
         F: FnOnce(u64) -> Result<PocketIc, String> + std::marker::Send + 'static,
     {
         let seed = self.seed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         // create the instance using `spawn_blocking` before acquiring a lock
-        let instance = tokio::task::spawn_blocking(move || f(seed))
+        let instance = tokio::task::spawn_blocking(move || create_instance_from_seed(seed))
             .await
             .expect("Failed to create PocketIC instance")?;
         let topology = instance.topology();
@@ -572,7 +577,35 @@ impl ApiState {
             progress_thread: None,
             state: InstanceState::Available(instance),
         }));
-        Ok((instance_id, topology))
+        drop(instances);
+        if let Some(config) = auto_progress {
+            // safe to unwrap here because the instance is fresh and thus auto progress
+            // cannot be enabled already
+            self.auto_progress(instance_id, config.artificial_delay_ms)
+                .await
+                .unwrap();
+        }
+        let http_gateway_info =
+            if let Some(instance_http_gateway_config) = instance_http_gateway_config {
+                let http_gateway_config = HttpGatewayConfig {
+                    ip_addr: instance_http_gateway_config.ip_addr,
+                    port: instance_http_gateway_config.port,
+                    forward_to: HttpGatewayBackend::PocketIcInstance(instance_id),
+                    domains: instance_http_gateway_config.domains,
+                    https_config: instance_http_gateway_config.https_config,
+                };
+                let res = self.create_http_gateway(http_gateway_config).await;
+                match res {
+                    Ok(http_gateway_info) => Some(http_gateway_info),
+                    Err(e) => {
+                        self.delete_instance(instance_id).await;
+                        return Err(e);
+                    }
+                }
+            } else {
+                None
+            };
+        Ok((instance_id, topology, http_gateway_info))
     }
 
     pub async fn delete_instance(&self, instance_id: InstanceId) {

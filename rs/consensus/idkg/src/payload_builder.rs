@@ -228,8 +228,8 @@ pub fn create_summary_payload(
 
     let block_reader = block_chain_reader(
         pool_reader,
-        &prev_summary_block,
-        parent_block,
+        prev_summary_block.height(),
+        parent_block.clone(),
         idkg_payload_metrics,
         log,
     )?;
@@ -481,14 +481,25 @@ pub fn create_data_payload(
         .dkg_summary_block(parent_block)
         .ok_or_else(|| IDkgPayloadError::ConsensusSummaryBlockNotFound(parent_block.height()))?;
 
+    // In case the certified height is below the summary height, add the heights in
+    // between to the blockchain. This is needed to calculate the total number of pre-
+    // signatures in the certified state and every block since then.
+    // Note that blocks below the summary are not guaranteed to exist, because they are
+    // purged once the CUP exists. However, if the CUP exists, that implies there is
+    // already a finalized block b with b.certified_height >= summary_height, which means
+    // we should not be creating a block referencing a lower certified height here.
+    let start_height = context
+        .certified_height
+        .increment()
+        .min(summary_block.height());
     // The notarized tip(parent) may be ahead of the finalized tip, and
     // the last few blocks may have references to heights after the finalized
     // tip. So use the chain ending at the parent to resolve refs, rather than the
     // finalized chain.
     let block_reader = block_chain_reader(
         pool_reader,
-        &summary_block,
-        parent_block,
+        start_height,
+        parent_block.clone(),
         Some(idkg_payload_metrics),
         log,
     )?;
@@ -1425,8 +1436,8 @@ mod tests {
             }
             let block_reader = block_chain_reader(
                 &pool_reader,
-                &pool_reader.get_highest_finalized_summary_block(),
-                &parent_block,
+                pool_reader.get_highest_finalized_summary_block().height(),
+                parent_block.clone(),
                 None,
                 &no_op_logger(),
             )
@@ -1657,8 +1668,8 @@ mod tests {
             summary.single_key_transcript_mut().current = Some(current_key_transcript);
             let block_reader = block_chain_reader(
                 &pool_reader,
-                &pool_reader.get_highest_finalized_summary_block(),
-                &parent_block,
+                pool_reader.get_highest_finalized_summary_block().height(),
+                parent_block.clone(),
                 None,
                 &no_op_logger(),
             )

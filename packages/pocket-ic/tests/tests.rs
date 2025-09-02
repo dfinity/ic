@@ -1,32 +1,40 @@
 use candid::{decode_one, encode_one, CandidType, Decode, Deserialize, Encode, Principal};
+#[cfg(not(windows))]
+use ic_base_types::{PrincipalId, SubnetId};
 use ic_certification::Label;
-use ic_management_canister_types::CanisterIdRecord;
 use ic_management_canister_types::{
-    Bip341, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult, HttpRequestResult,
-    NodeMetricsHistoryArgs, NodeMetricsHistoryRecord as NodeMetricsHistoryResultItem,
-    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrAux,
+    Bip341, CanisterIdRecord, CanisterInstallMode, CanisterSettings, EcdsaPublicKeyResult,
+    HttpRequestResult, ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrAux,
     SchnorrKeyId as SchnorrPublicKeyArgsKeyId, SchnorrPublicKeyResult,
 };
+#[cfg(not(windows))]
+use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
+#[cfg(not(windows))]
+use ic_registry_client::client::RegistryClientImpl;
+#[cfg(not(windows))]
+use ic_registry_client_helpers::subnet::SubnetRegistry;
+#[cfg(not(windows))]
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
+#[cfg(not(windows))]
 use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
+#[cfg(not(windows))]
+use pocket_ic::{common::rest::ExtendedSubnetConfigSet, nonblocking::PocketIc as PocketIcAsync};
 use pocket_ic::{
     common::rest::{
-        BlobCompression, CanisterHttpReply, CanisterHttpResponse, MockCanisterHttpResponse,
-        RawEffectivePrincipal, RawMessageId, SubnetKind,
+        AutoProgressConfig, BlobCompression, CanisterHttpReply, CanisterHttpResponse,
+        CreateInstanceResponse, HttpGatewayDetails, IcpFeatures, InitialTime, InstanceConfig,
+        InstanceHttpGatewayConfig, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
+        SubnetConfigSet, SubnetKind,
     },
-    query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
-    PocketIc, PocketIcBuilder, PocketIcState, RejectCode, Time,
-};
-#[cfg(not(windows))]
-use pocket_ic::{
-    common::rest::{CreateInstanceResponse, ExtendedSubnetConfigSet, InstanceConfig},
-    nonblocking::PocketIc as PocketIcAsync,
-    start_server, StartServerParams,
+    query_candid, start_server, update_candid, DefaultEffectiveCanisterIdError, ErrorCode,
+    IngressStatusResult, PocketIc, PocketIcBuilder, PocketIcState, RejectCode, StartServerParams,
+    Time,
 };
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_LENGTH;
-use reqwest::{Method, StatusCode};
+use reqwest::{Method, StatusCode, Url};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 #[cfg(windows)]
@@ -381,6 +389,81 @@ fn test_multiple_large_xnet_payloads() {
     }
 }
 
+#[test]
+fn test_initial_timestamp() {
+    let initial_timestamp = 1_620_328_630_000_000_000; // 06 May 2021 21:17:10 CEST
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_initial_timestamp(initial_timestamp)
+        .build();
+
+    // Initial time is bumped by 1ns during instance creation to ensure strict monotonicity.
+    assert_eq!(
+        pic.get_time().as_nanos_since_unix_epoch(),
+        initial_timestamp + 1
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "The initial timestamp (unix timestamp in nanoseconds) must be no earlier than 1620328630000000000 (provided 0)."
+)]
+fn test_invalid_initial_timestamp() {
+    let _pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_initial_timestamp(0)
+        .build();
+}
+
+#[test]
+fn test_initial_timestamp_with_cycles_minting() {
+    let initial_timestamp = 1_620_633_601_000_000_000; // 10 May 2021 10:00:01
+    let icp_features = IcpFeatures {
+        cycles_minting: true,
+        ..Default::default()
+    };
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .with_icp_features(icp_features)
+        .with_initial_timestamp(initial_timestamp)
+        .build();
+
+    // Initial time is bumped during each subnet creation and when executing rounds to deploy the CMC.
+    assert_eq!(
+        pic.get_time().as_nanos_since_unix_epoch(),
+        initial_timestamp + 7
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "The initial timestamp (unix timestamp in nanoseconds) must be no earlier than 1620633601000000000 (provided 1620328630000000000)."
+)]
+fn test_invalid_initial_timestamp_with_cycles_minting() {
+    let initial_timestamp = 1_620_328_630_000_000_000; // 06 May 2021 21:17:10 CEST
+    let icp_features = IcpFeatures {
+        cycles_minting: true,
+        ..Default::default()
+    };
+    let _pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .with_icp_features(icp_features)
+        .with_initial_timestamp(initial_timestamp)
+        .build();
+}
+
+#[test]
+fn test_auto_progress() {
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_auto_progress(None)
+        .build();
+
+    assert!(pic.auto_progress_enabled());
+}
+
 fn query_and_check_time(pic: &PocketIc, test_canister: Principal) {
     let current_time = pic.get_time().as_nanos_since_unix_epoch();
     let t: (u64,) = query_candid(pic, test_canister, "time", ((),)).unwrap();
@@ -536,12 +619,14 @@ async fn resume_killed_instance_impl(allow_incomplete_state: Option<bool>) -> Re
     let client = reqwest::Client::new();
     let instance_config = InstanceConfig {
         subnet_config_set: ExtendedSubnetConfigSet::default(),
+        http_gateway_config: None,
         state_dir: Some(temp_dir.path().to_path_buf()),
-        nonmainnet_features: false,
+        nonmainnet_features: None,
         log_level: None,
         bitcoind_addr: None,
         icp_features: None,
         allow_incomplete_state,
+        initial_time: None,
     };
     let response = client
         .post(server_url.join("instances").unwrap())
@@ -1318,7 +1403,6 @@ fn test_vetkd() {
     let pic = PocketIcBuilder::new()
         .with_ii_subnet() // this subnet has threshold keys
         .with_application_subnet()
-        .with_nonmainnet_features(true) // the VetKd feature is not available on mainnet yet
         .build();
 
     // We retrieve the app subnet ID from the topology.
@@ -2667,11 +2751,19 @@ fn test_reject_response_type() {
     }
 }
 
+#[cfg(not(windows))]
 #[test]
 fn test_custom_blockmaker_metrics() {
     const HOURS_IN_SECONDS: u64 = 60 * 60;
 
-    let pocket_ic = PocketIcBuilder::new().with_application_subnet().build();
+    // Create a temporary state directory from which the test can retrieve the registry.
+    let state_dir = TempDir::new().unwrap();
+    let state_dir_path_buf = state_dir.path().to_path_buf();
+
+    let pocket_ic = PocketIcBuilder::new()
+        .with_state_dir(state_dir_path_buf.clone())
+        .with_application_subnet()
+        .build();
     let topology = pocket_ic.topology();
     let application_subnet = topology.get_app_subnets()[0];
 
@@ -2680,19 +2772,29 @@ fn test_custom_blockmaker_metrics() {
     pocket_ic.add_cycles(canister, INIT_CYCLES);
     pocket_ic.install_canister(canister, test_canister_wasm(), vec![], None);
 
-    let nodes = topology
-        .subnet_configs
-        .get(&application_subnet)
+    // Retrieve node ids from the registry
+    let registry_proto_path = state_dir_path_buf.join("registry.proto");
+    let registry_data_provider = Arc::new(ProtoRegistryDataProvider::load_from_file(
+        registry_proto_path,
+    ));
+    let latest_version = registry_data_provider.latest_version();
+    let registry_client = RegistryClientImpl::new(registry_data_provider.clone(), None);
+    registry_client.poll_once().unwrap();
+    let node_ids = registry_client
+        .get_node_ids_on_subnet(
+            SubnetId::new(PrincipalId(application_subnet)),
+            latest_version,
+        )
         .unwrap()
-        .clone();
+        .unwrap();
 
-    let blockmaker_1 = nodes.node_ids[0].clone();
-    let blockmaker_2 = nodes.node_ids[1].clone();
+    let blockmaker_1 = node_ids[0].get().0;
+    let blockmaker_2 = node_ids[1].get().0;
 
     let subnets_blockmakers = vec![RawSubnetBlockmaker {
         subnet: application_subnet.into(),
-        blockmaker: blockmaker_1.clone(),
-        failed_blockmakers: vec![blockmaker_2.clone()],
+        blockmaker: blockmaker_1.into(),
+        failed_blockmakers: vec![blockmaker_2.into()],
     }];
 
     let tick_configs = TickConfigs {
@@ -2724,19 +2826,19 @@ fn test_custom_blockmaker_metrics() {
         )
         .unwrap();
 
-    let first_node_metrics = Decode!(&response, Vec<NodeMetricsHistoryResultItem>)
+    let first_node_metrics = Decode!(&response, Vec<NodeMetricsHistoryRecord>)
         .unwrap()
         .remove(0)
         .node_metrics;
 
     let blockmaker_1_metrics = first_node_metrics
         .iter()
-        .find(|x| x.node_id == Principal::from(blockmaker_1.clone()))
+        .find(|x| x.node_id == blockmaker_1)
         .unwrap()
         .clone();
     let blockmaker_2_metrics = first_node_metrics
         .into_iter()
-        .find(|x| x.node_id == Principal::from(blockmaker_2.clone()))
+        .find(|x| x.node_id == blockmaker_2)
         .unwrap();
 
     assert_eq!(blockmaker_1_metrics.num_blocks_proposed_total, daily_blocks);
@@ -3074,4 +3176,215 @@ fn test_invalid_specified_id() {
         .unwrap_err();
     let expected_err = format!("The `specified_id` {} is invalid because it belongs to the canister allocation ranges of the test environment.\\nUse a `specified_id` that matches a canister ID on the ICP mainnet and a test environment that supports canister creation with `specified_id` (e.g., PocketIC).", specified_id);
     assert!(err.contains(&expected_err));
+}
+
+#[test]
+#[should_panic(
+    expected = "Creating an HTTP gateway requires `AutoProgress` to be enabled via `initial_time`."
+)]
+fn with_http_gateway_config_but_no_auto_progress() {
+    let http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: None,
+    };
+    let _pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_http_gateway(http_gateway_config)
+        .build();
+}
+
+// We already have a function `PocketIc::list_instances`,
+// but that function does not take a server URL as argument
+// (it tries to reuse an existing PocketIC server based on PID).
+async fn list_instances(server_url: &Url) -> Vec<String> {
+    let url = server_url.join("instances").unwrap();
+    reqwest::Client::new()
+        .get(url)
+        .send()
+        .await
+        .expect("Failed to get result")
+        .json()
+        .await
+        .expect("Failed to get json")
+}
+
+async fn list_http_gateways(server_url: &Url) -> Vec<HttpGatewayDetails> {
+    let url = server_url.join("http_gateway").unwrap();
+    reqwest::Client::new()
+        .get(url)
+        .send()
+        .await
+        .expect("Failed to get result")
+        .json()
+        .await
+        .expect("Failed to get json")
+}
+
+#[tokio::test]
+async fn with_http_gateway_config_and_cleanup_works() {
+    let server_params = StartServerParams {
+        server_binary: None,
+        reuse: false,
+    };
+    let (_child, server_url) = start_server(server_params).await;
+
+    let http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: None,
+    };
+    let pic = PocketIcBuilder::new()
+        .with_server_url(server_url.clone())
+        .with_application_subnet()
+        .with_http_gateway(http_gateway_config)
+        .with_auto_progress(None)
+        .build_async()
+        .await;
+
+    let instances = list_instances(&server_url).await;
+    assert_eq!(instances.len(), 1);
+    assert!(!instances[0].contains("Deleted"));
+    assert_eq!(list_http_gateways(&server_url).await.len(), 1);
+
+    pic.drop().await;
+
+    let instances = list_instances(&server_url).await;
+    assert_eq!(instances.len(), 1);
+    assert_eq!(instances[0], "Deleted");
+    assert!(list_http_gateways(&server_url).await.is_empty());
+}
+
+async fn assert_create_instance_failure(
+    server_url: &Url,
+    instance_config: InstanceConfig,
+    expected_msg: &str,
+) {
+    // We cannot use `PocketIcBuilder` since we don't want the test to panic at this point.
+    let res = reqwest::Client::new()
+        .post(server_url.join("instances").unwrap())
+        .json(&instance_config)
+        .send()
+        .await
+        .expect("Failed to get result")
+        .json::<CreateInstanceResponse>()
+        .await
+        .expect("Could not parse response for create instance request");
+    match res {
+        CreateInstanceResponse::Error { message } => {
+            assert!(message.contains(expected_msg));
+        }
+        _ => panic!("Unexpected result: {:?}", res),
+    };
+}
+
+#[tokio::test]
+async fn with_http_gateway_config_invalid_instance_config() {
+    let server_params = StartServerParams {
+        server_binary: None,
+        reuse: false,
+    };
+    let (_child, server_url) = start_server(server_params).await;
+
+    // We provide an invalid log level.
+    let subnet_config_set = SubnetConfigSet {
+        application: 1,
+        ..Default::default()
+    };
+    let http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: None,
+    };
+    let auto_progress_config = AutoProgressConfig {
+        artificial_delay_ms: None,
+    };
+    let instance_config = InstanceConfig {
+        subnet_config_set: subnet_config_set.into(),
+        http_gateway_config: Some(http_gateway_config),
+        state_dir: None,
+        nonmainnet_features: None,
+        log_level: Some("invalid".to_string()),
+        bitcoind_addr: None,
+        icp_features: None,
+        allow_incomplete_state: None,
+        initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
+    };
+    assert_create_instance_failure(&server_url, instance_config, "Failed to parse log level").await;
+
+    // We confirm that there are no instances and HTTP gateways
+    // after the failure, i.e., cleanup works.
+    let instances = list_instances(&server_url).await;
+    assert!(instances.is_empty());
+    let http_gateways = list_http_gateways(&server_url).await;
+    assert!(http_gateways.is_empty());
+}
+
+#[tokio::test]
+async fn with_http_gateway_config_invalid_gateway_config() {
+    let server_params = StartServerParams {
+        server_binary: None,
+        reuse: false,
+    };
+    let (_child, server_url) = start_server(server_params).await;
+
+    // We first successfully create an instance with an HTTP gateway
+    // to later craft an invalid HTTP gateway configuration
+    // reusing the same port.
+    let mut http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: None,
+    };
+    let pic = PocketIcBuilder::new()
+        .with_server_url(server_url.clone())
+        .with_application_subnet()
+        .with_http_gateway(http_gateway_config.clone())
+        .with_auto_progress(None)
+        .build_async()
+        .await;
+
+    let instances = list_instances(&server_url).await;
+    assert_eq!(instances.len(), 1);
+    assert!(!instances[0].contains("Deleted"));
+    let http_gateways = list_http_gateways(&server_url).await;
+    assert_eq!(http_gateways.len(), 1);
+
+    // We try to bind to the HTTP gateway to the same port which fails.
+    let http_gateway_port = http_gateways[0].port;
+    http_gateway_config.port = Some(http_gateway_port);
+    let subnet_config_set = SubnetConfigSet {
+        application: 1,
+        ..Default::default()
+    };
+    let auto_progress_config = AutoProgressConfig {
+        artificial_delay_ms: None,
+    };
+    let instance_config = InstanceConfig {
+        subnet_config_set: subnet_config_set.into(),
+        http_gateway_config: Some(http_gateway_config),
+        state_dir: None,
+        nonmainnet_features: None,
+        log_level: None,
+        bitcoind_addr: None,
+        icp_features: None,
+        allow_incomplete_state: None,
+        initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
+    };
+    assert_create_instance_failure(&server_url, instance_config, "Failed to bind to address").await;
+
+    // We confirm that there are no new instances and HTTP gateways
+    // after the failure, i.e., cleanup works.
+    let instances = list_instances(&server_url).await;
+    assert_eq!(instances.len(), 2);
+    assert!(!instances[0].contains("Deleted"));
+    assert_eq!(instances[1], "Deleted"); // an instance was temporarily created, but deleted before returning an error
+    let http_gateways = list_http_gateways(&server_url).await;
+    assert_eq!(http_gateways.len(), 1);
+
+    pic.drop().await;
 }

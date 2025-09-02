@@ -1,6 +1,6 @@
 use anyhow::Result;
 use bitcoin::Amount;
-use bitcoincore_rpc::{json::CreateRawTransactionInput, RpcApi};
+use ic_btc_adapter_test_utils::rpc_client::CreateRawTransactionInput;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
@@ -11,9 +11,9 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on},
 };
 use ic_tests_ckbtc::{
-    adapter::{fund_with_btc, get_alice_and_bob_wallets, get_blackhole_address, AdapterProxy},
+    adapter::{fund_with_btc, get_blackhole_address, AdapterProxy},
     adapter_test_setup, subnet_sys,
-    utils::{ensure_wallet, get_btc_client},
+    utils::get_btc_client,
 };
 use slog::info;
 use std::collections::HashMap;
@@ -25,14 +25,13 @@ fn test_received_blocks(env: TestEnv) {
 
     // Setup client
     let client = get_btc_client(&env);
-    ensure_wallet(&client, &log);
     let start_height = client.get_blockchain_info().unwrap().blocks;
     let anchor = client.get_block_hash(start_height).unwrap()[..].to_vec();
     info!(log, "Set up bitcoind wallet");
 
     // Mine 150 blocks
-    let address = client.get_new_address(None, None).unwrap().assume_checked();
-    client.generate_to_address(150, &address).unwrap();
+    let address = client.get_address().unwrap();
+    client.generate_to_address(150, address).unwrap();
     info!(log, "Generated 150");
 
     // Instruct the adapter to sync the blocks
@@ -60,30 +59,27 @@ fn test_receives_new_3rd_party_txs(env: TestEnv) {
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
 
     let client = get_btc_client(&env);
-    ensure_wallet(&client, &log);
     let start_height = client.get_blockchain_info().unwrap().blocks;
     let anchor = client.get_block_hash(start_height).unwrap()[..].to_vec();
     info!(log, "Set up bitcoind wallet");
 
-    let (alice_client, bob_client, alice_address, bob_address) = get_alice_and_bob_wallets(&env);
+    let alice_client = client.with_account("alice").unwrap();
+    let bob_client = client.with_account("bob").unwrap();
+    let alice_address = alice_client.get_address().unwrap();
+    let bob_address = bob_client.get_address().unwrap();
     info!(log, "Set up alice and bob");
 
-    fund_with_btc(&alice_client, &alice_address);
+    fund_with_btc(&alice_client, alice_address);
 
-    let alice_balance_initial = alice_client.get_balance(None, None).unwrap();
-    let bob_balance_initial = bob_client.get_balance(None, None).unwrap();
+    let alice_balance_initial = alice_client.get_balance(None).unwrap();
+    let bob_balance_initial = bob_client.get_balance(None).unwrap();
 
     let start_height = client.get_blockchain_info().unwrap().blocks;
     let txid = alice_client
-        .send_to_address(
-            &bob_address,
+        .send_to(
+            bob_address,
             Amount::from_btc(1.0).unwrap(),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
+            Amount::from_btc(0.0001).unwrap(),
         )
         .expect("Failed to send to Bob");
     alice_client
@@ -95,8 +91,8 @@ fn test_receives_new_3rd_party_txs(env: TestEnv) {
     );
 
     // Take the tx fee into consideration
-    let alice_balance_diff = alice_balance_initial - alice_client.get_balance(None, None).unwrap();
-    let bob_balance_diff = bob_client.get_balance(None, None).unwrap() - bob_balance_initial;
+    let alice_balance_diff = alice_balance_initial - alice_client.get_balance(None).unwrap();
+    let bob_balance_diff = bob_client.get_balance(None).unwrap() - bob_balance_initial;
     assert!(
         alice_balance_diff > Amount::from_btc(1.0).unwrap()
             && alice_balance_diff < Amount::from_btc(1.001).unwrap()
@@ -126,14 +122,15 @@ fn test_send_tx(env: TestEnv) {
     let subnet_sys = subnet_sys(&env);
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
 
-    let client = get_btc_client(&env);
-    ensure_wallet(&client, &log);
     info!(log, "Set up bitcoind wallet");
-
-    let (alice_client, bob_client, alice_address, bob_address) = get_alice_and_bob_wallets(&env);
+    let client = get_btc_client(&env);
+    let alice_client = client.with_account("alice").unwrap();
+    let bob_client = client.with_account("bob").unwrap();
+    let alice_address = alice_client.get_address().unwrap();
+    let bob_address = bob_client.get_address().unwrap();
     info!(log, "Set up alice and bob");
 
-    let utxo = fund_with_btc(&alice_client, &alice_address);
+    let utxo = fund_with_btc(&alice_client, alice_address);
 
     let to_send = Amount::from_btc(1.0).unwrap();
     let tx_fee = Amount::from_btc(0.001).unwrap();
@@ -152,12 +149,10 @@ fn test_send_tx(env: TestEnv) {
     };
 
     let raw_tx = alice_client
-        .create_raw_transaction(&[raw_tx_input], &outs, None, Some(true))
+        .create_raw_transaction(&[raw_tx_input], &outs)
         .expect("Failed to create raw transaction");
 
-    let signed_tx = alice_client
-        .sign_raw_transaction_with_wallet(&raw_tx, None, None)
-        .unwrap();
+    let signed_tx = alice_client.sign_raw_transaction(&raw_tx, None).unwrap();
 
     assert!(signed_tx.complete);
     assert!(signed_tx.errors.is_none());
@@ -171,17 +166,15 @@ fn test_send_tx(env: TestEnv) {
             .expect("Failed to send transaction")
     });
 
+    let bob_balance = bob_client.get_balance(None).unwrap();
     let mut tries = 0;
-    while tries < 5
-        && bob_client.get_balances().unwrap().mine.untrusted_pending
-            == Amount::from_btc(0.0).unwrap()
-    {
+    while tries < 5 && bob_client.get_balance(None).unwrap() == bob_balance {
         std::thread::sleep(std::time::Duration::from_secs(1));
         tries += 1;
     }
 
     assert_eq!(
-        bob_client.get_balances().unwrap().mine.untrusted_pending,
+        bob_client.get_balance(None).unwrap(),
         Amount::from_btc(1.0).unwrap()
     );
 }

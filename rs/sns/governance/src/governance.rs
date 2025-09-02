@@ -1,19 +1,11 @@
-use crate::extensions::{
-    validate_execute_extension_operation, ExtensionType, ValidatedRegisterExtension,
-};
-use crate::icrc_ledger_helper::ICRCLedgerHelper;
-use crate::pb::sns_root_types::{register_extension_response, CanisterCallError};
-use crate::pb::v1::governance::GovernanceCachedMetrics;
-use crate::pb::v1::{
-    valuation, ExecuteExtensionOperation, Metrics, RegisterExtension, TreasuryMetrics,
-    VotingPowerMetrics,
-};
-use crate::proposal::TreasuryAccount;
-use crate::treasury::{assess_treasury_balance, interpret_token_code, tokens_to_e8s};
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
         upgrade_canister_directly,
+    },
+    extensions::{
+        validate_execute_extension_operation, validate_register_extension,
+        validate_upgrade_extension,
     },
     follower_index::{
         add_neuron_to_follower_index, build_follower_index,
@@ -24,6 +16,7 @@ use crate::{
         remove_neuron_from_follower_index, FollowerIndex,
     },
     following::{self, ValidatedSetFollowing},
+    icrc_ledger_helper::ICRCLedgerHelper,
     logs::{ERROR, INFO},
     neuron::{
         NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
@@ -32,8 +25,8 @@ use crate::{
     pb::{
         sns_root_types::{
             ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
-            RegisterDappCanistersRequest, RegisterDappCanistersResponse, RegisterExtensionRequest,
-            RegisterExtensionResponse, SetDappControllersRequest, SetDappControllersResponse,
+            RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
+            SetDappControllersResponse,
         },
         v1::{
             claim_swap_neurons_response::SwapNeuron,
@@ -41,7 +34,8 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, Command as InFlightCommand},
-                MaturityModulation, NeuronInFlightCommand, PendingVersion, SnsMetadata, Version,
+                GovernanceCachedMetrics, MaturityModulation, NeuronInFlightCommand, PendingVersion,
+                SnsMetadata, Version,
             },
             governance_error::ErrorType,
             manage_neuron::{
@@ -58,37 +52,40 @@ use crate::{
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
-            upgrade_journal_entry, Account as AccountProto, AddMaturityRequest,
+            upgrade_journal_entry, valuation, Account as AccountProto, AddMaturityRequest,
             AddMaturityResponse, AdvanceTargetVersionRequest, AdvanceTargetVersionResponse, Ballot,
             ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
             ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters,
-            DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
-            FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
-            GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
-            GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
-            GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
-            GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
-            ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-            ListProposalsResponse, ManageDappCanisterSettings, ManageLedgerParameters,
-            ManageNeuron, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens,
-            MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
-            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
-            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
-            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
+            DisburseMaturityInProgress, Empty, ExecuteExtensionOperation,
+            ExecuteGenericNervousSystemFunction, FailStuckUpgradeInProgressRequest,
+            FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
+            GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
+            GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+            GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
+            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
+            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
+            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
+            ManageSnsMetadata, Metrics, MintSnsTokens, MintTokensRequest, MintTokensResponse,
+            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
+            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
+            RegisterExtension, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
+            TransferSnsTreasuryFunds, TreasuryMetrics, UpgradeSnsControlledCanister, Vote,
+            VotingPowerMetrics, WaitForQuietState,
         },
     },
     proposal::{
         get_action_auxiliary,
         transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err,
         validate_and_render_proposal, validate_and_render_set_topics_for_custom_proposals,
-        ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
+        TreasuryAccount, ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
     },
     sns_upgrade::{
         canister_type_and_wasm_hash_for_upgrade, get_all_sns_canisters, get_canisters_to_upgrade,
         get_running_version, get_upgrade_params, get_wasm, SnsCanisterType, UpgradeSnsParams,
     },
+    treasury::{assess_treasury_balance, interpret_token_code, tokens_to_e8s},
     types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock, Wasm},
 };
 
@@ -98,8 +95,6 @@ use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::SpanStats;
-#[cfg(target_arch = "wasm32")]
-use ic_cdk::spawn;
 use ic_ledger_core::Tokens;
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
@@ -130,6 +125,7 @@ use maplit::{btreemap, hashset};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
+use crate::pb::v1::UpgradeExtension;
 use std::{
     cell::RefCell,
     cmp::Ordering,
@@ -698,7 +694,7 @@ pub struct Governance {
 fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
     #[cfg(target_arch = "wasm32")]
     {
-        spawn(future);
+        ic_cdk::futures::spawn_017_compat(future);
     }
     // This is needed for tests
     #[cfg(not(target_arch = "wasm32"))]
@@ -2211,6 +2207,9 @@ impl Governance {
             Action::RegisterExtension(register_extension) => {
                 self.perform_register_extension(register_extension).await
             }
+            Action::UpgradeExtension(upgrade_extension) => {
+                self.perform_upgrade_extension(upgrade_extension).await
+            }
             Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
                 self.perform_deregister_dapp_canisters(deregister_dapp_canisters)
                     .await
@@ -2337,71 +2336,6 @@ impl Governance {
         }
     }
 
-    async fn register_extension_with_root(
-        &self,
-        extension_canister_id: CanisterId,
-    ) -> Result<(), GovernanceError> {
-        let payload = candid::Encode!(&RegisterExtensionRequest {
-            canister_id: Some(extension_canister_id.get()),
-        })
-        .map_err(|err| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidPrincipal,
-                format!("Could not encode RegisterExtensionRequest: {err:?}"),
-            )
-        })?;
-
-        let reply = self
-            .env
-            .call_canister(
-                self.proto.root_canister_id_or_panic(),
-                "register_extension",
-                payload,
-            )
-            .await
-            .map_err(|err| {
-                GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!("Canister method call failed: {err:?}"),
-                )
-            })?;
-
-        let RegisterExtensionResponse { result } = Decode!(&reply, RegisterExtensionResponse)
-            .map_err(|err| {
-                GovernanceError::new_with_message(
-                    ErrorType::External,
-                    format!("Could not decode RegisterExtensionResponse: {err:?}"),
-                )
-            })?;
-
-        if let Some(register_extension_response::Result::Err(CanisterCallError {
-            code,
-            description,
-        })) = result
-        {
-            let code = if let Some(code) = code {
-                code.to_string()
-            } else {
-                "<no code>".to_string()
-            };
-            return Err(GovernanceError::new_with_message(
-                ErrorType::External,
-                format!(
-                    "Root.register_extension failed with code {}: {}",
-                    code, description
-                ),
-            ));
-        }
-
-        log!(
-            INFO,
-            "Root.register_extension succeeded for canister {}",
-            extension_canister_id.get()
-        );
-
-        Ok(())
-    }
-
     async fn perform_register_extension(
         &mut self,
         register_extension: RegisterExtension,
@@ -2414,61 +2348,42 @@ impl Governance {
             ));
         }
 
-        // Step 0. Validate the RegisterExtension proposal.
-        let ValidatedRegisterExtension { wasm, init, spec } =
-            register_extension.try_into().map_err(|err| {
+        let validated_register_extension = validate_register_extension(self, register_extension)
+            .await
+            .map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::InvalidProposal,
-                    format!("Invalid RegisterExtension: {err:?}"),
+                    format!("Invalid RegisterExtension: {:?}", err),
                 )
             })?;
 
-        let Wasm::Chunked {
-            wasm_module_hash,
-            store_canister_id,
-            chunk_hashes_list,
-        } = wasm
-        else {
+        validated_register_extension.execute(self).await?;
+
+        Ok(())
+    }
+
+    async fn perform_upgrade_extension(
+        &mut self,
+        upgrade_extension: UpgradeExtension,
+    ) -> Result<(), GovernanceError> {
+        // Check if SNS extensions are enabled
+        if !crate::is_sns_extensions_enabled() {
             return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "RegisterExtension proposal must contain a chunked wasm module.",
-            ));
-        };
-
-        // Use the store canister to install the extension itself.
-        let extension_canister_id = store_canister_id;
-
-        // Step 1. Register the extension with Root.
-        self.register_extension_with_root(extension_canister_id)
-            .await?;
-
-        // Step 2. Validate the init arguments.
-        if !spec.supports_extension_type(ExtensionType::TreasuryManager) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "Only TreasuryManager extensions are currently supported.",
+                ErrorType::PreconditionFailed,
+                "SNS extensions are not enabled",
             ));
         }
 
-        let treasury_manager_canister_id = extension_canister_id;
+        let validated_upgrade_extension = validate_upgrade_extension(self, upgrade_extension)
+            .await
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("Invalid UpgradeExtension: {:?}", err),
+                )
+            })?;
 
-        let (arg, sns_amount_e8s, icp_amount_e8s) =
-            self.construct_treasury_manager_init_payload(init).await?;
-
-        self.deposit_treasury_manager(treasury_manager_canister_id, sns_amount_e8s, icp_amount_e8s)
-            .await?;
-
-        self.upgrade_non_root_canister(
-            treasury_manager_canister_id,
-            Wasm::Chunked {
-                wasm_module_hash,
-                store_canister_id,
-                chunk_hashes_list,
-            },
-            arg,
-            CanisterInstallMode::Install,
-        )
-        .await?;
+        validated_upgrade_extension.execute(self).await?;
 
         Ok(())
     }
@@ -2671,7 +2586,9 @@ impl Governance {
             validate_execute_extension_operation(self, execute_extension_operation).await?;
 
         // Execute the validated operation
-        validated_operation.execute(self).await
+        validated_operation.execute(self).await?;
+
+        Ok(())
     }
 
     /// Executes a ManageNervousSystemParameters proposal by updating Governance's
@@ -2792,8 +2709,8 @@ impl Governance {
         .await
     }
 
-    async fn upgrade_non_root_canister(
-        &mut self,
+    pub(crate) async fn upgrade_non_root_canister(
+        &self,
         canister_id: CanisterId,
         wasm: Wasm,
         arg: Vec<u8>,

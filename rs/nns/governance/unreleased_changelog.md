@@ -9,11 +9,16 @@ on the process that this file is part of, see
 
 ## Added
 
+* The neuron `Split` command accepts an optional `memo` field that can be used to derive the neuron
+  subaccount, rather than generating a random one.
+
 ## Changed
 
 ## Deprecated
 
 ## Removed
+
+* The `IcpXdrConversionRate` proposal is now obsolete and cannot be submitted.
 
 ## Fixed
 

@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_cdk::api::call::call_raw;
 use ic_nervous_system_canisters::registry::RegistryCanister;

@@ -2,7 +2,6 @@ use crate::message_routing::{
     LatencyMetrics, MessageRoutingMetrics, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
 };
 use ic_base_types::NumBytes;
-use ic_certification_version::CertificationVersion;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_error_types::RejectCode;
 use ic_interfaces::messaging::{
@@ -571,7 +570,6 @@ impl StreamHandlerImpl {
             let new_destination = state
                 .metadata
                 .network_topology
-                .routing_table
                 .route(response.receiver().get())
                 .expect("Canister disappeared from registry. Registry in an inconsistent state.");
             info!(
@@ -766,14 +764,6 @@ impl StreamHandlerImpl {
                     stream.push_accept_signal();
                     maybe_lost_cycles
                 }
-                Reject(reason, RequestOrResponse::Request(request))
-                    if state.metadata.certification_version < CertificationVersion::V19 =>
-                {
-                    // Unable to induct a request, generate reject response and push it into `stream`.
-                    stream.push(generate_reject_response_for(reason, &request));
-                    stream.push_accept_signal();
-                    Cycles::zero()
-                }
                 Reject(reason, RequestOrResponse::Request(_)) => {
                     // Unable to induct a request, push a reject signal.
                     stream.push_reject_signal(reason);
@@ -791,9 +781,7 @@ impl StreamHandlerImpl {
         } else {
             // `remote_subnet_id` is not known to be a valid host for `msg.sender()`.
             //
-            // Do not enqueue a reject response as remote subnet is likely malicious and
-            // trying to cause a memory leak by sending bogus messages and never consuming
-            // reject responses.
+            // Do not push a reject signal as remote subnet is likely malicious.
             error!(
                 self.log,
                 "{}: Dropping message from subnet {} claiming to be from sender {}: {:?}",
@@ -828,11 +816,7 @@ impl StreamHandlerImpl {
         available_guaranteed_response_memory: &mut i64,
     ) -> InductionResult {
         // Subnet that should have received the message according to the routing table.
-        let receiver_host_subnet = state
-            .metadata
-            .network_topology
-            .routing_table
-            .route(msg.receiver().get());
+        let receiver_host_subnet = state.metadata.network_topology.route(msg.receiver().get());
 
         let payload_size = msg.payload_size_bytes().get();
         let msg_cycles = msg.cycles();
@@ -978,11 +962,7 @@ impl StreamHandlerImpl {
         state: &ReplicatedState,
     ) -> bool {
         // Remote subnet that should have sent the message according to the routing table.
-        let expected_subnet_id = state
-            .metadata
-            .network_topology
-            .routing_table
-            .route(msg.sender().get());
+        let expected_subnet_id = state.metadata.network_topology.route(msg.sender().get());
 
         match expected_subnet_id {
             // The actual originating subnet and the routing table entry for the sender are in agreement.
@@ -1038,11 +1018,7 @@ impl StreamHandlerImpl {
     ) -> bool {
         debug_assert_eq!(
             Some(actual_receiver_subnet_id),
-            state
-                .metadata
-                .network_topology
-                .routing_table
-                .route(msg.receiver().get())
+            state.metadata.network_topology.route(msg.receiver().get())
         );
 
         // Reroute if `msg.receiver()` is being migrated from `self.subnet_id` to

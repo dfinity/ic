@@ -165,7 +165,7 @@ fn test(env: TestEnv) {
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
 
-    let replica_version = get_guestos_img_version().unwrap();
+    let replica_version = get_guestos_img_version();
     let mut registry_version = snapshot.get_registry_version();
     let root_subnet_id = snapshot.root_subnet_id();
 

@@ -31,7 +31,7 @@ EOF
         LIST_OF_FUZZERS=$(bazel query 'attr(tags, "libfuzzer", //rs/...)')
 
         for FUZZER in $LIST_OF_FUZZERS; do
-            bazel build --config=fuzzing $FUZZER
+            bazel build --config=lint --config=fuzzing $FUZZER
             SOURCE_BINARY="$WORKSPACE/$(bazel cquery --config=fuzzing --output=files $FUZZER)"
             if [ $1 == "--zip" ]; then # zip branch
                 SOURCE_BASENAME=$(basename $SOURCE_BINARY)
@@ -59,7 +59,7 @@ EOF
         # Add a dummy seed corpus file for AFL
         echo "A dummy corpus file to make AFL work" >seed_corpus.txt
         for FUZZER in $LIST_OF_FUZZERS; do
-            bazel build --config=afl $FUZZER
+            bazel build --config=lint --config=afl $FUZZER
             SOURCE_BINARY="$WORKSPACE/$(bazel cquery --config=fuzzing --output=files $FUZZER)"
             if [ $1 == "--zip" ]; then # zip branch
                 SOURCE_BASENAME=$(basename $SOURCE_BINARY)

@@ -703,7 +703,7 @@ impl CanisterManager {
 
         let fee = self
             .cycles_account_manager
-            .canister_creation_fee(subnet_size, state.metadata.cost_schedule);
+            .canister_creation_fee(subnet_size, state.get_own_cost_schedule());
         if cycles < fee {
             return (
                 Err(CanisterManagerError::CreateCanisterNotEnoughCycles {
@@ -731,7 +731,7 @@ impl CanisterManager {
             &subnet_memory_saturation,
             cycles - fee,
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
         ) {
             Err(err) => (Err(err), cycles),
             Ok(validate_settings) => {
@@ -1245,7 +1245,7 @@ impl CanisterManager {
             &subnet_memory_saturation,
             cycles,
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
         ) {
             Err(err) => Err(err),
             Ok(validated_settings) => self.create_canister_helper(
@@ -1284,12 +1284,7 @@ impl CanisterManager {
             return Err(CanisterManagerError::CanisterAlreadyExists(new_canister_id));
         }
 
-        if state
-            .metadata
-            .network_topology
-            .routing_table
-            .route(specified_id)
-            == Some(state.metadata.own_subnet_id)
+        if state.metadata.network_topology.route(specified_id) == Some(state.metadata.own_subnet_id)
         {
             Ok(new_canister_id)
         } else {
@@ -1878,7 +1873,7 @@ impl CanisterManager {
         let cycles_for_instructions = self.cycles_account_manager.execution_cost(
             instructions,
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             // For the `take_canister_snapshot` operation, it does not matter if this is a Wasm64 or Wasm32 module
             // since the number of instructions charged depends on constant set fee and snapshot size
             // and Wasm64 does not bring any additional overhead for this operation.
@@ -1888,7 +1883,7 @@ impl CanisterManager {
 
         let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             canister,
             sender,
             cycles_for_instructions,
@@ -1909,7 +1904,7 @@ impl CanisterManager {
 
         self.cycles_and_memory_usage_updates(
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             canister,
             sender,
             round_limits,
@@ -2054,6 +2049,7 @@ impl CanisterManager {
                 snapshot
             }
         };
+        let execution_snapshot = snapshot.execution_snapshot();
 
         // Check the precondition:
         // Unable to start executing a `load_canister_snapshot`
@@ -2082,7 +2078,7 @@ impl CanisterManager {
             &mut canister_clone,
             self.config.canister_snapshot_baseline_instructions,
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             // For the `load_canister_snapshot` operation, it does not matter if this is a Wasm64 or Wasm32 module
             // since the number of instructions charged depends on constant set fee
             // and Wasm64 does not bring any additional overhead for this operation.
@@ -2098,7 +2094,6 @@ impl CanisterManager {
         let (_old_execution_state, mut system_state, scheduler_state) = canister_clone.into_parts();
 
         let (instructions_used, new_execution_state) = {
-            let execution_snapshot = snapshot.execution_snapshot();
             let new_wasm_hash = WasmHash::from(&execution_snapshot.wasm_binary);
             let compilation_cost_handling = if state
                 .metadata
@@ -2151,6 +2146,25 @@ impl CanisterManager {
         system_state
             .certified_data
             .clone_from(snapshot.certified_data());
+
+        // We don't restore the state of global timer and on low wasm memory hook
+        // for snapshots created via `take_canister_snapshot`
+        // since that would be a breaking change.
+        if snapshot.source() == SnapshotSource::MetadataUpload(candid::Reserved) {
+            if let Some(global_timer) = execution_snapshot.global_timer {
+                system_state.global_timer = global_timer;
+            }
+            if let Some(on_low_wasm_memory_hook_status) =
+                execution_snapshot.on_low_wasm_memory_hook_status
+            {
+                system_state
+                    .task_queue
+                    .set_on_low_wasm_memory_hook_status_from_snapshot(
+                        on_low_wasm_memory_hook_status,
+                    );
+            }
+        }
+
         let wasm_execution_mode = new_execution_state
             .as_ref()
             .map_or(WasmExecutionMode::Wasm32, |exec_state| {
@@ -2184,7 +2198,7 @@ impl CanisterManager {
         let cycles_for_instructions = self.cycles_account_manager.execution_cost(
             instructions,
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             // In this case, when the canister is actually created from the snapshot, we need to check
             // if the canister is in wasm64 mode to account for its instruction usage.
             wasm_execution_mode,
@@ -2192,7 +2206,7 @@ impl CanisterManager {
 
         let validated_cycles_and_memory_usage = match self.cycles_and_memory_usage_checks(
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             &new_canister,
             sender,
             cycles_for_instructions,
@@ -2209,7 +2223,7 @@ impl CanisterManager {
 
         self.cycles_and_memory_usage_updates(
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             &mut new_canister,
             sender,
             round_limits,
@@ -2328,12 +2342,19 @@ impl CanisterManager {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
         let snapshot = self.get_snapshot(canister.canister_id(), snapshot_id, state)?;
+        // A snapshot also contains the instruction counter as the last global
+        // (because it is *appended* during WASM instrumentation).
+        // We pop that last global (which is merely an implementation detail)
+        // from the list of globals returned to the user.
+        let mut globals = snapshot.exported_globals().clone();
+        let maybe_instruction_counter = globals.pop();
+        debug_assert!(maybe_instruction_counter.is_some());
 
         Ok(ReadCanisterSnapshotMetadataResponse {
             source: snapshot.source(),
             taken_at_timestamp: snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
             wasm_module_size: snapshot.execution_snapshot().wasm_binary.len() as u64,
-            exported_globals: snapshot.exported_globals().clone(),
+            globals,
             wasm_memory_size: snapshot.execution_snapshot().wasm_memory.size.get() as u64
                 * WASM_PAGE_SIZE_IN_BYTES as u64,
             stable_memory_size: snapshot.execution_snapshot().stable_memory.size.get() as u64
@@ -2378,7 +2399,7 @@ impl CanisterManager {
                 .canister_snapshot_data_baseline_instructions
                 .saturating_add(&NumInstructions::new(num_response_bytes)),
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             // For the `read_snapshot_data` operation, it does not matter if this is a Wasm64 or Wasm32 module.
             WasmExecutionMode::Wasm32,
         ) {
@@ -2393,7 +2414,7 @@ impl CanisterManager {
                     Err(e) => Err(e.into()),
                 }
             }
-            CanisterSnapshotDataKind::MainMemory { offset, size } => {
+            CanisterSnapshotDataKind::WasmMemory { offset, size } => {
                 let main_memory = snapshot.execution_snapshot().wasm_memory.clone();
                 match CanisterSnapshot::get_memory_chunk(main_memory, offset, size) {
                     Ok(chunk) => Ok(chunk),
@@ -2510,7 +2531,7 @@ impl CanisterManager {
         let cycles_for_instructions = self.cycles_account_manager.execution_cost(
             instructions,
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             // For the `create_snapshot_from_metadata` operation, it does not matter if this is a Wasm64 or Wasm32 module
             // since the number of instructions charged depends on constant set fee and snapshot size
             // and Wasm64 does not bring any additional overhead for this operation.
@@ -2520,7 +2541,7 @@ impl CanisterManager {
 
         let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             canister,
             sender,
             cycles_for_instructions,
@@ -2545,7 +2566,7 @@ impl CanisterManager {
 
         self.cycles_and_memory_usage_updates(
             subnet_size,
-            state.metadata.cost_schedule,
+            state.get_own_cost_schedule(),
             canister,
             sender,
             round_limits,
@@ -2592,7 +2613,7 @@ impl CanisterManager {
         validate_controller(canister, &sender)?;
         let snapshot_id = args.get_snapshot_id();
 
-        let cost_schedule = state.metadata.cost_schedule;
+        let cost_schedule = state.get_own_cost_schedule();
         let snapshot: &mut Arc<CanisterSnapshot> =
             self.get_snapshot_mut(canister.canister_id(), snapshot_id, state)?;
 
@@ -2643,7 +2664,7 @@ impl CanisterManager {
                     });
                 }
             }
-            CanisterSnapshotDataOffset::MainMemory { offset } => {
+            CanisterSnapshotDataOffset::WasmMemory { offset } => {
                 let max_size_bytes =
                     snapshot_inner.wasm_memory().size.get() * WASM_PAGE_SIZE_IN_BYTES;
                 if max_size_bytes < args.chunk.len().saturating_add(offset as usize) {
@@ -2692,7 +2713,7 @@ impl CanisterManager {
                 let new_memory_usage = canister.memory_usage() + chunk_bytes;
                 let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
                     subnet_size,
-                    state.metadata.cost_schedule,
+                    state.get_own_cost_schedule(),
                     canister,
                     sender,
                     Cycles::zero(),
@@ -2703,7 +2724,7 @@ impl CanisterManager {
                 )?;
                 self.cycles_and_memory_usage_updates(
                     subnet_size,
-                    state.metadata.cost_schedule,
+                    state.get_own_cost_schedule(),
                     canister,
                     sender,
                     round_limits,
@@ -2770,7 +2791,7 @@ impl CanisterManager {
                 args.chunk.len() as u64,
                 NumInstructions::new(args.chunk.len() as u64),
             ),
-            CanisterSnapshotDataOffset::MainMemory { .. } => (
+            CanisterSnapshotDataOffset::WasmMemory { .. } => (
                 args.chunk.len() as u64,
                 NumInstructions::new(args.chunk.len() as u64),
             ),
@@ -2857,7 +2878,7 @@ impl CanisterManager {
 fn get_response_size(kind: &CanisterSnapshotDataKind) -> Result<u64, CanisterManagerError> {
     let size = match kind {
         CanisterSnapshotDataKind::WasmModule { size, .. } => *size,
-        CanisterSnapshotDataKind::MainMemory { size, .. } => *size,
+        CanisterSnapshotDataKind::WasmMemory { size, .. } => *size,
         CanisterSnapshotDataKind::StableMemory { size, .. } => *size,
         CanisterSnapshotDataKind::WasmChunk { .. } => return Ok(CHUNK_SIZE),
     };

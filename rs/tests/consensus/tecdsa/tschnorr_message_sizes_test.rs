@@ -133,11 +133,17 @@ async fn gen_message_and_get_signature_depending_on_limit(
     let message = dummy_message(message_size);
 
     let signature = match limit_type {
-        LimitType::Local => {
-            generate_dummy_schnorr_signature_with_logger(message.len(), 0, 0, key_id, sig_can, log)
-                .await
-                .map(|sig| sig.signature)
-        }
+        LimitType::Local => generate_dummy_schnorr_signature_with_logger(
+            message.len(),
+            0,
+            0,
+            key_id,
+            None,
+            sig_can,
+            log,
+        )
+        .await
+        .map(|sig| sig.signature),
 
         LimitType::XNet => {
             get_schnorr_signature_with_logger(message.clone(), cycles, key_id, msg_can, log).await

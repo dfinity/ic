@@ -33,10 +33,7 @@ use ic_nervous_system_timers::test::{
 use ic_neurons_fund::{
     NeuronsFundParticipationLimits, PolynomialMatchingFunction, SerializableFunction,
 };
-use ic_nns_common::{
-    pb::v1::{NeuronId, ProposalId},
-    types::UpdateIcpXdrConversionRatePayload,
-};
+use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
@@ -737,75 +734,6 @@ async fn test_cascade_following() {
             .expect("Neuron not found"),
         0
     );
-}
-
-/// In this scenario, we simply test that you cannot make a proposal
-/// to set the conversion rate below the minimum allowable rate.
-#[tokio::test]
-async fn test_minimum_icp_xdr_conversion_rate() {
-    let driver = fake::FakeDriver::default();
-    let mut gov = Governance::new(
-        fixture_for_following(),
-        driver.get_fake_env(),
-        driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
-        driver.get_fake_randomness_generator(),
-    );
-    // Set minimum conversion rate.
-    gov.heap_data
-        .economics
-        .as_mut()
-        .unwrap()
-        .minimum_icp_xdr_rate = 100_000;
-    // This should fail.
-    assert_eq!(
-        ErrorType::InvalidProposal as i32,
-        gov.make_proposal(
-            &NeuronId { id: 1 },
-            // Must match neuron 1's serialized_id.
-            &PrincipalId::try_from(b"SID1".to_vec()).unwrap(),
-            &Proposal {
-                summary: "test".to_string(),
-                action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                    nns_function: NnsFunction::IcpXdrConversionRate as i32,
-                    payload: Encode!(&UpdateIcpXdrConversionRatePayload {
-                        xdr_permyriad_per_icp: 0,
-                        data_source: "".to_string(),
-                        timestamp_seconds: 0,
-                        reason: None,
-                    })
-                    .unwrap(),
-                })),
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap_err()
-        .error_type
-    );
-    // This should succeed
-    gov.make_proposal(
-        &NeuronId { id: 1 },
-        // Must match neuron 1's serialized_id.
-        &PrincipalId::try_from(b"SID1".to_vec()).unwrap(),
-        &Proposal {
-            title: Some("A Reasonable Title".to_string()),
-            summary: "test".to_string(),
-            action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                nns_function: NnsFunction::IcpXdrConversionRate as i32,
-                payload: Encode!(&UpdateIcpXdrConversionRatePayload {
-                    xdr_permyriad_per_icp: 100_000_000,
-                    data_source: "".to_string(),
-                    timestamp_seconds: 0,
-                    reason: None,
-                })
-                .unwrap(),
-            })),
-            ..Default::default()
-        },
-    )
-    .await
-    .unwrap();
 }
 
 #[tokio::test]
@@ -3371,29 +3299,6 @@ async fn test_genesis_in_the_future_in_supported() {
         )
         .await
         .unwrap();
-    let short_proposal_pid = gov
-        .make_proposal(
-            &NeuronId { id: 1 },
-            // Must match neuron 1's serialized_id.
-            &principal(1),
-            &Proposal {
-                title: Some("A Reasonable Title".to_string()),
-                summary: "proposal 2 (short)".to_string(),
-                action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
-                    nns_function: NnsFunction::IcpXdrConversionRate as i32,
-                    payload: Encode!(&UpdateIcpXdrConversionRatePayload {
-                        xdr_permyriad_per_icp: 9256,
-                        data_source: "the data source".to_string(),
-                        timestamp_seconds: 111_222_333,
-                        reason: None,
-                    })
-                    .unwrap(),
-                })),
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
 
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
     run_pending_timers();
@@ -3411,20 +3316,6 @@ async fn test_genesis_in_the_future_in_supported() {
             rounds_since_last_distribution: Some(0),
             latest_round_available_e8s_equivalent: Some(0)
         }
-    );
-    // ... even though the short proposal is ready to settle
-    let short_info = gov
-        .get_proposal_info(&PrincipalId::new_anonymous(), short_proposal_pid)
-        .unwrap();
-    assert_eq!(
-        short_info.reward_status, ReadyToSettle as i32,
-        "Proposal info for the 'short' proposal: {:#?}",
-        short_info
-    );
-    assert_eq!(
-        short_info.reward_event_round, 0,
-        "Proposal info for the 'short' proposal: {:#?}",
-        short_info
     );
 
     // The long proposal, however, is still open for voting
@@ -3508,7 +3399,7 @@ async fn test_genesis_in_the_future_in_supported() {
         RewardEvent {
             day_after_genesis: 1,
             actual_timestamp_seconds: fake_driver.now(),
-            settled_proposals: vec![long_early_proposal_pid, short_proposal_pid],
+            settled_proposals: vec![long_early_proposal_pid],
             distributed_e8s_equivalent: 2,
             total_available_e8s_equivalent: 100,
             rounds_since_last_distribution: Some(1),
@@ -3541,12 +3432,6 @@ async fn test_genesis_in_the_future_in_supported() {
     // At this point, all proposals have been rewarded
     assert_eq!(
         gov.get_proposal_info(&PrincipalId::new_anonymous(), long_early_proposal_pid)
-            .unwrap()
-            .reward_event_round,
-        1
-    );
-    assert_eq!(
-        gov.get_proposal_info(&PrincipalId::new_anonymous(), short_proposal_pid)
             .unwrap()
             .reward_event_round,
         1
@@ -3602,7 +3487,6 @@ fn compute_maturities(
     let governance_proto = GovernanceProtoBuilder::new()
         .with_instant_neuron_operations()
         .with_neurons(neurons)
-        .with_short_voting_period(10)
         .with_neuron_management_voting_period(10)
         .with_wait_for_quiet_threshold(10)
         .build();
@@ -3694,19 +3578,7 @@ proptest! {
 fn test_topic_weights(stake in 1u64..1_000_000_000) {
     // Check that voting on
     // 1. a governance proposal yields 20 times the voting power
-    // 2. an exchange rate proposal yields 0.01 times the voting power
     // 3. other proposals yield 1 time the voting power
-
-    // Test alloacting 100 maturity to two neurons with equal stake where
-    // 1. first neuron voting on a network proposal (1x) and
-    // 2. second neuron voting on an exchange proposal (0.01x).
-    // Overall reward weights are 2 * (1+0.01) = 2.02
-    // First neuron gets 1/2.02 * 100 = 49.5 truncated to 49.
-    // Second neuron gets 0.01/2.02 * 100 = 0.495 truncated to 0.
-    assert_eq!(
-        compute_maturities(vec![stake, stake], vec!["P-N", "-PE"], USUAL_REWARD_POT_E8S),
-        vec![49, 0]
-    );
 
     // Test alloacting 100 maturity to two neurons with equal stake where
     // 1. first neuron voting on a gov proposal (20x) and
@@ -3761,7 +3633,6 @@ fn test_random_voting_rewards_scenarios() {
             match proposal_topic {
                 fake::ProposalTopicBehavior::Governance => 20_00,
                 fake::ProposalTopicBehavior::NetworkEconomics => 1_00,
-                fake::ProposalTopicBehavior::ExchangeRate => 1,
             }
         }
 
@@ -3794,7 +3665,6 @@ fn test_random_voting_rewards_scenarios() {
             let proposal_topic = *[
                 fake::ProposalTopicBehavior::Governance,
                 fake::ProposalTopicBehavior::NetworkEconomics,
-                fake::ProposalTopicBehavior::ExchangeRate,
             ]
             .iter()
             .choose(&mut rng)
@@ -5220,10 +5090,17 @@ fn test_rate_limiting_neuron_creation() {
             .neuron_store
             .with_neuron(&neuron_id, |neuron| neuron.controller())
             .unwrap();
-        gov.split_neuron(&neuron_id, &controller, &Split { amount_e8s: 5 * E8 })
-            .now_or_never()
-            .unwrap()
-            .unwrap();
+        gov.split_neuron(
+            &neuron_id,
+            &controller,
+            &Split {
+                amount_e8s: 5 * E8,
+                memo: None,
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap();
 
         // spawn should not be rate limited
         let controller = gov
@@ -5477,6 +5354,7 @@ fn test_neuron_split_fails() {
             &from,
             &Split {
                 amount_e8s: 1_000_000,
+                memo: None,
             },
         )
         .now_or_never()
@@ -5494,6 +5372,7 @@ fn test_neuron_split_fails() {
             &unauthorized_caller,
             &Split {
                 amount_e8s: 1_000_000,
+                memo: None,
             },
         )
         .now_or_never()
@@ -5510,6 +5389,7 @@ fn test_neuron_split_fails() {
             &from,
             &Split {
                 amount_e8s: 1_000_000_000 - min_neuron_stake + 1,
+                memo: None,
             },
         )
         .now_or_never()
@@ -5527,6 +5407,7 @@ fn test_neuron_split_fails() {
             &from,
             &Split {
                 amount_e8s: min_neuron_stake - 1 + transaction_fee,
+                memo: None,
             },
         )
         .now_or_never()
@@ -5606,6 +5487,7 @@ fn test_neuron_split() {
             &from,
             &Split {
                 amount_e8s: 200_000_000,
+                memo: None,
             },
         )
         .now_or_never()
@@ -5673,6 +5555,28 @@ fn test_neuron_split() {
     let neuron_ids = governance.get_neuron_ids_by_principal(&from);
     let expected_neuron_ids = btreeset! { id, child_nid };
     assert_eq!(neuron_ids, expected_neuron_ids);
+
+    let child_neuron_split_by_memo_id = governance
+        .split_neuron(
+            &id,
+            &from,
+            &Split {
+                amount_e8s: 200_000_000,
+                memo: Some(1234),
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(governance.neuron_store.len(), 3);
+    let child_neuron_split_by_memo = governance
+        .get_full_neuron(&child_neuron_split_by_memo_id, &from)
+        .expect("The child neuron is missing");
+    assert_eq!(
+        child_neuron_split_by_memo.account,
+        ledger::compute_neuron_split_subaccount_bytes(from, 1234).to_vec(),
+    );
 }
 
 #[test]
@@ -5726,6 +5630,7 @@ fn test_seed_neuron_split() {
             &from,
             &Split {
                 amount_e8s: 100_000_000 + transaction_fee,
+                memo: None,
             },
         )
         .now_or_never()

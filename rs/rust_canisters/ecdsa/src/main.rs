@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::{candid_method, CandidType, Encode};
 use ic_cdk::api::{call::call_raw, print};
 use ic_cdk::update;

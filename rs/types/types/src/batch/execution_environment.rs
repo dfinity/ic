@@ -341,7 +341,7 @@ impl TryFrom<&pb::CanisterQueryStats> for CanisterQueryStats {
 
 /// How to charge canisters for their use of computational resources (such as
 /// executing instructions, storing data, network, etc.)
-#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CanisterCyclesCostSchedule {
     #[default]
     Normal,
