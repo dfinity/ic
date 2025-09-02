@@ -1095,7 +1095,9 @@ fn deposit_cycles_to_non_existing_canister_fails() {
         WasmResult::Reject(format!("Canister {} not found.", canister)),
         result
     );
-    assert!(test.canister_state(controller).system_state.balance() > Cycles::from(1_u128 << 61));
+    let controller_balance = test.canister_state(controller).system_state.balance().get();
+    assert!(controller_balance <= 1_u128 << 61);
+    assert!(controller_balance >= (1_u128 << 61) - 100_000_000_000);
 }
 
 #[test]

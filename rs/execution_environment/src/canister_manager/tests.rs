@@ -1633,9 +1633,13 @@ fn deposit_cycles_succeeds_with_enough_cycles() {
         test.canister_state(canister_id).system_state.balance(),
         cycles_balance_before + cycles_to_deposit
     );
-    assert!(
-        test.canister_state(deposit_canister).system_state.balance() < Cycles::from(1_u128 << 61)
-    );
+    let depositer_balance = test
+        .canister_state(deposit_canister)
+        .system_state
+        .balance()
+        .get();
+    assert!(depositer_balance <= 1_u128 << 61);
+    assert!(depositer_balance >= (1_u128 << 61) - 100_000_000_000);
 }
 
 #[test]
