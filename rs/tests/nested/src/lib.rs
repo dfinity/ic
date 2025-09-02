@@ -477,7 +477,7 @@ pub fn nns_recovery_test(env: TestEnv) {
     let output_dir = env.get_path("recovery_output");
     set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
 
-    // Define faulty and healthy nodes, pick a DFINITY-owned node (could be healthy or faulty)
+    // Choose f+1 faulty nodes to break
     let mut nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
     let f = (SUBNET_SIZE - 1) / 3;
     let faulty_nodes = &nns_nodes[..(f + 1)];
