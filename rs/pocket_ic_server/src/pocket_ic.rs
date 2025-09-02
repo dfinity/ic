@@ -12,8 +12,9 @@ use axum::{
 use bitcoin::Network;
 use candid::{CandidType, Decode, Encode, Principal};
 use cycles_minting_canister::{
-    ChangeSubnetTypeAssignmentArgs, CyclesCanisterInitPayload, SetAuthorizedSubnetworkListArgs,
-    SubnetListWithType, UpdateSubnetTypeArgs, DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
+    ChangeSubnetTypeAssignmentArgs, ChangeSubnetTypeAssignmentError, CyclesCanisterInitPayload,
+    SetAuthorizedSubnetworkListArgs, SubnetListWithType, UpdateSubnetTypeArgs,
+    UpdateSubnetTypeError, DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
 };
 use futures::future::BoxFuture;
 use futures::FutureExt;
@@ -76,8 +77,10 @@ use ic_registry_routing_table::{
     are_disjoint, is_subset_of, CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_registry_transport::deserialize_atomic_mutate_response;
 use ic_sns_wasm::init::SnsWasmCanisterInitPayloadBuilder;
-use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
+use ic_sns_wasm::pb::v1::add_wasm_response::Result as AddWasmResult;
+use ic_sns_wasm::pb::v1::{AddWasmRequest, AddWasmResponse, SnsCanisterType, SnsWasm};
 use ic_state_machine_tests::{
     add_global_registry_records, add_initial_registry_records, FakeVerifier, StateMachine,
     StateMachineBuilder, StateMachineConfig, StateMachineStateDir, SubmitIngressError, Subnets,
@@ -1037,13 +1040,14 @@ impl PocketIcSubnets {
             .collect();
         for mutation_request in mutation_requests {
             let mutation_request_bytes = mutation_request.encode_to_vec();
-            self.execute_ingress_on(
+            let res = self.execute_ingress_on(
                 nns_subnet.clone(),
                 GOVERNANCE_CANISTER_ID.get(),
                 REGISTRY_CANISTER_ID,
                 "atomic_mutate".to_string(),
                 mutation_request_bytes,
             );
+            deserialize_atomic_mutate_response(res).unwrap();
         }
         self.synced_registry_version = self.registry_data_provider.latest_version();
     }
@@ -1143,13 +1147,15 @@ impl PocketIcSubnets {
                 xdr_permyriad_per_icp,
                 reason: None,
             };
-            self.execute_ingress_on(
+            let res = self.execute_ingress_on(
                 nns_subnet.clone(),
                 GOVERNANCE_CANISTER_ID.get(),
                 CYCLES_MINTING_CANISTER_ID,
                 "set_icp_xdr_conversion_rate".to_string(),
                 Encode!(&update_icp_xdr_conversion_rate_payload).unwrap(),
             );
+            let decoded = Decode!(&res, Result<(), String>).unwrap();
+            decoded.unwrap();
         }
 
         // set default (application) subnets on CMC
@@ -1169,6 +1175,7 @@ impl PocketIcSubnets {
             who: None,
             subnets: authorized_subnets,
         };
+        // returns ()
         self.execute_ingress_on(
             nns_subnet.clone(),
             GOVERNANCE_CANISTER_ID.get(),
@@ -1185,25 +1192,29 @@ impl PocketIcSubnets {
             .map(|subnet_config| subnet_config.subnet_id);
         if let Some(fiduciary_subnet_id) = maybe_fiduciary_subnet_id {
             let update_subnet_type_args = UpdateSubnetTypeArgs::Add("fiduciary".to_string());
-            self.execute_ingress_on(
+            let res = self.execute_ingress_on(
                 nns_subnet.clone(),
                 GOVERNANCE_CANISTER_ID.get(),
                 CYCLES_MINTING_CANISTER_ID,
                 "update_subnet_type".to_string(),
                 Encode!(&update_subnet_type_args).unwrap(),
             );
+            let decoded = Decode!(&res, Result<(), UpdateSubnetTypeError>).unwrap();
+            decoded.unwrap();
             let change_subnet_type_assignment_args =
                 ChangeSubnetTypeAssignmentArgs::Add(SubnetListWithType {
                     subnets: vec![fiduciary_subnet_id],
                     subnet_type: "fiduciary".to_string(),
                 });
-            self.execute_ingress_on(
+            let res = self.execute_ingress_on(
                 nns_subnet.clone(),
                 GOVERNANCE_CANISTER_ID.get(),
                 CYCLES_MINTING_CANISTER_ID,
                 "change_subnet_type_assignment".to_string(),
                 Encode!(&change_subnet_type_assignment_args).unwrap(),
             );
+            let decoded = Decode!(&res, Result<(), ChangeSubnetTypeAssignmentError>).unwrap();
+            decoded.unwrap();
         }
     }
 
@@ -1681,13 +1692,21 @@ impl PocketIcSubnets {
                     }),
                     hash: sns_canister_wasm_hash.to_vec(),
                 };
-                self.execute_ingress_on(
+                let res = self.execute_ingress_on(
                     nns_subnet.clone(),
                     GOVERNANCE_CANISTER_ID.get(),
                     SNS_WASM_CANISTER_ID,
                     "add_wasm".to_string(),
                     Encode!(&add_sns_wasm_request).unwrap(),
                 );
+                let decoded = Decode!(&res, AddWasmResponse).unwrap();
+                let inner_res = decoded.result.unwrap();
+                match inner_res {
+                    AddWasmResult::Hash(hash) => assert_eq!(hash, sns_canister_wasm_hash),
+                    AddWasmResult::Error(err) => {
+                        panic!("Unexpected error when calling add_wasm on SNS-W: {:?}", err)
+                    }
+                }
             }
         }
 
@@ -1920,7 +1939,7 @@ impl PocketIcSubnets {
         canister_id: CanisterId,
         method: String,
         payload: Vec<u8>,
-    ) {
+    ) -> Vec<u8> {
         let msg_id = subnet
             .state_machine
             .submit_ingress_as(sender, canister_id, &method, payload)
@@ -1931,7 +1950,7 @@ impl PocketIcSubnets {
             }
             match subnet.state_machine.ingress_status(&msg_id) {
                 IngressStatus::Known { state, .. } => match state {
-                    IngressState::Completed(WasmResult::Reply(_)) => return,
+                    IngressState::Completed(WasmResult::Reply(reply)) => return reply,
                     IngressState::Completed(WasmResult::Reject(error)) => panic!(
                         "Failed to execute method {} on canister {}: {}",
                         method, canister_id, error
