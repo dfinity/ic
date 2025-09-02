@@ -75,12 +75,12 @@ pub async fn start_canister(canister: &Canister<'_>) {
 
 /// Mint some blocks to the given address.
 pub fn generate_blocks<T: RpcClientType>(
-    btc_client: &RpcClient<T>,
+    rpc_client: &RpcClient<T>,
     logger: &Logger,
     nb_blocks: u64,
     address: &T::Address,
 ) {
-    let generated_blocks = btc_client.generate_to_address(nb_blocks, address).unwrap();
+    let generated_blocks = rpc_client.generate_to_address(nb_blocks, address).unwrap();
     info!(&logger, "Generated {} btc blocks.", generated_blocks.len());
     assert_eq!(
         generated_blocks.len() as u64,
@@ -244,7 +244,7 @@ pub async fn wait_for_signed_tx(
 /// * The transfer didn't finalize after `LONG_TIMEOUT`.
 /// * The minter rejected the retrieval because the amount was too low to cover the fees.
 pub async fn wait_for_finalization<T: RpcClientType>(
-    btc_client: &RpcClient<T>,
+    rpc_client: &RpcClient<T>,
     ckbtc_minter_agent: &CkBtcMinterAgent,
     logger: &Logger,
     block_index: u64,
@@ -287,7 +287,7 @@ pub async fn wait_for_finalization<T: RpcClientType>(
         tokio::time::sleep(Duration::from_secs(5)).await;
 
         // We continue to generate blocks if the status is yet updated
-        generate_blocks::<T>(btc_client, logger, 1, default_btc_address);
+        generate_blocks::<T>(rpc_client, logger, 1, default_btc_address);
     }
 }
 
