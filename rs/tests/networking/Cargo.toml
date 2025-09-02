@@ -124,6 +124,10 @@ name = "ic-systest-update-workload-large-payload-test"
 path = "update_workload_large_payload.rs"
 
 [[bin]]
+name = "ic-systest-state-sync-performance"
+path = "state_sync_performance.rs"
+
+[[bin]]
 name = "ic-systest-cloner-canister-workload"
 path = "cloner_canister_workload.rs"
 

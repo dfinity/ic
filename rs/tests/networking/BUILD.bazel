@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("//rs/tests:common.bzl", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "STATESYNC_TEST_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -405,6 +405,26 @@ system_test_nns(
     runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/tests/networking/subnet_update_workload",
+    ],
+)
+
+system_test_nns(
+    name = "state_sync_performance",
+    enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
+    env = UNIVERSAL_CANISTER_ENV | {
+        "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync-test-canister)",
+    },
+    tags = [
+        "system_test_large",
+    ],
+    test_timeout = "eternal",
+    runtime_deps =
+        GRAFANA_RUNTIME_DEPS +
+        STATESYNC_TEST_CANISTER_RUNTIME_DEPS +
+        UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = COMMON_DEPS + [
+        "//rs/tests/message_routing/rejoin_test_lib",
+        "//rs/types/types",
     ],
 )
 
