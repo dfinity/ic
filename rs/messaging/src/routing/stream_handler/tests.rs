@@ -2112,10 +2112,12 @@ fn induct_stream_slices_partial_success() {
     );
 }
 
-/// Tests that a message addressed to a canister that is not currently hosted by
-/// this subnet; and is not being migrated on a path containing both this subnet
-/// and its known host; is dropped, incrementing the respective critical error
-/// count.
+/// Tests that among messages addressed to canisters not currently hosted by
+/// this subnet; and not being migrated on a path containing both this subnet
+/// and its known host:
+///  * requests are rejected as they are likely to be coming from a manually
+///    migrated canister; and
+///  * responses are dropped as likely to be from a malicious subnet.
 #[test]
 fn induct_stream_slices_receiver_subnet_mismatch() {
     with_test_setup(
@@ -2133,15 +2135,15 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
         btreemap![REMOTE_SUBNET => StreamSliceConfig {
             messages_begin: 43,
             messages: vec![
-                // ...a request addressed to a canister hosted by another subnet...
+                // ...a request addressed to a canister hosted by another subnet, to be rejected...
                 Request(*REMOTE_CANISTER, *OTHER_REMOTE_CANISTER),
-                // ...a response addressed to a canister hosted by another subnet...
+                // ...a response addressed to a canister hosted by another subnet, to be dropped...
                 Response(*REMOTE_CANISTER, *OTHER_REMOTE_CANISTER),
                 // ...a request addressed to a canister not mapped to any subnet in the routing
-                // table...
+                // table, to be rejected...
                 Request(*REMOTE_CANISTER, *UNKNOWN_CANISTER),
                 // ...a response addressed to a canister not mapped to any subnet in the routing
-                // table.
+                // table, to be dropped.
                 Response(*REMOTE_CANISTER, *UNKNOWN_CANISTER),
             ],
             signals_end: 21,
@@ -2159,7 +2161,7 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
             // The expected state should be unchanged...
             let mut expected_state = state.clone();
 
-            // ...except that the stream should have `signals_end` incremented for the 2 dropped messages.
+            // ...except that the stream should have 4 new signals, including a reject for the request.
             let outgoing_stream = state.get_stream(&REMOTE_SUBNET);
             let expected_stream = stream_from_config(StreamConfig {
                 begin: 21,
@@ -2168,13 +2170,17 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
                     message_in_stream(outgoing_stream, 22).clone(),
                 ],
                 signals_end: 47,
+                reject_signals: vec![
+                    RejectSignal::new(RejectReason::CanisterMigrating, 43.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 45.into()),
+                ],
                 ..StreamConfig::default()
             });
             expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
 
-            // Cycles attached to all messages in the slice are lost.
-            let cycles_lost = messages_in_slice(slices.get(&REMOTE_SUBNET), 43..=46)
-                .fold(Cycles::zero(), |acc, msg| acc + msg.cycles());
+            // Cycles attached to all other messages in the slice are lost.
+            let cycles_lost: Cycles = message_in_slice(slices.get(&REMOTE_SUBNET), 44).cycles()
+                + message_in_slice(slices.get(&REMOTE_SUBNET), 46).cycles();
             expected_state
                 .metadata
                 .subnet_metrics
@@ -2197,7 +2203,7 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
             metrics.assert_inducted_xnet_messages_eq(&[
                 (
                     LABEL_VALUE_TYPE_REQUEST,
-                    LABEL_VALUE_RECEIVER_SUBNET_MISMATCH,
+                    LABEL_VALUE_CANISTER_LIKELY_MIGRATED,
                     2,
                 ),
                 (
@@ -2208,7 +2214,7 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
             ]);
             assert_eq!(0, metrics.fetch_inducted_payload_sizes_stats().count);
             metrics.assert_eq_critical_errors(CriticalErrorCounts {
-                receiver_subnet_mismatch: 4,
+                receiver_subnet_mismatch: 2,
                 ..CriticalErrorCounts::default()
             });
         },
