@@ -616,7 +616,8 @@ impl IDkgPreSignerImpl {
         ret.append(&mut action);
 
         // Validated dealing support.
-        let validated_dealing_supports_to_purge = idkg_pool
+        let mut valid_dealing_supports = self.validated_dealing_supports.borrow_mut();
+        let mut action = idkg_pool
             .validated()
             .dealing_support()
             .filter(|(_, support)| {
@@ -627,15 +628,13 @@ impl IDkgPreSignerImpl {
                     &target_subnet_xnet_transcripts,
                 )
             })
-            .collect::<Vec<_>>();
-
-        let mut action = Vec::new();
-        let mut valid_dealing_supports = self.validated_dealing_supports.borrow_mut();
-        for (id, support) in validated_dealing_supports_to_purge {
-            let key = IDkgValidatedDealingSupportIdentifier::from(&support);
-            valid_dealing_supports.remove(&key);
-            action.push(IDkgChangeAction::RemoveValidated(id));
-        }
+            // Side-effect: remove from the validated_dealing_supports map
+            .map(|(id, support)| {
+                let key = IDkgValidatedDealingSupportIdentifier::from(&support);
+                valid_dealing_supports.remove(&key);
+                IDkgChangeAction::RemoveValidated(id)
+            })
+            .collect();
         ret.append(&mut action);
 
         ret
