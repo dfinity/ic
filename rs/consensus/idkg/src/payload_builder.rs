@@ -585,11 +585,8 @@ pub(crate) fn create_data_payload_helper(
 
     // (Pre-)signatures are created according to the registry version of the current block, which is the
     // same registry version used by execution when executing this block.
-    let Some(chain_key_config) = get_idkg_chain_key_config_if_enabled(
-        subnet_id,
-        context.registry_version,
-        registry_client,
-    )?
+    let Some(chain_key_config) =
+        get_idkg_chain_key_config_if_enabled(subnet_id, context.registry_version, registry_client)?
     else {
         return Ok(None);
     };
