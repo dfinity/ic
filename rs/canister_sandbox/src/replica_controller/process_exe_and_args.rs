@@ -26,6 +26,7 @@ const RUNNABLE_AS_SANDBOX: &[&str] = &[
     "ic-recovery",
     "pocket-ic",
     "pocket-ic-server",
+    "pocket-ic-server-head-nns",
     // To enable fuzzing with canister sandboxing.
     // TODO(PSEC): The binary name is hardcoded right now, but we would
     // need a different approach to enable multiple fuzzers use this

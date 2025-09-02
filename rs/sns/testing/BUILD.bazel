@@ -51,12 +51,12 @@ DEPENDENCIES = [
 DEV_DATA = [
     # Keep sorted
     ":sns_testing_canister",
-    "//rs/pocket_ic_server:pocket-ic-server",
+    "//rs/pocket_ic_server:pocket-ic-server-head-nns",
     "@nns_dapp_canister//file",
 ]
 
 DEV_ENV = {
-    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server-head-nns)",
     "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
     "SNS_TESTING_CANISTER_WASM_PATH": "$(rootpath :sns_testing_canister)",
 }
