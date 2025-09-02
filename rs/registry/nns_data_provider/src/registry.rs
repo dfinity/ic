@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use candid::{Decode, Encode};
 use prost::Message;
 use rand::seq::SliceRandom;
-use registry_canister::mutations::do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload;
 use std::time::Duration;
 use url::Url;
 
@@ -16,9 +15,7 @@ use ic_registry_transport::{
     serialize_atomic_mutate_request, serialize_get_changes_since_request,
     serialize_get_value_request, Error, GetChunk,
 };
-use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, PrincipalId, RegistryVersion, Time,
-};
+use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, Time};
 
 pub const MAX_NUM_SSH_KEYS: usize = 50;
 
@@ -101,7 +98,7 @@ impl RegistryCanister {
     }
 
     /// Returns an `Agent` chosen at random
-    fn choose_random_agent(&self) -> &Agent {
+    pub fn choose_random_agent(&self) -> &Agent {
         self.agent
             .choose(&mut rand::thread_rng())
             .expect("can't fail, ::new asserts list is non-empty")
@@ -313,42 +310,6 @@ impl RegistryCanister {
                 "Error on registry_atomic_mutate: {}",
                 error_string
             ))]),
-        }
-    }
-
-    pub async fn swap_node_in_subnet_directly(
-        &self,
-        old_node_id: PrincipalId,
-        new_node_id: PrincipalId,
-    ) -> Result<(), Error> {
-        let nonce = format!("{}", chrono::Utc::now().timestamp_nanos_opt().unwrap())
-            .as_bytes()
-            .to_vec();
-
-        let request = SwapNodeInSubnetDirectlyPayload {
-            new_node_id: Some(new_node_id),
-            old_node_id: Some(old_node_id),
-        };
-
-        let payload = Encode!(&request)
-            .map_err(|err| ic_registry_transport::Error::MalformedMessage(err.to_string()))?;
-
-        match self
-            .choose_random_agent()
-            .execute_update(
-                &self.canister_id,
-                &self.canister_id,
-                "swap_node_in_subnet_directly",
-                payload,
-                nonce,
-            )
-            .await
-            .map_err(ic_registry_transport::Error::UnknownError)?
-        {
-            Some(_) => Ok(()),
-            None => Err(ic_registry_transport::Error::UnknownError(
-                "No response was received from swap_node_in_subnet_directly".to_string(),
-            )),
         }
     }
 }

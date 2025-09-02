@@ -9,7 +9,6 @@ DEPENDENCIES = [
     "//rs/crypto/tree_hash",
     "//rs/interfaces/registry",
     "//rs/nns/constants",
-    "//rs/registry/canister",
     "//rs/registry/canister/api",
     "//rs/registry/transport",
     "//rs/tree_deserializer",
