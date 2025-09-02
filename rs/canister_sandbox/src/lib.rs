@@ -256,6 +256,7 @@ pub fn run_canister_sandbox(
     reply_handler.flush_with_errors();
 }
 
+#[cfg(feature = "fuzzing_code")]
 #[macro_export]
 macro_rules! embed_sandbox_signature {
     () => {

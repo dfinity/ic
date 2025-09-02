@@ -3,13 +3,13 @@
 //! always be found in the current folder, but this won't be the case when
 //! running unit tests or running within tools such as `ic-replay`.
 
+#[cfg(feature = "fuzzing_code")]
+use object::{Object, ObjectSection};
+use once_cell::sync::OnceCell;
 use std::{
     path::{Path, PathBuf},
     process::Command,
 };
-
-use object::{Object, ObjectSection};
-use once_cell::sync::OnceCell;
 
 use crate::{
     RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG,
@@ -105,6 +105,7 @@ fn create_child_process_argv(krate: SandboxCrate) -> Option<Vec<String>> {
         return Some(vec![exec_path, krate.run_as_flag().to_string()]);
     }
 
+    #[cfg(feature = "fuzzing_code")]
     // 2. An alternative solution for binaries that can serve as a sandbox.
     // The binary exports a section with the specified magic bytes.
     if check_binary_signature(current_binary_path.clone()) {
@@ -131,6 +132,7 @@ fn current_binary_path() -> Option<PathBuf> {
     std::env::args().next().map(PathBuf::from)
 }
 
+#[cfg(feature = "fuzzing_code")]
 fn check_binary_signature(binary_path: PathBuf) -> bool {
     let mut signature_found = false;
 
