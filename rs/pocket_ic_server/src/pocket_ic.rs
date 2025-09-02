@@ -12,9 +12,8 @@ use axum::{
 use bitcoin::Network;
 use candid::{CandidType, Decode, Encode, Principal};
 use cycles_minting_canister::{
-    ChangeSubnetTypeAssignmentArgs, ChangeSubnetTypeAssignmentError, CyclesCanisterInitPayload,
-    SetAuthorizedSubnetworkListArgs, SubnetListWithType, UpdateSubnetTypeArgs,
-    UpdateSubnetTypeError, DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
+    ChangeSubnetTypeAssignmentArgs, CyclesCanisterInitPayload, SetAuthorizedSubnetworkListArgs,
+    SubnetListWithType, UpdateSubnetTypeArgs, DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
 };
 use futures::future::BoxFuture;
 use futures::FutureExt;
@@ -1192,29 +1191,27 @@ impl PocketIcSubnets {
             .map(|subnet_config| subnet_config.subnet_id);
         if let Some(fiduciary_subnet_id) = maybe_fiduciary_subnet_id {
             let update_subnet_type_args = UpdateSubnetTypeArgs::Add("fiduciary".to_string());
-            let res = self.execute_ingress_on(
+            // returns ()
+            self.execute_ingress_on(
                 nns_subnet.clone(),
                 GOVERNANCE_CANISTER_ID.get(),
                 CYCLES_MINTING_CANISTER_ID,
                 "update_subnet_type".to_string(),
                 Encode!(&update_subnet_type_args).unwrap(),
             );
-            let decoded = Decode!(&res, Result<(), UpdateSubnetTypeError>).unwrap();
-            decoded.unwrap();
             let change_subnet_type_assignment_args =
                 ChangeSubnetTypeAssignmentArgs::Add(SubnetListWithType {
                     subnets: vec![fiduciary_subnet_id],
                     subnet_type: "fiduciary".to_string(),
                 });
-            let res = self.execute_ingress_on(
+            // returns ()
+            self.execute_ingress_on(
                 nns_subnet.clone(),
                 GOVERNANCE_CANISTER_ID.get(),
                 CYCLES_MINTING_CANISTER_ID,
                 "change_subnet_type_assignment".to_string(),
                 Encode!(&change_subnet_type_assignment_args).unwrap(),
             );
-            let decoded = Decode!(&res, Result<(), ChangeSubnetTypeAssignmentError>).unwrap();
-            decoded.unwrap();
         }
     }
 
