@@ -45,7 +45,7 @@ EXCLUDED_TAGS = [
 
 # Return all bazel targets (//...) sans the long_tests (if --skip_long_tests is specified)
 # in case any file is modified matching any of the following globs:
-all_targets_globs = [
+ALL_TARGETS_BLOBS = [
     ".bazelrc",
     ".bazelversion",
     ".github/*",
@@ -112,7 +112,7 @@ def load_explicit_targets() -> dict[str, Set[str]]:
 def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -> str:
     """
     Return a bazel query for all targets that have modified inputs in the specified git commit range. Taking into account:
-    * To return all targets in case files matching all_targets_globs are modified.
+    * To return all targets in case files matching ALL_TARGETS_BLOBS are modified.
     * To only include test targets in case the bazel command was 'test'.
     * To exclude long_tests if requested.
     """
@@ -124,13 +124,13 @@ def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -
     for file in modified_files:
         log(file)
 
-    # The files matching the all_targets_globs are typically not depended upon by any bazel target
+    # The files matching the ALL_TARGETS_BLOBS are typically not depended upon by any bazel target
     # but will determine which bazel targets there are in the first place so in case they're modified
     # simply return all bazel targets. Otherwise return all targets that depend on the modified files.
     mfiles = " ".join(f'"{f}"' for f in modified_files)
     query = (
         "//..."
-        if any(len(fnmatch.filter(modified_files, glob)) > 0 for glob in all_targets_globs)
+        if any(len(fnmatch.filter(modified_files, glob)) > 0 for glob in ALL_TARGETS_BLOBS)
         # Note that modified_files may contain files not depended upon by any bazel target.
         # `bazel query --keep_going` will ignore those but will return the special exit code 3
         # in case this happens which we check for below.
