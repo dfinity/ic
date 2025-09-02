@@ -6,11 +6,12 @@ mod sev;
 mod tests;
 
 use crate::generated_key::{GeneratedKeyDiskEncryption, DEFAULT_GENERATED_KEY_PATH};
-use crate::sev::{SevDiskEncryption, PREVIOUS_KEY_PATH};
+use crate::sev::SevDiskEncryption;
 use anyhow::{bail, Context, Result};
 use clap::Parser;
 use config::{deserialize_config, DEFAULT_GUESTOS_CONFIG_OBJECT_PATH};
 use config_types::GuestOSConfig;
+use guest_disk::DEFAULT_PREVIOUS_SEV_KEY_PATH;
 use ic_sev::guest::firmware::SevGuestFirmware;
 use libcryptsetup_rs::consts::flags::CryptActivate;
 use nix::unistd::getuid;
@@ -67,7 +68,7 @@ fn main() -> Result<()> {
                 .context("Failed to open /dev/sev-guest")
                 .map(|x| Box::new(x) as _)
         },
-        Path::new(PREVIOUS_KEY_PATH),
+        Path::new(DEFAULT_PREVIOUS_SEV_KEY_PATH),
         Path::new(DEFAULT_GENERATED_KEY_PATH),
     )
 }

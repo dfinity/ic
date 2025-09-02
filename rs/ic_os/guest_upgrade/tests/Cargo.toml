@@ -1,0 +1,22 @@
+[package]
+name = "guest_upgrade_tests"
+edition = "2021"
+
+[lib]
+
+[dependencies]
+attestation = { path = "../../attestation" }
+attestation_testing = { path = "../../attestation/testing" }
+futures = { workspace = true }
+guest_upgrade_client = { path = "../client" }
+guest_upgrade_server = { path = "../server" }
+guest_upgrade_shared = { path = "../shared" }
+tokio = { workspace = true }
+vsock_lib = { path = "../../vsock/vsock_lib" }
+config_types = { path = "../../config_types" }
+ic-protobuf = { path = "../../../protobuf" }
+ic_sev = { path = "../../sev" }
+ic-interfaces-registry = { path = "../../../interfaces/registry" }
+tempfile = { workspace = true }
+rustls = { workspace = true }
+anyhow = "1.0.95"

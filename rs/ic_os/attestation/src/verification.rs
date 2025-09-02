@@ -4,12 +4,13 @@ use sev::certs::snp::{ca, Certificate, Chain, Verifiable};
 use sev::firmware::guest::AttestationReport;
 use std::fmt::Debug;
 
-// Disable root certificate verification in tests by default so we can use fake certs but allow
-// enabling it so we can still test root cert verification.
-// Note that this is thread-local so the setting only affects the current thread where it's set.
-#[cfg(test)]
-thread_local! {
-    pub static VERIFY_AMD_ROOT_CERTIFICATE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+/// Controls whether the SEV root certificate is verified.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum SevRootCertificateVerification {
+    /// Default behavior: verify the SEV root certificate.
+    Verify,
+    /// Skip verification of the SEV root certificate. Should only be used in tests.
+    TestOnlySkipVerification,
 }
 
 /// Verify an SEV attestation package. The verification includes:
@@ -19,6 +20,7 @@ thread_local! {
 /// - Checking that the chip ID matches the expected chip ID (if provided).
 pub fn verify_attestation_package(
     attestation_package: &SevAttestationPackage,
+    sev_root_certificate_verification: SevRootCertificateVerification,
     blessed_guest_launch_measurements: &[impl AsRef<[u8]>],
     expected_custom_data: &(impl EncodeSevCustomData + Debug),
     expected_chip_id: Option<&[u8]>,
@@ -51,7 +53,11 @@ pub fn verify_attestation_package(
         .ok_or_else(|| {
             VerificationError::invalid_certificate_chain("Certificate chain is missing")
         })?;
-    verify_sev_attestation_report_signature(&parsed_attestation_report, certificate_chain)?;
+    verify_sev_attestation_report_signature(
+        &parsed_attestation_report,
+        certificate_chain,
+        sev_root_certificate_verification,
+    )?;
 
     verify_measurement(
         &parsed_attestation_report,
@@ -118,6 +124,7 @@ fn verify_measurement(
 fn verify_sev_attestation_report_signature(
     attestation_report: &AttestationReport,
     certificate_chain: &SevCertificateChain,
+    sev_root_certificate_verification: SevRootCertificateVerification,
 ) -> Result<(), VerificationError> {
     let Some(ref ark_pem) = certificate_chain.ark_pem else {
         return Err(VerificationError::invalid_certificate_chain(
@@ -151,11 +158,10 @@ fn verify_sev_attestation_report_signature(
         ));
     };
 
-    #[cfg(test)]
-    let verify_amd_root_certificate = VERIFY_AMD_ROOT_CERTIFICATE.get();
-    #[cfg(not(test))]
-    // In non-test code, always verify the AMD root certificate.
-    let verify_amd_root_certificate = true;
+    let verify_amd_root_certificate = match sev_root_certificate_verification {
+        SevRootCertificateVerification::Verify => true,
+        SevRootCertificateVerification::TestOnlySkipVerification => false,
+    };
 
     if verify_amd_root_certificate {
         // TODO: Replace this with generation-specific ARK when the necessary changes in the SEV lib

@@ -2,6 +2,12 @@
 name = "guest_disk"
 edition = "2021"
 
+[lib]
+
+[[bin]]
+name = "guest_disk"
+path = "src/main.rs"
+
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
