@@ -575,7 +575,6 @@ impl IDkgPreSignerImpl {
             .map(|transcript_params| transcript_params.transcript_id)
             .collect::<BTreeSet<_>>();
 
-        let ret = std::iter::empty();
         let current_height = block_reader.tip_height();
         let mut target_subnet_xnet_transcripts = BTreeSet::new();
         for transcript_params_ref in block_reader.target_subnet_xnet_transcripts() {
@@ -583,7 +582,7 @@ impl IDkgPreSignerImpl {
         }
 
         // Unvalidated dealings.
-        let action = idkg_pool
+        let ret = idkg_pool
             .unvalidated()
             .signed_dealings()
             .filter(|(_, signed_dealing)| {
@@ -595,7 +594,6 @@ impl IDkgPreSignerImpl {
                 )
             })
             .map(|(id, _)| IDkgChangeAction::RemoveUnvalidated(id));
-        let ret = ret.chain(action);
 
         // Validated dealings.
         let action = idkg_pool
