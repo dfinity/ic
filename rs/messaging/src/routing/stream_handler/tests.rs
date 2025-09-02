@@ -2001,12 +2001,13 @@ fn induct_stream_slices_partial_success() {
                 // ...a request not from `REMOTE_SUBNET` @47; this is also expected to trigger
                 // a reject respose...
                 Request(*LOCAL_CANISTER, *LOCAL_CANISTER),
-                // ...a response not from `REMOTE_SUBNET` @48; this is expected to be dropped...
+                // ...responses not from `REMOTE_SUBNET` @48 and @49; this is expected to be dropped...
                 Response(*LOCAL_CANISTER, *LOCAL_CANISTER),
-                // ...a request from a missing canister @49 (not anywhere according to the routing
+                Response(*UNKNOWN_CANISTER, *LOCAL_CANISTER),
+                // ...a request from a missing canister @50 (not anywhere according to the routing
                 // table); this is expected to be a reject response...
                 Request(*UNKNOWN_CANISTER, *LOCAL_CANISTER),
-                // ...and a response to a missing canister @50 (on this subnet according to the
+                // ...and a response to a missing canister @51 (on this subnet according to the
                 // routing table); this expected to be accepted but dropped.
                 Response(*REMOTE_CANISTER, *OTHER_LOCAL_CANISTER),
             ],
@@ -2033,13 +2034,13 @@ fn induct_stream_slices_partial_success() {
                     message_in_stream(state.get_stream(&REMOTE_SUBNET), 31).clone(),
                     message_in_stream(state.get_stream(&REMOTE_SUBNET), 32).clone(),
                 ],
-                // ...5 accept signals for the messages in the stream slice...
-                signals_end: 51,
+                // ...6 accept signals for the messages in the stream slice...
+                signals_end: 52,
                 reject_signals: vec![
                     // ...and three reject signal for the 3 misrouted requests.
                     RejectSignal::new(RejectReason::CanisterNotFound, 46.into()),
                     RejectSignal::new(RejectReason::CanisterMigrating, 47.into()),
-                    RejectSignal::new(RejectReason::CanisterMigrating, 49.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 50.into()),
                 ],
                 ..StreamConfig::default()
             });
@@ -2047,7 +2048,8 @@ fn induct_stream_slices_partial_success() {
 
             // Cycles attached to the responses from a wrong subnet and to non-existent `OTHER_LOCAL_CANISTER` are lost.
             let cycles_lost = message_in_slice(slices.get(&REMOTE_SUBNET), 48).cycles()
-                + message_in_slice(slices.get(&REMOTE_SUBNET), 50).cycles();
+                + message_in_slice(slices.get(&REMOTE_SUBNET), 49).cycles()
+                + message_in_slice(slices.get(&REMOTE_SUBNET), 51).cycles();
             expected_state
                 .metadata
                 .subnet_metrics
@@ -2084,7 +2086,7 @@ fn induct_stream_slices_partial_success() {
                 // Request @46 not inducted because of missing canister.
                 (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_NOT_FOUND, 1),
                 // Request @47 not inducted because of canister not on `REMOTE_SUBNET`.
-                // Request @49 not inducted because of unknown canister sender.
+                // Request @50 not inducted because of unknown canister sender.
                 (
                     LABEL_VALUE_TYPE_REQUEST,
                     LABEL_VALUE_SENDER_SUBNET_MISMATCH_MIGRATING,
@@ -2092,20 +2094,20 @@ fn induct_stream_slices_partial_success() {
                 ),
                 // Response @45 successfully inducted.
                 (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 1),
-                // Response @48 not inducted because it's a response from a wrong subnet.
+                // Responses @48 and @49 not inducted because it's a response from a wrong subnet.
                 (
                     LABEL_VALUE_TYPE_RESPONSE,
                     LABEL_VALUE_SENDER_SUBNET_MISMATCH,
-                    1,
+                    2,
                 ),
-                // Response @50 not inducted because of missing canister.
+                // Response @51 not inducted because of missing canister.
                 (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_CANISTER_NOT_FOUND, 1),
             ]);
             assert_eq!(3, metrics.fetch_inducted_payload_sizes_stats().count);
             // Three critical errors raised.
             metrics.assert_eq_critical_errors(CriticalErrorCounts {
                 induct_response_failed: 1,
-                sender_subnet_mismatch: 1,
+                sender_subnet_mismatch: 2,
                 ..CriticalErrorCounts::default()
             });
         },
