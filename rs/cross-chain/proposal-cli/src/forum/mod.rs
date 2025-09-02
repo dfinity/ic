@@ -130,7 +130,24 @@ impl ForumTopic {
 
     fn body(&self) -> String {
         match self {
-            ForumTopic::ApplicationCanisterManagement { proposals } => "".to_string(),
+            ForumTopic::ApplicationCanisterManagement { proposals } => {
+                let mut res = Vec::new();
+                res.push("Hi everyone :waving_hand:".to_string());
+                res.push(String::new());
+                res.push(format!(
+                    "Please use this forum thread to discuss the following {}:",
+                    pluralize("proposal", proposals.len())
+                ));
+                for (proposal_id, summary) in proposals {
+                    res.push(format!(
+                        "* Proposal [{}](https://dashboard.internetcomputer.org/proposal/{}): {} the {}",
+                        proposal_id, proposal_id, summary.install_mode, summary.canister
+                    ))
+                }
+                res.push(String::new());
+                res.push(":information_source: All listed proposals should contain the necessary information to verify them.".to_string());
+                res.join("\n")
+            }
         }
     }
 
