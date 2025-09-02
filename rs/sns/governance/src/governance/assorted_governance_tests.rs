@@ -99,6 +99,7 @@ impl ICRC1Ledger for AlwaysSucceedingLedger {
         _expires_at: Option<u64>,
         _fee: u64,
         _from_subaccount: Option<Subaccount>,
+        _expected_allowance: Option<u64>,
     ) -> Result<Nat, NervousSystemError> {
         Err(NervousSystemError {
             error_message: "Not Implemented".to_string(),
@@ -199,6 +200,7 @@ async fn test_perform_transfer_sns_treasury_funds_execution_fails_when_another_c
             _expires_at: Option<u64>,
             _fee: u64,
             _from_subaccount: Option<Subaccount>,
+            _expected_allowance: Option<u64>,
         ) -> Result<Nat, NervousSystemError> {
             Err(NervousSystemError {
                 error_message: "Not Implemented".to_string(),
@@ -347,6 +349,7 @@ async fn test_neuron_operations_exclude_one_another() {
             _expires_at: Option<u64>,
             _fee: u64,
             _from_subaccount: Option<Subaccount>,
+            _expected_allowance: Option<u64>,
         ) -> Result<Nat, NervousSystemError> {
             Err(NervousSystemError {
                 error_message: "Not Implemented".to_string(),
@@ -5049,6 +5052,18 @@ fn test_list_topics() {
                         name: "Register SNS extension".to_string(),
                         description: Some(
                             "Proposal to register a new SNS extension.".to_string(),
+                        ),
+                        function_type: Some(
+                            FunctionType::NativeNervousSystemFunction(
+                                Empty {},
+                            ),
+                        ),
+                    },
+                    NervousSystemFunction {
+                        id: 19,
+                        name: "Upgrade SNS extension".to_string(),
+                        description: Some(
+                            "Proposal to upgrade the WASM of a registered SNS extension.".to_string(),
                         ),
                         function_type: Some(
                             FunctionType::NativeNervousSystemFunction(

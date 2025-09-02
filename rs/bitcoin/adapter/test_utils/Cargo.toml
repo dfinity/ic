@@ -8,8 +8,8 @@ documentation.workspace = true
 
 [dependencies]
 ic-btc-adapter = { path = ".." }
+ic-config = { path = "../../../config" }
 bitcoin = { workspace = true }
-bitcoincore-rpc = { workspace = true }
 flate2 = { workspace = true }
 hex = { workspace = true }
 rand = { workspace = true }
@@ -17,3 +17,4 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+jsonrpc = { version = "0.18.0", features = ["minreq_http"] }

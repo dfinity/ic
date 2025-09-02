@@ -2,7 +2,6 @@ use crate::message_routing::{
     LatencyMetrics, MessageRoutingMetrics, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
 };
 use ic_base_types::NumBytes;
-use ic_certification_version::CertificationVersion;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_error_types::RejectCode;
 use ic_interfaces::messaging::{
@@ -765,14 +764,6 @@ impl StreamHandlerImpl {
                     stream.push_accept_signal();
                     maybe_lost_cycles
                 }
-                Reject(reason, RequestOrResponse::Request(request))
-                    if state.metadata.certification_version < CertificationVersion::V19 =>
-                {
-                    // Unable to induct a request, generate reject response and push it into `stream`.
-                    stream.push(generate_reject_response_for(reason, &request));
-                    stream.push_accept_signal();
-                    Cycles::zero()
-                }
                 Reject(reason, RequestOrResponse::Request(_)) => {
                     // Unable to induct a request, push a reject signal.
                     stream.push_reject_signal(reason);
@@ -799,9 +790,7 @@ impl StreamHandlerImpl {
         } else {
             // `remote_subnet_id` is not known to be a valid host for `msg.sender()`.
             //
-            // Do not enqueue a reject response as remote subnet is likely malicious and
-            // trying to cause a memory leak by sending bogus messages and never consuming
-            // reject responses.
+            // Do not push a reject signal as remote subnet is likely malicious.
             error!(
                 self.log,
                 "{}: Dropping message from subnet {} claiming to be from sender {}: {:?}",

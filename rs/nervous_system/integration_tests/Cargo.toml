@@ -12,6 +12,7 @@ assert_matches = { workspace = true }
 candid = { workspace = true }
 cycles-minting-canister = { path = "../../nns/cmc" }
 futures = { workspace = true }
+hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
