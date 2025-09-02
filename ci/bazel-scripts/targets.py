@@ -179,7 +179,7 @@ def targets(command: str, skip_long_tests: bool, base: str | None, head: str | N
 
     # Finally, exclude targets that have any of the excluded tags:
     excluded_tags_regex = "|".join(EXCLUDED_TAGS)
-    query = f"({query}) except attr(tags, '{excluded_tags_regex}', //...)"
+    query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...)'
 
     log(f"bazel query --keep_going '{query}'")
     result = subprocess.run(["bazel", "query", "--keep_going", query], stderr=subprocess.PIPE, text=True)
@@ -227,7 +227,7 @@ def check():
 
         for target in explicit_targets_for_pattern:
             excluded_tags_regex = "|".join(EXCLUDED_TAGS)
-            query = f"({target}) except attr(tags, '{excluded_tags_regex}', //...)"
+            query = f'({target}) except attr(tags, "{excluded_tags_regex}", //...)'
             result = subprocess.run(["bazel", "query", query], capture_output=True, text=True)
             if result.returncode != 0:
                 indented_error_msg = f"{indentation}" + f"\n{indentation}".join(result.stderr.strip().splitlines())
