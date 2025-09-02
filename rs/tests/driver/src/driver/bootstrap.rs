@@ -476,7 +476,7 @@ fn create_config_disk_image(
         config.bitcoind_addr = Some(bitcoind_addr.clone());
     }
 
-    // The bitcoin_addr specifies the local bitcoin node that the bitcoin adapter should connect to in the system test environment.
+    // The dogecoind_addr specifies the local dogecoin node that the dogecoin adapter should connect to in the system test environment.
     if let Ok(dogecoind_addr) = test_env.read_json_object::<String, _>(DOGECOIND_ADDR_PATH) {
         config.dogecoind_addr = Some(dogecoind_addr.clone());
     }
