@@ -233,15 +233,14 @@ pub fn fund_with_btc<T: RpcClientType>(
         .generate_to_address(1, to_fund_address)
         .unwrap();
 
-    // Generate 100 blocks for coinbase maturity
     let blackhole_address = to_fund_client.get_new_address().unwrap();
     to_fund_client
-        .generate_to_address(100, &blackhole_address)
+        .generate_to_address(T::REGTEST_COINBASE_MATURITY, &blackhole_address)
         .unwrap();
 
     assert_eq!(
         to_fund_client.get_blockchain_info().unwrap().blocks,
-        initial_height + 101
+        initial_height + T::REGTEST_COINBASE_MATURITY + 1
     );
 
     assert_eq!(
