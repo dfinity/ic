@@ -1408,6 +1408,7 @@ mod tests {
         time::UNIX_EPOCH,
         Height, RegistryVersion,
     };
+    use ic_types_test_utils::ids::node_test_id;
     use std::{collections::HashSet, ops::Deref};
 
     // Tests the Action logic
@@ -2259,7 +2260,8 @@ mod tests {
     fn test_validate_dealing_support_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_validate_dealing_support(key_id);
+            test_validate_dealing_support(key_id.clone());
+            test_validate_dealing_support_validates_only_necessary(key_id, 5);
         }
     }
 
@@ -2412,6 +2414,74 @@ mod tests {
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
 
                 assert!(pre_signer.validated_dealing_supports.borrow().is_empty());
+            })
+        });
+    }
+
+    // Tests that only the necessary dealing supports are validated, i.e., once we have enough
+    // supports for a dealing (2f + 1), further supports for the same dealing are dropped.
+    fn test_validate_dealing_support_validates_only_necessary(
+        key_id: IDkgMasterPublicKeyId,
+        f: usize,
+    ) {
+        let t_id = create_transcript_id_with_height(1, Height::from(25));
+        let mut artifacts = vec![];
+
+        let node_ids = (3..(3 + (3 * f + 1)))
+            .map(|i| node_test_id(i.try_into().unwrap()))
+            .collect::<Vec<_>>();
+
+        // Set up the transcript creation request
+        let t = create_transcript_param(&key_id, t_id, &[NODE_2], &node_ids);
+        let block_reader = TestIDkgBlockReader::for_pre_signer_test(Height::from(100), vec![t]);
+
+        // A dealing for a transcript that is requested by finalized block,
+        // we already have the dealing, and more than 2f+1 receivers send
+        // a support share(only 2f+1 shares accepted)
+        let (dealing, support) = create_support(t_id, NODE_2, NODE_3);
+        let validated_id = IDkgValidatedDealingSupportIdentifier::from(&support);
+        let mut msg_ids = vec![];
+        for node_id in &node_ids {
+            let (_, support) = create_support(t_id, NODE_2, *node_id);
+            msg_ids.push(support.message_id());
+            artifacts.push(UnvalidatedArtifact {
+                message: IDkgMessage::DealingSupport(support),
+                peer_id: *node_id,
+                timestamp: UNIX_EPOCH,
+            });
+        }
+
+        // Using CryptoReturningOK only 2f + 1 shares should be accepted, the rest dropped
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut idkg_pool, pre_signer) =
+                    create_pre_signer_dependencies(pool_config, logger);
+
+                // Set up the IDKG pool
+                let change_set = vec![IDkgChangeAction::AddToValidated(IDkgMessage::Dealing(
+                    dealing.clone(),
+                ))];
+                idkg_pool.apply(change_set);
+                artifacts.iter().for_each(|a| idkg_pool.insert(a.clone()));
+
+                let change_set = pre_signer.validate_dealing_support(&idkg_pool, &block_reader);
+                assert_eq!(change_set.len(), 3 * f + 1);
+                let (accepted, dropped): (Vec<_>, Vec<_>) = msg_ids
+                    .into_iter()
+                    .partition(|msg_id| is_moved_to_validated(&change_set, msg_id));
+                assert!(dropped
+                    .iter()
+                    .all(|msg_id| is_removed_from_unvalidated(&change_set, msg_id)));
+                assert_eq!(accepted.len(), 2 * f + 1);
+                assert_eq!(dropped.len(), f);
+
+                assert_eq!(pre_signer.validated_dealing_supports.borrow().len(), 1);
+                assert!(pre_signer
+                    .validated_dealing_supports
+                    .borrow()
+                    .get(&validated_id)
+                    .is_some_and(|signers| signers.len() == 2 * f + 1
+                        && signers.is_subset(&node_ids.into_iter().collect())));
             })
         });
     }
