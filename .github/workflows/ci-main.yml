@@ -180,6 +180,7 @@ jobs:
               echo "No bazel targets"
               exit 0
             fi
+            echo "Testing $num_targets targets ..."
             # the target list can get quite big, so we wrap it in details/summary
             {
               echo '<details><summary>Tested '"$num_targets"' targets</summary>';
@@ -483,6 +484,7 @@ jobs:
             fi
             ci/bazel-scripts/targets.py build "${targets_args[@]}" >"$targets"
             num_targets=$(wc <"$targets" -l)
+            echo "Considering $num_targets targets ..."
             # the target list can get quite big, so we wrap it in details/summary
             {
               echo '<details><summary>Considered '"$num_targets"' targets</summary>';
