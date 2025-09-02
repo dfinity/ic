@@ -938,7 +938,7 @@ impl StreamHandlerImpl {
 
             // Request receiver is not hosted by this subnet; it is only possible that this
             // message was sent by a subnet with a routing table claiming otherwise,
-            // so it is migrating.
+            // so it is migrating...
             _ if matches!(msg, RequestOrResponse::Request(_)) => {
                 self.observe_inducted_message_status(
                     msg_type,
@@ -947,7 +947,7 @@ impl StreamHandlerImpl {
                 Reject(RejectReason::CanisterMigrating, msg)
             }
 
-            // Response from a mismatching subnet is dropped.
+            // ...but a response to a mismatching subnet is dropped.
             host_subnet => {
                 error!(
                     self.log,
