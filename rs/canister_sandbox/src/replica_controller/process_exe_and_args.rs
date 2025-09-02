@@ -27,13 +27,6 @@ const RUNNABLE_AS_SANDBOX: &[&str] = &[
     "ic-recovery",
     "pocket-ic",
     "pocket-ic-server",
-    // To enable fuzzing with canister sandboxing.
-    // TODO(PSEC): The binary name is hardcoded right now, but we would
-    // need a different approach to enable multiple fuzzers use this
-    // approach. The logic can be gated with #[cfg(feature = "fuzzing_code")]
-    "execute_with_wasm_executor_system_api",
-    "execute_with_wasm_executor_ic_wasm",
-    "execute_subnet_message_update_settings",
 ];
 
 enum SandboxCrate {
@@ -112,18 +105,20 @@ fn create_child_process_argv(krate: SandboxCrate) -> Option<Vec<String>> {
     // 1. If the current binary supports running the sandbox mode, then use it.
     // This is important for `ic-replay` and `drun` where we do not control
     // the location of the sandbox binary.
-    
-    // if RUNNABLE_AS_SANDBOX.contains(&current_binary_name) {
-    //     
-    //     
-    // }
 
+    if RUNNABLE_AS_SANDBOX.contains(&current_binary_name) {
+        let exec_path = current_binary_path.to_str()?.to_string();
+        return Some(vec![exec_path, krate.run_as_flag().to_string()]);
+    }
+
+    // 2. An alternative solution for binaries that can service as a sandbox. 
+    // The binary exports a section with the specified magic bytes.
     if check_binary_signature(current_binary_path.clone()) {
         let exec_path = current_binary_path.to_str()?.to_string();
         return Some(vec![exec_path, krate.run_as_flag().to_string()]);
     }
 
-    // 2. If the sandbox binary is in the same folder as the current binary, then
+    // 3. If the sandbox binary is in the same folder as the current binary, then
     // use it.
     let current_binary_folder = current_binary_path.parent()?;
     let sandbox_executable_path = current_binary_folder.join(krate.executable_name());
@@ -132,7 +127,7 @@ fn create_child_process_argv(krate: SandboxCrate) -> Option<Vec<String>> {
         return Some(vec![exec_path]);
     }
 
-    // 3. The two checks above cover all production use cases.
+    // 4. The two checks above cover all production use cases.
     // Find the sandbox binary for testing and local development.
     create_sandbox_argv_for_testing(krate)
 }
@@ -147,19 +142,10 @@ fn check_binary_signature(binary_path: PathBuf) -> bool {
 
     if let Ok(data) = std::fs::read(binary_path) {
         if let Ok(obj_file) = object::File::parse(&*data) {
-            for section in obj_file.sections() {
-                if let Ok(name) = section.name() {
-                    println!("section name: {name}");
-                    if name == crate::SANDBOX_SECTION_NAME { 
-                        if let Ok(data) = section.data() {
-                            if *data == crate::SANDBOX_MAGIC_BYTES[..] {   
-                                signature_found = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
+            signature_found = obj_file.sections().any(|section| {
+                matches!(section.name(), Ok(name) if name == crate::SANDBOX_SECTION_NAME)
+                    && matches!(section.data(), Ok(data) if data.starts_with(&crate::SANDBOX_MAGIC_BYTES))
+            });
         }
     }
     signature_found

@@ -259,7 +259,8 @@ pub fn run_canister_sandbox(
 #[macro_export]
 macro_rules! embed_sandbox_signature {
     () => {
-        #[link_section = ".canister_sandbox"]
+        #[unsafe(no_mangle)]
+        #[unsafe(link_section = ".canister_sandbox")]
         #[used]
         static SANDBOX_SIGNATURE: [u8; 8] = SANDBOX_MAGIC_BYTES;
     };

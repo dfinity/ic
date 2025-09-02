@@ -1,13 +1,13 @@
 use ic_canister_sandbox_backend_lib::{
-    embed_sandbox_signature, SANDBOX_MAGIC_BYTES, SANDBOX_SECTION_NAME, canister_sandbox_main, compiler_sandbox::compiler_sandbox_main,
+    canister_sandbox_main, compiler_sandbox::compiler_sandbox_main, embed_sandbox_signature,
     launcher::sandbox_launcher_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG,
-    RUN_AS_SANDBOX_LAUNCHER_FLAG,
+    RUN_AS_SANDBOX_LAUNCHER_FLAG, SANDBOX_MAGIC_BYTES,
 };
 use libfuzzer_sys::test_input_wrap;
 use std::ffi::CString;
 use std::os::raw::c_char;
 
-// embed_sandbox_signature!();
+embed_sandbox_signature!();
 
 #[cfg(target_os = "linux")]
 use {
@@ -48,6 +48,9 @@ pub struct SandboxFeatures {
 // See https://github.com/rust-fuzz/libfuzzer/blob/c8275d1517933765b56a6de61a371bb1cc4268cb/src/lib.rs#L62
 
 pub fn fuzzer_main(features: SandboxFeatures) {
+    // Compiler hack to prevent the section to be removed.
+    unsafe { core::ptr::read_volatile(&SANDBOX_SIGNATURE); }
+
     if std::env::args().any(|arg| arg == RUN_AS_CANISTER_SANDBOX_FLAG) {
         #[cfg(not(fuzzing))]
         if features.syscall_tracing {

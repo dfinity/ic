@@ -1,6 +1,6 @@
 use clap::{Arg, ArgMatches, Command};
 use ic_canister_sandbox_backend_lib::{
-    embed_sandbox_signature, SANDBOX_MAGIC_BYTES, SANDBOX_SECTION_NAME, canister_sandbox_main, compiler_sandbox::compiler_sandbox_main,
+    canister_sandbox_main, compiler_sandbox::compiler_sandbox_main,
     launcher::sandbox_launcher_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_COMPILER_SANDBOX_FLAG,
     RUN_AS_SANDBOX_LAUNCHER_FLAG,
 };
@@ -21,8 +21,6 @@ const ARG_SUBNET_TYPE: &str = "subnet-type";
 
 const GB: u64 = 1024 * 1024 * 1024;
 const MAIN_MEMORY_CAPACITY: NumBytes = NumBytes::new(16 * GB);
-
-embed_sandbox_signature!();
 
 fn main() -> Result<(), String> {
     // Check if `drun` is running in the canister sandbox mode where it waits
