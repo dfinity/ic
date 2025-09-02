@@ -46,13 +46,12 @@ use lazy_static::lazy_static;
 use on_wire::{FromWire, IntoWire, NewType};
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
-use std::time::SystemTime;
 use std::{
     cell::{Cell, RefCell},
     collections::{btree_map::Entry, BTreeMap, BTreeSet},
     convert::TryInto,
     thread::LocalKey,
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 
 mod environment;
@@ -1126,34 +1125,6 @@ fn remove_subnet_from_authorized_subnet_list(arg: RemoveSubnetFromAuthorizedSubn
     });
 }
 
-#[export_name = "canister_update transaction_notification_pb"]
-fn transaction_notification_pb() {
-    in_executor_context(|| {
-        let input = arg_data_raw();
-        spawn_017_compat(async move {
-            let request = ProtoBuf::<TransactionNotification>::from_bytes(input)
-                .expect("Could not decode TransactionNotification")
-                .into_inner();
-
-            match do_transaction_notification(request).await {
-                Ok(response) => match ProtoBuf::new(response).into_bytes() {
-                    Ok(buf) => reply_raw(&buf),
-                    Err(e) => ic_cdk::api::call::reject(&format!("Error: {:?}", e)),
-                },
-                Err(e) => ic_cdk::api::call::reject(&format!("Error: {:?}", e)),
-            }
-        })
-    })
-}
-
-#[update(manual_reply = true, hidden = true)]
-async fn transaction_notification(tn: TransactionNotification) {
-    match do_transaction_notification(tn).await {
-        Ok(response) => ManualReply::<CyclesResponse>::one(response),
-        Err(e) => ManualReply::reject(format!("Error: {:?}", e)),
-    };
-}
-
 fn is_transient_error<T>(result: &Result<T, NotifyError>) -> bool {
     if let Err(e) = result {
         return e.is_retriable();
@@ -1933,132 +1904,6 @@ async fn issue_automatic_refund_if_memo_not_offerred(
         reason: reason_for_refund,
         block_index: refund_block_index,
     })
-}
-
-/// Processes a legacy notification from the Ledger canister.
-async fn do_transaction_notification(
-    tn: TransactionNotification,
-) -> Result<CyclesResponse, String> {
-    let caller = caller();
-
-    print(format!(
-        "[cycles] notified about transaction {:?} by {}",
-        tn, caller
-    ));
-
-    let ledger_canister_id = with_state(|state| state.ledger_canister_id);
-
-    if CanisterId::unchecked_from_principal(caller) != ledger_canister_id {
-        return Err(format!(
-            "This canister can only be notified by the ledger canister ({}), not by {}.",
-            ledger_canister_id, caller
-        ));
-    }
-
-    // We need this check if MAX_NOTIFY_HISTORY is smaller than max number of transactions
-    // the ledger can process within 24h
-    let last_purged_notification = with_state(|state| state.last_purged_notification);
-
-    if tn.block_height <= last_purged_notification {
-        return Err(NotifyError::TransactionTooOld(last_purged_notification + 1).to_string());
-    }
-
-    let block_height = tn.block_height;
-    with_state_mut(|state| match state.blocks_notified.entry(block_height) {
-        Entry::Occupied(entry) => match entry.get() {
-            NotificationStatus::Processing => Err("Another notification is in progress".into()),
-            NotificationStatus::NotifiedTopUp(resp) => Err(format!("Already notified: {:?}", resp)),
-            NotificationStatus::NotifiedCreateCanister(resp) => {
-                Err(format!("Already notified: {:?}", resp))
-            }
-            NotificationStatus::NotifiedMint(resp) => Err(format!("Already notified: {:?}", resp)),
-            NotificationStatus::NotMeaningfulMemo(resp) => {
-                Err(format!("Already notified: {:?}", resp))
-            }
-        },
-        Entry::Vacant(entry) => {
-            entry.insert(NotificationStatus::Processing);
-            Ok(())
-        }
-    })?;
-
-    let from = AccountIdentifier::new(tn.from, tn.from_subaccount);
-
-    let (cycles_response, notification_status) = if tn.memo == MEMO_CREATE_CANISTER {
-        let controller = authorize_sender_to_create_canister_via_ledger_notify(&tn)?;
-        match process_create_canister(controller, from, tn.amount, None, None).await {
-            Ok(canister_id) => (
-                Ok(CyclesResponse::CanisterCreated(canister_id)),
-                Some(NotificationStatus::NotifiedCreateCanister(Ok(canister_id))),
-            ),
-            Err(NotifyError::Refunded {
-                reason,
-                block_index,
-            }) => (
-                Ok(CyclesResponse::Refunded(reason.clone(), block_index)),
-                Some(NotificationStatus::NotifiedCreateCanister(Err(
-                    NotifyError::Refunded {
-                        reason,
-                        block_index,
-                    },
-                ))),
-            ),
-            Err(e) => (Err(e), None),
-        }
-    } else if tn.memo == MEMO_TOP_UP_CANISTER {
-        let canister_id = (&tn
-            .to_subaccount
-            .ok_or_else(|| "Topping up requires a subaccount.".to_string())?)
-            .try_into()
-            .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
-
-        // Always use base cycles limit for minting cycles, since the Subnet Rental Canister
-        // doesn't call this endpoint.
-        let process_top_up_result = process_top_up(
-            canister_id,
-            from,
-            tn.amount,
-            CyclesMintingLimiterSelector::BaseLimit,
-        )
-        .await;
-
-        match process_top_up_result {
-            Ok(cycles) => (
-                Ok(CyclesResponse::ToppedUp(())),
-                Some(NotificationStatus::NotifiedTopUp(Ok(cycles))),
-            ),
-            Err(NotifyError::Refunded {
-                reason,
-                block_index,
-            }) => (
-                Ok(CyclesResponse::Refunded(reason.clone(), block_index)),
-                Some(NotificationStatus::NotifiedTopUp(Err(
-                    NotifyError::Refunded {
-                        reason,
-                        block_index,
-                    },
-                ))),
-            ),
-            Err(e) => (Err(e), None),
-        }
-    } else {
-        let err = NotifyError::InvalidTransaction(format!(
-            "Do not know what to do with transaction with memo {}.",
-            tn.memo.0
-        ));
-        (Err(err), None)
-    };
-
-    with_state_mut(|state| {
-        if let Some(status) = notification_status {
-            state.blocks_notified.insert(block_height, status);
-        }
-        if is_transient_error(&cycles_response) {
-            state.blocks_notified.remove(&block_height);
-        }
-    });
-
-    cycles_response.map_err(|e| e.to_string())
 }
 
 /// Returns Ok(controller/creator/sender) if sender == creator (aka controller).
