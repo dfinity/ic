@@ -475,32 +475,32 @@ jobs:
             fi
 
             # otherwise, infer targets to build
-            targets=$(mktemp)
-            trap "rm $targets" INT TERM EXIT
+            target_pattern_file=$(mktemp)
+            trap "rm $target_pattern_file" INT TERM EXIT
             targets_args=()
             commit_range_arg=""
             if [[ "$DIFF_ONLY" == 'true' ]]; then
               targets_args+=("--base=$BASE_SHA" "--head=$HEAD_SHA")
             fi
-            ci/bazel-scripts/targets.py build "${targets_args[@]}" >"$targets"
-            num_targets=$(wc <"$targets" -l)
+            ci/bazel-scripts/targets.py build "${targets_args[@]}" >"$target_pattern_file"
+            num_targets=$(wc <"$target_pattern_file" -l)
             echo "Considering $num_targets targets ..."
             # the target list can get quite big, so we wrap it in details/summary
             {
               echo '<details><summary>Considered '"$num_targets"' targets</summary>';
-              cat "$targets"
+              cat "$target_pattern_file"
               echo '</details>';
             } >>"$GITHUB_STEP_SUMMARY"
 
             ARGS=()
 
-            if grep -q '^//ic-os' <"$targets"; then
+            if grep -q '^//ic-os' <"$target_pattern_file"; then
                 ARGS+=(-i)
             fi
-            if grep -q '^//publish/canisters' <"$targets"; then
+            if grep -q '^//publish/canisters' <"$target_pattern_file"; then
                 ARGS+=(-c)
             fi
-            if grep -q '^//publish/binaries' <"$targets"; then
+            if grep -q '^//publish/binaries' <"$target_pattern_file"; then
                 ARGS+=(-b)
             fi
 
