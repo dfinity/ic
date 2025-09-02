@@ -583,7 +583,7 @@ impl IDkgPreSignerImpl {
         }
 
         // Unvalidated dealings.
-        let mut action = idkg_pool
+        let action = idkg_pool
             .unvalidated()
             .signed_dealings()
             .filter(|(_, signed_dealing)| {
@@ -594,12 +594,11 @@ impl IDkgPreSignerImpl {
                     &target_subnet_xnet_transcripts,
                 )
             })
-            .map(|(id, _)| IDkgChangeAction::RemoveUnvalidated(id))
-            .collect();
-        ret.append(&mut action);
+            .map(|(id, _)| IDkgChangeAction::RemoveUnvalidated(id));
+        ret.extend(action);
 
         // Validated dealings.
-        let mut action = idkg_pool
+        let action = idkg_pool
             .validated()
             .signed_dealings()
             .filter(|(_, signed_dealing)| {
@@ -610,12 +609,11 @@ impl IDkgPreSignerImpl {
                     &target_subnet_xnet_transcripts,
                 )
             })
-            .map(|(id, _)| IDkgChangeAction::RemoveValidated(id))
-            .collect();
-        ret.append(&mut action);
+            .map(|(id, _)| IDkgChangeAction::RemoveValidated(id));
+        ret.extend(action);
 
         // Unvalidated dealing support.
-        let mut action = idkg_pool
+        let action = idkg_pool
             .unvalidated()
             .dealing_support()
             .filter(|(_, support)| {
@@ -626,13 +624,12 @@ impl IDkgPreSignerImpl {
                     &target_subnet_xnet_transcripts,
                 )
             })
-            .map(|(id, _)| IDkgChangeAction::RemoveUnvalidated(id))
-            .collect();
-        ret.append(&mut action);
+            .map(|(id, _)| IDkgChangeAction::RemoveUnvalidated(id));
+        ret.extend(action);
 
         // Validated dealing support.
         let mut valid_dealing_supports = self.validated_dealing_supports.borrow_mut();
-        let mut action = idkg_pool
+        let action = idkg_pool
             .validated()
             .dealing_support()
             .filter(|(_, support)| {
@@ -648,9 +645,8 @@ impl IDkgPreSignerImpl {
                 let key = IDkgValidatedDealingSupportIdentifier::from(&support);
                 valid_dealing_supports.remove(&key);
                 IDkgChangeAction::RemoveValidated(id)
-            })
-            .collect();
-        ret.append(&mut action);
+            });
+        ret.extend(action);
 
         ret
     }
