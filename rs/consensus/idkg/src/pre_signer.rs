@@ -50,6 +50,16 @@ struct IDkgValidatedDealingSupportIdentifier {
     dealing_hash: CryptoHashOf<SignedIDkgDealing>,
 }
 
+impl From<&IDkgDealingSupport> for IDkgValidatedDealingSupportIdentifier {
+    fn from(support: &IDkgDealingSupport) -> Self {
+        Self {
+            transcript_id: support.transcript_id,
+            dealer_id: support.dealer_id,
+            dealing_hash: support.dealing_hash.clone(),
+        }
+    }
+}
+
 pub(crate) trait IDkgPreSigner: Send {
     /// The on_state_change() called from the main IDKG path.
     fn on_state_change(
@@ -368,12 +378,7 @@ impl IDkgPreSignerImpl {
         for (id, support) in idkg_pool.unvalidated().dealing_support() {
             // Dedup dealing support by checking whether a previous (transcript_id, dealer_id,
             // dealing_hash) was already signed by the signer
-            let key = IDkgValidatedDealingSupportIdentifier {
-                transcript_id: support.transcript_id,
-                dealer_id: support.dealer_id,
-                dealing_hash: support.dealing_hash.clone(),
-            };
-
+            let key = IDkgValidatedDealingSupportIdentifier::from(&support);
             let mut valid_dealing_supports = self.validated_dealing_supports.borrow_mut();
             let maybe_signers = valid_dealing_supports.get_mut(&key);
             if maybe_signers
@@ -627,11 +632,7 @@ impl IDkgPreSignerImpl {
         let mut action = Vec::new();
         let mut valid_dealing_supports = self.validated_dealing_supports.borrow_mut();
         for (id, support) in validated_dealing_supports_to_purge {
-            let key = IDkgValidatedDealingSupportIdentifier {
-                transcript_id: support.transcript_id,
-                dealer_id: support.dealer_id,
-                dealing_hash: support.dealing_hash,
-            };
+            let key = IDkgValidatedDealingSupportIdentifier::from(&support);
             valid_dealing_supports.remove(&key);
             action.push(IDkgChangeAction::RemoveValidated(id));
         }
@@ -2292,11 +2293,7 @@ mod tests {
         });
         support.sig_share.signature = BasicSigOf::new(BasicSig(vec![1]));
         let msg_id_2_dupl = support.message_id();
-        let validated_id_2 = IDkgValidatedDealingSupportIdentifier {
-            transcript_id: support.transcript_id,
-            dealer_id: support.dealer_id,
-            dealing_hash: support.dealing_hash.clone(),
-        };
+        let validated_id_2 = IDkgValidatedDealingSupportIdentifier::from(&support);
         artifacts.push(UnvalidatedArtifact {
             message: IDkgMessage::DealingSupport(support),
             peer_id: NODE_3,
@@ -2439,11 +2436,7 @@ mod tests {
                 ))];
                 idkg_pool.apply(change_set);
 
-                let validated_id = IDkgValidatedDealingSupportIdentifier {
-                    transcript_id: support.transcript_id,
-                    dealer_id: support.dealer_id,
-                    dealing_hash: support.dealing_hash.clone(),
-                };
+                let validated_id = IDkgValidatedDealingSupportIdentifier::from(&support);
                 {
                     let mut valid_dealing_supports =
                         pre_signer.validated_dealing_supports.borrow_mut();
@@ -2805,28 +2798,16 @@ mod tests {
 
                 // Support 1: height <= current_height, in_progress (not purged)
                 let (_, support_1) = create_support(id_1, NODE_2, NODE_3);
-                let validated_id_1 = IDkgValidatedDealingSupportIdentifier {
-                    transcript_id: support_1.transcript_id,
-                    dealer_id: support_1.dealer_id,
-                    dealing_hash: support_1.dealing_hash.clone(),
-                };
+                let validated_id_1 = IDkgValidatedDealingSupportIdentifier::from(&support_1);
 
                 // Dealing 2: height <= current_height, !in_progress (purged)
                 let (_, support_2) = create_support(id_2, NODE_2, NODE_3);
                 let msg_id_2 = support_2.message_id();
-                let validated_id_2 = IDkgValidatedDealingSupportIdentifier {
-                    transcript_id: support_2.transcript_id,
-                    dealer_id: support_2.dealer_id,
-                    dealing_hash: support_2.dealing_hash.clone(),
-                };
+                let validated_id_2 = IDkgValidatedDealingSupportIdentifier::from(&support_2);
 
                 // Dealing 3: height > current_height (not purged)
                 let (_, support_3) = create_support(id_3, NODE_2, NODE_3);
-                let validated_id_3 = IDkgValidatedDealingSupportIdentifier {
-                    transcript_id: support_3.transcript_id,
-                    dealer_id: support_3.dealer_id,
-                    dealing_hash: support_3.dealing_hash.clone(),
-                };
+                let validated_id_3 = IDkgValidatedDealingSupportIdentifier::from(&support_3);
 
                 {
                     let mut valid_dealing_supports =
