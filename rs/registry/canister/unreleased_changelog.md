@@ -9,6 +9,7 @@ on the process that this file is part of, see
 
 ## Added
 * New update method that will be used for node swapping feature.
+* `migrate_canisters` returns the new registry version. 
 
 ## Changed
 

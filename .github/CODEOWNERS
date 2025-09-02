@@ -131,7 +131,6 @@ go_deps.bzl               @dfinity/idx
 /rs/cycles_account_manager/                             @dfinity/execution
 /rs/depcheck/                                           @dfinity/ic-interface-owners
 /rs/determinism_test/                                   @dfinity/execution
-/rs/drun/                                               @dfinity/languages
 /rs/embedders/                                          @dfinity/execution
 /rs/ethereum/                                           @dfinity/cross-chain-team
 /rs/execution_environment/                              @dfinity/execution

@@ -1,7 +1,7 @@
 //! Functions for determining the executable and args to use when creating
 //! sandbox and launcher processes. In production use cases the executable can
 //! always be found in the current folder, but this won't be the case when
-//! running unit tests or running within tools such as `drun` or `ic-replay`.
+//! running unit tests or running within tools such as `ic-replay`.
 
 use std::{
     path::{Path, PathBuf},
@@ -22,7 +22,6 @@ const LAUNCHER_EXECUTABLE_NAME: &str = "sandbox_launcher";
 
 // These binaries support running in the canister sandbox mode.
 const RUNNABLE_AS_SANDBOX: &[&str] = &[
-    "drun",
     "ic-replay",
     "ic-recovery",
     "pocket-ic",
@@ -103,7 +102,7 @@ fn create_child_process_argv(krate: SandboxCrate) -> Option<Vec<String>> {
     // Please do not reorder.
     //
     // 1. If the current binary supports running the sandbox mode, then use it.
-    // This is important for `ic-replay` and `drun` where we do not control
+    // This is important for `ic-replay` where we do not control
     // the location of the sandbox binary.
 
     if RUNNABLE_AS_SANDBOX.contains(&current_binary_name) {
