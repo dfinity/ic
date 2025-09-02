@@ -7,8 +7,6 @@ use libfuzzer_sys::test_input_wrap;
 use std::ffi::CString;
 use std::os::raw::c_char;
 
-embed_sandbox_signature!();
-
 #[cfg(target_os = "linux")]
 use {
     nix::{
@@ -35,6 +33,9 @@ pub struct SandboxFeatures {
     pub syscall_tracing: bool,
 }
 
+#[cfg(target_os = "linux")]
+embed_sandbox_signature!();
+
 // In general, fuzzers don't include `main()` and the initialisation logic is deferred to libfuzzer.
 // However, to enable canister sandboxing, we override the initialisation by providing our own `main()`
 // which acts as a dispatcher for different sandboxed under certain arguments.
@@ -49,6 +50,7 @@ pub struct SandboxFeatures {
 
 pub fn fuzzer_main(features: SandboxFeatures) {
     // Compiler hack to prevent the section from being removed.
+    #[cfg(target_os = "linux")]
     unsafe {
         core::ptr::read_volatile(&SANDBOX_SIGNATURE);
     }
