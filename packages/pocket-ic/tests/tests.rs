@@ -3388,3 +3388,12 @@ async fn with_http_gateway_config_invalid_gateway_config() {
 
     pic.drop().await;
 }
+
+#[test]
+fn make_live_after_auto_progress() {
+    let mut pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_auto_progress(None)
+        .build();
+    pic.make_live(None);
+}

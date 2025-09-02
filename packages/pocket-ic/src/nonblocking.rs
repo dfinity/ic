@@ -468,7 +468,9 @@ impl PocketIc {
         if let Some(url) = self.url() {
             return url;
         }
-        self.auto_progress().await;
+        if !self.auto_progress_enabled().await {
+            self.auto_progress().await;
+        }
         self.start_http_gateway(
             ip_addr.map(|ip_addr| ip_addr.to_string()),
             listen_at,
