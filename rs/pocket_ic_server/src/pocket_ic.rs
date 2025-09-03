@@ -2113,6 +2113,9 @@ impl PocketIc {
 
         let mut range_gen = RangeGen::new();
 
+        // We only update system canisters during subnet creation
+        // if the PocketIC does not resume from an existing state
+        // in which case system canisters have already been updated before.
         let update_system_canisters = topology.is_none();
         let mut subnet_config_info: Vec<SubnetConfigInfo> = if let Some(topology) = topology {
             topology
@@ -4184,6 +4187,8 @@ fn route(
                     // and all existing canister ranges within the PocketIC instance and thus we use
                     // `RangeGen::next_range()` to produce such a canister range.
                     let canister_allocation_range = pic.range_gen.next_range();
+                    // This is a fresh subnet so we always update system canisters.
+                    let update_system_canisters = true;
                     pic.subnets.create_subnet(
                         SubnetConfigInfo {
                             ranges: vec![range],
@@ -4194,7 +4199,7 @@ fn route(
                             instruction_config,
                             expected_state_time: None,
                         },
-                        true,
+                        update_system_canisters,
                     )?;
                     pic.subnets
                         .persist_topology(pic.default_effective_canister_id);
