@@ -10,19 +10,21 @@ use ic_system_test_driver::driver::group::{
 use ic_system_test_driver::driver::ic::VmResources;
 use ic_system_test_driver::driver::test_env::RequiredHostFeaturesFromCmdLine;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
-use ic_system_test_driver::driver::test_env_api::{get_dependency_path, FarmBaseUrl, SshSession};
+use ic_system_test_driver::driver::test_env_api::{
+    get_dependency_path, scp_recv_from, scp_send_to, FarmBaseUrl, SshSession,
+};
 use ic_system_test_driver::driver::test_setup::GroupSetup;
 use ic_system_test_driver::driver::universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms};
 use itertools::Itertools;
-use slog::{error, info, Logger};
+use slog::{error, info};
 use ssh2::Session;
+use std::env;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::str;
 use std::time::Duration;
-use std::{env, fs};
 
 const UVM_NAME: &str = "colocated-test-driver";
 const COLOCATED_TEST: &str = "COLOCATED_TEST";
@@ -33,8 +35,6 @@ pub const RUNFILES_TAR_ZST: &str = "runfiles.tar.zst";
 pub const ENV_TAR_ZST: &str = "env.tar.zst";
 const DASHBOARDS_TAR_ZST: &str = "dashboards.tar.zst";
 
-pub const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
-pub const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 pub const TEST_STATUS_CHECK_RETRY: Duration = Duration::from_secs(5);
 type ExitCode = i32;
 
@@ -409,42 +409,6 @@ fn fetch_test_dir(env: TestEnv, uvm: &DeployedUniversalVm, session: &Session) {
         log,
         "Untarred the test directory from the {UVM_NAME} to {colocated_test_dir:?}."
     );
-}
-
-fn scp_send_to(log: Logger, session: &Session, from: &std::path::Path, to: &std::path::Path) {
-    let size = fs::metadata(from).unwrap().len();
-    ic_system_test_driver::retry_with_msg!(
-        format!("scp-ing {from:?} of {size:?} B to {UVM_NAME}:{to:?}"),
-        log.clone(),
-        SCP_RETRY_TIMEOUT,
-        SCP_RETRY_BACKOFF,
-        || {
-            let mut remote_file = session.scp_send(to, 0o644, size, None)?;
-            let mut from_file = File::open(from)?;
-            std::io::copy(&mut from_file, &mut remote_file)?;
-            info!(log, "scp-ed {from:?} of {size:?} B to {UVM_NAME}:{to:?} .");
-            Ok(())
-        }
-    )
-    .unwrap_or_else(|e| panic!("Failed to scp {from:?} to {UVM_NAME}:{to:?} because: {e}"));
-}
-
-fn scp_recv_from(log: Logger, session: &Session, from: &std::path::Path, to: &std::path::Path) {
-    ic_system_test_driver::retry_with_msg!(
-        format!("scp-ing {UVM_NAME}:{from:?} to {to:?}"),
-        log.clone(),
-        SCP_RETRY_TIMEOUT,
-        SCP_RETRY_BACKOFF,
-        || {
-            let (mut remote_file, scp_file_stat) = session.scp_recv(from)?;
-            let size = scp_file_stat.size();
-            let mut to_file = File::create(to)?;
-            std::io::copy(&mut remote_file, &mut to_file)?;
-            info!(log, "scp-ed {UVM_NAME}:{from:?} of {size:?} B to {to:?}.");
-            Ok(())
-        }
-    )
-    .unwrap_or_else(|e| panic!("Failed to scp {UVM_NAME}:{from:?} to {to:?} because: {e}",));
 }
 
 fn receive_test_exit_code_async(

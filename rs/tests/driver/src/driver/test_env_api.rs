@@ -219,6 +219,8 @@ const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
 // It usually takes below 60 secs to install nns canisters.
 const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(160);
+const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
+const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 // Be mindful when modifying this constant, as the event can be consumed by other parties.
 const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
@@ -2398,4 +2400,62 @@ pub fn emit_group_event(log: &slog::Logger, group: &str) {
         },
     );
     event.emit_log(log);
+}
+
+/// Copy a local file via SSH to a remote host.
+pub fn scp_send_to(
+    log: Logger,
+    session: &Session,
+    from_local: &std::path::Path,
+    to_remote: &std::path::Path,
+) {
+    let size = fs::metadata(from_local).unwrap().len();
+    retry_with_msg!(
+        format!("scp-ing local {from_local:?} of {size:?} B to remote {to_remote:?}"),
+        log.clone(),
+        SCP_RETRY_TIMEOUT,
+        SCP_RETRY_BACKOFF,
+        || {
+            let mut remote_file = session.scp_send(to_remote, 0o644, size, None)?;
+            let mut from_file = std::fs::File::open(from_local)?;
+            std::io::copy(&mut from_file, &mut remote_file)?;
+            info!(
+                log,
+                "scp-ed local {from_local:?} of {size:?} B to remote {to_remote:?} ."
+            );
+            Ok(())
+        }
+    )
+    .unwrap_or_else(|e| {
+        panic!("Failed to scp local {from_local:?} to remote {to_remote:?} because: {e}")
+    });
+}
+
+/// Copy a file from a remote host to a local file.
+pub fn scp_recv_from(
+    log: Logger,
+    session: &Session,
+    from_remote: &std::path::Path,
+    to_local: &std::path::Path,
+) {
+    retry_with_msg!(
+        format!("scp-ing remote {from_remote:?} to local {to_local:?}"),
+        log.clone(),
+        SCP_RETRY_TIMEOUT,
+        SCP_RETRY_BACKOFF,
+        || {
+            let (mut remote_file, scp_file_stat) = session.scp_recv(from_remote)?;
+            let size = scp_file_stat.size();
+            let mut to_file = std::fs::File::create(to_local)?;
+            std::io::copy(&mut remote_file, &mut to_file)?;
+            info!(
+                log,
+                "scp-ed remote {from_remote:?} of {size:?} B to local {to_local:?}."
+            );
+            Ok(())
+        }
+    )
+    .unwrap_or_else(|e| {
+        panic!("Failed to scp remote {from_remote:?} to local {to_local:?} because: {e}")
+    });
 }
