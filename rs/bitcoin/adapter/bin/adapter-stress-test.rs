@@ -1,6 +1,6 @@
 use std::{convert::TryFrom, path::PathBuf, time::Duration};
 
-use bitcoin::{consensus::Decodable, Block, BlockHash};
+use bitcoin::{consensus::Decodable, dogecoin::Block, BlockHash};
 use clap::Parser;
 use ic_btc_adapter::AdapterNetwork;
 use ic_btc_service::{
@@ -75,7 +75,10 @@ async fn main() {
             Ok(response) => response.into_inner(),
             Err(status) => match status.code() {
                 tonic::Code::Cancelled | tonic::Code::Unavailable => continue,
-                _ => break,
+                _ => {
+                    println!("status = {:?}", status);
+                    break;
+                }
             },
         };
 
@@ -94,6 +97,8 @@ async fn main() {
             current_anchor = *block_hashes.last().expect("failed to get last block hash");
             total_processed_block_hashes += block_hashes.len();
             processed_block_hashes = block_hashes;
+        } else {
+            sleep(interval_sleep_ms).await;
         }
 
         println!(
@@ -104,7 +109,5 @@ async fn main() {
             inner.next.len(),
             total_processed_block_hashes
         );
-
-        sleep(interval_sleep_ms).await;
     }
 }

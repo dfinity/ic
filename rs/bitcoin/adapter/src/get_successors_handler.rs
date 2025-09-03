@@ -304,7 +304,7 @@ fn are_multiple_blocks_allowed(network: AdapterNetwork, anchor_height: BlockHeig
         AdapterNetwork::Dogecoin(network) => {
             use bitcoin::dogecoin::Network::*;
             match network {
-                Dogecoin => false,
+                Dogecoin => anchor_height <= 4_000_000,
                 Testnet | Regtest => true,
                 other => unreachable!("Unsupported Dogecoin network: {:?}", other),
             }
