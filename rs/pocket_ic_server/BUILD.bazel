@@ -154,6 +154,12 @@ EXTERNAL_CANISTER_DATA = [
     "@sns_aggregator_test_at_mainnet_commit//file",
 ]
 
+EXTERNAL_CANISTER_ENV = {
+    "CYCLES_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_cycles_ledger_canister//file)",
+    "SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH": "$(location @sns_aggregator_test_at_mainnet_commit//file)",
+    "INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH": "$(location @internet_identity_dev_at_mainnet_commit//file)",
+}
+
 HEAD_NNS_CANISTER_DATA = [
     "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256",
     "//rs/ledger_suite/icrc1/archive:archive_canister",
@@ -170,6 +176,23 @@ HEAD_NNS_CANISTER_DATA = [
     "//rs/sns/swap:sns-swap-canister",
     "//rs/nns/governance:governance-canister-test",
 ]
+
+HEAD_NNS_CANISTER_ENV = {
+    "REGISTRY_CANISTER_WASM_PATH": "$(location //rs/registry/canister:registry-canister)",
+    "CYCLES_MINTING_CANISTER_WASM_PATH": "$(location //rs/nns/cmc:cycles-minting-canister)",
+    "ICP_LEDGER_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
+    "ICP_INDEX_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icp/index:ic-icp-index-canister)",
+    "CYCLES_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256)",
+    "GOVERNANCE_TEST_CANISTER_WASM_PATH": "$(location //rs/nns/governance:governance-canister-test)",
+    "ROOT_CANISTER_WASM_PATH": "$(location //rs/nns/handlers/root/impl:root-canister)",
+    "SNS_WASM_CANISTER_WASM_PATH": "$(location //rs/nns/sns-wasm:sns-wasm-canister)",
+    "SNS_ROOT_CANISTER_WASM_PATH": "$(location //rs/sns/root:sns-root-canister)",
+    "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(location //rs/sns/governance:sns-governance-canister-test)",
+    "SNS_SWAP_CANISTER_WASM_PATH": "$(location //rs/sns/swap:sns-swap-canister)",
+    "SNS_LEDGER_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+    "SNS_LEDGER_ARCHIVE_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icrc1/archive:archive_canister)",
+    "SNS_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icrc1/index-ng:index_ng_canister)",
+}
 
 MAINNET_NNS_CANISTER_DATA = [
     "@mainnet_cycles_ledger_index//file",
@@ -188,12 +211,6 @@ MAINNET_NNS_CANISTER_DATA = [
     "@nns_governance_canister_test_at_mainnet_commit//file",
 ]
 
-EXTERNAL_CANISTER_ENV = {
-    "CYCLES_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_cycles_ledger_canister//file)",
-    "SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH": "$(location @sns_aggregator_test_at_mainnet_commit//file)",
-    "INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH": "$(location @internet_identity_dev_at_mainnet_commit//file)",
-}
-
 MAINNET_NNS_CANISTER_ENV = {
     "REGISTRY_CANISTER_WASM_PATH": "$(location @mainnet_nns_registry_canister//file)",
     "CYCLES_MINTING_CANISTER_WASM_PATH": "$(location @mainnet_nns_cycles-minting-canister//file)",
@@ -209,23 +226,6 @@ MAINNET_NNS_CANISTER_ENV = {
     "SNS_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-ledger//file)",
     "SNS_LEDGER_ARCHIVE_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-archive//file)",
     "SNS_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-index-ng//file)",
-}
-
-HEAD_NNS_CANISTER_ENV = {
-    "REGISTRY_CANISTER_WASM_PATH": "$(location //rs/registry/canister:registry-canister)",
-    "CYCLES_MINTING_CANISTER_WASM_PATH": "$(location //rs/nns/cmc:cycles-minting-canister)",
-    "ICP_LEDGER_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
-    "ICP_INDEX_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icp/index:ic-icp-index-canister)",
-    "CYCLES_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256)",
-    "GOVERNANCE_TEST_CANISTER_WASM_PATH": "$(location //rs/nns/governance:governance-canister-test)",
-    "ROOT_CANISTER_WASM_PATH": "$(location //rs/nns/handlers/root/impl:root-canister)",
-    "SNS_WASM_CANISTER_WASM_PATH": "$(location //rs/nns/sns-wasm:sns-wasm-canister)",
-    "SNS_ROOT_CANISTER_WASM_PATH": "$(location //rs/sns/root:sns-root-canister)",
-    "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(location //rs/sns/governance:sns-governance-canister-test)",
-    "SNS_SWAP_CANISTER_WASM_PATH": "$(location //rs/sns/swap:sns-swap-canister)",
-    "SNS_LEDGER_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icrc1/ledger:ledger_canister)",
-    "SNS_LEDGER_ARCHIVE_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icrc1/archive:archive_canister)",
-    "SNS_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icrc1/index-ng:index_ng_canister)",
 }
 
 [
