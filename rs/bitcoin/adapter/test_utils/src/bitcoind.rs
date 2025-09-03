@@ -20,7 +20,7 @@ use bitcoin::{
     },
     BlockHash,
 };
-use ic_btc_adapter::{BlockLike, BlockchainHeader, BlockchainNetwork};
+use ic_btc_adapter::{BlockchainBlock, BlockchainHeader, BlockchainNetwork};
 
 use bitcoin::io as bitcoin_io;
 

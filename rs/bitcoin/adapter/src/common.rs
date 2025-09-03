@@ -149,7 +149,7 @@ pub trait BlockchainNetwork {
     /// Header type
     type Header: BlockchainHeader;
     /// Block type
-    type Block: BlockLike<Header = Self::Header>;
+    type Block: BlockchainBlock<Header = Self::Header>;
     /// Return genesis block header
     fn genesis_block_header(&self) -> Self::Header;
     /// Validate the given block header
@@ -269,7 +269,7 @@ impl BlockchainHeader for bitcoin::dogecoin::Header {
 }
 
 /// A trait that contains the common methods of both Bitcoin and Dogecoin blocks.
-pub trait BlockLike: Decodable + Encodable + Clone {
+pub trait BlockchainBlock: Decodable + Encodable + Clone {
     /// Block Header
     type Header;
     /// Return block hash.
@@ -282,7 +282,7 @@ pub trait BlockLike: Decodable + Encodable + Clone {
     fn header(&self) -> Self::Header;
 }
 
-impl BlockLike for bitcoin::Block {
+impl BlockchainBlock for bitcoin::Block {
     type Header = bitcoin::block::Header;
 
     fn block_hash(&self) -> BlockHash {
@@ -299,7 +299,7 @@ impl BlockLike for bitcoin::Block {
     }
 }
 
-impl BlockLike for bitcoin::dogecoin::Block {
+impl BlockchainBlock for bitcoin::dogecoin::Block {
     type Header = bitcoin::dogecoin::Header;
 
     fn block_hash(&self) -> BlockHash {

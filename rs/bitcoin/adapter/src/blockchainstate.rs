@@ -1,7 +1,7 @@
 //! The module is responsible for keeping track of the blockchain state.
 //!
 use crate::{
-    common::{BlockHeight, BlockLike, BlockchainHeader, BlockchainNetwork},
+    common::{BlockHeight, BlockchainBlock, BlockchainHeader, BlockchainNetwork},
     metrics::BlockchainStateMetrics,
 };
 use bitcoin::{consensus::Encodable, BlockHash, Work};

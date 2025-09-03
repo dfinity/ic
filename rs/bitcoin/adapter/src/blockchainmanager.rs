@@ -1,6 +1,8 @@
 use crate::{
     blockchainstate::{AddHeaderError, BlockchainState},
-    common::{BlockHeight, BlockLike, BlockchainHeader, BlockchainNetwork, MINIMUM_VERSION_NUMBER},
+    common::{
+        BlockHeight, BlockchainBlock, BlockchainHeader, BlockchainNetwork, MINIMUM_VERSION_NUMBER,
+    },
     metrics::RouterMetrics,
     Channel, Command, ProcessNetworkMessageError,
 };

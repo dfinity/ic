@@ -2,7 +2,7 @@ use std::{convert::TryFrom, path::PathBuf, time::Duration};
 
 use bitcoin::{consensus::Decodable, BlockHash};
 use clap::Parser;
-use ic_btc_adapter::{AdapterNetwork, BlockLike, BlockchainHeader, BlockchainNetwork};
+use ic_btc_adapter::{AdapterNetwork, BlockchainBlock, BlockchainHeader, BlockchainNetwork};
 use ic_btc_service::{
     btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,
     BtcServiceGetSuccessorsResponse,
