@@ -171,64 +171,40 @@ fn test_fetch_canister_logs_via_submit_ingress() {
     );
 }
 
-#[test]
-fn test_fetch_canister_logs_via_execute_ingress() {
-    // Test fetch_canister_logs API call results.
-    let env = setup_env();
-    let canister_id = create_and_install_canister(
-        &env,
-        CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibilityV2::Public)
-            .build(),
-        wat_canister().build_wasm(),
-    );
-    let result = env.execute_ingress_as(
-        PrincipalId::new_anonymous(), // Any public user.
-        CanisterId::ic_00(),
-        "fetch_canister_logs",
-        FetchCanisterLogsRequest::new(canister_id).encode(),
-    );
-    assert_eq!(
-        result,
-        Err(UserError::new(
-            ErrorCode::CanisterRejectedMessage,
-            "ic00 method fetch_canister_logs can not be called via ingress messages",
-        ))
-    );
-}
-
 /*
 bazel test //rs/execution_environment:execution_environment_misc_integration_tests/canister_logging_test \
   --test_output=streamed \
   --test_arg=--nocapture \
-  --test_arg=test_fetch_canister_logs_via_execute_ingress_with_flag
+  --test_arg=test_fetch_canister_logs_via_replicated_ingress
 
 */
 
 #[test]
-fn test_fetch_canister_logs_via_execute_ingress_with_flag() {
-    // Test fetch_canister_logs API call results.
-    let env = setup_env_with(FlagStatus::Enabled);
-    let canister_id = create_and_install_canister(
-        &env,
-        CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibilityV2::Public)
-            .build(),
-        wat_canister().build_wasm(),
-    );
-    let result = env.execute_ingress_as(
-        PrincipalId::new_anonymous(), // Any public user.
-        CanisterId::ic_00(),
-        "fetch_canister_logs",
-        FetchCanisterLogsRequest::new(canister_id).encode(),
-    );
-    assert_eq!(
-        result,
-        Err(UserError::new(
-            ErrorCode::CanisterRejectedMessage,
-            "ic00 method fetch_canister_logs can not be called via ingress messages",
-        ))
-    );
+fn test_fetch_canister_logs_via_replicated_ingress() {
+    // Test fetch_canister_logs call fails for replicated ingress.
+    for replicated_inter_canister_log_fetch in [FlagStatus::Disabled, FlagStatus::Enabled] {
+        let env = setup_env_with(replicated_inter_canister_log_fetch);
+        let canister_id = create_and_install_canister(
+            &env,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_visibility(LogVisibilityV2::Public)
+                .build(),
+            wat_canister().build_wasm(),
+        );
+        let result = env.execute_ingress_as(
+            PrincipalId::new_anonymous(), // Any public user.
+            CanisterId::ic_00(),
+            "fetch_canister_logs",
+            FetchCanisterLogsRequest::new(canister_id).encode(),
+        );
+        assert_eq!(
+            result,
+            Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                "ic00 method fetch_canister_logs can not be called via ingress messages",
+            ))
+        );
+    }
 }
 
 #[test]
