@@ -165,8 +165,8 @@ MAINNET_CANISTER_DATA = [
     "@mainnet_sns-root-canister//file",
     "@mainnet_sns-swap-canister//file",
     "@nns_governance_canister_test_at_mainnet_commit//file",
-    "@sns_aggregator_test_at_mainnet_commit//file",
-    "@nns_dapp_test_at_mainnet_commit//file",
+    "@sns_aggregator//file",
+    "@nns_dapp_canister//file",
 ]
 
 MAINNET_CANISTER_ENV = {
@@ -185,9 +185,9 @@ MAINNET_CANISTER_ENV = {
     "SNS_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-ledger//file)",
     "SNS_LEDGER_ARCHIVE_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-archive//file)",
     "SNS_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-index-ng//file)",
-    "SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH": "$(location @sns_aggregator_test_at_mainnet_commit//file)",
+    "SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH": "$(location @sns_aggregator//file)",
     "INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH": "$(location @internet_identity_dev_at_mainnet_commit//file)",
-    "NNS_DAPP_TEST_CANISTER_WASM_PATH": "$(location @nns_dapp_test_at_mainnet_commit//file)",
+    "NNS_DAPP_TEST_CANISTER_WASM_PATH": "$(location @nns_dapp_canister//file)",
 }
 
 cargo_build_script(

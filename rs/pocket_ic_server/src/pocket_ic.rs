@@ -535,6 +535,7 @@ struct PocketIcSubnets {
     icp_features: Option<IcpFeatures>,
     initial_time: SystemTime,
     auto_progress_enabled: bool,
+    gateway_port: Option<u16>,
     synced_registry_version: RegistryVersion,
     _bitcoin_adapter_parts: Option<BitcoinAdapterParts>,
 }
@@ -643,6 +644,7 @@ impl PocketIcSubnets {
         icp_features: Option<IcpFeatures>,
         initial_time: SystemTime,
         auto_progress_enabled: bool,
+        gateway_port: Option<u16>,
         synced_registry_version: Option<u64>,
     ) -> Self {
         let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
@@ -670,6 +672,7 @@ impl PocketIcSubnets {
             icp_features,
             initial_time,
             auto_progress_enabled,
+            gateway_port,
             synced_registry_version,
             _bitcoin_adapter_parts: None,
         }
@@ -1919,6 +1922,9 @@ impl PocketIcSubnets {
         let nns_subnet = self.nns_subnet.clone().expect(
             "The NNS subnet is supposed to already exist if the `nns_ui` ICP feature is specified.",
         );
+        let gateway_port = self.gateway_port.expect(
+            "The HTTP gateway is supposed to be created if the `nns_ui` ICP feature is specified.",
+        );
 
         if !nns_subnet.state_machine.canister_exists(NNS_UI_CANISTER_ID) {
             // Create the NNS dapp canister with its ICP mainnet settings.
@@ -1952,33 +1958,35 @@ impl PocketIcSubnets {
             );
             assert_eq!(canister_id, NNS_UI_CANISTER_ID);
 
-            // Install the NNS dapp test canister.
+            // Install the NNS dapp canister.
             // The configuration values have been adapted from
-            // `https://github.com/dfinity/nns-dapp/blob/21fae3d008245cd16b3a78d08a9b130d4cae8ac9/scripts/nns-dapp/test-config-assets/mainnet/arg.did`.
+            // `https://github.com/dfinity/nns-dapp/blob/5126b011ac52f9f8544c37d18bc15603756a7e3c/scripts/nns-dapp/test-config-assets/mainnet/arg.did`.
             #[derive(CandidType)]
             struct CanisterArguments {
                 args: Vec<(String, String)>,
             }
-            let gateway_port = 8080;
+            let localhost_url = format!("http://localhost:{}", gateway_port);
             let args = vec![
-              ("API_HOST".to_string(), format!("http://localhost:{}", gateway_port)),
-              ("CYCLES_MINTING_CANISTER_ID".to_string(), "rkp4c-7iaaa-aaaaa-aaaca-cai".to_string()),
+              ("API_HOST".to_string(), localhost_url.clone()),
+              ("CYCLES_MINTING_CANISTER_ID".to_string(), CYCLES_MINTING_CANISTER_ID.to_string()),
               ("DFX_NETWORK".to_string(), "local".to_string()),
-              ("FEATURE_FLAGS".to_string(), "{\"DISABLE_IMPORT_TOKEN_VALIDATION_FOR_TESTING\":false,\"ENABLE_APY_PORTFOLIO\":true,\"ENABLE_CKTESTBTC\":false,\"ENABLE_DISBURSE_MATURITY\":true,\"ENABLE_LAUNCHPAD_REDESIGN\":true,\"ENABLE_NEW_TABLES\":true,\"ENABLE_NNS_TOPICS\":false,\"ENABLE_SNS_TOPICS\":true}".to_string()),
+              ("FEATURE_FLAGS".to_string(), "{\"DISABLE_CKTOKENS\":true,\"DISABLE_IMPORT_TOKEN_VALIDATION_FOR_TESTING\":false,\"ENABLE_APY_PORTFOLIO\":true,\"ENABLE_CKTESTBTC\":false,\"ENABLE_DISBURSE_MATURITY\":true,\"ENABLE_LAUNCHPAD_REDESIGN\":true,\"ENABLE_NEW_TABLES\":true,\"ENABLE_NNS_TOPICS\":false,\"ENABLE_SNS_TOPICS\":true}".to_string()),
               ("FETCH_ROOT_KEY".to_string(), "true".to_string()),
-              ("GOVERNANCE_CANISTER_ID".to_string(), "rrkah-fqaaa-aaaaa-aaaaq-cai".to_string()),
-              ("HOST".to_string(), format!("http://localhost:{}", gateway_port)),
-              ("ICP_SWAP_URL".to_string(), format!("http://uvevg-iyaaa-aaaak-ac27q-cai.raw.localhost:{}", gateway_port)),
-              ("IDENTITY_SERVICE_URL".to_string(), format!("http://rdmx6-jaaaa-aaaaa-aaadq-cai.localhost:{}", gateway_port)),
-              ("INDEX_CANISTER_ID".to_string(), "qhbym-qaaaa-aaaaa-aaafq-cai".to_string()),
-              ("LEDGER_CANISTER_ID".to_string(), "ryjl3-tyaaa-aaaaa-aaaba-cai".to_string()),
-              ("OWN_CANISTER_ID".to_string(), "qoctq-giaaa-aaaaa-aaaea-cai".to_string()),
-              ("PLAUSIBLE_DOMAIN".to_string(), format!("qoctq-giaaa-aaaaa-aaaea-cai.localhost:{}", gateway_port)),
+              ("GOVERNANCE_CANISTER_ID".to_string(), GOVERNANCE_CANISTER_ID.to_string()),
+              ("HOST".to_string(), localhost_url.clone()),
+              /* ICP swap canister is not deployed by PocketIC! */
+              ("ICP_SWAP_URL".to_string(), format!("http://uvevg-iyaaa-aaaak-ac27q-cai.raw.localhost:{}/", gateway_port)),
+              ("IDENTITY_SERVICE_URL".to_string(), format!("http://{}.localhost:{}", IDENTITY_CANISTER_ID, gateway_port)),
+              ("INDEX_CANISTER_ID".to_string(), LEDGER_INDEX_CANISTER_ID.to_string()),
+              ("LEDGER_CANISTER_ID".to_string(), LEDGER_CANISTER_ID.to_string()),
+              ("OWN_CANISTER_ID".to_string(), NNS_UI_CANISTER_ID.to_string()),
+              /* plausible.io API won't work anyway so the value of `PLAUSIBLE_DOMAIN` is pretty much arbitrary */
+              ("PLAUSIBLE_DOMAIN".to_string(), format!("{}.localhost", NNS_UI_CANISTER_ID)),
               ("ROBOTS".to_string(), "".to_string()),
-              ("SNS_AGGREGATOR_URL".to_string(), format!("http://3r4gx-wqaaa-aaaaq-aaaia-cai.localhost:{}", gateway_port)),
-              ("STATIC_HOST".to_string(), format!("http://localhost:{}", gateway_port)),
-              ("TVL_CANISTER_ID".to_string(), "qoctq-giaaa-aaaaa-aaaea-cai".to_string()),
-              ("WASM_CANISTER_ID".to_string(), "qaa6y-5yaaa-aaaaa-aaafa-cai".to_string()),
+              ("SNS_AGGREGATOR_URL".to_string(), format!("http://{}.localhost:{}", SNS_AGGREGATOR_CANISTER_ID, gateway_port)),
+              ("STATIC_HOST".to_string(), localhost_url.clone()),
+              ("TVL_CANISTER_ID".to_string(), NNS_UI_CANISTER_ID.to_string()),
+              ("WASM_CANISTER_ID".to_string(), SNS_WASM_CANISTER_ID.to_string()),
             ];
             let nns_dapp_test_init_payload = CanisterArguments { args };
             nns_subnet
@@ -2124,6 +2132,7 @@ impl PocketIc {
         allow_incomplete_state: Option<bool>,
         initial_time: Option<Time>,
         auto_progress_enabled: bool,
+        gateway_port: Option<u16>,
     ) -> Result<Self, String> {
         if let Some(ref icp_features) = icp_features {
             subnet_configs = subnet_configs.try_with_icp_features(icp_features)?;
@@ -2367,6 +2376,7 @@ impl PocketIc {
             icp_features,
             initial_time,
             auto_progress_enabled,
+            gateway_port,
             synced_registry_version,
         );
         let mut subnet_configs = Vec::new();
@@ -4356,6 +4366,7 @@ mod tests {
                 None,
                 None,
                 false,
+                None,
             )
             .unwrap();
             let mut pic1 = PocketIc::try_new(
@@ -4373,6 +4384,7 @@ mod tests {
                 None,
                 None,
                 false,
+                None,
             )
             .unwrap();
             assert_ne!(pic0.get_state_label(), pic1.get_state_label());

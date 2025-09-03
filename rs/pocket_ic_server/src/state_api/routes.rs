@@ -1337,7 +1337,7 @@ pub async fn create_instance(
 
     match api_state
         .add_instance(
-            move |seed| {
+            move |seed, gateway_port| {
                 PocketIc::try_new(
                     runtime,
                     seed,
@@ -1352,6 +1352,7 @@ pub async fn create_instance(
                     instance_config.allow_incomplete_state,
                     initial_time,
                     auto_progress_enabled,
+                    gateway_port,
                 )
             },
             auto_progress,
@@ -1402,7 +1403,22 @@ pub async fn create_http_gateway(
     State(AppState { api_state, .. }): State<AppState>,
     extract::Json(http_gateway_config): extract::Json<HttpGatewayConfig>,
 ) -> (StatusCode, Json<rest::CreateHttpGatewayResponse>) {
-    match api_state.create_http_gateway(http_gateway_config).await {
+    let listener = match api_state.create_http_gateway_listener(
+        http_gateway_config.ip_addr.clone(),
+        http_gateway_config.port,
+    ) {
+        Ok(listener) => listener,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(rest::CreateHttpGatewayResponse::Error { message: e }),
+            );
+        }
+    };
+    match api_state
+        .create_http_gateway(http_gateway_config, listener)
+        .await
+    {
         Ok(http_gateway_info) => (
             StatusCode::CREATED,
             Json(rest::CreateHttpGatewayResponse::Created(http_gateway_info)),
