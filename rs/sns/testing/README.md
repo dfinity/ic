@@ -64,7 +64,7 @@ Additionally, `sns-testing-init` will output the ID of the NNS neuron that shoul
 Use the following NNS neuron ID for further testing: 13469749498645661119
 ```
 
-This neuron ID will be used later.
+This is the preconfigured NNS neuron controlled by identity specified via `--dev-identity`, and it is expected to have a lot of voting power. This neuron ID will be used later to submit NNS proposals that get adapted right away.
 
 `sns-testing-init` additionally installs NNS dapp and Internet Identity canisters with which you can interact
 through their web UI:
