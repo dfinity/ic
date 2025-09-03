@@ -417,13 +417,6 @@ impl PocketIcBuilder {
         self
     }
 
-    /// Enables all ICP features supported by PocketIC and implemented by system canisters
-    /// (deployed to the PocketIC instance automatically when creating a new PocketIC instance).
-    pub fn with_all_icp_features(mut self) -> Self {
-        self.icp_features = IcpFeatures::all_icp_features();
-        self
-    }
-
     /// Enables selected ICP features supported by PocketIC and implemented by system canisters
     /// (deployed to the PocketIC instance automatically when creating a new PocketIC instance).
     pub fn with_icp_features(mut self, icp_features: IcpFeatures) -> Self {
