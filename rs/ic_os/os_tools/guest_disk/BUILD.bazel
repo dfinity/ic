@@ -27,7 +27,7 @@ rust_binary(
     name = "guest_disk",
     srcs = glob(
         ["src/**/*.rs"],
-        exclude = ["src/main.rs"],
+        exclude = ["src/lib.rs"],
     ),
     crate_name = "guest_disk",
     target_compatible_with = [
@@ -38,7 +38,7 @@ rust_binary(
 
 rust_library(
     name = "guest_disk_lib",
-    srcs = glob(["src/lib.rs"]),
+    srcs = ["src/lib.rs"],
     crate_name = "guest_disk",
     target_compatible_with = [
         "@platforms//os:linux",
