@@ -171,14 +171,6 @@ fn test_fetch_canister_logs_via_submit_ingress() {
     );
 }
 
-/*
-bazel test //rs/execution_environment:execution_environment_misc_integration_tests/canister_logging_test \
-  --test_output=streamed \
-  --test_arg=--nocapture \
-  --test_arg=test_fetch_canister_logs_via_replicated_ingress
-
-*/
-
 #[test]
 fn test_fetch_canister_logs_via_replicated_ingress() {
     // Test fetch_canister_logs call fails for replicated ingress.
