@@ -706,7 +706,7 @@ impl FilterBuilder {
         }
     }
 
-    /// Common code of [`filtered`] and [`pruned`], as they both have the same recursion with the decisions to prune or keep a subtree flipped.
+    /// Common code of [`Self::filtered`] and [`Self::pruned`], as they both have the same recursion with the decisions to prune or keep a subtree flipped.
     fn filtered_impl(
         &self,
         filter: &LabeledTree<()>,
@@ -781,7 +781,7 @@ impl FilterBuilder {
     }
 
     /// Returns a [`MixedHashTree`] with everything pruned except the paths in `filter`.
-    /// See also [`pruned`].
+    /// See also [`Self::pruned`].
     pub fn filtered(
         &self,
         filter: &LabeledTree<()>,
@@ -790,7 +790,7 @@ impl FilterBuilder {
     }
 
     /// Returns a [`MixedHashTree`] with everything in `paths` pruned.
-    /// See also [`filtered`].
+    /// See also [`Self::filtered`].
     pub fn pruned(
         &self,
         paths: &LabeledTree<()>,
