@@ -57,6 +57,10 @@ pub const RUN_AS_SANDBOX_LAUNCHER_FLAG: &str = "--run-as-sandbox-launcher";
 /// compiler mode.
 pub const RUN_AS_COMPILER_SANDBOX_FLAG: &str = "--run-as-compiler-sandbox";
 
+/// Magic signature to be exported by binaries which can work as a sandbox
+pub const SANDBOX_SECTION_NAME: &str = ".canister_sandbox";
+pub const SANDBOX_MAGIC_BYTES: [u8; 8] = [0x5d, 0xbe, 0xe2, 0x80, 0x4b, 0x10, 0xc6, 0x43];
+
 // Declare how messages are multiplexed on channels between the controller <->
 // (sandbox or launcher).
 
@@ -250,4 +254,15 @@ pub fn run_canister_sandbox(
         SocketReaderConfig::for_sandbox(),
     );
     reply_handler.flush_with_errors();
+}
+
+#[cfg(feature = "fuzzing_code")]
+#[macro_export]
+macro_rules! embed_sandbox_signature {
+    () => {
+        #[unsafe(no_mangle)]
+        #[unsafe(link_section = ".canister_sandbox")]
+        #[used]
+        static SANDBOX_SIGNATURE: [u8; 8] = SANDBOX_MAGIC_BYTES;
+    };
 }
