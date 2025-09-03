@@ -24,9 +24,9 @@ use pocket_ic::{common::rest::ExtendedSubnetConfigSet, nonblocking::PocketIc as 
 use pocket_ic::{
     common::rest::{
         AutoProgressConfig, BlobCompression, CanisterHttpReply, CanisterHttpResponse,
-        CreateInstanceResponse, HttpGatewayDetails, IcpFeatures, InitialTime, InstanceConfig,
-        InstanceHttpGatewayConfig, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
-        SubnetConfigSet, SubnetKind,
+        CreateInstanceResponse, EmptyConfig, HttpGatewayDetails, IcpFeatures, InitialTime,
+        InstanceConfig, InstanceHttpGatewayConfig, MockCanisterHttpResponse, RawEffectivePrincipal,
+        RawMessageId, SubnetConfigSet, SubnetKind,
     },
     query_candid, start_server, update_candid, DefaultEffectiveCanisterIdError, ErrorCode,
     IngressStatusResult, PocketIc, PocketIcBuilder, PocketIcState, RejectCode, StartServerParams,
@@ -419,7 +419,7 @@ fn test_invalid_initial_timestamp() {
 fn test_initial_timestamp_with_cycles_minting() {
     let initial_timestamp = 1_620_633_601_000_000_000; // 10 May 2021 10:00:01
     let icp_features = IcpFeatures {
-        cycles_minting: true,
+        cycles_minting: Some(EmptyConfig {}),
         ..Default::default()
     };
     let pic = PocketIcBuilder::new()
@@ -443,7 +443,7 @@ fn test_initial_timestamp_with_cycles_minting() {
 fn test_invalid_initial_timestamp_with_cycles_minting() {
     let initial_timestamp = 1_620_328_630_000_000_000; // 06 May 2021 21:17:10 CEST
     let icp_features = IcpFeatures {
-        cycles_minting: true,
+        cycles_minting: Some(EmptyConfig {}),
         ..Default::default()
     };
     let _pic = PocketIcBuilder::new()
@@ -558,7 +558,9 @@ fn time_on_resumed_instance() {
 
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
 #[cfg(not(windows))]
-async fn resume_killed_instance_impl(allow_incomplete_state: Option<bool>) -> Result<(), String> {
+async fn resume_killed_instance_impl(
+    allow_incomplete_state: Option<EmptyConfig>,
+) -> Result<(), String> {
     let (mut server, server_url) = start_server(StartServerParams::default()).await;
     let temp_dir = TempDir::new().unwrap();
 
@@ -659,7 +661,7 @@ async fn resume_killed_instance_impl(allow_incomplete_state: Option<bool>) -> Re
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
 #[cfg(not(windows))]
 #[tokio::test]
-async fn resume_killed_instance_default() {
+async fn resume_killed_instance_strict() {
     let err = resume_killed_instance_impl(None).await.unwrap_err();
     assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is incomplete."));
 }
@@ -667,16 +669,10 @@ async fn resume_killed_instance_default() {
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
 #[cfg(not(windows))]
 #[tokio::test]
-async fn resume_killed_instance_strict() {
-    let err = resume_killed_instance_impl(Some(false)).await.unwrap_err();
-    assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is incomplete."));
-}
-
-// Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
-#[cfg(not(windows))]
-#[tokio::test]
 async fn resume_killed_instance() {
-    resume_killed_instance_impl(Some(true)).await.unwrap();
+    resume_killed_instance_impl(Some(EmptyConfig {}))
+        .await
+        .unwrap();
 }
 
 #[test]
