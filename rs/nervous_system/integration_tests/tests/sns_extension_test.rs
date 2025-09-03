@@ -101,9 +101,9 @@ async fn do_test_treasury_manager() {
         ledger_fee_decimals: Nat::from(ICP_FEE),
     };
 
-    let topup_treasury_allocation_icp_e8s = 50 * E8 + ICP_FEE;
+    let topup_treasury_allocation_icp_e8s = 50 * E8;
     // This cannot be 100, b/c there will be slightly less than 200 left in the treasury at the point where this is called.
-    let topup_treasury_allocation_sns_e8s = 99 * E8 + SNS_FEE;
+    let topup_treasury_allocation_sns_e8s = 99 * E8;
 
     let extension_canister_id = {
         let agent = PocketIcAgent::new(&pocket_ic, sender);
