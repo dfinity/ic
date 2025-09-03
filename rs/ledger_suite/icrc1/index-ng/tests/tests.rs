@@ -1311,7 +1311,7 @@ mod fees_in_burn_and_mint_blocks {
             .mint(TEST_ACCOUNT_1, Tokens::from(MINT_AMOUNT))
             .build();
 
-        let expected_balance = MINT_AMOUNT;
+        let expected_balance = MINT_AMOUNT - MINT_FEE;
 
         assert_eq!(
             Nat::from(0u64),
@@ -1326,7 +1326,7 @@ mod fees_in_burn_and_mint_blocks {
         let actual_user_balance =
             icrc1_balance_of(&env, index_id, Account::from(Principal::from(TEST_USER_1)));
 
-        // Verify that the full mint amount was credited to the user account.
+        // Verify that the full mint amount, minus the fee, was credited to the user account.
         assert_eq!(
             actual_user_balance, expected_balance,
             "Actual user balance does not match expected balance after mint block ({} vs {})",
