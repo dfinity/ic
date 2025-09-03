@@ -558,16 +558,28 @@ impl ApiState {
 
     pub async fn add_instance<F>(
         &self,
-        create_instance_from_seed: F,
+        create_instance: F,
         auto_progress: Option<AutoProgressConfig>,
         instance_http_gateway_config: Option<InstanceHttpGatewayConfig>,
     ) -> Result<(InstanceId, Topology, Option<HttpGatewayInfo>), String>
     where
-        F: FnOnce(u64) -> Result<PocketIc, String> + std::marker::Send + 'static,
+        F: FnOnce(u64, Option<u16>) -> Result<PocketIc, String> + std::marker::Send + 'static,
     {
         let seed = self.seed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let listener = if let Some(ref instance_http_gateway_config) = instance_http_gateway_config
+        {
+            Some(self.create_http_gateway_listener(
+                instance_http_gateway_config.ip_addr.clone(),
+                instance_http_gateway_config.port,
+            )?)
+        } else {
+            None
+        };
+        let gateway_port = listener
+            .as_ref()
+            .map(|listener| listener.local_addr().unwrap().port());
         // create the instance using `spawn_blocking` before acquiring a lock
-        let instance = tokio::task::spawn_blocking(move || create_instance_from_seed(seed))
+        let instance = tokio::task::spawn_blocking(move || create_instance(seed, gateway_port))
             .await
             .expect("Failed to create PocketIC instance")?;
         let topology = instance.topology();
@@ -594,7 +606,9 @@ impl ApiState {
                     domains: instance_http_gateway_config.domains,
                     https_config: instance_http_gateway_config.https_config,
                 };
-                let res = self.create_http_gateway(http_gateway_config).await;
+                let res = self
+                    .create_http_gateway(http_gateway_config, listener.unwrap())
+                    .await;
                 match res {
                     Ok(http_gateway_info) => Some(http_gateway_info),
                     Err(e) => {
@@ -641,9 +655,22 @@ impl ApiState {
         tasks.join_all().await;
     }
 
-    pub async fn create_http_gateway(
+    pub(crate) fn create_http_gateway_listener(
+        &self,
+        ip_addr: Option<String>,
+        port: Option<u16>,
+    ) -> Result<std::net::TcpListener, String> {
+        let ip_addr = ip_addr.clone().unwrap_or("127.0.0.1".to_string());
+        let port = port.unwrap_or_default();
+        let addr = format!("{}:{}", ip_addr, port);
+        std::net::TcpListener::bind(&addr)
+            .map_err(|e| format!("Failed to bind to address {}: {}", addr, e))
+    }
+
+    pub(crate) async fn create_http_gateway(
         &self,
         http_gateway_config: HttpGatewayConfig,
+        listener: std::net::TcpListener,
     ) -> Result<HttpGatewayInfo, String> {
         async fn proxy_handler(
             State((replica_url, client)): State<(String, Arc<dyn Client>)>,
@@ -675,15 +702,6 @@ impl ApiState {
         } else {
             None
         };
-
-        let ip_addr = http_gateway_config
-            .ip_addr
-            .clone()
-            .unwrap_or("127.0.0.1".to_string());
-        let port = http_gateway_config.port.unwrap_or_default();
-        let addr = format!("{}:{}", ip_addr, port);
-        let listener = std::net::TcpListener::bind(&addr)
-            .map_err(|e| format!("Failed to bind to address {}: {}", addr, e))?;
 
         let pocket_ic_server_port = self.port.unwrap();
         let replica_url = match http_gateway_config.forward_to {
