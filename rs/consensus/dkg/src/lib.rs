@@ -35,6 +35,7 @@ pub mod payload_validator;
 
 pub use crate::utils::get_vetkey_public_keys;
 
+mod metrics;
 #[cfg(test)]
 mod test_utils;
 mod utils;
