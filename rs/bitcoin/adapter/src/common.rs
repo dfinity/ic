@@ -100,7 +100,7 @@ impl AdapterNetwork {
                 bitcoin::blockdata::constants::genesis_block(network).header
             }
             AdapterNetwork::Dogecoin(network) => {
-                bitcoin::dogecoin::constants::genesis_block(network).header
+                bitcoin::dogecoin::constants::genesis_block(network).header.pure_header
             }
         }
     }
@@ -208,7 +208,7 @@ impl BlockLike for bitcoin::dogecoin::Block {
         bitcoin::dogecoin::Block::check_merkle_root(self)
     }
     fn header(&self) -> bitcoin::block::Header {
-        self.header
+        self.header.pure_header
     }
 }
 
