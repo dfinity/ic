@@ -1,16 +1,16 @@
 [package]
-name = "ic-error-types"
-version = "0.2.0"
-license = "Apache-2.0"
-description = "Error types of the Internet Computer"
-repository = "https://github.com/dfinity/ic"
-documentation = "https://docs.rs/ic-error-types/latest/ic_error_types/"
-readme = "README.md"
-categories = ["api-bindings", "development-tools"]
-keywords = ["icp", "error", "smart-contract", "internet-computer"]
-include = ["src", "Cargo.toml", "CHANGELOG.md", "README.md", "LICENSE"]
 authors.workspace = true
+categories = ["api-bindings", "development-tools"]
+description = "Error types of the Internet Computer"
+documentation = "https://docs.rs/ic-error-types/latest/ic_error_types/"
 edition.workspace = true
+include = ["CHANGELOG.md", "Cargo.toml", "LICENSE", "README.md", "src"]
+keywords = ["error", "icp", "internet-computer", "smart-contract"]
+license = "Apache-2.0"
+name = "ic-error-types"
+readme = "README.md"
+repository = "https://github.com/dfinity/ic"
+version = "0.2.0"
 
 [dependencies]
 ic-heap-bytes = { path = "../ic-heap-bytes" }
