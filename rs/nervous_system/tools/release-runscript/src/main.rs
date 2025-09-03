@@ -547,8 +547,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
             .append_pair("title", &title)
             .append_pair("body", body)
             .append_pair("category", "Governance/NNS proposal discussions")
-            .append_pair("tags", "nns")
-            .append_pair("tags", "Protocol-canister-management");
+            .append_pair("tags", "nns,Protocol-canister-management");
 
         open_webpage(&url)?;
 
@@ -590,8 +589,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
             .append_pair("title", &title)
             .append_pair("body", body)
             .append_pair("category", "Governance/NNS proposal discussions")
-            .append_pair("tags", "SNS")
-            .append_pair("tags", "SNS-management");
+            .append_pair("tags", "SNS,SNS-management");
 
         open_webpage(&url)?;
 
