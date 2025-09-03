@@ -581,21 +581,6 @@ pub struct IcpFeatures {
     pub nns_ui: Option<EmptyConfig>,
 }
 
-impl IcpFeatures {
-    pub fn all_icp_features() -> Self {
-        Self {
-            registry: Some(EmptyConfig {}),
-            cycles_minting: Some(EmptyConfig {}),
-            icp_token: Some(EmptyConfig {}),
-            cycles_token: Some(EmptyConfig {}),
-            nns_governance: Some(EmptyConfig {}),
-            sns: Some(EmptyConfig {}),
-            ii: Some(EmptyConfig {}),
-            nns_ui: Some(EmptyConfig {}),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub enum InitialTime {
     /// Sets the initial timestamp of the new instance to the provided value which must be at least

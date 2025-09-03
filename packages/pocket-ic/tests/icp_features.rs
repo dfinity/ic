@@ -39,6 +39,19 @@ fn decode_gzipped_bytes(data: Vec<u8>) -> Vec<u8> {
     }
 }
 
+fn all_icp_features() -> IcpFeatures {
+    IcpFeatures {
+        registry: Some(EmptyConfig {}),
+        cycles_minting: Some(EmptyConfig {}),
+        icp_token: Some(EmptyConfig {}),
+        cycles_token: Some(EmptyConfig {}),
+        nns_governance: Some(EmptyConfig {}),
+        sns: Some(EmptyConfig {}),
+        ii: Some(EmptyConfig {}),
+        nns_ui: Some(EmptyConfig {}),
+    }
+}
+
 // The `nns_ui` feature requires auto progress and HTTP gateway
 // so we only enable this feature for frontend canister tests.
 fn all_icp_features_but_nns_ui() -> IcpFeatures {
@@ -78,7 +91,7 @@ fn resolving_client(pic: &PocketIc, host: String) -> Client {
 )]
 fn nns_ui_requires_http_gateway() {
     let _pic = PocketIcBuilder::new()
-        .with_icp_features(IcpFeatures::all_icp_features())
+        .with_icp_features(all_icp_features())
         .build();
 }
 
@@ -112,7 +125,7 @@ fn frontend_smoke_test(frontend_canister_id: Principal, expected_str: &str) {
         https_config: None,
     };
     let pic = PocketIcBuilder::new()
-        .with_icp_features(IcpFeatures::all_icp_features())
+        .with_icp_features(all_icp_features())
         .with_auto_progress(None)
         .with_http_gateway(instance_http_gateway_config)
         .build();
@@ -1140,7 +1153,7 @@ async fn with_all_icp_features_and_nns_subnet_state() {
         nonmainnet_features: None,
         log_level: None,
         bitcoind_addr: None,
-        icp_features: Some(IcpFeatures::all_icp_features()),
+        icp_features: Some(all_icp_features()),
         allow_incomplete_state: None,
         initial_time: None,
     };
