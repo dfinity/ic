@@ -6457,6 +6457,7 @@ dependencies = [
  "hex",
  "ic-base-types-protobuf-generator",
  "ic-crypto-sha2",
+ "ic-heap-bytes",
  "ic-protobuf",
  "ic-test-utilities-compare-dirs",
  "phantom_newtype",
@@ -6790,6 +6791,7 @@ dependencies = [
  "flate2",
  "hex",
  "ic-btc-adapter",
+ "ic-config",
  "jsonrpc",
  "rand 0.8.5",
  "serde",
@@ -9015,25 +9017,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-deterministic-heap-bytes"
-version = "0.9.0"
-dependencies = [
- "candid",
- "ic-deterministic-heap-bytes-derive",
- "paste",
-]
-
-[[package]]
-name = "ic-deterministic-heap-bytes-derive"
-version = "0.9.0"
-dependencies = [
- "darling 0.20.11",
- "proc-macro2",
- "quote",
- "syn 2.0.101",
-]
-
-[[package]]
 name = "ic-dummy-getrandom-for-wasm"
 version = "0.1.0"
 dependencies = [
@@ -9075,6 +9058,7 @@ dependencies = [
  "ic-config",
  "ic-cycles-account-manager",
  "ic-error-types 0.2.0",
+ "ic-heap-bytes",
  "ic-interfaces",
  "ic-limits",
  "ic-logger",
@@ -9134,6 +9118,7 @@ dependencies = [
 name = "ic-error-types"
 version = "0.2.0"
 dependencies = [
+ "ic-heap-bytes",
  "serde",
  "strum 0.26.3",
  "strum_macros 0.26.4",
@@ -9187,6 +9172,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-embedders",
  "ic-error-types 0.2.0",
+ "ic-heap-bytes",
  "ic-interfaces",
  "ic-interfaces-state-manager",
  "ic-interfaces-state-manager-mocks",
@@ -9336,6 +9322,27 @@ dependencies = [
  "uuid",
  "x509-parser 0.17.0",
  "zstd",
+]
+
+[[package]]
+name = "ic-heap-bytes"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-heap-bytes-derive",
+ "paste",
+ "prometheus 0.13.4",
+ "tempfile",
+]
+
+[[package]]
+name = "ic-heap-bytes-derive"
+version = "0.9.0"
+dependencies = [
+ "darling 0.20.11",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
 ]
 
 [[package]]
@@ -10192,6 +10199,7 @@ dependencies = [
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-internal-csp-proptest-utils",
  "ic-error-types 0.2.0",
+ "ic-heap-bytes",
  "ic-interfaces-state-manager",
  "ic-management-canister-types-private",
  "ic-protobuf",
@@ -14653,6 +14661,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-error-types 0.2.0",
  "ic-exhaustive-derive",
+ "ic-heap-bytes",
  "ic-limits",
  "ic-management-canister-types-private",
  "ic-protobuf",
@@ -14744,6 +14753,7 @@ version = "0.9.0"
 name = "ic-utils-lru-cache"
 version = "0.9.0"
 dependencies = [
+ "ic-heap-bytes",
  "ic-types",
  "lru",
  "proptest 1.6.0",
@@ -14964,6 +14974,7 @@ name = "ic-wasm-types"
 version = "0.9.0"
 dependencies = [
  "ic-crypto-sha2",
+ "ic-heap-bytes",
  "ic-sys",
  "ic-types",
  "ic-utils 0.9.0",
@@ -18303,6 +18314,8 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 name = "orchestrator"
 version = "0.9.0"
 dependencies = [
+ "assert_matches",
+ "async-stream",
  "async-trait",
  "backoff",
  "candid",
@@ -18327,6 +18340,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-test-utils-tls",
  "ic-crypto-tls-interfaces",
+ "ic-crypto-tls-interfaces-mocks",
  "ic-dashboard",
  "ic-ed25519",
  "ic-http-endpoints-async-utils",
@@ -18364,6 +18378,8 @@ dependencies = [
  "prometheus 0.13.4",
  "prost 0.13.4",
  "rand 0.8.5",
+ "rcgen",
+ "rustls 0.23.27",
  "serde",
  "serde_cbor",
  "serde_json",
@@ -18373,6 +18389,7 @@ dependencies = [
  "strum_macros 0.26.4",
  "tempfile",
  "tokio",
+ "tokio-rustls 0.26.1",
  "tokio-util",
  "url",
 ]
@@ -18769,6 +18786,7 @@ name = "phantom_newtype"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "ic-heap-bytes",
  "num-traits",
  "serde",
  "serde_json",
