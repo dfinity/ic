@@ -172,6 +172,7 @@ impl<'de> Deserialize<'de> for AdapterNetwork {
 
 /// A trait that contains the common methods of both Bitcoin and Dogecoin blocks.
 pub trait BlockLike: Decodable + Encodable + Clone {
+    type Header;
     /// Return block hash.
     fn block_hash(&self) -> bitcoin::BlockHash;
     /// Compute merkle root.
@@ -179,10 +180,12 @@ pub trait BlockLike: Decodable + Encodable + Clone {
     /// Check if the merkle root in block header matches what is computed.
     fn check_merkle_root(&self) -> bool;
     /// Return the block header.
-    fn header(&self) -> bitcoin::block::Header;
+    fn header(&self) -> Self::Header;
 }
 
 impl BlockLike for bitcoin::Block {
+    type Header = bitcoin::block::Header;
+
     fn block_hash(&self) -> bitcoin::BlockHash {
         bitcoin::Block::block_hash(self)
     }
@@ -192,12 +195,14 @@ impl BlockLike for bitcoin::Block {
     fn check_merkle_root(&self) -> bool {
         bitcoin::Block::check_merkle_root(self)
     }
-    fn header(&self) -> bitcoin::block::Header {
+    fn header(&self) -> Self::Header {
         self.header
     }
 }
 
 impl BlockLike for bitcoin::dogecoin::Block {
+    type Header = bitcoin::dogecoin::Header;
+
     fn block_hash(&self) -> bitcoin::BlockHash {
         bitcoin::dogecoin::Block::block_hash(self)
     }
@@ -207,8 +212,8 @@ impl BlockLike for bitcoin::dogecoin::Block {
     fn check_merkle_root(&self) -> bool {
         bitcoin::dogecoin::Block::check_merkle_root(self)
     }
-    fn header(&self) -> bitcoin::block::Header {
-        self.header
+    fn header(&self) -> Self::Header {
+        self.header.clone()
     }
 }
 

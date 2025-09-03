@@ -21,9 +21,9 @@ const ONE_MB: usize = 1_024 * 1_024;
 
 /// Contains the necessary information about a tip.
 #[derive(Clone, Debug)]
-pub struct Tip {
+pub struct Tip<Header> {
     /// This field stores a Bitcoin header.
-    pub header: BlockHeader,
+    pub header: Header,
     /// This field stores the height of the Bitcoin header stored in the field `header`.
     pub height: BlockHeight,
     /// This field stores the work of the Blockchain leading up to this tip.
@@ -33,7 +33,9 @@ pub struct Tip {
 
 /// Creates a new cache with a set genesis header determined by the
 /// provided network.
-fn init_cache_with_genesis(genesis_block_header: BlockHeader) -> HashMap<BlockHash, HeaderNode> {
+fn init_cache_with_genesis<Header>(
+    genesis_block_header: Header,
+) -> HashMap<BlockHash, HeaderNode<Header>> {
     let cached_header = HeaderNode {
         header: genesis_block_header,
         height: 0,
@@ -47,9 +49,9 @@ fn init_cache_with_genesis(genesis_block_header: BlockHeader) -> HashMap<BlockHa
 
 /// This struct stores a BlockHeader along with its height in the Bitcoin Blockchain.
 #[derive(Debug)]
-pub struct HeaderNode {
+pub struct HeaderNode<Header> {
     /// This field stores a Bitcoin header.
-    pub header: BlockHeader,
+    pub header: Header,
     /// This field stores the height of a Bitcoin header
     pub height: BlockHeight,
     /// This field stores the work of the Blockchain leading up to this header.
@@ -98,25 +100,25 @@ pub type SerializedBlock = Vec<u8>;
 /// The BlockChainState caches all the Bitcoin headers, some of the Bitcoin blocks.
 /// The BlockChainState also maintains the child relationhips between the headers.
 #[derive(Debug)]
-pub struct BlockchainState {
+pub struct BlockchainState<Header> {
     /// The starting point of the blockchain
-    genesis_block_header: BlockHeader,
+    genesis_block_header: Header,
 
     /// This field stores all the Bitcoin headers using a HashMap containining BlockHash and the corresponding header.
-    header_cache: HashMap<BlockHash, HeaderNode>,
+    header_cache: HashMap<BlockHash, HeaderNode<Header>>,
 
     /// This field stores a hashmap containing BlockHash and the corresponding SerializedBlock.
     block_cache: HashMap<BlockHash, Arc<SerializedBlock>>,
 
     /// This field contains the known tips of the header cache.
-    tips: Vec<Tip>,
+    tips: Vec<Tip<Header>>,
 
     /// Used to determine how validation should be handled with `validate_header`.
     network: AdapterNetwork,
     metrics: BlockchainStateMetrics,
 }
 
-impl BlockchainState {
+impl<Header> BlockchainState<Header> {
     /// This function is used to create a new BlockChainState object.  
     pub fn new(config: &Config, metrics_registry: &MetricsRegistry) -> Self {
         // Create a header cache and inserting dummy header corresponding the `adapter_genesis_hash`.
@@ -140,12 +142,12 @@ impl BlockchainState {
     }
 
     /// Returns the genesis header that the store is initialized with.
-    pub fn genesis(&self) -> &BlockHeader {
+    pub fn genesis(&self) -> &Header {
         &self.genesis_block_header
     }
 
     /// Returns the header for the given block hash.
-    pub fn get_cached_header(&self, hash: &BlockHash) -> Option<&HeaderNode> {
+    pub fn get_cached_header(&self, hash: &BlockHash) -> Option<&HeaderNode<Header>> {
         self.header_cache.get(hash)
     }
 
@@ -189,7 +191,7 @@ impl BlockchainState {
 
     /// This method adds the input header to the `header_cache`.
     #[allow(clippy::indexing_slicing)]
-    fn add_header(&mut self, header: BlockHeader) -> Result<AddHeaderResult, AddHeaderError> {
+    fn add_header(&mut self, header: Header) -> Result<AddHeaderResult, AddHeaderError> {
         let block_hash = header.block_hash();
 
         // If the header already exists in the cache,
@@ -245,7 +247,7 @@ impl BlockchainState {
     }
 
     /// This method adds a new block to the `block_cache`
-    pub fn add_block<Block: BlockLike>(&mut self, block: Block) -> Result<(), AddBlockError> {
+    pub fn add_block<Block: BlockLike<Header = Header>>(&mut self, block: Block) -> Result<(), AddBlockError> {
         let block_hash = block.block_hash();
 
         if block.compute_merkle_root().is_some() && !block.check_merkle_root() {
@@ -277,7 +279,7 @@ impl BlockchainState {
 
     /// This method returns the tip header with the highest cumulative work.
     #[allow(clippy::indexing_slicing)]
-    pub fn get_active_chain_tip(&self) -> &Tip {
+    pub fn get_active_chain_tip(&self) -> &Tip<Header> {
         // `self.tips` is initialized in the new() method with the initial header.
         // `add_headers` sorts the tips by total work. The zero index will always be
         // the active tip.
@@ -363,8 +365,8 @@ impl BlockchainState {
     }
 }
 
-impl HeaderStore for BlockchainState {
-    fn get_header(&self, hash: &BlockHash) -> Option<(BlockHeader, BlockHeight)> {
+impl<Header> HeaderStore for BlockchainState<Header> {
+    fn get_header(&self, hash: &BlockHash) -> Option<(Header, BlockHeight)> {
         self.get_cached_header(hash)
             .map(|cached| (cached.header, cached.height))
     }
