@@ -3,9 +3,8 @@ use candid::{CandidType, Encode};
 use ic_base_types::SubnetId;
 use ic_ledger_core::Tokens;
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
-    LEDGER_INDEX_CANISTER_ID, NNS_UI_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
-    SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID,
+    SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
@@ -171,15 +170,15 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
               /* ICP swap canister is not deployed by the test driver! */
               ("ICP_SWAP_URL".to_string(), format!("https://uvevg-iyaaa-aaaak-ac27q-cai.raw.{}/", ic_gateway_domain)),
               ("IDENTITY_SERVICE_URL".to_string(), format!("https://{}.{}", ii_canister_id, ic_gateway_domain)),
-              ("INDEX_CANISTER_ID".to_string(), LEDGER_INDEX_CANISTER_ID.to_string()),
+              ("INDEX_CANISTER_ID".to_string(), LEDGER_CANISTER_ID.to_string()),
               ("LEDGER_CANISTER_ID".to_string(), LEDGER_CANISTER_ID.to_string()),
-              ("OWN_CANISTER_ID".to_string(), NNS_UI_CANISTER_ID.to_string()),
+              ("OWN_CANISTER_ID".to_string(), nns_dapp_canister_id.to_string()),
               /* plausible.io API might not work anyway so the value of `PLAUSIBLE_DOMAIN` is pretty much arbitrary */
-              ("PLAUSIBLE_DOMAIN".to_string(), format!("{}.{}", NNS_UI_CANISTER_ID, ic_gateway_domain)),
+              ("PLAUSIBLE_DOMAIN".to_string(), format!("{}.{}", nns_dapp_canister_id, ic_gateway_domain)),
               ("ROBOTS".to_string(), "".to_string()),
               ("SNS_AGGREGATOR_URL".to_string(), format!("https://{}.{}", sns_aggregator_canister_id.unwrap_or(SNS_AGGREGATOR_CANISTER_ID.into()), ic_gateway_domain)),
               ("STATIC_HOST".to_string(), ic_gateway_url.to_string()),
-              ("TVL_CANISTER_ID".to_string(), NNS_UI_CANISTER_ID.to_string()),
+              ("TVL_CANISTER_ID".to_string(), nns_dapp_canister_id.to_string()),
               ("WASM_CANISTER_ID".to_string(), SNS_WASM_CANISTER_ID.to_string()),
             ];
         let nns_dapp_init_args = Some(CanisterArguments {
