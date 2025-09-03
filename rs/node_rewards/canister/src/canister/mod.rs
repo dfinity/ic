@@ -263,14 +263,9 @@ impl NodeRewardsCanister {
             from_nanos: request.from_nanos,
             to_nanos: request.to_nanos,
         };
-        let mut result = canister
-            .with_borrow(|canister| {
-                canister.calculate_rewards::<S>(request_inner, Some(provider_id))
-            })
-            .unwrap_or_else(|e| GetNodeProviderRewardsCalculationResponse {
-                error: Some(e),
-                ..Default::default()
-            })?;
+        let mut result = canister.with_borrow(|canister| {
+            canister.calculate_rewards::<S>(request_inner, Some(provider_id))
+        })?;
         let node_provider_rewards = result.provider_results.remove(&provider_id).ok_or(format!(
             "No rewards found for node provider {}",
             provider_id

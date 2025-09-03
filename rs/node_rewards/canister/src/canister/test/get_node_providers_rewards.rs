@@ -608,7 +608,7 @@ fn test_get_node_providers_rewards() {
     .unwrap();
 
     let inner_results = CANISTER_TEST
-        .with_borrow(|canister| canister.calculate_rewards::<TestState>(request, None))
+        .with_borrow(|canister| canister.calculate_rewards::<TestState>(request.clone(), None))
         .unwrap();
     let expected: BTreeMap<PrincipalId, NodeProviderRewards> =
         serde_json::from_str(EXPECTED_TEST_1).unwrap();
@@ -621,6 +621,17 @@ fn test_get_node_providers_rewards() {
         },
     };
     assert_eq!(result_endpoint, Ok(expected));
+
+    let inner_results = CANISTER_TEST
+        .with_borrow(|canister| {
+            canister.calculate_rewards::<TestState>(request, Some(test_provider_id(1)))
+        })
+        .unwrap();
+
+    assert_eq!(inner_results.provider_results.len(), 1);
+    let expected_total =
+        inner_results.provider_results[&test_provider_id(1)].rewards_total_xdr_permyriad;
+    assert_eq!(expected_total, 137200);
 }
 
 #[test]
