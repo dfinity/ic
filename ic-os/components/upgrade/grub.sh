@@ -37,17 +37,78 @@ write_grubenv() {
         return 1
     fi
 
-    TMP_FILE=$(mktemp /tmp/grubenv-XXXXXXXXXXXX)
+    # Create temporary file in the same directory as the target for atomic rename
+    local GRUBENV_DIR=$(dirname "${GRUBENV_FILE}")
+    local TMP_FILE=$(mktemp "${GRUBENV_DIR}/grubenv-XXXXXXXXXXXX")
+
+    # Ensure cleanup on exit
+    trap 'rm -f "${TMP_FILE}"' EXIT
+
+    # Write content to temporary file
     (
         echo "# GRUB Environment Block"
         echo boot_alternative="$boot_alternative"
         echo boot_cycle="$boot_cycle"
         # Fill to make sure we will have 1024 bytes
         echo -n "################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################"
-    ) >"${TMP_FILE}"
+    ) >"${TMP_FILE}" || {
+        echo "Error: Failed to write to temporary file ${TMP_FILE}" >&2
+        return 1
+    }
+
     # Truncate to arrive at precisely 1024 bytes
-    truncate --size=1024 "${TMP_FILE}"
-    cat "${TMP_FILE}" >"${GRUBENV_FILE}"
-    sync "${GRUBENV_FILE}"
-    rm "${TMP_FILE}"
+    if ! truncate --size=1024 "${TMP_FILE}"; then
+        echo "Error: Failed to truncate temporary file to 1024 bytes" >&2
+        return 1
+    fi
+
+    # Create backup of original file if it exists
+    if [ -f "${GRUBENV_FILE}" ]; then
+        local BACKUP_FILE="${GRUBENV_FILE}.backup.$(date +%s)"
+        if ! cp "${GRUBENV_FILE}" "${BACKUP_FILE}"; then
+            echo "Error: Failed to create backup of existing grubenv file" >&2
+            return 1
+        fi
+    fi
+
+    # Atomic move: rename temporary file to target file
+    if ! mv "${TMP_FILE}" "${GRUBENV_FILE}"; then
+        echo "Error: Failed to atomically move temporary file to ${GRUBENV_FILE}" >&2
+        if [ -f "${BACKUP_FILE}" ]; then
+            mv "${BACKUP_FILE}" "${GRUBENV_FILE}" 2>/dev/null || true
+        fi
+        return 1
+    fi
+
+    # Clear the trap since we successfully moved the file
+    trap - EXIT
+
+    # Force sync to ensure the file is written to disk
+    local sync_retries=3
+    local sync_delay=1
+    local sync_success=false
+
+    for ((i = 1; i <= sync_retries; i++)); do
+        if sync "${GRUBENV_FILE}"; then
+            sync_success=true
+            break
+        else
+            if [ $i -lt $sync_retries ]; then
+                echo "Warning: Sync attempt $i failed, retrying in ${sync_delay}s..." >&2
+                sleep $sync_delay
+                sync_delay=$((sync_delay * 2))
+            fi
+        fi
+    done
+
+    if [ "$sync_success" = false ]; then
+        echo "Error: Failed to sync grubenv file to disk after $sync_retries attempts" >&2
+        return 1
+    fi
+
+    if [ -f "${BACKUP_FILE}" ]; then
+        rm -f "${BACKUP_FILE}"
+    fi
+
+    echo "Successfully updated grubenv file: boot_alternative=$boot_alternative, boot_cycle=$boot_cycle"
 }
