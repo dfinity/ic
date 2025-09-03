@@ -1,5 +1,6 @@
 use ic_base_types::{CanisterId, NumBytes};
 use ic_error_types::UserError;
+use ic_heap_bytes::{total_bytes, DeterministicHeapBytes, HeapBytes};
 use ic_interfaces::execution_environment::SystemApiCallCounters;
 use ic_metrics::MetricsRegistry;
 use ic_query_stats::QueryStatsCollector;
@@ -8,11 +9,11 @@ use ic_types::{
     batch::QueryStats,
     ingress::WasmResult,
     messages::{CertificateDelegationFormat, CertificateDelegationMetadata, Query},
-    Cycles, MemoryDiskBytes, Time, UserId,
+    Cycles, DiskBytes, Time, UserId,
 };
 use ic_utils_lru_cache::LruCache;
 use prometheus::{Histogram, IntCounter, IntGauge};
-use std::{collections::BTreeMap, mem::size_of_val, sync::Mutex, time::Duration};
+use std::{collections::BTreeMap, sync::Mutex, time::Duration};
 
 use crate::metrics::duration_histogram;
 
@@ -21,6 +22,7 @@ mod tests;
 
 ////////////////////////////////////////////////////////////////////////
 /// Query Cache metrics.
+#[derive(HeapBytes)]
 pub(crate) struct QueryCacheMetrics {
     pub hits: IntCounter,
     pub hits_with_ignored_time: IntCounter,
@@ -128,7 +130,7 @@ impl QueryCacheMetrics {
 ///
 /// The key is to distinguish query cache entries, i.e. entries with different
 /// keys are (almost) completely independent from each other.
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Hash)]
 pub(crate) struct EntryKey {
     /// Query source.
     pub source: UserId,
@@ -158,22 +160,14 @@ impl EntryKey {
     }
 }
 
-impl MemoryDiskBytes for EntryKey {
-    fn memory_bytes(&self) -> usize {
-        size_of_val(self) + self.method_name.len() + self.method_payload.len()
-    }
-
-    fn disk_bytes(&self) -> usize {
-        0
-    }
-}
+impl DiskBytes for EntryKey {}
 
 ////////////////////////////////////////////////////////////////////////
 /// Query Cache entry environment metadata captured before the query execution.
 ///
 /// The cache entry is valid as long as the metadata is unchanged,
 /// or it can be proven that the query does not depend on the change.
-#[derive(PartialEq)]
+#[derive(DeterministicHeapBytes, PartialEq)]
 pub(crate) struct EntryEnv {
     /// The consensus-determined time when the query is executed.
     pub batch_time: Time,
@@ -206,6 +200,7 @@ impl EntryEnv {
 
 ////////////////////////////////////////////////////////////////////////
 /// Query Cache entry value.
+#[derive(DeterministicHeapBytes)]
 pub(crate) struct EntryValue {
     /// Query Cache entry environment metadata captured before the query execution.
     env: EntryEnv,
@@ -219,15 +214,7 @@ pub(crate) struct EntryValue {
     ignore_canister_balances: bool,
 }
 
-impl MemoryDiskBytes for EntryValue {
-    fn memory_bytes(&self) -> usize {
-        size_of_val(self) + self.result.memory_bytes()
-    }
-
-    fn disk_bytes(&self) -> usize {
-        0
-    }
-}
+impl DiskBytes for EntryValue {}
 
 impl EntryValue {
     pub(crate) fn new(
@@ -377,6 +364,7 @@ impl EntryValue {
 
 ////////////////////////////////////////////////////////////////////////
 /// Replica Side Query Cache.
+#[derive(HeapBytes)]
 pub(crate) struct QueryCache {
     // We can't use `RwLock`, as the `LruCache::get()` requires mutable reference
     // to update the LRU.
@@ -385,18 +373,8 @@ pub(crate) struct QueryCache {
     max_expiry_time: Duration,
     /// The upper limit on how long the data certificate stays valid in the query cache.
     data_certificate_expiry_time: Duration,
-    /// Query cache metrics (public for tests)
+    /// Query cache metrics (public for tests).
     pub(crate) metrics: QueryCacheMetrics,
-}
-
-impl MemoryDiskBytes for QueryCache {
-    fn memory_bytes(&self) -> usize {
-        size_of_val(self) + self.cache.lock().unwrap().memory_bytes()
-    }
-
-    fn disk_bytes(&self) -> usize {
-        0
-    }
 }
 
 impl QueryCache {
@@ -438,7 +416,7 @@ impl QueryCache {
                 // The cache entry is no longer valid, remove it.
                 cache.pop(key);
                 // Update the `count_bytes` metric.
-                self.metrics.count_bytes.set(cache.memory_bytes() as i64);
+                self.metrics.count_bytes.set(total_bytes(&*cache) as i64);
             }
         }
         None
@@ -486,7 +464,7 @@ impl QueryCache {
             let d = evicted_value.elapsed_seconds(now);
             self.metrics.evicted_entries_duration.observe(d);
         }
-        let memory_bytes = cache.memory_bytes() as i64;
+        let memory_bytes = total_bytes(&*cache) as i64;
         self.metrics.count_bytes.set(memory_bytes);
         self.metrics.len.set(cache.len() as i64);
     }

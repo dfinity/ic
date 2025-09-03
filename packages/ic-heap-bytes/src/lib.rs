@@ -1,6 +1,9 @@
-pub use ic_deterministic_heap_bytes_derive::DeterministicHeapBytes;
+pub use ic_heap_bytes_derive::{DeterministicHeapBytes, HeapBytes};
 use paste::paste;
-use std::collections::BTreeMap;
+
+////////////////////////////////////////////////////////////////////////
+// DeterministicHeapBytes
+////////////////////////////////////////////////////////////////////////
 
 /// A trait to deterministically report heap memory usage.
 ///
@@ -20,15 +23,15 @@ pub trait DeterministicHeapBytes {
     fn deterministic_heap_bytes(&self) -> usize {
         0
     }
-
-    /// Returns the deterministic total size of the object in bytes.
-    ///
-    /// The default implementation should suit most types, so typically
-    /// only the `deterministic_heap_bytes` function needs to be implemented for a new type.
-    fn deterministic_total_bytes(&self) -> usize {
-        size_of_val(self) + self.deterministic_heap_bytes()
-    }
 }
+
+/// Returns the deterministic total size of the object in bytes.
+pub fn deterministic_total_bytes<T: DeterministicHeapBytes>(t: &T) -> usize {
+    size_of_val(t) + t.deterministic_heap_bytes()
+}
+
+////////////////////////////////////////////////////////////////////////
+// DeterministicHeapBytes scalar types.
 
 impl DeterministicHeapBytes for u8 {}
 impl DeterministicHeapBytes for u16 {}
@@ -46,6 +49,13 @@ impl DeterministicHeapBytes for f32 {}
 impl DeterministicHeapBytes for f64 {}
 impl DeterministicHeapBytes for bool {}
 impl DeterministicHeapBytes for char {}
+
+////////////////////////////////////////////////////////////////////////
+// DeterministicHeapBytes standard library types.
+
+impl DeterministicHeapBytes for std::sync::atomic::AtomicU64 {}
+impl DeterministicHeapBytes for std::time::Duration {}
+impl DeterministicHeapBytes for std::fs::File {}
 
 impl DeterministicHeapBytes for String {
     fn deterministic_heap_bytes(&self) -> usize {
@@ -79,7 +89,7 @@ impl<T: DeterministicHeapBytes> DeterministicHeapBytes for Vec<T> {
 }
 
 impl<K: DeterministicHeapBytes, V: DeterministicHeapBytes> DeterministicHeapBytes
-    for BTreeMap<K, V>
+    for std::collections::BTreeMap<K, V>
 {
     /// Calculates the precise heap size by summing the heap usage of all elements.
     ///
@@ -97,6 +107,39 @@ impl<K: DeterministicHeapBytes, V: DeterministicHeapBytes> DeterministicHeapByte
         self_heap_bytes + elements_heap_bytes
     }
 }
+
+impl<T: DeterministicHeapBytes> DeterministicHeapBytes for std::sync::Arc<T> {
+    fn deterministic_heap_bytes(&self) -> usize {
+        self.as_ref().deterministic_heap_bytes()
+    }
+}
+
+impl<T: DeterministicHeapBytes> DeterministicHeapBytes for std::sync::Mutex<T> {
+    fn deterministic_heap_bytes(&self) -> usize {
+        self.lock().unwrap().deterministic_heap_bytes()
+    }
+}
+
+impl<T: DeterministicHeapBytes> DeterministicHeapBytes for Option<T> {
+    fn deterministic_heap_bytes(&self) -> usize {
+        match self {
+            Some(s) => s.deterministic_heap_bytes(),
+            None => 0,
+        }
+    }
+}
+
+impl<T: DeterministicHeapBytes, E: DeterministicHeapBytes> DeterministicHeapBytes for Result<T, E> {
+    fn deterministic_heap_bytes(&self) -> usize {
+        match self {
+            Ok(ok) => ok.deterministic_heap_bytes(),
+            Err(err) => err.deterministic_heap_bytes(),
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////
+// DeterministicHeapBytes tuples.
 
 macro_rules! impl_heap_bytes_for_tuple {
     ( $( $idx:tt ),* ) => {
@@ -120,25 +163,68 @@ impl_heap_bytes_for_tuple!(0, 1, 2, 3, 4, 5);
 impl_heap_bytes_for_tuple!(0, 1, 2, 3, 4, 5, 6);
 impl_heap_bytes_for_tuple!(0, 1, 2, 3, 4, 5, 6, 7);
 
-impl<T: DeterministicHeapBytes> DeterministicHeapBytes for Option<T> {
-    fn deterministic_heap_bytes(&self) -> usize {
-        match self {
-            Some(s) => s.deterministic_heap_bytes(),
-            None => 0,
-        }
-    }
-}
-
-impl<T: DeterministicHeapBytes, E: DeterministicHeapBytes> DeterministicHeapBytes for Result<T, E> {
-    fn deterministic_heap_bytes(&self) -> usize {
-        match self {
-            Ok(ok) => ok.deterministic_heap_bytes(),
-            Err(err) => err.deterministic_heap_bytes(),
-        }
-    }
-}
+////////////////////////////////////////////////////////////////////////
+// DeterministicHeapBytes external types.
 
 impl DeterministicHeapBytes for candid::Principal {}
+impl DeterministicHeapBytes for candid::types::principal::PrincipalError {}
+
+////////////////////////////////////////////////////////////////////////
+// HeapBytes
+////////////////////////////////////////////////////////////////////////
+
+/// A trait to estimate heap memory usage.
+///
+/// It can be derived for structs and enums. The `#[heap_bytes(with = ...)]`
+/// attribute can be used on variants and fields to specify a custom function
+/// to estimate heap bytes for that variant or field.
+pub trait HeapBytes {
+    /// Returns the total estimated size of heap-allocated data.
+    ///
+    /// This method performs a recursive heap memory estimation.
+    /// For large collections, this can be slow. In such cases, consider
+    /// using the `#[heap_bytes(with = ...)]` attribute and providing a constant
+    /// time estimation for that variant or field.
+    ///
+    /// The default implementation returns 0, which is correct for
+    /// types that do not have any heap allocations.
+    fn heap_bytes(&self) -> usize {
+        0
+    }
+}
+
+/// Returns the total estimated size of the object in bytes.
+pub fn total_bytes<T: HeapBytes>(t: &T) -> usize {
+    size_of_val(t) + t.heap_bytes()
+}
+
+// Use DeterministicHeapBytes as a fallback implementation for HeapBytes.
+impl<T: DeterministicHeapBytes> HeapBytes for T {
+    fn heap_bytes(&self) -> usize {
+        self.deterministic_heap_bytes()
+    }
+}
+
+////////////////////////////////////////////////////////////////////////
+// HeapBytes external types.
+
+impl HeapBytes for prometheus::Histogram {
+    fn heap_bytes(&self) -> usize {
+        let num_buckets = prometheus::DEFAULT_BUCKETS.len();
+        // To get the actual buckets and labels, we need to collect the metric,
+        // which is slow. Instead, we just assume that histogram allocates
+        // a default vector of buckets with no labels.
+        num_buckets * size_of::<f64>()
+    }
+}
+impl HeapBytes for prometheus::IntCounter {}
+impl HeapBytes for prometheus::IntGauge {}
+impl HeapBytes for tempfile::TempDir {
+    fn heap_bytes(&self) -> usize {
+        // TempDir allocates a string for the path.
+        self.path().as_os_str().len()
+    }
+}
 
 #[cfg(test)]
 mod tests;
