@@ -37,7 +37,6 @@
       "malicious_behavior": null,
       "query_stats_epoch_length": null,
       "bitcoind_addr": null,
-      "dogecoind_addr": null,
       "jaeger_addr": null,
       "socks_proxy": null,
       "hostname": null,

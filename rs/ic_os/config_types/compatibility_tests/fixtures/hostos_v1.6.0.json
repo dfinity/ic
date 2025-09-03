@@ -1,5 +1,5 @@
 {
-  "config_version": "1.5.0",
+  "config_version": "1.6.0",
   "network_settings": {
     "ipv6_config": {
       "Fixed": {
@@ -43,6 +43,7 @@
       "malicious_behavior": null,
       "query_stats_epoch_length": null,
       "bitcoind_addr": null,
+      "dogecoind_addr": null,
       "jaeger_addr": null,
       "socks_proxy": null,
       "hostname": null,
