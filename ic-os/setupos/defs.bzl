@@ -176,7 +176,7 @@ def _custom_partitions(mode):
     ]
 
 def create_test_img(name, source, **kwargs):
-    genrule(
+    native.genrule(
         name = name,
         srcs = [source],
         outs = [name + ".tar.zst"],
@@ -191,7 +191,7 @@ def create_test_img(name, source, **kwargs):
     )
 
 def extract_latest_guestos(name, setupos_img, setupos_version, guestos_img, guestos_version, **kwargs):
-    genrule(
+    native.genrule(
         name = name,
         srcs = [
             setupos_img,
