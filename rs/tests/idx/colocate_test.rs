@@ -151,12 +151,14 @@ fn setup(env: TestEnv) {
         &session,
         &runfiles_tar_path,
         &Path::new("/home/admin").join(RUNFILES_TAR_ZST),
+        0o644,
     );
     scp_send_to(
         log.clone(),
         &session,
         &env_tar_path,
         &Path::new("/home/admin").join(ENV_TAR_ZST),
+        0o644,
     );
 
     // Create a temporary environment file that we SCP into the UVM. These environment
@@ -182,6 +184,7 @@ fn setup(env: TestEnv) {
             &session,
             &filepath,
             Path::new("/home/admin/env_vars"),
+            0o644,
         );
     };
 
@@ -226,6 +229,7 @@ fn setup(env: TestEnv) {
                 &session,
                 Path::new(&DASHBOARDS_TAR_ZST),
                 Path::new(&dashboards_uvm_host_path),
+                0o644,
             );
             provided_path
         }

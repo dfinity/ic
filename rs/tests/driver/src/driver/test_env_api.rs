@@ -2408,6 +2408,7 @@ pub fn scp_send_to(
     session: &Session,
     from_local: &std::path::Path,
     to_remote: &std::path::Path,
+    mode: i32,
 ) {
     let size = fs::metadata(from_local).unwrap().len();
     retry_with_msg!(
@@ -2416,7 +2417,7 @@ pub fn scp_send_to(
         SCP_RETRY_TIMEOUT,
         SCP_RETRY_BACKOFF,
         || {
-            let mut remote_file = session.scp_send(to_remote, 0o644, size, None)?;
+            let mut remote_file = session.scp_send(to_remote, mode, size, None)?;
             let mut from_file = std::fs::File::open(from_local)?;
             std::io::copy(&mut from_file, &mut remote_file)?;
             info!(

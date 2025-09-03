@@ -617,6 +617,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
         session,
         local_ic_admin_path,
         remote_ic_admin_path,
+        0o755,
     );
 
     let nns_url = subnet_recovery.recovery_args.nns_url;
