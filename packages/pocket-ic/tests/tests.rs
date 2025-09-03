@@ -24,9 +24,9 @@ use pocket_ic::{common::rest::ExtendedSubnetConfigSet, nonblocking::PocketIc as 
 use pocket_ic::{
     common::rest::{
         AutoProgressConfig, BlobCompression, CanisterHttpReply, CanisterHttpResponse,
-        CreateInstanceResponse, EmptyConfig, HttpGatewayDetails, IcpFeatures, InitialTime,
-        InstanceConfig, InstanceHttpGatewayConfig, MockCanisterHttpResponse, RawEffectivePrincipal,
-        RawMessageId, SubnetConfigSet, SubnetKind,
+        CreateInstanceResponse, EmptyConfig, HttpGatewayDetails, HttpsConfig, IcpFeatures,
+        InitialTime, InstanceConfig, InstanceHttpGatewayConfig, MockCanisterHttpResponse,
+        RawEffectivePrincipal, RawMessageId, SubnetConfigSet, SubnetKind,
     },
     query_candid, start_server, update_candid, DefaultEffectiveCanisterIdError, ErrorCode,
     IngressStatusResult, PocketIc, PocketIcBuilder, PocketIcState, RejectCode, StartServerParams,
@@ -3320,7 +3320,7 @@ async fn with_http_gateway_config_invalid_instance_config() {
 }
 
 #[tokio::test]
-async fn with_http_gateway_config_invalid_gateway_config() {
+async fn with_http_gateway_config_invalid_gateway_port() {
     let server_params = StartServerParams {
         server_binary: None,
         reuse: false,
@@ -3372,6 +3372,78 @@ async fn with_http_gateway_config_invalid_gateway_config() {
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
     };
     assert_create_instance_failure(&server_url, instance_config, "Failed to bind to address").await;
+
+    // We confirm that there are no new instances and HTTP gateways
+    // after the failure, i.e., cleanup works.
+    let instances = list_instances(&server_url).await;
+    assert_eq!(instances.len(), 1);
+    assert!(!instances[0].contains("Deleted"));
+    let http_gateways = list_http_gateways(&server_url).await;
+    assert_eq!(http_gateways.len(), 1);
+
+    pic.drop().await;
+}
+
+#[tokio::test]
+async fn with_http_gateway_config_invalid_gateway_https_config() {
+    let server_params = StartServerParams {
+        server_binary: None,
+        reuse: false,
+    };
+    let (_child, server_url) = start_server(server_params).await;
+
+    // We first successfully create an instance with an HTTP gateway
+    // to later craft an invalid HTTP gateway configuration
+    // reusing the same port.
+    let mut http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: None,
+    };
+    let pic = PocketIcBuilder::new()
+        .with_server_url(server_url.clone())
+        .with_application_subnet()
+        .with_http_gateway(http_gateway_config.clone())
+        .with_auto_progress(None)
+        .build_async()
+        .await;
+
+    let instances = list_instances(&server_url).await;
+    assert_eq!(instances.len(), 1);
+    assert!(!instances[0].contains("Deleted"));
+    let http_gateways = list_http_gateways(&server_url).await;
+    assert_eq!(http_gateways.len(), 1);
+
+    // We try to bind to the HTTP gateway to the same port which fails.
+    http_gateway_config.https_config = Some(HttpsConfig {
+        cert_path: "".to_string(),
+        key_path: "".to_string(),
+    });
+    let subnet_config_set = SubnetConfigSet {
+        application: 1,
+        ..Default::default()
+    };
+    let auto_progress_config = AutoProgressConfig {
+        artificial_delay_ms: None,
+    };
+    let instance_config = InstanceConfig {
+        subnet_config_set: subnet_config_set.into(),
+        http_gateway_config: Some(http_gateway_config),
+        state_dir: None,
+        nonmainnet_features: None,
+        log_level: None,
+        bitcoind_addr: None,
+        icp_features: None,
+        allow_incomplete_state: None,
+        initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
+    };
+    assert_create_instance_failure(
+        &server_url,
+        instance_config,
+        "TLS config could not be created",
+    )
+    .await;
 
     // We confirm that there are no new instances and HTTP gateways
     // after the failure, i.e., cleanup works.
