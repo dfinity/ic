@@ -40,6 +40,7 @@ write_grubenv() {
     # Create temporary file in the same directory as the target for atomic rename
     local GRUBENV_DIR=$(dirname "${GRUBENV_FILE}")
     local TMP_FILE=$(mktemp "${GRUBENV_DIR}/grubenv-XXXXXXXXXXXX")
+    local BACKUP_FILE=""
 
     # Ensure cleanup on exit
     trap 'rm -f "${TMP_FILE}" "${BACKUP_FILE}"' EXIT
@@ -64,7 +65,7 @@ write_grubenv() {
 
     # Create backup of original file if it exists
     if [ -f "${GRUBENV_FILE}" ]; then
-        local BACKUP_FILE="${GRUBENV_FILE}.backup.$(date +%s)"
+        BACKUP_FILE="${GRUBENV_FILE}.backup.$(date +%s)"
         if ! cp "${GRUBENV_FILE}" "${BACKUP_FILE}"; then
             echo "Error: Failed to create backup of existing grubenv file" >&2
             return 1
