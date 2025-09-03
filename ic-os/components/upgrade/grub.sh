@@ -80,9 +80,6 @@ write_grubenv() {
         return 1
     fi
 
-    # Clear the trap since we successfully moved the file
-    trap - EXIT
-
     # Force sync to ensure the file is written to disk
     local sync_retries=3
     local sync_delay=1
