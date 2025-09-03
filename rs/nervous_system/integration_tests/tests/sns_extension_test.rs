@@ -865,7 +865,7 @@ async fn prepare_the_world(state_dir: PathBuf) -> World {
     .unwrap();
 
     let initial_treasury_allocation_icp_e8s = 100 * E8;
-    let initial_treasury_allocation_sns_e8s = 199 * E8;
+    let initial_treasury_allocation_sns_e8s = 200 * E8;
 
     let (neuron_id, sender) = sns::governance::find_neuron_with_majority_voting_power(
         &pocket_ic,
