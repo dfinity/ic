@@ -226,7 +226,7 @@ impl CanisterManager {
                         Ic00Method::FetchCanisterLogs
                     ),
                 ))
-                // match self.replicated_query_inter_canister_log_fetch {
+                // match self.replicated_inter_canister_log_fetch {
                 //     FlagStatus::Disabled => Err(UserError::new(
                 //         ErrorCode::CanisterRejectedMessage,
                 //         format!(

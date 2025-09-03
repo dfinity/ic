@@ -1538,7 +1538,7 @@ impl ExecutionEnvironment {
             },
 
             Ok(Ic00Method::FetchCanisterLogs) => {
-                match self.config.replicated_query_inter_canister_log_fetch {
+                match self.config.replicated_inter_canister_log_fetch {
                     FlagStatus::Disabled => ExecuteSubnetMessageResult::Finished {
                         response: Err(UserError::new(
                             ErrorCode::CanisterRejectedMessage,

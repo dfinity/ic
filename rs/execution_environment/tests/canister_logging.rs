@@ -73,7 +73,7 @@ fn readable_logs_without_backtraces(
         .collect()
 }
 
-fn setup_env_with(replicated_query_inter_canister_log_fetch: FlagStatus) -> StateMachine {
+fn setup_env_with(replicated_inter_canister_log_fetch: FlagStatus) -> StateMachine {
     let subnet_type = SubnetType::Application;
     let mut subnet_config = SubnetConfig::new(subnet_type);
     subnet_config.scheduler_config.max_instructions_per_round = MAX_INSTRUCTIONS_PER_ROUND;
@@ -82,7 +82,7 @@ fn setup_env_with(replicated_query_inter_canister_log_fetch: FlagStatus) -> Stat
     let config = StateMachineConfig::new(
         subnet_config,
         ExecutionConfig {
-            replicated_query_inter_canister_log_fetch,
+            replicated_inter_canister_log_fetch,
             ..Default::default()
         },
     );
