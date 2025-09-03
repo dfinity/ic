@@ -1,4 +1,5 @@
 /* tag::catalog[]
+TODO: Document the test
 end::catalog[] */
 
 use anyhow::Result;
@@ -13,8 +14,11 @@ use ic_system_test_driver::{
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
     systest,
+    util::{block_on, runtime_from_url, UniversalCanister},
 };
 use ic_types::Height;
+use rejoin_test_lib::{install_statesync_test_canisters, modify_canister_heap};
+use slog::info;
 use std::time::Duration;
 
 const INITIAL_NODES: usize = 1;
@@ -23,7 +27,7 @@ const TOTAL_NODES: usize = 13;
 const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(150); // artificial added latency
 
-const SIZE_LEVEL: usize = 8;
+const SIZE_LEVEL: usize = 16;
 const NUM_CANISTERS: usize = 8;
 
 fn setup(env: TestEnv) {
@@ -71,6 +75,50 @@ fn setup(env: TestEnv) {
 
 fn test(env: TestEnv) {
     let logger = env.logger();
+
+    let agent_node = env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .expect("Failed to get agent node");
+
+    block_on(async {
+        info!(
+            logger,
+            "Installing universal canister on a node {} ...",
+            agent_node.get_public_url()
+        );
+        let agent = agent_node.build_default_agent_async().await;
+        let universal_canister = UniversalCanister::new_with_retries(
+            &agent,
+            agent_node.effective_canister_id(),
+            &logger,
+        )
+        .await;
+
+        let endpoint_runtime = runtime_from_url(
+            agent_node.get_public_url(),
+            agent_node.effective_canister_id(),
+        );
+        let canisters =
+            install_statesync_test_canisters(env, &endpoint_runtime, NUM_CANISTERS).await;
+
+        info!(
+            logger,
+            "Start expanding the canister heap. The total size of all canisters will be {} MiB.",
+            SIZE_LEVEL * NUM_CANISTERS * 128
+        );
+        modify_canister_heap(
+            logger.clone(),
+            canisters.clone(),
+            SIZE_LEVEL,
+            NUM_CANISTERS,
+            false,
+            0,
+        )
+        .await;
+    });
 
     todo!()
 }

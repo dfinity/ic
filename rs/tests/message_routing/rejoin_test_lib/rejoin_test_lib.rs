@@ -3,6 +3,7 @@ use chrono::Utc;
 use futures::future::join_all;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::get_dependency_path;
+use ic_system_test_driver::driver::test_env_api::retry_async;
 use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasVm, IcNodeSnapshot};
 use ic_system_test_driver::util::{runtime_from_url, MetricsFetcher, UniversalCanister};
 use slog::info;
@@ -333,7 +334,7 @@ async fn store_and_read_stable(
     );
 }
 
-async fn install_statesync_test_canisters(
+pub async fn install_statesync_test_canisters(
     env: TestEnv,
     endpoint_runtime: &Runtime,
     num_canisters: usize,
@@ -371,7 +372,7 @@ async fn install_statesync_test_canisters(
     join_all(futures).await
 }
 
-async fn modify_canister_heap(
+pub async fn modify_canister_heap(
     logger: slog::Logger,
     canisters: Vec<Canister<'_>>,
     size_level: usize,
@@ -389,15 +390,36 @@ async fn modify_canister_heap(
                 for x in 1..=size_level {
                     let seed_for_canister = idx + (x - 1) * num_canisters + seed;
                     let payload = (x as u32, seed_for_canister as u32);
-                    let _res: Result<u64, String> = canister
-                        .update_("expand_state", dfn_candid::candid, payload)
-                        .await
-                        .unwrap_or_else(|err| {
-                            panic!(
-                                "Calling expand_state() on canister {:?} failed: {}",
-                                canister, err
-                            )
-                        });
+
+                    let _res: Result<u64, String> = retry_async(
+                        "Trying to expand the canister state",
+                        &logger_clone,
+                        Duration::from_secs(500),
+                        Duration::from_secs(5),
+                        async || {
+                            canister
+                                .update_("expand_state", dfn_candid::candid, payload)
+                                .await
+                                .map_err(|err| anyhow::anyhow!("{}", err))
+                        },
+                    )
+                    .await
+                    .unwrap_or_else(|err| {
+                        panic!(
+                            "Calling expand_state() on canister {:?} failed: {}",
+                            canister, err
+                        )
+                    });
+
+                    // let _res: Result<u64, String> = canister
+                    //     .update_("expand_state", dfn_candid::candid, payload)
+                    //     .await
+                    //     .unwrap_or_else(|err| {
+                    //         panic!(
+                    //             "Calling expand_state() on canister {:?} failed: {}",
+                    //             canister, err
+                    //         )
+                    //     });
                     info!(
                         logger_clone,
                         "Expanded canister {:?} {} times, it is now {}",
