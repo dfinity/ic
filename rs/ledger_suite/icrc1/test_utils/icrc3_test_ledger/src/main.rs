@@ -3,7 +3,9 @@ use ic_cdk::{query, update};
 use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc3_test_ledger::AddBlockResult;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
-use icrc_ledger_types::icrc3::blocks::{BlockWithId, GetBlocksRequest, GetBlocksResult};
+use icrc_ledger_types::icrc3::blocks::{
+    BlockWithId, GetBlocksRequest, GetBlocksResponse, GetBlocksResult,
+};
 use num_traits::ToPrimitive;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -85,6 +87,37 @@ pub fn icrc3_get_blocks(requests: Vec<GetBlocksRequest>) -> GetBlocksResult {
                 log_length: Nat::from(total_blocks),
                 blocks: result_blocks,
                 archived_blocks: vec![], // No archiving in this simple implementation
+            }
+        })
+    })
+}
+
+#[candid_method(query)]
+#[query]
+pub fn get_blocks(request: GetBlocksRequest) -> GetBlocksResponse {
+    BLOCKS.with(|blocks| {
+        NEXT_BLOCK_ID.with(|next_id| {
+            let blocks = blocks.borrow();
+            let total_blocks = *next_id.borrow();
+
+            let mut result_blocks = Vec::new();
+
+            let start = request.start.0.to_u64().unwrap_or(0);
+            let length = request.length.0.to_u64().unwrap_or(0) as usize;
+
+            // Get blocks in the requested range
+            for block_id in start..std::cmp::min(start + length as u64, total_blocks) {
+                if let Some(block) = blocks.get(&block_id) {
+                    result_blocks.push(block.clone().into());
+                }
+            }
+
+            GetBlocksResponse {
+                chain_length: total_blocks,
+                blocks: result_blocks,
+                archived_blocks: vec![], // No archiving in this simple implementation
+                first_index: Nat::from(start),
+                certificate: None,
             }
         })
     })
