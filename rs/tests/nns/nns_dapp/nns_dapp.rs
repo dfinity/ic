@@ -3,7 +3,7 @@ use candid::{CandidType, Encode};
 use ic_base_types::SubnetId;
 use ic_ledger_core::Tokens;
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
     LEDGER_INDEX_CANISTER_ID, NNS_UI_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
     SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
@@ -170,7 +170,7 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
               ("HOST".to_string(), ic_gateway_url.to_string()),
               /* ICP swap canister is not deployed by the test driver! */
               ("ICP_SWAP_URL".to_string(), format!("https://uvevg-iyaaa-aaaak-ac27q-cai.raw.{}/", ic_gateway_domain)),
-              ("IDENTITY_SERVICE_URL".to_string(), format!("https://{}.{}", IDENTITY_CANISTER_ID, ic_gateway_domain)),
+              ("IDENTITY_SERVICE_URL".to_string(), format!("https://{}.{}", ii_canister_id, ic_gateway_domain)),
               ("INDEX_CANISTER_ID".to_string(), LEDGER_INDEX_CANISTER_ID.to_string()),
               ("LEDGER_CANISTER_ID".to_string(), LEDGER_CANISTER_ID.to_string()),
               ("OWN_CANISTER_ID".to_string(), NNS_UI_CANISTER_ID.to_string()),
