@@ -20,7 +20,6 @@ use ic_protobuf::proxy::try_from_option_field;
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
-use ic_sys::utility_command::UtilityCommand;
 use ic_types::{
     consensus::{CatchUpPackage, HasHeight},
     crypto::{
@@ -42,6 +41,8 @@ const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 pub(crate) enum OrchestratorControlFlow {
     /// The node is assigned to the subnet with the given subnet id.
     Assigned(SubnetId),
+    /// The node is in the process of leaving subnet with the given id.
+    Leaving(SubnetId),
     /// The node is unassigned.
     Unassigned,
     /// The node should stop the orchestrator.
@@ -276,6 +277,8 @@ impl Upgrade {
             .await?;
         }
 
+        // Assume that the node is assigned
+        let mut flow = OrchestratorControlFlow::Assigned(subnet_id);
         // Now when we have the most recent CUP, we check if we're still assigned.
         // If not, go into unassigned state.
         if let Some(decision) = should_node_become_unassigned(
@@ -284,18 +287,14 @@ impl Upgrade {
             subnet_id,
             &latest_cup,
         ) {
-            let node_id = self.node_id;
             match decision {
                 UnassignmentDecision::Later => {
-                    UtilityCommand::notify_host(&format!("The node {node_id} has been unassigned from the subnet {subnet_id} in the registry. Please do not turn off the machine while it completes its graceful removal from the subnet. This process can take up to 15 minutes. A new message will be displayed here when the node has been successfully removed."), 1);
+                    flow = OrchestratorControlFlow::Leaving(subnet_id);
                 }
                 UnassignmentDecision::Now => {
                     self.stop_replica()?;
                     return match self.remove_state().await {
-                        Ok(()) => {
-                            UtilityCommand::notify_host(&format!("The node {node_id} has gracefully left subnet {subnet_id}. The node can be turned off now."), 1);
-                            Ok(OrchestratorControlFlow::Unassigned)
-                        }
+                        Ok(()) => Ok(OrchestratorControlFlow::Unassigned),
                         Err(err) => {
                             warn!(
                                 self.logger,
@@ -345,7 +344,11 @@ impl Upgrade {
         // not arrive at the corresponding CUP yet.
         self.prepare_upgrade_if_scheduled(subnet_id).await?;
 
-        Ok(OrchestratorControlFlow::Assigned(subnet_id))
+        Ok(flow)
+    }
+
+    pub fn node_id(&self) -> NodeId {
+        self.node_id
     }
 
     // Special case for when we are doing bootstrap subnet recovery for
