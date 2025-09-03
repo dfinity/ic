@@ -38,7 +38,7 @@ use ic_nns_constants::{
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use icp_ledger::{
     AccountIdentifier, Block, BlockIndex, BlockRes, Memo, Operation, SendArgs, Subaccount, Tokens,
-    Transaction, TransactionNotification, DEFAULT_TRANSFER_FEE,
+    Transaction, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
