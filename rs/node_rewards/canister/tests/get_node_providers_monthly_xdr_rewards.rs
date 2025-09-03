@@ -5,8 +5,7 @@ use ic_nns_constants::NODE_REWARDS_CANISTER_ID;
 use ic_nns_test_utils::common::build_node_rewards_test_wasm;
 use ic_node_rewards_canister_api::monthly_rewards::GetNodeProvidersMonthlyXdrRewardsRequest;
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
-    GetHistoricalRewardPeriodsResponse, GetNodeProviderRewardsCalculationRequest,
-    GetNodeProviderRewardsCalculationResponse,
+    GetNodeProviderRewardsCalculationRequest, GetNodeProviderRewardsCalculationResponse,
 };
 use ic_types::PrincipalId;
 use pocket_ic::common::rest::{EmptyConfig, IcpFeatures};
@@ -82,7 +81,6 @@ async fn get_node_provider_rewards_calculation_is_only_callable_in_nonreplicated
             from_nanos: past_time_nanos,
             to_nanos: past_time_nanos,
             provider_id: Principal::anonymous(),
-            historical,
         };
 
         // Non-replicated query call is allowed.
@@ -121,39 +119,4 @@ async fn get_node_provider_rewards_calculation_is_only_callable_in_nonreplicated
             "Replicated execution of this method is not allowed. Use a non-replicated query call."
         );
     }
-}
-
-#[tokio::test]
-async fn get_historical_reward_periods_is_only_callable_in_nonreplicated_mode() {
-    let pocket_ic = setup_env().await;
-    let node_rewards_id = NODE_REWARDS_CANISTER_ID.get().0;
-
-    // Non-replicated query call is allowed.
-    let res = query_candid::<_, (GetHistoricalRewardPeriodsResponse,)>(
-        &pocket_ic,
-        node_rewards_id,
-        "get_historical_reward_periods",
-        (),
-    )
-    .await
-    .unwrap()
-    .0
-    .unwrap();
-    assert!(res.is_empty());
-
-    // Replicated update call is not allowed.
-    let err = update_candid::<_, (GetHistoricalRewardPeriodsResponse,)>(
-        &pocket_ic,
-        node_rewards_id,
-        "get_historical_reward_periods",
-        (),
-    )
-    .await
-    .unwrap()
-    .0
-    .unwrap_err();
-    assert_eq!(
-        err,
-        "Replicated execution of this method is not allowed. Use a non-replicated query call."
-    );
 }
