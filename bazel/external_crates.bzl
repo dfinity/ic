@@ -1535,7 +1535,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.2",
             ),
             "tracing-subscriber": crate.spec(
-                version = "^0.3.19",
+                version = "^0.3.20",
                 features = [
                     "env-filter",
                     "fmt",
