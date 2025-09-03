@@ -154,7 +154,10 @@ install_upgrade() {
     fi
     boot_cycle=first_boot
     echo "Setting boot_alternative to ${boot_alternative} and boot_cycle to ${boot_cycle}"
-    write_grubenv "${grubdir}/grubenv" "$boot_alternative" "$boot_cycle"
+    if ! write_grubenv "${grubdir}/grubenv" "$boot_alternative" "$boot_cycle"; then
+        echo "ERROR: GuestOS upgrade failed: Could not update GRUB environment"
+        exit 1
+    fi
     echo "Grubenv updated successfully"
 
     echo "Upgrade installation complete"
