@@ -2004,8 +2004,8 @@ fn induct_stream_slices_partial_success() {
                 // ...responses not from `REMOTE_SUBNET` @48 and @49; this is expected to be dropped...
                 Response(*LOCAL_CANISTER, *LOCAL_CANISTER),
                 Response(*UNKNOWN_CANISTER, *LOCAL_CANISTER),
-                // ...a request from a missing canister @50 (not anywhere according to the routing
-                // table); this is expected to be a reject response...
+                // ...a request from a canister @50 not hosted anywhere according to the routing
+                // table; expected to produce a reject signal..
                 Request(*UNKNOWN_CANISTER, *LOCAL_CANISTER),
                 // ...and a response to a missing canister @51 (on this subnet according to the
                 // routing table); this expected to be accepted but dropped.
