@@ -152,13 +152,15 @@ ALIASES = {}
 EXTERNAL_CANISTER_DATA = [
     "@mainnet_cycles_ledger_canister//file",
     "@internet_identity_dev_at_mainnet_commit//file",
-    "@sns_aggregator_test_at_mainnet_commit//file",
+    "@sns_aggregator//file",
+    "@nns_dapp_canister//file",
 ]
 
 EXTERNAL_CANISTER_ENV = {
     "CYCLES_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_cycles_ledger_canister//file)",
-    "SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH": "$(location @sns_aggregator_test_at_mainnet_commit//file)",
     "INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH": "$(location @internet_identity_dev_at_mainnet_commit//file)",
+    "SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH": "$(location @sns_aggregator//file)",
+    "NNS_DAPP_TEST_CANISTER_WASM_PATH": "$(location @nns_dapp_canister//file)",
 }
 
 HEAD_NNS_CANISTER_DATA = [

@@ -131,6 +131,7 @@ rust_test_suite(
             ":pocket-ic",
             "//packages/icrc-ledger-types",
             "@crate_index//:candid",
+            "@crate_index//:flate2",
             "@crate_index//:reqwest",
             "@crate_index//:serde",
             "@crate_index//:sha2",
