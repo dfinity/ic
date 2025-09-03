@@ -76,47 +76,38 @@ async fn get_node_provider_rewards_calculation_is_only_callable_in_nonreplicated
     pocket_ic.advance_time(Duration::from_secs(86_400)).await;
     pocket_ic.tick().await;
 
-    for historical in [false, true] {
-        let request = GetNodeProviderRewardsCalculationRequest {
-            from_nanos: past_time_nanos,
-            to_nanos: past_time_nanos,
-            provider_id: Principal::anonymous(),
-        };
+    let request = GetNodeProviderRewardsCalculationRequest {
+        from_nanos: past_time_nanos,
+        to_nanos: past_time_nanos,
+        provider_id: Principal::anonymous(),
+    };
 
-        // Non-replicated query call is allowed.
-        let err = query_candid::<_, (GetNodeProviderRewardsCalculationResponse,)>(
-            &pocket_ic,
-            node_rewards_id,
-            "get_node_provider_rewards_calculation",
-            (request.clone(),),
-        )
-        .await
-        .unwrap()
-        .0
-        .unwrap_err();
-        let maybe_historical = if historical { "historical " } else { "" };
-        assert_eq!(
-            err,
-            format!(
-                "No {}rewards found for node provider 2vxsx-fae",
-                maybe_historical
-            )
-        );
+    // Non-replicated query call is allowed.
+    let err = query_candid::<_, (GetNodeProviderRewardsCalculationResponse,)>(
+        &pocket_ic,
+        node_rewards_id,
+        "get_node_provider_rewards_calculation",
+        (request.clone(),),
+    )
+    .await
+    .unwrap()
+    .0
+    .unwrap_err();
+    assert_eq!(err, "No rewards found for node provider 2vxsx-fae");
 
-        // Replicated update call is not allowed.
-        let err = update_candid::<_, (GetNodeProviderRewardsCalculationResponse,)>(
-            &pocket_ic,
-            node_rewards_id,
-            "get_node_provider_rewards_calculation",
-            (request,),
-        )
-        .await
-        .unwrap()
-        .0
-        .unwrap_err();
-        assert_eq!(
-            err,
-            "Replicated execution of this method is not allowed. Use a non-replicated query call."
-        );
-    }
+    // Replicated update call is not allowed.
+    let err = update_candid::<_, (GetNodeProviderRewardsCalculationResponse,)>(
+        &pocket_ic,
+        node_rewards_id,
+        "get_node_provider_rewards_calculation",
+        (request,),
+    )
+    .await
+    .unwrap()
+    .0
+    .unwrap_err();
+    assert_eq!(
+        err,
+        "Replicated execution of this method is not allowed. Use a non-replicated query call."
+    );
 }
