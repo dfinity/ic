@@ -50,11 +50,11 @@ pub(crate) fn is_node_swapping_enabled_for_caller(caller: PrincipalId) -> bool {
 }
 
 #[cfg(test)]
-pub(crate) fn temporarily_enable_swapping_on_subnets(subnets: Vec<SubnetId>) {
+pub(crate) fn enable_swapping_on_subnets(subnets: Vec<SubnetId>) {
     NODE_SWAPPING_ENABLED_SUBNETS.replace(subnets);
 }
 
 #[cfg(test)]
-pub(crate) fn temporarily_enable_swapping_for_callers(callers: Vec<PrincipalId>) {
+pub(crate) fn enable_swapping_for_callers(callers: Vec<PrincipalId>) {
     NODE_SWAPPING_WHITELISTED_CALLERS.replace(callers);
 }

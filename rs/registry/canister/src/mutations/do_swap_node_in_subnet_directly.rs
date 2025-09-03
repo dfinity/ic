@@ -156,10 +156,31 @@ impl SwapNodeInSubnetDirectlyPayload {
 #[cfg(test)]
 mod tests {
 
-    use ic_types::PrincipalId;
+    use std::collections::BTreeMap;
+
+    use ic_nns_test_utils::registry::create_subnet_threshold_signing_pubkey_and_cup_mutations;
+    use ic_protobuf::registry::{
+        dc::v1::DataCenterRecord,
+        node_operator::v1::NodeOperatorRecord,
+        subnet::v1::{SubnetListRecord, SubnetRecord, SubnetType},
+    };
+    use ic_registry_keys::{
+        make_data_center_record_key, make_node_operator_record_key, make_subnet_list_record_key,
+        make_subnet_record_key,
+    };
+    use ic_registry_transport::upsert;
+    use ic_types::{NodeId, PrincipalId, SubnetId};
+    use prost::Message;
 
     use crate::{
-        flags::{temporarily_disable_node_swapping, temporarily_enable_node_swapping},
+        common::test_helpers::{
+            get_invariant_compliant_subnet_record, invariant_compliant_registry,
+            prepare_registry_with_nodes_and_node_operator_id,
+        },
+        flags::{
+            enable_swapping_for_callers, enable_swapping_on_subnets,
+            temporarily_disable_node_swapping, temporarily_enable_node_swapping,
+        },
         mutations::do_swap_node_in_subnet_directly::{SwapError, SwapNodeInSubnetDirectlyPayload},
         registry::Registry,
     };
@@ -203,6 +224,104 @@ mod tests {
             new_node_id: Some(PrincipalId::new_node_test_id(1)),
             old_node_id: Some(PrincipalId::new_node_test_id(2)),
         }
+    }
+
+    fn node_operator() -> PrincipalId {
+        PrincipalId::new_user_test_id(1)
+    }
+
+    fn node_operator_not_owning_nodes() -> PrincipalId {
+        PrincipalId::new_user_test_id(2)
+    }
+
+    fn scenario_compliant_registry() -> Registry {
+        // Get the nodes mutations
+        let (request, nodes) =
+            prepare_registry_with_nodes_and_node_operator_id(1, 2, node_operator());
+        let mut mutations = request.mutations;
+
+        // Get the subnet mutations
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let mut subnet =
+            get_invariant_compliant_subnet_record(vec![nodes.keys().nth(0).unwrap().clone()]);
+        subnet.subnet_type = SubnetType::System.into();
+        mutations.extend([
+            upsert(
+                make_subnet_list_record_key(),
+                SubnetListRecord {
+                    subnets: vec![subnet_id.get().to_vec()],
+                }
+                .encode_to_vec(),
+            ),
+            upsert(make_subnet_record_key(subnet_id), subnet.encode_to_vec()),
+        ]);
+
+        // Threshold signing keys
+        let (node_id, keys) = nodes.iter().nth(0).unwrap();
+        let mut nodes_in_subnet = BTreeMap::new();
+        nodes_in_subnet.insert(node_id.clone(), keys.clone());
+        let threshold_pk_and_cp =
+            create_subnet_threshold_signing_pubkey_and_cup_mutations(subnet_id, &nodes_in_subnet);
+        mutations.extend(threshold_pk_and_cp);
+
+        // Data center mutations
+        mutations.push(upsert(
+            make_data_center_record_key("dc"),
+            DataCenterRecord {
+                id: "dc".to_string(),
+                region: "region".to_string(),
+                owner: "owner".to_string(),
+                gps: Some(ic_protobuf::registry::dc::v1::Gps {
+                    latitude: 0.0,
+                    longitude: 0.0,
+                }),
+            }
+            .encode_to_vec(),
+        ));
+
+        // Both node operators
+        mutations.extend([
+            upsert(
+                make_node_operator_record_key(node_operator()),
+                NodeOperatorRecord {
+                    node_operator_principal_id: node_operator().to_vec(),
+                    node_allowance: 10,
+                    node_provider_principal_id: PrincipalId::new_user_test_id(999).to_vec(),
+                    dc_id: "dc".to_string(),
+                    ..Default::default()
+                }
+                .encode_to_vec(),
+            ),
+            upsert(
+                make_node_operator_record_key(node_operator_not_owning_nodes()),
+                NodeOperatorRecord {
+                    node_operator_principal_id: node_operator_not_owning_nodes().to_vec(),
+                    node_allowance: 10,
+                    node_provider_principal_id: PrincipalId::new_user_test_id(999).to_vec(),
+                    dc_id: "dc".to_string(),
+                    ..Default::default()
+                }
+                .encode_to_vec(),
+            ),
+        ]);
+
+        let mut registry = invariant_compliant_registry(0);
+        registry.maybe_apply_mutation_internal(mutations);
+
+        registry
+    }
+
+    fn get_only_subnet(registry: &Registry) -> (SubnetId, SubnetRecord) {
+        registry
+            .get_subnet_list_record()
+            .subnets
+            .first()
+            .map(|bytes| {
+                let principal = PrincipalId::try_from(bytes).unwrap();
+                let id = SubnetId::new(principal);
+                (id, registry.get_subnet_or_panic(id))
+            })
+            .unwrap()
     }
 
     #[test]
@@ -250,5 +369,83 @@ mod tests {
                 "Expected: {expected:?} but found result: {output:?}"
             );
         }
+    }
+
+    #[test]
+    fn feature_enabled_for_caller() {
+        let _temp_enable_feat = temporarily_enable_node_swapping();
+        let caller = PrincipalId::new_user_test_id(1);
+        let mut registry = invariant_compliant_registry(1);
+        let payload = valid_payload();
+
+        // First make a call and expect to fail because
+        // the feature is not enabled for this caller.
+        assert!(registry
+            .swap_nodes_inner(payload.clone(), caller)
+            .is_err_and(|err| err
+                == SwapError::FeatureDisabledForCaller {
+                    caller: caller.clone()
+                }));
+
+        // Enable the feature for the caller
+        enable_swapping_for_callers(vec![caller.clone()]);
+
+        // Expect the first next error which is the missing
+        // subnet in the registry.
+        assert!(registry
+            .swap_nodes_inner(payload.clone(), caller)
+            .is_err_and(|err| err
+                == SwapError::SubnetNotFoundForNode {
+                    old_node_id: payload.old_node_id.unwrap()
+                }))
+    }
+
+    #[test]
+    fn feature_enabled_for_subnet() {
+        let _temp_enable_feat = temporarily_enable_node_swapping();
+        let caller = PrincipalId::new_user_test_id(1);
+        enable_swapping_for_callers(vec![caller.clone()]);
+        let mut registry = invariant_compliant_registry(1);
+
+        let payload = valid_payload();
+
+        let subnet_record =
+            get_invariant_compliant_subnet_record(vec![NodeId::new(payload.old_node_id.unwrap())]);
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+
+        registry.apply_mutations_for_test(vec![
+            upsert(
+                make_subnet_record_key(subnet_id),
+                subnet_record.encode_to_vec(),
+            ),
+            upsert(
+                make_subnet_list_record_key(),
+                SubnetListRecord {
+                    subnets: vec![subnet_id.get().to_vec()],
+                }
+                .encode_to_vec(),
+            ),
+        ]);
+
+        // First call when the feature isn't enabled on the subnet.
+        assert!(registry
+            .swap_nodes_inner(payload.clone(), caller.clone())
+            .is_err_and(|err| err
+                == SwapError::FeatureDisabledOnSubnet {
+                    subnet_id: subnet_id.clone()
+                }));
+
+        // Now enable the feature and call again.
+        enable_swapping_on_subnets(vec![subnet_id.clone()]);
+        assert!(registry.swap_nodes_inner(payload, caller).is_ok());
+    }
+
+    #[test]
+    fn e2e_valid_swap() {
+        let _temp_enable_feat = temporarily_enable_node_swapping();
+        let caller = PrincipalId::new_user_test_id(1);
+        enable_swapping_for_callers(vec![caller.clone()]);
+
+        let registry = scenario_compliant_registry();
     }
 }
