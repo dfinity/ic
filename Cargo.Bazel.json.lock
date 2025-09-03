@@ -1,5 +1,5 @@
 {
-  "checksum": "4f1c5ed2f312010711b5d0b4b03233772f13409c395474d67228247cbae20b0d",
+  "checksum": "ef54ae853e7c6cbe5ac0c039f7f155b527b791ba046d5567e21e4ea7410cc641",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21836,7 +21836,7 @@
               "target": "tracing_slog"
             },
             {
-              "id": "tracing-subscriber 0.3.19",
+              "id": "tracing-subscriber 0.3.20",
               "target": "tracing_subscriber"
             },
             {
@@ -34852,7 +34852,7 @@
               "target": "tracing_serde"
             },
             {
-              "id": "tracing-subscriber 0.3.19",
+              "id": "tracing-subscriber 0.3.20",
               "target": "tracing_subscriber"
             },
             {
@@ -45506,14 +45506,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "matchers 0.1.0": {
+    "matchers 0.2.0": {
       "name": "matchers",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "package_url": "https://github.com/hawkw/matchers",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/matchers/0.1.0/download",
-          "sha256": "8263075bb86c5a1b1427b5ae862e8889656f126e9f77c484496e8b47cf5c5558"
+          "url": "https://static.crates.io/crates/matchers/0.2.0/download",
+          "sha256": "d1525a2a28c7f4fa0fc98bb91ae755d1e2d1505079e05539e35bc876b5d65ae9"
         }
       },
       "targets": [
@@ -45538,14 +45538,14 @@
         "deps": {
           "common": [
             {
-              "id": "regex-automata 0.1.10",
+              "id": "regex-automata 0.4.8",
               "target": "regex_automata"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.1.0"
+        "version": "0.2.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -48768,14 +48768,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "nu-ansi-term 0.46.0": {
+    "nu-ansi-term 0.50.1": {
       "name": "nu-ansi-term",
-      "version": "0.46.0",
+      "version": "0.50.1",
       "package_url": "https://github.com/nushell/nu-ansi-term",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/nu-ansi-term/0.46.0/download",
-          "sha256": "77a8165726e8236064dbb45459242600304b42a5ea24ee2948e18e023bf7ba84"
+          "url": "https://static.crates.io/crates/nu-ansi-term/0.50.1/download",
+          "sha256": "d4a28e057d01f97e61255210fcff094d74ed0466038633e95017f5beb68e4399"
         }
       },
       "targets": [
@@ -48798,29 +48798,25 @@
           "**"
         ],
         "deps": {
-          "common": [
-            {
-              "id": "overload 0.1.1",
-              "target": "overload"
-            }
-          ],
+          "common": [],
           "selects": {
-            "cfg(target_os = \"windows\")": [
+            "cfg(windows)": [
               {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
+                "id": "windows-sys 0.52.0",
+                "target": "windows_sys",
+                "alias": "windows"
               }
             ]
           }
         },
-        "edition": "2018",
-        "version": "0.46.0"
+        "edition": "2021",
+        "version": "0.50.1"
       },
       "license": "MIT",
       "license_ids": [
         "MIT"
       ],
-      "license_file": null
+      "license_file": "LICENSE"
     },
     "num 0.4.3": {
       "name": "num",
@@ -52677,44 +52673,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "overload 0.1.1": {
-      "name": "overload",
-      "version": "0.1.1",
-      "package_url": "https://github.com/danaugrs/overload",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/overload/0.1.1/download",
-          "sha256": "b15813163c1d831bf4a13c3610c05c0d03b39feb07f7e09fa234dac9b15aaf39"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "overload",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "overload",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "version": "0.1.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "p256 0.13.2": {
       "name": "p256",
       "version": "0.13.2",
@@ -56005,7 +55963,7 @@
               "target": "tracing_appender"
             },
             {
-              "id": "tracing-subscriber 0.3.19",
+              "id": "tracing-subscriber 0.3.20",
               "target": "tracing_subscriber"
             }
           ],
@@ -62928,23 +62886,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "default",
-            "regex-syntax",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "regex-syntax 0.6.29",
-              "target": "regex_syntax"
-            }
-          ],
-          "selects": {}
-        },
         "edition": "2015",
         "version": "0.1.10"
       },
@@ -63032,7 +62973,9 @@
         "crate_features": {
           "common": [
             "alloc",
+            "dfa-build",
             "dfa-onepass",
+            "dfa-search",
             "hybrid",
             "meta",
             "nfa-backtrack",
@@ -81445,7 +81388,7 @@
               "target": "time"
             },
             {
-              "id": "tracing-subscriber 0.3.19",
+              "id": "tracing-subscriber 0.3.20",
               "target": "tracing_subscriber"
             }
           ],
@@ -81617,7 +81560,7 @@
               "target": "tracing"
             },
             {
-              "id": "tracing-subscriber 0.3.19",
+              "id": "tracing-subscriber 0.3.20",
               "target": "tracing_subscriber"
             }
           ],
@@ -81742,7 +81685,7 @@
               "target": "tracing_core"
             },
             {
-              "id": "tracing-subscriber 0.3.19",
+              "id": "tracing-subscriber 0.3.20",
               "target": "tracing_subscriber"
             }
           ],
@@ -81826,7 +81769,7 @@
               "target": "tracing_log"
             },
             {
-              "id": "tracing-subscriber 0.3.19",
+              "id": "tracing-subscriber 0.3.20",
               "target": "tracing_subscriber"
             }
           ],
@@ -82016,14 +81959,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tracing-subscriber 0.3.19": {
+    "tracing-subscriber 0.3.20": {
       "name": "tracing-subscriber",
-      "version": "0.3.19",
+      "version": "0.3.20",
       "package_url": "https://github.com/tokio-rs/tracing",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tracing-subscriber/0.3.19/download",
-          "sha256": "e8189decb5ac0fa7bc8b96b7cb9b2701d60d48805aca84a238004d665fcc4008"
+          "url": "https://static.crates.io/crates/tracing-subscriber/0.3.20/download",
+          "sha256": "2054a14f5307d601f88daf0553e1cbf472acc4f2c51afab632431cdcd72124d5"
         }
       },
       "targets": [
@@ -82056,7 +81999,6 @@
             "matchers",
             "nu-ansi-term",
             "once_cell",
-            "regex",
             "registry",
             "serde",
             "serde_json",
@@ -82074,11 +82016,11 @@
         "deps": {
           "common": [
             {
-              "id": "matchers 0.1.0",
+              "id": "matchers 0.2.0",
               "target": "matchers"
             },
             {
-              "id": "nu-ansi-term 0.46.0",
+              "id": "nu-ansi-term 0.50.1",
               "target": "nu_ansi_term"
             },
             {
@@ -82086,8 +82028,8 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.11.1",
-              "target": "regex"
+              "id": "regex-automata 0.4.8",
+              "target": "regex_automata"
             },
             {
               "id": "serde 1.0.219",
@@ -82133,7 +82075,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.19"
+        "version": "0.3.20"
       },
       "license": "MIT",
       "license_ids": [
@@ -82767,7 +82709,7 @@
               "target": "tracing"
             },
             {
-              "id": "tracing-subscriber 0.3.19",
+              "id": "tracing-subscriber 0.3.20",
               "target": "tracing_subscriber"
             }
           ],
@@ -95029,7 +94971,7 @@
     "tracing-opentelemetry 0.28.0",
     "tracing-serde 0.1.3",
     "tracing-slog 0.2.0",
-    "tracing-subscriber 0.3.19",
+    "tracing-subscriber 0.3.20",
     "trust-dns-resolver 0.22.0",
     "turmoil 0.6.4",
     "url 2.5.4",
