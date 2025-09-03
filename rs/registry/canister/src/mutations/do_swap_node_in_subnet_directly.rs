@@ -162,7 +162,7 @@ mod tests {
     use ic_protobuf::registry::{
         dc::v1::DataCenterRecord,
         node_operator::v1::NodeOperatorRecord,
-        subnet::v1::{SubnetListRecord, SubnetRecord, SubnetType},
+        subnet::v1::{SubnetListRecord, SubnetType},
     };
     use ic_registry_keys::{
         make_data_center_record_key, make_node_operator_record_key, make_subnet_list_record_key,
@@ -226,102 +226,120 @@ mod tests {
         }
     }
 
-    fn node_operator() -> PrincipalId {
-        PrincipalId::new_user_test_id(1)
+    fn operator(id: u64) -> PrincipalId {
+        PrincipalId::new_user_test_id(id)
     }
 
-    fn node_operator_not_owning_nodes() -> PrincipalId {
-        PrincipalId::new_user_test_id(2)
+    fn provider(id: u64) -> PrincipalId {
+        PrincipalId::new_user_test_id(9999 - id)
     }
 
-    fn scenario_compliant_registry() -> Registry {
-        // Get the nodes mutations
-        let (request, nodes) =
-            prepare_registry_with_nodes_and_node_operator_id(1, 2, node_operator());
-        let mut mutations = request.mutations;
+    fn subnet(id: u64) -> SubnetId {
+        SubnetId::new(PrincipalId::new_subnet_test_id(id))
+    }
 
-        // Get the subnet mutations
-        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-        let mut subnet =
-            get_invariant_compliant_subnet_record(vec![nodes.keys().nth(0).unwrap().clone()]);
-        subnet.subnet_type = SubnetType::System.into();
-        mutations.extend([
-            upsert(
-                make_subnet_list_record_key(),
-                SubnetListRecord {
-                    subnets: vec![subnet_id.get().to_vec()],
+    /// Generate
+    fn scenario_compliant_registry(
+        providers: &[(PrincipalId, &[(PrincipalId, &str, Option<SubnetId>, u64)])],
+    ) -> (
+        Registry,
+        BTreeMap<
+            PrincipalId,
+            BTreeMap<String, BTreeMap<PrincipalId, Vec<(NodeId, Option<SubnetId>)>>>,
+        >,
+    ) {
+        let mut registry = invariant_compliant_registry(1);
+        let mut mutations = vec![];
+        let mut mutation_id = 2;
+        let mut subnets = BTreeMap::new();
+        let mut network_data = BTreeMap::new();
+
+        for (provider, provider_layout) in providers {
+            for (operator, dc_id, maybe_subnet, num_nodes) in *provider_layout {
+                let (request, nodes) = prepare_registry_with_nodes_and_node_operator_id(
+                    mutation_id,
+                    *num_nodes,
+                    *operator,
+                );
+                mutation_id += 1;
+
+                mutations.extend(request.mutations);
+
+                mutations.push(upsert(
+                    make_data_center_record_key(dc_id),
+                    DataCenterRecord {
+                        id: dc_id.to_string(),
+                        region: "region".to_string(),
+                        owner: "owner".to_string(),
+                        gps: Some(ic_protobuf::registry::dc::v1::Gps {
+                            latitude: 0.0,
+                            longitude: 0.0,
+                        }),
+                    }
+                    .encode_to_vec(),
+                ));
+
+                mutations.push(upsert(
+                    make_node_operator_record_key(*operator),
+                    NodeOperatorRecord {
+                        node_operator_principal_id: operator.to_vec(),
+                        node_allowance: 10,
+                        node_provider_principal_id: provider.to_vec(),
+                        dc_id: dc_id.to_string(),
+                        ..Default::default()
+                    }
+                    .encode_to_vec(),
+                ));
+
+                network_data
+                    .entry(*provider)
+                    .or_insert(BTreeMap::new())
+                    .entry(dc_id.to_string())
+                    .or_insert(BTreeMap::new())
+                    .entry(*operator)
+                    .or_insert(vec![])
+                    .extend(nodes.keys().map(|n| (*n, maybe_subnet.clone())));
+
+                if let Some(subnet) = maybe_subnet {
+                    subnets
+                        .entry(subnet)
+                        .or_insert(BTreeMap::new())
+                        .extend(nodes);
                 }
-                .encode_to_vec(),
-            ),
-            upsert(make_subnet_record_key(subnet_id), subnet.encode_to_vec()),
-        ]);
+            }
+        }
 
-        // Threshold signing keys
-        let (node_id, keys) = nodes.iter().nth(0).unwrap();
-        let mut nodes_in_subnet = BTreeMap::new();
-        nodes_in_subnet.insert(node_id.clone(), keys.clone());
-        let threshold_pk_and_cp =
-            create_subnet_threshold_signing_pubkey_and_cup_mutations(subnet_id, &nodes_in_subnet);
-        mutations.extend(threshold_pk_and_cp);
+        for (subnet, nodes) in &subnets {
+            let mut subnet_record =
+                get_invariant_compliant_subnet_record(nodes.keys().cloned().collect());
+            // For simplicity mark every subnet as system subnet
+            subnet_record.subnet_type = SubnetType::System.into();
 
-        // Data center mutations
+            mutations.push(upsert(
+                make_subnet_record_key(**subnet),
+                subnet_record.encode_to_vec(),
+            ));
+
+            let threshold_pk_and_cup =
+                create_subnet_threshold_signing_pubkey_and_cup_mutations(**subnet, nodes);
+
+            mutations.extend(threshold_pk_and_cup);
+        }
+
         mutations.push(upsert(
-            make_data_center_record_key("dc"),
-            DataCenterRecord {
-                id: "dc".to_string(),
-                region: "region".to_string(),
-                owner: "owner".to_string(),
-                gps: Some(ic_protobuf::registry::dc::v1::Gps {
-                    latitude: 0.0,
-                    longitude: 0.0,
-                }),
+            make_subnet_list_record_key(),
+            SubnetListRecord {
+                subnets: subnets.keys().map(|k| k.get().to_vec()).collect(),
             }
             .encode_to_vec(),
         ));
 
-        // Both node operators
-        mutations.extend([
-            upsert(
-                make_node_operator_record_key(node_operator()),
-                NodeOperatorRecord {
-                    node_operator_principal_id: node_operator().to_vec(),
-                    node_allowance: 10,
-                    node_provider_principal_id: PrincipalId::new_user_test_id(999).to_vec(),
-                    dc_id: "dc".to_string(),
-                    ..Default::default()
-                }
-                .encode_to_vec(),
-            ),
-            upsert(
-                make_node_operator_record_key(node_operator_not_owning_nodes()),
-                NodeOperatorRecord {
-                    node_operator_principal_id: node_operator_not_owning_nodes().to_vec(),
-                    node_allowance: 10,
-                    node_provider_principal_id: PrincipalId::new_user_test_id(999).to_vec(),
-                    dc_id: "dc".to_string(),
-                    ..Default::default()
-                }
-                .encode_to_vec(),
-            ),
-        ]);
+        // Sort and dedup by key if we have duplicated dcs or nos
+        mutations.sort_by_key(|m| m.key.clone());
+        mutations.dedup_by_key(|m| m.key.clone());
 
-        let mut registry = invariant_compliant_registry(0);
         registry.maybe_apply_mutation_internal(mutations);
-
-        registry
-    }
-
-    fn get_only_subnet(registry: &Registry) -> (SubnetId, SubnetRecord) {
-        registry
-            .get_subnet_list_record()
-            .subnets
-            .first()
-            .map(|bytes| {
-                let principal = PrincipalId::try_from(bytes).unwrap();
-                let id = SubnetId::new(principal);
-                (id, registry.get_subnet_or_panic(id))
-            })
-            .unwrap()
+        (registry, network_data)
     }
 
     #[test]
@@ -443,9 +461,33 @@ mod tests {
     #[test]
     fn e2e_valid_swap() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
-        let caller = PrincipalId::new_user_test_id(1);
-        enable_swapping_for_callers(vec![caller.clone()]);
+        enable_swapping_for_callers(vec![operator(1)]);
+        enable_swapping_on_subnets(vec![subnet(1)]);
 
-        let registry = scenario_compliant_registry();
+        let (mut registry, network_data) = scenario_compliant_registry(&[(
+            provider(1),
+            &[
+                (operator(1), "dc", None, 1),
+                (operator(1), "dc", Some(subnet(1)), 1),
+            ],
+        )]);
+
+        let nodes = &network_data[&provider(1)]["dc"][&operator(1)];
+        let payload = SwapNodeInSubnetDirectlyPayload {
+            old_node_id: nodes
+                .iter()
+                .find_map(|(id, subnet)| subnet.map(|_| id.get())),
+            new_node_id: nodes
+                .iter()
+                .find_map(|(id, subnet)| subnet.is_none().then(|| id.get())),
+        };
+
+        let response = registry.swap_nodes_inner(payload, operator(1));
+        assert!(
+            response.is_ok(),
+            "Expected OK response but got: {response:?}"
+        );
+
+        //TODO(DRE-548): Add assertions that the swap has been made
     }
 }
