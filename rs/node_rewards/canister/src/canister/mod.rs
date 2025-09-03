@@ -24,7 +24,6 @@ use ic_registry_keys::{
 };
 use ic_registry_node_provider_rewards::{calculate_rewards_v0, RewardsPerNodeProvider};
 use ic_types::RegistryVersion;
-use itertools::Itertools;
 use rewards_calculation::rewards_calculator::RewardsCalculatorInput;
 use rewards_calculation::rewards_calculator_results::RewardsCalculatorResults;
 use rewards_calculation::types::RewardPeriod;
