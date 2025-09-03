@@ -610,7 +610,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
 
     // ic-recovery requires ic-admin so we copy ic-admin to the node at /tmp/ic-admin
     // such that we can bind-mount it to /opt/ic/bin/ic-admin below:
-    let local_ic_admin_path = &get_dependency_path("recovery/binaries/ic-admin");
+    let local_ic_admin_path = &get_dependency_path("rs/tests/recovery/binaries/ic-admin");
     let remote_ic_admin_path = Path::new("/tmp/ic-admin");
     scp_send_to(
         logger.clone(),
