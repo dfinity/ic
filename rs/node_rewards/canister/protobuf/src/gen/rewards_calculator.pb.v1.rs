@@ -161,7 +161,8 @@ pub struct SubnetsFailureRateKey {
 )]
 #[repr(i32)]
 pub enum RewardsCalculatorVersion {
-    V1 = 0,
+    Unspecified = 0,
+    V1 = 1,
 }
 impl RewardsCalculatorVersion {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -170,12 +171,14 @@ impl RewardsCalculatorVersion {
     /// (if the ProtoBuf definition does not change) and safe for programmatic use.
     pub fn as_str_name(&self) -> &'static str {
         match self {
+            Self::Unspecified => "REWARDS_CALCULATOR_VERSION_UNSPECIFIED",
             Self::V1 => "REWARDS_CALCULATOR_VERSION_V1",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
     pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
         match value {
+            "REWARDS_CALCULATOR_VERSION_UNSPECIFIED" => Some(Self::Unspecified),
             "REWARDS_CALCULATOR_VERSION_V1" => Some(Self::V1),
             _ => None,
         }

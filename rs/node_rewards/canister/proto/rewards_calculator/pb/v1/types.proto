@@ -6,7 +6,8 @@ import "ic_base_types/pb/v1/types.proto";
 import "ic_nervous_system/pb/v1/nervous_system.proto";
 
 enum RewardsCalculatorVersion {
-  REWARDS_CALCULATOR_VERSION_V1 = 0;
+  REWARDS_CALCULATOR_VERSION_UNSPECIFIED = 0;
+  REWARDS_CALCULATOR_VERSION_V1 = 1;
 }
 
 message DayUtc {

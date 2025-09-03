@@ -101,7 +101,7 @@ type NodeProviderRewards = record {
 type RewardsCalculatorVersion = variant { V1 };
 
 type GetNodeProviderRewardsCalculationRequest = record {
-  rewards_calculator_version: RewardsCalculatorVersion;
+  rewards_calculator_version: opt RewardsCalculatorVersion;
   from_nanos: nat64;
   to_nanos: nat64;
   provider_id: principal;

@@ -5,7 +5,7 @@ use ic_node_rewards_canister_protobuf::pb::rewards_calculator::v1::{
 
 #[derive(CandidType, Clone, Deserialize)]
 pub struct GetNodeProviderRewardsCalculationRequest {
-    pub rewards_calculator_version: RewardsCalculatorVersion,
+    pub rewards_calculator_version: Option<RewardsCalculatorVersion>,
     pub from_nanos: u64,
     pub to_nanos: u64,
     pub provider_id: Principal,
