@@ -3,6 +3,7 @@ use ic_sns_testing::nns_dapp::bootstrap_nns;
 use ic_sns_testing::utils::{get_identity_principal, TREASURY_PRINCIPAL_ID};
 use ic_sns_testing::NnsInitArgs;
 use icp_ledger::Tokens;
+use pocket_ic::common::rest::{EmptyConfig, IcpFeatures};
 use pocket_ic::PocketIcBuilder;
 use tempfile::tempdir;
 
@@ -17,10 +18,23 @@ async fn nns_init(args: NnsInitArgs) {
         );
         tempdir.keep()
     };
+    // The `nns_ui` feature requires auto progress to be enabled when the instance is created
+    // which would make `deciding_nns_neuron_id` non-deterministic.
+    // Hence, we deploy the NNS dapp separately for now.
+    let all_icp_features_but_nns_ui = IcpFeatures {
+        registry: Some(EmptyConfig {}),
+        cycles_minting: Some(EmptyConfig {}),
+        icp_token: Some(EmptyConfig {}),
+        cycles_token: Some(EmptyConfig {}),
+        nns_governance: Some(EmptyConfig {}),
+        sns: Some(EmptyConfig {}),
+        ii: Some(EmptyConfig {}),
+        nns_ui: None,
+    };
     let mut pocket_ic = PocketIcBuilder::new()
         .with_server_url(args.server_url)
         .with_state_dir(state_dir.clone())
-        .with_all_icp_features()
+        .with_icp_features(all_icp_features_but_nns_ui)
         .with_nns_subnet()
         .with_sns_subnet()
         .with_ii_subnet()
