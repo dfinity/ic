@@ -1,11 +1,11 @@
-use ic_system_test_driver::driver::test_env_api::secs;
+use ic_system_test_driver::driver::test_env_api::{secs, IcNodeContainer, SubnetSnapshot};
 use ic_system_test_driver::{
     driver::test_env_api::{
         HasPublicApiUrl, IcNodeSnapshot, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
     },
     util::{block_on, MetricsFetcher},
 };
-use ic_types::Height;
+use ic_types::{Height, RegistryVersion};
 
 use anyhow::{anyhow, bail};
 use slog::{info, Logger};
@@ -150,4 +150,51 @@ pub fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) {
         }
     )
     .expect("Failed to detect that node has deleted its state.");
+}
+
+pub fn await_subnet_earliest_topology_version(
+    subnet: &SubnetSnapshot,
+    target_version: RegistryVersion,
+    logger: &Logger,
+) {
+    const EARLIEST_TOPOLOGY_VERSION: &str = "peer_manager_topology_earliest_registry_version";
+    info!(
+        logger,
+        "Waiting until earliest topology version {} on subnet {}", target_version, subnet.subnet_id,
+    );
+    let metrics = MetricsFetcher::new(subnet.nodes(), vec![EARLIEST_TOPOLOGY_VERSION.into()]);
+    ic_system_test_driver::retry_with_msg!(
+        format!(
+            "Waiting until earliest topology version {} on subnet {}",
+            target_version, subnet.subnet_id,
+        ),
+        logger.clone(),
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || match block_on(metrics.fetch::<u64>()) {
+            Ok(val) => {
+                let earliest_registry_versions = &val[EARLIEST_TOPOLOGY_VERSION];
+                assert_eq!(earliest_registry_versions.len(), subnet.nodes().count());
+                let min_earliest_registry_version =
+                    earliest_registry_versions.iter().min().unwrap();
+                assert!(
+                    *min_earliest_registry_version <= target_version.get(),
+                    "Target version already surpassed"
+                );
+                if *min_earliest_registry_version == target_version.get() {
+                    Ok(())
+                } else {
+                    bail!(
+                        "Target registry version not yet reached, current: {:?}, target: {}",
+                        earliest_registry_versions,
+                        target_version,
+                    )
+                }
+            }
+            Err(err) => {
+                bail!("Could not connect to metrics yet {:?}", err);
+            }
+        }
+    )
+    .expect("The subnet did not reach the specified registry version in time")
 }

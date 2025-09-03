@@ -19,13 +19,13 @@ Runbook::
 
 end::catalog[] */
 
-use crate::ADDRESS_LENGTH;
+use crate::{IcRpcClientType, ADDRESS_LENGTH};
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat};
 use canister_test::Canister;
 use ic_btc_adapter_test_utils::{
     bitcoin::{Address, Amount, Txid},
-    rpc_client::{Auth, RpcApi, RpcClient},
+    rpc_client::{Auth, RpcClient, RpcClientType},
 };
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
@@ -74,8 +74,13 @@ pub async fn start_canister(canister: &Canister<'_>) {
 }
 
 /// Mint some blocks to the given address.
-pub fn generate_blocks(btc_client: &RpcClient, logger: &Logger, nb_blocks: u64, address: &Address) {
-    let generated_blocks = btc_client.generate_to_address(nb_blocks, address).unwrap();
+pub fn generate_blocks<T: RpcClientType>(
+    rpc_client: &RpcClient<T>,
+    logger: &Logger,
+    nb_blocks: u64,
+    address: &T::Address,
+) {
+    let generated_blocks = rpc_client.generate_to_address(nb_blocks, address).unwrap();
     info!(&logger, "Generated {} btc blocks.", generated_blocks.len());
     assert_eq!(
         generated_blocks.len() as u64,
@@ -136,7 +141,10 @@ pub async fn wait_for_ledger_balance(
 
 /// Wait until we have a tx in btc mempool
 /// Timeout after SHORT_TIMEOUT if the minter doesn't successfully find a new tx in the timeframe.
-pub async fn wait_for_mempool_change(btc_rpc: &RpcClient, logger: &Logger) -> Vec<Txid> {
+pub async fn wait_for_mempool_change<T: RpcClientType>(
+    btc_rpc: &RpcClient<T>,
+    logger: &Logger,
+) -> Vec<Txid> {
     let start = Instant::now();
     loop {
         if start.elapsed() >= SHORT_TIMEOUT {
@@ -235,12 +243,12 @@ pub async fn wait_for_signed_tx(
 /// This function panics if:
 /// * The transfer didn't finalize after `LONG_TIMEOUT`.
 /// * The minter rejected the retrieval because the amount was too low to cover the fees.
-pub async fn wait_for_finalization(
-    btc_client: &RpcClient,
+pub async fn wait_for_finalization<T: RpcClientType>(
+    rpc_client: &RpcClient<T>,
     ckbtc_minter_agent: &CkBtcMinterAgent,
     logger: &Logger,
     block_index: u64,
-    default_btc_address: &Address,
+    default_btc_address: &T::Address,
 ) -> ic_btc_interface::Txid {
     let start = Instant::now();
     loop {
@@ -279,7 +287,7 @@ pub async fn wait_for_finalization(
         tokio::time::sleep(Duration::from_secs(5)).await;
 
         // We continue to generate blocks if the status is yet updated
-        generate_blocks(btc_client, logger, 1, default_btc_address);
+        generate_blocks::<T>(rpc_client, logger, 1, default_btc_address);
     }
 }
 
@@ -387,7 +395,12 @@ pub async fn get_btc_address(
     address.parse::<Address<_>>().unwrap().assume_checked()
 }
 
-pub async fn send_to_btc_address(btc_rpc: &RpcClient, logger: &Logger, dst: &Address, amount: u64) {
+pub async fn send_to_btc_address<T: RpcClientType>(
+    btc_rpc: &RpcClient<T>,
+    logger: &Logger,
+    dst: &T::Address,
+    amount: u64,
+) {
     match btc_rpc.send_to(
         dst,
         Amount::from_sat(amount),
@@ -402,15 +415,15 @@ pub async fn send_to_btc_address(btc_rpc: &RpcClient, logger: &Logger, dst: &Add
     }
 }
 
-/// Create a client for bitcoind.
-pub fn get_btc_client(env: &TestEnv) -> RpcClient {
+/// Create a client for bitcoind or dogecoind.
+pub fn get_rpc_client<T: IcRpcClientType>(env: &TestEnv) -> RpcClient<T> {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     RpcClient::new(
-        bitcoin::Network::Regtest,
+        T::REGTEST,
         &format!(
             "http://[{}]:{}",
             deployed_universal_vm.get_vm().unwrap().ipv6,
-            crate::BITCOIND_RPC_PORT
+            T::RPC_PORT
         ),
         Auth::UserPass(
             crate::BITCOIND_RPC_USER.to_string(),

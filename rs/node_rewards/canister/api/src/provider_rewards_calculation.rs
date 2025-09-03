@@ -6,6 +6,15 @@ pub struct GetNodeProviderRewardsCalculationRequest {
     pub from_nanos: u64,
     pub to_nanos: u64,
     pub provider_id: Principal,
+    pub historical: bool,
 }
 
 pub type GetNodeProviderRewardsCalculationResponse = Result<NodeProviderRewards, String>;
+
+#[derive(CandidType, Clone, Deserialize, Debug, PartialEq, Eq)]
+pub struct HistoricalRewardPeriod {
+    pub from_nanos: u64,
+    pub to_nanos: u64,
+    pub providers_rewarded: Vec<Principal>,
+}
+pub type GetHistoricalRewardPeriodsResponse = Result<Vec<HistoricalRewardPeriod>, String>;

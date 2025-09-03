@@ -97,10 +97,10 @@ pub fn new_service(
     BoxCloneService::new(router.into_service())
 }
 
-pub(super) type CallV2Response = Result<Accepted, IngressError>;
+type AsyncResponse = Result<Accepted, IngressError>;
 
 /// Handles a call to /api/v2/canister/../call
-pub(super) async fn handler(
+async fn handler(
     Path(effective_canister_id): Path<CanisterId>,
     State(AsynchronousCallHandlerState {
         ingress_tracking_semaphore,
@@ -108,7 +108,7 @@ pub(super) async fn handler(
         ingress_watcher_handle,
     }): State<AsynchronousCallHandlerState>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpCallContent>>>,
-) -> CallV2Response {
+) -> AsyncResponse {
     let logger = ingress_validator.log.clone();
 
     let ingress_submitter = ingress_validator

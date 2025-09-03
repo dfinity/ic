@@ -142,11 +142,21 @@ pub struct ChainKeyConfig {
 }
 
 impl ChainKeyConfig {
+    /// Returns the list of key IDs for which there are key configs.
+    /// Note that a registry invariant ensures that there is at most one config for each key ID.
     pub fn key_ids(&self) -> Vec<MasterPublicKeyId> {
         self.key_configs
             .iter()
             .map(|key_config| key_config.key_id.clone())
             .collect()
+    }
+
+    /// Returns the key config for the given key ID, if it exists.
+    /// Note that a registry invariant ensures that there is at most one config for each key ID.
+    pub fn key_config(&self, key_id: &MasterPublicKeyId) -> Option<&KeyConfig> {
+        self.key_configs
+            .iter()
+            .find(|config| config.key_id == *key_id)
     }
 }
 

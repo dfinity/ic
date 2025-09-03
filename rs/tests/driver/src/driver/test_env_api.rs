@@ -1344,6 +1344,7 @@ pub fn load_wasm<P: AsRef<Path>>(p: P) -> Vec<u8> {
     wasm_bytes
 }
 
+#[async_trait]
 pub trait SshSession: HasTestEnv {
     /// Return the address of the SSH server to connect to.
     fn get_host_ip(&self) -> Result<IpAddr>;
@@ -1366,8 +1367,27 @@ pub trait SshSession: HasTestEnv {
         )
     }
 
+    /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
+    /// This is the async version of `block_on_ssh_session`.
+    async fn block_on_ssh_session_async(&self) -> Result<Session> {
+        let ip = self.get_host_ip()?;
+        retry_with_msg_async!(
+            format!("get_ssh_session to {ip}"),
+            &self.test_env().logger(),
+            SSH_RETRY_TIMEOUT,
+            RETRY_BACKOFF,
+            || async { self.get_ssh_session() }
+        )
+        .await
+    }
+
     fn block_on_bash_script(&self, script: &str) -> Result<String> {
         let session = self.block_on_ssh_session()?;
+        self.block_on_bash_script_from_session(&session, script)
+    }
+
+    async fn block_on_bash_script_async(&self, script: &str) -> Result<String> {
+        let session = self.block_on_ssh_session_async().await?;
         self.block_on_bash_script_from_session(&session, script)
     }
 

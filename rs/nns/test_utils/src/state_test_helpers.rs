@@ -1345,7 +1345,10 @@ pub fn nns_split_neuron(
     neuron_id: NeuronId,
     amount: u64,
 ) -> ManageNeuronResponse {
-    let command = ManageNeuronCommandRequest::Split(Split { amount_e8s: amount });
+    let command = ManageNeuronCommandRequest::Split(Split {
+        amount_e8s: amount,
+        memo: None,
+    });
 
     manage_neuron_or_panic(state_machine, sender, neuron_id, command)
 }
