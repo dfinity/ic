@@ -764,6 +764,7 @@ fn validate_canister_ranges(
 }
 
 fn main() -> Result<()> {
+    // TODO(CON-1487): test the `/api/v3` endpoints as well
     SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test_empty_paths_return_time))
