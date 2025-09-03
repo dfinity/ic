@@ -54,7 +54,7 @@ async fn main() {
     let mut total_processed_block_hashes: usize = 0;
     let mut processed_block_hashes: Vec<BlockHash> = vec![];
     let mut current_anchor = block_0.block_hash();
-    let mut rpc_client = setup_client(cli.uds_path).await;
+    let mut rpc_client = setup_client(cli.uds_path.clone()).await;
     let total_timer = Instant::now();
 
     loop {
@@ -77,7 +77,12 @@ async fn main() {
                 tonic::Code::Cancelled | tonic::Code::Unavailable => continue,
                 _ => {
                     println!("status = {:?}", status);
-                    break;
+                    sleep(interval_sleep_ms).await;
+                    println!("Reconnecting ... ");
+                    rpc_client = setup_client(cli.uds_path.clone()).await;
+                    sleep(interval_sleep_ms).await;
+                    println!("Reconnected");
+                    continue
                 }
             },
         };
