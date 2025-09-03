@@ -4,6 +4,7 @@ use crate::sign::multi_sig::MultiSigVerifierInternal;
 use crate::sign::multi_sig::MultiSignerInternal;
 use crate::sign::threshold_sig::{ThresholdSigVerifierInternal, ThresholdSignerInternal};
 use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
+use ic_crypto_internal_csp::types::CspPublicCoefficients;
 use ic_crypto_internal_csp::types::{CspPublicKey, CspSignature};
 use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_crypto_internal_threshold_sig_bls12381::api::bls_signature_cache_statistics;
@@ -34,6 +35,8 @@ use ic_types::crypto::{
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
+use threshold_sig::initial_high_threshold_ni_dkg_transcript_from_registry;
+use threshold_sig::map_verify_combined_error;
 
 pub(crate) use basic_sig::{BasicSigVerifierInternal, BasicSignerInternal};
 pub(crate) use threshold_sig::lazily_calculated_public_key_from_store;
@@ -983,6 +986,33 @@ impl<C: CryptoServiceProvider> ThresholdSchnorrSigVerifier for CryptoComponentIm
             crypto.error => log_err(result.as_ref().err()),
         );
         result
+    }
+}
+
+pub struct CupValidator(pub Arc<dyn RegistryClient>);
+
+impl<T: Signable> ThresholdSigVerifierByPublicKey<T> for CupValidator {
+    fn verify_combined_threshold_sig_by_public_key(
+        &self,
+        signature: &CombinedThresholdSigOf<T>,
+        message: &T,
+        subnet_id: SubnetId,
+        version: RegistryVersion,
+    ) -> CryptoResult<()> {
+        let csp_signature = CspSignature::try_from(signature)?;
+        let transcript = initial_high_threshold_ni_dkg_transcript_from_registry(
+            self.0.as_ref(),
+            subnet_id,
+            version,
+        )?;
+        let csp_pub_coeffs = CspPublicCoefficients::from(&transcript);
+        Csp::threshold_verify_combined_signature(
+            AlgorithmId::from(&csp_pub_coeffs),
+            message.as_signed_bytes().as_slice(),
+            csp_signature,
+            csp_pub_coeffs,
+        )
+        .map_err(map_verify_combined_error)
     }
 }
 
