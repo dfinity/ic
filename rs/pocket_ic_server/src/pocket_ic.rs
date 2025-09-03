@@ -1112,7 +1112,7 @@ impl PocketIcSubnets {
                 .map(|icp_features|
                   // using `EmptyConfig { }` explicitly
                   // to force an update after adding a new field to `EmptyConfig`
-                  matches!(icp_features.cycles_minting, Some(EmptyConfig {})))
+                  matches!(icp_features.cycles_token, Some(EmptyConfig {})))
                 .unwrap_or_default()
             {
                 Some(CYCLES_LEDGER_CANISTER_ID)
