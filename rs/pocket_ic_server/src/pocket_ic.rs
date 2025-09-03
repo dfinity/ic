@@ -182,11 +182,14 @@ const CONTENT_TYPE_CBOR: HeaderValue = HeaderValue::from_static("application/cbo
 
 fn default_timestamp(icp_features: &Option<IcpFeatures>) -> SystemTime {
     // To set the ICP/XDR conversion rate, the PocketIC time (in seconds) must be strictly larger than the default timestamp in CMC state.
-    if icp_features
+    let cycles_minting_feature = icp_features
         .as_ref()
-        .map(|icp_features| icp_features.cycles_minting)
-        .unwrap_or_default()
-    {
+        .map(|icp_features|
+            // using `EmptyConfig { }` explicitly
+            // to force an update after adding a new field to `EmptyConfig`
+            matches!(icp_features.cycles_minting, Some(EmptyConfig {})))
+        .unwrap_or_default();
+    if cycles_minting_feature {
         UNIX_EPOCH + Duration::from_secs(DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS + 1)
     } else {
         GENESIS.into()
@@ -947,28 +950,44 @@ impl PocketIcSubnets {
                 ii,
                 nns_ui,
             } = icp_features;
-            if registry {
+            // using `EmptyConfig { }` explicitly
+            // to force an update after adding a new field to `EmptyConfig`
+            if let Some(EmptyConfig {}) = registry {
                 self.update_registry();
             }
-            if cycles_minting {
+            // using `EmptyConfig { }` explicitly
+            // to force an update after adding a new field to `EmptyConfig`
+            if let Some(EmptyConfig {}) = cycles_minting {
                 self.update_cmc();
             }
-            if icp_token {
+            // using `EmptyConfig { }` explicitly
+            // to force an update after adding a new field to `EmptyConfig`
+            if let Some(EmptyConfig {}) = icp_token {
                 self.deploy_icp_token();
             }
-            if cycles_token {
+            // using `EmptyConfig { }` explicitly
+            // to force an update after adding a new field to `EmptyConfig`
+            if let Some(EmptyConfig {}) = cycles_token {
                 self.deploy_cycles_token();
             }
-            if nns_governance {
+            // using `EmptyConfig { }` explicitly
+            // to force an update after adding a new field to `EmptyConfig`
+            if let Some(EmptyConfig {}) = nns_governance {
                 self.deploy_nns_governance();
             }
-            if sns {
+            // using `EmptyConfig { }` explicitly
+            // to force an update after adding a new field to `EmptyConfig`
+            if let Some(EmptyConfig {}) = sns {
                 self.deploy_sns();
             }
-            if ii {
+            // using `EmptyConfig { }` explicitly
+            // to force an update after adding a new field to `EmptyConfig`
+            if let Some(EmptyConfig {}) = ii {
                 self.deploy_ii();
             }
-            if nns_ui {
+            // using `EmptyConfig { }` explicitly
+            // to force an update after adding a new field to `EmptyConfig`
+            if let Some(EmptyConfig {}) = nns_ui {
                 self.deploy_nns_ui();
             }
         }
@@ -1100,7 +1119,10 @@ impl PocketIcSubnets {
             let cycles_ledger_canister_id = if self
                 .icp_features
                 .as_ref()
-                .map(|icp_features| icp_features.cycles_token)
+                .map(|icp_features|
+                  // using `EmptyConfig { }` explicitly
+                  // to force an update after adding a new field to `EmptyConfig`
+                  matches!(icp_features.cycles_token, Some(EmptyConfig {})))
                 .unwrap_or_default()
             {
                 Some(CYCLES_LEDGER_CANISTER_ID)
@@ -2129,7 +2151,7 @@ impl PocketIc {
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
-        allow_incomplete_state: Option<bool>,
+        allow_incomplete_state: Option<EmptyConfig>,
         initial_time: Option<Time>,
         auto_progress_enabled: bool,
         gateway_port: Option<u16>,
@@ -2191,7 +2213,9 @@ impl PocketIc {
                     if let Some(allocation_range) = config.alloc_range {
                         range_gen.add_assigned(vec![allocation_range]).unwrap();
                     }
-                    let expected_state_time = if let Some(true) = allow_incomplete_state {
+                    // using `EmptyConfig { }` explicitly
+                    // to force an update after adding a new field to `EmptyConfig`
+                    let expected_state_time = if let Some(EmptyConfig {}) = allow_incomplete_state {
                         None
                     } else {
                         Some(topology.time)
