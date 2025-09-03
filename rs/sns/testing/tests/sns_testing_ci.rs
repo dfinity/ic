@@ -121,10 +121,7 @@ async fn test_sns_testing_dev_nns_neuron_id() {
     let state_dir = TempDir::new().unwrap();
     let state_dir = state_dir.path().to_path_buf();
 
-    let dev_participant_id = PrincipalId(
-        Principal::from_text("wztqp-aztft-mjkys-ircom-di7v5-upcuq-ohaon-yvite-pmtpw-b37l5-uqe")
-            .unwrap(),
-    );
+    let dev_participant_id = DEV_PARTICIPANT_ID;
 
     let (_pocket_ic, dev_nns_neuron_id) =
         prepare_network_for_test(dev_participant_id, state_dir).await;
