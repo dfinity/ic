@@ -99,7 +99,7 @@ fn check_legacy_get_blocks(
     result: &GetBlocksResult,
     request: &GetBlocksRequest,
 ) {
-    let legacy_response = get_blocks(&env, canister_id, request);
+    let legacy_response = get_blocks(env, canister_id, request);
 
     assert_eq!(result.log_length, legacy_response.chain_length);
     assert_eq!(result.archived_blocks, vec![]);
