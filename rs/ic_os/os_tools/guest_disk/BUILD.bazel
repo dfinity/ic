@@ -33,7 +33,7 @@ rust_binary(
     target_compatible_with = [
         "@platforms//os:linux",
     ],
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + [":guest_disk_lib"],
 )
 
 rust_library(
