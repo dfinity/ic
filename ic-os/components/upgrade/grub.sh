@@ -42,7 +42,7 @@ write_grubenv() {
     local TMP_FILE=$(mktemp "${GRUBENV_DIR}/grubenv-XXXXXXXXXXXX")
 
     # Ensure cleanup on exit
-    trap 'rm -f "${TMP_FILE}"' EXIT
+    trap 'rm -f "${TMP_FILE}" "${BACKUP_FILE}"' EXIT
 
     # Write content to temporary file
     (
@@ -104,10 +104,6 @@ write_grubenv() {
     if [ "$sync_success" = false ]; then
         echo "Error: Failed to sync grubenv file to disk after $sync_retries attempts" >&2
         return 1
-    fi
-
-    if [ -f "${BACKUP_FILE}" ]; then
-        rm -f "${BACKUP_FILE}"
     fi
 
     echo "Successfully updated grubenv file: boot_alternative=$boot_alternative, boot_cycle=$boot_cycle"
