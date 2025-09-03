@@ -272,7 +272,7 @@ where
 
 const LOCAL_IP: net::Ipv4Addr = net::Ipv4Addr::new(127, 0, 0, 1);
 
-/// Bitcoin daemon.
+/// Bitcoin or Dogecoin daemon.
 pub struct Daemon<T: RpcClientType> {
     /// RPC client that connects to this Bitcoin daemon.
     pub rpc_client: RpcClient<T>,
@@ -331,9 +331,9 @@ impl<'a> Default for Conf<'a> {
 }
 
 impl<T: RpcClientType> Daemon<T> {
-    /// Create a new Bitcoin daemon by running the executable at the given path, network and
+    /// Create a new daemon by running the executable at the given path, network and
     /// configration.
-    pub fn new(bitcoind_path: &str, network: T, conf: Conf) -> Result<Daemon<T>, RpcError> {
+    pub fn new(daemon_path: &str, network: T, conf: Conf) -> Result<Daemon<T>, RpcError> {
         let work_dir = match conf.work_dir {
             Some(dir) => {
                 fs::create_dir_all(dir.clone())?;
@@ -371,7 +371,7 @@ impl<T: RpcClientType> Daemon<T> {
             process::Stdio::null()
         };
 
-        let mut process = process::Command::new(bitcoind_path)
+        let mut process = process::Command::new(daemon_path)
             .arg("-printtoconsole")
             .arg(format!("-conf={}", conf_path.display()))
             .arg(format!("-datadir={}", work_dir.path().display()))

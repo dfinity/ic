@@ -1,13 +1,13 @@
-use crate::utils::RpcClient;
-use bitcoin::{block::Header, consensus::deserialize, Address, Amount, Block};
+use crate::IcRpcClientType;
+use bitcoin::{consensus::deserialize, Amount};
 use candid::{Encode, Principal};
 use ic_agent::{agent::RejectCode, Agent, AgentError};
-use ic_btc_adapter_test_utils::rpc_client::ListUnspentResultEntry;
+use ic_btc_adapter_test_utils::rpc_client::{ListUnspentResultEntry, RpcClient, RpcClientType};
 use ic_config::execution_environment::BITCOIN_MAINNET_CANISTER_ID;
 use ic_management_canister_types_private::{
     BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsRequestInitial, BitcoinGetSuccessorsResponse,
-    BitcoinGetSuccessorsResponsePartial, BitcoinNetwork, BitcoinSendTransactionInternalArgs,
-    Method as Ic00Method, Payload,
+    BitcoinGetSuccessorsResponsePartial, BitcoinSendTransactionInternalArgs, Method as Ic00Method,
+    Payload,
 };
 use ic_system_test_driver::util::{MessageCanister, MESSAGE_CANISTER_WASM};
 use ic_types::PrincipalId;
@@ -23,13 +23,14 @@ use std::{str::FromStr, time::Duration};
 /// This allows to make arbitrary calls to the adapter, but they will go through the
 /// entire replica code path.
 #[derive(Clone)]
-pub struct AdapterProxy<'a> {
+pub struct AdapterProxy<'a, T: IcRpcClientType> {
+    _network: T,
     msg_can: MessageCanister<'a>,
     log: Logger,
 }
 
-impl<'a> AdapterProxy<'a> {
-    pub async fn new(agent: &'a Agent, log: Logger) -> Self {
+impl<'a, T: IcRpcClientType> AdapterProxy<'a, T> {
+    pub async fn new(_network: T, agent: &'a Agent, log: Logger) -> Self {
         let bitcoin_principal_id = PrincipalId::from_str(BITCOIN_MAINNET_CANISTER_ID).unwrap();
         let bitcoin_principal = bitcoin_principal_id.into();
 
@@ -62,7 +63,11 @@ impl<'a> AdapterProxy<'a> {
         };
 
         let msg_can = MessageCanister::from_canister_id(agent, bitcoin_principal_id.into());
-        Self { msg_can, log }
+        Self {
+            _network,
+            msg_can,
+            log,
+        }
     }
 
     /// Make a `bitcoin_get_succesors` call
@@ -70,10 +75,10 @@ impl<'a> AdapterProxy<'a> {
         &self,
         anchor: Vec<u8>,
         headers: Vec<Vec<u8>>,
-    ) -> Result<(Vec<Block>, Vec<Header>), AgentError> {
+    ) -> Result<(Vec<T::Block>, Vec<T::Header>), AgentError> {
         let get_successors_request =
             BitcoinGetSuccessorsArgs::Initial(BitcoinGetSuccessorsRequestInitial {
-                network: BitcoinNetwork::BitcoinMainnet,
+                network: T::REGTEST_REPLICA,
                 anchor,
                 processed_block_hashes: headers,
             });
@@ -101,13 +106,13 @@ impl<'a> AdapterProxy<'a> {
         let blocks = blocks
             .iter()
             .map(|block| {
-                deserialize::<Block>(block).expect("Failed to deserialize a bitcoin block")
+                deserialize::<T::Block>(block).expect("Failed to deserialize a bitcoin block")
             })
             .collect();
         let next = next
             .iter()
             .map(|next| {
-                deserialize::<Header>(next).expect("Failed to deserialize a bitcoin header")
+                deserialize::<T::Header>(next).expect("Failed to deserialize a bitcoin header")
             })
             .collect();
 
@@ -118,7 +123,7 @@ impl<'a> AdapterProxy<'a> {
     /// Make a `bitcoin_send_tx` call
     pub async fn send_tx(&self, transaction: Vec<u8>) -> Result<(), AgentError> {
         let send_tx_request = BitcoinSendTransactionInternalArgs {
-            network: BitcoinNetwork::BitcoinMainnet,
+            network: T::REGTEST_REPLICA,
             transaction,
         };
 
@@ -140,7 +145,7 @@ impl<'a> AdapterProxy<'a> {
         anchor: Vec<u8>,
         max_num_blocks: usize,
         max_tries: u64,
-    ) -> Result<Vec<Block>, AgentError> {
+    ) -> Result<Vec<T::Block>, AgentError> {
         let mut blocks = vec![];
         let mut tries = 0;
 
@@ -164,7 +169,7 @@ impl<'a> AdapterProxy<'a> {
 
             let new_headers = new_blocks
                 .iter()
-                .map(|block| block.block_hash()[..].to_vec())
+                .map(|block| T::block_hash(block)[..].to_vec())
                 .collect::<Vec<_>>();
 
             headers.extend(new_headers);
@@ -211,16 +216,16 @@ impl<'a> AdapterProxy<'a> {
     }
 }
 
-pub fn fund_with_btc(
-    to_fund_client: &RpcClient,
-    to_fund_address: &Address,
+pub fn fund_with_btc<T: RpcClientType>(
+    to_fund_client: &RpcClient<T>,
+    to_fund_address: &T::Address,
 ) -> ListUnspentResultEntry {
     let initial_amount = to_fund_client
-        .get_received_by_address(to_fund_address, Some(0))
+        .get_balance_of(None, to_fund_address)
         .unwrap();
 
     let initial_height = to_fund_client.get_blockchain_info().unwrap().blocks;
-    let expected_rewards = calculate_regtest_reward(initial_height);
+    let expected_rewards = calculate_regtest_reward::<T>(initial_height);
 
     let initial_utxos = to_fund_client.list_unspent(None, None).unwrap();
 
@@ -228,19 +233,19 @@ pub fn fund_with_btc(
         .generate_to_address(1, to_fund_address)
         .unwrap();
 
-    // Generate 100 blocks for coinbase maturity
+    let blackhole_address = to_fund_client.get_new_address().unwrap();
     to_fund_client
-        .generate_to_address(100, &get_blackhole_address())
+        .generate_to_address(T::REGTEST_COINBASE_MATURITY, &blackhole_address)
         .unwrap();
 
     assert_eq!(
         to_fund_client.get_blockchain_info().unwrap().blocks,
-        initial_height + 101
+        initial_height + T::REGTEST_COINBASE_MATURITY + 1
     );
 
     assert_eq!(
         to_fund_client
-            .get_received_by_address(to_fund_address, Some(0))
+            .get_balance_of(None, to_fund_address)
             .unwrap(),
         initial_amount + expected_rewards
     );
@@ -259,14 +264,8 @@ pub fn fund_with_btc(
     coinbase_utxo
 }
 
-fn calculate_regtest_reward(height: u64) -> Amount {
+fn calculate_regtest_reward<T: RpcClientType>(height: u64) -> Amount {
     let halvings = (height / 150) as u32;
-    let base_reward = Amount::from_btc(50.0).unwrap();
+    let base_reward = T::REGTEST_INITIAL_BLOCK_REWARDS;
     base_reward / 2u64.pow(halvings)
-}
-
-pub fn get_blackhole_address() -> Address {
-    Address::from_str("mipcBbFg9gMiCh81Kj8tqqdgoZub1ZJRfn")
-        .unwrap()
-        .assume_checked()
 }
