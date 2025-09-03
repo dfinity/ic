@@ -1,9 +1,12 @@
 use candid::Principal;
 use candid::{CandidType, Encode};
 use ic_base_types::SubnetId;
-use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_ledger_core::Tokens;
-use ic_nns_constants::{ROOT_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID};
+use ic_nns_constants::{
+    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
+    LEDGER_INDEX_CANISTER_ID, NNS_UI_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
+    SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
@@ -150,41 +153,35 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
         .await;
     });
 
-    // deploy the ckETH ledger canister (ICRC1-ledger with "ckETH" as token symbol and name) required by NNS dapp
-    let cketh_init_args = InitArgsBuilder::for_tests()
-        .with_token_symbol("ckETH".to_string())
-        .with_token_name("ckETH".to_string())
-        .build();
-    let cketh_canister_id = nns_node.create_and_install_canister_with_arg(
-        &env::var("IC_ICRC1_LEDGER_WASM_PATH").expect("IC_ICRC1_LEDGER_WASM_PATH not set"),
-        Some(Encode!(&(LedgerArgument::Init(cketh_init_args))).unwrap()),
-    );
-
     // now that we know all required canister IDs, install the NNS dapp
     let nns_agent = nns_node.build_default_agent();
     let nns_dapp_wasm = load_wasm(env::var("NNS_DAPP_WASM_PATH").unwrap());
     let logger = env.logger();
     block_on(async move {
+        // The configuration values have been adapted from
+        // `https://github.com/dfinity/nns-dapp/blob/5126b011ac52f9f8544c37d18bc15603756a7e3c/scripts/nns-dapp/test-config-assets/mainnet/arg.did`.
         let nns_dapp_metadata = vec![
-            ("API_HOST".to_string(), ic_gateway_url.to_string()),
-            ("CKETH_INDEX_CANISTER_ID".to_string(), cketh_canister_id.to_string()),
-            ("CKETH_LEDGER_CANISTER_ID".to_string(), cketh_canister_id.to_string()),
-            ("CYCLES_MINTING_CANISTER_ID".to_string(), "rkp4c-7iaaa-aaaaa-aaaca-cai".to_string()),
-            ("DFX_NETWORK".to_string(), "farm".to_string()),
-            ("FEATURE_FLAGS".to_string(), "{\"ENABLE_CKBTC\":false,\"ENABLE_CKTESTBTC\":false,\"ENABLE_HIDE_ZERO_BALANCE\":true,\"ENABLE_VOTING_INDICATION\":true}".to_string()),
-            ("FETCH_ROOT_KEY".to_string(), "true".to_string()),
-            ("GOVERNANCE_CANISTER_ID".to_string(), "rrkah-fqaaa-aaaaa-aaaaq-cai".to_string()),
-            ("HOST".to_string(), ic_gateway_url.to_string()),
-            ("IDENTITY_SERVICE_URL".to_string(), format!("https://{}.{}",  ii_canister_id, ic_gateway_domain)),
-            ("INDEX_CANISTER_ID".to_string(), "ryjl3-tyaaa-aaaaa-aaaba-cai".to_string()),
-            ("LEDGER_CANISTER_ID".to_string(), "ryjl3-tyaaa-aaaaa-aaaba-cai".to_string()),
-            ("OWN_CANISTER_ID".to_string(), nns_dapp_canister_id.to_string()),
-            ("ROBOTS".to_string(), "<meta name=\"robots\" content=\"noindex, nofollow\" />".to_string()),
-            ("SNS_AGGREGATOR_URL".to_string(), sns_aggregator_canister_id.map(|s| format!("https://{}.{}", s, ic_gateway_domain)).unwrap_or_default()),
-            ("STATIC_HOST".to_string(), ic_gateway_url.to_string()),
-            ("TVL_CANISTER_ID".to_string(), "".to_string()),
-            ("WASM_CANISTER_ID".to_string(), "qaa6y-5yaaa-aaaaa-aaafa-cai".to_string())
-        ];
+              ("API_HOST".to_string(), ic_gateway_url.to_string()),
+              ("CYCLES_MINTING_CANISTER_ID".to_string(), CYCLES_MINTING_CANISTER_ID.to_string()),
+              ("DFX_NETWORK".to_string(), "local".to_string()),
+              ("FEATURE_FLAGS".to_string(), "{\"DISABLE_CKTOKENS\":true,\"DISABLE_IMPORT_TOKEN_VALIDATION_FOR_TESTING\":false,\"ENABLE_APY_PORTFOLIO\":true,\"ENABLE_CKTESTBTC\":false,\"ENABLE_DISBURSE_MATURITY\":true,\"ENABLE_LAUNCHPAD_REDESIGN\":true,\"ENABLE_NEW_TABLES\":true,\"ENABLE_NNS_TOPICS\":false,\"ENABLE_SNS_TOPICS\":true}".to_string()),
+              ("FETCH_ROOT_KEY".to_string(), "true".to_string()),
+              ("GOVERNANCE_CANISTER_ID".to_string(), GOVERNANCE_CANISTER_ID.to_string()),
+              ("HOST".to_string(), ic_gateway_url.to_string()),
+              /* ICP swap canister is not deployed by the test driver! */
+              ("ICP_SWAP_URL".to_string(), format!("https://uvevg-iyaaa-aaaak-ac27q-cai.raw.{}/", ic_gateway_domain)),
+              ("IDENTITY_SERVICE_URL".to_string(), format!("https://{}.localhost:{}", IDENTITY_CANISTER_ID, ic_gateway_domain)),
+              ("INDEX_CANISTER_ID".to_string(), LEDGER_INDEX_CANISTER_ID.to_string()),
+              ("LEDGER_CANISTER_ID".to_string(), LEDGER_CANISTER_ID.to_string()),
+              ("OWN_CANISTER_ID".to_string(), NNS_UI_CANISTER_ID.to_string()),
+              /* plausible.io API won't work anyway so the value of `PLAUSIBLE_DOMAIN` is pretty much arbitrary */
+              ("PLAUSIBLE_DOMAIN".to_string(), format!("{}.{}", NNS_UI_CANISTER_ID, ic_gateway_domain)),
+              ("ROBOTS".to_string(), "".to_string()),
+              ("SNS_AGGREGATOR_URL".to_string(), format!("https://{}.{}", sns_aggregator_canister_id.unwrap_or(SNS_AGGREGATOR_CANISTER_ID.into()), ic_gateway_domain)),
+              ("STATIC_HOST".to_string(), ic_gateway_url.to_string()),
+              ("TVL_CANISTER_ID".to_string(), NNS_UI_CANISTER_ID.to_string()),
+              ("WASM_CANISTER_ID".to_string(), SNS_WASM_CANISTER_ID.to_string()),
+            ];
         let nns_dapp_init_args = Some(CanisterArguments {
             args: nns_dapp_metadata,
             schema: Some(SchemaLabel::AccountsInStableMemory),
