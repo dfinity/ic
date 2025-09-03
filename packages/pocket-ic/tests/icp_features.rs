@@ -54,24 +54,6 @@ fn all_icp_features_but_nns_ui() -> IcpFeatures {
     }
 }
 
-#[test]
-fn test_no_canister_http_without_auto_progress() {
-    let pic = PocketIcBuilder::new()
-        .with_icp_features(all_icp_features_but_nns_ui())
-        .build();
-
-    // No canister http outcalls should be made
-    // (because we did not enable auto progress when creating the PocketIC instance
-    // and the system canisters should be configured to make no canister http outcalls
-    // in this case).
-    // We advance time and execute a few more rounds in case they were only made on timers.
-    for _ in 0..10 {
-        pic.advance_time(Duration::from_secs(1));
-        pic.tick();
-    }
-    assert!(pic.get_canister_http().is_empty());
-}
-
 fn resolving_client(pic: &PocketIc, host: String) -> Client {
     // Windows doesn't automatically resolve localhost subdomains.
     if cfg!(windows) {
@@ -88,6 +70,38 @@ fn resolving_client(pic: &PocketIc, host: String) -> Client {
     } else {
         Client::new()
     }
+}
+
+#[test]
+#[should_panic(
+    expected = "The `nns_ui` feature requires an HTTP gateway to be created via `http_gateway_config`."
+)]
+fn nns_ui_requires_http_gateway() {
+    let _pic = PocketIcBuilder::new()
+        .with_icp_features(IcpFeatures::all_icp_features())
+        .build();
+}
+
+#[test]
+#[should_panic(
+    expected = "The `nns_ui` feature requires the `registry` feature to be enabled, too."
+)]
+fn nns_ui_requires_other_icp_features() {
+    let instance_http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: None,
+    };
+    let icp_features = IcpFeatures {
+        nns_ui: Some(EmptyConfig {}),
+        ..Default::default()
+    };
+    let _pic = PocketIcBuilder::new()
+        .with_icp_features(icp_features)
+        .with_auto_progress(None)
+        .with_http_gateway(instance_http_gateway_config)
+        .build();
 }
 
 fn frontend_smoke_test(frontend_canister_id: Principal, expected_str: &str) {
@@ -131,6 +145,24 @@ fn test_ii() {
     let ii_canister_id = Principal::from_text("rdmx6-jaaaa-aaaaa-aaadq-cai").unwrap();
 
     frontend_smoke_test(ii_canister_id, "<title>Internet Identity</title>");
+}
+
+#[test]
+fn test_no_canister_http_without_auto_progress() {
+    let pic = PocketIcBuilder::new()
+        .with_icp_features(all_icp_features_but_nns_ui())
+        .build();
+
+    // No canister http outcalls should be made
+    // (because we did not enable auto progress when creating the PocketIC instance
+    // and the system canisters should be configured to make no canister http outcalls
+    // in this case).
+    // We advance time and execute a few more rounds in case they were only made on timers.
+    for _ in 0..10 {
+        pic.advance_time(Duration::from_secs(1));
+        pic.tick();
+    }
+    assert!(pic.get_canister_http().is_empty());
 }
 
 #[test]

@@ -37,10 +37,11 @@ use ic_http_endpoints_public::{cors_layer, query, read_state};
 use ic_types::{CanisterId, SubnetId};
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
-    HttpGatewayDetails, InitialTime, InstanceConfig, MockCanisterHttpResponse, NonmainnetFeatures,
-    RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult,
-    RawCycles, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId,
-    RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, TickConfigs, Topology,
+    HttpGatewayDetails, IcpFeatures, InitialTime, InstanceConfig, MockCanisterHttpResponse,
+    NonmainnetFeatures, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
+    RawCanisterResult, RawCycles, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
+    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, TickConfigs,
+    Topology,
 };
 use pocket_ic::RejectResponse;
 use serde::Serialize;
@@ -1333,6 +1334,49 @@ pub async fn create_instance(
                 message: "Creating an HTTP gateway requires `AutoProgress` to be enabled via `initial_time`.".to_string()
             }),
         );
+    }
+
+    if let Some(ref icp_features) = instance_config.icp_features {
+        // using `let IcpFeatures { }` with explicit field names
+        // to force an update after adding a new field to `IcpFeatures`
+        let IcpFeatures {
+            registry,
+            cycles_minting,
+            icp_token,
+            /* `nns_ui` does not depend on `cycles_token` */
+            cycles_token: _,
+            nns_governance,
+            sns,
+            ii,
+            nns_ui,
+        } = icp_features;
+        if nns_ui.is_some() {
+            if instance_config.http_gateway_config.is_none() {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(rest::CreateInstanceResponse::Error {
+                        message: "The `nns_ui` feature requires an HTTP gateway to be created via `http_gateway_config`.".to_string()
+                    }),
+                );
+            }
+            for (icp_feature, icp_feature_str) in [
+                (registry, "registry"),
+                (cycles_minting, "cycles_minting"),
+                (icp_token, "icp_token"),
+                (nns_governance, "nns_governance"),
+                (sns, "sns"),
+                (ii, "ii"),
+            ] {
+                if icp_feature.is_none() {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(rest::CreateInstanceResponse::Error {
+                            message: format!("The `nns_ui` feature requires the `{}` feature to be enabled, too.", icp_feature_str),
+                        }),
+                    );
+                }
+            }
+        }
     }
 
     match api_state
