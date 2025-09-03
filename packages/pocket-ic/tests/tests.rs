@@ -3431,7 +3431,7 @@ async fn with_http_gateway_config_invalid_gateway_https_config() {
     // after the failure, i.e., cleanup works.
     let instances = list_instances(&server_url).await;
     assert_eq!(instances.len(), 1);
-    assert_eq!(instances[1], "Deleted"); // an instance was temporarily created, but deleted before returning an error
+    assert_eq!(instances[0], "Deleted"); // an instance was temporarily created, but deleted before returning an error
     let http_gateways = list_http_gateways(&server_url).await;
     assert!(http_gateways.is_empty());
 }
