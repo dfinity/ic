@@ -258,7 +258,6 @@ pub async fn test_missing_nns_canisters() {
 #[tokio::test]
 pub async fn test_non_installed_target_canister() {
     let pocket_ic = PocketIcBuilder::new()
-        .with_all_icp_features()
         .with_nns_subnet()
         .with_sns_subnet()
         .with_ii_subnet()
@@ -293,7 +292,6 @@ pub async fn test_non_installed_target_canister() {
 #[tokio::test]
 pub async fn test_nonexisting_target_canister() {
     let pocket_ic = PocketIcBuilder::new()
-        .with_all_icp_features()
         .with_nns_subnet()
         .with_sns_subnet()
         .with_ii_subnet()
@@ -315,7 +313,6 @@ pub async fn test_nonexisting_target_canister() {
 #[tokio::test]
 pub async fn test_target_canister_not_controlled_by_nns_root() {
     let pocket_ic = PocketIcBuilder::new()
-        .with_all_icp_features()
         .with_nns_subnet()
         .with_sns_subnet()
         .with_ii_subnet()
