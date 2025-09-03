@@ -27,13 +27,6 @@ use ic_types::{NodeId, PrincipalId};
 use std::convert::TryFrom;
 use std::sync::Arc;
 
-const NODE_1: NodeId = NodeId::new(PrincipalId::new(
-    10,
-    [
-        1, 0, 0, 0, 0, 0, 0, 0, 0xfd, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    ],
-));
-
 #[cfg(test)]
 mod tests;
 
@@ -56,13 +49,13 @@ pub fn create_dealing<C: CspSigner>(
         internal_dealing_raw: vec![],
     };
 
-    sign_dealing(
-        csp_client,
-        registry,
-        unsigned_dealing,
-        *self_node_id,
-        params.registry_version(),
-    )
+    Ok(SignedIDkgDealing {
+        signature: BasicSignature {
+            signature: BasicSigOf::new(BasicSig(vec![])),
+            signer: *self_node_id,
+        },
+        content: unsigned_dealing,
+    })
 }
 
 fn sign_dealing<S: CspSigner>(
