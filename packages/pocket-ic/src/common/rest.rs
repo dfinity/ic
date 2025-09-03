@@ -34,6 +34,14 @@ pub struct HttpsConfig {
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct InstanceHttpGatewayConfig {
+    pub ip_addr: Option<String>,
+    pub port: Option<u16>,
+    pub domains: Option<Vec<String>>,
+    pub https_config: Option<HttpsConfig>,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct HttpGatewayConfig {
     pub ip_addr: Option<String>,
     pub port: Option<u16>,
@@ -68,6 +76,7 @@ pub enum CreateInstanceResponse {
     Created {
         instance_id: InstanceId,
         topology: Topology,
+        http_gateway_info: Option<HttpGatewayInfo>,
     },
     Error {
         message: String,
@@ -561,26 +570,26 @@ pub struct NonmainnetFeatures {
 /// during the PocketIC instance lifetime.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct IcpFeatures {
-    pub registry: bool,
+    pub registry: Option<EmptyConfig>,
     /// If the `cycles_minting` feature is enabled, then the default timestamp of a PocketIC instance is set to 10 May 2021 10:00:01 AM CEST (the smallest value that is strictly larger than the default timestamp hard-coded in the CMC state).
-    pub cycles_minting: bool,
-    pub icp_token: bool,
-    pub cycles_token: bool,
-    pub nns_governance: bool,
-    pub sns: bool,
-    pub ii: bool,
+    pub cycles_minting: Option<EmptyConfig>,
+    pub icp_token: Option<EmptyConfig>,
+    pub cycles_token: Option<EmptyConfig>,
+    pub nns_governance: Option<EmptyConfig>,
+    pub sns: Option<EmptyConfig>,
+    pub ii: Option<EmptyConfig>,
 }
 
 impl IcpFeatures {
     pub fn all_icp_features() -> Self {
         Self {
-            registry: true,
-            cycles_minting: true,
-            icp_token: true,
-            cycles_token: true,
-            nns_governance: true,
-            sns: true,
-            ii: true,
+            registry: Some(EmptyConfig {}),
+            cycles_minting: Some(EmptyConfig {}),
+            icp_token: Some(EmptyConfig {}),
+            cycles_token: Some(EmptyConfig {}),
+            nns_governance: Some(EmptyConfig {}),
+            sns: Some(EmptyConfig {}),
+            ii: Some(EmptyConfig {}),
         }
     }
 }
@@ -600,12 +609,13 @@ pub enum InitialTime {
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct InstanceConfig {
     pub subnet_config_set: ExtendedSubnetConfigSet,
+    pub http_gateway_config: Option<InstanceHttpGatewayConfig>,
     pub state_dir: Option<PathBuf>,
     pub nonmainnet_features: Option<NonmainnetFeatures>,
     pub log_level: Option<String>,
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
     pub icp_features: Option<IcpFeatures>,
-    pub allow_incomplete_state: Option<bool>,
+    pub allow_incomplete_state: Option<EmptyConfig>,
     pub initial_time: Option<InitialTime>,
 }
 
@@ -761,27 +771,33 @@ impl ExtendedSubnetConfigSet {
         } = icp_features;
         // NNS canisters
         for (flag, icp_feature_str) in [
-            (*registry, "registry"),
-            (*cycles_minting, "cycles_minting"),
-            (*icp_token, "icp_token"),
-            (*nns_governance, "nns_governance"),
-            (*sns, "sns"),
+            (registry, "registry"),
+            (cycles_minting, "cycles_minting"),
+            (icp_token, "icp_token"),
+            (nns_governance, "nns_governance"),
+            (sns, "sns"),
         ] {
-            if flag {
+            // using `EmptyConfig { }` explicitly
+            // to force an update after adding a new field to `EmptyConfig`
+            if let Some(EmptyConfig {}) = flag {
                 check_empty_subnet(&self.nns, "NNS", icp_feature_str)?;
                 self.nns = Some(self.nns.unwrap_or_default());
             }
         }
         // canisters on the II subnet
-        for (flag, icp_feature_str) in [(*cycles_token, "cycles_token"), (*ii, "ii")] {
-            if flag {
+        for (flag, icp_feature_str) in [(cycles_token, "cycles_token"), (ii, "ii")] {
+            // using `EmptyConfig { }` explicitly
+            // to force an update after adding a new field to `EmptyConfig`
+            if let Some(EmptyConfig {}) = flag {
                 check_empty_subnet(&self.ii, "II", icp_feature_str)?;
                 self.ii = Some(self.ii.unwrap_or_default());
             }
         }
         // canisters on the SNS subnet
-        for (flag, icp_feature_str) in [(*sns, "sns")] {
-            if flag {
+        for (flag, icp_feature_str) in [(sns, "sns")] {
+            // using `EmptyConfig { }` explicitly
+            // to force an update after adding a new field to `EmptyConfig`
+            if let Some(EmptyConfig {}) = flag {
                 check_empty_subnet(&self.sns, "SNS", icp_feature_str)?;
                 self.sns = Some(self.sns.unwrap_or_default());
             }

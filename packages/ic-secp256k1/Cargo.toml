@@ -13,9 +13,9 @@ documentation.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-candid = { workspace = true }
 hex-literal = "0.4"
 hmac = "0.12"
+ic_principal = { version = "0.1.1", default-features = false }
 k256 = { workspace = true }
 num-bigint = { workspace = true }
 pem = "1.1.0"

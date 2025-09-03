@@ -204,6 +204,7 @@ default_vm_resources = {
 
 def system_test(
         name,
+        test_name = None,
         test_driver_target = None,
         runtime_deps = [],
         tags = [],
@@ -237,6 +238,7 @@ def system_test(
 
     Args:
       name: base name to use for the binary and test rules.
+      test_name: optional name for the test, useful when the test name is different than name.
       test_driver_target: optional string to identify the target of the test driver binary. Defaults to None which means declare a rust_binary from <name>.rs.
       runtime_deps: dependencies to make available to the test when it runs.
       tags: additional tags for the system_test.
@@ -288,8 +290,11 @@ def system_test(
     # Convert env to a mutable dictionary
     env = dict(env)
 
+    if test_name == None:
+        test_name = name
+
     if test_driver_target == None:
-        bin_name = name + "_bin"
+        bin_name = test_name + "_bin"
         original_srcs = kwargs.pop("srcs", [])
         rust_binary(
             name = bin_name,
@@ -438,7 +443,7 @@ def system_test(
         deps = deps + UNIVERSAL_VM_RUNTIME_DEPS
 
     run_system_test(
-        name = name,
+        name = test_name,
         src = test_driver_target,
         runtime_deps = deps,
         env_deps = _env_deps,
@@ -455,7 +460,7 @@ def system_test(
     )
 
     env = env | {
-        "COLOCATED_TEST": name,
+        "COLOCATED_TEST": test_name,
         "COLOCATED_TEST_DRIVER_VM_REQUIRED_HOST_FEATURES": json.encode(colocated_test_driver_vm_required_host_features),
         "COLOCATED_TEST_DRIVER_VM_RESOURCES": json.encode(colocated_test_driver_vm_resources),
     }
@@ -474,7 +479,7 @@ def system_test(
             deps.append(dep)
 
     run_system_test(
-        name = name + "_colocate",
+        name = test_name + "_colocate",
         src = "//rs/tests/idx:colocate_test_bin",
         colocated_test_bin = test_driver_target,
         runtime_deps = deps + [

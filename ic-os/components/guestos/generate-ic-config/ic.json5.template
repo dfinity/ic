@@ -134,6 +134,15 @@
         // specified in the systemd socket file.
         bitcoin_mainnet_uds_path: "/run/ic-node/bitcoin-mainnet-adapter/socket",
         bitcoin_mainnet_uds_metrics_path: "/run/ic-node/bitcoin-mainnet-adapter/metrics",
+        // IPC socket and metrics path for DOGE Testnet adapter. This UDS path has to be the same as
+        // specified in the systemd socket file.
+        // The DOGE adapter socket file is: ic-doge-testnet-adapter.socket
+        dogecoin_testnet_uds_path: "/run/ic-node/dogecoin-testnet-adapter/socket",
+        dogecoin_testnet_uds_metrics_path: "/run/ic-node/dogecoin-testnet-adapter/metrics",
+        // IPC socket and metrics path for DOGE Mainnet adapter. This UDS path has to be the same as
+        // specified in the systemd socket file.
+        dogecoin_mainnet_uds_path: "/run/ic-node/dogecoin-mainnet-adapter/socket",
+        dogecoin_mainnet_uds_metrics_path: "/run/ic-node/dogecoin-mainnet-adapter/metrics",
         // IPC socket and metrics path for canister http adapter. These UDS path has to be the same as
         // specified in the systemd socket file.
         // The canister http adapter socket file is: ic-https-outcalls-adapter.socket

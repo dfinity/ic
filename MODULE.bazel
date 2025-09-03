@@ -136,6 +136,16 @@ oci.pull(
 )
 use_repo(oci, "bitcoind", "bitcoind_linux_amd64")
 
+# dogecoin container used in test
+oci.pull(
+    name = "dogecoind",
+    image = "ghcr.io/dfinity/fiftysix/dogecoin-core@sha256:13c8b150b759eed9e11ebaf0edfdf998022bfd622164c8768d7057b43e4e156c",
+    platforms = [
+        "linux/amd64",
+    ],
+)
+use_repo(oci, "dogecoind", "dogecoind_linux_amd64")
+
 # IC HTTP Gateway container used in tests
 oci.pull(
     name = "ic_gatewayd",
@@ -818,6 +828,20 @@ filegroup(
         "https://bitcoin.org/bin/bitcoin-core-27.0/bitcoin-27.0-arm64-apple-darwin.tar.gz",
         "https://bitcoincore.org/bin/bitcoin-core-27.0/bitcoin-27.0-arm64-apple-darwin.tar.gz",
     ],
+)
+
+http_archive(
+    name = "dogecoin_core_linux_x86",
+    build_file_content = """
+package(default_visibility = ["//visibility:public"])
+filegroup(
+    name = "dogecoind",
+    srcs = ["bin/dogecoind"],
+)
+""",
+    sha256 = "4f227117b411a7c98622c970986e27bcfc3f547a72bef65e7d9e82989175d4f8",
+    strip_prefix = "dogecoin-1.14.9",
+    url = "https://github.com/dogecoin/dogecoin/releases/download/v1.14.9/dogecoin-1.14.9-x86_64-linux-gnu.tar.gz",
 )
 
 http_file(

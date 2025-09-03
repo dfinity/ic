@@ -11,6 +11,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/bitcoin/adapter",
+        "//rs/config",
         "@crate_index//:bitcoin",
         "@crate_index//:flate2",
         "@crate_index//:hex",

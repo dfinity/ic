@@ -1,0 +1,19 @@
+[Unit]
+Description=IC Dogecoin Testnet Adapter Service Provider
+After=bootstrap-ic-node.service
+Wants=bootstrap-ic-node.service
+After=network-online.target
+Wants=network-online.target
+Requires=ic-doge-testnet-adapter.socket
+StartLimitIntervalSec=0
+
+[Service]
+User=ic-replica
+Environment=RUST_BACKTRACE=1
+ExecStartPre=+/opt/ic/bin/generate-doge-adapter-config.sh -o /run/ic-node/config/ic-doge-testnet-adapter.json5
+ExecStart=/opt/ic/bin/ic-btc-adapter /run/ic-node/config/ic-doge-testnet-adapter.json5
+Restart=always
+
+[Install]
+WantedBy=ic-replica.service
+Also=ic-doge-testnet-adapter.socket

@@ -588,20 +588,15 @@ pub(crate) fn create_data_payload_helper(
     log: &ReplicaLogger,
 ) -> Result<Option<IDkgPayload>, IDkgPayloadError> {
     let height = parent_block.height().increment();
-    let summary = summary_block.payload.as_ref().as_summary();
 
-    // For this interval: context.registry_version from last summary block,
-    // which is the same as calling pool_reader.registry_version(height).
-    // which is the same as summary.dkg.registry_version,
-    let curr_interval_registry_version = summary.dkg.registry_version;
-    // For next interval: context.registry_version from the new summary block
+    // Note that the creation of key transcripts depends on the registry version of the summary block, i.e.
+    // for then next interval: context.registry_version from the new summary block
     let next_interval_registry_version = summary_block.context.registry_version;
 
-    let Some(chain_key_config) = get_idkg_chain_key_config_if_enabled(
-        subnet_id,
-        curr_interval_registry_version,
-        registry_client,
-    )?
+    // (Pre-)signatures are created according to the registry version of the current block, which is the
+    // same registry version used by execution when executing this block.
+    let Some(chain_key_config) =
+        get_idkg_chain_key_config_if_enabled(subnet_id, context.registry_version, registry_client)?
     else {
         return Ok(None);
     };

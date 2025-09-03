@@ -409,34 +409,15 @@ pub fn nns_recovery_test(env: TestEnv) {
     }
     info!(logger, "Success: New nodes have taken over the NNS subnet");
 
-    // Define faulty and healthy nodes, pick a DFINITY-owned node (could be healthy or faulty)
-    let mut nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
-    let dfinity_owned_node = nns_nodes.first().unwrap().clone();
-    nns_nodes.shuffle(&mut rand::thread_rng());
-    let f = (SUBNET_SIZE - 1) / 3;
-    let faulty_nodes = &nns_nodes[..(f + 1)];
-    let healthy_nodes = &nns_nodes[(f + 1)..];
-    info!(
-        logger,
-        "Selected DFINITY-owned NNS node: {} ({:?})",
-        dfinity_owned_node.node_id,
-        dfinity_owned_node.get_ip_addr()
-    );
-    info!(
-        logger,
-        "Selected faulty nodes: {:?}. Selected healthy nodes: {:?}",
-        faulty_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>(),
-        healthy_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>(),
-    );
-
     // Readiness wait: ensure the NNS subnet is healthy and making progress before writing
+    let nns_node = nns_subnet.nodes().next().unwrap();
     info!(
         logger,
         "Waiting for NNS subnet to become healthy and make progress after membership changes..."
     );
     cert_state_makes_progress_with_retries(
-        &dfinity_owned_node.get_public_url(),
-        dfinity_owned_node.effective_canister_id(),
+        &nns_node.get_public_url(),
+        nns_node.effective_canister_id(),
         &logger,
         Duration::from_secs(300),
         Duration::from_secs(10),
@@ -456,10 +437,7 @@ pub fn nns_recovery_test(env: TestEnv) {
         std::fs::read_to_string(&ssh_pub_key_path).expect("Failed to read SSH public key");
     let payload =
         get_updatesubnetpayload_with_keys(nns_subnet.subnet_id, None, Some(vec![ssh_pub_key]));
-    block_on(update_subnet_record(
-        dfinity_owned_node.get_public_url(),
-        payload,
-    ));
+    block_on(update_subnet_record(nns_node.get_public_url(), payload));
     let backup_mean = AuthMean::PrivateKey(ssh_priv_key);
     for node in nns_subnet.nodes() {
         info!(
@@ -474,14 +452,14 @@ pub fn nns_recovery_test(env: TestEnv) {
     info!(logger, "Ensure NNS subnet is functional");
     let msg = "subnet recovery works!";
     let app_can_id = store_message(
-        &dfinity_owned_node.get_public_url(),
-        dfinity_owned_node.effective_canister_id(),
+        &nns_node.get_public_url(),
+        nns_node.effective_canister_id(),
         msg,
         &logger,
     );
     assert!(can_read_msg(
         &logger,
-        &dfinity_owned_node.get_public_url(),
+        &nns_node.get_public_url(),
         app_can_id,
         msg
     ));
@@ -499,35 +477,18 @@ pub fn nns_recovery_test(env: TestEnv) {
     let output_dir = env.get_path("recovery_output");
     set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
 
-    let recovery_args = RecoveryArgs {
-        dir: recovery_dir,
-        nns_url: dfinity_owned_node.get_public_url(),
-        replica_version: Some(ic_version),
-        key_file: Some(ssh_priv_key_path.clone()),
-        test_mode: true,
-        skip_prompts: true,
-        use_local_binaries: false,
-    };
-
-    // unlike during a production recovery using the CLI, here we already know all of parameters
-    // ahead of time.
-    let subnet_args = NNSRecoverySameNodesArgs {
-        subnet_id: nns_subnet.subnet_id,
-        upgrade_version: Some(working_version.clone()),
-        replay_until_height: None, // We will set this after breaking the subnet, see below
-        upgrade_image_url: Some(get_guestos_update_img_url()),
-        upgrade_image_hash: Some(get_guestos_update_img_sha256()),
-        download_node: Some(dfinity_owned_node.get_ip_addr()),
-        upload_method: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
-        backup_key_file: Some(ssh_priv_key_path),
-        output_dir: Some(output_dir.clone()),
-        next_step: None,
-    };
-
-    let mut subnet_recovery_tool =
-        NNSRecoverySameNodes::new(logger.clone(), recovery_args, subnet_args);
-
-    // Break f+1 nodes by SSHing into them and breaking the replica binary.
+    // Choose f+1 faulty nodes to break
+    let nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
+    let f = (SUBNET_SIZE - 1) / 3;
+    let faulty_nodes = &nns_nodes[..(f + 1)];
+    let healthy_nodes = &nns_nodes[(f + 1)..];
+    info!(
+        logger,
+        "Selected faulty nodes: {:?}. Selected healthy nodes: {:?}",
+        faulty_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>(),
+        healthy_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>(),
+    );
+    // Break faulty nodes by SSHing into them and breaking the replica binary.
     info!(
         logger,
         "Breaking the NNS subnet by breaking the replica binary on f+1={} nodes",
@@ -567,7 +528,7 @@ pub fn nns_recovery_test(env: TestEnv) {
     );
     assert!(cannot_store_msg(
         logger.clone(),
-        &dfinity_owned_node.get_public_url(),
+        &nns_node.get_public_url(),
         app_can_id,
         msg
     ));
@@ -576,20 +537,50 @@ pub fn nns_recovery_test(env: TestEnv) {
         "Success: Subnet is broken - cannot store new messages"
     );
 
-    // Replay until highest certification share height across all healthy nodes
-    // In a real recovery, this will be determined by the recovery coordinator
-    subnet_recovery_tool.params.replay_until_height = Some(
-        healthy_nodes
-            .iter()
-            .map(|n| {
-                block_on(get_node_metrics(&logger, &n.get_ip_addr()))
-                    .expect("Missing metrics for node")
-                    .certification_share_height
-            })
-            .max()
-            .unwrap()
-            .get(),
+    // Choose the DFINITY-owned node to be the one with the highest certification share height
+    let (dfinity_owned_node, highest_certification_share_height) = nns_subnet
+        .nodes()
+        .filter_map(|n| {
+            block_on(get_node_metrics(&logger, &n.get_ip_addr()))
+                .map(|m| (n, m.certification_share_height.get()))
+        })
+        .max_by_key(|&(_, cert_share_height)| cert_share_height)
+        .expect("No download node found");
+
+    info!(
+        logger,
+        "Selected DFINITY-owned NNS node: {} ({:?})",
+        dfinity_owned_node.node_id,
+        dfinity_owned_node.get_ip_addr()
     );
+
+    let recovery_args = RecoveryArgs {
+        dir: recovery_dir,
+        nns_url: dfinity_owned_node.get_public_url(),
+        replica_version: Some(ic_version),
+        key_file: Some(ssh_priv_key_path.clone()),
+        test_mode: true,
+        skip_prompts: true,
+        use_local_binaries: false,
+    };
+
+    // unlike during a production recovery using the CLI, here we already know all of parameters
+    // ahead of time.
+    let subnet_args = NNSRecoverySameNodesArgs {
+        subnet_id: nns_subnet.subnet_id,
+        upgrade_version: Some(working_version.clone()),
+        replay_until_height: Some(highest_certification_share_height),
+        upgrade_image_url: Some(get_guestos_update_img_url()),
+        upgrade_image_hash: Some(get_guestos_update_img_sha256()),
+        download_node: Some(dfinity_owned_node.get_ip_addr()),
+        upload_method: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
+        backup_key_file: Some(ssh_priv_key_path),
+        output_dir: Some(output_dir.clone()),
+        next_step: None,
+    };
+
+    let subnet_recovery_tool =
+        NNSRecoverySameNodes::new(logger.clone(), recovery_args, subnet_args);
 
     info!(logger, "Starting recovery tool",);
 

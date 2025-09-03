@@ -18,6 +18,7 @@ ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-error-types = { path = "../../../packages/ic-error-types" }
+ic-heap-bytes = { path = "../../../packages/ic-heap-bytes" }
 ic-management-canister-types-private = { path = "../management_canister_types" }
 ic-protobuf = { path = "../../protobuf" }
 ic-validate-eq = { path = "../../utils/validate_eq" }

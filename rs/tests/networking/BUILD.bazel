@@ -388,11 +388,18 @@ system_test_nns(
 
 system_test_nns(
     name = "query_workload_long_test",
+    additional_colocate_tags = [
+        "system_test_benchmark",
+    ],
+    colocated_test_driver_vm_required_host_features = ["performance"],
+    colocated_test_driver_vm_resources = {
+        "vcpus": 16,
+    },
+    enable_head_nns_variant = False,
     flaky = True,  # flakiness rate of over 1.1% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "colocate",
         "k8s",
-        "long_test",
     ],
     test_timeout = "eternal",
     runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
@@ -403,10 +410,17 @@ system_test_nns(
 
 system_test_nns(
     name = "update_workload_large_payload",
+    additional_colocate_tags = [
+        "system_test_benchmark",
+    ],
+    colocated_test_driver_vm_required_host_features = ["performance"],
+    colocated_test_driver_vm_resources = {
+        "vcpus": 16,
+    },
+    enable_head_nns_variant = False,
     flaky = True,  # flakiness rate of 1.83% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "colocate",
-        "long_test",
     ],
     test_timeout = "eternal",
     runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
