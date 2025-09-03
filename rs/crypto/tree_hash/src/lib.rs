@@ -723,14 +723,14 @@ impl FilterBuilder {
             }
 
             match (tree, filter) {
+                // Pruned and empty subtrees are always kept.
+                (FilterBuilder::Empty(_), _) => Ok(tree.mixed_hash_tree()),
+                (FilterBuilder::Pruned(_), _) => Ok(tree.mixed_hash_tree()),
                 // If the path in `filter` ends, we keep the entire subtree if `FilterMode::Keep` and prune it otherwise.
                 (_, LabeledTree::Leaf(_)) => match filter_mode {
                     FilterMode::Keep => Ok(tree.mixed_hash_tree()),
                     FilterMode::Prune => Ok(MixedHashTree::Pruned(tree.digest().clone())),
                 },
-                // Pruned and empty subtrees are always kept.
-                (FilterBuilder::Empty(_), _) => Ok(tree.mixed_hash_tree()),
-                (FilterBuilder::Pruned(_), _) => Ok(tree.mixed_hash_tree()),
                 // On a fork, filter both sides.
                 (FilterBuilder::Fork(digest, b), filter) => {
                     let l = filtered_inner(&b.0, filter, filter_mode, depth + 1)?;
@@ -746,28 +746,22 @@ impl FilterBuilder {
                 }
                 // On a label, check if it is in `filter`.
                 (FilterBuilder::Labeled(digest, label, inner), LabeledTree::SubTree(flat_map)) => {
-                    match flat_map.get(label) {
-                        Some(subfilter) => {
-                            if filter_mode == FilterMode::Prune
-                                && matches!(subfilter, LabeledTree::Leaf(_))
-                            {
-                                // A path in `filter` ends here, so we prune this subtree including the label.
-                                Ok(MixedHashTree::Pruned(digest.clone()))
-                            } else {
-                                // Otherwise it's simply recursive.
-                                let mixed_hash_tree =
-                                    filtered_inner(inner, subfilter, filter_mode, depth + 1)?;
-                                Ok(MixedHashTree::Labeled(
-                                    label.clone(),
-                                    Box::new(mixed_hash_tree),
-                                ))
-                            }
+                    match (flat_map.get(label), filter_mode) {
+                        (Some(LabeledTree::Leaf(_)), FilterMode::Prune) => {
+                            // A path in `filter` ends here, so we prune this subtree including the label.
+                            Ok(MixedHashTree::Pruned(digest.clone()))
                         }
-                        // The path is not in `filter`.
-                        None => match filter_mode {
-                            FilterMode::Keep => Ok(MixedHashTree::Pruned(digest.clone())),
-                            FilterMode::Prune => Ok(tree.mixed_hash_tree()),
-                        },
+                        (Some(subfilter), _) => {
+                            // Recursive case
+                            let mixed_hash_tree =
+                                filtered_inner(inner, subfilter, filter_mode, depth + 1)?;
+                            Ok(MixedHashTree::Labeled(
+                                label.clone(),
+                                Box::new(mixed_hash_tree),
+                            ))
+                        }
+                        (None, FilterMode::Keep) => Ok(MixedHashTree::Pruned(digest.clone())),
+                        (None, FilterMode::Prune) => Ok(tree.mixed_hash_tree()),
                     }
                 }
                 // The tree ends in a leaf, but the path still continues. Invalid input.
