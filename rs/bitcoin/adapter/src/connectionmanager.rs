@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity)]
+
 use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -24,7 +26,7 @@ use crate::{
     addressbook::{
         validate_services, AddressBook, AddressBookError, AddressEntry, AddressTimestamp,
     },
-    common::{BlockHeight, DEFAULT_CHANNEL_BUFFER_SIZE, MINIMUM_VERSION_NUMBER},
+    common::{BlockHeight, BlockchainNetwork, DEFAULT_CHANNEL_BUFFER_SIZE, MINIMUM_VERSION_NUMBER},
     config::Config,
     connection::{Connection, ConnectionConfig, ConnectionState, PingState},
     metrics::RouterMetrics,
@@ -72,7 +74,7 @@ pub type ConnectionManagerResult<T> = Result<T, ConnectionManagerError>;
 
 /// This struct manages the connection connections that the adapter uses to communicate
 /// with Bitcoin nodes.
-pub struct ConnectionManager<NetworkMessage> {
+pub struct ConnectionManager<Network: BlockchainNetwork> {
     /// p2p protocol version used in `VersionMessage`.
     p2p_protocol_version: u32,
     /// This field contains the address book.
@@ -93,7 +95,7 @@ pub struct ConnectionManager<NetworkMessage> {
     /// connection.
     current_height: BlockHeight,
     /// This field contains connections that have connected are being managed.
-    connections: HashMap<SocketAddr, Connection<NetworkMessage>>,
+    connections: HashMap<SocketAddr, Connection<NetworkMessage<Network::Header, Network::Block>>>,
     /// This field determines whether or not we will be using a SOCKS proxy to communicate with
     /// the BTC network.
     socks_proxy: Option<String>,
@@ -101,18 +103,21 @@ pub struct ConnectionManager<NetworkMessage> {
     stream_event_receiver: Receiver<StreamEvent>,
     /// This field is used to allow new streams to send events back to the connection manager.
     stream_event_sender: Sender<StreamEvent>,
-    network_message_sender: Sender<(SocketAddr, NetworkMessage)>,
+    network_message_sender: Sender<(SocketAddr, NetworkMessage<Network::Header, Network::Block>)>,
     /// This field is used for the version nonce generation.
     rng: StdRng,
     metrics: RouterMetrics,
 }
 
-impl<Header: Clone, Block: Clone> ConnectionManager<NetworkMessage<Header, Block>> {
+impl<Network: BlockchainNetwork> ConnectionManager<Network> {
     /// This function is used to create a new connection manager with a provided config.
     pub fn new(
-        config: &Config,
+        config: &Config<Network>,
         logger: ReplicaLogger,
-        network_message_sender: Sender<(SocketAddr, NetworkMessage<Header, Block>)>,
+        network_message_sender: Sender<(
+            SocketAddr,
+            NetworkMessage<Network::Header, Network::Block>,
+        )>,
         metrics: RouterMetrics,
     ) -> Self {
         let address_book = AddressBook::new(config, logger.clone());
@@ -122,7 +127,7 @@ impl<Header: Clone, Block: Clone> ConnectionManager<NetworkMessage<Header, Block
         let (min_connections, max_connections) = connection_limits(&address_book);
 
         Self {
-            p2p_protocol_version: config.network.p2p_protocol_version(),
+            p2p_protocol_version: Network::P2P_PROTOCOL_VERSION,
             initial_address_discovery: !address_book.has_enough_addresses(),
             address_book,
             logger,
@@ -162,7 +167,7 @@ impl<Header: Clone, Block: Clone> ConnectionManager<NetworkMessage<Header, Block
     pub fn tick(
         &mut self,
         current_height: BlockHeight,
-        handle: fn(StreamConfig<Header, Block>) -> JoinHandle<()>,
+        handle: fn(StreamConfig<Network::Header, Network::Block>) -> JoinHandle<()>,
     ) {
         self.current_height = current_height;
 
@@ -184,7 +189,7 @@ impl<Header: Clone, Block: Clone> ConnectionManager<NetworkMessage<Header, Block
     /// This function will remove disconnects and establish new connections.
     fn manage_connections(
         &mut self,
-        handle: fn(StreamConfig<Header, Block>) -> JoinHandle<()>,
+        handle: fn(StreamConfig<Network::Header, Network::Block>) -> JoinHandle<()>,
     ) -> ConnectionManagerResult<()> {
         self.manage_ping_states();
         self.flag_version_handshake_timeouts();
@@ -291,7 +296,7 @@ impl<Header: Clone, Block: Clone> ConnectionManager<NetworkMessage<Header, Block
     /// This function creates a new connection with a stream to a BTC node.
     fn make_connection(
         &mut self,
-        handle: fn(StreamConfig<Header, Block>) -> JoinHandle<()>,
+        handle: fn(StreamConfig<Network::Header, Network::Block>) -> JoinHandle<()>,
     ) -> ConnectionManagerResult<()> {
         self.metrics.connections.inc();
         let address_entry_result = if !self.address_book.has_enough_addresses() {
@@ -332,7 +337,8 @@ impl<Header: Clone, Block: Clone> ConnectionManager<NetworkMessage<Header, Block
     fn get_connection(
         &mut self,
         addr: &SocketAddr,
-    ) -> ConnectionManagerResult<&mut Connection<NetworkMessage<Header, Block>>> {
+    ) -> ConnectionManagerResult<&mut Connection<NetworkMessage<Network::Header, Network::Block>>>
+    {
         match self.connections.get_mut(addr) {
             Some(connection) => Ok(connection),
             None => Err(ConnectionManagerError::ConnectionNotFound),
@@ -356,17 +362,18 @@ impl<Header: Clone, Block: Clone> ConnectionManager<NetworkMessage<Header, Block
         let receiver = Address::new(addr, ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED);
         let nonce: u64 = self.rng.gen();
         let user_agent = String::from(USER_AGENT);
-        let message = <NetworkMessage<Header, Block>>::Version(VersionMessage::new(
-            self.p2p_protocol_version,
-            services,
-            timestamp as i64,
-            receiver,
-            sender,
-            nonce,
-            user_agent,
-            // The height the adapter believes is the active tip.
-            self.current_height as i32,
-        ));
+        let message =
+            <NetworkMessage<Network::Header, Network::Block>>::Version(VersionMessage::new(
+                self.p2p_protocol_version,
+                services,
+                timestamp as i64,
+                receiver,
+                sender,
+                nonce,
+                user_agent,
+                // The height the adapter believes is the active tip.
+                self.current_height as i32,
+            ));
 
         self.send_to(addr, message)
     }
@@ -399,7 +406,7 @@ impl<Header: Clone, Block: Clone> ConnectionManager<NetworkMessage<Header, Block
     fn send_to(
         &mut self,
         addr: &SocketAddr,
-        network_message: NetworkMessage<Header, Block>,
+        network_message: NetworkMessage<Network::Header, Network::Block>,
     ) -> ConnectionManagerResult<()> {
         self.metrics
             .bitcoin_messages_sent
@@ -419,7 +426,7 @@ impl<Header: Clone, Block: Clone> ConnectionManager<NetworkMessage<Header, Block
     }
 
     /// This function is used to send a message to all of the connected connections.
-    fn send_to_all(&mut self, network_message: NetworkMessage<Header, Block>) {
+    fn send_to_all(&mut self, network_message: NetworkMessage<Network::Header, Network::Block>) {
         if !self.has_enough_active_connections() {
             return;
         }
@@ -595,10 +602,13 @@ impl<Header: Clone, Block: Clone> ConnectionManager<NetworkMessage<Header, Block
     }
 }
 
-impl<Header: Clone, Block: Clone> Channel<Header, Block>
-    for ConnectionManager<NetworkMessage<Header, Block>>
+impl<Network: BlockchainNetwork> Channel<Network::Header, Network::Block>
+    for ConnectionManager<Network>
 {
-    fn send(&mut self, command: Command<Header, Block>) -> Result<(), ChannelError> {
+    fn send(
+        &mut self,
+        command: Command<Network::Header, Network::Block>,
+    ) -> Result<(), ChannelError> {
         let Command { address, message } = command;
         if let Some(addr) = address {
             self.send_to(&addr, message).ok();
@@ -631,9 +641,7 @@ impl<Header: Clone, Block: Clone> Channel<Header, Block>
     }
 }
 
-impl<Header: Clone, Block: Clone> ProcessEvent
-    for ConnectionManager<NetworkMessage<Header, Block>>
-{
+impl<Network: BlockchainNetwork> ProcessEvent for ConnectionManager<Network> {
     fn process_event(&mut self, event: &StreamEvent) -> Result<(), ProcessNetworkMessageError> {
         match &event.kind {
             StreamEventKind::Connected => {
@@ -666,13 +674,13 @@ impl<Header: Clone, Block: Clone> ProcessEvent
     }
 }
 
-impl<Header: Clone, Block: Clone> ProcessNetworkMessage<Header, Block>
-    for ConnectionManager<NetworkMessage<Header, Block>>
+impl<Network: BlockchainNetwork> ProcessNetworkMessage<Network::Header, Network::Block>
+    for ConnectionManager<Network>
 {
     fn process_bitcoin_network_message(
         &mut self,
         address: SocketAddr,
-        message: &NetworkMessage<Header, Block>,
+        message: &NetworkMessage<Network::Header, Network::Block>,
     ) -> Result<(), ProcessNetworkMessageError> {
         match message {
             NetworkMessage::Version(version_message) => {
@@ -705,7 +713,7 @@ mod test {
     use super::*;
     use crate::config::test::ConfigBuilder;
     use bitcoin::p2p::ServiceFlags;
-    use bitcoin::{block::Header, Block};
+    use bitcoin::{block::Header, Block, Network};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use std::str::FromStr;
@@ -719,7 +727,7 @@ mod test {
         let services = ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED;
         let receiver = Address::new(&socket_1, services);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
-        let config = ConfigBuilder::new()
+        let config = ConfigBuilder::<Network>::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let mut version_message = VersionMessage::new(
@@ -763,7 +771,7 @@ mod test {
             60_000,
         );
 
-        let config = ConfigBuilder::new()
+        let config = ConfigBuilder::<Network>::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
@@ -798,7 +806,7 @@ mod test {
             60_000,
         );
 
-        let config = ConfigBuilder::new()
+        let config = ConfigBuilder::<Network>::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
@@ -891,8 +899,8 @@ mod test {
     /// This test is used to walk through the initial address discovery process.
     #[tokio::test]
     async fn test_initial_address_discovery_lifecycle() {
-        let config = ConfigBuilder::new()
-            .with_network(bitcoin::Network::Signet.into())
+        let config = ConfigBuilder::<Network>::new()
+            .with_network(bitcoin::Network::Signet)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, mut network_message_receiver) =
@@ -953,7 +961,7 @@ mod test {
         let runtime = tokio::runtime::Runtime::new().expect("runtime err");
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
 
-        let config = ConfigBuilder::new()
+        let config = ConfigBuilder::<Network>::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
@@ -997,7 +1005,7 @@ mod test {
         let runtime = tokio::runtime::Runtime::new().expect("runtime err");
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
         let addr2 = SocketAddr::from_str("192.168.1.1:8333").expect("invalid address");
-        let config = ConfigBuilder::new()
+        let config = ConfigBuilder::<Network>::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
@@ -1066,7 +1074,7 @@ mod test {
         let runtime = tokio::runtime::Runtime::new().expect("runtime err");
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
         let addr2 = SocketAddr::from_str("192.168.1.1:8333").expect("invalid address");
-        let config = ConfigBuilder::new()
+        let config = ConfigBuilder::<Network>::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
@@ -1130,7 +1138,7 @@ mod test {
             60_000,
         );
 
-        let config = ConfigBuilder::new()
+        let config = ConfigBuilder::<Network>::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
@@ -1178,7 +1186,7 @@ mod test {
             60_000,
         );
 
-        let config = ConfigBuilder::new()
+        let config = ConfigBuilder::<Network>::new()
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =

@@ -52,7 +52,7 @@ mod transaction_store;
 mod get_successors_handler;
 
 pub use common::{AdapterNetwork, BlockchainBlock, BlockchainHeader, BlockchainNetwork};
-pub use config::{address_limits, Config, IncomingSource};
+pub use config::{address_limits, AdapterConfig, Config, IncomingSource};
 
 use crate::{
     blockchainstate::BlockchainState, get_successors_handler::GetSuccessorsHandler,
@@ -200,62 +200,52 @@ pub fn start_server(
     log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
     rt_handle: &tokio::runtime::Handle,
-    config: config::Config,
+    config: config::Config<AdapterNetwork>,
 ) {
-    let _enter = rt_handle.enter();
-
-    let (adapter_state, tx) = AdapterState::new(config.idle_seconds);
-
-    match config.network {
-        AdapterNetwork::Bitcoin(network) => {
-            let blockchain_state =
-                Arc::new(Mutex::new(BlockchainState::new(network, metrics_registry)));
-            let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
-            let (transaction_manager_tx, transaction_manager_rx) = channel(100);
-            start_grpc_server(
-                network,
-                config.incoming_source.clone(),
-                log.clone(),
-                tx,
-                blockchain_state.clone(),
-                blockchain_manager_tx,
-                transaction_manager_tx,
-                metrics_registry,
-            );
-            start_main_event_loop::<bitcoin::Network>(
-                &config,
-                log.clone(),
-                blockchain_state,
-                transaction_manager_rx,
-                adapter_state,
-                blockchain_manager_rx,
-                metrics_registry,
-            )
+    match config.as_adapter_config() {
+        AdapterConfig::Bitcoin(config) => {
+            start_server_helper(log, metrics_registry, rt_handle, config)
         }
-        AdapterNetwork::Dogecoin(network) => {
-            let blockchain_state =
-                Arc::new(Mutex::new(BlockchainState::new(network, metrics_registry)));
-            let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
-            let (transaction_manager_tx, transaction_manager_rx) = channel(100);
-            start_grpc_server(
-                network,
-                config.incoming_source.clone(),
-                log.clone(),
-                tx,
-                blockchain_state.clone(),
-                blockchain_manager_tx,
-                transaction_manager_tx,
-                metrics_registry,
-            );
-            start_main_event_loop::<bitcoin::dogecoin::Network>(
-                &config,
-                log.clone(),
-                blockchain_state,
-                transaction_manager_rx,
-                adapter_state,
-                blockchain_manager_rx,
-                metrics_registry,
-            )
+        AdapterConfig::Dogecoin(config) => {
+            start_server_helper(log, metrics_registry, rt_handle, config)
         }
     }
+}
+
+fn start_server_helper<Network: BlockchainNetwork + Sync + Send + 'static>(
+    log: &ReplicaLogger,
+    metrics_registry: &MetricsRegistry,
+    rt_handle: &tokio::runtime::Handle,
+    config: config::Config<Network>,
+) where
+    Network::Header: Sync + Send + 'static,
+    Network::Block: Sync + Send + 'static,
+{
+    let _enter = rt_handle.enter();
+    let (adapter_state, tx) = AdapterState::new(config.idle_seconds);
+    let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(
+        config.network,
+        metrics_registry,
+    )));
+    let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
+    let (transaction_manager_tx, transaction_manager_rx) = channel(100);
+    start_grpc_server(
+        config.network,
+        config.incoming_source.clone(),
+        log.clone(),
+        tx,
+        blockchain_state.clone(),
+        blockchain_manager_tx,
+        transaction_manager_tx,
+        metrics_registry,
+    );
+    start_main_event_loop(
+        &config,
+        log.clone(),
+        blockchain_state,
+        transaction_manager_rx,
+        adapter_state,
+        blockchain_manager_rx,
+        metrics_registry,
+    )
 }

@@ -87,20 +87,6 @@ impl AdapterNetwork {
             AdapterNetwork::Dogecoin(network) => format!("dogecoin:{network}"),
         }
     }
-    /// Call `magic()` function on the respective network.
-    pub fn magic(&self) -> Magic {
-        match self {
-            AdapterNetwork::Bitcoin(network) => network.magic(),
-            AdapterNetwork::Dogecoin(network) => network.magic(),
-        }
-    }
-    /// Return the p2p protocol version.
-    pub fn p2p_protocol_version(&self) -> u32 {
-        match self {
-            AdapterNetwork::Bitcoin(_) => bitcoin::p2p::PROTOCOL_VERSION,
-            AdapterNetwork::Dogecoin(_) => 70015,
-        }
-    }
 }
 
 impl fmt::Display for AdapterNetwork {
@@ -145,11 +131,13 @@ impl<'de> Deserialize<'de> for AdapterNetwork {
 }
 
 /// Trait that implements differences between Bitcoin and Dogecoin networks.
-pub trait BlockchainNetwork {
+pub trait BlockchainNetwork: Copy {
     /// Header type
     type Header: BlockchainHeader;
     /// Block type
     type Block: BlockchainBlock<Header = Self::Header>;
+    /// P2P protocol version number
+    const P2P_PROTOCOL_VERSION: u32;
     /// Return genesis block header
     fn genesis_block_header(&self) -> Self::Header;
     /// Validate the given block header
@@ -168,11 +156,16 @@ pub trait BlockchainNetwork {
     fn max_in_flight_blocks(&self) -> usize {
         crate::get_successors_handler::MAX_IN_FLIGHT_BLOCKS
     }
+    /// Return magic setting.
+    fn magic(&self) -> Magic;
+    /// This function returns the port to use based on the network provided.
+    fn p2p_port(&self) -> u16;
 }
 
 impl BlockchainNetwork for bitcoin::Network {
     type Header = bitcoin::block::Header;
     type Block = bitcoin::Block;
+    const P2P_PROTOCOL_VERSION: u32 = bitcoin::p2p::PROTOCOL_VERSION;
     fn genesis_block_header(&self) -> Self::Header {
         bitcoin::blockdata::constants::genesis_block(self).header
     }
@@ -208,11 +201,24 @@ impl BlockchainNetwork for bitcoin::Network {
             _ => crate::get_successors_handler::MAX_IN_FLIGHT_BLOCKS,
         }
     }
+    fn magic(&self) -> Magic {
+        bitcoin::Network::magic(*self)
+    }
+    fn p2p_port(&self) -> u16 {
+        use bitcoin::Network::*;
+        match self {
+            Bitcoin => 8333,
+            Testnet => 18333,
+            Testnet4 => 48333,
+            _ => 8333,
+        }
+    }
 }
 
 impl BlockchainNetwork for bitcoin::dogecoin::Network {
     type Header = bitcoin::dogecoin::Header;
     type Block = bitcoin::dogecoin::Block;
+    const P2P_PROTOCOL_VERSION: u32 = 70015;
     fn genesis_block_header(&self) -> Self::Header {
         bitcoin::dogecoin::constants::genesis_block(self).header
     }
@@ -230,6 +236,17 @@ impl BlockchainNetwork for bitcoin::dogecoin::Network {
             Dogecoin => false,
             Testnet | Regtest => true,
             other => unreachable!("Unsupported Dogecoin network: {:?}", other),
+        }
+    }
+    fn magic(&self) -> Magic {
+        bitcoin::dogecoin::Network::magic(*self)
+    }
+    fn p2p_port(&self) -> u16 {
+        use bitcoin::dogecoin::Network::*;
+        match self {
+            Dogecoin => 22556,
+            Testnet => 44556,
+            _ => 18444,
         }
     }
 }

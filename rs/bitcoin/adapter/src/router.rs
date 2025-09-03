@@ -28,7 +28,7 @@ use tokio::{
 /// ConnectionManager, we keep the ConnectionManager free of dependencies like the
 /// TransactionStore or the BlockchainManager.
 pub fn start_main_event_loop<Network>(
-    config: &Config,
+    config: &Config<Network>,
     logger: ReplicaLogger,
     blockchain_state: Arc<Mutex<BlockchainState<Network>>>,
     mut transaction_manager_rx: Receiver<TransactionManagerRequest>,
