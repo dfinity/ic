@@ -609,7 +609,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
     let session = &node.block_on_ssh_session().unwrap();
 
     // ic-recovery requires ic-admin so we copy ic-admin to the node at /tmp/ic-admin
-    // such that we can bind-mount it to /opt/ic/bin/ic-admin below:
+    // such that we can copy it to /opt/ic/bin/ic-admin below:
     let local_ic_admin_path = &get_dependency_path("rs/tests/recovery/binaries/ic-admin");
     let remote_ic_admin_path = Path::new("/tmp/ic-admin");
     scp_send_to(
@@ -631,6 +631,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
     let pub_key = pub_key.trim();
     let node_ip = node.get_ip_addr();
 
+<<<<<<< HEAD
     let command = format!(
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -654,10 +655,42 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
         --skip DownloadCertifications \
         --skip MergeCertificationPools
     "#
+=======
+    let script = format!(
+        r#"set -euo pipefail
+# We need to have ic-admin at /opt/ic/bin/ic-admin. However /opt/ic/bin is on a read-only filesystem.
+# To work around this the following prepares an overlay on /opt/ic/bin that keeps existing binaries visible (lowerdir)
+# and lets us add ic-admin via a writable upperdir.
+sudo mkdir -p /tmp/opt-ic-bin-overlay/{{upper,work}}
+sudo mount -t overlay overlay \
+  -o lowerdir=/opt/ic/bin,upperdir=/tmp/opt-ic-bin-overlay/upper,workdir=/tmp/opt-ic-bin-overlay/work \
+  /opt/ic/bin
+
+# Ensure overlay gets cleaned up on exit
+cleanup() {{ sudo umount /opt/ic/bin || true; }}
+trap cleanup EXIT
+
+# Make ic-admin visible through the overlay (write goes to upperdir, not the read-only FS)
+sudo install -m 0755 {remote_ic_admin_path:?} /opt/ic/bin/ic-admin
+
+/opt/ic/bin/ic-recovery \
+  --nns-url {nns_url} \
+  --test --skip-prompts --use-local-binaries \
+  app-subnet-recovery \
+  --subnet-id {subnet_id} \
+  {maybe_replay_until_height}\
+  --pub-key "{pub_key}" \
+  --download-method local \
+  --upload-method local \
+  --wait-for-cup-node {node_ip} \
+  --skip DownloadCertifications \
+  --skip MergeCertificationPools
+"#
+>>>>>>> 2dd8bf9e58 (use an overlay fs)
     );
 
-    info!(logger, "Executing local recovery command: \n{command}");
-    match node.block_on_bash_script_from_session(session, &command) {
+    info!(logger, "Executing local recovery command: \n{script}");
+    match node.block_on_bash_script_from_session(session, &script) {
         Ok(ret) => info!(logger, "Finished local recovery: \n{ret}"),
         Err(err) => panic!("Local recovery failed: \n{err}"),
     }
