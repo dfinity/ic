@@ -64,6 +64,7 @@ use ic_system_test_driver::driver::driver_setup::{
     SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
 };
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env_api::scp_send_to;
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::util::*;
 use ic_types::{consensus::CatchUpPackage, Height, ReplicaVersion, SubnetId};
@@ -605,6 +606,19 @@ fn remote_recovery(cfg: &TestConfig, subnet_recovery: AppSubnetRecovery, logger:
 }
 
 fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
+    let session = &node.block_on_ssh_session().unwrap();
+
+    // ic-recovery requires ic-admin so we copy ic-admin to the node at /tmp/ic-admin
+    // such that we can bind-mount it to /opt/ic/bin/ic-admin below:
+    let local_ic_admin_path = &get_dependency_path("recovery/binaries/ic-admin");
+    let remote_ic_admin_path = Path::new("/tmp/ic-admin");
+    scp_send_to(
+        logger.clone(),
+        session,
+        local_ic_admin_path,
+        remote_ic_admin_path,
+    );
+
     let nns_url = subnet_recovery.recovery_args.nns_url;
     let subnet_id = subnet_recovery.params.subnet_id;
     let maybe_replay_until_height = subnet_recovery
@@ -617,7 +631,11 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
     let node_ip = node.get_ip_addr();
 
     let command = format!(
+<<<<<<< HEAD
         r#"export PATH="/opt/ic/bin:$PATH"
+=======
+        r#"sudo mount --bind {remote_ic_admin_path:?} /opt/ic/bin/ic-admin
+>>>>>>> 5b89f88ae8 (chore: rm ic-admin from the GuestOS)
         /opt/ic/bin/ic-recovery \
         --nns-url {nns_url} \
         --test --skip-prompts --use-local-binaries \
@@ -634,7 +652,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
     );
 
     info!(logger, "Executing local recovery command: \n{command}");
-    match node.block_on_bash_script(&command) {
+    match node.block_on_bash_script_from_session(session, &command) {
         Ok(ret) => info!(logger, "Finished local recovery: \n{ret}"),
         Err(err) => panic!("Local recovery failed: \n{err}"),
     }
