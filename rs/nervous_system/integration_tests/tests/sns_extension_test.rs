@@ -323,7 +323,18 @@ async fn do_test_treasury_manager() {
             println!(">>> AuditTrail: {:#?}", response);
         }
 
+        // We have done 2 deposits and 1 withdrawal.
+        // Each deposit has three fees:
+        // - transfer fee from treasury owner to the treasury manager
+        // - approval fee given from the treasury manager to the external custodian
+        // - transfer fee from the treasury manager to the external custodian
+        // Withdrawal has two fees:
+        // - transfer fee from the external custodian to the treasury manager
+        // - transfer fee from the treasury manager to the treasury owner
         let expected_sns_fee_collector = 8 * SNS_FEE;
+        // Second deposit takes place with deposit ratio (SNS/ICP)
+        // lower than the market ratio (SNS/ICP in the pool). Hence,
+        // the excess amount of ICP is returned to the treasury owner.
         let expected_icp_fee_collector = 9 * ICP_FEE;
 
         let treasury_allocation_sns_e8s = initial_treasury_allocation_sns_e8s
