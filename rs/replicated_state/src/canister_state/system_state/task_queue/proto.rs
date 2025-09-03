@@ -1,3 +1,4 @@
+/*
 use super::*;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::canister_state_bits::v1 as pb;
@@ -38,3 +39,4 @@ impl TryFrom<pb::TaskQueue> for TaskQueue {
         })
     }
 }
+*/

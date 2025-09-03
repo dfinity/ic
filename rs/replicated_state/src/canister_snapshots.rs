@@ -387,7 +387,7 @@ impl CanisterSnapshot {
             .as_ref()
             .ok_or(CanisterSnapshotError::EmptyExecutionState(canister_id))?;
         let global_timer = canister.system_state.global_timer;
-        let hook_status = canister.system_state.task_queue.peek_hook_status();
+        let hook_status = canister.system_state.status.peek_hook_status();
         let execution_snapshot = ExecutionStateSnapshot {
             wasm_binary: execution_state.wasm_binary.binary.clone(),
             exported_globals: execution_state.exported_globals.clone(),
