@@ -68,10 +68,13 @@ async fn prepare_network_for_test(
     // Installing NNS canisters
     let dev_nns_neuron_id = bootstrap_nns(
         &pocket_ic,
-        vec![(
-            treasury_principal_id,
-            Tokens::from_tokens(10_000_000).unwrap(),
-        )],
+        vec![
+            (
+                treasury_principal_id,
+                Tokens::from_tokens(10_000_000).unwrap(),
+            ),
+            (dev_participant_id, Tokens::from_tokens(100).unwrap()),
+        ],
         dev_participant_id,
     )
     .await;
@@ -111,6 +114,24 @@ async fn prepare_test_canister(pocket_ic: &PocketIc) -> CanisterId {
         .is_empty());
     test_canister_query(pocket_ic, test_canister_id, greeting).await;
     test_canister_id
+}
+
+#[tokio::test]
+async fn test_sns_testing_dev_nns_neuron_id() {
+    let state_dir = TempDir::new().unwrap();
+    let state_dir = state_dir.path().to_path_buf();
+
+    let dev_participant_id = PrincipalId(
+        Principal::from_text("wztqp-aztft-mjkys-ircom-di7v5-upcuq-ohaon-yvite-pmtpw-b37l5-uqe")
+            .unwrap(),
+    );
+
+    let (_pocket_ic, dev_nns_neuron_id) =
+        prepare_network_for_test(dev_participant_id, state_dir).await;
+
+    // The following NNS neuron ID is hard-coded in sns-testing README.
+    // If the test fails, then the README must be updated.
+    assert_eq!(dev_nns_neuron_id.id, 5562256181269567345);
 }
 
 #[tokio::test]

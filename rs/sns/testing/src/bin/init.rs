@@ -27,8 +27,6 @@ async fn nns_init(args: NnsInitArgs) {
         .with_application_subnet()
         .build_async()
         .await;
-    let endpoint = pocket_ic.make_live(Some(args.ic_network_port)).await;
-    println!("PocketIC endpoint: {}", endpoint);
 
     let dev_principal_id = get_identity_principal(&args.dev_identity).unwrap();
 
@@ -54,6 +52,11 @@ async fn nns_init(args: NnsInitArgs) {
         dev_principal_id,
     )
     .await;
+
+    // Only make the instance "live" after bootstrapping NNS to ensure a deterministic `deciding_nns_neuron_id`.
+    let endpoint = pocket_ic.make_live(Some(args.ic_network_port)).await;
+    println!("PocketIC endpoint: {}", endpoint);
+
     println!("NNS initialized");
     println!(
         "Use the following Neuron ID for further testing: {}",
