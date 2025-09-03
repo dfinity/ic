@@ -81,7 +81,7 @@ extract_latest_guestos(
 # Extract the GuestOS image from mainnet dev SetupOS
 extract_latest_guestos(
     name = "mainnet-latest-guest-dev-img",
-    guestos_img = "@mainnet_latest_guestos_dev_disk_image//file",
+    guestos_img = "@mainnet_latest_guestos_dev_update_image//file",
     guestos_version = MAINNET_LATEST_GUESTOS_REVISION,
     setupos_img = "@mainnet_latest_setupos_dev_disk_image//file",
     setupos_version = MAINNET_LATEST_HOSTOS_REVISION,
