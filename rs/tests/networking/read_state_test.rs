@@ -32,10 +32,10 @@ Success::
   principal than who made the original request with request ID R;
 . /api/{v2,v3}/canister/.../read_state requests for two paths /request_status/R and /request_status/S with two different request
   IDs R and S are rejected with 400 (while requesting each of the two paths in isolation would succeed);
-. Read state requests for the path /canister_ranges/{subnet_id} succeed and return a correct list of canister
-  ranges assigned to the subnet. Both /api/{v2,v3}/subnet/{subnet_id}/read_state and
-  /api/{v2,v3}/canister/{canister_id}/read_state endpoints are tested.
-
+. Read state requests at `/api/{v2,v3}/subnet/{subnet_id}/read_state` for the path `/canister_ranges/{subnet_id}`
+  succeed and return a correct list of canister ranges assigned to the subnet.
+. Read state requests at `/api/{v2,v3}/canister/{canister_id}/read_state` for the path `/canister_ranges/{subnet_id}`
+  should fail because the path is disallowed.
 end::catalog[] */
 
 use std::borrow::Cow;
@@ -52,11 +52,14 @@ use ic_agent::agent_error::HttpErrorPayload;
 use ic_agent::hash_tree::{Label, LookupResult, SubtreeLookupResult};
 use ic_agent::identity::AnonymousIdentity;
 use ic_agent::{lookup_value, Agent, AgentError, Certificate, Identity, RequestId};
+use ic_certification::{verify_certificate, verify_certificate_for_subnet_read_state};
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_http_endpoints_public::read_state;
 use ic_message::ForwardParams;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::test_env::HasIcPrepDir;
 use ic_system_test_driver::driver::test_env_api::SubnetSnapshot;
 use ic_system_test_driver::util::{
     block_on, get_identity, random_ed25519_identity, runtime_from_url, MessageCanister,
@@ -70,7 +73,7 @@ use ic_system_test_driver::{
     },
     systest,
 };
-use ic_types::messages::HttpReadStateResponse;
+use ic_types::messages::{Blob, HttpReadStateResponse};
 use ic_types::{CanisterId, PrincipalId};
 use reqwest::StatusCode;
 use serde::Serialize;
@@ -185,23 +188,53 @@ fn read_state_with_identity_and_principal_id(
     identity: impl Identity,
     principal_id: PrincipalId,
 ) -> Result<Certificate, AgentError> {
+    let subnet = get_first_app_subnet(env);
+    let node = get_first_app_node(env);
+    let api_boundary_node = env
+        .topology_snapshot()
+        .api_boundary_nodes()
+        .next()
+        .expect("There should be at least one API boundary node");
+
     let node_url = match endpoint {
         Endpoint::CanisterReadState(read_state::canister::Version::V2)
-        | Endpoint::SubnetReadState(read_state::subnet::Version::V2) => env
-            .topology_snapshot()
-            .api_boundary_nodes()
-            .next()
-            .expect("There should be at least one API boundary node")
-            .get_public_url(),
+        | Endpoint::SubnetReadState(read_state::subnet::Version::V2) => {
+            api_boundary_node.get_public_url()
+        }
         // TODO: switch to api_boundary_node once the endpoints are
         // allowlisted by the boundary nodes.
         Endpoint::CanisterReadState(read_state::canister::Version::V3)
-        | Endpoint::SubnetReadState(read_state::subnet::Version::V3) => {
-            get_first_app_node(env).get_public_url()
+        | Endpoint::SubnetReadState(read_state::subnet::Version::V3) => node.get_public_url(),
+    };
+
+    let certificate = endpoint.read_state(node_url, paths, principal_id, identity)?;
+
+    let nns_public_key =
+        parse_threshold_sig_key_from_der(&env.prep_dir("").unwrap().root_public_key().unwrap())
+            .unwrap();
+
+    match endpoint {
+        Endpoint::CanisterReadState(_version) => {
+            verify_certificate(
+                &certificate,
+                &CanisterId::unchecked_from_principal(principal_id),
+                &nns_public_key,
+            )
+            .unwrap();
+        }
+        Endpoint::SubnetReadState(_version) => {
+            verify_certificate_for_subnet_read_state(
+                &certificate,
+                &subnet.subnet_id,
+                &nns_public_key,
+            )
+            .unwrap();
         }
     };
 
-    endpoint.read_state(node_url, paths, principal_id, identity)
+    let certificate: Certificate = serde_cbor::from_slice(&certificate).unwrap();
+
+    Ok(certificate)
 }
 
 fn test_empty_paths_return_time(env: TestEnv, endpoint: Endpoint) {
@@ -741,8 +774,8 @@ fn test_request_path_access(env: TestEnv, version: read_state::canister::Version
     assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 400);
 }
 
-// Queries the `api/v2/canister/{canister_id}/read_state` endpoint for the canister ranges,
-// and compares the result with the canister ranges obtained from the registry.
+/// Queries the `api/{v2,v3}/canister/{canister_id}/read_state` endpoint for the canister ranges,
+/// and makes sure the requests fails.
 fn test_canister_canister_ranges_paths(env: TestEnv, version: read_state::canister::Version) {
     let endpoint = Endpoint::CanisterReadState(version);
     let subnet = get_first_app_subnet(&env);
@@ -752,13 +785,16 @@ fn test_canister_canister_ranges_paths(env: TestEnv, version: read_state::canist
         subnet.subnet_id.get_ref().as_slice().into(),
     ];
 
-    let cert = read_state(&env, vec![path.clone()], endpoint).expect("Failed to read state");
+    let err = read_state(&env, vec![path.clone()], endpoint).expect_err(
+        "/canister_ranges path should not be fetchable from \
+        the /api/v2/canister/<canister_id>/read_state endpoint",
+    );
 
-    validate_canister_ranges(&subnet, &path, &cert);
+    assert_matches!(err, AgentError::HttpError(payload) if payload.status == 404);
 }
 
-// Queries the `api/v2/subnet/{subnet_id}/read_state` endpoint for the canister ranges.
-// and compares the result with the canister ranges obtained from the registry.
+/// Queries the `api/{v2,v3}/subnet/{subnet_id}/read_state` endpoint for the canister ranges.
+/// and compares the result with the canister ranges obtained from the registry.
 fn test_subnet_canister_ranges_paths(env: TestEnv, version: read_state::subnet::Version) {
     let endpoint = Endpoint::SubnetReadState(version);
     let subnet = get_first_app_subnet(&env);
@@ -839,7 +875,7 @@ impl Endpoint {
         paths: Vec<Vec<Label<Vec<u8>>>>,
         principal_id: PrincipalId,
         identity: impl Identity,
-    ) -> Result<Certificate, AgentError> {
+    ) -> Result<Blob, AgentError> {
         let expiration = OffsetDateTime::now_utc() + Duration::from_secs(3 * 60);
         let content = EnvelopeContent::ReadState {
             ingress_expiry: expiration.unix_timestamp_nanos() as u64,
@@ -863,9 +899,8 @@ impl Endpoint {
 
         let response: HttpReadStateResponse =
             block_on(try_send(self.url(base, principal_id), serialized_bytes))?;
-        let certificate: Certificate = serde_cbor::from_slice(&response.certificate).unwrap();
 
-        Ok(certificate)
+        Ok(response.certificate)
     }
 }
 

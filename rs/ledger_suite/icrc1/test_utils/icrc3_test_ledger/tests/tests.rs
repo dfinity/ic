@@ -7,7 +7,10 @@ use ic_state_machine_tests::StateMachine;
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
+use icrc_ledger_types::icrc3::blocks::{
+    BlockWithId, GetBlocksRequest, GetBlocksResponse, GetBlocksResult,
+};
+use num_traits::cast::ToPrimitive;
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -63,13 +66,54 @@ fn icrc3_get_blocks(
     canister_id: CanisterId,
     requests: Vec<GetBlocksRequest>,
 ) -> GetBlocksResult {
-    Decode!(
+    let result = Decode!(
         &env.query(canister_id, "icrc3_get_blocks", Encode!(&requests).unwrap())
             .expect("failed to get blocks")
             .bytes(),
         GetBlocksResult
     )
+    .expect("failed to decode icrc3_get_blocks response");
+    if requests.len() == 1 {
+        check_legacy_get_blocks(env, canister_id, &result, &requests[0]);
+    }
+    result
+}
+
+fn get_blocks(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    request: &GetBlocksRequest,
+) -> GetBlocksResponse {
+    Decode!(
+        &env.query(canister_id, "get_blocks", Encode!(request).unwrap())
+            .expect("failed to get blocks")
+            .bytes(),
+        GetBlocksResponse
+    )
     .expect("failed to decode icrc3_get_blocks response")
+}
+
+fn check_legacy_get_blocks(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    result: &GetBlocksResult,
+    request: &GetBlocksRequest,
+) {
+    let legacy_response = get_blocks(env, canister_id, request);
+
+    assert_eq!(result.log_length, legacy_response.chain_length);
+    assert_eq!(result.archived_blocks, vec![]);
+    assert_eq!(legacy_response.archived_blocks, vec![]);
+
+    let mut legacy_response_blocks = vec![];
+    let start = legacy_response.first_index.0.to_u64().unwrap();
+    for (index, value) in legacy_response.blocks.iter().enumerate() {
+        legacy_response_blocks.push(BlockWithId {
+            id: Nat::from(start + index as u64),
+            block: ICRC3Value::from(value.clone()),
+        });
+    }
+    assert_eq!(result.blocks, legacy_response_blocks);
 }
 
 #[test]

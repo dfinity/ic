@@ -29,4 +29,5 @@ ic-icrc1-test-utils = { path = ".." }
 ic-ledger-suite-state-machine-tests = { path = "../../../tests/sm-tests" }
 ic-state-machine-tests = { path = "../../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../../test_utilities/load_wasm" }
+num-traits = { workspace = true }
 serde_bytes = { workspace = true }
