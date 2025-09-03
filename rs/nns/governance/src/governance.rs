@@ -81,6 +81,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::println;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
+use ic_management_canister_types_private::{CanisterMetadataRequest, CanisterMetadataResponse};
 use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::{
@@ -102,6 +103,7 @@ use ic_nns_governance_api::{
     CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons, ListNeuronsResponse,
     ListProposalInfoResponse, ManageNeuronResponse, NeuronInfo, ProposalInfo,
 };
+use ic_nns_proposal_payload::candid_to_json;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
@@ -5016,34 +5018,32 @@ impl Governance {
     ) -> Result<String, GovernanceError> {
         let nns_function = update.nns_function();
         let (canister_id, method_name) = nns_function.canister_and_function()?;
-        let request = ValidateAndRenderNnsFunctionPayload {
-            name: method_name.to_string(),
-            args: update.payload.clone(),
-        };
+        let request = CanisterMetadataRequest::new(canister_id, "candid:service".to_string());
         let encoded_request = Encode!(&request).expect("Failed to encode payload");
         let response = self
             .env
-            .call_canister_method(
-                canister_id,
-                "validate_and_render_nns_function",
-                encoded_request,
-            )
+            .call_canister_method(CanisterId::ic_00(), "canister_metadata", encoded_request)
             .await
             .map_err(|(code, msg)| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!("Failed to call validate_and_render_nns_function: {}", msg),
+                    format!("Failed to call canister_metadata. Error code: {code}, message: {msg}"),
                 )
             })?;
-        let decoded_response = Decode!([decoder_config()]; &response, Result<String, String>)
+        let decoded_response = Decode!([decoder_config()]; &response, CanisterMetadataResponse)
             .expect("Failed to decode response");
-        let rendered = decoded_response.map_err(|e| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                format!("The nns function payload is malformed: {}", e),
-            )
-        })?;
-        Ok(rendered)
+        let candid_source = decoded_response.value();
+
+        candid_to_json(candid_source, method_name, &update.payload)
+            .map(|json_value| {
+                serde_json::to_string_pretty(&json_value).expect("Failed to serialize to json")
+            })
+            .map_err(|e| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("Failed to convert candid to json: {}", e),
+                )
+            })
     }
 
     fn validate_execute_nns_function(

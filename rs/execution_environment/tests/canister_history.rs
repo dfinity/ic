@@ -10,8 +10,9 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::CanisterInstallMode::{Install, Reinstall, Upgrade};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
-    CanisterInfoRequest, CanisterInfoResponse, CreateCanisterArgs, EnvironmentVariable,
-    InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
+    CanisterInfoRequest, CanisterInfoResponse, CanisterMetadataRequest, CanisterMetadataResponse,
+    CreateCanisterArgs, EnvironmentVariable, InstallCodeArgs, Method, Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::{
@@ -79,6 +80,28 @@ fn get_canister_info(
     match wasm_result {
         WasmResult::Reply(bytes) => Ok(CanisterInfoResponse::decode(&bytes[..])
             .expect("failed to decode canister_info response")),
+        WasmResult::Reject(reason) => Err(reason),
+    }
+}
+
+fn get_canister_metadata(
+    env: &StateMachine,
+    ucan: CanisterId,
+    canister_id: CanisterId,
+    name: &str,
+) -> Result<CanisterMetadataResponse, String> {
+    let metadata_request_payload = universal_canister_payload(
+        &PrincipalId::default(),
+        &Method::CanisterMetadata.to_string(),
+        CanisterMetadataRequest::new(canister_id, name.to_string()).encode(),
+        Cycles::new(0),
+    );
+    let wasm_result = env
+        .execute_ingress(ucan, "update", metadata_request_payload)
+        .unwrap();
+    match wasm_result {
+        WasmResult::Reply(bytes) => Ok(CanisterMetadataResponse::decode(&bytes[..])
+            .expect("failed to decode canister_metadata response")),
         WasmResult::Reject(reason) => Err(reason),
     }
 }
@@ -1009,6 +1032,111 @@ fn canister_info_retrieval() {
     assert_eq!(canister_info.changes(), reference_change_entries);
     assert_eq!(canister_info.module_hash(), None);
     assert_eq!(canister_info.controllers(), vec![user_id1, user_id2]);
+}
+
+#[test]
+fn canister_metadata_retrieval() {
+    let now = std::time::SystemTime::now();
+    let (env, _test_canister, _test_canister_sha256) = test_setup(SubnetType::Application, now);
+
+    // declare user IDs
+    let user_id1 = user_test_id(7).get();
+
+    // Create universal canister for making management canister calls
+    let ucan = env
+        .install_canister_wasm(UNIVERSAL_CANISTER_WASM, vec![], None)
+        .unwrap();
+
+    // create canister via ingress from user_id1
+    let wasm_result = env
+        .execute_ingress_as(
+            user_id1,
+            ic00::IC_00,
+            ic00::Method::ProvisionalCreateCanisterWithCycles,
+            ic00::ProvisionalCreateCanisterWithCyclesArgs {
+                amount: Some(candid::Nat::from(INITIAL_CYCLES_BALANCE.get())),
+                settings: Some(
+                    CanisterSettingsArgsBuilder::new()
+                        .with_controllers(vec![user_id1])
+                        .build(),
+                ),
+                specified_id: None,
+                sender_canister_version: None,
+            }
+            .encode(),
+        )
+        .expect("failed to create canister");
+    let canister_id = canister_id_from_wasm_result(wasm_result);
+
+    // Install canister with custom metadata sections
+    let binary_with_metadata = include_bytes!("test-data/custom_sections.wasm").to_vec();
+    env.execute_ingress_as(
+        user_id1,
+        ic00::IC_00,
+        Method::InstallCode,
+        InstallCodeArgs::new(
+            ic_management_canister_types_private::CanisterInstallMode::Install,
+            canister_id,
+            binary_with_metadata,
+            vec![],
+            None,
+            None,
+        )
+        .encode(),
+    )
+    .unwrap();
+
+    // users cannot retrieve canister metadata directly via ingress messages
+    let res = env.execute_ingress(
+        ic00::IC_00,
+        Method::CanisterMetadata,
+        CanisterMetadataRequest::new(canister_id, "candid:service".to_string()).encode(),
+    );
+    assert_eq!(
+        res,
+        Err(UserError::new(
+            ErrorCode::CanisterRejectedMessage,
+            "Only canisters can call ic00 method canister_metadata"
+        ))
+    );
+
+    // Test retrieving existing metadata section
+    let metadata_result = get_canister_metadata(&env, ucan, canister_id, "candid:service").unwrap();
+    // The content should be a non-empty string since the test wasm has this section
+    assert!(!metadata_result.value().is_empty());
+
+    // Test retrieving another existing metadata section
+    let metadata_result = get_canister_metadata(&env, ucan, canister_id, "candid:args").unwrap();
+    assert!(!metadata_result.value().is_empty());
+
+    // Test retrieving non-existent metadata section
+    let metadata_result = get_canister_metadata(&env, ucan, canister_id, "non_existent");
+    assert!(metadata_result.is_err());
+    assert!(metadata_result
+        .unwrap_err()
+        .contains("Metadata section 'non_existent' not found"));
+
+    // Test with canister that has no execution state (uninstall first)
+    env.execute_ingress_as(
+        user_id1,
+        ic00::IC_00,
+        Method::UninstallCode,
+        CanisterIdRecord::from(canister_id).encode(),
+    )
+    .unwrap();
+
+    let metadata_result = get_canister_metadata(&env, ucan, canister_id, "candid:service");
+    assert!(metadata_result.is_err());
+    assert!(metadata_result
+        .unwrap_err()
+        .contains("Canister has no execution state"));
+
+    // Test with non-existent canister
+    let non_existent_canister = CanisterId::from_u64(999999);
+    let metadata_result =
+        get_canister_metadata(&env, ucan, non_existent_canister, "candid:service");
+    assert!(metadata_result.is_err());
+    assert!(metadata_result.unwrap_err().contains("not found"));
 }
 
 #[test]

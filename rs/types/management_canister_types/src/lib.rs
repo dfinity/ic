@@ -137,6 +137,9 @@ pub enum Method {
 
     // Support for canister migration
     RenameCanister,
+
+    // Canister metadata access
+    CanisterMetadata,
 }
 
 fn candid_error_to_user_error(err: candid::Error) -> UserError {
@@ -702,6 +705,61 @@ impl CanisterInfoResponse {
 }
 
 impl Payload<'_> for CanisterInfoResponse {}
+
+/// `CandidType` for `CanisterMetadataRequest`
+/// ```text
+/// record {
+///   canister_id : principal;
+///   name : text;
+/// }
+/// ```
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct CanisterMetadataRequest {
+    canister_id: PrincipalId,
+    name: String,
+}
+
+impl CanisterMetadataRequest {
+    pub fn new(canister_id: CanisterId, name: String) -> CanisterMetadataRequest {
+        CanisterMetadataRequest {
+            canister_id: canister_id.into(),
+            name,
+        }
+    }
+
+    pub fn canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl Payload<'_> for CanisterMetadataRequest {}
+
+/// `CandidType` for `CanisterMetadataResponse`
+/// ```text
+/// record {
+///   value : text;
+/// }
+/// ```
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct CanisterMetadataResponse {
+    value: String,
+}
+
+impl CanisterMetadataResponse {
+    pub fn new(value: String) -> Self {
+        Self { value }
+    }
+
+    pub fn value(&self) -> &str {
+        &self.value
+    }
+}
+
+impl Payload<'_> for CanisterMetadataResponse {}
 
 impl From<&CanisterChangeOrigin> for pb_canister_state_bits::canister_change::ChangeOrigin {
     fn from(item: &CanisterChangeOrigin) -> Self {

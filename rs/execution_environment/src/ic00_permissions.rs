@@ -26,6 +26,7 @@ impl Ic00MethodPermissions {
         match method {
             Ic00Method::CanisterStatus
             | Ic00Method::CanisterInfo
+            | Ic00Method::CanisterMetadata
             | Ic00Method::DepositCycles
             | Ic00Method::ECDSAPublicKey
             | Ic00Method::SignWithECDSA

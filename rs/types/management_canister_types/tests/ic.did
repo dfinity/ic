@@ -319,6 +319,15 @@ type canister_info_result = record {
     controllers : vec principal;
 };
 
+type canister_metadata_args = record {
+    canister_id : canister_id;
+    name : text;
+};
+
+type canister_metadata_result = record {
+    value : text;
+};
+
 type delete_canister_args = record {
     canister_id : canister_id;
 };
@@ -629,6 +638,7 @@ service ic : {
     stop_canister : (stop_canister_args) -> ();
     canister_status : (canister_status_args) -> (canister_status_result);
     canister_info : (canister_info_args) -> (canister_info_result);
+    canister_metadata : (canister_metadata_args) -> (canister_metadata_result);
     delete_canister : (delete_canister_args) -> ();
     deposit_cycles : (deposit_cycles_args) -> ();
     raw_rand : () -> (raw_rand_result);

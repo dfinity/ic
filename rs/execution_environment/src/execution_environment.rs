@@ -36,18 +36,19 @@ use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SI
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, CreateCanisterArgs,
-    DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EmptyBlob,
-    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
-    ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
-    SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
-    StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse, TakeCanisterSnapshotArgs,
-    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse, UploadChunkArgs,
-    VetKdDeriveKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
+    CanisterInfoResponse, CanisterMetadataRequest, CanisterMetadataResponse, CanisterStatusType,
+    ClearChunkStoreArgs, CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs,
+    ECDSAPublicKeyResponse, EmptyBlob, InstallChunkedCodeArgs, InstallCodeArgsV2,
+    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method,
+    NodeMetricsHistoryArgs, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
+    RenameCanisterArgs, ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs,
+    SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs,
+    SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadCanisterSnapshotMetadataResponse, UploadChunkArgs, VetKdDeriveKeyArgs,
+    VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -920,6 +921,22 @@ impl ExecutionEnvironment {
                 }
                 CanisterCall::Ingress(_) => {
                     self.reject_unexpected_ingress(Ic00Method::CanisterInfo)
+                }
+            },
+
+            Ok(Ic00Method::CanisterMetadata) => match &msg {
+                CanisterCall::Request(_) => {
+                    let res = CanisterMetadataRequest::decode(payload).and_then(|record| {
+                        self.get_canister_metadata(record.canister_id(), record.name(), &state)
+                            .map(|res| (res, Some(record.canister_id())))
+                    });
+                    ExecuteSubnetMessageResult::Finished {
+                        response: res,
+                        refund: msg.take_cycles(),
+                    }
+                }
+                CanisterCall::Ingress(_) => {
+                    self.reject_unexpected_ingress(Ic00Method::CanisterMetadata)
                 }
             },
 
@@ -2268,6 +2285,48 @@ impl ExecutionEnvironment {
             .copied()
             .collect::<Vec<PrincipalId>>();
         let res = CanisterInfoResponse::new(total_num_changes, changes, module_hash, controllers);
+        Ok(res.encode())
+    }
+
+    fn get_canister_metadata(
+        &self,
+        canister_id: CanisterId,
+        name: &str,
+        state: &ReplicatedState,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister = get_canister(canister_id, state)?;
+        let value = match &canister.execution_state {
+            Some(execution_state) => {
+                match execution_state.metadata.get_custom_section(name) {
+                    Some(custom_section) => {
+                        // Convert the custom section content to a string
+                        // If the content is not valid UTF-8, we'll return an error
+                        match std::str::from_utf8(custom_section.content()) {
+                            Ok(content_str) => content_str.to_string(),
+                            Err(_) => {
+                                return Err(UserError::new(
+                                    ErrorCode::CanisterRejectedMessage,
+                                    format!("Metadata section '{}' contains non-UTF-8 data", name),
+                                ));
+                            }
+                        }
+                    }
+                    None => {
+                        return Err(UserError::new(
+                            ErrorCode::CanisterRejectedMessage,
+                            format!("Metadata section '{}' not found", name),
+                        ));
+                    }
+                }
+            }
+            None => {
+                return Err(UserError::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    "Canister has no execution state",
+                ));
+            }
+        };
+        let res = CanisterMetadataResponse::new(value);
         Ok(res.encode())
     }
 
