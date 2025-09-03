@@ -1340,7 +1340,8 @@ pub async fn create_instance(
         // using `let IcpFeatures { }` with explicit field names
         // to force an update after adding a new field to `IcpFeatures`
         let IcpFeatures {
-            registry,
+            /* `nns_ui` does not depend on `registry` */
+            registry: _,
             cycles_minting,
             icp_token,
             /* `nns_ui` does not depend on `cycles_token` */
@@ -1360,7 +1361,6 @@ pub async fn create_instance(
                 );
             }
             for (icp_feature, icp_feature_str) in [
-                (registry, "registry"),
                 (cycles_minting, "cycles_minting"),
                 (icp_token, "icp_token"),
                 (nns_governance, "nns_governance"),

@@ -84,7 +84,7 @@ fn nns_ui_requires_http_gateway() {
 
 #[test]
 #[should_panic(
-    expected = "The `nns_ui` feature requires the `registry` feature to be enabled, too."
+    expected = "The `nns_ui` feature requires the `cycles_minting` feature to be enabled, too."
 )]
 fn nns_ui_requires_other_icp_features() {
     let instance_http_gateway_config = InstanceHttpGatewayConfig {
