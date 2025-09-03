@@ -49,6 +49,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "BaseRewards",
         "DailyBaseRewardsType3",
         "NodeProviderRewards",
+        "RewardsCalculatorVersion",
     ] {
         config.type_attribute(
             format!("rewards_calculator.pb.v1.{message_name}"),
