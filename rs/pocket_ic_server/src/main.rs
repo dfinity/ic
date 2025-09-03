@@ -58,7 +58,7 @@ const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
 #[derive(Parser)]
 #[clap(name = "pocket-ic-server")]
-#[clap(version = "9.0.3")]
+#[clap(version = "10.0.0")]
 struct Args {
     /// The IP address to which the PocketIC server should bind (defaults to 127.0.0.1)
     #[clap(long, short)]
