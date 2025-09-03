@@ -9,14 +9,14 @@ use ic_node_rewards_canister_api::provider_rewards_calculation::{
     GetNodeProviderRewardsCalculationResponse,
 };
 use ic_types::PrincipalId;
-use pocket_ic::common::rest::IcpFeatures;
+use pocket_ic::common::rest::{EmptyConfig, IcpFeatures};
 use pocket_ic::nonblocking::{query_candid, update_candid, PocketIc};
 use pocket_ic::PocketIcBuilder;
 use std::time::Duration;
 
 async fn setup_env() -> PocketIc {
     let icp_features = IcpFeatures {
-        registry: true,
+        registry: Some(EmptyConfig {}),
         ..Default::default()
     };
     let pocket_ic = PocketIcBuilder::new()
