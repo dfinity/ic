@@ -961,6 +961,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "num_cpus": crate.spec(
                 version = "^1.16.0",
             ),
+            "object": crate.spec(
+                version = "^0.37.3",
+            ),
             "once_cell": crate.spec(
                 version = "^1.8",
             ),
