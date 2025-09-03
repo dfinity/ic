@@ -1,11 +1,17 @@
 use std::fmt::Display;
 
 use candid::CandidType;
-use ic_types::PrincipalId;
+use ic_types::{PrincipalId, SubnetId};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 
-use crate::{flags::is_node_swapping_enabled, registry::Registry};
+use crate::{
+    flags::{
+        is_node_swapping_enabled, is_node_swapping_enabled_for_caller,
+        is_node_swapping_enabled_on_subnet,
+    },
+    registry::Registry,
+};
 
 impl Registry {
     /// Called by the node operators in order to rotate their nodes without the need for governance.
@@ -18,7 +24,7 @@ impl Registry {
     fn swap_nodes_inner(
         &mut self,
         payload: SwapNodeInSubnetDirectlyPayload,
-        _caller: PrincipalId,
+        caller: PrincipalId,
     ) -> Result<(), SwapError> {
         // Check if the feature is enabled on the network.
         if !is_node_swapping_enabled() {
@@ -27,12 +33,62 @@ impl Registry {
 
         // Check if the payload is valid by itself.
         payload.validate()?;
+        let (old_node_id, _new_node_id) =
+            (payload.old_node_id.unwrap(), payload.new_node_id.unwrap());
 
-        //TODO(DRE-547): Check if the feature is allowed on the target subnet and for the caller
+        // Check if the feature is allowed on the target subnet and for the caller
+        Self::swapping_allowed_for_caller(caller)?;
+        let subnet_id = self.find_subnet_for_node(old_node_id)?;
+        Self::swapping_allowed_on_subnet(subnet_id)?;
 
         //TODO(DRE-553): Rate-limiting mechanism
 
         //TODO(DRE-548): Implement the swapping functionality
+        Ok(())
+    }
+
+    /// Check if the caller is whitelisted to use this feature.
+    fn swapping_allowed_for_caller(caller: PrincipalId) -> Result<(), SwapError> {
+        if !is_node_swapping_enabled_for_caller(caller) {
+            return Err(SwapError::FeatureDisabledForCaller { caller });
+        }
+
+        Ok(())
+    }
+
+    /// Map the `old_node_id` to a subnet and error if it is
+    /// not a member of any subnet.
+    fn find_subnet_for_node(&self, old_node_id: PrincipalId) -> Result<SubnetId, SwapError> {
+        for (subnet, id) in self
+            .get_subnet_list_record()
+            .subnets
+            .into_iter()
+            // This unwrap should never happen if the registry is invariant compliant.
+            .map(|bytes| SubnetId::new(PrincipalId::try_from(bytes).unwrap()))
+            // This unwrap should never happen if the registry is invariant compliant.
+            .map(|subnet_id| (self.get_subnet_or_panic(subnet_id), subnet_id))
+        {
+            if !subnet
+                .membership
+                .iter()
+                .map(|bytes| PrincipalId::try_from(bytes).unwrap())
+                .any(|node| node == old_node_id)
+            {
+                // Node is not a member of this subnet so skip it.
+                continue;
+            }
+
+            return Ok(id);
+        }
+
+        Err(SwapError::SubnetNotFoundForNode { old_node_id })
+    }
+
+    fn swapping_allowed_on_subnet(subnet_id: SubnetId) -> Result<(), SwapError> {
+        if !is_node_swapping_enabled_on_subnet(subnet_id) {
+            return Err(SwapError::FeatureDisabledOnSubnet { subnet_id });
+        }
+
         Ok(())
     }
 }
@@ -55,6 +111,9 @@ pub enum SwapError {
     FeatureDisabled,
     MissingInput,
     SamePrincipals,
+    FeatureDisabledForCaller { caller: PrincipalId },
+    FeatureDisabledOnSubnet { subnet_id: SubnetId },
+    SubnetNotFoundForNode { old_node_id: PrincipalId },
 }
 
 impl Display for SwapError {
@@ -68,6 +127,12 @@ impl Display for SwapError {
                 SwapError::MissingInput => "The provided payload has missing data".to_string(),
                 SwapError::SamePrincipals =>
                     "`new_node_id` and `old_node_id` must differ".to_string(),
+                SwapError::FeatureDisabledForCaller { caller } =>
+                    format!("Caller `{caller}` isn't whitelisted to use swapping feature yet."),
+                SwapError::FeatureDisabledOnSubnet { subnet_id } =>
+                    format!("Swapping is disabled on subnet `{subnet_id}`."),
+                SwapError::SubnetNotFoundForNode { old_node_id } =>
+                    format!("Node {old_node_id} is not a member of any subnet."),
             }
         )
     }
@@ -161,9 +226,13 @@ mod tests {
 
         let payload = valid_payload();
 
-        assert!(registry
-            .swap_nodes_inner(payload, PrincipalId::new_user_test_id(1))
-            .is_ok())
+        let result = registry.swap_nodes_inner(payload, PrincipalId::new_user_test_id(1));
+
+        // First error that occurs after validation
+        assert!(result.is_err_and(|err| err
+            == SwapError::FeatureDisabledForCaller {
+                caller: PrincipalId::new_user_test_id(1)
+            }));
     }
 
     #[test]
