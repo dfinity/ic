@@ -1,22 +1,38 @@
 /* tag::catalog[]
+
+Title:: State Sync performance test
+
+Runbook::
+. setup a testnet with a single node
+. install nns and state sync canisters
+. grow the state of the subnet by expanding states of the state sync canisters
+
 TODO: Document the test
 end::catalog[] */
 
 use anyhow::Result;
+use canister_test::Canister;
+use ic_consensus_threshold_sig_system_test_utils::{
+    empty_subnet_update, execute_update_subnet_proposal,
+};
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
-        ic::{InternetComputer, Subnet},
+        ic::{ImageSizeGiB, InternetComputer, Subnet, VmResources},
         prometheus_vm::{HasPrometheus, PrometheusVm},
         simulate_network::{FixedNetworkSimulation, SimulateNetwork},
         test_env::TestEnv,
-        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+        test_env_api::{
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+        },
     },
     systest,
     util::{block_on, runtime_from_url, UniversalCanister},
 };
 use ic_types::Height;
+use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use rejoin_test_lib::{install_statesync_test_canisters, modify_canister_heap};
 use slog::info;
 use std::time::Duration;
@@ -30,12 +46,20 @@ const LATENCY: Duration = Duration::from_millis(150); // artificial added latenc
 const SIZE_LEVEL: usize = 16;
 const NUM_CANISTERS: usize = 8;
 
+const LATEST_CERTIFIED_HEIGHT: &str = "state_manager_latest_certified_height";
+
 fn setup(env: TestEnv) {
     PrometheusVm::default()
         .start(&env)
         .expect("failed to start prometheus VM");
 
     InternetComputer::new()
+        .with_default_vm_resources(VmResources {
+            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(
+                30 + 2 * NUM_CANISTERS as u64 * SIZE_LEVEL as u64,
+            )),
+            ..VmResources::default()
+        })
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(99))
@@ -60,24 +84,29 @@ fn setup(env: TestEnv) {
             .expect("Timeout while waiting for all unassigned nodes to be healthy");
     });
 
-    topology
-        .subnets()
-        .next()
-        .expect("Failed to retreive system subnet")
-        .apply_network_settings(
-            FixedNetworkSimulation::new()
-                .with_latency(LATENCY)
-                .with_bandwidth(BANDWIDTH_MBITS),
-        );
-
+    topology.root_subnet().apply_network_settings(
+        FixedNetworkSimulation::new()
+            .with_latency(LATENCY)
+            .with_bandwidth(BANDWIDTH_MBITS),
+    );
     env.sync_with_prometheus();
+
+    // Currently, we make the assumption that the first subnets is the root
+    // subnet. This might not hold in the future.
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
+        .expect("Failed to install NNS canisters");
 }
 
 fn test(env: TestEnv) {
     let logger = env.logger();
+    let topology = env.topology_snapshot();
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
 
-    let agent_node = env
-        .topology_snapshot()
+    let agent_node = topology
         .root_subnet()
         .nodes()
         .next()
@@ -118,9 +147,28 @@ fn test(env: TestEnv) {
             0,
         )
         .await;
-    });
 
-    todo!()
+        info!(
+            logger,
+            "Expanded the subnet state size. Growing the subnet to {} nodes", TOTAL_NODES
+        );
+
+        let disable_signing_payload = UpdateSubnetPayload {
+            subnet_id: topology.root_subnet().subnet_id,
+            ..empty_subnet_update()
+        };
+        execute_update_subnet_proposal(
+            &governance,
+            disable_signing_payload,
+            &format!("Grow subnet to {} nodes", TOTAL_NODES),
+            &logger,
+        )
+        .await;
+
+        let res =
+            fetch_metrics::<u64>(&logger, agent_node.clone(), vec![LATEST_CERTIFIED_HEIGHT]).await;
+        let latest_certified_height = res[LATEST_CERTIFIED_HEIGHT][0];
+    });
 }
 
 fn main() -> Result<()> {

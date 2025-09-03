@@ -423,6 +423,10 @@ system_test_nns(
         STATESYNC_TEST_CANISTER_RUNTIME_DEPS +
         UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
+        "//rs/nns/constants",
+        "//rs/registry/canister",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/message_routing/rejoin_test_lib",
         "//rs/types/types",
     ],
