@@ -213,9 +213,12 @@ jobs:
             # the target list can get quite big, so we wrap it in details/summary
             {
               echo '<details><summary>Tested '"$num_targets"' targets</summary>';
-              cat "$target_pattern_file"
+              sed 's/.*/`&`/' "$target_pattern_file"
               echo '</details>';
             } >>"$GITHUB_STEP_SUMMARY"
+
+            exit 0
+
             bazel_args+=( --target_pattern_file="$target_pattern_file" )
 
             echo "Building as user: $(whoami)"
@@ -500,7 +503,7 @@ jobs:
             # the target list can get quite big, so we wrap it in details/summary
             {
               echo '<details><summary>Considered '"$num_targets"' targets</summary>';
-              cat "$target_pattern_file"
+              sed 's/.*/`&`/' "$target_pattern_file"
               echo '</details>';
             } >>"$GITHUB_STEP_SUMMARY"
 
