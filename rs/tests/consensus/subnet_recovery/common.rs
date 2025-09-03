@@ -632,8 +632,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
     let node_ip = node.get_ip_addr();
 
     let command = format!(
-        r#"sudo mount --bind {remote_ic_admin_path:?} /opt/ic/bin/ic-admin
-        /opt/ic/bin/ic-recovery \
+        r#"sudo mount --bind {remote_ic_admin_path:?} /opt/ic/bin/ic-admin && /opt/ic/bin/ic-recovery \
         --nns-url {nns_url} \
         --test --skip-prompts --use-local-binaries \
         app-subnet-recovery \
