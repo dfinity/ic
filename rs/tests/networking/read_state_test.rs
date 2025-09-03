@@ -155,15 +155,16 @@ fn get_first_app_subnet(env: &TestEnv) -> SubnetSnapshot {
 }
 
 /// Call "read_state" with the given paths and the basic identity on the first Application subnet
-fn new_read_state(
+fn read_state(
     env: &TestEnv,
     paths: Vec<Vec<Label<Vec<u8>>>>,
     endpoint: Endpoint,
 ) -> Result<Certificate, AgentError> {
-    new_read_state_with_identity(env, paths, endpoint, get_identity())
+    read_state_with_identity(env, paths, endpoint, get_identity())
 }
 
-fn new_read_state_with_identity(
+/// Call "read_state" with the given paths and the identity on the first Application subnet
+fn read_state_with_identity(
     env: &TestEnv,
     paths: Vec<Vec<Label<Vec<u8>>>>,
     endpoint: Endpoint,
@@ -174,11 +175,10 @@ fn new_read_state_with_identity(
         Endpoint::SubnetReadState(_version) => get_first_app_subnet(env).subnet_id.get(),
     };
 
-    new_read_state_with_identity_and_principal_id(env, paths, endpoint, identity, principal_id)
+    read_state_with_identity_and_principal_id(env, paths, endpoint, identity, principal_id)
 }
 
-/// Call "read_state" with the given paths and the basic identity on the first Application subnet
-fn new_read_state_with_identity_and_principal_id(
+fn read_state_with_identity_and_principal_id(
     env: &TestEnv,
     paths: Vec<Vec<Label<Vec<u8>>>>,
     endpoint: Endpoint,
@@ -205,7 +205,7 @@ fn new_read_state_with_identity_and_principal_id(
 }
 
 fn test_empty_paths_return_time(env: TestEnv, endpoint: Endpoint) {
-    let cert = new_read_state(&env, vec![], endpoint).expect("Valid request");
+    let cert = read_state(&env, vec![], endpoint).expect("Valid request");
     let mut value = lookup_value(&cert, vec!["time".as_bytes()]).unwrap();
     let time = leb128::read::unsigned(&mut value).unwrap();
     assert!(time > 0);
@@ -214,7 +214,7 @@ fn test_empty_paths_return_time(env: TestEnv, endpoint: Endpoint) {
 fn test_time_path_returns_time(env: TestEnv, endpoint: Endpoint) {
     let path = vec!["time".into()];
     let paths = vec![path.clone()];
-    let cert = new_read_state(&env, paths, endpoint).expect("Valid request");
+    let cert = read_state(&env, paths, endpoint).expect("Valid request");
     let mut value = lookup_value(&cert, path).unwrap();
     let time = leb128::read::unsigned(&mut value).unwrap();
     assert!(time > 0);
@@ -232,7 +232,7 @@ fn test_subnet_path(env: TestEnv, endpoint: Endpoint) {
 
     // Query the `/subnet` enpoint of the app subnet
     let path = vec!["subnet".into()];
-    let cert = new_read_state(&env, vec![path], endpoint).expect("Valid request");
+    let cert = read_state(&env, vec![path], endpoint).expect("Valid request");
 
     // Should contain public key and canister ranges for all subnets
     for subnet_id in [nns_subnet_id, app_subnet_id] {
@@ -283,7 +283,7 @@ fn test_subnet_path(env: TestEnv, endpoint: Endpoint) {
 fn test_invalid_request_rejected(env: TestEnv, endpoint: Endpoint) {
     for invalid_request_id in ["", "foo"] {
         let path = vec!["request_status".into(), invalid_request_id.into()];
-        let error = new_read_state(&env, vec![path], endpoint).expect_err("Invalid request");
+        let error = read_state(&env, vec![path], endpoint).expect_err("Invalid request");
         match endpoint {
             Endpoint::CanisterReadState(_version) => {
                 assert_matches!(
@@ -307,7 +307,7 @@ fn test_absent_request(env: TestEnv, version: read_state::canister::Version) {
     let endpoint = Endpoint::CanisterReadState(version);
     for absent_request_id in [&[0; 32], &[8; 32], &[255; 32]] {
         let path = vec!["request_status".into(), absent_request_id.into()];
-        let cert = new_read_state(&env, vec![path], endpoint).expect("Valid request");
+        let cert = read_state(&env, vec![path], endpoint).expect("Valid request");
         let value = lookup_value(
             &cert,
             vec![
@@ -323,8 +323,8 @@ fn test_absent_request(env: TestEnv, version: read_state::canister::Version) {
 // The paths `/` (root), `/<>` (empty label), and `/<foo>` are invalid.
 fn test_invalid_path_rejected(env: TestEnv, endpoint: Endpoint) {
     for invalid_path in [vec![], vec!["".into()], vec!["foo".into()]] {
-        let error = new_read_state(&env, vec![invalid_path.clone()], endpoint)
-            .expect_err("Invalid request");
+        let error =
+            read_state(&env, vec![invalid_path.clone()], endpoint).expect_err("Invalid request");
         assert_matches!(
             error,
             AgentError::HttpError(error) if error.status == StatusCode::NOT_FOUND.as_u16(),
@@ -353,7 +353,7 @@ fn lookup_metadata(
         "metadata".into(),
         metadata_section.into(),
     ];
-    let cert = new_read_state_with_identity_and_principal_id(
+    let cert = read_state_with_identity_and_principal_id(
         env,
         vec![path.clone()],
         endpoint,
@@ -593,7 +593,7 @@ fn test_module_hash_and_controllers<F>(
         canister_id.get_ref().as_slice().into(),
         "module_hash".into(),
     ];
-    let cert = new_read_state_with_identity_and_principal_id(
+    let cert = read_state_with_identity_and_principal_id(
         env,
         vec![module_hash_path.clone()],
         endpoint,
@@ -609,7 +609,7 @@ fn test_module_hash_and_controllers<F>(
         canister_id.get_ref().as_slice().into(),
         "controllers".into(),
     ];
-    let cert = new_read_state_with_identity_and_principal_id(
+    let cert = read_state_with_identity_and_principal_id(
         env,
         vec![controllers_path.clone()],
         endpoint,
@@ -674,7 +674,7 @@ fn test_request_path(env: TestEnv, version: read_state::canister::Version) {
         (*request_id).into(),
         "status".into(),
     ];
-    let cert = new_read_state(&env, vec![status_path.clone()], endpoint).unwrap();
+    let cert = read_state(&env, vec![status_path.clone()], endpoint).unwrap();
     let value = lookup_value(&cert, status_path).unwrap();
     assert_eq!(
         String::from("replied"),
@@ -686,7 +686,7 @@ fn test_request_path(env: TestEnv, version: read_state::canister::Version) {
         (*request_id).into(),
         "reply".into(),
     ];
-    let cert = new_read_state(&env, vec![reply_path.clone()], endpoint).unwrap();
+    let cert = read_state(&env, vec![reply_path.clone()], endpoint).unwrap();
     let value = lookup_value(&cert, reply_path).unwrap();
     // Sanity check that at least 32 bytes were returned
     assert!(value.len() > 32);
@@ -711,11 +711,11 @@ fn test_request_path_access(env: TestEnv, version: read_state::canister::Version
         let paths = vec![vec!["request_status".into(), (*request_id).into()]];
 
         // Lookup should succeed for default identity
-        let result = new_read_state_with_identity(&env, paths.clone(), endpoint, get_identity());
+        let result = read_state_with_identity(&env, paths.clone(), endpoint, get_identity());
         assert!(result.is_ok());
 
         // Lookup should fail for identity that didn't make the request
-        let result = new_read_state_with_identity(&env, paths, endpoint, random_ed25519_identity());
+        let result = read_state_with_identity(&env, paths, endpoint, random_ed25519_identity());
         assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 403);
     }
 
@@ -724,7 +724,7 @@ fn test_request_path_access(env: TestEnv, version: read_state::canister::Version
         vec!["request_status".into(), (*request_id1).into()],
         vec!["request_status".into(), (*request_id2).into()],
     ];
-    let result = new_read_state_with_identity(&env, paths.clone(), endpoint, get_identity());
+    let result = read_state_with_identity(&env, paths.clone(), endpoint, get_identity());
     assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 400);
 
     // Reading both requests (to different canisters) at the same time should fail
@@ -737,7 +737,7 @@ fn test_request_path_access(env: TestEnv, version: read_state::canister::Version
         vec!["request_status".into(), (*request_id1).into()],
         vec!["request_status".into(), (*request_id2).into()],
     ];
-    let result = new_read_state_with_identity(&env, paths.clone(), endpoint, get_identity());
+    let result = read_state_with_identity(&env, paths.clone(), endpoint, get_identity());
     assert_matches!(result, Err(AgentError::HttpError(payload)) if payload.status == 400);
 }
 
@@ -752,7 +752,7 @@ fn test_canister_canister_ranges_paths(env: TestEnv, version: read_state::canist
         subnet.subnet_id.get_ref().as_slice().into(),
     ];
 
-    let cert = new_read_state(&env, vec![path.clone()], endpoint).expect("Failed to read state");
+    let cert = read_state(&env, vec![path.clone()], endpoint).expect("Failed to read state");
 
     validate_canister_ranges(&subnet, &path, &cert);
 }
@@ -768,7 +768,7 @@ fn test_subnet_canister_ranges_paths(env: TestEnv, version: read_state::subnet::
         subnet.subnet_id.get_ref().as_slice().into(),
     ];
 
-    let cert = new_read_state(&env, vec![path.clone()], endpoint).expect("Failed to read state");
+    let cert = read_state(&env, vec![path.clone()], endpoint).expect("Failed to read state");
 
     validate_canister_ranges(&subnet, &path, &cert);
 }
