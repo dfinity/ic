@@ -257,13 +257,13 @@ where
     }
 }
 
-pub fn mock_bitcoin<Network: BlockchainNetwork>(
+pub fn mock_bitcoin<Network>(
     rt: &tokio::runtime::Handle,
     test_data_path: String,
     block_data_path: String,
 ) -> net::SocketAddr
 where
-    Network: Clone + 'static,
+    Network: BlockchainNetwork + Clone + 'static,
     Network::Header: for<'de> serde::Deserialize<'de> + Debug + Send + Sync,
     Network::Block: for<'de> serde::Deserialize<'de> + Debug + Send + Sync,
 {

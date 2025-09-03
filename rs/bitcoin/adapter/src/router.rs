@@ -27,7 +27,7 @@ use tokio::{
 /// Having a design where we have a separate task that awaits on messages from the
 /// ConnectionManager, we keep the ConnectionManager free of dependencies like the
 /// TransactionStore or the BlockchainManager.
-pub fn start_main_event_loop<Network: BlockchainNetwork>(
+pub fn start_main_event_loop<Network>(
     config: &Config,
     logger: ReplicaLogger,
     blockchain_state: Arc<Mutex<BlockchainState<Network>>>,
@@ -36,9 +36,9 @@ pub fn start_main_event_loop<Network: BlockchainNetwork>(
     mut blockchain_manager_rx: Receiver<BlockchainManagerRequest<Network::Header>>,
     metrics_registry: &MetricsRegistry,
 ) where
+    Network: BlockchainNetwork + Send + 'static,
     Network::Header: Send,
     Network::Block: Send,
-    Network: Send + 'static,
 {
     let (network_message_sender, mut network_message_receiver) = channel::<(
         SocketAddr,

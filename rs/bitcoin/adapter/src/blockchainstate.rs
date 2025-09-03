@@ -202,7 +202,7 @@ impl<Network: BlockchainNetwork> BlockchainState<Network> {
         }
 
         let parent = self.header_cache.get_mut(&header.prev_block_hash()).ok_or(
-            AddHeaderError::PrevHeaderNotCached(header.prev_block_hash().clone()),
+            AddHeaderError::PrevHeaderNotCached(header.prev_block_hash()),
         )?;
 
         let cached_header = HeaderNode {
