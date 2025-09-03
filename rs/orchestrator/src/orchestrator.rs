@@ -12,7 +12,6 @@ use crate::{
     registry_helper::RegistryHelper,
     ssh_access_manager::SshAccessManager,
     upgrade::{OrchestratorControlFlow, Upgrade},
-    utils::{maybe_notify_control_flow_change, NodeAssignationState},
 };
 use backoff::ExponentialBackoffBuilder;
 use get_if_addrs::get_if_addrs;
@@ -381,36 +380,10 @@ impl Orchestrator {
             // in case it gets stuck in an unexpected situation for longer than 15 minutes.
             const UPGRADE_TIMEOUT: Duration = Duration::from_secs(60 * 15);
 
-            // Assume an initial unassigned state. This is used for a graceful shutdown message
-            // to the host console. The message is displayed only if the change is from
-            // Assigned -> Unassigned.
-            let mut current_node_assignment_state = NodeAssignationState::Unknown;
-
             loop {
-                // Fetch the current state of the node assignment as visible to the registry
-                let current_subnet_in_registry = match upgrade.registry.get_subnet_id_from_node_id(
-                    upgrade.node_id(),
-                    upgrade.registry.get_latest_version(),
-                ) {
-                    Ok(maybe_subnet) => maybe_subnet,
-                    Err(e) => {
-                        error!(log, "Couldn't read information about subnet membership from registry due to: {e:?}");
-                        None
-                    }
-                };
                 match tokio::time::timeout(UPGRADE_TIMEOUT, upgrade.check_for_upgrade()).await {
                     Ok(Ok(control_flow)) => {
                         upgrade.metrics.failed_consecutive_upgrade_checks.reset();
-
-                        // Figure out the new state based on the information from
-                        // the registry and the cup information.
-                        current_node_assignment_state = maybe_notify_control_flow_change(
-                            current_node_assignment_state,
-                            control_flow.clone(),
-                            upgrade.node_id(),
-                            current_subnet_in_registry,
-                            &log,
-                        );
 
                         match control_flow {
                             OrchestratorControlFlow::Assigned(subnet_id) => {

@@ -20,6 +20,7 @@ use ic_protobuf::proxy::try_from_option_field;
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
+use ic_sys::utility_command::UtilityCommand;
 use ic_types::{
     consensus::{CatchUpPackage, HasHeight},
     crypto::{
@@ -38,7 +39,6 @@ use std::{
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 
 #[must_use = "This may be a `Stop` variant, which should be handled"]
-#[derive(Clone, Debug)]
 pub(crate) enum OrchestratorControlFlow {
     /// The node is assigned to the subnet with the given subnet id.
     Assigned(SubnetId),
@@ -150,10 +150,6 @@ impl Upgrade {
             .reboot_duration
             .set(elapsed_time.as_secs() as i64);
         Ok(())
-    }
-
-    pub(crate) fn node_id(&self) -> NodeId {
-        self.node_id
     }
 
     /// Checks for a new release package, and if found, upgrades to this release
@@ -282,24 +278,35 @@ impl Upgrade {
 
         // Now when we have the most recent CUP, we check if we're still assigned.
         // If not, go into unassigned state.
-        if should_node_become_unassigned(
+        if let Some(decision) = should_node_become_unassigned(
             &*self.registry.registry_client,
             self.node_id,
             subnet_id,
             &latest_cup,
         ) {
-            self.stop_replica()?;
-            return match self.remove_state().await {
-                Ok(()) => Ok(OrchestratorControlFlow::Unassigned),
-                Err(err) => {
-                    warn!(
-                        self.logger,
-                        "Removal of the node state failed with error {}", err
-                    );
-                    self.metrics.critical_error_state_removal_failed.inc();
-                    Err(err)
+            let node_id = self.node_id;
+            match decision {
+                UnassignmentDecision::Later => {
+                    UtilityCommand::notify_host(&format!("The node {node_id} has been unassigned from the subnet {subnet_id} in the registry. Please do not turn off the machine while it completes its graceful removal from the subnet. This process can take up to 15 minutes. A new message will be displayed here when the node has been successfully removed."), 1);
                 }
-            };
+                UnassignmentDecision::Now => {
+                    self.stop_replica()?;
+                    return match self.remove_state().await {
+                        Ok(()) => {
+                            UtilityCommand::notify_host(&format!("The node {node_id} has gracefully left subnet {subnet_id}. The node can be turned off now."), 1);
+                            Ok(OrchestratorControlFlow::Unassigned)
+                        }
+                        Err(err) => {
+                            warn!(
+                                self.logger,
+                                "Removal of the node state failed with error {}", err
+                            );
+                            self.metrics.critical_error_state_removal_failed.inc();
+                            Err(err)
+                        }
+                    };
+                }
+            }
         }
 
         // If we arrived here, we have the newest CUP and we're still assigned.
@@ -643,6 +650,21 @@ fn get_subnet_id(registry: &dyn RegistryClient, cup: &CatchUpPackage) -> Result<
     }
 }
 
+/// Represents the unassignment decision that the node should take.
+enum UnassignmentDecision {
+    /// Unassign right now.
+    ///
+    /// This means that the node is no longer participating in consensus
+    /// and can be deemed as unassigned as of now.
+    Now,
+    /// Unassign later.
+    ///
+    /// This means that the node is still pariticpating in consensus and
+    /// it was only requested for the node to be unassigned in the
+    /// registry. Here, the node is still participating in the subnet.
+    Later,
+}
+
 // Checks if the node still belongs to the subnet it was assigned the last time.
 // We decide this by checking the subnet membership starting from the oldest
 // relevant version of the local CUP and ending with the latest registry
@@ -652,25 +674,44 @@ fn should_node_become_unassigned(
     node_id: NodeId,
     subnet_id: SubnetId,
     cup: &CatchUpPackage,
-) -> bool {
+) -> Option<UnassignmentDecision> {
     let oldest_relevant_version = cup.get_oldest_registry_version_in_use().get();
     let latest_registry_version = registry.get_latest_version().get();
     // Make sure that if the latest registry version is for some reason violating
     // the assumption that it's higher/equal than any other version used in the
     // system, we still do not remove the subnet state by a mistake.
     if latest_registry_version < oldest_relevant_version {
-        return false;
+        return None;
     }
-    for version in oldest_relevant_version..=latest_registry_version {
-        if let Ok(Some(members)) =
-            registry.get_node_ids_on_subnet(subnet_id, RegistryVersion::from(version))
-        {
-            if members.iter().any(|id| id == &node_id) {
-                return false;
-            }
+
+    // If the node is at the latest registry version in a subnet it shouldn't be unassigned.
+    if node_is_in_subnet_at_version(registry, node_id, subnet_id, latest_registry_version) {
+        return None;
+    }
+
+    for version in oldest_relevant_version..latest_registry_version {
+        if node_is_in_subnet_at_version(registry, node_id, subnet_id, version) {
+            return Some(UnassignmentDecision::Later);
         }
     }
-    true
+
+    Some(UnassignmentDecision::Now)
+}
+
+fn node_is_in_subnet_at_version(
+    registry: &dyn RegistryClient,
+    node_id: NodeId,
+    subnet_id: SubnetId,
+    version: u64,
+) -> bool {
+    registry
+        .get_node_ids_on_subnet(subnet_id, RegistryVersion::from(version))
+        .map(|maybe_members| {
+            maybe_members
+                .map(|members| members.iter().any(|id| id == &node_id))
+                .unwrap_or(false)
+        })
+        .unwrap_or(false)
 }
 
 // Call `sync` and `fstrim` on the data partition
