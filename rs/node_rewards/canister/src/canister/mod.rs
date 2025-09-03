@@ -121,7 +121,6 @@ impl NodeRewardsCanister {
     fn calculate_rewards<S: RegistryDataStableMemory>(
         &self,
         request: GetNodeProvidersRewardsRequest,
-        provider_filter: Option<PrincipalId>,
     ) -> Result<RewardsCalculatorResults, String> {
         let reward_period = RewardPeriod::new(request.from_nanos.into(), request.to_nanos.into())
             .map_err(|e| e.to_string())?;
@@ -134,16 +133,12 @@ impl NodeRewardsCanister {
         let daily_metrics_by_subnet = self
             .metrics_manager
             .daily_metrics_by_subnet(reward_period.from, reward_period.to);
-        let mut provider_rewardable_nodes =
-            RegistryQuerier::get_rewardable_nodes_per_provider::<S>(
-                &*self.registry_client,
-                reward_period.from,
-                reward_period.to,
-            )
-            .map_err(|e| format!("Could not get rewardable nodes: {e:?}"))?;
-        if let Some(provider_id) = provider_filter {
-            provider_rewardable_nodes.retain(|p, _| p == &provider_id);
-        }
+        let provider_rewardable_nodes = RegistryQuerier::get_rewardable_nodes_per_provider::<S>(
+            &*self.registry_client,
+            reward_period.from,
+            reward_period.to,
+        )
+        .map_err(|e| format!("Could not get rewardable nodes: {e:?}"))?;
 
         let input = RewardsCalculatorInput {
             reward_period,
@@ -243,8 +238,7 @@ impl NodeRewardsCanister {
                 )
             })?;
         NodeRewardsCanister::schedule_metrics_sync(canister).await;
-        let result =
-            canister.with_borrow(|canister| canister.calculate_rewards::<S>(request, None))?;
+        let result = canister.with_borrow(|canister| canister.calculate_rewards::<S>(request))?;
         let rewards_xdr_permyriad = result
             .provider_results
             .iter()
@@ -267,9 +261,8 @@ impl NodeRewardsCanister {
             from_nanos: request.from_nanos,
             to_nanos: request.to_nanos,
         };
-        let mut result = canister.with_borrow(|canister| {
-            canister.calculate_rewards::<S>(request_inner, Some(provider_id))
-        })?;
+        let mut result =
+            canister.with_borrow(|canister| canister.calculate_rewards::<S>(request_inner))?;
         let node_provider_rewards = result.provider_results.remove(&provider_id).ok_or(format!(
             "No rewards found for node provider {}",
             provider_id
