@@ -176,6 +176,10 @@ members = [
     "rs/ic_os/dev_test_tools/setupos-image-config",
     "rs/ic_os/fstrim_tool",
     "rs/ic_os/grub",
+    "rs/ic_os/guest_upgrade/client",
+    "rs/ic_os/guest_upgrade/server",
+    "rs/ic_os/guest_upgrade/shared",
+    "rs/ic_os/guest_upgrade/tests",
     "rs/ic_os/linux_kernel_command_line",
     "rs/ic_os/metrics_tool",
     "rs/ic_os/network",
@@ -844,6 +848,7 @@ tonic = "0.12.3"
 tonic-build = "0.12.3"
 tower = { version = "0.5.2", features = ["full"] }
 tower-http = { version = "0.6.4", features = [
+    "add-extension",
     "cors",
     "limit",
     "trace",

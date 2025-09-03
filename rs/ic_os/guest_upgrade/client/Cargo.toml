@@ -1,0 +1,33 @@
+[package]
+name = "guest_upgrade_client"
+edition = "2021"
+
+[lib]
+
+[[bin]]
+name = "guest_upgrade_client"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+attestation = { path = "../../attestation" }
+config = { path = "../../config" }
+config_types = { path = "../../config_types" }
+der = { workspace = true }
+guest_disk = { path = "../../os_tools/guest_disk" }
+guest_upgrade_shared = { path = "../shared" }
+ic-interfaces-registry = { path = "../../../interfaces/registry" }
+ic-registry-client = { path = "../../../registry/client" }
+ic-registry-nns-data-provider-wrappers = { path = "../../../registry/nns_data_provider_wrappers" }
+ic-crypto-utils-threshold-sig-der = { path = "../../../crypto/utils/threshold_sig_der" }
+ic_sev = { path = "../../sev" }
+rcgen = { workspace = true }
+rustls = { workspace = true }
+sev = { workspace = true }
+tokio = { workspace = true }
+tonic = { workspace = true }
+x509-parser = { workspace = true }
+hyper-rustls = { workspace = true }
+hyper-util = { workspace = true }
+tower = { workspace = true }
+http = { workspace = true }

@@ -6,8 +6,6 @@ use ic_sev::guest::firmware::SevGuestFirmware;
 use ic_sev::guest::key_deriver::{derive_key_from_sev_measurement, Key};
 use std::path::Path;
 
-pub const PREVIOUS_KEY_PATH: &str = "/var/alternative_store.keyfile";
-
 pub struct SevDiskEncryption<'a> {
     pub sev_firmware: Box<dyn SevGuestFirmware>,
     pub previous_key_path: &'a Path,
