@@ -252,7 +252,7 @@ fn run_run_tests(cmd: RunTests) -> Result<()> {
 
 If not, you can also run the upgrade tests manually:
     - Follow instructions in: testnet/tools/nns-tools/README.md#upgrade-testing-via-bazel
-   
+
 2. SNS Testing Note:
    - No manual testing needed for SNS
    - Covered by sns_release_qualification in CI
@@ -482,7 +482,7 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
         5,
         "Submit Proposals",
         &format!(
-            "I submitted the following proposals: 
+            "I submitted the following proposals:
             NNS: {}
             SNS: {}",
             nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
@@ -589,7 +589,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
             .append_pair("title", &title)
             .append_pair("body", body)
             .append_pair("category", "Governance/NNS proposal discussions")
-            .append_pair("tags", "SNS,SNS-management");
+            .append_pair("tags", "SNS,Service-nervous-system-mgmt");
 
         open_webpage(&url)?;
 
