@@ -11,7 +11,7 @@ use ic_management_canister_types_private::{
 };
 use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister;
 use ic_nns_constants::{REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_test_utils::common::build_registry_wasm;
+use ic_nns_test_utils::common::{build_registry_wasm, build_test_registry_wasm};
 use ic_nns_test_utils::itest_helpers::{
     set_up_registry_canister, set_up_universal_canister, try_call_via_universal_canister,
 };
@@ -414,25 +414,38 @@ pub async fn check_subnet_for_canisters(
 }
 
 pub async fn install_registry_canister(pocket_ic: &PocketIc) {
-    install_registry_canister_with_mutations(pocket_ic, vec![]).await;
+    install_registry_canister_with_payload_builder(
+        pocket_ic,
+        RegistryCanisterInitPayloadBuilder::new(),
+        false,
+    )
+    .await;
 }
 
-pub async fn install_registry_canister_with_mutations(
-    pocket_ic: &PocketIc,
-    requests: Vec<RegistryAtomicMutateRequest>,
-) {
-    let mut payload = RegistryCanisterInitPayloadBuilder::new();
-    for request in requests {
-        payload.push_init_mutate_request(request);
-    }
+pub async fn install_test_registry_canister(pocket_ic: &PocketIc) {
+    install_registry_canister_with_payload_builder(
+        pocket_ic,
+        RegistryCanisterInitPayloadBuilder::new(),
+        true,
+    )
+    .await;
+}
 
-    let payload = payload.build();
+pub async fn install_registry_canister_with_payload_builder(
+    pocket_ic: &PocketIc,
+    builder: RegistryCanisterInitPayloadBuilder,
+    test_configuration: bool,
+) {
+    let payload = builder.build();
     install_canister(
         pocket_ic,
         "Registry",
         REGISTRY_CANISTER_ID,
         Encode!(&payload).unwrap(),
-        build_registry_wasm(),
+        test_configuration
+            .then(|| build_test_registry_wasm())
+            .or(Some(build_registry_wasm()))
+            .unwrap(),
         Some(ROOT_CANISTER_ID.get()),
     )
     .await;

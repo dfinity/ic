@@ -39,6 +39,23 @@ pub(crate) fn temporarily_enable_node_swapping() -> Temporary {
     Temporary::new(&IS_NODE_SWAPPING_ENABLED, true)
 }
 
+#[cfg(test)]
+mod temporary_overrides {
+    use super::*;
+
+    pub(crate) fn test_set_swapping_status(override_value: bool) {
+        IS_NODE_SWAPPING_ENABLED.replace(override_value);
+    }
+
+    pub(crate) fn test_set_swapping_whitelisted_callers(override_callers: Vec<PrincipalId>) {
+        NODE_SWAPPING_WHITELISTED_CALLERS.replace(override_callers);
+    }
+
+    pub(crate) fn test_set_swapping_enabled_subnets(override_subnets: Vec<SubnetId>) {
+        NODE_SWAPPING_ENABLED_SUBNETS.replace(override_subnets);
+    }
+}
+
 pub(crate) fn is_node_swapping_enabled_on_subnet(subnet_id: SubnetId) -> bool {
     NODE_SWAPPING_ENABLED_SUBNETS
         .with_borrow(|enabled_subnets| enabled_subnets.contains(&subnet_id))

@@ -180,6 +180,13 @@ fn canister_init() {
             registry.maybe_apply_mutation_internal(mutation_request.mutations)
         });
     recertify_registry();
+
+    #[cfg(test)]
+    {
+        test_set_swapping_status(init_payload.is_swapping_feature_enabled);
+        test_set_swapping_whitelisted_callers(init_payload.swapping_whitelisted_callers);
+        test_set_swapping_enabled_subnets(init_payload.swapping_enabled_subnets);
+    }
 }
 
 #[export_name = "canister_pre_upgrade"]
