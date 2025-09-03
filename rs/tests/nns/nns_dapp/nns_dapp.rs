@@ -170,7 +170,7 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
               ("HOST".to_string(), ic_gateway_url.to_string()),
               /* ICP swap canister is not deployed by the test driver! */
               ("ICP_SWAP_URL".to_string(), format!("https://uvevg-iyaaa-aaaak-ac27q-cai.raw.{}/", ic_gateway_domain)),
-              ("IDENTITY_SERVICE_URL".to_string(), format!("https://{}.localhost:{}", IDENTITY_CANISTER_ID, ic_gateway_domain)),
+              ("IDENTITY_SERVICE_URL".to_string(), format!("https://{}.{}", IDENTITY_CANISTER_ID, ic_gateway_domain)),
               ("INDEX_CANISTER_ID".to_string(), LEDGER_INDEX_CANISTER_ID.to_string()),
               ("LEDGER_CANISTER_ID".to_string(), LEDGER_CANISTER_ID.to_string()),
               ("OWN_CANISTER_ID".to_string(), NNS_UI_CANISTER_ID.to_string()),
