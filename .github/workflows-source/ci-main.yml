@@ -213,7 +213,11 @@ jobs:
             # the target list can get quite big, so we wrap it in details/summary
             {
               echo '<details><summary>Tested '"$num_targets"' targets</summary>';
-              sed 's/.*/* &/' "$target_pattern_file"
+              echo
+              echo '```'
+              cat "$target_pattern_file"
+              echo '```'
+              echo
               echo '</details>';
             } >>"$GITHUB_STEP_SUMMARY"
 
@@ -503,7 +507,11 @@ jobs:
             # the target list can get quite big, so we wrap it in details/summary
             {
               echo '<details><summary>Considered '"$num_targets"' targets</summary>';
-              sed 's/.*/* &/' "$target_pattern_file"
+              echo
+              echo '```'
+              cat "$target_pattern_file"
+              echo '```'
+              echo
               echo '</details>';
             } >>"$GITHUB_STEP_SUMMARY"
 
