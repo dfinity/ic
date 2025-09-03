@@ -9,7 +9,6 @@ use std::os::raw::c_char;
 
 #[cfg(target_os = "linux")]
 use {
-    ic_canister_sandbox_backend_lib::{embed_sandbox_signature, SANDBOX_MAGIC_BYTES},
     nix::{
         sys::ptrace, sys::ptrace::Options, sys::wait::waitpid, sys::wait::WaitPidFlag,
         sys::wait::WaitStatus, unistd::fork, unistd::ForkResult, unistd::Pid,
@@ -18,6 +17,9 @@ use {
     std::collections::BTreeSet,
     syscalls::Sysno,
 };
+
+#[cfg(all(target_os = "linux", feature = "fuzzing_code"))]
+use ic_canister_sandbox_backend_lib::{embed_sandbox_signature, SANDBOX_MAGIC_BYTES};
 
 #[allow(improper_ctypes)]
 extern "C" {
@@ -34,7 +36,7 @@ pub struct SandboxFeatures {
     pub syscall_tracing: bool,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", feature = "fuzzing_code"))]
 embed_sandbox_signature!();
 
 // In general, fuzzers don't include `main()` and the initialisation logic is deferred to libfuzzer.
@@ -51,7 +53,7 @@ embed_sandbox_signature!();
 
 pub fn fuzzer_main(features: SandboxFeatures) {
     // Compiler hack to prevent the section from being removed.
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "fuzzing_code"))]
     unsafe {
         core::ptr::read_volatile(&SANDBOX_SIGNATURE);
     }
