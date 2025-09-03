@@ -424,6 +424,7 @@ system_test_nns(
         UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/nns/constants",
+        "//rs/nns/governance/api",
         "//rs/registry/canister",
         "//rs/rust_canisters/canister_test",
         "//rs/tests/consensus/tecdsa/utils",

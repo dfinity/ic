@@ -211,7 +211,7 @@ pub async fn rejoin_test_large_state(
     assert_state_sync_has_happened(&logger, rejoin_node, base_count).await;
 }
 
-async fn assert_state_sync_has_happened(
+pub async fn assert_state_sync_has_happened(
     logger: &slog::Logger,
     rejoin_node: IcNodeSnapshot,
     base_count: u64,
