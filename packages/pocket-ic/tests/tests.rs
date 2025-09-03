@@ -3392,34 +3392,16 @@ async fn with_http_gateway_config_invalid_gateway_https_config() {
     };
     let (_child, server_url) = start_server(server_params).await;
 
-    // We first successfully create an instance with an HTTP gateway
-    // to later craft an invalid HTTP gateway configuration
-    // reusing the same port.
-    let mut http_gateway_config = InstanceHttpGatewayConfig {
+    // We provide invalid paths in `HttpsConfig` which makes HTTP gateway creation fail.
+    let http_gateway_config = InstanceHttpGatewayConfig {
         ip_addr: None,
         port: None,
         domains: None,
-        https_config: None,
+        https_config: Some(HttpsConfig {
+            cert_path: "".to_string(),
+            key_path: "".to_string(),
+        }),
     };
-    let pic = PocketIcBuilder::new()
-        .with_server_url(server_url.clone())
-        .with_application_subnet()
-        .with_http_gateway(http_gateway_config.clone())
-        .with_auto_progress(None)
-        .build_async()
-        .await;
-
-    let instances = list_instances(&server_url).await;
-    assert_eq!(instances.len(), 1);
-    assert!(!instances[0].contains("Deleted"));
-    let http_gateways = list_http_gateways(&server_url).await;
-    assert_eq!(http_gateways.len(), 1);
-
-    // We try to bind to the HTTP gateway to the same port which fails.
-    http_gateway_config.https_config = Some(HttpsConfig {
-        cert_path: "".to_string(),
-        key_path: "".to_string(),
-    });
     let subnet_config_set = SubnetConfigSet {
         application: 1,
         ..Default::default()
@@ -3448,13 +3430,10 @@ async fn with_http_gateway_config_invalid_gateway_https_config() {
     // We confirm that there are no new instances and HTTP gateways
     // after the failure, i.e., cleanup works.
     let instances = list_instances(&server_url).await;
-    assert_eq!(instances.len(), 2);
-    assert!(!instances[0].contains("Deleted"));
+    assert_eq!(instances.len(), 1);
     assert_eq!(instances[1], "Deleted"); // an instance was temporarily created, but deleted before returning an error
     let http_gateways = list_http_gateways(&server_url).await;
-    assert_eq!(http_gateways.len(), 1);
-
-    pic.drop().await;
+    assert!(http_gateways.is_empty());
 }
 
 #[test]

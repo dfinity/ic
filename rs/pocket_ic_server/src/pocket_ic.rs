@@ -2023,7 +2023,7 @@ impl PocketIcSubnets {
               ("INDEX_CANISTER_ID".to_string(), LEDGER_INDEX_CANISTER_ID.to_string()),
               ("LEDGER_CANISTER_ID".to_string(), LEDGER_CANISTER_ID.to_string()),
               ("OWN_CANISTER_ID".to_string(), NNS_UI_CANISTER_ID.to_string()),
-              /* plausible.io API won't work anyway so the value of `PLAUSIBLE_DOMAIN` is pretty much arbitrary */
+              /* plausible.io API might not work anyway so the value of `PLAUSIBLE_DOMAIN` is pretty much arbitrary */
               ("PLAUSIBLE_DOMAIN".to_string(), format!("{}.localhost", NNS_UI_CANISTER_ID)),
               ("ROBOTS".to_string(), "".to_string()),
               ("SNS_AGGREGATOR_URL".to_string(), format!("http://{}.localhost:{}", SNS_AGGREGATOR_CANISTER_ID, gateway_port)),
