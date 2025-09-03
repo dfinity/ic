@@ -170,6 +170,16 @@ const INTERNET_IDENTITY_TEST_CANISTER_WASM: &[u8] =
 
 const DEFAULT_SUBACCOUNT: Subaccount = Subaccount([0; 32]);
 
+// Initial amount of cycles when bootstrapping system canisters so that
+// - the canister has enough cycles to never run out of cycles;
+// - it is still possible to top up the canister with further cycles without overflowing 128-bit range.
+const INITIAL_CYCLES: Cycles = Cycles::from(u128::MAX / 2);
+
+// Initial amount of cycles when bootstrapping system canisters so that
+// - the canister has enough cycles to never run out of cycles;
+// - it is still possible to top up the canister with further cycles without overflowing 64-bit range.
+const INITIAL_CYCLES_64_BIT: Cycles = Cycles::from(u64::MAX / 2);
+
 // Maximum duration of waiting for bitcoin/canister http adapter server to start.
 const MAX_START_SERVER_DURATION: Duration = Duration::from_secs(60);
 
@@ -1384,13 +1394,10 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
             };
-            // Create the cycles ledger canister and top it up with cycles so that
-            // - test identities can be initialized to have a large cycles balance on the ledger that is actually backed by ICP cycles;
-            // - additional cycles can be deposited to the ledger without overflowing 128-bit integer range.
-            // The initial amount of ICP cycles equal to `u128::MAX / 2` satisfies both requirements.
             let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
                 Some(CYCLES_LEDGER_CANISTER_ID.get()),
-                Cycles::from(u128::MAX / 2),
+                /* The cycles ledger needs cycles for the test identities to withdraw. */
+                INITIAL_CYCLES,
                 Some(settings),
             );
             assert_eq!(canister_id, CYCLES_LEDGER_CANISTER_ID);
@@ -1638,15 +1645,10 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
             };
-            // The SNS-W canister requires cycles to deploy SNS
-            // and thus we have to top it up with cycles:
-            // - the canister should have enough cycles to never run out of cycles;
-            // - it should still be possible top up the canister with further cycles without overflowing 64-bit integer range
-            //   (the SNS-W canister uses 64-bit cycles API).
-            // The initial amount of ICP cycles equal to `u64::MAX / 2` satisfies both requirements.
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(SNS_WASM_CANISTER_ID.get()),
-                Cycles::from(u64::MAX / 2),
+                /* The SNS-W canister requires cycles to deploy SNSs and uses 64-bit cycles API. */
+                INITIAL_CYCLES_64_BIT,
                 Some(settings),
             );
             assert_eq!(canister_id, SNS_WASM_CANISTER_ID);
@@ -1730,14 +1732,10 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
             };
-            // The SNS aggregator canister is created on an *application* subnet
-            // and thus we have to top it up with cycles:
-            // - the canister should have enough cycles to never run out of cycles;
-            // - it should still be possible top up the canister with further cycles without overflowing 128-bit integer range.
-            // The initial amount of ICP cycles equal to `u128::MAX / 2` satisfies both requirements.
             let canister_id = sns_subnet.state_machine.create_canister_with_cycles(
                 Some(SNS_AGGREGATOR_CANISTER_ID.get()),
-                Cycles::from(u128::MAX / 2),
+                /* The SNS aggregator is deployed to an application subnet. */
+                INITIAL_CYCLES,
                 Some(settings),
             );
             assert_eq!(canister_id, SNS_AGGREGATOR_CANISTER_ID);
@@ -1804,14 +1802,10 @@ impl PocketIcSubnets {
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
             };
-            // Create the Internet Identity canister.
-            // Although the Internet Identity canister is created on a system subnet, it always attaches cycles to canister http outcalls and thus it needs cycles:
-            // - the canister should have enough cycles to never run out of cycles;
-            // - it should still be possible top up the canister with further cycles without overflowing 128-bit integer range.
-            // The initial amount of ICP cycles equal to `u128::MAX / 2` satisfies both requirements.
             let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
                 Some(IDENTITY_CANISTER_ID.get()),
-                Cycles::from(u128::MAX / 2),
+                /* The Internet Identity always attaches cycles to canister http outcalls. */
+                INITIAL_CYCLES,
                 Some(settings),
             );
             assert_eq!(canister_id, IDENTITY_CANISTER_ID);
