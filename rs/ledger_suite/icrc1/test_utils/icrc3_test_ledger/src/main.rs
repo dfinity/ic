@@ -4,7 +4,7 @@ use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc3_test_ledger::AddBlockResult;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc3::blocks::{
-    BlockWithId, GetBlocksRequest, GetBlocksResponse, GetBlocksResult,
+    BlockWithId, GenericBlock, GetBlocksRequest, GetBlocksResponse, GetBlocksResult,
 };
 use num_traits::ToPrimitive;
 use std::cell::RefCell;
@@ -108,7 +108,7 @@ pub fn get_blocks(request: GetBlocksRequest) -> GetBlocksResponse {
             // Get blocks in the requested range
             for block_id in start..std::cmp::min(start + length as u64, total_blocks) {
                 if let Some(block) = blocks.get(&block_id) {
-                    result_blocks.push(block.clone().into());
+                    result_blocks.push(GenericBlock::from(block.clone()));
                 }
             }
 
