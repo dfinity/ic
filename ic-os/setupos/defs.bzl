@@ -174,3 +174,50 @@ def _custom_partitions(mode):
         ":partition-config.tzst",
         ":partition-data.tzst",
     ]
+
+def create_test_img(name, source, **kwargs):
+    genrule(
+        name = name,
+        srcs = [source],
+        outs = [name + ".tar.zst"],
+        cmd = """
+            tar -xf $<
+            $(location //rs/ic_os/dev_test_tools/setupos-disable-checks) --image-path disk.img
+            tar --zstd -Scf $@ disk.img
+        """,
+        target_compatible_with = ["@platforms//os:linux"],
+        tools = ["//rs/ic_os/dev_test_tools/setupos-disable-checks"],
+        **kwargs
+    )
+
+def extract_latest_guestos(name, setupos_img, setupos_version, guestos_img, guestos_version, **kwargs):
+    genrule(
+        name = name,
+        srcs = [
+            setupos_img,
+            guestos_img,
+        ],
+        outs = [name + ".tar.zst"],
+        cmd = """#!/bin/bash
+            if [ "{guestos_version}" != "{setupos_version}" ]; then
+                echo "WARNING: The latest HostOS and GuestOS releases are not in line, building an effictively latest image from components."
+                tmpimage=$$(mktemp)
+                $(location //rs/ic_os/build_tools/partition_tools:extract-guestos) --image $(location {setupos_img}) "$${{tmpimage}}"
+                $(location //rs/ic_os/build_tools/partition_tools:fuse-guestos) --image "$${{tmpimage}}" --update $(location {guestos_img}) $@
+                rm -rf "$${{tmpimage}}"
+            else
+                $(location //rs/ic_os/build_tools/partition_tools:extract-guestos) --image $(location {setupos_img}) $@
+            fi
+        """.format(
+            setupos_img = setupos_img,
+            setupos_version = setupos_version,
+            guestos_img = guestos_img,
+            guestos_version = guestos_version,
+        ),
+        target_compatible_with = ["@platforms//os:linux"],
+        tools = [
+            "//rs/ic_os/build_tools/partition_tools:extract-guestos",
+            "//rs/ic_os/build_tools/partition_tools:fuse-guestos",
+        ],
+        **kwargs
+    )
