@@ -5,6 +5,7 @@ use ic_sns_testing::NnsInitArgs;
 use icp_ledger::Tokens;
 use pocket_ic::common::rest::{EmptyConfig, IcpFeatures};
 use pocket_ic::PocketIcBuilder;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::tempdir;
 
 async fn nns_init(args: NnsInitArgs) {
@@ -31,10 +32,19 @@ async fn nns_init(args: NnsInitArgs) {
         ii: Some(EmptyConfig {}),
         nns_ui: None,
     };
+    // We set the time of the PocketIC instance to the current time so that
+    // neurons are not too old when we make the instance "live" later.
+    // Setting the time to the current time has no impact on determinism of
+    // `deciding_nns_neuron_id`.
+    let current_time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64;
     let mut pocket_ic = PocketIcBuilder::new()
         .with_server_url(args.server_url)
         .with_state_dir(state_dir.clone())
         .with_icp_features(all_icp_features_but_nns_ui)
+        .with_initial_timestamp(current_time)
         .with_nns_subnet()
         .with_sns_subnet()
         .with_ii_subnet()

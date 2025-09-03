@@ -190,56 +190,31 @@ async fn install_frontend_nns_canisters(pocket_ic: &PocketIc) {
     if !check_canister_installed(pocket_ic, &NNS_UI_CANISTER_ID).await {
         // TODO @rvem: perhaps, we may start using configurable endpoint for the IC http interface
         // which should be considered in NNS dapp configuration.
-        let endpoint = "localhost:8080";
-        let nns_dapp_payload = NnsDappPayload {
-            args: vec![
-                ("API_HOST".to_string(), format!("http://{}", endpoint)),
-                (
-                    "CYCLES_MINTING_CANISTER_ID".to_string(),
-                    CYCLES_MINTING_CANISTER_ID.get().to_string(),
-                ),
-                ("DFX_NETWORK".to_string(), "local".to_string()),
-                (
-                    "FEATURE_FLAGS".to_string(),
-                    "{\"ENABLE_CKBTC\":false,\"ENABLE_CKTESTBTC\":false}".to_string(),
-                ),
-                ("FETCH_ROOT_KEY".to_string(), "true".to_string()),
-                (
-                    "GOVERNANCE_CANISTER_ID".to_string(),
-                    GOVERNANCE_CANISTER_ID.get().to_string(),
-                ),
-                ("HOST".to_string(), format!("http://{}", endpoint)),
-                (
-                    "IDENTITY_SERVICE_URL".to_string(),
-                    format!("http://{}.{}", IDENTITY_CANISTER_ID.get(), endpoint),
-                ),
-                (
-                    "LEDGER_CANISTER_ID".to_string(),
-                    LEDGER_CANISTER_ID.get().to_string(),
-                ),
-                (
-                    "OWN_CANISTER_ID".to_string(),
-                    NNS_UI_CANISTER_ID.get().to_string(),
-                ),
-                (
-                    "ROBOTS".to_string(),
-                    "<meta name=\"robots\" content=\"noindex, nofollow\" />".to_string(),
-                ),
-                (
-                    "SNS_AGGREGATOR_URL".to_string(),
-                    format!("http://{}.{}", SNS_AGGREGATOR_CANISTER_ID.get(), endpoint),
-                ),
-                ("STATIC_HOST".to_string(), format!("http://{}", endpoint)),
-                (
-                    "WASM_CANISTER_ID".to_string(),
-                    SNS_WASM_CANISTER_ID.get().to_string(),
-                ),
-                (
-                    "INDEX_CANISTER_ID".to_string(),
-                    LEDGER_INDEX_CANISTER_ID.get().to_string(),
-                ),
-            ],
-        };
+        let gateway_port = 8080;
+        let localhost_url = format!("http://localhost:{}", gateway_port);
+        let args = vec![
+              ("API_HOST".to_string(), localhost_url.clone()),
+              ("CYCLES_MINTING_CANISTER_ID".to_string(), CYCLES_MINTING_CANISTER_ID.to_string()),
+              ("DFX_NETWORK".to_string(), "local".to_string()),
+              ("FEATURE_FLAGS".to_string(), "{\"DISABLE_CKTOKENS\":true,\"DISABLE_IMPORT_TOKEN_VALIDATION_FOR_TESTING\":false,\"ENABLE_APY_PORTFOLIO\":true,\"ENABLE_CKTESTBTC\":false,\"ENABLE_DISBURSE_MATURITY\":true,\"ENABLE_LAUNCHPAD_REDESIGN\":true,\"ENABLE_NEW_TABLES\":true,\"ENABLE_NNS_TOPICS\":false,\"ENABLE_SNS_TOPICS\":true}".to_string()),
+              ("FETCH_ROOT_KEY".to_string(), "true".to_string()),
+              ("GOVERNANCE_CANISTER_ID".to_string(), GOVERNANCE_CANISTER_ID.to_string()),
+              ("HOST".to_string(), localhost_url.clone()),
+              /* ICP swap canister is not deployed by sns-testing! */
+              ("ICP_SWAP_URL".to_string(), format!("http://uvevg-iyaaa-aaaak-ac27q-cai.raw.localhost:{}/", gateway_port)),
+              ("IDENTITY_SERVICE_URL".to_string(), format!("http://{}.localhost:{}", IDENTITY_CANISTER_ID, gateway_port)),
+              ("INDEX_CANISTER_ID".to_string(), LEDGER_INDEX_CANISTER_ID.to_string()),
+              ("LEDGER_CANISTER_ID".to_string(), LEDGER_CANISTER_ID.to_string()),
+              ("OWN_CANISTER_ID".to_string(), NNS_UI_CANISTER_ID.to_string()),
+              /* plausible.io API might not work anyway so the value of `PLAUSIBLE_DOMAIN` is pretty much arbitrary */
+              ("PLAUSIBLE_DOMAIN".to_string(), format!("{}.localhost", NNS_UI_CANISTER_ID)),
+              ("ROBOTS".to_string(), "".to_string()),
+              ("SNS_AGGREGATOR_URL".to_string(), format!("http://{}.localhost:{}", SNS_AGGREGATOR_CANISTER_ID, gateway_port)),
+              ("STATIC_HOST".to_string(), localhost_url.clone()),
+              ("TVL_CANISTER_ID".to_string(), NNS_UI_CANISTER_ID.to_string()),
+              ("WASM_CANISTER_ID".to_string(), SNS_WASM_CANISTER_ID.to_string()),
+            ];
+        let nns_dapp_payload = NnsDappPayload { args };
         install_canister_with_controllers(
             pocket_ic,
             "nns-dapp",

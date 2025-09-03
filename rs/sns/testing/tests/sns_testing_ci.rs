@@ -21,6 +21,7 @@ use icp_ledger::Tokens;
 use pocket_ic::common::rest::{EmptyConfig, IcpFeatures};
 use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::TempDir;
 
 const DEV_PARTICIPANT_ID: PrincipalId = PrincipalId::new_user_test_id(1000);
@@ -71,9 +72,14 @@ async fn prepare_network_for_test(
 ) -> (PocketIc, NeuronId) {
     // Preparing the PocketIC-based network
 
+    let current_time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64;
     let pocket_ic = PocketIcBuilder::new()
         .with_state_dir(state_dir.clone())
         .with_icp_features(all_icp_features_but_nns_ui())
+        .with_initial_timestamp(current_time)
         .with_nns_subnet()
         .with_sns_subnet()
         .with_ii_subnet()
