@@ -2035,19 +2035,7 @@ impl CanisterManager {
                     NumInstructions::new(0),
                 );
             }
-            Some(snapshot) => {
-                // Verify the provided snapshot id belongs to this canister.
-                if snapshot.canister_id() != canister_id {
-                    return (
-                        Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
-                            canister_id,
-                            snapshot_id,
-                        }),
-                        NumInstructions::new(0),
-                    );
-                }
-                snapshot
-            }
+            Some(snapshot) => snapshot,
         };
         let execution_snapshot = snapshot.execution_snapshot();
 

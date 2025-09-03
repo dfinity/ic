@@ -1440,7 +1440,7 @@ fn load_canister_snapshot_fails_snapshot_not_found() {
 }
 
 #[test]
-fn load_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
+fn load_canister_snapshot_works_on_another_canister() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(1);
@@ -1457,7 +1457,10 @@ fn load_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
-    // Take a snapshot.
+    let canister_state_1_before_snapshot =
+        test.state().canister_state(&canister_id_1).unwrap().clone();
+
+    // Take a snapshot of `canister_id_1`.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id_1, None);
     let result = test.subnet_message("take_canister_snapshot", args.encode());
     assert!(result.is_ok());
@@ -1465,26 +1468,26 @@ fn load_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
     let snapshot_id = response.snapshot_id();
     assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
 
-    let initial_canister_state = test.state().canister_state(&canister_id_2).unwrap().clone();
-
-    // Loading a canister snapshot fails because snapshot does not belong to `canister_id_2`.
+    // Loading a canister snapshot belonging to `canister_id_1` on `canister_id_2` succeeds.
     let args: LoadCanisterSnapshotArgs =
         LoadCanisterSnapshotArgs::new(canister_id_2, snapshot_id, None);
-    let error = test
-        .subnet_message("load_canister_snapshot", args.encode())
-        .unwrap_err();
-    assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
-    let message = format!(
-        "The snapshot {} does not belong to canister {}",
-        snapshot_id, canister_id_2,
-    )
-    .to_string();
-    assert!(error.description().contains(&message));
+    test.subnet_message("load_canister_snapshot", args.encode())
+        .unwrap();
     assert!(test.state().canister_state(&canister_id_2).is_some());
+
+    let (execution_state_1, system_state_1, _) = canister_state_1_before_snapshot.into_parts();
+    let (execution_state_2, system_state_2, _) = test
+        .state()
+        .canister_state(&canister_id_2)
+        .unwrap()
+        .clone()
+        .into_parts();
+    assert_eq!(execution_state_1, execution_state_2);
     assert_eq!(
-        initial_canister_state,
-        test.state().canister_state(&canister_id_2).unwrap().clone()
+        system_state_1.wasm_chunk_store,
+        system_state_2.wasm_chunk_store
     );
+    assert_eq!(system_state_1.certified_data, system_state_2.certified_data);
 }
 
 #[test]
