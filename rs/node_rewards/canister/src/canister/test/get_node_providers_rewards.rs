@@ -733,7 +733,7 @@ fn test_get_node_provider_rewards_calculation_historical() {
 
     for (provider_id, expected_rewards) in expected {
         let request = GetNodeProviderRewardsCalculationRequest {
-            rewards_calculator_version: RewardsCalculatorVersion::V1,
+            rewards_calculator_version: Some(RewardsCalculatorVersion::V1),
             from_nanos: from.unix_ts_at_day_end(),
             to_nanos: to.unix_ts_at_day_end(),
             provider_id: provider_id.0,

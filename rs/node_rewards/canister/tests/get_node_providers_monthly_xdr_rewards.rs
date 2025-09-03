@@ -80,7 +80,7 @@ async fn get_node_provider_rewards_calculation_is_only_callable_in_nonreplicated
 
     for historical in [false, true] {
         let request = GetNodeProviderRewardsCalculationRequest {
-            rewards_calculator_version: RewardsCalculatorVersion::V1,
+            rewards_calculator_version: Some(RewardsCalculatorVersion::V1),
             from_nanos: past_time_nanos,
             to_nanos: past_time_nanos,
             provider_id: Principal::anonymous(),
