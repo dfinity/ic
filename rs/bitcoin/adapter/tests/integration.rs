@@ -1009,7 +1009,7 @@ fn test_btc_mainnet_data() {
         .unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let bitcoind_addr = ic_btc_adapter_test_utils::bitcoind::mock_bitcoin::<bitcoin::Block>(
+    let bitcoind_addr = ic_btc_adapter_test_utils::bitcoind::mock_bitcoin::<bitcoin::Network>(
         rt.handle(),
         headers_data_path,
         blocks_data_path,
@@ -1045,7 +1045,7 @@ fn test_btc_testnet_data() {
         .unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let bitcoind_addr = ic_btc_adapter_test_utils::bitcoind::mock_bitcoin::<bitcoin::Block>(
+    let bitcoind_addr = ic_btc_adapter_test_utils::bitcoind::mock_bitcoin::<bitcoin::Network>(
         rt.handle(),
         headers_data_path,
         blocks_data_path,

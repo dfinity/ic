@@ -2,7 +2,7 @@
 //! to the correct component.
 use crate::{
     blockchainmanager::BlockchainManager,
-    common::{BlockLike, DEFAULT_CHANNEL_BUFFER_SIZE},
+    common::{BlockchainNetwork, DEFAULT_CHANNEL_BUFFER_SIZE},
     config::Config,
     connectionmanager::ConnectionManager,
     metrics::RouterMetrics,
@@ -27,17 +27,23 @@ use tokio::{
 /// Having a design where we have a separate task that awaits on messages from the
 /// ConnectionManager, we keep the ConnectionManager free of dependencies like the
 /// TransactionStore or the BlockchainManager.
-pub fn start_main_event_loop<Block: BlockLike + Send + Clone + 'static>(
+pub fn start_main_event_loop<Network: BlockchainNetwork>(
     config: &Config,
     logger: ReplicaLogger,
-    blockchain_state: Arc<Mutex<BlockchainState>>,
+    blockchain_state: Arc<Mutex<BlockchainState<Network>>>,
     mut transaction_manager_rx: Receiver<TransactionManagerRequest>,
     mut adapter_state: AdapterState,
-    mut blockchain_manager_rx: Receiver<BlockchainManagerRequest>,
+    mut blockchain_manager_rx: Receiver<BlockchainManagerRequest<Network::Header>>,
     metrics_registry: &MetricsRegistry,
-) {
-    let (network_message_sender, mut network_message_receiver) =
-        channel::<(SocketAddr, NetworkMessage<Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+) where
+    Network::Header: Send,
+    Network::Block: Send,
+    Network: Send + 'static,
+{
+    let (network_message_sender, mut network_message_receiver) = channel::<(
+        SocketAddr,
+        NetworkMessage<Network::Header, Network::Block>,
+    )>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
     let router_metrics = RouterMetrics::new(metrics_registry);
 

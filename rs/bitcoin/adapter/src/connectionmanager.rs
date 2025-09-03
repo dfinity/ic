@@ -107,12 +107,12 @@ pub struct ConnectionManager<NetworkMessage> {
     metrics: RouterMetrics,
 }
 
-impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
+impl<Header: Clone, Block: Clone> ConnectionManager<NetworkMessage<Header, Block>> {
     /// This function is used to create a new connection manager with a provided config.
     pub fn new(
         config: &Config,
         logger: ReplicaLogger,
-        network_message_sender: Sender<(SocketAddr, NetworkMessage<Block>)>,
+        network_message_sender: Sender<(SocketAddr, NetworkMessage<Header, Block>)>,
         metrics: RouterMetrics,
     ) -> Self {
         let address_book = AddressBook::new(config, logger.clone());
@@ -162,7 +162,7 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
     pub fn tick(
         &mut self,
         current_height: BlockHeight,
-        handle: fn(StreamConfig<Block>) -> JoinHandle<()>,
+        handle: fn(StreamConfig<Header, Block>) -> JoinHandle<()>,
     ) {
         self.current_height = current_height;
 
@@ -184,7 +184,7 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
     /// This function will remove disconnects and establish new connections.
     fn manage_connections(
         &mut self,
-        handle: fn(StreamConfig<Block>) -> JoinHandle<()>,
+        handle: fn(StreamConfig<Header, Block>) -> JoinHandle<()>,
     ) -> ConnectionManagerResult<()> {
         self.manage_ping_states();
         self.flag_version_handshake_timeouts();
@@ -291,7 +291,7 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
     /// This function creates a new connection with a stream to a BTC node.
     fn make_connection(
         &mut self,
-        handle: fn(StreamConfig<Block>) -> JoinHandle<()>,
+        handle: fn(StreamConfig<Header, Block>) -> JoinHandle<()>,
     ) -> ConnectionManagerResult<()> {
         self.metrics.connections.inc();
         let address_entry_result = if !self.address_book.has_enough_addresses() {
@@ -332,7 +332,7 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
     fn get_connection(
         &mut self,
         addr: &SocketAddr,
-    ) -> ConnectionManagerResult<&mut Connection<NetworkMessage<Block>>> {
+    ) -> ConnectionManagerResult<&mut Connection<NetworkMessage<Header, Block>>> {
         match self.connections.get_mut(addr) {
             Some(connection) => Ok(connection),
             None => Err(ConnectionManagerError::ConnectionNotFound),
@@ -356,7 +356,7 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
         let receiver = Address::new(addr, ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED);
         let nonce: u64 = self.rng.gen();
         let user_agent = String::from(USER_AGENT);
-        let message = <NetworkMessage<Block>>::Version(VersionMessage::new(
+        let message = <NetworkMessage<Header, Block>>::Version(VersionMessage::new(
             self.p2p_protocol_version,
             services,
             timestamp as i64,
@@ -399,7 +399,7 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
     fn send_to(
         &mut self,
         addr: &SocketAddr,
-        network_message: NetworkMessage<Block>,
+        network_message: NetworkMessage<Header, Block>,
     ) -> ConnectionManagerResult<()> {
         self.metrics
             .bitcoin_messages_sent
@@ -419,7 +419,7 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
     }
 
     /// This function is used to send a message to all of the connected connections.
-    fn send_to_all(&mut self, network_message: NetworkMessage<Block>) {
+    fn send_to_all(&mut self, network_message: NetworkMessage<Header, Block>) {
         if !self.has_enough_active_connections() {
             return;
         }
@@ -595,8 +595,10 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
     }
 }
 
-impl<Block: Clone> Channel<Block> for ConnectionManager<NetworkMessage<Block>> {
-    fn send(&mut self, command: Command<Block>) -> Result<(), ChannelError> {
+impl<Header: Clone, Block: Clone> Channel<Header, Block>
+    for ConnectionManager<NetworkMessage<Header, Block>>
+{
+    fn send(&mut self, command: Command<Header, Block>) -> Result<(), ChannelError> {
         let Command { address, message } = command;
         if let Some(addr) = address {
             self.send_to(&addr, message).ok();
@@ -629,7 +631,9 @@ impl<Block: Clone> Channel<Block> for ConnectionManager<NetworkMessage<Block>> {
     }
 }
 
-impl<Block: Clone> ProcessEvent for ConnectionManager<NetworkMessage<Block>> {
+impl<Header: Clone, Block: Clone> ProcessEvent
+    for ConnectionManager<NetworkMessage<Header, Block>>
+{
     fn process_event(&mut self, event: &StreamEvent) -> Result<(), ProcessNetworkMessageError> {
         match &event.kind {
             StreamEventKind::Connected => {
@@ -662,11 +666,13 @@ impl<Block: Clone> ProcessEvent for ConnectionManager<NetworkMessage<Block>> {
     }
 }
 
-impl<Block: Clone> ProcessNetworkMessage<Block> for ConnectionManager<NetworkMessage<Block>> {
+impl<Header: Clone, Block: Clone> ProcessNetworkMessage<Header, Block>
+    for ConnectionManager<NetworkMessage<Header, Block>>
+{
     fn process_bitcoin_network_message(
         &mut self,
         address: SocketAddr,
-        message: &NetworkMessage<Block>,
+        message: &NetworkMessage<Header, Block>,
     ) -> Result<(), ProcessNetworkMessageError> {
         match message {
             NetworkMessage::Version(version_message) => {
@@ -699,7 +705,7 @@ mod test {
     use super::*;
     use crate::config::test::ConfigBuilder;
     use bitcoin::p2p::ServiceFlags;
-    use bitcoin::Block;
+    use bitcoin::{block::Header, Block};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use std::str::FromStr;
@@ -728,7 +734,7 @@ mod test {
         );
         version_message.version = MINIMUM_VERSION_NUMBER - 1;
         let (network_message_sender, _network_message_receiver) =
-            channel::<(SocketAddr, NetworkMessage<Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+            channel::<(SocketAddr, NetworkMessage<Header, Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
         let manager = ConnectionManager::new(
             &config,
@@ -761,7 +767,7 @@ mod test {
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
-            channel::<(SocketAddr, NetworkMessage<Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+            channel::<(SocketAddr, NetworkMessage<Header, Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
         let mut manager = ConnectionManager::new(
             &config,
@@ -796,7 +802,7 @@ mod test {
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
-            channel::<(SocketAddr, NetworkMessage<Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+            channel::<(SocketAddr, NetworkMessage<Header, Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
         let manager = ConnectionManager::new(
             &config,
@@ -808,7 +814,7 @@ mod test {
         assert!(!manager.validate_received_version(&version_message));
     }
 
-    fn simple_handle(config: StreamConfig<Block>) -> JoinHandle<()> {
+    fn simple_handle(config: StreamConfig<Header, Block>) -> JoinHandle<()> {
         tokio::task::spawn(async move {
             let _ = &config;
             let StreamConfig {
@@ -890,7 +896,7 @@ mod test {
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, mut network_message_receiver) =
-            channel::<(SocketAddr, NetworkMessage<Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+            channel::<(SocketAddr, NetworkMessage<Header, Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
         let mut manager = ConnectionManager::new(
             &config,
             no_op_logger(),
@@ -951,7 +957,7 @@ mod test {
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
-            channel::<(SocketAddr, NetworkMessage<Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+            channel::<(SocketAddr, NetworkMessage<Header, Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
         let mut manager = ConnectionManager::new(
             &config,
@@ -995,7 +1001,7 @@ mod test {
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
-            channel::<(SocketAddr, NetworkMessage<Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+            channel::<(SocketAddr, NetworkMessage<Header, Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
         let mut manager = ConnectionManager::new(
             &config,
             no_op_logger(),
@@ -1064,7 +1070,7 @@ mod test {
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
-            channel::<(SocketAddr, NetworkMessage<Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+            channel::<(SocketAddr, NetworkMessage<Header, Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
         let mut manager = ConnectionManager::new(
             &config,
@@ -1128,7 +1134,7 @@ mod test {
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
-            channel::<(SocketAddr, NetworkMessage<Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+            channel::<(SocketAddr, NetworkMessage<Header, Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
         let mut manager = ConnectionManager::new(
             &config,
@@ -1176,7 +1182,7 @@ mod test {
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
-            channel::<(SocketAddr, NetworkMessage<Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
+            channel::<(SocketAddr, NetworkMessage<Header, Block>)>(DEFAULT_CHANNEL_BUFFER_SIZE);
 
         let mut manager = ConnectionManager::new(
             &config,

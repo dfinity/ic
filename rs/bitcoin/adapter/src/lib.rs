@@ -5,7 +5,7 @@
 //! component to provide blocks and collect outgoing transactions.
 
 use bitcoin::p2p::message::NetworkMessage;
-use bitcoin::{block::Header as BlockHeader, BlockHash};
+use bitcoin::BlockHash;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use std::{
@@ -51,7 +51,7 @@ mod transaction_store;
 // malicious fork can be prioritized by a DFS, thus potentially ignoring honest forks).
 mod get_successors_handler;
 
-pub use common::{AdapterNetwork, BlockLike};
+pub use common::{AdapterNetwork, BlockLike, BlockchainHeader, BlockchainNetwork};
 pub use config::{address_limits, Config, IncomingSource};
 
 use crate::{
@@ -62,12 +62,12 @@ use crate::{
 /// This struct is used to represent commands given to the adapter in order to interact
 /// with BTC nodes.
 #[derive(Clone, Eq, PartialEq, Debug)]
-struct Command<Block> {
+struct Command<Header, Block> {
     /// This is the address of the Bitcoin node to which the message is supposed to be sent.
     /// If the address is None, then the message will be sent to all the peers.
     address: Option<SocketAddr>,
     /// This the network message to be sent to the above peer.
-    message: NetworkMessage<Block>,
+    message: NetworkMessage<Header, Block>,
 }
 
 /// This enum is used to represent errors that could occur while dispatching an
@@ -84,10 +84,10 @@ enum ProcessNetworkMessageError {
 enum ChannelError {}
 
 /// This trait is to provide an interface so that managers can communicate to BTC nodes.
-trait Channel<Block> {
+trait Channel<Header, Block> {
     /// This method is used to send a message to a specific connection
     /// or to all connections based on the [Command](Command)'s fields.
-    fn send(&mut self, command: Command<Block>) -> Result<(), ChannelError>;
+    fn send(&mut self, command: Command<Header, Block>) -> Result<(), ChannelError>;
 
     /// This method is used to retrieve a list of available connections
     /// that have completed the version handshake.
@@ -108,21 +108,21 @@ trait ProcessEvent {
 /// This trait provides an interface for processing messages coming from
 /// bitcoin peers.
 /// [StreamEvent](crate::stream::StreamEvent).
-trait ProcessNetworkMessage<Block> {
+trait ProcessNetworkMessage<Header, Block> {
     /// This method is used to route an event in a component's internals and
     /// perform state updates.
     fn process_bitcoin_network_message(
         &mut self,
         addr: SocketAddr,
-        message: &NetworkMessage<Block>,
+        message: &NetworkMessage<Header, Block>,
     ) -> Result<(), ProcessNetworkMessageError>;
 }
 
 /// Commands sent back to the router in order perform actions on the blockchain state.
 #[derive(Debug)]
-pub(crate) enum BlockchainManagerRequest {
+pub(crate) enum BlockchainManagerRequest<Header> {
     /// Inform the adapter to enqueue the next block headers into the syncing queue.
-    EnqueueNewBlocksToDownload(Vec<BlockHeader>),
+    EnqueueNewBlocksToDownload(Vec<Header>),
     /// Inform the adapter to prune the following block hashes from the cache.
     PruneBlocks(BlockHash, Vec<BlockHash>),
 }
@@ -206,38 +206,56 @@ pub fn start_server(
 
     let (adapter_state, tx) = AdapterState::new(config.idle_seconds);
 
-    let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
-    let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(&config, metrics_registry)));
-    let (transaction_manager_tx, transaction_manager_rx) = channel(100);
-
-    start_grpc_server(
-        config.clone(),
-        log.clone(),
-        tx,
-        blockchain_state.clone(),
-        blockchain_manager_tx,
-        transaction_manager_tx,
-        metrics_registry,
-    );
-
     match config.network {
-        AdapterNetwork::Bitcoin(_) => start_main_event_loop::<bitcoin::Block>(
-            &config,
-            log.clone(),
-            blockchain_state,
-            transaction_manager_rx,
-            adapter_state,
-            blockchain_manager_rx,
-            metrics_registry,
-        ),
-        AdapterNetwork::Dogecoin(_) => start_main_event_loop::<bitcoin::dogecoin::Block>(
-            &config,
-            log.clone(),
-            blockchain_state,
-            transaction_manager_rx,
-            adapter_state,
-            blockchain_manager_rx,
-            metrics_registry,
-        ),
+        AdapterNetwork::Bitcoin(network) => {
+            let blockchain_state =
+                Arc::new(Mutex::new(BlockchainState::new(network, metrics_registry)));
+            let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
+            let (transaction_manager_tx, transaction_manager_rx) = channel(100);
+            start_grpc_server(
+                network,
+                config.incoming_source.clone(),
+                log.clone(),
+                tx,
+                blockchain_state.clone(),
+                blockchain_manager_tx,
+                transaction_manager_tx,
+                metrics_registry,
+            );
+            start_main_event_loop::<bitcoin::Network>(
+                &config,
+                log.clone(),
+                blockchain_state,
+                transaction_manager_rx,
+                adapter_state,
+                blockchain_manager_rx,
+                metrics_registry,
+            )
+        }
+        AdapterNetwork::Dogecoin(network) => {
+            let blockchain_state =
+                Arc::new(Mutex::new(BlockchainState::new(network, metrics_registry)));
+            let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
+            let (transaction_manager_tx, transaction_manager_rx) = channel(100);
+            start_grpc_server(
+                network,
+                config.incoming_source.clone(),
+                log.clone(),
+                tx,
+                blockchain_state.clone(),
+                blockchain_manager_tx,
+                transaction_manager_tx,
+                metrics_registry,
+            );
+            start_main_event_loop::<bitcoin::dogecoin::Network>(
+                &config,
+                log.clone(),
+                blockchain_state,
+                transaction_manager_rx,
+                adapter_state,
+                blockchain_manager_rx,
+                metrics_registry,
+            )
+        }
     }
 }
