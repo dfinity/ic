@@ -101,9 +101,9 @@ async fn do_test_treasury_manager() {
         ledger_fee_decimals: Nat::from(ICP_FEE),
     };
 
-    let topup_treasury_allocation_icp_e8s = 50 * E8;
+    let topup_treasury_allocation_icp_e8s = 50 * E8 + ICP_FEE;
     // This cannot be 100, b/c there will be slightly less than 200 left in the treasury at the point where this is called.
-    let topup_treasury_allocation_sns_e8s = 99 * E8;
+    let topup_treasury_allocation_sns_e8s = 99 * E8 + SNS_FEE;
 
     let extension_canister_id = {
         let agent = PocketIcAgent::new(&pocket_ic, sender);
@@ -208,8 +208,8 @@ async fn do_test_treasury_manager() {
         "After registering KongSwapAdaptor",
         &sns,
         &pocket_ic,
-        initial_icp_balance_e8s - initial_treasury_allocation_icp_e8s,
-        initial_sns_balance_e8s - initial_treasury_allocation_sns_e8s,
+        initial_icp_balance_e8s - (initial_treasury_allocation_icp_e8s + ICP_FEE),
+        initial_sns_balance_e8s - (initial_treasury_allocation_sns_e8s + SNS_FEE),
     )
     .await
     .unwrap();
@@ -226,11 +226,11 @@ async fn do_test_treasury_manager() {
             response.asset_to_balances,
             Some(btreemap! {
                 sns_token.clone() => empty_sns_balance_book.clone()
-                    .external_custodian(initial_treasury_allocation_sns_e8s - 4 * SNS_FEE)
-                    .fee_collector(2 * SNS_FEE),
+                    .external_custodian(initial_treasury_allocation_sns_e8s - 3 * SNS_FEE)
+                    .fee_collector(3 * SNS_FEE),
                 icp_token.clone() => empty_icp_balance_book.clone()
-                    .external_custodian(initial_treasury_allocation_icp_e8s - 4 * ICP_FEE)
-                    .fee_collector(2 * ICP_FEE),
+                    .external_custodian(initial_treasury_allocation_icp_e8s - 3 * ICP_FEE)
+                    .fee_collector(3 * ICP_FEE),
             }),
         );
     }
@@ -323,21 +323,15 @@ async fn do_test_treasury_manager() {
             println!(">>> AuditTrail: {:#?}", response);
         }
 
-        let expected_sns_fee_collector = 6 * SNS_FEE;
-        let expected_icp_fee_collector = 7 * ICP_FEE;
-
-        // As during deposits and intialisation, an approval and a transfer fee is also paid.
-        // Hence, the value reached the treasury manager is 2 * FEE less than the value in the proposal.
-        let num_deposits = 2;
-        let expected_fees_sns_e8s = expected_sns_fee_collector + num_deposits * 2 * SNS_FEE;
-        let expected_fees_icp_e8s = expected_icp_fee_collector + num_deposits * 2 * ICP_FEE;
+        let expected_sns_fee_collector = 8 * SNS_FEE;
+        let expected_icp_fee_collector = 9 * ICP_FEE;
 
         let treasury_allocation_sns_e8s = initial_treasury_allocation_sns_e8s
             + topup_treasury_allocation_sns_e8s
-            - expected_fees_sns_e8s;
+            - expected_sns_fee_collector;
         let treasury_allocation_icp_e8s = initial_treasury_allocation_icp_e8s
             + topup_treasury_allocation_icp_e8s
-            - expected_fees_icp_e8s;
+            - expected_icp_fee_collector;
 
         let response = pocket_ic
             .call(extension_canister_id, BalancesRequest {})
@@ -871,7 +865,7 @@ async fn prepare_the_world(state_dir: PathBuf) -> World {
     .unwrap();
 
     let initial_treasury_allocation_icp_e8s = 100 * E8;
-    let initial_treasury_allocation_sns_e8s = 200 * E8;
+    let initial_treasury_allocation_sns_e8s = 199 * E8;
 
     let (neuron_id, sender) = sns::governance::find_neuron_with_majority_voting_power(
         &pocket_ic,
