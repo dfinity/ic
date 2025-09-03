@@ -2253,8 +2253,21 @@ message MonthlyNodeProviderRewards {
   // from the value in network economics.
   optional uint64 maximum_node_provider_rewards_e8s = 5;
 
+  // Used in V1
   // The registry version used to calculate these rewards at the time the rewards were calculated.
   optional uint64 registry_version = 6;
+
+  // Used in V2
+  // The first timestamp (in nanos since the unix epoch) for which these rewards apply (inclusive).
+  optional uint64 from_nanos = 8;
+
+  // Used in V2
+  // The last timestamp (in nanos since the unix epoch) for which these rewards apply (inclusive).
+  optional uint64 to_nanos = 9;
+
+  // Used in V2
+  // The version of the rewards calculator used to calculate these rewards.
+  optional RewardsCalculatorVersion rewards_calculator_version = 10;
 
   // The list of node_provieders at the time when the rewards were calculated.
   repeated NodeProvider node_providers = 7;
@@ -2539,10 +2552,16 @@ message ArchivedMonthlyNodeProviderRewards {
   // rewards data structure over time.
   oneof version {
     V1 version_1 = 1;
+    V2 version_2 = 2;
   }
 
   // The first version of the stored rewards.
   message V1 {
+    ic_nns_governance.pb.v1.MonthlyNodeProviderRewards rewards = 1;
+  }
+
+  // The second version of the stored rewards.
+  message V2 {
     ic_nns_governance.pb.v1.MonthlyNodeProviderRewards rewards = 1;
   }
 }
