@@ -212,6 +212,7 @@ system_test_nns(
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
+        "//rs/http_endpoints/public",
         "//rs/limits",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
@@ -228,9 +229,13 @@ system_test_nns(
         "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:leb128",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde",
         "@crate_index//:serde_cbor",
         "@crate_index//:slog",
+        "@crate_index//:time",
         "@crate_index//:tokio",
+        "@crate_index//:url",
     ],
 )
 
