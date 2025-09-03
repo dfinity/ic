@@ -37,8 +37,9 @@ const DEFAULT_SERVER_MEASUREMENT: [u8; 48] = [52; 48];
 const UNREGISTERED_MEASUREMENT: [u8; 48] = [99; 48];
 /// Custom data that does not match the expected value.
 const BOGUS_CUSTOM_DATA: [u8; 64] = [255; 64];
-
+/// Expected chip ID of the machine.
 const DEFAULT_CHIP_ID: [u8; 64] = [88; 64];
+/// Chip ID that is different from the expected one.
 const DIFFERENT_CHIP_ID: [u8; 64] = [123; 64];
 
 #[derive(Debug, Clone)]
@@ -183,8 +184,7 @@ impl DiskEncryptionKeyExchangeTestFixture {
         }
     }
 
-    /// Run the key exchange test with the configured timeout
-    /// Return (server status, client status).
+    /// Run the key exchange test and return (server status, client status).
     async fn run_key_exchange_test(&self) -> (anyhow::Result<()>, anyhow::Result<()>) {
         let mut vsock_client = MockVSockClient::default();
         let client_agent = self.create_client_agent();
@@ -251,12 +251,12 @@ impl DiskEncryptionKeyExchangeTestFixture {
     }
 
     /// Check if the previous key file was populated correctly
-    fn verify_previous_key_populated(&mut self) {
+    fn verify_previous_key_populated(&self) {
         let key_content =
             std::fs::read_to_string(self.previous_key.path()).expect("Failed to read previous key");
 
         let expected_key = derive_key_from_sev_measurement(
-            &mut self.server_sev_firmware,
+            &mut self.server_sev_firmware.clone(),
             Key::DiskEncryptionKey {
                 device_path: Path::new("/dev/vda10"),
             },
@@ -294,14 +294,22 @@ async fn join_with_timeout<A, B>(
     }
 }
 
-fn assert_error_contains_str(error: &anyhow::Error, contains: &str) {
-    assert!(format!("{error:?}").contains(contains), "{error:?}");
+fn assert_status_contains_error(result: &anyhow::Result<()>, error: &str) {
+    let err = result.as_ref().expect_err("Expected error");
+    assert!(format!("{err:?}").contains(error), "{err:?}");
+}
+
+fn assert_statuses_contain_error(
+    (server_result, client_result): (anyhow::Result<()>, anyhow::Result<()>),
+    error: &str,
+) {
+    assert_status_contains_error(&server_result, error);
+    assert_status_contains_error(&client_result, error);
 }
 
 #[tokio::test]
 async fn test_exchange_keys_successfully() {
-    let mut fixture = DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default());
-
+    let fixture = DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default());
     let (server_result, client_result) = fixture.run_key_exchange_test().await;
 
     server_result.expect("Key exchange should succeed");
@@ -317,18 +325,12 @@ async fn test_client_measurement_not_in_registry() {
         ..Default::default()
     };
 
-    let fixture = DiskEncryptionKeyExchangeTestFixture::new(config);
-
-    let (server_result, client_result) = fixture.run_key_exchange_test().await;
-
-    assert_error_contains_str(
-        client_result
-            .as_ref()
-            .expect_err("Key exchange should fail when client measurement is not in registry"),
+    assert_statuses_contain_error(
+        DiskEncryptionKeyExchangeTestFixture::new(config)
+            .run_key_exchange_test()
+            .await,
         "InvalidMeasurement",
     );
-
-    server_result.expect_err("Key exchange should fail when client measurement is not in registry");
 }
 
 #[tokio::test]
@@ -338,18 +340,12 @@ async fn test_server_measurement_not_in_registry() {
         ..Default::default()
     };
 
-    let fixture = DiskEncryptionKeyExchangeTestFixture::new(config);
-
-    let (server_result, client_result) = fixture.run_key_exchange_test().await;
-
-    assert_error_contains_str(
-        client_result
-            .as_ref()
-            .expect_err("Key exchange should fail when server measurement is not in registry"),
+    assert_statuses_contain_error(
+        DiskEncryptionKeyExchangeTestFixture::new(config)
+            .run_key_exchange_test()
+            .await,
         "InvalidMeasurement",
     );
-
-    server_result.expect_err("Key exchange should fail when custom data is wrong");
 }
 
 #[tokio::test]
@@ -359,26 +355,18 @@ async fn test_wrong_custom_data() {
         ..Default::default()
     };
 
-    let fixture = DiskEncryptionKeyExchangeTestFixture::new(config);
-
-    let (server_result, client_result) = fixture.run_key_exchange_test().await;
-
-    assert_error_contains_str(
-        client_result
-            .as_ref()
-            .expect_err("Key exchange should fail when custom data is wrong"),
+    assert_statuses_contain_error(
+        DiskEncryptionKeyExchangeTestFixture::new(config)
+            .run_key_exchange_test()
+            .await,
         "InvalidCustomData",
     );
-
-    server_result.expect_err("Key exchange should fail when custom data is wrong");
 }
 
 #[tokio::test]
 async fn test_server_is_unreachable() {
-    let fixture = DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default());
-
     // We don't start the server, so the client should fail to connect
-    let result = fixture
+    let result = DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default())
         .create_client_agent()
         .run()
         .await
@@ -392,7 +380,6 @@ async fn test_server_is_unreachable() {
 
 #[tokio::test]
 async fn test_server_timeout() {
-    let fixture = DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default());
     let mut vsock_client = MockVSockClient::default();
 
     vsock_client
@@ -405,7 +392,7 @@ async fn test_server_timeout() {
             Ok(Payload::NoPayload)
         });
 
-    fixture
+    DiskEncryptionKeyExchangeTestFixture::new(TestConfig::default())
         .create_server_agent(vsock_client)
         .exchange_keys()
         .await
@@ -422,18 +409,8 @@ async fn test_attestation_reports_not_signed() {
         .run_key_exchange_test()
         .await;
 
-    assert_error_contains_str(
-        client_result
-            .as_ref()
-            .expect_err("Key exchange should fail when attestation reports are not signed"),
-        "InvalidSignature",
-    );
-
-    let server_error = server_result
-        .as_ref()
-        .expect_err("Key exchange should fail when attestation reports are not signed");
-    assert_error_contains_str(server_error, "InvalidSignature");
-    assert_error_contains_str(server_error, "Debug info from Upgrade VM");
+    assert_status_contains_error(&server_result, "Debug info from Upgrade VM");
+    assert_statuses_contain_error((server_result, client_result), "InvalidSignature");
 }
 
 #[tokio::test]
@@ -443,16 +420,10 @@ async fn test_different_chip_id() {
         ..Default::default()
     };
 
-    let fixture = DiskEncryptionKeyExchangeTestFixture::new(config);
-
-    let (server_result, client_result) = fixture.run_key_exchange_test().await;
-
-    assert_error_contains_str(
-        client_result
-            .as_ref()
-            .expect_err("Key exchange should fail when chip IDs are different"),
+    assert_statuses_contain_error(
+        DiskEncryptionKeyExchangeTestFixture::new(config)
+            .run_key_exchange_test()
+            .await,
         "InvalidChipId",
     );
-
-    server_result.expect_err("Key exchange should fail when chip IDs are different");
 }
