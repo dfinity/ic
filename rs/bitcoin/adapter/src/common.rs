@@ -1,5 +1,6 @@
 use bitcoin::consensus::{Decodable, Encodable};
 use bitcoin::p2p::Magic;
+use bitcoin::{BlockHash, Work};
 use ic_btc_validation::{HeaderStore, ValidateHeaderError};
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
@@ -93,33 +94,6 @@ impl AdapterNetwork {
             AdapterNetwork::Dogecoin(network) => network.magic(),
         }
     }
-    /// Call `genesis_block(network).header` function on the respective network.
-    pub fn genesis_block_header(&self) -> bitcoin::block::Header {
-        match self {
-            AdapterNetwork::Bitcoin(network) => {
-                bitcoin::blockdata::constants::genesis_block(network).header
-            }
-            AdapterNetwork::Dogecoin(network) => {
-                bitcoin::dogecoin::constants::genesis_block(network).header
-            }
-        }
-    }
-    /// Validate block header against the network type and known headers.
-    pub fn validate_header(
-        &self,
-        store: &impl HeaderStore,
-        header: &bitcoin::block::Header,
-    ) -> Result<(), ValidateHeaderError> {
-        match self {
-            AdapterNetwork::Bitcoin(network) => {
-                ic_btc_validation::validate_header(network, store, header)
-            }
-            AdapterNetwork::Dogecoin(_network) => {
-                // TODO(XC-422): use real dogecoin validation
-                Ok(())
-            }
-        }
-    }
     /// Return the p2p protocol version.
     pub fn p2p_protocol_version(&self) -> u32 {
         match self {
@@ -170,11 +144,87 @@ impl<'de> Deserialize<'de> for AdapterNetwork {
     }
 }
 
+pub trait BlockchainNetwork {
+    type Header: BlockchainHeader;
+    type Block: BlockLike<Header = Self::Header>;
+    fn genesis_block_header(&self) -> Self::Header;
+    fn validate_header(
+        &self,
+        store: &impl HeaderStore,
+        header: &Self::Header,
+    ) -> Result<(), ValidateHeaderError>;
+}
+
+impl BlockchainNetwork for bitcoin::Network {
+    type Header = bitcoin::block::Header;
+    type Block = bitcoin::Block;
+    fn genesis_block_header(&self) -> Self::Header {
+        bitcoin::blockdata::constants::genesis_block(self).header
+    }
+    fn validate_header(
+        &self,
+        store: &impl HeaderStore,
+        header: &Self::Header,
+    ) -> Result<(), ValidateHeaderError> {
+        ic_btc_validation::validate_header(self, store, header)
+    }
+}
+
+impl BlockchainNetwork for bitcoin::dogecoin::Network {
+    type Header = bitcoin::dogecoin::Header;
+    type Block = bitcoin::dogecoin::Block;
+    fn genesis_block_header(&self) -> Self::Header {
+        bitcoin::dogecoin::constants::genesis_block(self).header
+    }
+    fn validate_header(
+        &self,
+        _store: &impl HeaderStore,
+        _header: &Self::Header,
+    ) -> Result<(), ValidateHeaderError> {
+        // TODO(XC-422): use real dogecoin validation
+        Ok(())
+    }
+}
+
+/// A trait that contains the common methods of both Bitcoin and Dogecoin blocks.
+pub trait BlockchainHeader: Decodable + Encodable + Clone {
+    /// Return block hash.
+    fn block_hash(&self) -> BlockHash;
+    /// Return previous block hash.
+    fn prev_block_hash(&self) -> BlockHash;
+    /// Check if the merkle root in block header matches what is computed.
+    fn work(&self) -> Work;
+}
+
+impl BlockchainHeader for bitcoin::block::Header {
+    fn block_hash(&self) -> BlockHash {
+        self.block_hash()
+    }
+    fn prev_block_hash(&self) -> BlockHash {
+        self.prev_blockhash
+    }
+    fn work(&self) -> Work {
+        self.work()
+    }
+}
+
+impl BlockchainHeader for bitcoin::dogecoin::Header {
+    fn block_hash(&self) -> BlockHash {
+        self.pure_header.block_hash()
+    }
+    fn prev_block_hash(&self) -> BlockHash {
+        self.pure_header.prev_blockhash
+    }
+    fn work(&self) -> Work {
+        self.pure_header.work()
+    }
+}
+
 /// A trait that contains the common methods of both Bitcoin and Dogecoin blocks.
 pub trait BlockLike: Decodable + Encodable + Clone {
     type Header;
     /// Return block hash.
-    fn block_hash(&self) -> bitcoin::BlockHash;
+    fn block_hash(&self) -> BlockHash;
     /// Compute merkle root.
     fn compute_merkle_root(&self) -> Option<bitcoin::TxMerkleNode>;
     /// Check if the merkle root in block header matches what is computed.
@@ -186,7 +236,7 @@ pub trait BlockLike: Decodable + Encodable + Clone {
 impl BlockLike for bitcoin::Block {
     type Header = bitcoin::block::Header;
 
-    fn block_hash(&self) -> bitcoin::BlockHash {
+    fn block_hash(&self) -> BlockHash {
         bitcoin::Block::block_hash(self)
     }
     fn compute_merkle_root(&self) -> Option<bitcoin::TxMerkleNode> {
@@ -203,7 +253,7 @@ impl BlockLike for bitcoin::Block {
 impl BlockLike for bitcoin::dogecoin::Block {
     type Header = bitcoin::dogecoin::Header;
 
-    fn block_hash(&self) -> bitcoin::BlockHash {
+    fn block_hash(&self) -> BlockHash {
         bitcoin::dogecoin::Block::block_hash(self)
     }
     fn compute_merkle_root(&self) -> Option<bitcoin::TxMerkleNode> {
