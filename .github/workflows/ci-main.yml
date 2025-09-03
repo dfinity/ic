@@ -191,9 +191,6 @@ jobs:
               echo
               echo '</details>';
             } >>"$GITHUB_STEP_SUMMARY"
-
-            exit 0
-
             bazel_args+=( --target_pattern_file="$target_pattern_file" )
 
             echo "Building as user: $(whoami)"
