@@ -173,12 +173,12 @@ const DEFAULT_SUBACCOUNT: Subaccount = Subaccount([0; 32]);
 // Initial amount of cycles when bootstrapping system canisters so that
 // - the canister has enough cycles to never run out of cycles;
 // - it is still possible to top up the canister with further cycles without overflowing 128-bit range.
-const INITIAL_CYCLES: Cycles = Cycles::from(u128::MAX / 2);
+const INITIAL_CYCLES: u128 = u128::MAX / 2;
 
 // Initial amount of cycles when bootstrapping system canisters so that
 // - the canister has enough cycles to never run out of cycles;
 // - it is still possible to top up the canister with further cycles without overflowing 64-bit range.
-const INITIAL_CYCLES_64_BIT: Cycles = Cycles::from(u64::MAX / 2);
+const INITIAL_CYCLES_64_BIT: u64 = u64::MAX / 2;
 
 // Maximum duration of waiting for bitcoin/canister http adapter server to start.
 const MAX_START_SERVER_DURATION: Duration = Duration::from_secs(60);
@@ -1397,7 +1397,7 @@ impl PocketIcSubnets {
             let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
                 Some(CYCLES_LEDGER_CANISTER_ID.get()),
                 /* The cycles ledger needs cycles for the test identities to withdraw. */
-                INITIAL_CYCLES,
+                Cycles::from(INITIAL_CYCLES),
                 Some(settings),
             );
             assert_eq!(canister_id, CYCLES_LEDGER_CANISTER_ID);
@@ -1648,7 +1648,7 @@ impl PocketIcSubnets {
             let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
                 Some(SNS_WASM_CANISTER_ID.get()),
                 /* The SNS-W canister requires cycles to deploy SNSs and uses 64-bit cycles API. */
-                INITIAL_CYCLES_64_BIT,
+                Cycles::from(INITIAL_CYCLES_64_BIT),
                 Some(settings),
             );
             assert_eq!(canister_id, SNS_WASM_CANISTER_ID);
@@ -1735,7 +1735,7 @@ impl PocketIcSubnets {
             let canister_id = sns_subnet.state_machine.create_canister_with_cycles(
                 Some(SNS_AGGREGATOR_CANISTER_ID.get()),
                 /* The SNS aggregator is deployed to an application subnet. */
-                INITIAL_CYCLES,
+                Cycles::from(INITIAL_CYCLES),
                 Some(settings),
             );
             assert_eq!(canister_id, SNS_AGGREGATOR_CANISTER_ID);
@@ -1805,7 +1805,7 @@ impl PocketIcSubnets {
             let canister_id = ii_subnet.state_machine.create_canister_with_cycles(
                 Some(IDENTITY_CANISTER_ID.get()),
                 /* The Internet Identity always attaches cycles to canister http outcalls. */
-                INITIAL_CYCLES,
+                Cycles::from(INITIAL_CYCLES),
                 Some(settings),
             );
             assert_eq!(canister_id, IDENTITY_CANISTER_ID);
