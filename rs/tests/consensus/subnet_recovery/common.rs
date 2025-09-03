@@ -633,11 +633,15 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
 
     let command = format!(
 <<<<<<< HEAD
+<<<<<<< HEAD
         r#"export PATH="/opt/ic/bin:$PATH"
 =======
         r#"sudo mount --bind {remote_ic_admin_path:?} /opt/ic/bin/ic-admin
 >>>>>>> 5b89f88ae8 (chore: rm ic-admin from the GuestOS)
         /opt/ic/bin/ic-recovery \
+=======
+        r#"sudo mount --bind {remote_ic_admin_path:?} /opt/ic/bin/ic-admin && /opt/ic/bin/ic-recovery \
+>>>>>>> a6d13f140d (fix)
         --nns-url {nns_url} \
         --test --skip-prompts --use-local-binaries \
         app-subnet-recovery \
