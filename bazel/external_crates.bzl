@@ -306,7 +306,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "bitcoin": crate.spec(
                 git = "https://github.com/dfinity/rust-dogecoin",
-                rev = "c226c2e6420b4bc9a7329aaf696b98e61039f2f9",
+                rev = "cda2b5ec270017c82abd6ef2e71b7fe583a133fd",
                 features = [
                     "default",
                     "rand",
