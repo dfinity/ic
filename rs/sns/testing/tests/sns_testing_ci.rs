@@ -64,7 +64,7 @@ async fn prepare_network_for_test(
         nns_governance: Some(EmptyConfig {}),
         sns: Some(EmptyConfig {}),
         ii: Some(EmptyConfig {}),
-        nns_ui: None,
+        nns_ui: Some(EmptyConfig {}),
     };
     let current_time = SystemTime::now()
         .duration_since(UNIX_EPOCH)
