@@ -195,39 +195,23 @@ impl AdapterState {
     }
 }
 
-/// Starts the gRPC server and the router for handling incoming requests.
-pub fn start_server(
-    log: &ReplicaLogger,
-    metrics_registry: &MetricsRegistry,
-    rt_handle: &tokio::runtime::Handle,
-    config: config::Config<AdapterNetwork>,
-) {
-    match config.as_adapter_config() {
-        AdapterConfig::Bitcoin(config) => {
-            start_server_helper(log, metrics_registry, rt_handle, config)
-        }
-        AdapterConfig::Dogecoin(config) => {
-            start_server_helper(log, metrics_registry, rt_handle, config)
-        }
-    }
-}
-
-fn start_server_helper<Network: BlockchainNetwork + Sync + Send + 'static>(
+fn start_server_helper<Network>(
     log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
     rt_handle: &tokio::runtime::Handle,
     config: config::Config<Network>,
 ) where
-    Network::Header: Sync + Send + 'static,
-    Network::Block: Sync + Send + 'static,
+    Network: BlockchainNetwork + Sync + Send + 'static,
+    Network::Header: Send,
+    Network::Block: Send,
 {
     let _enter = rt_handle.enter();
     let (adapter_state, tx) = AdapterState::new(config.idle_seconds);
+    let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
     let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(
         config.network,
         metrics_registry,
     )));
-    let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
     let (transaction_manager_tx, transaction_manager_rx) = channel(100);
     start_grpc_server(
         config.network,
@@ -248,4 +232,21 @@ fn start_server_helper<Network: BlockchainNetwork + Sync + Send + 'static>(
         blockchain_manager_rx,
         metrics_registry,
     )
+}
+
+/// Starts the gRPC server and the router for handling incoming requests.
+pub fn start_server(
+    log: &ReplicaLogger,
+    metrics_registry: &MetricsRegistry,
+    rt_handle: &tokio::runtime::Handle,
+    config: config::Config<AdapterNetwork>,
+) {
+    match config.into() {
+        AdapterConfig::Bitcoin(config) => {
+            start_server_helper(log, metrics_registry, rt_handle, config)
+        }
+        AdapterConfig::Dogecoin(config) => {
+            start_server_helper(log, metrics_registry, rt_handle, config)
+        }
+    }
 }

@@ -76,9 +76,10 @@ impl<Header: BlockchainHeader> TryFrom<GetSuccessorsResponse<Header>>
 }
 
 #[tonic::async_trait]
-impl<Network: BlockchainNetwork + Sync + Send + 'static> BtcService for BtcServiceImpl<Network>
+impl<Network> BtcService for BtcServiceImpl<Network>
 where
-    Network::Header: Sync + Send + 'static,
+    Network: BlockchainNetwork + Sync + Send + 'static,
+    Network::Header: Send,
 {
     async fn get_successors(
         &self,
@@ -127,7 +128,7 @@ where
 }
 
 /// Blocks until the server binds to the socket
-pub fn start_grpc_server<Network: BlockchainNetwork + Sync + Send + 'static>(
+pub fn start_grpc_server<Network>(
     network: Network,
     incoming_source: IncomingSource,
     logger: ReplicaLogger,
@@ -137,7 +138,8 @@ pub fn start_grpc_server<Network: BlockchainNetwork + Sync + Send + 'static>(
     transaction_manager_tx: mpsc::Sender<TransactionManagerRequest>,
     metrics_registry: &MetricsRegistry,
 ) where
-    Network::Header: Sync + Send + 'static,
+    Network: BlockchainNetwork + Sync + Send + 'static,
+    Network::Header: Send,
 {
     let get_successors_handler = GetSuccessorsHandler::new(
         network,

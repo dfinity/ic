@@ -143,9 +143,8 @@ pub enum AdapterConfig {
     Dogecoin(Config<bitcoin::dogecoin::Network>),
 }
 
-impl Config<AdapterNetwork> {
-    /// Return corresponding [AdapterConfig].
-    pub fn as_adapter_config(self) -> AdapterConfig {
+impl From<Config<AdapterNetwork>> for AdapterConfig {
+    fn from(config: Config<AdapterNetwork>) -> Self {
         let Config {
             dns_seeds,
             network,
@@ -156,9 +155,9 @@ impl Config<AdapterNetwork> {
             logger,
             incoming_source,
             address_limits,
-        } = self;
+        } = config;
         match network {
-            AdapterNetwork::Bitcoin(network) => AdapterConfig::Bitcoin(Config {
+            AdapterNetwork::Bitcoin(network) => Self::Bitcoin(Config {
                 dns_seeds,
                 network,
                 socks_proxy,
@@ -169,7 +168,7 @@ impl Config<AdapterNetwork> {
                 incoming_source,
                 address_limits,
             }),
-            AdapterNetwork::Dogecoin(network) => AdapterConfig::Dogecoin(Config {
+            AdapterNetwork::Dogecoin(network) => Self::Dogecoin(Config {
                 dns_seeds,
                 network,
                 socks_proxy,
