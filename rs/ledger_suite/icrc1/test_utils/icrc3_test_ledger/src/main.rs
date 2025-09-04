@@ -58,26 +58,28 @@ fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
 const MAX_U64_ENCODING_BYTES: usize = 10;
 
 fn construct_hash_tree() -> HashTree {
-    let last_idx_block = BLOCKS.with(|blocks| blocks.borrow().last_key_value());
-    match last_idx_block {
-        Some((last_block_index, last_block)) => {
-            let last_block_index_label = Label::from("last_block_index");
-            let last_block_hash_label = Label::from("last_block_hash");
+    BLOCKS.with(|blocks| {
+        let blocks = blocks.borrow();
+        match blocks.last_key_value() {
+            Some((last_block_index, last_block)) => {
+                let last_block_index_label = Label::from("last_block_index");
+                let last_block_hash_label = Label::from("last_block_hash");
 
-            let mut last_block_index_encoded = Vec::with_capacity(MAX_U64_ENCODING_BYTES);
-            leb128::write::unsigned(&mut last_block_index_encoded, *last_block_index)
-                .expect("Failed to write LEB128");
+                let mut last_block_index_encoded = Vec::with_capacity(MAX_U64_ENCODING_BYTES);
+                leb128::write::unsigned(&mut last_block_index_encoded, *last_block_index)
+                    .expect("Failed to write LEB128");
 
-            fork(
-                label(
-                    last_block_hash_label,
-                    leaf(last_block.clone().hash().to_vec()),
-                ),
-                label(last_block_index_label, leaf(last_block_index_encoded)),
-            )
+                fork(
+                    label(
+                        last_block_hash_label,
+                        leaf(last_block.clone().hash().to_vec()),
+                    ),
+                    label(last_block_index_label, leaf(last_block_index_encoded)),
+                )
+            }
+            None => empty(),
         }
-        None => empty(),
-    }
+    })
 }
 
 #[query(name = "icrc1_supported_standards")]
