@@ -47,7 +47,7 @@ As part of the Voting Neuron Grants season 2, teams submitting canister upgrade 
 
 Once the proposal is published, the corresponding proposal ID can be used to create an appropriate forum topic.
 
-NOTE: Using this functionality requires having an API key and username for the https://forum.dfinity.org/[DFINITY developer forum].
+NOTE: Using this functionality requires having an API key and username for the https://forum.dfinity.org/[DFINITY developer forum]. See the https://docs.discourse.org/[Discourse API] for more information.
 
 .Create a new forum topic for a single canister upgrade proposal (ckETH minter)
 ====
