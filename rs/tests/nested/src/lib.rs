@@ -614,10 +614,22 @@ pub fn nns_recovery_test(env: TestEnv) {
     )
     .unwrap();
 
-    info!(logger, "Simulate node provider action on 2f+1 nodes");
+    // The DFINITY-owned node is already recovered as part of the recovery tool, so we only need to
+    // trigger the recovery on 2f other nodes.
+    info!(logger, "Simulate node provider action on 2f nodes");
     block_on(join_all(
         get_host_vm_names(SUBNET_SIZE)
-            .choose_multiple(&mut rand::thread_rng(), 2 * f + 1)
+            .iter()
+            .filter(|vm_name| {
+                env.get_nested_vm(vm_name)
+                    .unwrap()
+                    .get_nested_network()
+                    .unwrap()
+                    .guest_ip
+                    != dfinity_owned_node.get_ip_addr()
+            })
+            .collect::<Vec<_>>()
+            .choose_multiple(&mut rand::thread_rng(), 2 * f)
             .map(|vm_name| {
                 simulate_node_provider_action(
                     &logger,
