@@ -793,14 +793,7 @@ impl Storable for AbridgedNeuron {
             .expect("Unable to deserialize Neuron.")
     }
 
-    const BOUND: Bound = Bound::Bounded {
-        // How this number was chosen: we constructed the largest abridged Neuron
-        // possible, and found that its serialized size was 190 bytes. This is 2x
-        // that, which seems to strike a good balance between comfortable room for
-        // growth vs. excessive wasted space.
-        max_size: 380,
-        is_fixed_size: false,
-    };
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 impl Storable for BallotInfo {
@@ -812,11 +805,7 @@ impl Storable for BallotInfo {
         Self::decode(&bytes[..]).expect("Unable to deserialize Neuron.")
     }
 
-    const BOUND: Bound = Bound::Bounded {
-        // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
-        max_size: 48,
-        is_fixed_size: false,
-    };
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 impl Storable for MaturityDisbursement {
@@ -840,11 +829,7 @@ impl Storable for KnownNeuronData {
         Self::decode(&bytes[..]).expect("Unable to deserialize Neuron.")
     }
 
-    const BOUND: Bound = Bound::Bounded {
-        // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
-        max_size: 6412,
-        is_fixed_size: false,
-    };
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 impl Storable for NeuronStakeTransfer {
@@ -856,11 +841,7 @@ impl Storable for NeuronStakeTransfer {
         Self::decode(&bytes[..]).expect("Unable to deserialize Neuron.")
     }
 
-    const BOUND: Bound = Bound::Bounded {
-        // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
-        max_size: 290,
-        is_fixed_size: false,
-    };
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 // Private Helpers
