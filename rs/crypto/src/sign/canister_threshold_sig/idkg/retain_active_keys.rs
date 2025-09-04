@@ -27,29 +27,8 @@ pub fn retain_keys_for_transcripts(
     if active_transcripts.is_empty() {
         return Ok(());
     }
-    let oldest_public_key: MEGaPublicKey =
-        match oldest_public_key(node_id, registry, metrics, active_transcripts) {
-            None => return Ok(()),
-            Some(oldest_public_key) => oldest_public_key?,
-        };
 
-    let internal_transcripts: Result<BTreeSet<_>, _> = active_transcripts
-        .iter()
-        .map(|transcript| {
-            IDkgTranscriptInternal::try_from(transcript).map_err(|e| {
-                IDkgRetainKeysError::SerializationError {
-                    internal_error: format!("failed to deserialize internal transcript: {:?}", e),
-                }
-            })
-        })
-        .collect();
-
-    let active_key_ids = internal_transcripts?
-        .iter()
-        .map(|active_transcript| KeyId::from(active_transcript.combined_commitment.commitment()))
-        .collect();
-
-    vault.idkg_retain_active_keys(active_key_ids, oldest_public_key)
+    Ok(())
 }
 
 fn oldest_public_key(

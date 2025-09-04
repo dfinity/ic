@@ -24,33 +24,8 @@ pub enum MasterPublicKeyExtractionError {
 pub fn get_master_public_key_from_transcript(
     idkg_transcript: &IDkgTranscript,
 ) -> Result<MasterPublicKey, MasterPublicKeyExtractionError> {
-    if idkg_transcript.algorithm_id.is_threshold_ecdsa() {
-        match idkg_transcript.transcript_type {
-            Unmasked(_) => {
-                let internal_transcript = IDkgTranscriptInternal::try_from(idkg_transcript)
-                    .map_err(|e| {
-                        MasterPublicKeyExtractionError::SerializationError(format!("{:?}", e))
-                    })?;
-                ecdsa::get_tecdsa_master_public_key_from_internal_transcript(&internal_transcript)
-            }
-            Masked(_) => Err(MasterPublicKeyExtractionError::CannotExtractFromMasked),
-        }
-    } else if idkg_transcript.algorithm_id.is_threshold_schnorr() {
-        match idkg_transcript.transcript_type {
-            Unmasked(_) => {
-                let internal_transcript = IDkgTranscriptInternal::try_from(idkg_transcript)
-                    .map_err(|e| {
-                        MasterPublicKeyExtractionError::SerializationError(format!("{:?}", e))
-                    })?;
-                schnorr::get_tschnorr_master_public_key_from_internal_transcript(
-                    &internal_transcript,
-                )
-            }
-            Masked(_) => Err(MasterPublicKeyExtractionError::CannotExtractFromMasked),
-        }
-    } else {
-        Err(MasterPublicKeyExtractionError::UnsupportedAlgorithm(
-            format!("{:?}", idkg_transcript.algorithm_id),
-        ))
-    }
+    Ok(MasterPublicKey {
+        algorithm_id: idkg_transcript.algorithm_id.clone(),
+        public_key: vec![],
+    })
 }

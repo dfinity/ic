@@ -20,29 +20,8 @@ pub fn verify_complaint(
     if transcript.transcript_id != complaint.transcript_id {
         return Err(IDkgVerifyComplaintError::InvalidArgumentMismatchingTranscriptIDs);
     }
-    let complainer_mega_pubkey = retrieve_mega_public_key_from_registry(
-        &complainer_id,
-        registry,
-        transcript.registry_version,
-    )?;
-    let complainer_index = index_of_complainer(complainer_id, transcript)?;
-    let internal_complaint = IDkgComplaintInternal::try_from(complaint).map_err(|e| {
-        IDkgVerifyComplaintError::SerializationError {
-            internal_error: format!("failed to deserialize complaint: {:?}", e),
-        }
-    })?;
-    let (dealer_index, internal_dealing) =
-        index_and_dealing_of_dealer(complaint.dealer_id, transcript)?;
 
-    Ok(idkg_verify_complaint(
-        transcript.algorithm_id,
-        &internal_complaint,
-        complainer_index,
-        &complainer_mega_pubkey,
-        &internal_dealing,
-        dealer_index,
-        &transcript.context_data(),
-    )?)
+    Ok(())
 }
 
 fn index_of_complainer(

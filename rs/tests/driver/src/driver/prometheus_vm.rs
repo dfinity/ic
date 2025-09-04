@@ -488,6 +488,7 @@ sudo tar -cf "{tarball_full_path:?}" \
     --sparse \
     --use-compress-program="zstd --threads=0 -10" \
     -C /var/lib/prometheus .
+sudo systemctl start prometheus.service
     "#,
         );
         let session = deployed_prometheus_vm
