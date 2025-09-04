@@ -74,7 +74,7 @@ pub fn setup(env: TestEnv, _cfg: SetupConfig) {
     }
 }
 
-pub fn nns_recovery_test(env: TestEnv, _cfg: TestConfig) {
+pub fn test(env: TestEnv, _cfg: TestConfig) {
     let logger = env.logger();
 
     let recovery_img = std::fs::read(get_dependency_path(
