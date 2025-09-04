@@ -181,8 +181,14 @@ fn canister_init() {
         });
     recertify_registry();
 
-    #[cfg(test)]
+    #[cfg(feature = "test")]
     {
+        use registry_canister::flags::temporary_overrides::{
+            test_set_swapping_enabled_subnets, test_set_swapping_status,
+            test_set_swapping_whitelisted_callers,
+        };
+
+        println!("{LOG_PREFIX}canister_init: Overriding swapping flags");
         test_set_swapping_status(init_payload.is_swapping_feature_enabled);
         test_set_swapping_whitelisted_callers(init_payload.swapping_whitelisted_callers);
         test_set_swapping_enabled_subnets(init_payload.swapping_enabled_subnets);

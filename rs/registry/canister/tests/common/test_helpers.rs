@@ -29,7 +29,7 @@ use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_Q
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_types::ReplicaVersion;
 use pocket_ic::nonblocking::PocketIc;
-use registry_canister::init::RegistryCanisterInitPayloadBuilder;
+use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
 use registry_canister::mutations::do_create_subnet::CreateSubnetPayload;
 use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
 use registry_canister::mutations::node_management::do_add_node::connection_endpoint_from_string;
@@ -416,7 +416,7 @@ pub async fn check_subnet_for_canisters(
 pub async fn install_registry_canister(pocket_ic: &PocketIc) {
     install_registry_canister_with_payload_builder(
         pocket_ic,
-        RegistryCanisterInitPayloadBuilder::new(),
+        RegistryCanisterInitPayloadBuilder::new().build(),
         false,
     )
     .await;
@@ -425,7 +425,7 @@ pub async fn install_registry_canister(pocket_ic: &PocketIc) {
 pub async fn install_test_registry_canister(pocket_ic: &PocketIc) {
     install_registry_canister_with_payload_builder(
         pocket_ic,
-        RegistryCanisterInitPayloadBuilder::new(),
+        RegistryCanisterInitPayloadBuilder::new().build(),
         true,
     )
     .await;
@@ -433,10 +433,9 @@ pub async fn install_test_registry_canister(pocket_ic: &PocketIc) {
 
 pub async fn install_registry_canister_with_payload_builder(
     pocket_ic: &PocketIc,
-    builder: RegistryCanisterInitPayloadBuilder,
+    payload: RegistryCanisterInitPayload,
     test_configuration: bool,
 ) {
-    let payload = builder.build();
     install_canister(
         pocket_ic,
         "Registry",
