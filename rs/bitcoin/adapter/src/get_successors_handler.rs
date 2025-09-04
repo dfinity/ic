@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use bitcoin::BlockHash;
+use bitcoin::{consensus::Encodable, BlockHash};
 use ic_metrics::MetricsRegistry;
 use static_assertions::const_assert_eq;
 use tokio::sync::mpsc::Sender;
@@ -156,7 +156,27 @@ impl<Network: BlockchainNetwork> GetSuccessorsHandler<Network> {
             }
             (blocks, next, obsolete_blocks)
         };
-        let response_next = &next[..next.len().min(MAX_NEXT_BLOCK_HEADERS_LENGTH)];
+        // Because Dogecoin headers can have variable length, we must choose
+        // next headers that can fit within MAX_NEXT_BYTES.
+        // TODO(XC-478): add tests for auxpow headers
+        let mut response_next = Vec::with_capacity(MAX_NEXT_BLOCK_HEADERS_LENGTH);
+        let mut response_next_bytes = 0;
+        let mut bytes = Vec::with_capacity(MAX_NEXT_BYTES);
+        for header in next.iter() {
+            match header.consensus_encode(&mut bytes) {
+                Ok(size) => {
+                    response_next_bytes += size;
+                    if response_next_bytes <= MAX_NEXT_BYTES {
+                        response_next.push(header.clone())
+                    } else {
+                        break;
+                    }
+                }
+                Err(_) => {
+                    break;
+                }
+            }
+        }
         let response = GetSuccessorsResponse {
             blocks: blocks.into_iter().map(|(_, block)| block).collect(),
             next: response_next.to_vec(),
