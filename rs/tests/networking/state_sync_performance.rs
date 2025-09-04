@@ -12,6 +12,7 @@ end::catalog[] */
 
 use anyhow::Result;
 use canister_test::Canister;
+use futures::future::join_all;
 use ic_consensus_threshold_sig_system_test_utils::execute_proposal;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::{NnsFunction, ProposalStatus};
@@ -160,6 +161,7 @@ fn test(env: TestEnv) {
             "Expanded the subnet state size. Growing the subnet to {} nodes", TOTAL_NODES
         );
 
+        let new_nodes = topology.unassigned_nodes().collect::<Vec<_>>();
         let add_nodes_payload = AddNodesToSubnetPayload {
             subnet_id: topology.root_subnet().subnet_id.get(),
             node_ids: topology
@@ -186,7 +188,15 @@ fn test(env: TestEnv) {
         // let latest_certified_height = res[LATEST_CERTIFIED_HEIGHT][0];
 
         let base_count = res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT][0];
-        assert_state_sync_has_happened(&logger, agent_node, base_count).await;
+
+        let maybe_state_syncs = new_nodes
+            .into_iter()
+            .map(|node| async {
+                assert_state_sync_has_happened(&logger, node, base_count).await;
+            })
+            .collect::<Vec<_>>();
+
+        join_all(maybe_state_syncs).await
     });
 }
 

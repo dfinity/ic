@@ -284,8 +284,8 @@ pub async fn fetch_metrics<T>(
 where
     T: Copy + Debug + FromStr,
 {
-    const NUM_RETRIES: u32 = 200;
-    const BACKOFF_TIME_MILLIS: u64 = 500;
+    const NUM_RETRIES: u32 = 500;
+    const BACKOFF_TIME_MILLIS: u64 = 1000;
 
     let metrics = MetricsFetcher::new(
         std::iter::once(node),

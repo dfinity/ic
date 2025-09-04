@@ -430,6 +430,7 @@ system_test_nns(
         "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/message_routing/rejoin_test_lib",
         "//rs/types/types",
+        "@crate_index//:futures",
     ],
 )
 
