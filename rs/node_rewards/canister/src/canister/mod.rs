@@ -275,6 +275,7 @@ impl NodeRewardsCanister {
                 let daily_rewards = rewards_xdr_permyriad.entry(provider_id.0).or_insert(0);
                 *daily_rewards += provider_rewards.rewards_total_xdr_permyriad;
             }
+            current_day = current_day.next_day();
         }
 
         Ok(NodeProvidersRewards {
