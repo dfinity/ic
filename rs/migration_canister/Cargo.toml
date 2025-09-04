@@ -18,3 +18,7 @@ ic-stable-structures = "0.7.0"
 serde_cbor = { workspace = true }
 serde = { workspace =true }
 serde_bytes = { workspace =true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+
