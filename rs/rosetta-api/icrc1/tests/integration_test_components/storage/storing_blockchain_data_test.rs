@@ -1,5 +1,6 @@
 #![allow(clippy::disallowed_types)]
 use crate::common::local_replica;
+use crate::common::local_replica::create_and_install_custom_icrc_ledger;
 use crate::common::local_replica::test_identity;
 use crate::common::local_replica::{create_and_install_icrc_ledger, get_custom_agent};
 use candid::Nat;
@@ -8,6 +9,8 @@ use ic_agent::Identity;
 use ic_base_types::PrincipalId;
 use ic_icrc1_ledger::FeatureFlags;
 use ic_icrc1_ledger::InitArgsBuilder;
+use ic_icrc1_ledger::Tokens;
+use ic_icrc1_test_utils::icrc3::BlockBuilder;
 use ic_icrc1_test_utils::minter_identity;
 use ic_icrc1_test_utils::valid_transactions_strategy;
 use ic_icrc1_test_utils::ArgWithCaller;
@@ -247,10 +250,6 @@ fn test_self_transfer() {
     });
 }
 
-use crate::common::local_replica::create_and_install_custom_icrc_ledger;
-use ic_icrc1_ledger::Tokens;
-use ic_icrc1_test_utils::icrc3::BlockBuilder;
-
 fn icrc3_test_ledger() -> Vec<u8> {
     std::fs::read(std::env::var("ICRC3_TEST_LEDGER_CANISTER_WASM_PATH").unwrap()).unwrap()
 }
@@ -261,7 +260,7 @@ const TEST_ACCOUNT_1: Account = Account {
     owner: TEST_USER_1.0,
     subaccount: None,
 };
-const TEST_ACCOUNT_2: Account = Account {
+const FEE_COLLECTOR: Account = Account {
     owner: TEST_USER_2.0,
     subaccount: None,
 };
@@ -284,17 +283,13 @@ fn test_burn_fee() {
     let port = endpoint.port().unwrap();
 
     let block0 = BlockBuilder::new(0, 1000)
-        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000u64))
+        .with_fee(Tokens::from(50u64))
+        .mint(TEST_ACCOUNT_1, Tokens::from(1_000u64))
         .build();
     let block1 = BlockBuilder::new(1, 2000)
         .with_parent_hash(block0.clone().hash().to_vec())
-        .transfer(TEST_ACCOUNT_1, TEST_ACCOUNT_2, Tokens::from(100_000u64))
-        .build();
-    let block2 = BlockBuilder::new(2, 3000)
-        .mint(TEST_ACCOUNT_1, Tokens::from(500_000u64))
-        .build();
-    let block3 = BlockBuilder::new(3, 4000)
-        .burn(TEST_ACCOUNT_1, Tokens::from(50_000u64))
+        .with_fee(Tokens::from(50u64))
+        .burn(TEST_ACCOUNT_1, Tokens::from(50u64))
         .build();
 
     rt.block_on(async {
@@ -329,25 +324,16 @@ fn test_burn_fee() {
         .unwrap();
         storage_client.update_account_balances().unwrap();
 
-        // if let Some((tip_block_hash, tip_block_index)) = agent
-        //     .get_certified_chain_tip()
-        //     .await
-        //     .expect("failed to get cerfified tip")
-        // {
-        //     assert_eq!(tip_block_index, Nat::from(1u64));
-        //     assert_eq!(tip_block_hash, block1.hash());
-        // } else {
-        //     panic!("did not get the tip");
-        // }
-
-        assert_eq!(storage_client.get_highest_block_idx().unwrap(), Some(1));
-
         assert_eq!(
             storage_client
                 .get_account_balance(&TEST_ACCOUNT_1)
                 .unwrap()
                 .unwrap(),
-            Nat::from(900_000u64)
+            Nat::from(900u64)
         );
+        assert!(storage_client
+            .get_account_balance(&FEE_COLLECTOR)
+            .unwrap()
+            .is_none());
     });
 }
