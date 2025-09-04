@@ -611,9 +611,8 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
     let node_ip = node.get_ip_addr();
     info!(
         logger,
-        "Copying ic-admin to node {node_id} with IP {node_ip} ..."
+        "Copying ic-admin to node {node_id} with IP {node_ip} such that ic-recovery can execute it ..."
     );
-    // ic-recovery requires ic-admin so we copy ic-admin to the node via scp below.
     scp_send_to(
         logger.clone(),
         session,
