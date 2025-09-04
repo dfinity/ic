@@ -1,4 +1,5 @@
-use ic_crypto_tree_hash::{Label, Path};
+use ic_crypto_tree_hash::Path;
+use ic_http_endpoints_public::{query, read_state};
 use ic_types::{
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
@@ -10,6 +11,7 @@ use ic_types::{
 use reqwest::{header::CONTENT_TYPE, StatusCode};
 use serde_cbor::Value as CBOR;
 use std::{net::SocketAddr, time::Duration};
+use url::Url;
 
 const INGRESS_EXPIRY_DURATION: Duration = Duration::from_secs(300);
 const METHOD_NAME: &str = "test";
@@ -68,6 +70,7 @@ pub async fn wait_for_status_healthy(addr: &SocketAddr) -> Result<(), &'static s
 pub enum Call {
     V2,
     V3,
+    V4,
 }
 
 #[derive(Clone, Debug)]
@@ -136,7 +139,7 @@ impl IngressMessage {
 
 impl Call {
     pub async fn call(
-        &self,
+        self,
         addr: SocketAddr,
         ingress_message: IngressMessage,
     ) -> reqwest::Response {
@@ -146,6 +149,7 @@ impl Call {
         let version = match self {
             Call::V2 => "v2",
             Call::V3 => "v3",
+            Call::V4 => "v4",
         };
 
         let url = format!(
@@ -163,17 +167,22 @@ impl Call {
     }
 }
 
-#[derive(Default)]
 pub struct Query {
     canister_id: PrincipalId,
     effective_canister_id: PrincipalId,
+    version: query::Version,
 }
 
 impl Query {
-    pub fn new(canister_id: PrincipalId, effective_canister_id: PrincipalId) -> Self {
+    pub fn new(
+        canister_id: PrincipalId,
+        effective_canister_id: PrincipalId,
+        version: query::Version,
+    ) -> Self {
         Self {
             canister_id,
             effective_canister_id,
+            version,
         }
     }
 
@@ -199,9 +208,13 @@ impl Query {
         };
 
         let body = serde_cbor::to_vec(&envelope).unwrap();
+        let version_str = match self.version {
+            query::Version::V2 => "v2",
+            query::Version::V3 => "v3",
+        };
         let url = format!(
-            "http://{}/api/v2/canister/{}/query",
-            addr, self.effective_canister_id
+            "http://{addr}/api/{version_str}/canister/{}/query",
+            self.effective_canister_id
         );
 
         reqwest::Client::new()
@@ -217,26 +230,29 @@ impl Query {
 pub struct CanisterReadState {
     paths: Vec<Path>,
     effective_canister_id: PrincipalId,
-}
-
-impl Default for CanisterReadState {
-    fn default() -> Self {
-        Self {
-            paths: vec![Path::from(Label::from("time"))],
-            effective_canister_id: PrincipalId::default(),
-        }
-    }
+    version: read_state::canister::Version,
 }
 
 impl CanisterReadState {
-    pub fn new(paths: Vec<Path>, effective_canister_id: PrincipalId) -> Self {
+    pub fn new(
+        paths: Vec<Path>,
+        effective_canister_id: PrincipalId,
+        version: read_state::canister::Version,
+    ) -> Self {
         Self {
             paths,
             effective_canister_id,
+            version,
         }
     }
 
     pub async fn read_state(self, addr: SocketAddr) -> reqwest::Response {
+        let url_string = format!("http://{}", addr);
+        let url = Url::parse(&url_string).unwrap();
+        self.read_state_at_url(url).await
+    }
+
+    pub async fn read_state_at_url(self, mut url: Url) -> reqwest::Response {
         let ingress_expiry = (current_time() + INGRESS_EXPIRY_DURATION).as_nanos_since_unix_epoch();
 
         let call_content = HttpReadStateContent::ReadState {
@@ -256,12 +272,24 @@ impl CanisterReadState {
         };
 
         let body = serde_cbor::to_vec(&envelope).unwrap();
-        let url = format!(
-            "http://{}/api/v2/canister/{}/read_state",
-            addr, self.effective_canister_id
-        );
 
-        reqwest::Client::new()
+        let version_str = match self.version {
+            read_state::canister::Version::V2 => "v2",
+            read_state::canister::Version::V3 => "v3",
+        };
+
+        url.set_path(&format!(
+            "api/{version_str}/canister/{}/read_state",
+            self.effective_canister_id
+        ));
+
+        let client = reqwest::Client::builder()
+            .http2_prior_knowledge()
+            .danger_accept_invalid_certs(true)
+            .build()
+            .unwrap();
+
+        client
             .post(url)
             .body(body)
             .header(CONTENT_TYPE, APPLICATION_CBOR)

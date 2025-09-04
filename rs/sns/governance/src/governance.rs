@@ -1,12 +1,11 @@
-use crate::icrc_ledger_helper::ICRCLedgerHelper;
-use crate::pb::v1::governance::GovernanceCachedMetrics;
-use crate::pb::v1::{valuation, Metrics, TreasuryMetrics, VotingPowerMetrics};
-use crate::proposal::TreasuryAccount;
-use crate::treasury::{assess_treasury_balance, interpret_token_code, tokens_to_e8s};
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
         upgrade_canister_directly,
+    },
+    extensions::{
+        validate_execute_extension_operation, validate_register_extension,
+        validate_upgrade_extension,
     },
     follower_index::{
         add_neuron_to_follower_index, build_follower_index,
@@ -17,6 +16,7 @@ use crate::{
         remove_neuron_from_follower_index, FollowerIndex,
     },
     following::{self, ValidatedSetFollowing},
+    icrc_ledger_helper::ICRCLedgerHelper,
     logs::{ERROR, INFO},
     neuron::{
         NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
@@ -34,7 +34,8 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, Command as InFlightCommand},
-                MaturityModulation, NeuronInFlightCommand, PendingVersion, SnsMetadata, Version,
+                GovernanceCachedMetrics, MaturityModulation, NeuronInFlightCommand, PendingVersion,
+                SnsMetadata, Version,
             },
             governance_error::ErrorType,
             manage_neuron::{
@@ -51,47 +52,49 @@ use crate::{
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
-            upgrade_journal_entry, Account as AccountProto, AddMaturityRequest,
+            upgrade_journal_entry, valuation, Account as AccountProto, AddMaturityRequest,
             AddMaturityResponse, AdvanceTargetVersionRequest, AdvanceTargetVersionResponse, Ballot,
             ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
             ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters,
-            DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
-            FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
-            GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
-            GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
-            GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
-            GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
-            ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-            ListProposalsResponse, ManageDappCanisterSettings, ManageLedgerParameters,
-            ManageNeuron, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens,
-            MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
-            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
-            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
-            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
+            DisburseMaturityInProgress, Empty, ExecuteExtensionOperation,
+            ExecuteGenericNervousSystemFunction, FailStuckUpgradeInProgressRequest,
+            FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
+            GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
+            GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+            GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
+            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
+            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
+            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
+            ManageSnsMetadata, Metrics, MintSnsTokens, MintTokensRequest, MintTokensResponse,
+            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
+            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
+            RegisterExtension, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
+            TransferSnsTreasuryFunds, TreasuryMetrics, UpgradeSnsControlledCanister, Vote,
+            VotingPowerMetrics, WaitForQuietState,
         },
     },
     proposal::{
         get_action_auxiliary,
         transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err,
         validate_and_render_proposal, validate_and_render_set_topics_for_custom_proposals,
-        ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
+        TreasuryAccount, ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
     },
     sns_upgrade::{
         canister_type_and_wasm_hash_for_upgrade, get_all_sns_canisters, get_canisters_to_upgrade,
         get_running_version, get_upgrade_params, get_wasm, SnsCanisterType, UpgradeSnsParams,
     },
+    treasury::{assess_treasury_balance, interpret_token_code, tokens_to_e8s},
     types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock, Wasm},
 };
+
 use candid::{Decode, Encode};
 #[cfg(not(target_arch = "wasm32"))]
 use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::SpanStats;
-#[cfg(target_arch = "wasm32")]
-use ic_cdk::spawn;
 use ic_ledger_core::Tokens;
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
@@ -118,8 +121,11 @@ use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
+
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+
+use crate::pb::v1::UpgradeExtension;
 use std::{
     cell::RefCell,
     cmp::Ordering,
@@ -616,10 +622,10 @@ pub struct Governance {
     pub env: Box<dyn Environment>,
 
     /// Implementation of the interface with the SNS ledger canister.
-    ledger: Box<dyn ICRC1Ledger>,
+    pub(crate) ledger: Box<dyn ICRC1Ledger>,
 
     // Implementation of the interface pointing to the NNS's ICP ledger canister
-    nns_ledger: Box<dyn ICRC1Ledger>,
+    pub(crate) nns_ledger: Box<dyn ICRC1Ledger>,
 
     /// Implementation of the interface with the CMC canister.
     cmc: Box<dyn CMC>,
@@ -688,7 +694,7 @@ pub struct Governance {
 fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
     #[cfg(target_arch = "wasm32")]
     {
-        spawn(future);
+        ic_cdk::futures::spawn_017_compat(future);
     }
     // This is needed for tests
     #[cfg(not(target_arch = "wasm32"))]
@@ -1128,11 +1134,11 @@ impl Governance {
         caller: &PrincipalId,
         disburse: &manage_neuron::Disburse,
     ) -> Result<u64, GovernanceError> {
-        let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
+        // First check authorized
         let neuron = self.get_neuron_result(id)?;
-
         neuron.check_authorized(caller, NeuronPermissionType::Disburse)?;
 
+        // Check that the neuron is dissolved.
         let state = neuron.state(self.env.now());
         if state != NeuronState::Dissolved {
             return Err(GovernanceError::new_with_message(
@@ -1140,6 +1146,8 @@ impl Governance {
                 format!("Neuron {} is NOT dissolved. It is in state {:?}", id, state),
             ));
         }
+
+        let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
 
         let from_subaccount = neuron.subaccount()?;
 
@@ -1157,17 +1165,17 @@ impl Governance {
             })?,
         };
 
-        let fees_amount_e8s = neuron.neuron_fees_e8s;
+        let max_burnable_fee = self.maximum_burnable_fees_for_neuron(neuron)?;
+
         // Calculate the amount to transfer and make sure no matter what the user
         // disburses we still take the neuron management fees into account.
-        //
-        // Note that the implementation of stake_e8s() is effectively:
-        //   neuron.cached_neuron_stake_e8s.saturating_sub(neuron.neuron_fees_e8s)
-        // So there is symmetry here in that we are subtracting
-        // fees_amount_e8s from both sides of this `map_or`.
-        let mut disburse_amount_e8s = disburse.amount.as_ref().map_or(neuron.stake_e8s(), |a| {
-            a.e8s.saturating_sub(fees_amount_e8s)
-        });
+        let mut disburse_amount_e8s = disburse
+            .amount
+            .as_ref()
+            .map_or(neuron.stake_e8s(), |a| a.e8s);
+
+        // You cannot disburse more than the neuron's stake, which includes fees.
+        disburse_amount_e8s = disburse_amount_e8s.min(neuron.stake_e8s());
 
         // Subtract the transaction fee from the amount to disburse since it will
         // be deducted from the source (the neuron's) account.
@@ -1182,34 +1190,35 @@ impl Governance {
         // Transfer 1 - burn the neuron management fees, but only if the value
         // exceeds the cost of a transaction fee, as the ledger doesn't support
         // burn transfers for an amount less than the transaction fee.
-        if fees_amount_e8s > transaction_fee_e8s {
+        if max_burnable_fee > transaction_fee_e8s {
             let _result = self
                 .ledger
                 .transfer_funds(
-                    fees_amount_e8s,
+                    max_burnable_fee,
                     0, // Burning transfers don't pay a fee.
                     Some(from_subaccount),
                     self.governance_minting_account(),
                     self.env.now(),
                 )
                 .await?;
-        }
 
-        let nid = id.to_string();
-        let neuron = self
-            .proto
-            .neurons
-            .get_mut(&nid)
-            .expect("Expected the parent neuron to exist");
+            // We only update the cached_neuron_stake_e8s and neuron_fees_e8s if we actually
+            // burn fees, otherwise this leads to ledger and governance getting out of sync.
+            let nid = id.to_string();
+            let neuron = self
+                .proto
+                .neurons
+                .get_mut(&nid)
+                .expect("Expected the parent neuron to exist");
 
-        // Update the neuron's stake and management fees to reflect the burning
-        // above.
-        if neuron.cached_neuron_stake_e8s > fees_amount_e8s {
-            neuron.cached_neuron_stake_e8s -= fees_amount_e8s;
-        } else {
-            neuron.cached_neuron_stake_e8s = 0;
+            // Update the neuron's stake and management fees to reflect the burning
+            // above.
+            neuron.cached_neuron_stake_e8s = neuron
+                .cached_neuron_stake_e8s
+                .saturating_sub(max_burnable_fee);
+
+            neuron.neuron_fees_e8s = neuron.neuron_fees_e8s.saturating_sub(max_burnable_fee);
         }
-        neuron.neuron_fees_e8s = 0;
 
         // Transfer 2 - Disburse to the chosen account. This may fail if the
         // user told us to disburse more than they had in their account (but
@@ -1225,11 +1234,49 @@ impl Governance {
             )
             .await?;
 
+        let nid = id.to_string();
+        let neuron = self
+            .proto
+            .neurons
+            .get_mut(&nid)
+            .expect("Expected the parent neuron to exist");
+
         let to_deduct = disburse_amount_e8s + transaction_fee_e8s;
         // The transfer was successful we can change the stake of the neuron.
         neuron.cached_neuron_stake_e8s = neuron.cached_neuron_stake_e8s.saturating_sub(to_deduct);
 
         Ok(block_height)
+    }
+
+    /// Returns the maximum amount of fees that can be burned for a given neuron.
+    /// This takes into account the open proposals that this neuron has submitted,
+    /// ensuring we don't burn fees that could potentially be refunded if those
+    /// proposals are accepted.
+    fn maximum_burnable_fees_for_neuron(&self, neuron: &Neuron) -> Result<u64, GovernanceError> {
+        let neuron_id = neuron.id.as_ref().ok_or_else(|| {
+            GovernanceError::new_with_message(ErrorType::NotFound, "Neuron does not have an ID")
+        })?;
+
+        // Calculate the total reject costs from all open proposals submitted by this neuron
+        let total_open_proposal_reject_costs = self
+            .proto
+            .proposals
+            .values()
+            .filter(|proposal_data| {
+                // Only consider open proposals where this neuron is the proposer
+                proposal_data.proposer.as_ref() == Some(neuron_id)
+                    && proposal_data.status() == ProposalDecisionStatus::Open
+            })
+            .map(|proposal_data| proposal_data.reject_cost_e8s)
+            .sum::<u64>();
+
+        // The maximum burnable amount is the total fees minus any fees that are
+        // tied up in open proposals (which could potentially be refunded)
+        let max_burnable = neuron
+            .neuron_fees_e8s
+            .saturating_sub(total_open_proposal_reject_costs);
+
+        Ok(max_burnable)
     }
 
     /// Splits a (parent) neuron into two neurons (the parent and child neuron).
@@ -2143,6 +2190,10 @@ impl Governance {
                 self.perform_execute_generic_nervous_system_function(call)
                     .await
             }
+            Action::ExecuteExtensionOperation(execute_extension_operation) => {
+                self.perform_execute_extension_operation(execute_extension_operation)
+                    .await
+            }
             Action::AddGenericNervousSystemFunction(nervous_system_function) => {
                 self.perform_add_generic_nervous_system_function(nervous_system_function)
             }
@@ -2153,10 +2204,12 @@ impl Governance {
                 self.perform_register_dapp_canisters(register_dapp_canisters)
                     .await
             }
-            Action::RegisterExtension(_) => Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "RegisterExtension proposals are not supported yet.",
-            )),
+            Action::RegisterExtension(register_extension) => {
+                self.perform_register_extension(register_extension).await
+            }
+            Action::UpgradeExtension(upgrade_extension) => {
+                self.perform_upgrade_extension(upgrade_extension).await
+            }
             Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
                 self.perform_deregister_dapp_canisters(deregister_dapp_canisters)
                     .await
@@ -2283,6 +2336,58 @@ impl Governance {
         }
     }
 
+    async fn perform_register_extension(
+        &mut self,
+        register_extension: RegisterExtension,
+    ) -> Result<(), GovernanceError> {
+        // Check if SNS extensions are enabled
+        if !crate::is_sns_extensions_enabled() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "SNS extensions are not enabled",
+            ));
+        }
+
+        let validated_register_extension = validate_register_extension(self, register_extension)
+            .await
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("Invalid RegisterExtension: {:?}", err),
+                )
+            })?;
+
+        validated_register_extension.execute(self).await?;
+
+        Ok(())
+    }
+
+    async fn perform_upgrade_extension(
+        &mut self,
+        upgrade_extension: UpgradeExtension,
+    ) -> Result<(), GovernanceError> {
+        // Check if SNS extensions are enabled
+        if !crate::is_sns_extensions_enabled() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "SNS extensions are not enabled",
+            ));
+        }
+
+        let validated_upgrade_extension = validate_upgrade_extension(self, upgrade_extension)
+            .await
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("Invalid UpgradeExtension: {:?}", err),
+                )
+            })?;
+
+        validated_upgrade_extension.execute(self).await?;
+
+        Ok(())
+    }
+
     /// Registers a list of Dapp canister ids in the root canister.
     async fn perform_register_dapp_canisters(
         &self,
@@ -2308,7 +2413,7 @@ impl Governance {
             .map(|reply| {
                 // This line is to ensure we handle the reply properly if it's ever
                 // changed to not be empty.
-                match candid::Decode!(&reply, RegisterDappCanistersResponse) {
+                match Decode!(&reply, RegisterDappCanistersResponse) {
                     Ok(RegisterDappCanistersResponse {}) => {}
                     Err(_) => log!(ERROR, "Could not decode RegisterDappCanistersResponse!"),
                 };
@@ -2360,7 +2465,7 @@ impl Governance {
             .and_then(|reply| {
                 // This line is to ensure we handle the reply properly if it's ever
                 // changed to not be empty.
-                match candid::Decode!(&reply, SetDappControllersResponse) {
+                match Decode!(&reply, SetDappControllersResponse) {
                     Ok(SetDappControllersResponse { failed_updates }) => {
                         if failed_updates.is_empty() {
                             log!(
@@ -2463,6 +2568,27 @@ impl Governance {
                 .await
             }
         }
+    }
+
+    async fn perform_execute_extension_operation(
+        &self,
+        execute_extension_operation: ExecuteExtensionOperation,
+    ) -> Result<(), GovernanceError> {
+        // Check if SNS extensions are enabled
+        if !crate::is_sns_extensions_enabled() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "SNS extensions are not enabled",
+            ));
+        }
+
+        let validated_operation =
+            validate_execute_extension_operation(self, execute_extension_operation).await?;
+
+        // Execute the validated operation
+        validated_operation.execute(self).await?;
+
+        Ok(())
     }
 
     /// Executes a ManageNervousSystemParameters proposal by updating Governance's
@@ -2583,9 +2709,9 @@ impl Governance {
         .await
     }
 
-    async fn upgrade_non_root_canister(
-        &mut self,
-        target_canister_id: CanisterId,
+    pub(crate) async fn upgrade_non_root_canister(
+        &self,
+        canister_id: CanisterId,
         wasm: Wasm,
         arg: Vec<u8>,
         mode: CanisterInstallMode,
@@ -2601,7 +2727,7 @@ impl Governance {
             let stop_before_installing = true;
 
             let mut change_canister_arg =
-                ChangeCanisterRequest::new(stop_before_installing, mode, target_canister_id)
+                ChangeCanisterRequest::new(stop_before_installing, mode, canister_id)
                     .with_arg(arg)
                     .with_mode(mode);
 
@@ -3011,7 +3137,7 @@ impl Governance {
                 candid::decode_one::<CanisterInfoResponse>(&b)
                 .map_err(|e| GovernanceError::new_with_message(ErrorType::External, format!("Could not execute proposal. Error decoding canister_info response.\n{}", e)))
             })
-            .map_err(|err| GovernanceError::new_with_message(ErrorType::External, format!("Canister method call canister_info failed: {:?}", err)))??;
+            .map_err(|err: (Option<i32>, String)| GovernanceError::new_with_message(ErrorType::External, format!("Canister method call canister_info failed: {:?}", err)))??;
 
         let ledger_canister_info_version_number_before_upgrade: u64 =
             ledger_canister_info
@@ -3142,7 +3268,7 @@ impl Governance {
                 )
             })
             .and_then(
-                |reply| match candid::Decode!(&reply, ManageDappCanisterSettingsResponse) {
+                |reply| match Decode!(&reply, ManageDappCanisterSettingsResponse) {
                     Ok(ManageDappCanisterSettingsResponse { failure_reason }) => failure_reason
                         .map_or(Ok(()), |failure_reason| {
                             Err(GovernanceError::new_with_message(
@@ -3272,7 +3398,7 @@ impl Governance {
     }
 
     /// Returns the ledger's transaction fee as stored in the service nervous parameters.
-    fn transaction_fee_e8s_or_panic(&self) -> u64 {
+    pub(crate) fn transaction_fee_e8s_or_panic(&self) -> u64 {
         self.nervous_system_parameters_or_panic()
             .transaction_fee_e8s
             .expect("NervousSystemParameters must have transaction_fee_e8s")
@@ -3335,7 +3461,7 @@ impl Governance {
         }
 
         let reserved_canisters = self.reserved_canister_targets();
-        validate_and_render_proposal(proposal, &*self.env, &self.proto, reserved_canisters)
+        validate_and_render_proposal(self, proposal, reserved_canisters)
             .await
             .map_err(|e| GovernanceError::new_with_message(ErrorType::InvalidProposal, e))
     }
@@ -3369,6 +3495,7 @@ impl Governance {
         let now_seconds = self.env.now();
 
         // Validate proposal
+        // TODO: return the optional extension spec
         let (rendering, action_auxiliary) = self.validate_and_render_proposal(proposal).await?;
 
         let nervous_system_parameters = self.nervous_system_parameters_or_panic();
@@ -3986,28 +4113,28 @@ impl Governance {
             })
             .collect::<BTreeSet<_>>();
 
-        // First, validate the requested followee modifications in isolation.
+        // First, validate the requested followee modifications - in isolation and then in
+        // composition with the neuron's old followees.
 
         // TODO[NNS1-3708]: Avoid cloning the neuron commands.
         let set_following = ValidatedSetFollowing::try_from(set_following.clone())
             .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
+        let old_topic_followees = neuron.topic_followees.clone();
+        let new_topic_followees = TopicFollowees::new(old_topic_followees, set_following)
+            .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
 
-        // Second, validate the requested followee modifications in composition with the neuron's
-        // old followees. If all validation steps succeed, save the new followees.
-        {
-            let old_topic_followees = neuron.topic_followees.clone();
-
-            let new_topic_followees = TopicFollowees::new(old_topic_followees, set_following)
-                .map_err(|err| GovernanceError::new_with_message(ErrorType::InvalidCommand, err))?;
-
-            neuron.topic_followees.replace(new_topic_followees);
-        }
-
-        // Third, update the followee index for this neuron.
+        // Second, remove the neuron from the follower index, which needs to be done before
+        // replacing the topic followees. Note that mutations begin here, so there should not be any
+        // exit points beyond this point.
         remove_neuron_from_follower_index(&mut self.topic_follower_index, neuron);
+
+        // Third, save the new followees.
+        neuron.topic_followees.replace(new_topic_followees);
+
+        // Fourth, update the followee index for this neuron.
         add_neuron_to_follower_index(&mut self.topic_follower_index, neuron);
 
-        // Fourth, remove any legacy following (based on individual proposal types under the topics
+        // Fifth, remove any legacy following (based on individual proposal types under the topics
         // that were modified by this command).
         for topic in &mentioned_topics {
             let native_functions = topic.native_functions();
@@ -5242,6 +5369,8 @@ impl Governance {
         }
 
         let mut metrics = self.proto.metrics.clone().unwrap_or_default();
+
+        metrics.timestamp_seconds = now_seconds;
 
         let mut treasury_metrics = vec![];
 
@@ -6538,6 +6667,9 @@ mod assorted_governance_tests;
 
 #[cfg(test)]
 mod cast_vote_and_cascade_follow_tests;
+
+#[cfg(test)]
+mod disburse_neuron_tests;
 
 #[cfg(test)]
 mod fail_stuck_upgrade_in_progress_tests;

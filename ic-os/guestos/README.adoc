@@ -34,7 +34,7 @@ Alternatively, Bazel can be used to perform a testnet deployment. For documentat
 
 Instead of running GuestOS locally in qemu, you can launch a GuestOS virtual machine on Farm:
 
-    bazel run --config=systest //ic-os/guestos/envs/dev:launch-remote-vm
+    bazel run --test_output=streamed //ic-os/guestos/envs/dev:launch-remote-vm
 
 The program will spin up a new GuestOS VM on Farm, and the machine can then be accessed via SSH.
 

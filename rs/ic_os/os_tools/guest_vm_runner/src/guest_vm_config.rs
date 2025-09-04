@@ -1,4 +1,4 @@
-use crate::{GuestVMType, GUESTOS_DEVICE};
+use crate::GuestVMType;
 use anyhow::{Context, Result};
 use askama::Template;
 use config::hostos::guestos_bootstrap_image::BootstrapOptions;
@@ -23,8 +23,8 @@ pub struct DirectBootConfig {
     pub kernel: PathBuf,
     /// The initrd file
     pub initrd: PathBuf,
-    /// The OVMF.fd file
-    pub ovmf: PathBuf,
+    /// The OVMF_SEV.fd file
+    pub ovmf_sev: PathBuf,
     /// Kernel command line parameters
     pub kernel_cmdline: String,
 }
@@ -32,10 +32,15 @@ pub struct DirectBootConfig {
 pub fn assemble_config_media(
     hostos_config: &HostOSConfig,
     guest_vm_type: GuestVMType,
+    sev_certificate_chain_pem: Option<String>,
     media_path: &Path,
 ) -> Result<()> {
-    let guestos_config = generate_guestos_config(hostos_config, guest_vm_type.to_config_type())
-        .context("Failed to generate GuestOS config")?;
+    let guestos_config = generate_guestos_config(
+        hostos_config,
+        guest_vm_type.to_config_type(),
+        sev_certificate_chain_pem,
+    )
+    .context("Failed to generate GuestOS config")?;
 
     let bootstrap_options = make_bootstrap_options(hostos_config, guestos_config)?;
 
@@ -81,6 +86,7 @@ pub fn generate_vm_config(
     config: &HostOSConfig,
     media_path: &Path,
     direct_boot: Option<DirectBootConfig>,
+    disk_device: &Path,
     guest_vm_type: GuestVMType,
 ) -> Result<String> {
     let node_type = match guest_vm_type {
@@ -103,7 +109,7 @@ pub fn generate_vm_config(
     GuestOSTemplateProps {
         domain_name: vm_domain_name(guest_vm_type).to_string(),
         domain_uuid: vm_domain_uuid(guest_vm_type).to_string(),
-        disk_device: GUESTOS_DEVICE.to_string(),
+        disk_device: disk_device.to_path_buf(),
         cpu_domain: cpu_domain.to_string(),
         console_log_path: serial_log_path(guest_vm_type).display().to_string(),
         vm_memory: config.hostos_settings.vm_memory,
@@ -138,7 +144,7 @@ pub fn serial_log_path(guest_vm_type: GuestVMType) -> &'static Path {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "skip_default_tests")))]
 mod tests {
     use super::*;
     use config_types::{
@@ -170,10 +176,7 @@ mod tests {
                 node_reward_type: Some("type3.1".to_string()),
                 mgmt_mac: "00:11:22:33:44:55".parse().unwrap(),
                 deployment_environment: DeploymentEnvironment::Testnet,
-                logging: Logging {
-                    elasticsearch_hosts: None,
-                    elasticsearch_tags: None,
-                },
+                logging: Logging {},
                 use_nns_public_key: false,
                 nns_urls: vec![url::Url::parse("https://example.com").unwrap()],
                 use_node_operator_private_key: false,
@@ -199,7 +202,7 @@ mod tests {
         config.icos_settings.use_node_operator_private_key = true;
 
         let guestos_config =
-            generate_guestos_config(&config, config_types::GuestVMType::Default).unwrap();
+            generate_guestos_config(&config, config_types::GuestVMType::Default, None).unwrap();
 
         let options = make_bootstrap_options(&config, guestos_config.clone()).unwrap();
 
@@ -244,7 +247,7 @@ mod tests {
             Some(DirectBootConfig {
                 kernel: PathBuf::from("/tmp/test-kernel"),
                 initrd: PathBuf::from("/tmp/test-initrd"),
-                ovmf: PathBuf::from("/tmp/OVMF.fd"),
+                ovmf_sev: PathBuf::from("/tmp/OVMF_SEV.fd"),
                 kernel_cmdline: "security=selinux selinux=1 enforcing=0".to_string(),
             })
         } else {
@@ -255,6 +258,7 @@ mod tests {
             &config,
             Path::new("/tmp/config.img"),
             direct_boot,
+            Path::new("/dev/guest_disk"),
             guest_vm_type,
         )
         .unwrap();
@@ -331,7 +335,7 @@ mod tests {
         let media_path = temp_dir.path().join("config.img");
         let config = create_test_hostos_config();
 
-        let result = assemble_config_media(&config, GuestVMType::Upgrade, &media_path);
+        let result = assemble_config_media(&config, GuestVMType::Upgrade, None, &media_path);
 
         assert!(
             result.is_ok(),

@@ -1,10 +1,12 @@
 #![allow(dead_code)]
 use crate::driver::constants;
+use crate::driver::test_env::HasIcPrepDir;
+use crate::driver::vector_vm::VectorVm;
 use crate::driver::{
     farm::{Farm, HostFeature},
     resource::AllocatedVm,
     task_scheduler::TaskScheduler,
-    test_env_api::{FarmBaseUrl, HasGroupSetup, HasIcDependencies},
+    test_env_api::{FarmBaseUrl, HasFarmUrl, HasGroupSetup},
     universal_vm::UNIVERSAL_VMS_DIR,
     {
         action_graph::ActionGraph,
@@ -25,9 +27,12 @@ use crate::driver::{
 };
 use crate::k8s::tnet::TNet;
 use crate::util::block_on;
+use chrono::Utc;
+use regex::Regex;
 use walkdir::WalkDir;
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
@@ -64,6 +69,7 @@ const DEBUG_KEEPALIVE_TASK_NAME: &str = "debug_keepalive";
 const REPORT_TASK_NAME: &str = "report";
 const KEEPALIVE_TASK_NAME: &str = "keepalive";
 const UVMS_LOGS_STREAM_TASK_NAME: &str = "uvms_logs_stream";
+const VECTOR_TASK_NAME: &str = "vector_logging";
 const SETUP_TASK_NAME: &str = "setup";
 const LIFETIME_GUARD_TASK_PREFIX: &str = "lifetime_guard_";
 pub const COLOCATE_CONTAINER_NAME: &str = "system_test";
@@ -130,6 +136,15 @@ pub struct CliArgs {
         value_parser = CliArgs::parse_host_feature
     )]
     pub required_host_features: Option<Vec<HostFeature>>,
+
+    #[clap(long = "no-logs", help = "If set, the vector vm will not be spawned.")]
+    pub no_logs: bool,
+
+    #[clap(
+        long = "exclude-logs",
+        help = "The list of regexes which will be skipped from the streaming."
+    )]
+    pub exclude_logs: Vec<Regex>,
 }
 
 impl CliArgs {
@@ -192,7 +207,7 @@ impl TestEnvAttribute for SetupResult {
 }
 
 pub fn is_task_visible_to_user(task_id: &TaskId) -> bool {
-    matches!(task_id, TaskId::Test(task_name) if task_name.ne(REPORT_TASK_NAME) && task_name.ne(KEEPALIVE_TASK_NAME) && task_name.ne(UVMS_LOGS_STREAM_TASK_NAME) && !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX) && !task_name.starts_with("dummy("))
+    matches!(task_id, TaskId::Test(task_name) if task_name.ne(REPORT_TASK_NAME) && task_name.ne(KEEPALIVE_TASK_NAME) && task_name.ne(UVMS_LOGS_STREAM_TASK_NAME) && task_name.ne(VECTOR_TASK_NAME) && !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX) && !task_name.starts_with("dummy("))
 }
 
 pub struct ComposeContext<'a> {
@@ -420,6 +435,18 @@ impl Plan<Box<dyn Task>> {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CliArguments {
+    #[serde(with = "serde_regex")]
+    pub exclude_logs: Vec<Regex>,
+}
+
+impl TestEnvAttribute for CliArguments {
+    fn attribute_name() -> String {
+        "cli_arguments".to_string()
+    }
+}
+
 impl SystemTestGroup {
     pub fn new() -> Self {
         Self {
@@ -539,6 +566,7 @@ impl SystemTestGroup {
 
     fn make_plan(self, rh: &Handle, group_ctx: GroupContext) -> Result<Plan<Box<dyn Task>>> {
         debug!(group_ctx.log(), "SystemTestGroup.make_plan");
+        let start_time = Utc::now();
 
         let mut compose_ctx = ComposeContext {
             rh,
@@ -576,11 +604,27 @@ impl SystemTestGroup {
                                 .to_path_buf()
                         };
                         let mut streamed_uvms: HashMap<String, Ipv6Addr> = HashMap::new();
+                        let mut skipped_uvms: BTreeSet<String> = BTreeSet::new();
                         debug!(logger, ">>> {UVMS_LOGS_STREAM_TASK_NAME}");
                         loop {
                             match discover_uvms(root_search_dir.clone()) {
                                 Ok(discovered_uvms) => {
                                     for (key, value) in discovered_uvms {
+                                        if skipped_uvms.contains(&key) {
+                                            continue;
+                                        }
+
+                                        let key_match = group_ctx
+                                            .exclude_logs
+                                            .iter()
+                                            .any(|pattern| pattern.is_match(&key));
+
+                                        if key_match {
+                                            debug!(logger, "Skipping journald streaming of [uvm={key}] because it was excluded by the `--exclude-logs` pattern");
+                                            skipped_uvms.insert(key);
+                                            continue;
+                                        }
+
                                         streamed_uvms.entry(key.clone()).or_insert_with(|| {
                                                 let logger = logger.clone();
                                                 info!(
@@ -665,6 +709,44 @@ impl SystemTestGroup {
             Box::from(EmptyTask::new(keepalive_task_id)) as Box<dyn Task>
         };
 
+        let logging_task_id = TaskId::Test(String::from(VECTOR_TASK_NAME));
+        let log_task = if group_ctx.logs_enabled {
+            let logger = group_ctx.logger().clone();
+            let group_ctx = group_ctx.clone();
+
+            let log_task = subproc(
+                logging_task_id,
+                move || {
+                    debug!(logger, ">>> log_fn");
+
+                    let setup_dir = group_ctx.group_dir.join(constants::GROUP_SETUP_DIR);
+                    let env =
+                        TestEnv::new_without_duplicating_logger(setup_dir.clone(), logger.clone());
+                    while !setup_dir.exists() || env.prep_dir("").is_none() {
+                        info!(logger, "Setup and/or prep directories not created yet.");
+                        std::thread::sleep(KEEPALIVE_INTERVAL);
+                    }
+
+                    let mut vector_vm = VectorVm::new().with_start_time(start_time);
+                    vector_vm.start(&env).expect("Failed to start Vector VM");
+
+                    loop {
+                        if let Err(e) = vector_vm.sync_with_vector(&env) {
+                            warn!(logger, "Failed to sync with vector vm due to: {:?}", e);
+                        }
+
+                        std::thread::sleep(KEEPALIVE_INTERVAL);
+                    }
+                },
+                &mut compose_ctx,
+            );
+
+            Box::from(log_task) as Box<dyn Task>
+        } else {
+            debug!(group_ctx.logger(), "Not spawning logs task");
+            Box::from(EmptyTask::new(logging_task_id)) as Box<dyn Task>
+        };
+
         let setup_plan = {
             let logger = group_ctx.logger().clone();
             let group_ctx = group_ctx.clone();
@@ -675,7 +757,15 @@ impl SystemTestGroup {
                 TaskId::Test(String::from(SETUP_TASK_NAME)),
                 move || {
                     debug!(logger, ">>> setup_fn");
+                    let cli_arguments = CliArguments {
+                        exclude_logs: group_ctx.exclude_logs.clone(),
+                    };
+
                     let env = ensure_setup_env(group_ctx);
+
+                    // Persist the cli arguments in case the test needs them
+                    cli_arguments.write_attribute(&env);
+
                     setup_fn(env.clone());
                     SetupResult {}.write_attribute(&env);
                 },
@@ -720,6 +810,13 @@ impl SystemTestGroup {
                 &mut compose_ctx,
             );
 
+            let logs_plan = compose(
+                Some(log_task),
+                EvalOrder::Sequential,
+                vec![uvms_stream_plan],
+                &mut compose_ctx,
+            );
+
             // TODO: k8s
             let report_plan = Ok(compose(
                 Some(Box::new(EmptyTask::new(TaskId::Test(
@@ -728,13 +825,13 @@ impl SystemTestGroup {
                 EvalOrder::Sequential,
                 vec![if let Some(overall_timeout) = self.overall_timeout {
                     timed(
-                        uvms_stream_plan,
+                        logs_plan,
                         overall_timeout,
                         Some(String::from("::group")),
                         &mut compose_ctx,
                     )
                 } else {
-                    uvms_stream_plan
+                    logs_plan
                 }],
                 &mut compose_ctx,
             ));
@@ -756,6 +853,13 @@ impl SystemTestGroup {
             Some(uvms_logs_stream_task),
             EvalOrder::Sequential,
             vec![keepalive_plan],
+            &mut compose_ctx,
+        );
+
+        let logs_plan = compose(
+            Some(log_task),
+            EvalOrder::Sequential,
+            vec![uvms_stream_plan],
             &mut compose_ctx,
         );
 
@@ -783,7 +887,7 @@ impl SystemTestGroup {
         Ok(compose(
             Some(keepalive_task),
             EvalOrder::Parallel,
-            vec![report_plan, uvms_stream_plan],
+            vec![report_plan, logs_plan],
             &mut compose_ctx,
         ))
     }
@@ -809,6 +913,8 @@ impl SystemTestGroup {
             args.no_farm_keepalive || args.no_group_ttl,
             args.group_base_name,
             args.k8s,
+            !args.no_logs,
+            args.exclude_logs,
         )?;
 
         let with_farm = self.with_farm && !args.k8s;

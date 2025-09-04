@@ -4,7 +4,6 @@ use crate::wasm_executor::{
     get_execution_parameters, get_system_state, MAX_SUBNET_AVAILABLE_MEMORY,
 };
 use ic_config::embedders::Config as EmbeddersConfig;
-use ic_config::flag_status::FlagStatus;
 use ic_embedders::{
     wasm_utils::instrumentation::WasmMemoryType,
     wasmtime_embedder::{
@@ -64,26 +63,13 @@ pub(crate) fn system_api_imports(config: EmbeddersConfig) -> SystemApiImportStor
     );
     let mut linker: wasmtime::Linker<StoreData> = wasmtime::Linker::new(&engine);
 
-    match config.feature_flags.wasm64 {
-        FlagStatus::Enabled => {
-            linker::syscalls::<u64>(
-                &mut linker,
-                config.feature_flags,
-                config.stable_memory_dirty_page_limit,
-                config.stable_memory_accessed_page_limit,
-                WasmMemoryType::Wasm64,
-            );
-        }
-        FlagStatus::Disabled => {
-            linker::syscalls::<u32>(
-                &mut linker,
-                config.feature_flags,
-                config.stable_memory_dirty_page_limit,
-                config.stable_memory_accessed_page_limit,
-                WasmMemoryType::Wasm32,
-            );
-        }
-    }
+    linker::syscalls::<u64>(
+        &mut linker,
+        config.feature_flags,
+        config.stable_memory_dirty_page_limit,
+        config.stable_memory_accessed_page_limit,
+        WasmMemoryType::Wasm64,
+    );
 
     // to avoid store move
     let mut system_api_imports: Vec<(&str, &str, wasmtime::Func)> = linker

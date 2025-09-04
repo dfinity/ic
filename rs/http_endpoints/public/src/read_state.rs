@@ -4,8 +4,8 @@ use crate::HttpError;
 use hyper::StatusCode;
 use ic_types::PrincipalId;
 
-pub(crate) mod canister;
-pub(crate) mod subnet;
+pub mod canister;
+pub mod subnet;
 
 fn parse_principal_id(principal_id: &[u8]) -> Result<PrincipalId, HttpError> {
     match PrincipalId::try_from(principal_id) {

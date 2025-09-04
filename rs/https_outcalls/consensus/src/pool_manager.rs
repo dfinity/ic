@@ -4,7 +4,8 @@
 //! and eventually make it into consensus.
 use crate::metrics::CanisterHttpPoolManagerMetrics;
 use ic_consensus_utils::{
-    crypto::ConsensusCrypto, membership::Membership, registry_version_at_height,
+    crypto::ConsensusCrypto, is_current_protocol_version, membership::Membership,
+    registry_version_at_height,
 };
 use ic_interfaces::{
     canister_http::*, consensus_pool::ConsensusPoolCache, p2p::consensus::PoolMutationsProducer,
@@ -17,12 +18,12 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::api_boundary_node::ApiBoundaryNodeRegistry;
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     canister_http::*, consensus::HasHeight, crypto::Signed, messages::CallbackId,
-    replica_config::ReplicaConfig, Height,
+    replica_config::ReplicaConfig, Height, ReplicaVersion,
 };
-use rand::Rng;
 use std::{
     cell::RefCell,
     collections::{BTreeSet, HashSet},
@@ -33,9 +34,6 @@ use std::{
 
 pub type CanisterHttpAdapterClient =
     Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
-
-/// The probability of using api boundary node addresses for SOCKS proxy dark launch.
-const REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE: u32 = 100;
 
 /// [`CanisterHttpPoolManagerImpl`] implements the pool and state monitoring
 /// functionality that is necessary to ensure that http requests are made and
@@ -52,17 +50,10 @@ pub struct CanisterHttpPoolManagerImpl {
     crypto: Arc<dyn ConsensusCrypto>,
     membership: Arc<Membership>,
     replica_config: ReplicaConfig,
+    subnet_type: SubnetType,
     requested_id_cache: RefCell<BTreeSet<CallbackId>>,
     metrics: CanisterHttpPoolManagerMetrics,
     log: ReplicaLogger,
-}
-
-//TODO(SOCKS_PROXY_DL): Remove this function.
-fn should_dl_socks_proxy() -> bool {
-    let mut rng = rand::thread_rng();
-    let random_number: u32 = rng.gen_range(0..100);
-    // This is a dark launch feature. We want to test the SOCKS proxy with some percentage of requests.
-    random_number < REGISTRY_SOCKS_PROXY_DARK_LAUNCH_PERCENTAGE
 }
 
 impl CanisterHttpPoolManagerImpl {
@@ -73,6 +64,7 @@ impl CanisterHttpPoolManagerImpl {
         crypto: Arc<dyn ConsensusCrypto>,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
         replica_config: ReplicaConfig,
+        subnet_type: SubnetType,
         registry_client: Arc<dyn RegistryClient>,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
@@ -88,6 +80,7 @@ impl CanisterHttpPoolManagerImpl {
             http_adapter_shim,
             crypto,
             replica_config,
+            subnet_type,
             membership,
             consensus_pool_cache,
             registry_client,
@@ -161,8 +154,18 @@ impl CanisterHttpPoolManagerImpl {
     fn get_socks_proxy_addrs(&self) -> Vec<String> {
         let latest_registry_version = self.registry_client.get_latest_version();
 
-        self.registry_client
-            .get_api_boundary_node_ids(latest_registry_version)
+        let allowed_boundary_nodes = match self.subnet_type {
+            SubnetType::System => self
+                .registry_client
+                .get_system_api_boundary_node_ids(latest_registry_version),
+            SubnetType::Application | SubnetType::VerifiedApplication => {
+                //TODO(BOUN-1467): For now, only system subnets are allowed to use API BNs are proxies.
+                // An empty list of boundary nodes will cause the adapter to use socks5.ic0.app instead.
+                Ok(vec![])
+            }
+        };
+
+        allowed_boundary_nodes
             .unwrap_or_else(|e| {
                 warn!(self.log, "Failed to get API boundary node IDs: {:?}", e);
                 Vec::new()
@@ -232,11 +235,7 @@ impl CanisterHttpPoolManagerImpl {
             .cloned()
             .collect();
 
-        let socks_proxy_addrs = if should_dl_socks_proxy() {
-            self.get_socks_proxy_addrs()
-        } else {
-            Vec::new()
-        };
+        let socks_proxy_addrs = self.get_socks_proxy_addrs();
 
         for (id, context) in http_requests {
             if let Replication::NonReplicated(delegated_node_id) = context.replication {
@@ -300,6 +299,7 @@ impl CanisterHttpPoolManagerImpl {
                         timeout: response.timeout,
                         registry_version,
                         content_hash: ic_types::crypto::crypto_hash(&response),
+                        replica_version: ReplicaVersion::default(),
                     };
                     let signature = if let Ok(signature) = self
                         .crypto
@@ -372,10 +372,13 @@ impl CanisterHttpPoolManagerImpl {
             .filter(|share| share.content.id < next_callback_id)
             .filter_map(|share| {
                 if existing_signed_requests.contains(&key_from_share(share)) {
-                    return Some(CanisterHttpChangeAction::HandleInvalid(
-                        share.clone(),
-                        "Redundant share".into(),
-                    ));
+                    return match is_current_protocol_version(&share.content.replica_version) {
+                            true => Some(CanisterHttpChangeAction::HandleInvalid(
+                            share.clone(),
+                            "Redundant share".into(),
+                    )),
+                        false => Some(CanisterHttpChangeAction::RemoveUnvalidated(share.clone())),
+                    };
                 }
 
                 match active_contexts.get(&share.content.id) {
@@ -523,6 +526,7 @@ impl<T: CanisterHttpPool> PoolMutationsProducer<T> for CanisterHttpPoolManagerIm
 #[cfg(test)]
 pub mod test {
     use super::*;
+    use assert_matches::assert_matches;
     use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_consensus_utils::crypto::SignVerify;
@@ -530,7 +534,6 @@ pub mod test {
     use ic_interfaces_state_manager::Labeled;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SubnetCallContext;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::subnet_test_id;
@@ -542,7 +545,7 @@ pub mod test {
     };
     use mockall::predicate::*;
     use mockall::*;
-    use std::collections::BTreeMap;
+    use std::{collections::BTreeMap, str::FromStr};
 
     mock! {
         pub NonBlockingChannel<Request: 'static> {
@@ -635,6 +638,7 @@ pub mod test {
                         timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                         registry_version: RegistryVersion::from(1),
                         content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                        replica_version: ReplicaVersion::default(),
                     };
 
                     let signature = crypto
@@ -665,6 +669,7 @@ pub mod test {
                     crypto,
                     pool.get_cache(),
                     replica_config,
+                    SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),
                     log,
@@ -678,6 +683,113 @@ pub mod test {
 
                 // Make sure the changes are empty (share was filtered out)
                 assert!(changes.is_empty());
+            })
+        });
+    }
+
+    #[test]
+    fn test_invalidation_of_invalid_version() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|log| {
+                let Dependencies {
+                    pool,
+                    replica_config,
+                    crypto,
+                    state_manager,
+                    registry,
+                    ..
+                } = dependencies(pool_config.clone(), 5);
+                let mut shim_mock = MockNonBlockingChannel::<CanisterHttpRequest>::new();
+                shim_mock
+                    .expect_try_receive()
+                    .return_const(Err(TryReceiveError::Empty));
+
+                let request = CanisterHttpRequestContext {
+                    request: ic_test_utilities_types::messages::RequestBuilder::new().build(),
+                    url: "".to_string(),
+                    max_response_bytes: None,
+                    headers: vec![],
+                    body: None,
+                    http_method: CanisterHttpMethod::GET,
+                    transform: None,
+                    time: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    replication: Replication::FullyReplicated,
+                };
+
+                // NOTE: We need at least some context in the state, otherwise next_callback_id will be 0 and no
+                // artifacts can have a smaller callback_id and be valid
+                state_manager
+                    .get_mut()
+                    .expect_get_latest_state()
+                    .return_const(Labeled::new(
+                        Height::from(1),
+                        Arc::new(state_with_pending_http_calls(BTreeMap::from([(
+                            CallbackId::from(0),
+                            request,
+                        )]))),
+                    ));
+
+                let response_metadata = CanisterHttpResponseMetadata {
+                    id: CallbackId::from(0),
+                    timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
+                    registry_version: RegistryVersion::from(1),
+                    content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                    replica_version: ReplicaVersion::default(),
+                };
+
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
+
+                let signature = crypto
+                    .sign(
+                        &response_metadata,
+                        replica_config.node_id,
+                        RegistryVersion::from(1),
+                    )
+                    .unwrap();
+
+                let mut share = Signed {
+                    content: response_metadata.clone(),
+                    signature,
+                };
+
+                // add a share (plus content) to the validated pool
+                canister_http_pool.apply(vec![CanisterHttpChangeAction::AddToValidated(
+                    share.clone(),
+                    empty_canister_http_response(7),
+                )]);
+
+                // add an unvalidated copy of the share, that has an outdated version instead
+                share.content.replica_version =
+                    ReplicaVersion::from_str("outdated_version").unwrap();
+                canister_http_pool.insert(UnvalidatedArtifact {
+                    message: share,
+                    peer_id: replica_config.node_id,
+                    timestamp: UNIX_EPOCH,
+                });
+
+                let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
+                    Arc::new(Mutex::new(Box::new(shim_mock)));
+
+                let pool_manager = CanisterHttpPoolManagerImpl::new(
+                    state_manager as Arc<_>,
+                    shim,
+                    crypto,
+                    pool.get_cache(),
+                    replica_config,
+                    SubnetType::Application,
+                    Arc::clone(&registry) as Arc<_>,
+                    MetricsRegistry::new(),
+                    log,
+                );
+
+                let changes = pool_manager.validate_shares(
+                    pool.get_cache().as_ref(),
+                    &canister_http_pool,
+                    Height::from(0),
+                );
+
+                assert_matches!(&changes[0], CanisterHttpChangeAction::RemoveUnvalidated(_));
             })
         });
     }
@@ -727,6 +839,7 @@ pub mod test {
                     timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                     registry_version: RegistryVersion::from(1),
                     content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                    replica_version: ReplicaVersion::default(),
                 };
 
                 let mut canister_http_pool =
@@ -783,6 +896,7 @@ pub mod test {
                     crypto,
                     pool.get_cache(),
                     replica_config,
+                    SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),
                     log,
@@ -852,6 +966,7 @@ pub mod test {
                     timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                     registry_version: RegistryVersion::from(1),
                     content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                    replica_version: ReplicaVersion::default(),
                 };
 
                 let signature = crypto
@@ -879,6 +994,7 @@ pub mod test {
                     crypto,
                     pool.get_cache(),
                     replica_config,
+                    SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),
                     log,
@@ -942,6 +1058,7 @@ pub mod test {
                     crypto,
                     pool.get_cache(),
                     replica_config,
+                    SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),
                     log,
@@ -1015,6 +1132,7 @@ pub mod test {
                     crypto.clone(),
                     pool.get_cache(),
                     replica_config.clone(),
+                    SubnetType::Application,
                     Arc::clone(&registry) as Arc<_>,
                     MetricsRegistry::new(),
                     log,
@@ -1029,6 +1147,7 @@ pub mod test {
                     timeout: ic_types::Time::from_nanos_since_unix_epoch(10),
                     registry_version: RegistryVersion::from(1),
                     content_hash: CryptoHashOf::new(CryptoHash(vec![])),
+                    replica_version: ReplicaVersion::default(),
                 };
 
                 let signature = crypto

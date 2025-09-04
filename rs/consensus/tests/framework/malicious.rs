@@ -39,13 +39,10 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for InvalidNotaryShareSignature 
                     })
                     .and_then(|share| NotarizationShare::try_from(share).ok())
                 {
-                    std::mem::swap(
-                        action,
-                        &mut AddToValidated(ValidatedConsensusArtifact {
-                            msg: share.into_message(),
-                            timestamp,
-                        }),
-                    );
+                    *action = AddToValidated(ValidatedConsensusArtifact {
+                        msg: share.into_message(),
+                        timestamp,
+                    });
                 }
             }
         }

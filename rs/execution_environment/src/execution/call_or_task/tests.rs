@@ -4,7 +4,6 @@ use assert_matches::assert_matches;
 
 use ic_base_types::NumSeconds;
 use ic_error_types::ErrorCode;
-use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::testing::SystemStateTesting;
@@ -14,6 +13,7 @@ use ic_replicated_state::{
 };
 use ic_state_machine_tests::WasmResult;
 use ic_sys::PAGE_SIZE;
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::ingress::IngressStatus;
 use ic_types::messages::{CallbackId, RequestMetadata};
 use ic_types::{Cycles, NumInstructions, NumOsPages};
@@ -189,6 +189,7 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(a_id),
     );
 
@@ -278,6 +279,7 @@ fn dts_replicated_query_concurrent_cycles_change_succeeds() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(canister_id),
     );
 
@@ -375,6 +377,7 @@ fn dts_update_concurrent_cycles_change_fails() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(a_id),
     );
 
@@ -473,6 +476,7 @@ fn dts_replicated_query_concurrent_cycles_change_fails() {
     let max_execution_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(instruction_limit),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         test.canister_wasm_execution_mode(canister_id),
     );
 
@@ -1115,11 +1119,7 @@ fn stable_grow_updates_subnet_available_memory() {
 
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    test.set_subnet_available_memory(SubnetAvailableMemory::new(
-        initial_subnet_memory,
-        initial_subnet_memory,
-        initial_subnet_memory,
-    ));
+    test.set_available_execution_memory(initial_subnet_memory);
 
     // Growing stable memory should reduce the subnet total memory.
     let payload = wasm()

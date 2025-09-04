@@ -1,4 +1,4 @@
-use ic_base_types::NumSeconds;
+use ic_base_types::{EnvironmentVariables, NumSeconds};
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
 use ic_management_canister_types_private::{
     CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId,
@@ -29,8 +29,11 @@ use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
 };
-use ic_types::methods::{Callback, WasmClosure};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
+use ic_types::{
+    batch::CanisterCyclesCostSchedule,
+    methods::{Callback, WasmClosure},
+};
 use ic_types::{
     batch::RawQueryStats,
     messages::{CallbackId, Ingress, Request, RequestOrResponse},
@@ -153,6 +156,7 @@ impl ReplicatedStateBuilder {
                 subnet_type: self.subnet_type,
                 subnet_features: self.subnet_features,
                 chain_keys_held: BTreeSet::new(),
+                cost_schedule: CanisterCyclesCostSchedule::Normal,
             },
         );
 
@@ -471,7 +475,7 @@ impl SystemStateBuilder {
         mut self,
         environment_variables: BTreeMap<String, String>,
     ) -> Self {
-        self.system_state.environment_variables = environment_variables;
+        self.system_state.environment_variables = EnvironmentVariables::new(environment_variables);
         self
     }
 
@@ -990,7 +994,7 @@ prop_compose! {
         (signals_end, reject_signals) in arb_stream_signals(
             0..=10000,
             min_signal_count..=max_signal_count,
-            with_reject_reasons
+            with_reject_reasons,
         ),
         responses_only in any::<bool>(),
     ) -> StreamHeader {
@@ -1006,6 +1010,27 @@ prop_compose! {
                 deprecated_responses_only: responses_only,
             },
         )
+    }
+}
+
+prop_compose! {
+    pub fn arb_invalid_stream_header(
+        min_signal_count: usize,
+        max_signal_count: usize,
+    )(
+        valid_stream_header in arb_stream_header(min_signal_count, max_signal_count, RejectReason::all()),
+        reason in proptest::sample::select(RejectReason::all()),
+    ) -> StreamHeader {
+        let begin = valid_stream_header.begin();
+        let end = valid_stream_header.end();
+        let signals_end = valid_stream_header.signals_end();
+        let mut reject_signals = valid_stream_header.reject_signals().clone();
+        let flags = *valid_stream_header.flags();
+
+        // `reject_signals` may not contain the `signals_end`.
+        reject_signals.push_back(RejectSignal::new(reason, signals_end));
+
+        StreamHeader::new(begin, end, signals_end, reject_signals, flags)
     }
 }
 

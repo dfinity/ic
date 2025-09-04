@@ -40,7 +40,6 @@ def _zstd_compress(ctx):
     """
     out = ctx.actions.declare_file(ctx.label.name)
 
-    # TODO: install zstd as dependency.
     ctx.actions.run(
         executable = "zstd",
         arguments = ["-q", "--threads=0", "-10", "-f", "-z", "-o", out.path] + [s.path for s in ctx.files.srcs],
@@ -63,7 +62,6 @@ def _untar(ctx):
     """
     out = ctx.actions.declare_directory(ctx.label.name)
 
-    # TODO: install tar as dependency.
     ctx.actions.run(
         executable = "tar",
         arguments = ["-xf", ctx.file.src.path, "-C", out.path],
@@ -88,7 +86,6 @@ def _mcopy(ctx):
     for src in ctx.files.srcs:
         command += "&& mcopy -mi {output} -sQ {src_path} ::/{filename} ".format(output = out.path, src_path = src.path, filename = ctx.attr.remap_paths.get(src.basename, src.basename))
 
-    # TODO: install mcopy as dependency.
     ctx.actions.run_shell(
         command = command,
         inputs = ctx.files.srcs + [ctx.file.fs],
@@ -412,7 +409,8 @@ write_info_file_var = rule(
 def file_size_check(
         name,
         file,
-        max_file_size):
+        max_file_size,
+        tags = []):
     """
     A check to make sure the given file is below the specified size.
 
@@ -420,6 +418,7 @@ def file_size_check(
       name: Name of the test.
       file: File to check (label).
       max_file_size: Max accepted size in bytes.
+      tags: See Bazel documentation
     """
 
     native.sh_test(
@@ -430,4 +429,5 @@ def file_size_check(
             "FILE": "$(rootpath %s)" % file,
             "MAX_SIZE": str(max_file_size),
         },
+        tags = tags,
     )

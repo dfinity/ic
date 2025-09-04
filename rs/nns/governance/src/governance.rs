@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::{
     are_nf_fund_proposals_disabled, decoder_config,
     governance::{
@@ -53,7 +54,7 @@ use crate::{
                 self, NeuronsFundNeuron as NeuronsFundNeuronPb,
             },
             swap_background_information, ArchivedMonthlyNodeProviderRewards, Ballot,
-            CreateServiceNervousSystem, ExecuteNnsFunction, Followees,
+            CreateServiceNervousSystem, ExecuteNnsFunction, Followees, FulfillSubnetRentalRequest,
             GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
             Governance as GovernanceProto, GovernanceError, InstallCode, KnownNeuron,
             ListKnownNeuronsResponse, ListProposalInfo, ManageNeuron, MonthlyNodeProviderRewards,
@@ -87,10 +88,7 @@ use ic_nervous_system_common::{
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
 use ic_nervous_system_proto::pb::v1::{GlobalTimeOfDay, Principals};
-use ic_nns_common::{
-    pb::v1::{NeuronId, ProposalId},
-    types::UpdateIcpXdrConversionRatePayload,
-};
+use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     LIFELINE_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
@@ -149,6 +147,7 @@ pub mod tla_macros;
 #[cfg(feature = "tla")]
 pub mod tla;
 
+use crate::pb::v1::AddOrRemoveNodeProvider;
 use crate::reward::distribution::RewardsDistribution;
 use crate::storage::with_voting_state_machines_mut;
 #[cfg(feature = "tla")]
@@ -461,6 +460,11 @@ impl NnsFunction {
                 CREATE_SERVICE_NERVOUS_SYSTEM instead."
                     .to_string(),
             ),
+            NnsFunction::IcpXdrConversionRate => Err(
+                "NNS_FUNCTION_ICP_XDR_CONVERSION_RATE is obsolete as conversion rates \
+                are now provided by the exchange rate canister automatically."
+                    .to_string(),
+            ),
             _ => Ok(()),
         }
     }
@@ -718,6 +722,7 @@ impl Proposal {
                         .valid_topic()
                         .unwrap_or(Topic::Unspecified)
                 }
+                Action::FulfillSubnetRentalRequest(_) => Topic::SubnetRental,
             }
         } else {
             println!("{}ERROR: No action -> no topic.", LOG_PREFIX);
@@ -784,6 +789,7 @@ impl Action {
             Action::InstallCode(_) => "ACTION_CHANGE_CANISTER",
             Action::StopOrStartCanister(_) => "ACTION_STOP_OR_START_CANISTER",
             Action::UpdateCanisterSettings(_) => "ACTION_UPDATE_CANISTER_SETTINGS",
+            Action::FulfillSubnetRentalRequest(_) => "ACTION_FULFILL_SUBNET_RENTAL_REQUEST",
         }
     }
 
@@ -2362,6 +2368,11 @@ impl Governance {
         // New neurons are not allowed when the heap is too large.
         self.check_heap_can_grow()?;
 
+        let &manage_neuron::Split {
+            amount_e8s: split_amount_e8s,
+            memo,
+        } = split;
+
         let min_stake = self
             .heap_data
             .economics
@@ -2387,14 +2398,14 @@ impl Governance {
             return Err(GovernanceError::new(ErrorType::NotAuthorized));
         }
 
-        if split.amount_e8s < min_stake + transaction_fee_e8s {
+        if split_amount_e8s < min_stake + transaction_fee_e8s {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
                 format!(
                     "Trying to split a neuron with argument {} e8s. This is too little: \
                       at the minimum, one needs the minimum neuron stake, which is {} e8s, \
                       plus the transaction fee, which is {}. Hence the minimum split amount is {}.",
-                    split.amount_e8s,
+                    split_amount_e8s,
                     min_stake,
                     transaction_fee_e8s,
                     min_stake + transaction_fee_e8s
@@ -2402,7 +2413,7 @@ impl Governance {
             ));
         }
 
-        if minted_stake_e8s < min_stake + split.amount_e8s {
+        if minted_stake_e8s < min_stake + split_amount_e8s {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
                 format!(
@@ -2410,7 +2421,7 @@ impl Governance {
                      This is not allowed, because the parent has stake {} e8s. \
                      If the requested amount was subtracted from it, there would be less than \
                      the minimum allowed stake, which is {} e8s. ",
-                    split.amount_e8s, id.id, minted_stake_e8s, min_stake
+                    split_amount_e8s, id.id, minted_stake_e8s, min_stake
                 ),
             ));
         }
@@ -2420,7 +2431,12 @@ impl Governance {
 
         let from_subaccount = parent_neuron.subaccount();
 
-        let to_subaccount = Subaccount(self.randomness.random_byte_array()?);
+        let to_subaccount_bytes = if let Some(memo) = memo {
+            ledger::compute_neuron_split_subaccount_bytes(parent_neuron.controller(), memo)
+        } else {
+            self.randomness.random_byte_array()?
+        };
+        let to_subaccount = Subaccount(to_subaccount_bytes);
 
         // Make sure there isn't already a neuron with the same sub-account.
         if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
@@ -2435,7 +2451,7 @@ impl Governance {
             command: Some(InFlightCommand::Split(*split)),
         };
 
-        let staked_amount = split.amount_e8s - transaction_fee_e8s;
+        let staked_amount = split_amount_e8s - transaction_fee_e8s;
 
         // Make sure the parent neuron is not already undergoing a ledger
         // update.
@@ -2478,12 +2494,12 @@ impl Governance {
         self.neuron_store.with_neuron_mut(id, |parent_neuron| {
             parent_neuron.cached_neuron_stake_e8s = parent_neuron
                 .cached_neuron_stake_e8s
-                .checked_sub(split.amount_e8s)
+                .checked_sub(split_amount_e8s)
                 .expect("Subtracting neuron stake underflows");
         })?;
 
         let now = self.env.now();
-        tla_log_locals! { sn_amount : split.amount_e8s, sn_child_neuron_id: child_nid.id, sn_parent_neuron_id: id.id, sn_child_account_id: tla::account_to_tla(neuron_subaccount(to_subaccount)) };
+        tla_log_locals! { sn_amount : split_amount_e8s, sn_child_neuron_id: child_nid.id, sn_parent_neuron_id: id.id, sn_child_account_id: tla::account_to_tla(neuron_subaccount(to_subaccount)) };
         let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(
@@ -2503,7 +2519,7 @@ impl Governance {
                 .with_neuron_mut(id, |parent_neuron| {
                     parent_neuron.cached_neuron_stake_e8s = parent_neuron
                         .cached_neuron_stake_e8s
-                        .checked_add(split.amount_e8s)
+                        .checked_add(split_amount_e8s)
                         .expect("Neuron stake overflows");
                 })
                 .expect("Expected the parent neuron to exist");
@@ -2538,7 +2554,7 @@ impl Governance {
             transfer_maturity_e8s,
             transfer_staked_maturity_e8s,
         } = calculate_split_neuron_effect(
-            split.amount_e8s,
+            split_amount_e8s,
             minted_stake_e8s,
             parent_maturity_e8s,
             parent_staked_maturity_e8s,
@@ -4374,6 +4390,10 @@ impl Governance {
                 self.perform_update_canister_settings(pid, update_settings)
                     .await;
             }
+            Action::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
+                self.perform_fulfill_subnet_rental_request(pid, fulfill_subnet_rental_request)
+                    .await
+            }
         }
     }
 
@@ -4444,6 +4464,17 @@ impl Governance {
     ) {
         let result = self
             .perform_call_canister(proposal_id, update_settings)
+            .await;
+        self.set_proposal_execution_status(proposal_id, result);
+    }
+
+    async fn perform_fulfill_subnet_rental_request(
+        &mut self,
+        proposal_id: u64,
+        fulfill_subnet_rental_request: FulfillSubnetRentalRequest,
+    ) {
+        let result = fulfill_subnet_rental_request
+            .execute(ProposalId { id: proposal_id }, &self.env)
             .await;
         self.set_proposal_execution_status(proposal_id, result);
     }
@@ -4951,8 +4982,10 @@ impl Governance {
                 self.validate_manage_network_economics(network_economics)
             }
 
+            Action::AddOrRemoveNodeProvider(add_or_remove_node_provider) => {
+                self.validate_add_or_remove_node_provider(add_or_remove_node_provider)
+            }
             Action::ApproveGenesisKyc(_)
-            | Action::AddOrRemoveNodeProvider(_)
             | Action::RewardNodeProvider(_)
             | Action::RewardNodeProviders(_)
             | Action::RegisterKnownNeuron(_) => Ok(()),
@@ -4969,6 +5002,9 @@ impl Governance {
             Action::InstallCode(install_code) => install_code.validate(),
             Action::StopOrStartCanister(stop_or_start) => stop_or_start.validate(),
             Action::UpdateCanisterSettings(update_settings) => update_settings.validate(),
+            Action::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
+                fulfill_subnet_rental_request.validate()
+            }
         }?;
 
         Ok(action.clone())
@@ -5013,17 +5049,6 @@ impl Governance {
                 self.validate_subnet_rental_proposal(&update.payload)
                     .map_err(invalid_proposal_error)?;
             }
-            NnsFunction::IcpXdrConversionRate => {
-                Self::validate_icp_xdr_conversion_rate_payload(
-                    &update.payload,
-                    self.heap_data
-                        .economics
-                        .as_ref()
-                        .ok_or_else(|| GovernanceError::new(ErrorType::Unavailable))?
-                        .minimum_icp_xdr_rate,
-                )
-                .map_err(invalid_proposal_error)?;
-            }
             NnsFunction::AssignNoid => {
                 Self::validate_assign_noid_payload(&update.payload, &self.heap_data.node_providers)
                     .map_err(invalid_proposal_error)?;
@@ -5062,31 +5087,6 @@ impl Governance {
         Ok(())
     }
 
-    fn validate_icp_xdr_conversion_rate_payload(
-        payload: &[u8],
-        minimum_icp_xdr_rate: u64,
-    ) -> Result<(), String> {
-        let decoded_payload = match Decode!([decoder_config()]; payload, UpdateIcpXdrConversionRatePayload)
-        {
-            Ok(payload) => payload,
-            Err(e) => {
-                return Err(format!(
-                    "The payload could not be decoded into a UpdateIcpXdrConversionRatePayload: {}",
-                    e
-                ));
-            }
-        };
-
-        if decoded_payload.xdr_permyriad_per_icp < minimum_icp_xdr_rate {
-            return Err(format!(
-                "The proposed rate {} is below the minimum allowable rate",
-                decoded_payload.xdr_permyriad_per_icp
-            ))?;
-        }
-
-        Ok(())
-    }
-
     fn validate_assign_noid_payload(
         payload: &[u8],
         node_providers: &[NodeProvider],
@@ -5113,6 +5113,81 @@ impl Governance {
         }
 
         Ok(())
+    }
+
+    fn validate_add_or_remove_node_provider(
+        &self,
+        add_or_remove_node_provider: &AddOrRemoveNodeProvider,
+    ) -> Result<(), GovernanceError> {
+        match &add_or_remove_node_provider.change {
+            None => Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "AddOrRemoveNodeProvider proposal must have a change field",
+            )),
+            Some(Change::ToAdd(node_provider)) => {
+                let Some(np_id) = node_provider.id else {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        "AddOrRemoveNodeProvider proposal must have a node provider id",
+                    ));
+                };
+                // Validate that np does not exist
+                if self
+                    .heap_data
+                    .node_providers
+                    .iter()
+                    .any(|np| np.id.as_ref() == Some(&np_id))
+                {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        format!(
+                            "AddOrRemoveNodeProvider cannot add already existing Node Provider: {}",
+                            np_id
+                        ),
+                    ));
+                }
+
+                if let Some(ref account_identifier) = node_provider.reward_account {
+                    validate_account_identifier(account_identifier).map_err(|e| {
+                        GovernanceError::new_with_message(
+                            ErrorType::InvalidProposal,
+                            format!("The account_identifier field is invalid: {}", e),
+                        )
+                    })?;
+                }
+
+                // Validate that np does not exist
+                // validate the account_identifier
+                Ok(())
+            }
+            Some(Change::ToRemove(node_provider)) => {
+                let Some(np_id) = node_provider.id else {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        "AddOrRemoveNodeProvider proposal must have a node provider id",
+                    ));
+                };
+
+                // Validate that np exists
+                if !self
+                    .heap_data
+                    .node_providers
+                    .iter()
+                    .any(|np| np.id.as_ref() == Some(&np_id))
+                {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        format!(
+                            "AddOrRemoveNodeProvider ToRemove must target an existing Node Provider \
+                              but targeted {}",
+                            np_id
+                        ),
+                    ));
+                }
+
+                Ok(())
+            }
+        }
     }
 
     fn validate_add_or_remove_data_centers_payload(payload: &[u8]) -> Result<(), String> {
@@ -7010,6 +7085,15 @@ impl Governance {
             })?;
 
         if let Some(new_reward_account) = update.reward_account {
+            validate_account_identifier(&new_reward_account).map_err(|e| {
+                GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    format!(
+                        "Invalid reward_account for Node Provider {}: {}",
+                        node_provider_id, e
+                    ),
+                )
+            })?;
             node_provider.reward_account = Some(new_reward_account);
         } else {
             return Err(GovernanceError::new_with_message(
@@ -8093,6 +8177,24 @@ fn validate_motion(motion: &Motion) -> Result<(), GovernanceError> {
             ),
         ));
     }
+
+    Ok(())
+}
+
+fn validate_account_identifier(
+    account_identifier: &icp_ledger::protobuf::AccountIdentifier,
+) -> Result<(), String> {
+    if account_identifier.hash.len() != 32 {
+        return Err(
+            format!(
+                "The account identifier must be 32 bytes long (so that it includes the checksum) but, this account identifier is: {} bytes",
+                account_identifier.hash.len()
+            ),
+        );
+    }
+
+    AccountIdentifier::try_from(account_identifier)
+        .map_err(|e| format!("The account identifier is not valid: {}", e))?;
 
     Ok(())
 }
