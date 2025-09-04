@@ -57,7 +57,7 @@ use util::{
 
 use anyhow::bail;
 
-pub const HOST_VM_NAME: &str = "host-1";
+const HOST_VM_NAME: &str = "host-1";
 
 fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
     (1..=num_hosts).map(|i| format!("host-{}", i)).collect()
