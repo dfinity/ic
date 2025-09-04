@@ -1,6 +1,7 @@
 use crate::metrics::MetricsManager;
 use crate::registry_querier::RegistryQuerier;
 use crate::storage::VM;
+use crate::telemetry;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_node_rewards_canister_api::monthly_rewards::{
@@ -260,13 +261,16 @@ impl NodeRewardsCanister {
             let result = canister
                 .with_borrow(|canister| canister.calculate_rewards::<S>(current_day, None))?;
             for (provider_id, provider_rewards) in result.provider_results.into_iter() {
+                let instruction_counter = telemetry::InstructionCounter::default();
+
                 let daily_rewards = rewards_xdr_permyriad.entry(provider_id.0).or_insert(0);
                 *daily_rewards += provider_rewards.rewards_total_xdr_permyriad;
                 ic_cdk::println!(
-                    "Provider {} has {} rewards for day {}",
+                    "Provider {} has {} rewards for day {} and took {} instructions",
                     provider_id,
                     provider_rewards.rewards_total_xdr_permyriad,
-                    current_day
+                    current_day,
+                    instruction_counter.sum()
                 );
             }
         }
