@@ -66,7 +66,7 @@ const_assert_eq!(
 pub(crate) const BTC_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 750_000;
 
 // Max height for sending multiple blocks when connecting the Dogecoin mainnet.
-pub(crate) const DOGE_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 4_000_000;
+pub(crate) const DOGE_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 5_000_000;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct GetSuccessorsRequest {
