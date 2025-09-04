@@ -262,6 +262,12 @@ impl NodeRewardsCanister {
             for (provider_id, provider_rewards) in result.provider_results.into_iter() {
                 let daily_rewards = rewards_xdr_permyriad.entry(provider_id.0).or_insert(0);
                 *daily_rewards += provider_rewards.rewards_total_xdr_permyriad;
+                ic_cdk::println!(
+                    "Provider {} has {} rewards for day {}",
+                    provider_id,
+                    provider_rewards.rewards_total_xdr_permyriad,
+                    current_day
+                );
             }
         }
 
