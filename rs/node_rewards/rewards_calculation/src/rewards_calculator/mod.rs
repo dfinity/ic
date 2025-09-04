@@ -442,9 +442,7 @@ fn step_6_construct_provider_results(
             if let Some(node_metrics) = provider_nodes_metrics_daily.remove(&node.node_id) {
                 NodeStatus::Assigned { node_metrics }
             } else {
-                NodeStatus::Unassigned {
-                    extrapolated_fr: *extrapolated_fr,
-                }
+                NodeStatus::Unassigned { extrapolated_fr }
             };
 
         let rewards_reduction_percent = reward_reduction
