@@ -1,5 +1,5 @@
 {
-  "checksum": "d5b323818033f8f3dd8d03f70c1ef7560a5a4fba2c0ed0f459155ae6244084bc",
+  "checksum": "8302df3c8391e72434a266be9750616b83092ea0c3105f2b9bc5f8309144084c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -8155,7 +8155,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/rust-dogecoin",
           "commitish": {
-            "Rev": "c226c2e6420b4bc9a7329aaf696b98e61039f2f9"
+            "Rev": "cda2b5ec270017c82abd6ef2e71b7fe583a133fd"
           },
           "strip_prefix": "bitcoin"
         }

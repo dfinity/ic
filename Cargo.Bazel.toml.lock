@@ -1418,7 +1418,7 @@ dependencies = [
 [[package]]
 name = "bitcoin"
 version = "0.32.5-doge.0"
-source = "git+https://github.com/dfinity/rust-dogecoin?rev=c226c2e6420b4bc9a7329aaf696b98e61039f2f9#c226c2e6420b4bc9a7329aaf696b98e61039f2f9"
+source = "git+https://github.com/dfinity/rust-dogecoin?rev=cda2b5ec270017c82abd6ef2e71b7fe583a133fd#cda2b5ec270017c82abd6ef2e71b7fe583a133fd"
 dependencies = [
  "base58ck",
  "bech32 0.11.0",
