@@ -13,7 +13,6 @@ use ic_btc_replica_types::{
     Network, SendTransactionRequest,
 };
 use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig;
-use ic_config::logger::Config as LoggerConfig;
 use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -100,15 +99,12 @@ fn start_adapter<T: RpcClientType + Into<AdapterNetwork>>(
     network: T,
 ) {
     let config = Config {
-        network: network.into(),
         incoming_source: IncomingSource::Path(uds_path.to_path_buf()),
         nodes,
         ipv6_only: true,
         address_limits: (1, 1),
         idle_seconds: 6, // it can take at most 5 seconds for tcp connections etc to be established.
-        logger: LoggerConfig::default(),
-        dns_seeds: vec![],
-        socks_proxy: None,
+        ..Config::default_with(network.into())
     };
 
     start_server(logger, metrics_registry, rt_handle, config);
