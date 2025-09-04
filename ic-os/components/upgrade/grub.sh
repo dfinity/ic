@@ -2,6 +2,8 @@
 
 # Common grub utilities for IC-OS components
 
+source /opt/ic/bin/logging.sh
+
 # Reads properties "boot_alternative" and "boot_cycle" from the grubenv
 # file. The properties are stored as global variables.
 #
@@ -33,7 +35,7 @@ write_grubenv() {
     local boot_cycle="$3"
 
     if [ -z "$GRUBENV_FILE" ] || [ -z "$boot_alternative" ] || [ -z "$boot_cycle" ]; then
-        echo "Error: write_grubenv requires 3 parameters: grubenv_file, boot_alternative, boot_cycle" >&2
+        write_log "Error: write_grubenv requires 3 parameters: grubenv_file, boot_alternative, boot_cycle"
         return 1
     fi
 
@@ -53,13 +55,13 @@ write_grubenv() {
         # Fill to make sure we will have 1024 bytes
         echo -n "################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################"
     ) >"${TMP_FILE}" || {
-        echo "Error: Failed to write to temporary file ${TMP_FILE}" >&2
+        write_log "Error: Failed to write to temporary file ${TMP_FILE}"
         return 1
     }
 
     # Truncate to arrive at precisely 1024 bytes
     if ! truncate --size=1024 "${TMP_FILE}"; then
-        echo "Error: Failed to truncate temporary file to 1024 bytes" >&2
+        write_log "Error: Failed to truncate temporary file to 1024 bytes"
         return 1
     fi
 
@@ -67,14 +69,14 @@ write_grubenv() {
     if [ -f "${GRUBENV_FILE}" ]; then
         BACKUP_FILE="${GRUBENV_FILE}.backup.$(date +%s)"
         if ! cp "${GRUBENV_FILE}" "${BACKUP_FILE}"; then
-            echo "Error: Failed to create backup of existing grubenv file" >&2
+            write_log "Error: Failed to create backup of existing grubenv file"
             return 1
         fi
     fi
 
     # Atomic move: rename temporary file to target file
     if ! mv "${TMP_FILE}" "${GRUBENV_FILE}"; then
-        echo "Error: Failed to atomically move temporary file to ${GRUBENV_FILE}" >&2
+        write_log "Error: Failed to atomically move temporary file to ${GRUBENV_FILE}"
         if [ -f "${BACKUP_FILE}" ]; then
             mv "${BACKUP_FILE}" "${GRUBENV_FILE}" 2>/dev/null || true
         fi
@@ -92,7 +94,7 @@ write_grubenv() {
             break
         else
             if [ $i -lt $sync_retries ]; then
-                echo "Warning: Sync attempt $i failed, retrying in ${sync_delay}s..." >&2
+                write_log "Warning: Sync attempt $i failed, retrying in ${sync_delay}s..."
                 sleep $sync_delay
                 sync_delay=$((sync_delay * 2))
             fi
@@ -100,9 +102,9 @@ write_grubenv() {
     done
 
     if [ "$sync_success" = false ]; then
-        echo "Error: Failed to sync grubenv file to disk after $sync_retries attempts" >&2
+        write_log "Error: Failed to sync grubenv file to disk after $sync_retries attempts"
         return 1
     fi
 
-    echo "Successfully updated grubenv file: boot_alternative=$boot_alternative, boot_cycle=$boot_cycle"
+    write_log "Successfully updated grubenv file: boot_alternative=$boot_alternative, boot_cycle=$boot_cycle"
 }
