@@ -2,7 +2,6 @@ use crate::message_routing::{
     LatencyMetrics, MessageRoutingMetrics, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
 };
 use ic_base_types::NumBytes;
-use ic_certification_version::CertificationVersion;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_error_types::RejectCode;
 use ic_interfaces::messaging::{
@@ -82,6 +81,7 @@ const LABEL_VALUE_SENDER_SUBNET_MISMATCH: &str = "SenderSubnetMismatch";
 const LABEL_VALUE_RECEIVER_SUBNET_MISMATCH: &str = "ReceiverSubnetMismatch";
 const LABEL_VALUE_REQUEST_MISROUTED: &str = "RequestMisrouted";
 const LABEL_VALUE_CANISTER_MIGRATED: &str = "CanisterMigrated";
+const LABEL_VALUE_CANISTER_LIKELY_MIGRATED: &str = "CanisterLikelyMigrated";
 const LABEL_TYPE: &str = "type";
 const LABEL_VALUE_TYPE_REQUEST: &str = "request";
 const LABEL_VALUE_TYPE_RESPONSE: &str = "response";
@@ -764,14 +764,6 @@ impl StreamHandlerImpl {
                     stream.push_accept_signal();
                     maybe_lost_cycles
                 }
-                Reject(reason, RequestOrResponse::Request(request))
-                    if state.metadata.certification_version < CertificationVersion::V19 =>
-                {
-                    // Unable to induct a request, generate reject response and push it into `stream`.
-                    stream.push(generate_reject_response_for(reason, &request));
-                    stream.push_accept_signal();
-                    Cycles::zero()
-                }
                 Reject(reason, RequestOrResponse::Request(_)) => {
                     // Unable to induct a request, push a reject signal.
                     stream.push_reject_signal(reason);
@@ -789,9 +781,7 @@ impl StreamHandlerImpl {
         } else {
             // `remote_subnet_id` is not known to be a valid host for `msg.sender()`.
             //
-            // Do not enqueue a reject response as remote subnet is likely malicious and
-            // trying to cause a memory leak by sending bogus messages and never consuming
-            // reject responses.
+            // Do not push a reject signal as remote subnet is likely malicious.
             error!(
                 self.log,
                 "{}: Dropping message from subnet {} claiming to be from sender {}: {:?}",
@@ -855,6 +845,7 @@ impl StreamHandlerImpl {
                         match msg {
                             RequestOrResponse::Request(ref request) => {
                                 let reason = match err {
+                                    // Receiver should be hosted by this subnet, but does not exist.
                                     StateError::CanisterNotFound(_) => {
                                         RejectReason::CanisterNotFound
                                     }
@@ -896,7 +887,7 @@ impl StreamHandlerImpl {
             }
 
             // Receiver canister is migrating to/from this subnet.
-            Some(host_subnet) if self.should_reroute_message_to(&msg, host_subnet, state) => {
+            Some(host_subnet) if self.is_receiver_canister_migrating(&msg, host_subnet, state) => {
                 self.observe_inducted_message_status(msg_type, LABEL_VALUE_CANISTER_MIGRATED);
 
                 match &msg {
@@ -929,8 +920,18 @@ impl StreamHandlerImpl {
                 Accept(msg_cycles)
             }
 
-            // Receiver is not and was not (according to `migrating_canisters`) recently
-            // hosted by this subnet.
+            // Request receiver is not hosted by this subnet; it is only possible that this
+            // message was sent by a subnet with a routing table claiming otherwise,
+            // so it is migrating...
+            _ if matches!(msg, RequestOrResponse::Request(_)) => {
+                self.observe_inducted_message_status(
+                    msg_type,
+                    LABEL_VALUE_CANISTER_LIKELY_MIGRATED,
+                );
+                Reject(RejectReason::CanisterMigrating, msg)
+            }
+
+            // ...but a response to a mismatching subnet is dropped.
             host_subnet => {
                 error!(
                     self.log,
@@ -1006,14 +1007,10 @@ impl StreamHandlerImpl {
         }
     }
 
-    /// Checks whether a message addressed to a canister known not to be hosted by
-    /// `self.subnet_id` should be rejected (as opposed to silently dropped).
-    ///
-    /// Reject signals for `Responses` and reject responses for requests addressed
-    /// to receivers not hosted by `self.subnet_id` are only produced if both the
-    /// known host and `self.subnet_id` are on the path of a canister migration
-    /// including `msg.receiver()`.
-    fn should_reroute_message_to(
+    /// Checks whether the receiver of the given message (known not to be hosted by
+    /// `self.subnet_id`) is part of a canister migration between the known host
+    /// subnet and this subnet (in any order).
+    fn is_receiver_canister_migrating(
         &self,
         msg: &RequestOrResponse,
         actual_receiver_subnet_id: SubnetId,

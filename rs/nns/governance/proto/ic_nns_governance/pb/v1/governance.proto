@@ -801,6 +801,8 @@ message ManageNeuron {
   message Split {
     // The amount to split to the child neuron.
     uint64 amount_e8s = 1;
+    // The memo to use for the child neuron.
+    optional uint64 memo = 2;
   }
 
   // Merge another neuron into this neuron.

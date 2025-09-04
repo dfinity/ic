@@ -379,39 +379,38 @@ async fn modify_canister_heap(
     skip_odd_indexed_canister: bool,
     seed: usize,
 ) {
-    for x in 1..=size_level {
-        info!(
-            logger,
-            "Start modifying canisters {} times, it is now {}",
-            x,
-            Utc::now()
-        );
-        for (i, canister) in canisters.iter().enumerate() {
-            if skip_odd_indexed_canister && i % 2 == 1 {
-                continue;
+    let expansions = canisters
+        .iter()
+        .enumerate()
+        .filter(|(idx, _)| !(skip_odd_indexed_canister && idx % 2 == 1))
+        .map(|(idx, canister)| {
+            let logger_clone = logger.clone();
+            async move {
+                for x in 1..=size_level {
+                    let seed_for_canister = idx + (x - 1) * num_canisters + seed;
+                    let payload = (x as u32, seed_for_canister as u32);
+                    let _res: Result<u64, String> = canister
+                        .update_("expand_state", dfn_candid::candid, payload)
+                        .await
+                        .unwrap_or_else(|err| {
+                            panic!(
+                                "Calling expand_state() on canister {:?} failed: {}",
+                                canister, err
+                            )
+                        });
+                    info!(
+                        logger_clone,
+                        "Expanded canister {:?} {} times, it is now {}",
+                        canister,
+                        x,
+                        Utc::now()
+                    );
+                }
             }
-            let seed_for_canister = i + (x - 1) * num_canisters + seed;
-            let payload = (x as u32, seed_for_canister as u32);
-            // Each call will expand the memory by writing a chunk of 128 MiB.
-            // There are 8 chunks in the canister, so the memory will grow by 1 GiB after 8 calls.
-            let _res: Result<u64, String> = canister
-                .update_("expand_state", dfn_candid::candid, payload)
-                .await
-                .unwrap_or_else(|e| {
-                    panic!(
-                        "Calling expand_state() on canister {} failed: {}",
-                        canister.canister_id_vec8()[0],
-                        e
-                    )
-                });
-        }
-        info!(
-            logger,
-            "Expanded canisters {} times, it is now {}",
-            x,
-            Utc::now()
-        );
-    }
+        })
+        .collect::<Vec<_>>();
+
+    join_all(expansions).await;
 }
 
 // The function waits for the manifest reaching or surpassing the given height and returns the manifest height.

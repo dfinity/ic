@@ -785,6 +785,8 @@ pub mod manage_neuron {
     pub struct Split {
         /// The amount to split to the child neuron.
         pub amount_e8s: u64,
+        /// The memo to use for the child neuron.
+        pub memo: Option<u64>,
     }
     /// Merge another neuron into this neuron.
     #[derive(

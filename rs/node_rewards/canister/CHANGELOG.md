@@ -2,6 +2,9 @@
 
 INSERT NEW RELEASES HERE
 
+* Replicated execution of the query endpoints `get_node_provider_rewards_calculation` and `get_historical_reward_periods`
+  is disabled.
+
 # 2025-08-15: Proposal 137910
 
 http://dashboard.internetcomputer.org/proposal/137910
