@@ -118,6 +118,27 @@ benches:
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
+  record_known_neuron_vote:
+    total:
+      calls: 1
+      instructions: 178465
+      heap_increase: 0
+      stable_memory_increase: 128
+    scopes: {}
+  record_neuron_vote_known_neuron_voting_history_disabled:
+    total:
+      calls: 1
+      instructions: 143342
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
+  record_neuron_vote_known_neuron_voting_history_enabled:
+    total:
+      calls: 1
+      instructions: 143377
+      heap_increase: 0
+      stable_memory_increase: 0
+    scopes: {}
   single_vote_all_stable:
     total:
       calls: 1
@@ -142,13 +163,6 @@ benches:
         instructions: 25653919
         heap_increase: 0
         stable_memory_increase: 0
-  update_recent_ballots_stable_memory:
-    total:
-      calls: 1
-      instructions: 143389
-      heap_increase: 0
-      stable_memory_increase: 0
-    scopes: {}
   voting_power_snapshots_is_latest_snapshot_a_spike_false:
     total:
       calls: 1
