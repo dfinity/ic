@@ -44,10 +44,9 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "Unassigned",
         "NodeStatus.status",
         "NodeStatus",
-        "DailyResults",
         "NodeResults",
         "BaseRewards",
-        "DailyBaseRewardsType3",
+        "BaseRewardsType3",
         "NodeProviderRewards",
     ] {
         config.type_attribute(

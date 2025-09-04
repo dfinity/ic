@@ -10,7 +10,7 @@ use ic_node_rewards_canister_protobuf::pb::ic_node_rewards::v1::{
 use ic_node_rewards_canister_protobuf::KeyRange;
 use ic_stable_structures::StableBTreeMap;
 use itertools::Itertools;
-use rewards_calculation::types::{DayUtc, NodeMetricsDailyRaw, SubnetMetricsDailyKey, UnixTsNanos};
+use rewards_calculation::types::{DayUtc, NodeMetricsDailyRaw, UnixTsNanos};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 
@@ -185,19 +185,18 @@ where
     /// For each node in every subnet, calculates the number of proposed and failed blocks
     /// produced during each day. This is done by subtracting the total metrics of the
     /// previous day from those of the current day.
-    pub fn daily_metrics_by_subnet(
+    pub fn metrics_by_subnet(
         &self,
-        start_day: DayUtc,
-        end_day: DayUtc,
-    ) -> BTreeMap<SubnetMetricsDailyKey, Vec<NodeMetricsDailyRaw>> {
-        let mut daily_metrics_by_subnet = BTreeMap::new();
-        let previous_day_ts = start_day.previous_day().unix_ts_at_day_start();
+        day_utc: DayUtc,
+    ) -> BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>> {
+        let mut metrics_by_subnet = BTreeMap::new();
+        let previous_day_ts = day_utc.previous_day().unix_ts_at_day_start();
         let first_key = SubnetMetricsKey {
             timestamp_nanos: previous_day_ts,
             ..SubnetMetricsKey::min_key()
         };
         let last_key = SubnetMetricsKey {
-            timestamp_nanos: end_day.get(),
+            timestamp_nanos: day_utc.get(),
             ..SubnetMetricsKey::max_key()
         };
 
@@ -209,10 +208,10 @@ where
             .into_iter()
             .collect();
 
-        let mut last_total_metrics: HashMap<_, _> = HashMap::new();
+        let mut initial_total_metrics: HashMap<_, _> = HashMap::new();
         if let Some((timestamp_nanos, _)) = subnets_metrics_by_day.first_key_value() {
-            if timestamp_nanos < &start_day {
-                last_total_metrics = subnets_metrics_by_day
+            if timestamp_nanos < &day_utc {
+                initial_total_metrics = subnets_metrics_by_day
                     .pop_first()
                     .unwrap()
                     .1
@@ -233,38 +232,30 @@ where
         };
 
         for (_, subnets_metrics) in subnets_metrics_by_day {
-            // current_total_metrics holds the total metrics for the current day per node per subnet.
-            // It will be used to calculate the daily metrics for each node the next day by subtracting
-            // the last day's total metrics from the current day's total metrics.
-            let mut current_total_metrics: HashMap<_, _> = HashMap::new();
             for (k, v) in subnets_metrics {
+                let subnet_id = SubnetId::from(k.subnet_id.unwrap());
+
                 let daily_nodes_metrics: Vec<NodeMetricsDailyRaw> = v
                     .nodes_metrics
                     .into_iter()
                     .map(|node| {
-                        let (last_proposed_total, last_failed_total) = last_total_metrics
+                        let (initial_proposed_total, initial_failed_total) = initial_total_metrics
                             .remove(&(k.subnet_id, node.node_id))
                             .unwrap_or_default();
-                        current_total_metrics.insert(
-                            (k.subnet_id, node.node_id),
-                            (node.num_blocks_proposed_total, node.num_blocks_failed_total),
-                        );
-
                         NodeMetricsDailyRaw {
                             node_id: NodeId::from(node.node_id.unwrap()),
                             num_blocks_proposed: node.num_blocks_proposed_total
-                                - last_proposed_total,
-                            num_blocks_failed: node.num_blocks_failed_total - last_failed_total,
+                                - initial_proposed_total,
+                            num_blocks_failed: node.num_blocks_failed_total - initial_failed_total,
                         }
                     })
                     .collect();
 
-                daily_metrics_by_subnet.insert(k.into(), daily_nodes_metrics);
+                metrics_by_subnet.insert(subnet_id, daily_nodes_metrics);
             }
-            last_total_metrics = current_total_metrics;
         }
 
-        daily_metrics_by_subnet
+        metrics_by_subnet
     }
 }
 

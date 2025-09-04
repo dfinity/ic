@@ -3,8 +3,7 @@ use ic_node_rewards_canister_protobuf::pb::rewards_calculator::v1::NodeProviderR
 
 #[derive(CandidType, Clone, Deserialize)]
 pub struct GetNodeProviderRewardsCalculationRequest {
-    pub from_nanos: u64,
-    pub to_nanos: u64,
+    pub day_timestamp_nanos: u64,
     pub provider_id: Principal,
 }
 

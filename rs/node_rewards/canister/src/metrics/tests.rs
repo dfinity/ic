@@ -319,7 +319,7 @@ async fn _daily_metrics_correct_different_update_size(size: usize) {
         mm.update_subnets_metrics(vec![subnet_id(1)]).await;
     }
     let daily_metrics: Vec<Vec<NodeMetricsDailyRaw>> = mm
-        .daily_metrics_by_subnet(0.into(), (4 * ONE_DAY_NANOS).into())
+        .metrics_by_subnet(0.into(), (4 * ONE_DAY_NANOS).into())
         .into_values()
         .collect();
 
@@ -384,7 +384,7 @@ async fn daily_metrics_correct_2_subs() {
     }
 
     let node_1_daily_metrics = mm
-        .daily_metrics_by_subnet(0.into(), (8 * ONE_DAY_NANOS).into())
+        .metrics_by_subnet(0.into(), (8 * ONE_DAY_NANOS).into())
         .into_iter()
         .collect::<BTreeMap<_, _>>()
         .into_iter()
@@ -477,7 +477,7 @@ async fn daily_metrics_correct_overlapping_days() {
     }
 
     let daily_metrics = mm
-        .daily_metrics_by_subnet(0.into(), (4 * ONE_DAY_NANOS).into())
+        .metrics_by_subnet(0.into(), (4 * ONE_DAY_NANOS).into())
         .into_iter()
         .collect::<BTreeMap<_, _>>()
         .into_iter()

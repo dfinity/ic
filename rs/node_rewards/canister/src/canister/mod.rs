@@ -23,18 +23,29 @@ use ic_registry_keys::{
     DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
 };
 use ic_registry_node_provider_rewards::{calculate_rewards_v0, RewardsPerNodeProvider};
-use ic_types::RegistryVersion;
+use ic_types::{RegistryVersion, Time};
 use rewards_calculation::rewards_calculator::RewardsCalculatorInput;
 use rewards_calculation::rewards_calculator_results::RewardsCalculatorResults;
-use rewards_calculation::types::RewardPeriod;
+use rewards_calculation::types::DayUtc;
 use std::cell::RefCell;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::thread::LocalKey;
 
 #[cfg(test)]
 mod test;
+
+#[cfg(target_arch = "wasm32")]
+fn current_time() -> Time {
+    let current_time = ic_cdk::api::time();
+    Time::from_nanos_since_unix_epoch(current_time)
+}
+
+#[cfg(not(any(target_arch = "wasm32")))]
+fn current_time() -> Time {
+    ic_types::time::current_time()
+}
 
 /// This struct represents the API for the canister.  API methods should be implemented in
 /// main.rs and defer the important work to the methods in this struct, essentially passing
@@ -119,38 +130,33 @@ impl NodeRewardsCanister {
 
     fn calculate_rewards<S: RegistryDataStableMemory>(
         &self,
-        request: GetNodeProvidersRewardsRequest,
+        day_utc: DayUtc,
         provider_filter: Option<PrincipalId>,
     ) -> Result<RewardsCalculatorResults, String> {
-        let reward_period = RewardPeriod::new(request.from_nanos.into(), request.to_nanos.into())
-            .map_err(|e| e.to_string())?;
+        // Metrics are collected at the end of the day, so we need to ensure that
+        // the end timestamp is not later than the first ts of today.
+        let today: DayUtc = current_time().as_nanos_since_unix_epoch().into();
+        if day_utc >= today {
+            return Err("day_utc must be earlier than today".to_string());
+        }
         let registry_querier = RegistryQuerier::new(self.registry_client.clone());
-
         let version = registry_querier
-            .version_for_timestamp(reward_period.from.unix_ts_at_day_end())
+            .version_for_timestamp(day_utc.unix_ts_at_day_end())
             .ok_or_else(|| "Could not find registry version for timestamp".to_string())?;
         let rewards_table = registry_querier.get_rewards_table(version);
-        let daily_metrics_by_subnet = self
-            .metrics_manager
-            .daily_metrics_by_subnet(reward_period.from, reward_period.to);
-        let provider_rewardable_nodes = RegistryQuerier::get_rewardable_nodes_per_provider::<S>(
-            &*self.registry_client,
-            reward_period.from,
-            reward_period.to,
-            provider_filter,
-        )
-        .map_err(|e| format!("Could not get rewardable nodes: {e:?}"))?;
+        let metrics_by_subnet = self.metrics_manager.metrics_by_subnet(day_utc);
+        let provider_rewardable_nodes = registry_querier
+            .get_rewardable_nodes_per_provider(version, provider_filter)
+            .map_err(|e| format!("Could not get rewardable nodes: {e:?}"))?;
 
         let input = RewardsCalculatorInput {
-            reward_period,
+            day_utc,
             rewards_table,
-            daily_metrics_by_subnet,
+            metrics_by_subnet,
             provider_rewardable_nodes,
         };
-        let result = rewards_calculation::rewards_calculator::calculate_rewards(input)
-            .map_err(|e| format!("Could not calculate rewards: {e:?}"));
-
-        result
+        let result = rewards_calculation::rewards_calculator::calculate_daily_rewards(input);
+        Ok(result)
     }
 }
 
@@ -229,6 +235,15 @@ impl NodeRewardsCanister {
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersRewardsRequest,
     ) -> GetNodeProvidersRewardsResponse {
+        let start_day: DayUtc = request.from_day_timestamp_nanos.into();
+        let end_day: DayUtc = request.to_day_timestamp_nanos.into();
+        let mut rewards_xdr_permyriad = BTreeMap::new();
+        if start_day > end_day {
+            return Err(
+                "from_day_timestamp_nanos must be before to_day_timestamp_nanos".to_string(),
+            );
+        }
+
         NodeRewardsCanister::schedule_registry_sync(canister)
             .await
             .map_err(|e| {
@@ -239,15 +254,16 @@ impl NodeRewardsCanister {
                 )
             })?;
         NodeRewardsCanister::schedule_metrics_sync(canister).await;
-        let result =
-            canister.with_borrow(|canister| canister.calculate_rewards::<S>(request, None))?;
-        let rewards_xdr_permyriad = result
-            .provider_results
-            .iter()
-            .map(|(provider_id, provider_rewards)| {
-                (provider_id.0, provider_rewards.rewards_total_xdr_permyriad)
-            })
-            .collect();
+
+        let mut current_day = start_day;
+        while current_day <= end_day {
+            let result = canister
+                .with_borrow(|canister| canister.calculate_rewards::<S>(current_day, None))?;
+            for (provider_id, provider_rewards) in result.provider_results.into_iter() {
+                let daily_rewards = rewards_xdr_permyriad.entry(provider_id.0).or_insert(0);
+                *daily_rewards += provider_rewards.rewards_total_xdr_permyriad;
+            }
+        }
 
         Ok(NodeProvidersRewards {
             rewards_xdr_permyriad,
@@ -259,12 +275,8 @@ impl NodeRewardsCanister {
         request: GetNodeProviderRewardsCalculationRequest,
     ) -> GetNodeProviderRewardsCalculationResponse {
         let provider_id = PrincipalId::from(request.provider_id);
-        let request_inner = GetNodeProvidersRewardsRequest {
-            from_nanos: request.from_nanos,
-            to_nanos: request.to_nanos,
-        };
         let mut result = canister.with_borrow(|canister| {
-            canister.calculate_rewards::<S>(request_inner, Some(provider_id))
+            canister.calculate_rewards::<S>(request.day_timestamp_nanos.into(), Some(provider_id))
         })?;
         let node_provider_rewards = result.provider_results.remove(&provider_id).ok_or(format!(
             "No rewards found for node provider {}",
