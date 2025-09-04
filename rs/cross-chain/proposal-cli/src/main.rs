@@ -226,7 +226,7 @@ async fn main() {
                 "y" => {
                     const DFINITY_FORUM_URL: &str = "https://forum.dfinity.org";
                     let forum_client =
-                        DiscourseClient::new(DFINITY_FORUM_URL.to_string(), api_user, api_key);
+                        DiscourseClient::new(DFINITY_FORUM_URL.parse().unwrap(), api_user, api_key);
                     let response = forum_client
                         .create_topic(request)
                         .await

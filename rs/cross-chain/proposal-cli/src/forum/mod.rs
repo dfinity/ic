@@ -12,6 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Formatter;
 use std::str::FromStr;
 use std::time::Duration;
+use url::Url;
 
 type ProposalId = u64;
 
@@ -234,13 +235,13 @@ pub struct CreateTopicResponse {
 
 pub struct DiscourseClient {
     client: reqwest::Client,
-    forum_url: String,
+    forum_url: Url,
     api_user: String,
     api_key: String,
 }
 
 impl DiscourseClient {
-    pub fn new(url: String, api_user: String, api_key: String) -> Self {
+    pub fn new(url: Url, api_user: String, api_key: String) -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .build()
@@ -268,9 +269,10 @@ impl DiscourseClient {
         path: &str,
         request: Request,
     ) -> Result<Response, String> {
+        let url = self.forum_url.join(path).map_err(|e| e.to_string())?;
         let response = self
             .client
-            .post(format!("{}/{}", self.forum_url, path))
+            .post(url)
             .json(&request)
             .header("Api-Key", &self.api_key)
             .header("Api-Username", &self.api_user)

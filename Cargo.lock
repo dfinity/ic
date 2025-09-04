@@ -10538,6 +10538,7 @@ dependencies = [
  "strum_macros 0.26.4",
  "tempfile",
  "tokio",
+ "url",
 ]
 
 [[package]]
