@@ -1,3 +1,27 @@
+/* tag::catalog[]
+Title:: Pre-signature stash management test
+
+Goal:: Test that increasing and decreasing the pre-signature stash size works as expected
+
+Runbook::
+. Setup:
+    . App subnet comprising N nodes, with all supported chain keys enabled.
+. Initially, the stash size is set to 20.
+. Decrease the stash size to 1 via proposal.
+. Assert that the stash size is 1 on all nodes.
+. Stop pre-signature generation and increase the stash size to 15 via proposal.
+. Assert that the stash size is still 1.
+. Send a signature request for each key and assert that the signatures succeed.
+. Assert that the stash size is now 0.
+. Start pre-signature generation again.
+. Assert that the stash size is now 15.
+
+Success::
+. Pre-signature stash size can be increased and decreased via proposal.
+. Chain key signatures succeed.
+
+end::catalog[] */
+
 use anyhow::{bail, Result};
 use canister_test::Canister;
 use ic_consensus_system_test_utils::node::{
@@ -33,8 +57,7 @@ use slog::{info, Logger};
 const MAX_PARALLEL_PRE_SIGNATURES: u32 = 10;
 const DKG_INTERVAL_LENGTH: u64 = 19;
 
-/// Creates one system subnet and two application subnets.
-pub fn setup(test_env: TestEnv) {
+fn setup(test_env: TestEnv) {
     let key_ids = make_key_ids_for_all_idkg_schemes();
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
