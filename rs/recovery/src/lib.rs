@@ -26,7 +26,7 @@ use registry_helper::RegistryPollingStrategy;
 use serde::{Deserialize, Serialize};
 use slog::{info, warn, Logger};
 use ssh_helper::SshHelper;
-use std::io::ErrorKind;
+use std::{env, io::ErrorKind};
 use std::{
     net::IpAddr,
     path::{Path, PathBuf},
@@ -206,8 +206,7 @@ impl Recovery {
         }
 
         let ic_admin = if args.use_local_binaries {
-            // When using local binaries, we expect ic-admin to be in PATH
-            PathBuf::from("ic-admin")
+            PathBuf::from(env::var("IC_ADMIN_BIN").unwrap_or("ic-admin".to_string()))
         } else {
             binary_dir.join("ic-admin")
         };

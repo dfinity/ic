@@ -632,7 +632,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
     let pub_key = pub_key.trim();
 
     let command = format!(
-        r#"PATH="/var/lib/admin${{PATH:+:$PATH}}" /opt/ic/bin/ic-recovery \
+        r#"IC_ADMIN_BIN="/var/lib/admin/ic-admin" /opt/ic/bin/ic-recovery \
         --nns-url {nns_url} \
         --test --skip-prompts --use-local-binaries \
         app-subnet-recovery \
