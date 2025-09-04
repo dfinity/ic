@@ -457,6 +457,39 @@ fn take_load_snapshot_global_timer_on_low_wasm_memory() {
 }
 
 #[test]
+fn upload_and_load_snapshot_with_invalid_wasm() {
+    let env = StateMachineBuilder::new()
+        .with_snapshot_download_enabled(true)
+        .with_snapshot_upload_enabled(true)
+        .build();
+
+    let canister_id = env.create_canister(None);
+
+    // Upload snapshot metadata.
+    // A wasm module consisting of 42 zeros is invalid.
+    let upload_args = UploadCanisterSnapshotMetadataArgs::new(
+        canister_id,
+        None,   /* replace_snapshot */
+        42,     /* wasm_module_size */
+        vec![], /* globals */
+        0,      /* wasm_memory_size */
+        0,      /* stable_memory_size */
+        vec![], /* certified_data */
+        None,   /* global_timer */
+        None,   /* on_low_wasm_memory_hook_status */
+    );
+    let uploaded_snapshot_id = env
+        .upload_canister_snapshot_metadata(&upload_args)
+        .unwrap()
+        .snapshot_id;
+
+    let load_snapshot_args = LoadCanisterSnapshotArgs::new(canister_id, uploaded_snapshot_id, None);
+    let err = env.load_canister_snapshot(load_snapshot_args).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterInvalidWasm);
+    assert!(err.description().contains("Canister's Wasm module is not valid: Failed to decode wasm module: unsupported canister module format."));
+}
+
+#[test]
 fn upload_snapshot_module_with_checkpoint() {
     let env = StateMachineBuilder::new()
         .with_snapshot_download_enabled(true)

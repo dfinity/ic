@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 ic-btc-adapter = { path = ".." }
+ic-config = { path = "../../../config" }
 bitcoin = { workspace = true }
 flate2 = { workspace = true }
 hex = { workspace = true }

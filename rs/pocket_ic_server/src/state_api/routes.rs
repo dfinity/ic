@@ -1259,19 +1259,6 @@ pub async fn create_instance(
     extract::Json(instance_config): extract::Json<InstanceConfig>,
 ) -> (StatusCode, Json<rest::CreateInstanceResponse>) {
     let mut subnet_configs = instance_config.subnet_config_set;
-    if let Some(ref icp_features) = instance_config.icp_features {
-        subnet_configs = match subnet_configs.try_with_icp_features(icp_features) {
-            Ok(subnet_configs) => subnet_configs,
-            Err(e) => {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(rest::CreateInstanceResponse::Error {
-                        message: format!("Subnet config failed to validate: {}", e),
-                    }),
-                );
-            }
-        };
-    }
 
     let skip_validate_subnet_configs = instance_config
         .state_dir
@@ -1279,6 +1266,19 @@ pub async fn create_instance(
         .map(|state_dir| File::open(state_dir.clone().join("topology.json")).is_ok())
         .unwrap_or_default();
     if !skip_validate_subnet_configs {
+        if let Some(ref icp_features) = instance_config.icp_features {
+            subnet_configs = match subnet_configs.try_with_icp_features(icp_features) {
+                Ok(subnet_configs) => subnet_configs,
+                Err(e) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(rest::CreateInstanceResponse::Error {
+                            message: format!("Subnet config failed to validate: {}", e),
+                        }),
+                    );
+                }
+            };
+        }
         if let Err(e) = subnet_configs.validate() {
             return (
                 StatusCode::BAD_REQUEST,
@@ -1326,6 +1326,15 @@ pub async fn create_instance(
     };
     let auto_progress_enabled = auto_progress.is_some();
 
+    if instance_config.http_gateway_config.is_some() && !auto_progress_enabled {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(rest::CreateInstanceResponse::Error {
+                message: "Creating an HTTP gateway requires `AutoProgress` to be enabled via `initial_time`.".to_string()
+            }),
+        );
+    }
+
     match api_state
         .add_instance(
             move |seed| {
@@ -1346,14 +1355,16 @@ pub async fn create_instance(
                 )
             },
             auto_progress,
+            instance_config.http_gateway_config,
         )
         .await
     {
-        Ok((instance_id, topology)) => (
+        Ok((instance_id, topology, http_gateway_info)) => (
             StatusCode::CREATED,
             Json(rest::CreateInstanceResponse::Created {
                 instance_id,
                 topology,
+                http_gateway_info,
             }),
         ),
         Err(err) => (

@@ -1,8 +1,8 @@
 use candid::{CandidType, Encode, Principal};
 use ic_btc_adapter_test_utils::{
     bitcoin::{Address, Network as BtcNetwork},
-    bitcoind::{BitcoinD, Conf},
-    rpc_client::{RpcApi, RpcError},
+    bitcoind::{Conf, Daemon},
+    rpc_client::RpcError,
 };
 use ic_btc_interface::{Config, Network};
 use ic_config::execution_environment::BITCOIN_TESTNET_CANISTER_ID;
@@ -82,7 +82,7 @@ fn bitcoin_integration_test() {
         p2p: true,
         ..Conf::default()
     };
-    let bitcoind = BitcoinD::new(&bitcoind_path, BtcNetwork::Regtest, conf).unwrap();
+    let bitcoind = Daemon::new(&bitcoind_path, BtcNetwork::Regtest, conf).unwrap();
 
     let pic = PocketIcBuilder::new()
         .with_bitcoin_subnet()

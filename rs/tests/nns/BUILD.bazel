@@ -15,6 +15,9 @@ system_test_nns(
         "NNS_DAPP_WASM_PATH": "$(rootpath @nns_dapp_canister//file)",
         "SUBNET_RENTAL_WASM_PATH": "$(rootpath @subnet_rental_canister//file)",
     },
+    tags = [
+        "long_test",  # the P90 duration was over 6 minutes for the week starting on 2025-08-25.
+    ],
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS + [
         "//rs/ledger_suite/icrc1/ledger:ledger_canister",
         "@ii_dev_canister//file",

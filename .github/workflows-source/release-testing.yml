@@ -130,6 +130,7 @@ jobs:
       - name: Run qualification for version ${{ matrix.version }} from the tip of the branch
         uses: ./.github/actions/bazel
         with:
+          bazel-bep-artifact-name: ${{ github.job }}-${{ matrix.version }}-${{ github.action }}-bep
           run: |
             bazel test \
               --config=stamped \

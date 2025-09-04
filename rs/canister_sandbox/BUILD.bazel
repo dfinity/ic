@@ -67,10 +67,17 @@ rust_library(
     name = "backend_lib",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
+    crate_features = select({
+        "//bazel:fuzzing_code_enabled": ["fuzzing_code"],
+        "//conditions:default": [],
+    }),
     crate_name = "ic_canister_sandbox_backend_lib",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + select({
+        "//bazel:fuzzing_code_enabled": ["@crate_index//:object"],
+        "//conditions:default": [],
+    }),
 )
 
 rust_ic_test(
