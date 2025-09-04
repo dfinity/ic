@@ -117,7 +117,7 @@ type ICRC3DataCertificate = record {
   hash_tree : blob
 };
 
-service : {
+service : () -> {
     // Update endpoint to add a block to the ledger
     add_block : (ICRC3Value) -> (AddBlockResult);
 
