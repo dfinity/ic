@@ -8,7 +8,7 @@ use ic_certification::{
     hash_tree::{HashTreeNode, SubtreeLookupResult},
     Certificate, HashTree,
 };
-use icrc_ledger_types::icrc::generic_value::{Hash, ICRC3Value};
+use icrc_ledger_types::icrc::generic_value::Hash;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
@@ -190,14 +190,6 @@ impl Icrc1Agent {
         Ok(
             Decode!(&self.update("icrc1_transfer", &Encode!(&args)?).await?, Result<Nat, TransferError>)?,
         )
-    }
-
-    /// Adds the block to the ledger
-    pub async fn add_block(
-        &self,
-        block: &ICRC3Value,
-    ) -> Result<Result<Nat, String>, Icrc1AgentError> {
-        Ok(Decode!(&self.update("add_block", &Encode!(block)?).await?, Result<Nat, String>)?)
     }
 
     pub async fn approve(

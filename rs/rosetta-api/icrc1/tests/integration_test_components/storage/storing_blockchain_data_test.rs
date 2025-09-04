@@ -3,7 +3,7 @@ use crate::common::local_replica;
 use crate::common::local_replica::create_and_install_custom_icrc_ledger;
 use crate::common::local_replica::test_identity;
 use crate::common::local_replica::{create_and_install_icrc_ledger, get_custom_agent};
-use candid::Nat;
+use candid::{Decode, Encode, Nat};
 use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
 use ic_base_types::PrincipalId;
@@ -22,6 +22,7 @@ use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::tokens::Zero;
 use icrc_ledger_agent::CallMode;
 use icrc_ledger_agent::Icrc1Agent;
+use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use lazy_static::lazy_static;
@@ -265,6 +266,18 @@ const FEE_COLLECTOR: Account = Account {
     subaccount: None,
 };
 
+/// Adds the block to the ledger
+pub async fn add_block(agent: &Arc<Icrc1Agent>, block: &ICRC3Value) -> Result<Nat, String> {
+    let result = agent
+        .agent
+        .update(&agent.ledger_canister_id, "add_block")
+        .with_arg(Encode!(block).expect("failed to encode arg"))
+        .call_and_wait()
+        .await
+        .expect("failed to add block");
+    Decode!(&result, Result<Nat, String>).unwrap()
+}
+
 #[test]
 fn test_burn_fee() {
     // Create a tokio environment to conduct async calls
@@ -312,10 +325,10 @@ fn test_burn_fee() {
         let storage_client = Arc::new(StorageClient::new_in_memory().unwrap());
 
         // Add blocks to the ledger
-        let result0 = agent.add_block(&block0).await.unwrap().unwrap();
+        let result0 = add_block(&agent, &block0).await.unwrap();
         assert_eq!(result0, Nat::from(0u64));
 
-        let result1 = agent.add_block(&block1).await.unwrap().unwrap();
+        let result1 = add_block(&agent, &block1).await.unwrap();
         assert_eq!(result1, Nat::from(1u64));
 
         blocks_synchronizer::start_synching_blocks(
@@ -342,10 +355,10 @@ fn test_burn_fee() {
             .unwrap()
             .is_none());
 
-        let result2 = agent.add_block(&block2).await.unwrap().unwrap();
+        let result2 = add_block(&agent, &block2).await.unwrap();
         assert_eq!(result2, Nat::from(2u64));
 
-        let result3 = agent.add_block(&block3).await.unwrap().unwrap();
+        let result3 = add_block(&agent, &block3).await.unwrap();
         assert_eq!(result3, Nat::from(3u64));
 
         blocks_synchronizer::start_synching_blocks(
@@ -365,14 +378,14 @@ fn test_burn_fee() {
                 .get_account_balance(&TEST_ACCOUNT_1)
                 .unwrap()
                 .unwrap(),
-            Nat::from(850u64)
+            Nat::from(850u64) // 900 + mint 50 - burn 50 - burn fee 50
         );
         assert_eq!(
             storage_client
                 .get_account_balance(&FEE_COLLECTOR)
                 .unwrap()
                 .unwrap(),
-            Nat::from(100u64)
+            Nat::from(100u64) // mint fee 50 + burn fee 50
         );
     });
 }
