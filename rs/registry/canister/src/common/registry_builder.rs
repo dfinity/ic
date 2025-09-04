@@ -278,4 +278,8 @@ impl CompliantRegistry {
     {
         f(&self.registry)
     }
+
+    pub fn mutations(&self) -> Vec<RegistryMutation> {
+        self.mutations.clone()
+    }
 }
