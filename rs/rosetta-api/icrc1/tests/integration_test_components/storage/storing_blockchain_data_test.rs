@@ -246,3 +246,108 @@ fn test_self_transfer() {
         );
     });
 }
+
+use crate::common::local_replica::create_and_install_custom_icrc_ledger;
+use ic_icrc1_ledger::Tokens;
+use ic_icrc1_test_utils::icrc3::BlockBuilder;
+
+fn icrc3_test_ledger() -> Vec<u8> {
+    std::fs::read(std::env::var("ICRC3_TEST_LEDGER_CANISTER_WASM_PATH").unwrap()).unwrap()
+}
+
+const TEST_USER_1: PrincipalId = PrincipalId::new_user_test_id(1);
+const TEST_USER_2: PrincipalId = PrincipalId::new_user_test_id(2);
+const TEST_ACCOUNT_1: Account = Account {
+    owner: TEST_USER_1.0,
+    subaccount: None,
+};
+const TEST_ACCOUNT_2: Account = Account {
+    owner: TEST_USER_2.0,
+    subaccount: None,
+};
+
+#[test]
+fn test_burn_fee() {
+    // Create a tokio environment to conduct async calls
+    let rt = Runtime::new().unwrap();
+
+    let mut pocket_ic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_sns_subnet()
+        .build();
+
+    let init_args = InitArgsBuilder::for_tests().build();
+
+    let icrc_ledger_canister_id =
+        create_and_install_custom_icrc_ledger(&pocket_ic, init_args, icrc3_test_ledger(), None);
+    let endpoint = pocket_ic.make_live(None);
+    let port = endpoint.port().unwrap();
+
+    let block0 = BlockBuilder::new(0, 1000)
+        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000u64))
+        .build();
+    let block1 = BlockBuilder::new(1, 2000)
+        .with_parent_hash(block0.clone().hash().to_vec())
+        .transfer(TEST_ACCOUNT_1, TEST_ACCOUNT_2, Tokens::from(100_000u64))
+        .build();
+    let block2 = BlockBuilder::new(2, 3000)
+        .mint(TEST_ACCOUNT_1, Tokens::from(500_000u64))
+        .build();
+    let block3 = BlockBuilder::new(3, 4000)
+        .burn(TEST_ACCOUNT_1, Tokens::from(50_000u64))
+        .build();
+
+    rt.block_on(async {
+        let agent = Arc::new(Icrc1Agent {
+            agent: local_replica::get_testing_agent(port).await,
+            ledger_canister_id: icrc_ledger_canister_id,
+        });
+        let storage_client = Arc::new(StorageClient::new_in_memory().unwrap());
+
+        // Add blocks to the ledger
+        let result0 = agent.add_block(&block0).await.unwrap().unwrap();
+        assert_eq!(result0, Nat::from(0u64));
+
+        let result1 = agent.add_block(&block1).await.unwrap().unwrap();
+        assert_eq!(result1, Nat::from(1u64));
+
+        // let result2 = agent.add_block(&block2).await.unwrap().unwrap();
+        // assert_eq!(result2, Nat::from(2u64));
+
+        // let result3 = agent.add_block(&block3).await.unwrap().unwrap();
+        // assert_eq!(result3, Nat::from(3u64));
+
+        blocks_synchronizer::start_synching_blocks(
+            agent.clone(),
+            storage_client.clone(),
+            10,
+            Arc::new(AsyncMutex::new(vec![])),
+            RecurrencyMode::OneShot,
+            Box::new(|| {}),
+        )
+        .await
+        .unwrap();
+        storage_client.update_account_balances().unwrap();
+
+        // if let Some((tip_block_hash, tip_block_index)) = agent
+        //     .get_certified_chain_tip()
+        //     .await
+        //     .expect("failed to get cerfified tip")
+        // {
+        //     assert_eq!(tip_block_index, Nat::from(1u64));
+        //     assert_eq!(tip_block_hash, block1.hash());
+        // } else {
+        //     panic!("did not get the tip");
+        // }
+
+        assert_eq!(storage_client.get_highest_block_idx().unwrap(), Some(1));
+
+        assert_eq!(
+            storage_client
+                .get_account_balance(&TEST_ACCOUNT_1)
+                .unwrap()
+                .unwrap(),
+            Nat::from(900_000u64)
+        );
+    });
+}
