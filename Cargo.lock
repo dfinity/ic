@@ -10104,8 +10104,11 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "candid_parser",
+ "ciborium",
  "ic-base-types",
+ "ic-cbor",
  "ic-cdk",
+ "ic-certification 3.0.3",
  "ic-icrc1",
  "ic-icrc1-ledger",
  "ic-icrc1-test-utils",
@@ -10113,6 +10116,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "icrc-ledger-types",
+ "leb128",
  "num-traits",
  "serde_bytes",
 ]
