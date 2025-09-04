@@ -578,20 +578,7 @@ pub struct IcpFeatures {
     pub nns_governance: Option<EmptyConfig>,
     pub sns: Option<EmptyConfig>,
     pub ii: Option<EmptyConfig>,
-}
-
-impl IcpFeatures {
-    pub fn all_icp_features() -> Self {
-        Self {
-            registry: Some(EmptyConfig {}),
-            cycles_minting: Some(EmptyConfig {}),
-            icp_token: Some(EmptyConfig {}),
-            cycles_token: Some(EmptyConfig {}),
-            nns_governance: Some(EmptyConfig {}),
-            sns: Some(EmptyConfig {}),
-            ii: Some(EmptyConfig {}),
-        }
-    }
+    pub nns_ui: Option<EmptyConfig>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -768,6 +755,7 @@ impl ExtendedSubnetConfigSet {
             nns_governance,
             sns,
             ii,
+            nns_ui,
         } = icp_features;
         // NNS canisters
         for (flag, icp_feature_str) in [
@@ -776,6 +764,7 @@ impl ExtendedSubnetConfigSet {
             (icp_token, "icp_token"),
             (nns_governance, "nns_governance"),
             (sns, "sns"),
+            (nns_ui, "nns_ui"),
         ] {
             // using `EmptyConfig { }` explicitly
             // to force an update after adding a new field to `EmptyConfig`

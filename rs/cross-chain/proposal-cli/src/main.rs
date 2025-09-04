@@ -1,21 +1,23 @@
 mod candid;
 mod canister;
 mod dashboard;
+mod forum;
 mod git;
 mod ic_admin;
 mod proposal;
 
 use crate::canister::TargetCanister;
 use crate::dashboard::DashboardClient;
+use crate::forum::{CreateTopicRequest, DiscourseClient, ForumTopic};
 use crate::git::{GitCommitHash, GitRepository};
 use crate::ic_admin::ProposalFiles;
 use crate::proposal::{InstallProposalTemplate, ProposalTemplate, UpgradeProposalTemplate};
 use clap::{Parser, Subcommand};
 use ic_admin::IcAdminArgs;
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::{fs, io};
 
 /// A fictional versioning CLI
 #[derive(Debug, Parser)] // requires `derive` feature
@@ -74,6 +76,18 @@ enum Commands {
         /// Tool to submit proposal
         #[command(subcommand)]
         submit: Option<SubmitProposal>,
+    },
+    /// Create a forum post for a new proposal
+    #[command(arg_required_else_help = true)]
+    CreateForumPost {
+        /// ID of the proposals for which a forum topic should be created.
+        proposal_ids: Vec<u64>,
+        /// API key to submit the post
+        #[arg(long)]
+        api_key: String,
+        /// Username associated with the API key
+        #[arg(long)]
+        api_user: String,
     },
 }
 
@@ -183,6 +197,47 @@ async fn main() {
                     };
 
                     write_to_disk(output_dir, proposal, submit.clone(), &git_repo);
+                }
+            }
+        }
+        Commands::CreateForumPost {
+            proposal_ids,
+            api_key,
+            api_user,
+        } => {
+            let dashboard = DashboardClient::new();
+            let proposals = dashboard.retrieve_proposal_batch(&proposal_ids).await;
+            let topic = ForumTopic::for_upgrade_proposals(proposals).unwrap_or_else(|e| {
+                panic!("Failed to create forum topic for proposals {proposal_ids:?}: {e}")
+            });
+            let request = CreateTopicRequest::from(topic);
+            println!("The following topic will be created");
+            println!();
+            println!("{request:?}");
+            println!();
+            println!("Are you sure? [y/N]");
+
+            let mut confirm = String::new();
+            io::stdin()
+                .read_line(&mut confirm)
+                .expect("Failed to read line");
+
+            match confirm.trim() {
+                "y" => {
+                    const DFINITY_FORUM_URL: &str = "https://forum.dfinity.org";
+                    let forum_client =
+                        DiscourseClient::new(DFINITY_FORUM_URL.parse().unwrap(), api_user, api_key);
+                    let response = forum_client
+                        .create_topic(request)
+                        .await
+                        .expect("Failed to create topic");
+                    println!(
+                        "Forum post successfully created at {}{}",
+                        DFINITY_FORUM_URL, response.post_url
+                    );
+                }
+                _ => {
+                    println!("Aborting, no forum topic created!")
                 }
             }
         }

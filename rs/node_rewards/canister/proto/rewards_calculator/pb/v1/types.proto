@@ -72,18 +72,3 @@ message NodeProviderRewards {
   repeated DailyBaseRewardsType3 base_rewards_type3 = 3;
   repeated NodeResults nodes_results = 4;
 }
-
-message NodeProviderRewardsKey {
-  ic_base_types.pb.v1.PrincipalId principal_id = 1;
-  DayUtc end_day = 2;
-  DayUtc start_day = 3;
-}
-
-message SubnetsFailureRateValue {
-  ic_nervous_system.pb.v1.Decimal subnet_fr_percent = 1;
-}
-
-message SubnetsFailureRateKey {
-  DayUtc day = 1;
-  ic_base_types.pb.v1.PrincipalId subnet_id = 2;
-}

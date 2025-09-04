@@ -652,7 +652,7 @@ impl Governance {
         self.ledger
             .icrc2_approve(
                 to,
-                sns_amount_e8s.saturating_sub(self.transaction_fee_e8s_or_panic()),
+                sns_amount_e8s,
                 Some(expiry_time_nsec),
                 self.transaction_fee_e8s_or_panic(),
                 self.sns_treasury_subaccount(),
@@ -670,7 +670,7 @@ impl Governance {
         self.nns_ledger
             .icrc2_approve(
                 to,
-                icp_amount_e8s.saturating_sub(icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s()),
+                icp_amount_e8s,
                 Some(expiry_time_nsec),
                 icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s(),
                 self.icp_treasury_subaccount(),
