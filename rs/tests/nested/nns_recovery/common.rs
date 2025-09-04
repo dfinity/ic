@@ -32,13 +32,10 @@ use ic_system_test_driver::{
     retry_with_msg, retry_with_msg_async,
     util::block_on,
 };
-use nested::{
-    setup_ic_infrastructure,
-    util::{
-        assert_version_compatibility, get_host_boot_id, setup_nested_vm_group,
-        setup_vector_targets_for_vm, start_nested_vm_group,
-    },
-    NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT,
+use nested::util::{
+    assert_version_compatibility, get_host_boot_id, setup_ic_infrastructure, setup_nested_vm_group,
+    setup_vector_targets_for_vm, start_nested_vm_group, NODE_REGISTRATION_BACKOFF,
+    NODE_REGISTRATION_TIMEOUT,
 };
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};

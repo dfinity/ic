@@ -1,7 +1,10 @@
 use std::io::Read;
+use std::str::FromStr;
 
 use anyhow::{bail, Context, Result};
+use canister_test::PrincipalId;
 use ic_canister_client::Sender;
+use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
 use ic_protobuf::registry::{
@@ -12,11 +15,13 @@ use ic_registry_keys::{
     make_blessed_replica_versions_key, make_unassigned_nodes_config_record_key,
 };
 use ic_registry_nns_data_provider::registry::RegistryCanister;
+use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         bootstrap::{setup_nested_vms, start_nested_vms},
         farm::Farm,
-        ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME},
+        ic::{InternetComputer, Subnet},
+        ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm, IC_GATEWAY_VM_NAME},
         nested::{NestedNode, NestedVm, NestedVms},
         resource::{allocate_resources, get_resource_request_for_nested_nodes},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
@@ -33,6 +38,7 @@ use ic_system_test_driver::{
     retry_with_msg_async_quiet,
     util::runtime_from_url,
 };
+use ic_types::Height;
 use ic_types::{hostos_version::HostosVersion, NodeId, ReplicaVersion};
 use prost::Message;
 use regex::Regex;
@@ -42,6 +48,35 @@ use std::time::Duration;
 
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use slog::{info, Logger};
+
+pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+pub const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
+
+/// Setup the basic IC infrastructure (testnet, NNS, gateway)
+pub fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>) {
+    let principal =
+        PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
+            .unwrap();
+
+    // Setup "testnet"
+    let mut subnet = Subnet::fast_single_node(SubnetType::System);
+    if let Some(dkg_interval) = dkg_interval {
+        subnet = subnet.with_dkg_interval_length(Height::from(dkg_interval));
+    }
+    InternetComputer::new()
+        .add_subnet(subnet)
+        .with_api_boundary_nodes(1)
+        .with_node_provider(principal)
+        .with_node_operator(principal)
+        .setup_and_start(env)
+        .expect("failed to setup IC under test");
+
+    install_nns_and_check_progress(env.topology_snapshot());
+
+    IcGatewayVm::new(IC_GATEWAY_VM_NAME)
+        .start(env)
+        .expect("failed to setup ic-gateway");
+}
 
 /// Asserts that SetupOS and initial NNS GuestOS image versions match.
 /// Only checks if both functions return ReplicaVersion successfully.

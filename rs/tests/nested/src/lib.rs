@@ -1,22 +1,11 @@
-use std::str::FromStr;
 use std::time::Duration;
 
-use canister_test::PrincipalId;
-use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
-    driver::{
-        ic::{InternetComputer, Subnet},
-        ic_gateway_vm::{IcGatewayVm, IC_GATEWAY_VM_NAME},
-        nested::NestedVms,
-        test_env::TestEnv,
-        test_env_api::*,
-    },
+    driver::{nested::NestedVms, test_env::TestEnv, test_env_api::*},
     retry_with_msg,
     util::block_on,
 };
-use ic_types::Height;
 use reqwest::Client;
 use slog::info;
 
@@ -24,43 +13,15 @@ pub mod util;
 use util::{
     assert_version_compatibility, check_hostos_version, elect_guestos_version,
     elect_hostos_version, get_blessed_guestos_versions, get_host_boot_id,
-    get_unassigned_nodes_config, setup_nested_vm_group, setup_vector_targets_for_vm,
-    simple_setup_nested_vm_group, start_nested_vm_group, update_nodes_hostos_version,
-    update_unassigned_nodes, wait_for_expected_guest_version, wait_for_guest_version,
+    get_unassigned_nodes_config, setup_ic_infrastructure, setup_nested_vm_group,
+    setup_vector_targets_for_vm, simple_setup_nested_vm_group, start_nested_vm_group,
+    update_nodes_hostos_version, update_unassigned_nodes, wait_for_expected_guest_version,
+    wait_for_guest_version, NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT,
 };
 
 use anyhow::bail;
 
-pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
-pub const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
-
 const HOST_VM_NAME: &str = "host-1";
-
-/// Setup the basic IC infrastructure (testnet, NNS, gateway)
-pub fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>) {
-    let principal =
-        PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
-            .unwrap();
-
-    // Setup "testnet"
-    let mut subnet = Subnet::fast_single_node(SubnetType::System);
-    if let Some(dkg_interval) = dkg_interval {
-        subnet = subnet.with_dkg_interval_length(Height::from(dkg_interval));
-    }
-    InternetComputer::new()
-        .add_subnet(subnet)
-        .with_api_boundary_nodes(1)
-        .with_node_provider(principal)
-        .with_node_operator(principal)
-        .setup_and_start(env)
-        .expect("failed to setup IC under test");
-
-    install_nns_and_check_progress(env.topology_snapshot());
-
-    IcGatewayVm::new(IC_GATEWAY_VM_NAME)
-        .start(env)
-        .expect("failed to setup ic-gateway");
-}
 
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS
