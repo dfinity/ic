@@ -149,7 +149,7 @@ jobs:
       image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       options: >-
         -e NODE_NAME
-    # <<: *skip-merge-group
+    # <<: *skip-merge-group disabled because it sets "if: ${{ github.event_name != 'merge_group' }}" but we want to temporarily disable it entirely
     if: false
     timeout-minutes: 60
     permissions:
