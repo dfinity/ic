@@ -607,18 +607,27 @@ fn remote_recovery(cfg: &TestConfig, subnet_recovery: AppSubnetRecovery, logger:
 
 fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
     let session = &node.block_on_ssh_session().unwrap();
+    let node_ip = node.get_ip_addr();
 
-    // ic-recovery requires ic-admin so we copy ic-admin to the node at /tmp/ic-admin
-    // such that we can copy it to /opt/ic/bin/ic-admin below:
-    let local_ic_admin_path = &get_dependency_path("rs/tests/recovery/binaries/ic-admin");
-    let remote_ic_admin_path = Path::new("/tmp/ic-admin");
+    info!(logger, "Copying ic-admin to node {node_ip} ...");
+    // ic-recovery requires ic-admin so we copy ic-admin to the node via scp below.
+    // However /opt/ic/bin is on a read-only filesystem. To work around this the following prepares an overlay fs
+    // on /opt/ic/bin that keeps existing binaries visible (lowerdir) and lets us add ic-admin via a writable upperdir.
     scp_send_to(
         logger.clone(),
         session,
-        local_ic_admin_path,
-        remote_ic_admin_path,
+        &get_dependency_path("rs/tests/recovery/binaries/ic-admin"),
+        Path::new("/tmp/ic-admin"),
         0o755,
     );
+    node.block_on_bash_script_from_session(session, r#"set -euo pipefail
+sudo mkdir -p /tmp/opt-ic-bin-overlay/{upper,work}
+sudo mount -t overlay overlay \
+  -o lowerdir=/opt/ic/bin,upperdir=/tmp/opt-ic-bin-overlay/upper,workdir=/tmp/opt-ic-bin-overlay/work \
+  /opt/ic/bin
+sudo mv /tmp/ic-admin /opt/ic/bin/ic-admin
+"#
+    ).unwrap();
 
     let nns_url = subnet_recovery.recovery_args.nns_url;
     let subnet_id = subnet_recovery.params.subnet_id;
@@ -629,8 +638,8 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
         .unwrap_or_default();
     let pub_key = subnet_recovery.params.pub_key.unwrap();
     let pub_key = pub_key.trim();
-    let node_ip = node.get_ip_addr();
 
+<<<<<<< HEAD
 <<<<<<< HEAD
     let command = format!(
 <<<<<<< HEAD
@@ -643,6 +652,10 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
 =======
         r#"sudo mount --bind {remote_ic_admin_path:?} /opt/ic/bin/ic-admin && /opt/ic/bin/ic-recovery \
 >>>>>>> a6d13f140d (fix)
+=======
+    let command = format!(
+        r#"/opt/ic/bin/ic-recovery \
+>>>>>>> 153cfc9612 (refactor)
         --nns-url {nns_url} \
         --test --skip-prompts --use-local-binaries \
         app-subnet-recovery \
@@ -655,6 +668,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
         --skip DownloadCertifications \
         --skip MergeCertificationPools
     "#
+<<<<<<< HEAD
 =======
     let script = format!(
         r#"set -euo pipefail
@@ -687,10 +701,12 @@ sudo install -m 0755 {remote_ic_admin_path:?} /opt/ic/bin/ic-admin
   --skip MergeCertificationPools
 "#
 >>>>>>> 2dd8bf9e58 (use an overlay fs)
+=======
+>>>>>>> 153cfc9612 (refactor)
     );
 
-    info!(logger, "Executing local recovery command: \n{script}");
-    match node.block_on_bash_script_from_session(session, &script) {
+    info!(logger, "Executing local recovery command: \n{command}");
+    match node.block_on_bash_script_from_session(session, &command) {
         Ok(ret) => info!(logger, "Finished local recovery: \n{ret}"),
         Err(err) => panic!("Local recovery failed: \n{err}"),
     }
