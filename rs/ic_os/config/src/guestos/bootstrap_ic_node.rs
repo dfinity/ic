@@ -138,10 +138,16 @@ fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &P
         copy_directory_recursive(&ssh_keys_src, &ssh_keys_dst)?;
     }
 
+    let nns_key_src = Path::new("/opt/ic/share/nns_public_key.pem");
+    let nns_key_dst = state_root.join("data/nns_public_key.pem");
+    if nns_key_src.exists() {
+        println!("Copying /opt/ic/share/nns_public_key.pem to data/nns_public_key.pem");
+        copy_file_with_parent_dir(nns_key_src, &nns_key_dst)?;
+        fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444))?;
+    }
     #[cfg(feature = "dev")]
     {
         let nns_key_override_src = extracted_dir.join("nns_public_key_override.pem");
-        let nns_key_dst = state_root.join("data/nns_public_key.pem");
         if nns_key_override_src.exists() {
             println!(
                 "Overriding nns_public_key.pem with nns_public_key_override.pem from injected config"
