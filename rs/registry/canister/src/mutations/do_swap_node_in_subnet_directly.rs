@@ -106,7 +106,7 @@ pub struct SwapNodeInSubnetDirectlyPayload {
     pub old_node_id: Option<PrincipalId>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum SwapError {
     FeatureDisabled,
     MissingInput,
@@ -156,27 +156,10 @@ impl SwapNodeInSubnetDirectlyPayload {
 #[cfg(test)]
 mod tests {
 
-    use std::collections::BTreeMap;
-
-    use ic_nns_test_utils::registry::create_subnet_threshold_signing_pubkey_and_cup_mutations;
-    use ic_protobuf::registry::{
-        dc::v1::DataCenterRecord,
-        node_operator::v1::NodeOperatorRecord,
-        subnet::v1::{SubnetListRecord, SubnetType},
-    };
-    use ic_registry_keys::{
-        make_data_center_record_key, make_node_operator_record_key, make_subnet_list_record_key,
-        make_subnet_record_key,
-    };
-    use ic_registry_transport::upsert;
-    use ic_types::{NodeId, PrincipalId, SubnetId};
-    use prost::Message;
+    use ic_types::{PrincipalId, SubnetId};
 
     use crate::{
-        common::test_helpers::{
-            get_invariant_compliant_subnet_record, invariant_compliant_registry,
-            prepare_registry_with_nodes_and_node_operator_id,
-        },
+        common::registry_builder::CompliantRegistryBuilder,
         flags::{
             enable_swapping_for_callers, enable_swapping_on_subnets,
             temporarily_disable_node_swapping, temporarily_enable_node_swapping,
@@ -238,110 +221,6 @@ mod tests {
         SubnetId::new(PrincipalId::new_subnet_test_id(id))
     }
 
-    /// Generate
-    fn scenario_compliant_registry(
-        providers: &[(PrincipalId, &[(PrincipalId, &str, Option<SubnetId>, u64)])],
-    ) -> (
-        Registry,
-        BTreeMap<
-            PrincipalId,
-            BTreeMap<String, BTreeMap<PrincipalId, Vec<(NodeId, Option<SubnetId>)>>>,
-        >,
-    ) {
-        let mut registry = invariant_compliant_registry(1);
-        let mut mutations = vec![];
-        let mut mutation_id = 2;
-        let mut subnets = BTreeMap::new();
-        let mut network_data = BTreeMap::new();
-
-        for (provider, provider_layout) in providers {
-            for (operator, dc_id, maybe_subnet, num_nodes) in *provider_layout {
-                let (request, nodes) = prepare_registry_with_nodes_and_node_operator_id(
-                    mutation_id,
-                    *num_nodes,
-                    *operator,
-                );
-                mutation_id += 1;
-
-                mutations.extend(request.mutations);
-
-                mutations.push(upsert(
-                    make_data_center_record_key(dc_id),
-                    DataCenterRecord {
-                        id: dc_id.to_string(),
-                        region: "region".to_string(),
-                        owner: "owner".to_string(),
-                        gps: Some(ic_protobuf::registry::dc::v1::Gps {
-                            latitude: 0.0,
-                            longitude: 0.0,
-                        }),
-                    }
-                    .encode_to_vec(),
-                ));
-
-                mutations.push(upsert(
-                    make_node_operator_record_key(*operator),
-                    NodeOperatorRecord {
-                        node_operator_principal_id: operator.to_vec(),
-                        node_allowance: 10,
-                        node_provider_principal_id: provider.to_vec(),
-                        dc_id: dc_id.to_string(),
-                        ..Default::default()
-                    }
-                    .encode_to_vec(),
-                ));
-
-                network_data
-                    .entry(*provider)
-                    .or_insert(BTreeMap::new())
-                    .entry(dc_id.to_string())
-                    .or_insert(BTreeMap::new())
-                    .entry(*operator)
-                    .or_insert(vec![])
-                    .extend(nodes.keys().map(|n| (*n, maybe_subnet.clone())));
-
-                if let Some(subnet) = maybe_subnet {
-                    subnets
-                        .entry(subnet)
-                        .or_insert(BTreeMap::new())
-                        .extend(nodes);
-                }
-            }
-        }
-
-        for (subnet, nodes) in &subnets {
-            let mut subnet_record =
-                get_invariant_compliant_subnet_record(nodes.keys().cloned().collect());
-            // For simplicity mark every subnet as system subnet
-            subnet_record.subnet_type = SubnetType::System.into();
-
-            mutations.push(upsert(
-                make_subnet_record_key(**subnet),
-                subnet_record.encode_to_vec(),
-            ));
-
-            let threshold_pk_and_cup =
-                create_subnet_threshold_signing_pubkey_and_cup_mutations(**subnet, nodes);
-
-            mutations.extend(threshold_pk_and_cup);
-        }
-
-        mutations.push(upsert(
-            make_subnet_list_record_key(),
-            SubnetListRecord {
-                subnets: subnets.keys().map(|k| k.get().to_vec()).collect(),
-            }
-            .encode_to_vec(),
-        ));
-
-        // Sort and dedup by key if we have duplicated dcs or nos
-        mutations.sort_by_key(|m| m.key.clone());
-        mutations.dedup_by_key(|m| m.key.clone());
-
-        registry.maybe_apply_mutation_internal(mutations);
-        (registry, network_data)
-    }
-
     #[test]
     fn feature_flag_check_works() {
         let mut registry = Registry::new();
@@ -393,29 +272,39 @@ mod tests {
     fn feature_enabled_for_caller() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
         let caller = PrincipalId::new_user_test_id(1);
-        let mut registry = invariant_compliant_registry(1);
-        let payload = valid_payload();
+        enable_swapping_on_subnets(vec![subnet(1)]);
+
+        let mut compliant_registry = CompliantRegistryBuilder::default()
+            .with_operator(operator(1), "dc", provider(1))
+            .with_node(operator(1), "node-1", None)
+            .with_node(operator(1), "node-2", Some(subnet(1)))
+            .build();
+
+        let payload = SwapNodeInSubnetDirectlyPayload {
+            new_node_id: Some(compliant_registry.node_id("node-1").get()),
+            old_node_id: Some(compliant_registry.node_id("node-2").get()),
+        };
 
         // First make a call and expect to fail because
         // the feature is not enabled for this caller.
-        assert!(registry
-            .swap_nodes_inner(payload.clone(), caller)
-            .is_err_and(|err| err
-                == SwapError::FeatureDisabledForCaller {
-                    caller: caller.clone()
-                }));
+        let response =
+            compliant_registry.run_mut(|reg| reg.swap_nodes_inner(payload.clone(), caller));
+        let expected_err = SwapError::FeatureDisabledForCaller {
+            caller: caller.clone(),
+        };
+        assert!(
+            response.as_ref().is_err_and(|err| err == &expected_err),
+            "Expected error {expected_err:?} but got {response:?}"
+        );
 
         // Enable the feature for the caller
         enable_swapping_for_callers(vec![caller.clone()]);
+        let response =
+            compliant_registry.run_mut(|reg| reg.swap_nodes_inner(payload.clone(), caller));
 
         // Expect the first next error which is the missing
         // subnet in the registry.
-        assert!(registry
-            .swap_nodes_inner(payload.clone(), caller)
-            .is_err_and(|err| err
-                == SwapError::SubnetNotFoundForNode {
-                    old_node_id: payload.old_node_id.unwrap()
-                }))
+        assert!(response.is_ok(), "Expected OK but got {response:?}");
     }
 
     #[test]
@@ -423,39 +312,36 @@ mod tests {
         let _temp_enable_feat = temporarily_enable_node_swapping();
         let caller = PrincipalId::new_user_test_id(1);
         enable_swapping_for_callers(vec![caller.clone()]);
-        let mut registry = invariant_compliant_registry(1);
+        let mut compliant_registry = CompliantRegistryBuilder::default()
+            .with_operator(caller, "dc", caller)
+            .with_node(caller, "node-1", Some(subnet(1)))
+            .with_node(caller, "node-2", None)
+            .build();
 
-        let payload = valid_payload();
+        let payload = SwapNodeInSubnetDirectlyPayload {
+            new_node_id: Some(compliant_registry.node_id("node-2").get()),
+            old_node_id: Some(compliant_registry.node_id("node-1").get()),
+        };
 
-        let subnet_record =
-            get_invariant_compliant_subnet_record(vec![NodeId::new(payload.old_node_id.unwrap())]);
-        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-
-        registry.apply_mutations_for_test(vec![
-            upsert(
-                make_subnet_record_key(subnet_id),
-                subnet_record.encode_to_vec(),
-            ),
-            upsert(
-                make_subnet_list_record_key(),
-                SubnetListRecord {
-                    subnets: vec![subnet_id.get().to_vec()],
-                }
-                .encode_to_vec(),
-            ),
-        ]);
+        let response =
+            compliant_registry.run_mut(|reg| reg.swap_nodes_inner(payload.clone(), caller));
+        let expected_err = SwapError::FeatureDisabledOnSubnet {
+            subnet_id: subnet(1),
+        };
 
         // First call when the feature isn't enabled on the subnet.
-        assert!(registry
-            .swap_nodes_inner(payload.clone(), caller.clone())
-            .is_err_and(|err| err
-                == SwapError::FeatureDisabledOnSubnet {
-                    subnet_id: subnet_id.clone()
-                }));
+        assert!(
+            response.as_ref().is_err_and(|err| err == &expected_err),
+            "Expected to get error {expected_err:?} but got {response:?}"
+        );
 
         // Now enable the feature and call again.
-        enable_swapping_on_subnets(vec![subnet_id.clone()]);
-        assert!(registry.swap_nodes_inner(payload, caller).is_ok());
+        enable_swapping_on_subnets(vec![subnet(1)]);
+        let response = compliant_registry.run_mut(|reg| reg.swap_nodes_inner(payload, caller));
+        assert!(
+            response.is_ok(),
+            "Expected the result to be OK but got {response:?}"
+        );
     }
 
     #[test]
@@ -464,25 +350,19 @@ mod tests {
         enable_swapping_for_callers(vec![operator(1)]);
         enable_swapping_on_subnets(vec![subnet(1)]);
 
-        let (mut registry, network_data) = scenario_compliant_registry(&[(
-            provider(1),
-            &[
-                (operator(1), "dc", None, 1),
-                (operator(1), "dc", Some(subnet(1)), 1),
-            ],
-        )]);
+        let mut compliant_registry = CompliantRegistryBuilder::default()
+            .with_operator(operator(1), "dc", provider(1))
+            .with_node(operator(1), "node-1", None)
+            .with_node(operator(1), "node-2", Some(subnet(1)))
+            .build();
 
-        let nodes = &network_data[&provider(1)]["dc"][&operator(1)];
         let payload = SwapNodeInSubnetDirectlyPayload {
-            old_node_id: nodes
-                .iter()
-                .find_map(|(id, subnet)| subnet.map(|_| id.get())),
-            new_node_id: nodes
-                .iter()
-                .find_map(|(id, subnet)| subnet.is_none().then(|| id.get())),
+            old_node_id: Some(compliant_registry.node_id("node-2").get()),
+            new_node_id: Some(compliant_registry.node_id("node-1").get()),
         };
 
-        let response = registry.swap_nodes_inner(payload, operator(1));
+        let response =
+            compliant_registry.run_mut(|registry| registry.swap_nodes_inner(payload, operator(1)));
         assert!(
             response.is_ok(),
             "Expected OK response but got: {response:?}"
