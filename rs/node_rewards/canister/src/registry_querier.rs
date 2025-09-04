@@ -152,7 +152,7 @@ impl RegistryQuerier {
     /// - the most recent `NodeRecord` before `B` inclusive,
     /// - the corresponding `RegistryVersion`,
     /// - the sorted list of `DayUTC`s the node is in the registry.
-    fn nodes_in_version<S: RegistryDataStableMemory>(
+    fn nodes_in_version(
         &self,
         registry_version: RegistryVersion,
     ) -> Result<BTreeMap<NodeId, NodeRecord>, RegistryClientError> {
@@ -182,7 +182,7 @@ impl RegistryQuerier {
     ) -> Result<Option<NodeOperatorData>, RegistryClientError> {
         let node_operator_record_key = make_node_operator_record_key(node_operator);
         let Some(node_operator_record) = get_decoded_value::<NodeOperatorRecord>(
-            &self.registry_client,
+            &*self.registry_client,
             node_operator_record_key.as_str(),
             version,
         )
@@ -195,7 +195,7 @@ impl RegistryQuerier {
 
         let data_center_key = make_data_center_record_key(node_operator_record.dc_id.as_str());
         let Some(data_center_record) = get_decoded_value::<DataCenterRecord>(
-            &self.registry_client,
+            &*self.registry_client,
             data_center_key.as_str(),
             version,
         )
