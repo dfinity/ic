@@ -493,7 +493,7 @@ fn serve_metrics_service_discovery() -> HttpResponse {
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),
-        "/metrics/sd" => serve_metrics_service_discovery(),
+        "/sns_canisters" => serve_metrics_service_discovery(),
         _ => HttpResponseBuilder::not_found().build(),
     }
 }
