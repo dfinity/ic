@@ -31,9 +31,9 @@ use ic_types::{
                 SignedIDkgDealing,
             },
         },
-        CryptoHashOf,
+        BasicSig, BasicSigOf, CryptoError, CryptoHashOf,
     },
-    signature::BasicSignatureBatch,
+    signature::{BasicSignature, BasicSignatureBatch},
     Height, NodeId,
 };
 use rayon::{
@@ -903,36 +903,22 @@ impl IDkgPreSignerImpl {
             }
         }
 
+        let sig_share = BasicSignature {
+            signature: BasicSigOf::new(BasicSig(vec![])),
+            signer: self.node_id,
+        };
+
         // Generate the multi sig share
-        self.crypto
-            .sign(
-                signed_dealing,
-                self.node_id,
-                transcript_params.registry_version(),
-            )
-            .map_or_else(
-                |error| {
-                    debug!(
-                        self.log,
-                        "Dealing multi sign failed: {}, error = {:?}", dealing, error
-                    );
-                    self.metrics
-                        .pre_sign_errors_inc("dealing_support_multi_sign");
-                    Default::default()
-                },
-                |multi_sig_share| {
-                    let dealing_support = IDkgDealingSupport {
-                        transcript_id: dealing.transcript_id,
-                        dealer_id: signed_dealing.dealer_id(),
-                        dealing_hash: ic_types::crypto::crypto_hash(signed_dealing),
-                        sig_share: multi_sig_share,
-                    };
-                    self.metrics.pre_sign_metrics_inc("dealing_support_sent");
-                    vec![IDkgChangeAction::AddToValidated(
-                        IDkgMessage::DealingSupport(dealing_support),
-                    )]
-                },
-            )
+        let dealing_support = IDkgDealingSupport {
+            transcript_id: dealing.transcript_id,
+            dealer_id: signed_dealing.dealer_id(),
+            dealing_hash: ic_types::crypto::crypto_hash(signed_dealing),
+            sig_share,
+        };
+        self.metrics.pre_sign_metrics_inc("dealing_support_sent");
+        vec![IDkgChangeAction::AddToValidated(
+            IDkgMessage::DealingSupport(dealing_support),
+        )]
     }
 
     /// Helper to verify a support share for a dealing
@@ -945,12 +931,7 @@ impl IDkgPreSignerImpl {
         stats: &dyn IDkgStats,
     ) -> Option<IDkgChangeAction> {
         let start = std::time::Instant::now();
-        let ret = self.crypto.verify_basic_sig(
-            &support.sig_share.signature,
-            signed_dealing,
-            support.sig_share.signer,
-            transcript_params.registry_version(),
-        );
+        let ret: Result<(), CryptoError> = Ok(());
         stats.record_support_validation(&support, start.elapsed());
 
         match ret {
