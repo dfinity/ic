@@ -291,6 +291,18 @@ fn test_burn_fee() {
         .with_fee(Tokens::from(50u64))
         .burn(TEST_ACCOUNT_1, Tokens::from(50u64))
         .build();
+    let block2 = BlockBuilder::new(2, 3000)
+        .with_parent_hash(block1.clone().hash().to_vec())
+        .with_fee(Tokens::from(50u64))
+        .with_fee_collector(FEE_COLLECTOR)
+        .mint(TEST_ACCOUNT_1, Tokens::from(50u64))
+        .build();
+    let block3 = BlockBuilder::new(3, 4000)
+        .with_parent_hash(block2.clone().hash().to_vec())
+        .with_fee_collector_block(2)
+        .with_fee(Tokens::from(50u64))
+        .burn(TEST_ACCOUNT_1, Tokens::from(50u64))
+        .build();
 
     rt.block_on(async {
         let agent = Arc::new(Icrc1Agent {
@@ -305,12 +317,6 @@ fn test_burn_fee() {
 
         let result1 = agent.add_block(&block1).await.unwrap().unwrap();
         assert_eq!(result1, Nat::from(1u64));
-
-        // let result2 = agent.add_block(&block2).await.unwrap().unwrap();
-        // assert_eq!(result2, Nat::from(2u64));
-
-        // let result3 = agent.add_block(&block3).await.unwrap().unwrap();
-        // assert_eq!(result3, Nat::from(3u64));
 
         blocks_synchronizer::start_synching_blocks(
             agent.clone(),
@@ -335,5 +341,38 @@ fn test_burn_fee() {
             .get_account_balance(&FEE_COLLECTOR)
             .unwrap()
             .is_none());
+
+        let result2 = agent.add_block(&block2).await.unwrap().unwrap();
+        assert_eq!(result2, Nat::from(2u64));
+
+        let result3 = agent.add_block(&block3).await.unwrap().unwrap();
+        assert_eq!(result3, Nat::from(3u64));
+
+        blocks_synchronizer::start_synching_blocks(
+            agent.clone(),
+            storage_client.clone(),
+            10,
+            Arc::new(AsyncMutex::new(vec![])),
+            RecurrencyMode::OneShot,
+            Box::new(|| {}),
+        )
+        .await
+        .unwrap();
+        storage_client.update_account_balances().unwrap();
+
+        assert_eq!(
+            storage_client
+                .get_account_balance(&TEST_ACCOUNT_1)
+                .unwrap()
+                .unwrap(),
+            Nat::from(850u64)
+        );
+        assert_eq!(
+            storage_client
+                .get_account_balance(&FEE_COLLECTOR)
+                .unwrap()
+                .unwrap(),
+            Nat::from(100u64)
+        );
     });
 }

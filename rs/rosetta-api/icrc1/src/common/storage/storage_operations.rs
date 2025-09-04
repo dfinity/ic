@@ -280,6 +280,17 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                         connection,
                         &mut account_balances_cache,
                     )?;
+                    if let Some(collector) =
+                        get_fee_collector_from_block(&rosetta_block, connection)?
+                    {
+                        credit(
+                            collector,
+                            fee,
+                            rosetta_block.index,
+                            connection,
+                            &mut account_balances_cache,
+                        )?;
+                    }
                 }
                 crate::common::storage::types::IcrcOperation::Mint { to, amount } => {
                     credit(
@@ -289,6 +300,20 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                         connection,
                         &mut account_balances_cache,
                     )?;
+                    let fee = rosetta_block
+                        .get_fee_paid()?
+                        .unwrap_or(Nat(BigUint::zero()));
+                    if let Some(collector) =
+                        get_fee_collector_from_block(&rosetta_block, connection)?
+                    {
+                        credit(
+                            collector,
+                            fee,
+                            rosetta_block.index,
+                            connection,
+                            &mut account_balances_cache,
+                        )?;
+                    }
                 }
                 crate::common::storage::types::IcrcOperation::Approve { from, .. } => {
                     let fee = rosetta_block
