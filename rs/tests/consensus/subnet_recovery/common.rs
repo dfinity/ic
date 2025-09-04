@@ -607,9 +607,12 @@ fn remote_recovery(cfg: &TestConfig, subnet_recovery: AppSubnetRecovery, logger:
 
 fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
     let session = &node.block_on_ssh_session().unwrap();
+    let node_id = node.node_id;
     let node_ip = node.get_ip_addr();
-
-    info!(logger, "Copying ic-admin to node {node_ip} ...");
+    info!(
+        logger,
+        "Copying ic-admin to node {node_id} with IP {node_ip} ..."
+    );
     // ic-recovery requires ic-admin so we copy ic-admin to the node via scp below.
     // However /opt/ic/bin is on a read-only filesystem. To work around this the following prepares an overlay fs
     // on /opt/ic/bin that keeps existing binaries visible (lowerdir) and lets us add ic-admin via a writable upperdir.
@@ -617,15 +620,15 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
         logger.clone(),
         session,
         &get_dependency_path("rs/tests/recovery/binaries/ic-admin"),
-        Path::new("/tmp/ic-admin"),
+        Path::new("/var/lib/admin/ic-admin"),
         0o755,
     );
     node.block_on_bash_script_from_session(session, r#"set -euo pipefail
-sudo mkdir -p /tmp/opt-ic-bin-overlay/{upper,work}
+sudo mkdir -p /var/lib/admin/opt-ic-bin-overlay/{upper,work}
 sudo mount -t overlay overlay \
-  -o lowerdir=/opt/ic/bin,upperdir=/tmp/opt-ic-bin-overlay/upper,workdir=/tmp/opt-ic-bin-overlay/work \
+  -o lowerdir=/opt/ic/bin,upperdir=/var/lib/admin/opt-ic-bin-overlay/upper,workdir=/var/lib/admin/opt-ic-bin-overlay/work,metacopy=off \
   /opt/ic/bin
-sudo mv /tmp/ic-admin /opt/ic/bin/ic-admin
+sudo mv /var/lib/admin/ic-admin /opt/ic/bin/ic-admin
 "#
     ).unwrap();
 
