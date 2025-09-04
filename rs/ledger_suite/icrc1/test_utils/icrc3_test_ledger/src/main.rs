@@ -1,5 +1,5 @@
 use candid::{candid_method, Nat};
-use ic_cdk::{query, update};
+use ic_cdk::{init, query, update};
 use ic_certification::{
     hash_tree::{empty, fork, label, leaf, Label},
     HashTree,
@@ -168,6 +168,11 @@ pub fn get_blocks(request: GetBlocksRequest) -> GetBlocksResponse {
             }
         })
     })
+}
+
+#[init]
+fn init() {
+    ic_cdk::api::certified_data_set(construct_hash_tree().digest());
 }
 
 pub fn get_block_count() -> u64 {
