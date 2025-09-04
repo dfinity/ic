@@ -118,23 +118,6 @@ impl Default for Config<bitcoin::dogecoin::Network> {
     }
 }
 
-impl Default for Config<AdapterNetwork> {
-    fn default() -> Self {
-        let network = bitcoin::dogecoin::Network::Dogecoin;
-        Self {
-            network: network.into(),
-            dns_seeds: Default::default(),
-            socks_proxy: Default::default(),
-            nodes: vec![],
-            idle_seconds: default_idle_seconds(),
-            ipv6_only: false,
-            logger: LoggerConfig::default(),
-            incoming_source: Default::default(),
-            address_limits: address_limits(network.into()),
-        }
-    }
-}
-
 #[cfg(test)]
 pub mod test {
 
