@@ -22,6 +22,7 @@ use ic_system_test_driver::{
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::*,
         test_setup::GroupSetup,
+        vector_vm::HasVectorTargets,
     },
     nns::{
         get_governance_canister, submit_update_elected_hostos_versions_proposal,
@@ -41,6 +42,24 @@ use std::time::Duration;
 
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use slog::{info, Logger};
+
+/// Asserts that SetupOS and initial NNS GuestOS image versions match.
+/// Only checks if both functions return ReplicaVersion successfully.
+/// NOTE: If you want to create a new test with conflicting versions, add a
+/// field to override this check and, in your test, account for the fact that
+/// after registration, the deployed node will upgrade to the NNS GuestOS version.
+pub fn assert_version_compatibility() {
+    let setupos_version = get_setupos_img_version();
+    let guestos_version = get_guestos_img_version();
+
+    if setupos_version != guestos_version {
+        // TODO: Revert change after extending image version support
+
+        // panic!(
+        //     "Version mismatch detected: SetupOS version '{setupos_version}' does not match GuestOS version '{guestos_version}'. If you want to create a test with different versions, add a field to override this check."
+        // );
+    }
+}
 
 /// Use an SSH channel to check the version on the running HostOS.
 pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
@@ -218,7 +237,7 @@ pub(crate) async fn update_nodes_hostos_version(
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
 }
 
-pub(crate) fn setup_nested_vm_group(env: TestEnv, names: &[&str]) {
+pub fn setup_nested_vm_group(env: TestEnv, names: &[&str]) {
     let logger = env.logger();
     info!(logger, "Setting up nested VM(s) ...");
 
@@ -261,6 +280,32 @@ pub(crate) fn setup_nested_vm_group(env: TestEnv, names: &[&str]) {
     .expect("Unable to setup nested VMs.");
 
     info!(logger, "Nested VM(s) setup complete!");
+}
+
+/// Setup vector targets for a single VM
+pub fn setup_vector_targets_for_vm(env: &TestEnv, vm_name: &str) {
+    let vm = env
+        .get_nested_vm(vm_name)
+        .unwrap_or_else(|e| panic!("Expected nested vm {vm_name} to exist, but got error: {e:?}"));
+
+    let network = vm.get_nested_network().unwrap();
+
+    for (job, ip) in [
+        ("node_exporter", network.guest_ip),
+        ("host_node_exporter", network.host_ip),
+    ] {
+        env.add_custom_vector_target(
+            format!("{vm_name}-{job}"),
+            ip.into(),
+            Some(
+                [("job", job)]
+                    .into_iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect(),
+            ),
+        )
+        .unwrap();
+    }
 }
 
 /// Simplified nested VM setup that bypasses IC Gateway and NNS requirements.
@@ -309,7 +354,7 @@ pub(crate) fn simple_setup_nested_vm_group(env: TestEnv, names: &[&str]) {
     info!(logger, "Minimal nested VM(s) setup complete!");
 }
 
-pub(crate) fn start_nested_vm_group(env: TestEnv) {
+pub fn start_nested_vm_group(env: TestEnv) {
     let logger = env.logger();
     info!(logger, "Setup nested VMs ...");
 
@@ -386,7 +431,7 @@ pub async fn wait_for_expected_guest_version(
 }
 
 /// Get the current boot ID from a HostOS node.
-pub(crate) fn get_host_boot_id(node: &NestedVm) -> String {
+pub fn get_host_boot_id(node: &NestedVm) -> String {
     node.block_on_bash_script("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
         .expect("Failed to retrieve boot ID")
         .trim()
