@@ -93,9 +93,10 @@ impl SshHelper {
 
 /// Return the configured SSH command options as an environment argument usable by `rsync`.
 pub fn get_rsync_ssh_arg(key_file: Option<&PathBuf>) -> String {
-    let mut arg = format!("ssh {}", SSH_ARGS.join(" "));
+    let mut arg = Command::new("ssh");
+    arg.args(SSH_ARGS);
     if let Some(file) = key_file {
-        arg.push_str(&format!(" -i {}", file.display()));
+        arg.arg("-i").arg(file);
     }
-    arg
+    format!("{:?}", arg)
 }
