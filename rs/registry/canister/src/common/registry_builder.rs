@@ -41,10 +41,22 @@ pub struct TestNodeOperator {
 #[derive(Default)]
 pub struct CompliantRegistryBuilder {
     nodes: BTreeMap<String, (PrincipalId, Option<SubnetId>)>,
-    subnets: BTreeSet<SubnetId>,
-    operators: Vec<TestNodeOperator>,
-    providers: BTreeSet<PrincipalId>,
+    subnets: BTreeMap<String, SubnetId>,
+    operators: BTreeMap<String, TestNodeOperator>,
+    providers: BTreeMap<String, PrincipalId>,
     data_centers: BTreeSet<String>,
+}
+
+fn operator(num: u64) -> PrincipalId {
+    PrincipalId::new_user_test_id(num)
+}
+
+fn provider(num: u64) -> PrincipalId {
+    PrincipalId::new_user_test_id(9999 - num)
+}
+
+fn subnet(num: u64) -> SubnetId {
+    SubnetId::new(PrincipalId::new_subnet_test_id(num))
 }
 
 impl CompliantRegistryBuilder {
@@ -53,25 +65,27 @@ impl CompliantRegistryBuilder {
     #[track_caller]
     pub fn with_operator(
         mut self,
-        operator: PrincipalId,
+        operator_utility_id: &str,
         dc_id: &str,
-        provider: PrincipalId,
+        provider_utility_id: &str,
     ) -> Self {
         self.data_centers.insert(dc_id.to_string());
-        self.providers.insert(provider);
-        if let Some(mentioned_operator) = self
-            .operators
-            .iter()
-            .find(|op| op.id == operator && (op.provider != provider || op.dc != dc_id))
-        {
-            panic!("Operator with id {operator} already exists in the builder with slightly different data. Already present {mentioned_operator:?}");
+        let provider_id = provider(self.providers.len() as u64 + 1);
+        self.providers
+            .insert(provider_utility_id.to_string(), provider_id);
+
+        if let Some(existing_op) = self.operators.get(operator_utility_id) {
+            panic!("Operator with utility key {operator_utility_id} is already specified with the following values {existing_op:?}");
         }
 
-        self.operators.push(TestNodeOperator {
-            id: operator,
-            provider,
-            dc: dc_id.to_string(),
-        });
+        self.operators.insert(
+            operator_utility_id.to_string(),
+            TestNodeOperator {
+                id: operator(self.operators.len() as u64 + 1),
+                provider: provider_id,
+                dc: dc_id.to_string(),
+            },
+        );
 
         self
     }
@@ -79,25 +93,31 @@ impl CompliantRegistryBuilder {
     #[track_caller]
     pub fn with_node(
         mut self,
-        operator: PrincipalId,
-        node_utility_key: &str,
-        subnet_id: Option<SubnetId>,
+        operator_utility_id: &str,
+        node_utility_id: &str,
+        subnet_utility_id: Option<&str>,
     ) -> Self {
-        if let Some((op, maybe_subnet)) = self.nodes.get(node_utility_key) {
+        let subnet_id = subnet_utility_id.map(|key| {
+            let id = subnet(self.subnets.len() as u64 + 1);
+            self.subnets.insert(key.to_string(), id);
+            id
+        });
+
+        let operator = match self.operators.get(operator_utility_id) {
+            Some(op) => op.id,
+            None => panic!(
+                "Node operator {operator_utility_id} isn't yet known to the registry builder."
+            ),
+        };
+
+        if let Some((op, maybe_subnet)) = self.nodes.get(node_utility_id) {
             if *op != operator || maybe_subnet != &subnet_id {
-                panic!("Node with utility key {node_utility_key} already exists in the builder with slightly different data. Already present value {:?}", (node_utility_key, op, maybe_subnet))
+                panic!("Node with utility key {node_utility_id} already exists in the builder with slightly different data. Already present value {:?}", (node_utility_id, op, maybe_subnet))
             }
         }
 
-        if !self.operators.iter().any(|op| op.id == operator) {
-            panic!("Node operator {operator} isn't yet known to the registry builder.")
-        }
-        if let Some(s) = subnet_id.as_ref() {
-            self.subnets.insert(s.clone());
-        }
-
         self.nodes
-            .insert(node_utility_key.to_string(), (operator, subnet_id));
+            .insert(node_utility_id.to_string(), (operator, subnet_id));
 
         self
     }
@@ -143,7 +163,7 @@ impl CompliantRegistryBuilder {
             ));
         }
 
-        for operator in &self.operators {
+        for (_, operator) in &self.operators {
             mutations.push(upsert(
                 make_node_operator_record_key(operator.id),
                 NodeOperatorRecord {
@@ -157,7 +177,7 @@ impl CompliantRegistryBuilder {
             ));
         }
 
-        for subnet in &self.subnets {
+        for (_, subnet) in &self.subnets {
             let nodes_for_subnet: Vec<_> = nodes_with_keys
                 .values()
                 .filter(|test_node| test_node.subnet.is_some_and(|s| s == *subnet))
@@ -189,7 +209,7 @@ impl CompliantRegistryBuilder {
         mutations.push(upsert(
             make_subnet_list_record_key(),
             SubnetListRecord {
-                subnets: self.subnets.iter().map(|s| s.get().to_vec()).collect(),
+                subnets: self.subnets.iter().map(|(_, s)| s.get().to_vec()).collect(),
             }
             .encode_to_vec(),
         ));
@@ -220,9 +240,9 @@ impl CompliantRegistryBuilder {
 #[allow(dead_code)]
 pub struct CompliantRegistry {
     nodes: BTreeMap<String, TestNode>,
-    subnets: BTreeSet<SubnetId>,
-    operators: Vec<TestNodeOperator>,
-    providers: BTreeSet<PrincipalId>,
+    subnets: BTreeMap<String, SubnetId>,
+    operators: BTreeMap<String, TestNodeOperator>,
+    providers: BTreeMap<String, PrincipalId>,
     data_centers: BTreeSet<String>,
     mutations: Vec<RegistryMutation>,
 
@@ -232,6 +252,17 @@ pub struct CompliantRegistry {
 impl CompliantRegistry {
     pub fn node_id(&self, node_utility_key: &str) -> NodeId {
         self.nodes.get(node_utility_key).map(|tn| tn.id).unwrap()
+    }
+
+    pub fn operator_id(&self, operator_utility_key: &str) -> PrincipalId {
+        self.operators
+            .get(operator_utility_key)
+            .map(|op| op.id)
+            .unwrap()
+    }
+
+    pub fn subnet_id(&self, subnet_utility_key: &str) -> SubnetId {
+        *self.subnets.get(subnet_utility_key).unwrap()
     }
 
     pub fn run_mut<F, R>(&mut self, f: F) -> R
