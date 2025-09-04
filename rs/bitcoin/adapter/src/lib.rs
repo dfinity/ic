@@ -108,13 +108,13 @@ trait ProcessEvent {
 /// This trait provides an interface for processing messages coming from
 /// bitcoin peers.
 /// [StreamEvent](crate::stream::StreamEvent).
-trait ProcessNetworkMessage<Header, Block> {
+trait ProcessNetworkMessage<Network: BlockchainNetwork> {
     /// This method is used to route an event in a component's internals and
     /// perform state updates.
     fn process_bitcoin_network_message(
         &mut self,
         addr: SocketAddr,
-        message: &NetworkMessage<Header, Block>,
+        message: &NetworkMessage<Network::Header, Network::Block>,
     ) -> Result<(), ProcessNetworkMessageError>;
 }
 

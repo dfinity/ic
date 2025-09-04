@@ -673,9 +673,7 @@ impl<Network: BlockchainNetwork> ProcessEvent for ConnectionManager<Network> {
     }
 }
 
-impl<Network: BlockchainNetwork> ProcessNetworkMessage<Network::Header, Network::Block>
-    for ConnectionManager<Network>
-{
+impl<Network: BlockchainNetwork> ProcessNetworkMessage<Network> for ConnectionManager<Network> {
     fn process_bitcoin_network_message(
         &mut self,
         address: SocketAddr,
