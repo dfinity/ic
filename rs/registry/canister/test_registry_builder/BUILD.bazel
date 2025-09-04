@@ -1,17 +1,17 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//rs/registry/canister:__pkg__"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "@crate_index//:prost",
-    "//rs/registry/transport",
-    "//rs/nns/test_utils",
-    "//rs/types/types",
-    "//rs/registry/keys",
-    "//rs/protobuf",
-    "//rs/types/base_types",
     "//rs/crypto/node_key_validation",
+    "//rs/nns/test_utils",
+    "//rs/protobuf",
+    "//rs/registry/keys",
+    "//rs/registry/transport",
+    "//rs/types/base_types",
+    "//rs/types/types",
+    "@crate_index//:prost",
 ]
 
 DEV_DEPENDENCIES = [

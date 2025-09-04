@@ -20519,6 +20519,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "test-registry-builder",
  "tokio",
  "url",
 ]
@@ -23201,6 +23202,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "test-registry-builder"
+version = "0.9.0"
+dependencies = [
+ "ic-base-types",
+ "ic-crypto-node-key-validation",
+ "ic-nns-test-utils",
+ "ic-protobuf",
+ "ic-registry-keys",
+ "ic-registry-transport",
+ "ic-types",
+ "prost 0.13.4",
+]
+
+[[package]]
 name = "test-strategy"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -23222,16 +23237,6 @@ dependencies = [
  "quote",
  "structmeta 0.3.0",
  "syn 2.0.101",
-]
-
-[[package]]
-name = "test_registry_builder"
-version = "0.9.0"
-dependencies = [
- "ic-protobuf",
- "ic-registry-keys",
- "ic-registry-transport",
- "prost 0.13.4",
 ]
 
 [[package]]
