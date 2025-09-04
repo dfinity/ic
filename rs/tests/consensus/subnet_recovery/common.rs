@@ -614,8 +614,6 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
         "Copying ic-admin to node {node_id} with IP {node_ip} ..."
     );
     // ic-recovery requires ic-admin so we copy ic-admin to the node via scp below.
-    // However /opt/ic/bin is on a read-only filesystem. To work around this the following prepares an overlay fs
-    // on /opt/ic/bin that keeps existing binaries visible (lowerdir) and lets us add ic-admin via a writable upperdir.
     scp_send_to(
         logger.clone(),
         session,
@@ -623,14 +621,6 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
         Path::new("/var/lib/admin/ic-admin"),
         0o755,
     );
-    node.block_on_bash_script_from_session(session, r#"set -euo pipefail
-sudo mkdir -p /var/lib/admin/opt-ic-bin-overlay/{upper,work}
-sudo mount -t overlay overlay \
-  -o lowerdir=/opt/ic/bin,upperdir=/var/lib/admin/opt-ic-bin-overlay/upper,workdir=/var/lib/admin/opt-ic-bin-overlay/work,metacopy=off \
-  /opt/ic/bin
-sudo mv /var/lib/admin/ic-admin /opt/ic/bin/ic-admin
-"#
-    ).unwrap();
 
     let nns_url = subnet_recovery.recovery_args.nns_url;
     let subnet_id = subnet_recovery.params.subnet_id;
@@ -642,23 +632,8 @@ sudo mv /var/lib/admin/ic-admin /opt/ic/bin/ic-admin
     let pub_key = subnet_recovery.params.pub_key.unwrap();
     let pub_key = pub_key.trim();
 
-<<<<<<< HEAD
-<<<<<<< HEAD
     let command = format!(
-<<<<<<< HEAD
-<<<<<<< HEAD
-        r#"export PATH="/opt/ic/bin:$PATH"
-=======
-        r#"sudo mount --bind {remote_ic_admin_path:?} /opt/ic/bin/ic-admin
->>>>>>> 5b89f88ae8 (chore: rm ic-admin from the GuestOS)
-        /opt/ic/bin/ic-recovery \
-=======
-        r#"sudo mount --bind {remote_ic_admin_path:?} /opt/ic/bin/ic-admin && /opt/ic/bin/ic-recovery \
->>>>>>> a6d13f140d (fix)
-=======
-    let command = format!(
-        r#"/opt/ic/bin/ic-recovery \
->>>>>>> 153cfc9612 (refactor)
+        r#"PATH="/var/lib/admin${{PATH:+:$PATH}}" /opt/ic/bin/ic-recovery \
         --nns-url {nns_url} \
         --test --skip-prompts --use-local-binaries \
         app-subnet-recovery \
@@ -671,41 +646,6 @@ sudo mv /var/lib/admin/ic-admin /opt/ic/bin/ic-admin
         --skip DownloadCertifications \
         --skip MergeCertificationPools
     "#
-<<<<<<< HEAD
-=======
-    let script = format!(
-        r#"set -euo pipefail
-# We need to have ic-admin at /opt/ic/bin/ic-admin. However /opt/ic/bin is on a read-only filesystem.
-# To work around this the following prepares an overlay on /opt/ic/bin that keeps existing binaries visible (lowerdir)
-# and lets us add ic-admin via a writable upperdir.
-sudo mkdir -p /tmp/opt-ic-bin-overlay/{{upper,work}}
-sudo mount -t overlay overlay \
-  -o lowerdir=/opt/ic/bin,upperdir=/tmp/opt-ic-bin-overlay/upper,workdir=/tmp/opt-ic-bin-overlay/work \
-  /opt/ic/bin
-
-# Ensure overlay gets cleaned up on exit
-cleanup() {{ sudo umount /opt/ic/bin || true; }}
-trap cleanup EXIT
-
-# Make ic-admin visible through the overlay (write goes to upperdir, not the read-only FS)
-sudo install -m 0755 {remote_ic_admin_path:?} /opt/ic/bin/ic-admin
-
-/opt/ic/bin/ic-recovery \
-  --nns-url {nns_url} \
-  --test --skip-prompts --use-local-binaries \
-  app-subnet-recovery \
-  --subnet-id {subnet_id} \
-  {maybe_replay_until_height}\
-  --pub-key "{pub_key}" \
-  --download-method local \
-  --upload-method local \
-  --wait-for-cup-node {node_ip} \
-  --skip DownloadCertifications \
-  --skip MergeCertificationPools
-"#
->>>>>>> 2dd8bf9e58 (use an overlay fs)
-=======
->>>>>>> 153cfc9612 (refactor)
     );
 
     info!(logger, "Executing local recovery command: \n{command}");
