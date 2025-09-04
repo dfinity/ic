@@ -4,7 +4,7 @@ use crate::{
     common::{BlockHeight, BlockchainBlock, BlockchainHeader, BlockchainNetwork},
     metrics::BlockchainStateMetrics,
 };
-use bitcoin::{consensus::Encodable, BlockHash, Work};
+use bitcoin::{block::Header as PureHeader, consensus::Encodable, BlockHash, Work};
 use ic_btc_validation::{HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
 use std::{collections::HashMap, sync::Arc};
@@ -99,7 +99,7 @@ pub type SerializedBlock = Vec<u8>;
 #[derive(Debug)]
 pub struct BlockchainState<Network: BlockchainNetwork> {
     /// The starting point of the blockchain
-    genesis_block_header: Network::Header,
+    genesis_block_header: PureHeader,
 
     /// This field stores all the Bitcoin headers using a HashMap containining BlockHash and the corresponding header.
     header_cache: HashMap<BlockHash, HeaderNode<Network::Header>>,
@@ -129,7 +129,7 @@ impl<Network: BlockchainNetwork> BlockchainState<Network> {
         }];
 
         BlockchainState {
-            genesis_block_header,
+            genesis_block_header: genesis_block_header.into_pure_header(),
             header_cache,
             block_cache,
             tips,
@@ -139,8 +139,8 @@ impl<Network: BlockchainNetwork> BlockchainState<Network> {
     }
 
     /// Returns the genesis header that the store is initialized with.
-    pub fn genesis(&self) -> Network::Header {
-        self.genesis_block_header.clone()
+    pub fn genesis(&self) -> PureHeader {
+        self.genesis_block_header
     }
 
     /// Returns the header for the given block hash.
@@ -252,7 +252,7 @@ impl<Network: BlockchainNetwork> BlockchainState<Network> {
 
         // If the block's header is not added before, then add the header into the `header_cache` first.
         let _ = self
-            .add_header(block.header())
+            .add_header(block.header().clone())
             .map_err(AddBlockError::Header)?;
         self.tips.sort_unstable_by(|a, b| b.work.cmp(&a.work));
 
@@ -416,8 +416,7 @@ mod test {
     /// successfully.
     #[test]
     fn test_adding_headers_successfully() {
-        let network = Network::Regtest;
-        let mut state = BlockchainState::new(network, &MetricsRegistry::default());
+        let mut state = BlockchainState::new(Network::Regtest, &MetricsRegistry::default());
 
         let initial_header = state.genesis();
         let chain = generate_headers(initial_header.block_hash(), initial_header.time, 16, &[]);

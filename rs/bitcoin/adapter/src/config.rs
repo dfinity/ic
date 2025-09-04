@@ -135,54 +135,6 @@ impl Default for Config<AdapterNetwork> {
     }
 }
 
-/// Config specialized to either Bitcoin or Dogecoin network.
-pub enum AdapterConfig {
-    /// Bitcoin Config
-    Bitcoin(Config<bitcoin::Network>),
-    /// Dogecoin Config
-    Dogecoin(Config<bitcoin::dogecoin::Network>),
-}
-
-impl From<Config<AdapterNetwork>> for AdapterConfig {
-    fn from(config: Config<AdapterNetwork>) -> Self {
-        let Config {
-            dns_seeds,
-            network,
-            socks_proxy,
-            nodes,
-            idle_seconds,
-            ipv6_only,
-            logger,
-            incoming_source,
-            address_limits,
-        } = config;
-        match network {
-            AdapterNetwork::Bitcoin(network) => Self::Bitcoin(Config {
-                dns_seeds,
-                network,
-                socks_proxy,
-                nodes,
-                idle_seconds,
-                ipv6_only,
-                logger,
-                incoming_source,
-                address_limits,
-            }),
-            AdapterNetwork::Dogecoin(network) => Self::Dogecoin(Config {
-                dns_seeds,
-                network,
-                socks_proxy,
-                nodes,
-                idle_seconds,
-                ipv6_only,
-                logger,
-                incoming_source,
-                address_limits,
-            }),
-        }
-    }
-}
-
 #[cfg(test)]
 pub mod test {
 

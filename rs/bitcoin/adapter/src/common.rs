@@ -1,6 +1,6 @@
 use bitcoin::consensus::{Decodable, Encodable};
 use bitcoin::p2p::Magic;
-use bitcoin::{BlockHash, Work};
+use bitcoin::{block::Header as PureHeader, BlockHash, Work};
 use ic_btc_validation::{HeaderStore, ValidateHeaderError};
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
@@ -150,7 +150,7 @@ pub trait BlockchainNetwork: Copy {
     /// in [GetSuccessorsResponse].
     fn are_multiple_blocks_allowed(&self, anchor_height: BlockHeight) -> bool;
     /// Return max blocks bytes.
-    fn max_blocks_size(&self) -> usize {
+    fn max_blocks_bytes(&self) -> usize {
         crate::get_successors_handler::MAX_BLOCKS_BYTES
     }
     /// Return max in-flight blocks that is allowed in the adapter state.
@@ -188,7 +188,7 @@ impl BlockchainNetwork for bitcoin::Network {
             other => unreachable!("Unsupported Bitcoin network: {:?}", other),
         }
     }
-    fn max_blocks_size(&self) -> usize {
+    fn max_blocks_bytes(&self) -> usize {
         match self {
             bitcoin::Network::Testnet4 => crate::get_successors_handler::TESTNET4_MAX_BLOCKS_BYTES,
             _ => crate::get_successors_handler::MAX_BLOCKS_BYTES,
@@ -255,7 +255,7 @@ impl BlockchainNetwork for bitcoin::dogecoin::Network {
     }
 }
 
-/// A trait that contains the common methods of both Bitcoin and Dogecoin blocks.
+/// A trait that contains the common methods of both Bitcoin and Dogecoin headers.
 pub trait BlockchainHeader: Decodable + Encodable + Clone {
     /// Return block hash.
     fn block_hash(&self) -> BlockHash;
@@ -263,6 +263,8 @@ pub trait BlockchainHeader: Decodable + Encodable + Clone {
     fn prev_block_hash(&self) -> BlockHash;
     /// Check if the merkle root in block header matches what is computed.
     fn work(&self) -> Work;
+    /// Return the 80-byte header.
+    fn into_pure_header(self) -> PureHeader;
 }
 
 impl BlockchainHeader for bitcoin::block::Header {
@@ -275,6 +277,9 @@ impl BlockchainHeader for bitcoin::block::Header {
     fn work(&self) -> Work {
         self.work()
     }
+    fn into_pure_header(self) -> PureHeader {
+        self
+    }
 }
 
 impl BlockchainHeader for bitcoin::dogecoin::Header {
@@ -286,6 +291,9 @@ impl BlockchainHeader for bitcoin::dogecoin::Header {
     }
     fn work(&self) -> Work {
         self.pure_header.work()
+    }
+    fn into_pure_header(self) -> PureHeader {
+        self.pure_header
     }
 }
 
@@ -300,7 +308,7 @@ pub trait BlockchainBlock: Decodable + Encodable + Clone {
     /// Check if the merkle root in block header matches what is computed.
     fn check_merkle_root(&self) -> bool;
     /// Return the block header.
-    fn header(&self) -> Self::Header;
+    fn header(&self) -> &Self::Header;
 }
 
 impl BlockchainBlock for bitcoin::Block {
@@ -315,8 +323,8 @@ impl BlockchainBlock for bitcoin::Block {
     fn check_merkle_root(&self) -> bool {
         bitcoin::Block::check_merkle_root(self)
     }
-    fn header(&self) -> Self::Header {
-        self.header
+    fn header(&self) -> &Self::Header {
+        &self.header
     }
 }
 
@@ -332,8 +340,8 @@ impl BlockchainBlock for bitcoin::dogecoin::Block {
     fn check_merkle_root(&self) -> bool {
         bitcoin::dogecoin::Block::check_merkle_root(self)
     }
-    fn header(&self) -> Self::Header {
-        self.header.clone()
+    fn header(&self) -> &Self::Header {
+        &self.header
     }
 }
 

@@ -11,7 +11,7 @@ use tonic::Status;
 
 use crate::{
     blockchainstate::SerializedBlock,
-    common::{BlockHeight, BlockchainNetwork},
+    common::{BlockHeight, BlockchainHeader, BlockchainNetwork},
     metrics::GetSuccessorMetrics,
     BlockchainManagerRequest, BlockchainState,
 };
@@ -87,7 +87,7 @@ pub struct GetSuccessorsResponse<Header> {
 /// server.
 pub struct GetSuccessorsHandler<Network: BlockchainNetwork> {
     state: Arc<Mutex<BlockchainState<Network>>>,
-    blockchain_manager_tx: Sender<BlockchainManagerRequest<Network::Header>>,
+    blockchain_manager_tx: Sender<BlockchainManagerRequest>,
     network: Network,
     metrics: GetSuccessorMetrics,
 }
@@ -98,7 +98,7 @@ impl<Network: BlockchainNetwork> GetSuccessorsHandler<Network> {
     pub fn new(
         network: Network,
         state: Arc<Mutex<BlockchainState<Network>>>,
-        blockchain_manager_tx: Sender<BlockchainManagerRequest<Network::Header>>,
+        blockchain_manager_tx: Sender<BlockchainManagerRequest>,
         metrics_registry: &MetricsRegistry,
     ) -> Self {
         Self {
@@ -168,7 +168,9 @@ impl<Network: BlockchainNetwork> GetSuccessorsHandler<Network> {
         if !next.is_empty() {
             // TODO: better handling of full channel as the receivers are never closed.
             self.blockchain_manager_tx
-                .try_send(BlockchainManagerRequest::EnqueueNewBlocksToDownload(next))
+                .try_send(BlockchainManagerRequest::EnqueueNewBlocksToDownload(
+                    next.into_iter().map(|x| x.into_pure_header()).collect(),
+                ))
                 .ok();
         }
         // TODO: better handling of full channel as the receivers are never closed.
@@ -205,7 +207,7 @@ fn get_successor_blocks<Network: BlockchainNetwork>(
         .map(|c| c.children.iter().collect())
         .unwrap_or_default();
 
-    let max_blocks_size = network.max_blocks_size();
+    let max_blocks_bytes = network.max_blocks_bytes();
 
     let max_blocks_length = if allow_multiple_blocks {
         MAX_BLOCKS_LENGTH
@@ -225,7 +227,7 @@ fn get_successor_blocks<Network: BlockchainNetwork>(
             let block_size = block.len();
             // If we have at least one block in the response, and we can't fit another block, we stop.
             if response_block_size > 0
-                && (response_block_size + block_size > max_blocks_size
+                && (response_block_size + block_size > max_blocks_bytes
                     || successor_blocks.len() + 1 > max_blocks_length)
             {
                 break;
@@ -284,6 +286,7 @@ fn get_next_headers<Network: BlockchainNetwork>(
     next_headers
 }
 
+// TODO(XC-478): add tests for auxpow headers
 #[cfg(test)]
 mod test {
     use super::*;

@@ -5,7 +5,7 @@
 //! component to provide blocks and collect outgoing transactions.
 
 use bitcoin::p2p::message::NetworkMessage;
-use bitcoin::BlockHash;
+use bitcoin::{block::Header as PureHeader, BlockHash};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use std::{
@@ -52,7 +52,7 @@ mod transaction_store;
 mod get_successors_handler;
 
 pub use common::{AdapterNetwork, BlockchainBlock, BlockchainHeader, BlockchainNetwork};
-pub use config::{address_limits, AdapterConfig, Config, IncomingSource};
+pub use config::{address_limits, Config, IncomingSource};
 
 use crate::{
     blockchainstate::BlockchainState, get_successors_handler::GetSuccessorsHandler,
@@ -120,9 +120,9 @@ trait ProcessNetworkMessage<Header, Block> {
 
 /// Commands sent back to the router in order perform actions on the blockchain state.
 #[derive(Debug)]
-pub(crate) enum BlockchainManagerRequest<Header> {
+pub(crate) enum BlockchainManagerRequest {
     /// Inform the adapter to enqueue the next block headers into the syncing queue.
-    EnqueueNewBlocksToDownload(Vec<Header>),
+    EnqueueNewBlocksToDownload(Vec<PureHeader>),
     /// Inform the adapter to prune the following block hashes from the cache.
     PruneBlocks(BlockHash, Vec<BlockHash>),
 }
@@ -241,12 +241,34 @@ pub fn start_server(
     rt_handle: &tokio::runtime::Handle,
     config: config::Config<AdapterNetwork>,
 ) {
-    match config.into() {
-        AdapterConfig::Bitcoin(config) => {
-            start_server_helper(log, metrics_registry, rt_handle, config)
+    match config.network {
+        AdapterNetwork::Bitcoin(network) => {
+            let btc_config = Config {
+                network,
+                dns_seeds: config.dns_seeds,
+                socks_proxy: config.socks_proxy,
+                nodes: config.nodes,
+                idle_seconds: config.idle_seconds,
+                ipv6_only: config.ipv6_only,
+                logger: config.logger,
+                incoming_source: config.incoming_source,
+                address_limits: config.address_limits,
+            };
+            start_server_helper(log, metrics_registry, rt_handle, btc_config)
         }
-        AdapterConfig::Dogecoin(config) => {
-            start_server_helper(log, metrics_registry, rt_handle, config)
+        AdapterNetwork::Dogecoin(network) => {
+            let doge_config = Config {
+                network,
+                dns_seeds: config.dns_seeds,
+                socks_proxy: config.socks_proxy,
+                nodes: config.nodes,
+                idle_seconds: config.idle_seconds,
+                ipv6_only: config.ipv6_only,
+                logger: config.logger,
+                incoming_source: config.incoming_source,
+                address_limits: config.address_limits,
+            };
+            start_server_helper(log, metrics_registry, rt_handle, doge_config)
         }
     }
 }

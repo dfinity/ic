@@ -134,7 +134,7 @@ pub fn start_grpc_server<Network>(
     logger: ReplicaLogger,
     last_received_tx: watch::Sender<Option<Instant>>,
     blockchain_state: Arc<Mutex<BlockchainState<Network>>>,
-    blockchain_manager_tx: mpsc::Sender<BlockchainManagerRequest<Network::Header>>,
+    blockchain_manager_tx: mpsc::Sender<BlockchainManagerRequest>,
     transaction_manager_tx: mpsc::Sender<TransactionManagerRequest>,
     metrics_registry: &MetricsRegistry,
 ) where

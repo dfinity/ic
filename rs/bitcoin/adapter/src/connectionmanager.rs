@@ -1,5 +1,3 @@
-#![allow(clippy::type_complexity)]
-
 use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -34,6 +32,12 @@ use crate::{
     Channel, ChannelError, Command, ProcessEvent, ProcessNetworkMessage,
     ProcessNetworkMessageError,
 };
+
+type StreamConfigOf<Network> =
+    StreamConfig<<Network as BlockchainNetwork>::Header, <Network as BlockchainNetwork>::Block>;
+
+type NetworkMessageOf<Network> =
+    NetworkMessage<<Network as BlockchainNetwork>::Header, <Network as BlockchainNetwork>::Block>;
 
 /// How the adapter identifies itself to other Bitcoin nodes.
 const USER_AGENT: &str = "ic-btc-adapter";
@@ -95,7 +99,7 @@ pub struct ConnectionManager<Network: BlockchainNetwork> {
     /// connection.
     current_height: BlockHeight,
     /// This field contains connections that have connected are being managed.
-    connections: HashMap<SocketAddr, Connection<NetworkMessage<Network::Header, Network::Block>>>,
+    connections: HashMap<SocketAddr, Connection<NetworkMessageOf<Network>>>,
     /// This field determines whether or not we will be using a SOCKS proxy to communicate with
     /// the BTC network.
     socks_proxy: Option<String>,
@@ -103,7 +107,7 @@ pub struct ConnectionManager<Network: BlockchainNetwork> {
     stream_event_receiver: Receiver<StreamEvent>,
     /// This field is used to allow new streams to send events back to the connection manager.
     stream_event_sender: Sender<StreamEvent>,
-    network_message_sender: Sender<(SocketAddr, NetworkMessage<Network::Header, Network::Block>)>,
+    network_message_sender: Sender<(SocketAddr, NetworkMessageOf<Network>)>,
     /// This field is used for the version nonce generation.
     rng: StdRng,
     metrics: RouterMetrics,
@@ -114,10 +118,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
     pub fn new(
         config: &Config<Network>,
         logger: ReplicaLogger,
-        network_message_sender: Sender<(
-            SocketAddr,
-            NetworkMessage<Network::Header, Network::Block>,
-        )>,
+        network_message_sender: Sender<(SocketAddr, NetworkMessageOf<Network>)>,
         metrics: RouterMetrics,
     ) -> Self {
         let address_book = AddressBook::new(config, logger.clone());
@@ -167,7 +168,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
     pub fn tick(
         &mut self,
         current_height: BlockHeight,
-        handle: fn(StreamConfig<Network::Header, Network::Block>) -> JoinHandle<()>,
+        handle: fn(StreamConfigOf<Network>) -> JoinHandle<()>,
     ) {
         self.current_height = current_height;
 
@@ -189,7 +190,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
     /// This function will remove disconnects and establish new connections.
     fn manage_connections(
         &mut self,
-        handle: fn(StreamConfig<Network::Header, Network::Block>) -> JoinHandle<()>,
+        handle: fn(StreamConfigOf<Network>) -> JoinHandle<()>,
     ) -> ConnectionManagerResult<()> {
         self.manage_ping_states();
         self.flag_version_handshake_timeouts();
@@ -296,7 +297,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
     /// This function creates a new connection with a stream to a BTC node.
     fn make_connection(
         &mut self,
-        handle: fn(StreamConfig<Network::Header, Network::Block>) -> JoinHandle<()>,
+        handle: fn(StreamConfigOf<Network>) -> JoinHandle<()>,
     ) -> ConnectionManagerResult<()> {
         self.metrics.connections.inc();
         let address_entry_result = if !self.address_book.has_enough_addresses() {
@@ -314,7 +315,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
         let stream_event_sender = self.stream_event_sender.clone();
         let network_message_sender = self.network_message_sender.clone();
 
-        let stream_config = StreamConfig {
+        let stream_config = crate::stream::StreamConfig {
             address,
             logger: self.logger.clone(),
             magic: self.magic,
@@ -337,8 +338,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
     fn get_connection(
         &mut self,
         addr: &SocketAddr,
-    ) -> ConnectionManagerResult<&mut Connection<NetworkMessage<Network::Header, Network::Block>>>
-    {
+    ) -> ConnectionManagerResult<&mut Connection<NetworkMessageOf<Network>>> {
         match self.connections.get_mut(addr) {
             Some(connection) => Ok(connection),
             None => Err(ConnectionManagerError::ConnectionNotFound),
@@ -362,18 +362,17 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
         let receiver = Address::new(addr, ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED);
         let nonce: u64 = self.rng.gen();
         let user_agent = String::from(USER_AGENT);
-        let message =
-            <NetworkMessage<Network::Header, Network::Block>>::Version(VersionMessage::new(
-                self.p2p_protocol_version,
-                services,
-                timestamp as i64,
-                receiver,
-                sender,
-                nonce,
-                user_agent,
-                // The height the adapter believes is the active tip.
-                self.current_height as i32,
-            ));
+        let message = <NetworkMessageOf<Network>>::Version(VersionMessage::new(
+            self.p2p_protocol_version,
+            services,
+            timestamp as i64,
+            receiver,
+            sender,
+            nonce,
+            user_agent,
+            // The height the adapter believes is the active tip.
+            self.current_height as i32,
+        ));
 
         self.send_to(addr, message)
     }
@@ -406,7 +405,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
     fn send_to(
         &mut self,
         addr: &SocketAddr,
-        network_message: NetworkMessage<Network::Header, Network::Block>,
+        network_message: NetworkMessageOf<Network>,
     ) -> ConnectionManagerResult<()> {
         self.metrics
             .bitcoin_messages_sent
@@ -426,7 +425,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
     }
 
     /// This function is used to send a message to all of the connected connections.
-    fn send_to_all(&mut self, network_message: NetworkMessage<Network::Header, Network::Block>) {
+    fn send_to_all(&mut self, network_message: NetworkMessageOf<Network>) {
         if !self.has_enough_active_connections() {
             return;
         }
@@ -680,7 +679,7 @@ impl<Network: BlockchainNetwork> ProcessNetworkMessage<Network::Header, Network:
     fn process_bitcoin_network_message(
         &mut self,
         address: SocketAddr,
-        message: &NetworkMessage<Network::Header, Network::Block>,
+        message: &NetworkMessageOf<Network>,
     ) -> Result<(), ProcessNetworkMessageError> {
         match message {
             NetworkMessage::Version(version_message) => {

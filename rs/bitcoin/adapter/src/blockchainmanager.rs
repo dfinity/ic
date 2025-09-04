@@ -7,6 +7,7 @@ use crate::{
     Channel, Command, ProcessNetworkMessageError,
 };
 use bitcoin::{
+    block::Header as PureHeader,
     hashes::Hash as _,
     p2p::{
         message::{NetworkMessage, MAX_INV_SIZE},
@@ -703,7 +704,7 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
 
     /// Add block hashes to the sync queue that are not already being synced, planned to be synced,
     /// or in the block cache.
-    pub fn enqueue_new_blocks_to_download(&mut self, next_headers: Vec<Network::Header>) {
+    pub fn enqueue_new_blocks_to_download(&mut self, next_headers: Vec<PureHeader>) {
         let state = self.blockchain.lock().unwrap();
         for header in next_headers {
             let hash = header.block_hash();
@@ -787,10 +788,10 @@ pub mod test {
 
     fn create_blockchain_manager<Network: BlockchainNetwork>(
         network: Network,
-    ) -> (Network::Header, BlockchainManager<Network>) {
+    ) -> (BlockHeader, BlockchainManager<Network>) {
         let blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
         (
-            blockchain_state.genesis().clone(),
+            blockchain_state.genesis(),
             BlockchainManager::new(
                 Arc::new(Mutex::new(blockchain_state)),
                 no_op_logger(),

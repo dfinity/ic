@@ -33,7 +33,7 @@ pub fn start_main_event_loop<Network>(
     blockchain_state: Arc<Mutex<BlockchainState<Network>>>,
     mut transaction_manager_rx: Receiver<TransactionManagerRequest>,
     mut adapter_state: AdapterState,
-    mut blockchain_manager_rx: Receiver<BlockchainManagerRequest<Network::Header>>,
+    mut blockchain_manager_rx: Receiver<BlockchainManagerRequest>,
     metrics_registry: &MetricsRegistry,
 ) where
     Network: BlockchainNetwork + Send + 'static,
