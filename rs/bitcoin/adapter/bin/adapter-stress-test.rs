@@ -85,10 +85,6 @@ async fn run<Network: BlockchainNetwork>(network: Network, uds_path: PathBuf) {
                 _ => {
                     println!("status = {:?}", status);
                     sleep(interval_sleep_ms).await;
-                    println!("Reconnecting ... ");
-                    rpc_client = setup_client(uds_path.clone()).await;
-                    sleep(interval_sleep_ms).await;
-                    println!("Reconnected");
                     continue;
                 }
             },
