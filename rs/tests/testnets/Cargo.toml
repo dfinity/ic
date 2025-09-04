@@ -86,5 +86,5 @@ name = "small_with_query_stats"
 path = "small_with_query_stats.rs"
 
 [[bin]]
-name = "nested"
-path = "nested.rs"
+name = "nns_recovery"
+path = "nns_recovery.rs"

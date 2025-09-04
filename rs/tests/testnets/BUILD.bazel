@@ -323,7 +323,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "nested",
+    name = "nns_recovery",
     tags = [
         "dynamic_testnet",
         "manual",
