@@ -1,0 +1,32 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//rs/registry/canister:__pkg__"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:prost",
+    "//rs/registry/transport",
+    "//rs/nns/test_utils",
+    "//rs/types/types",
+    "//rs/registry/keys",
+    "//rs/protobuf",
+    "//rs/types/base_types",
+    "//rs/crypto/node_key_validation",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+]
+
+LIB_SRCS = glob(
+    ["src/**/*.rs"],
+)
+
+rust_library(
+    name = "test_registry_builder",
+    testonly = True,
+    srcs = LIB_SRCS,
+    crate_name = "test_registry_builder",
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)

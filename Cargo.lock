@@ -23225,6 +23225,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "test_registry_builder"
+version = "0.9.0"
+dependencies = [
+ "ic-protobuf",
+ "ic-registry-keys",
+ "ic-registry-transport",
+ "prost 0.13.4",
+]
+
+[[package]]
 name = "testing-verification-tests"
 version = "0.9.0"
 dependencies = [
