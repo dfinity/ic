@@ -1,16 +1,11 @@
-use crate::extensions::{validate_execute_extension_operation, validate_register_extension};
-use crate::icrc_ledger_helper::ICRCLedgerHelper;
-use crate::pb::v1::governance::GovernanceCachedMetrics;
-use crate::pb::v1::{
-    valuation, ExecuteExtensionOperation, Metrics, RegisterExtension, TreasuryMetrics,
-    VotingPowerMetrics,
-};
-use crate::proposal::TreasuryAccount;
-use crate::treasury::{assess_treasury_balance, interpret_token_code, tokens_to_e8s};
 use crate::{
     canister_control::{
         get_canister_id, perform_execute_generic_nervous_system_function_call,
         upgrade_canister_directly,
+    },
+    extensions::{
+        validate_execute_extension_operation, validate_register_extension,
+        validate_upgrade_extension,
     },
     follower_index::{
         add_neuron_to_follower_index, build_follower_index,
@@ -21,6 +16,7 @@ use crate::{
         remove_neuron_from_follower_index, FollowerIndex,
     },
     following::{self, ValidatedSetFollowing},
+    icrc_ledger_helper::ICRCLedgerHelper,
     logs::{ERROR, INFO},
     neuron::{
         NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
@@ -38,7 +34,8 @@ use crate::{
             governance::{
                 self,
                 neuron_in_flight_command::{self, Command as InFlightCommand},
-                MaturityModulation, NeuronInFlightCommand, PendingVersion, SnsMetadata, Version,
+                GovernanceCachedMetrics, MaturityModulation, NeuronInFlightCommand, PendingVersion,
+                SnsMetadata, Version,
             },
             governance_error::ErrorType,
             manage_neuron::{
@@ -55,37 +52,40 @@ use crate::{
             proposal::Action,
             proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
             transfer_sns_treasury_funds::TransferFrom,
-            upgrade_journal_entry, Account as AccountProto, AddMaturityRequest,
+            upgrade_journal_entry, valuation, Account as AccountProto, AddMaturityRequest,
             AddMaturityResponse, AdvanceTargetVersionRequest, AdvanceTargetVersionResponse, Ballot,
             ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
             ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters,
-            DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
-            FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
-            GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
-            GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse,
-            GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
-            GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
-            ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-            ListProposalsResponse, ManageDappCanisterSettings, ManageLedgerParameters,
-            ManageNeuron, ManageNeuronResponse, ManageSnsMetadata, MintSnsTokens,
-            MintTokensRequest, MintTokensResponse, NervousSystemFunction, NervousSystemParameters,
-            Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType,
-            Proposal, ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-            RegisterDappCanisters, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
-            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, Vote, WaitForQuietState,
+            DisburseMaturityInProgress, Empty, ExecuteExtensionOperation,
+            ExecuteGenericNervousSystemFunction, FailStuckUpgradeInProgressRequest,
+            FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
+            GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
+            GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+            GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
+            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
+            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse,
+            ManageDappCanisterSettings, ManageLedgerParameters, ManageNeuron, ManageNeuronResponse,
+            ManageSnsMetadata, Metrics, MintSnsTokens, MintTokensRequest, MintTokensResponse,
+            NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
+            ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
+            RegisterExtension, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
+            TransferSnsTreasuryFunds, TreasuryMetrics, UpgradeSnsControlledCanister, Vote,
+            VotingPowerMetrics, WaitForQuietState,
         },
     },
     proposal::{
         get_action_auxiliary,
         transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err,
         validate_and_render_proposal, validate_and_render_set_topics_for_custom_proposals,
-        ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
+        TreasuryAccount, ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
     },
     sns_upgrade::{
         canister_type_and_wasm_hash_for_upgrade, get_all_sns_canisters, get_canisters_to_upgrade,
         get_running_version, get_upgrade_params, get_wasm, SnsCanisterType, UpgradeSnsParams,
     },
+    treasury::{assess_treasury_balance, interpret_token_code, tokens_to_e8s},
     types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock, Wasm},
 };
 
@@ -95,8 +95,6 @@ use futures::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::SpanStats;
-#[cfg(target_arch = "wasm32")]
-use ic_cdk::spawn;
 use ic_ledger_core::Tokens;
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
@@ -127,6 +125,7 @@ use maplit::{btreemap, hashset};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
+use crate::pb::v1::UpgradeExtension;
 use std::{
     cell::RefCell,
     cmp::Ordering,
@@ -695,7 +694,7 @@ pub struct Governance {
 fn spawn_in_canister_env(future: impl Future<Output = ()> + Sized + 'static) {
     #[cfg(target_arch = "wasm32")]
     {
-        spawn(future);
+        ic_cdk::futures::spawn_017_compat(future);
     }
     // This is needed for tests
     #[cfg(not(target_arch = "wasm32"))]
@@ -2208,6 +2207,9 @@ impl Governance {
             Action::RegisterExtension(register_extension) => {
                 self.perform_register_extension(register_extension).await
             }
+            Action::UpgradeExtension(upgrade_extension) => {
+                self.perform_upgrade_extension(upgrade_extension).await
+            }
             Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
                 self.perform_deregister_dapp_canisters(deregister_dapp_canisters)
                     .await
@@ -2346,10 +2348,42 @@ impl Governance {
             ));
         }
 
-        let validated_register_extension =
-            validate_register_extension(self, register_extension).await?;
+        let validated_register_extension = validate_register_extension(self, register_extension)
+            .await
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("Invalid RegisterExtension: {:?}", err),
+                )
+            })?;
 
         validated_register_extension.execute(self).await?;
+
+        Ok(())
+    }
+
+    async fn perform_upgrade_extension(
+        &mut self,
+        upgrade_extension: UpgradeExtension,
+    ) -> Result<(), GovernanceError> {
+        // Check if SNS extensions are enabled
+        if !crate::is_sns_extensions_enabled() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "SNS extensions are not enabled",
+            ));
+        }
+
+        let validated_upgrade_extension = validate_upgrade_extension(self, upgrade_extension)
+            .await
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("Invalid UpgradeExtension: {:?}", err),
+                )
+            })?;
+
+        validated_upgrade_extension.execute(self).await?;
 
         Ok(())
     }

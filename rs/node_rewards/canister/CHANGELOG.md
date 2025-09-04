@@ -2,6 +2,21 @@
 
 INSERT NEW RELEASES HERE
 
+* Replicated execution of the query endpoints `get_node_provider_rewards_calculation` and `get_historical_reward_periods`
+  is disabled.
+
+# 2025-08-15: Proposal 137910
+
+http://dashboard.internetcomputer.org/proposal/137910
+
+* Hourly sync nodes metrics, in preparation for performance based rewards calculation.
+* Extract rewardable nodes between two timestamps, in preparation for performance based rewards calculation.
+* Compute daily failure rate extrapolation in rewards-calculation lib., in preparation for performance based rewards
+  calculation.
+* Add telemetry for the canister
+* Removed the registry store cleanup function, which was previously used to resynchronize registry data with timestamp
+  to registry versions mapping.
+
 # 2025-07-11: Proposal 137348
 
 http://dashboard.internetcomputer.org/proposal/137348

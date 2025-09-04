@@ -1,11 +1,14 @@
 // TODO: Jira ticket NNS1-3556
+#![allow(deprecated)]
 #![allow(static_mut_refs)]
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::{measure_span, measure_span_async};
-use ic_cdk::api::stable::stable_read;
-use ic_cdk::{caller as cdk_caller, init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk::{
+    api::stable::stable_read, caller as cdk_caller, init, post_upgrade, pre_upgrade, println,
+    query, update,
+};
 use ic_cdk_timers::TimerId;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
@@ -25,18 +28,23 @@ use ic_nervous_system_proto::pb::v1::{
 };
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
+#[cfg(feature = "test")]
+use ic_sns_governance::extensions::add_allowed_extension_spec;
+#[cfg(feature = "test")]
+use ic_sns_governance::pb::v1::AddAllowedExtensionRequest;
 use ic_sns_governance::{
     governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
     logs::{ERROR, INFO},
     pb::v1::{self as sns_gov_pb},
+    storage::with_upgrades_memory,
     types::{Environment, HeapGrowthPotential},
     upgrade_journal::serve_journal,
 };
-use ic_sns_governance_api::pb::v1::GovernanceError;
-use ic_sns_governance_api::pb::v1::{get_metrics_response, governance_error::ErrorType};
 use ic_sns_governance_api::pb::v1::{
+    get_metrics_response,
     get_running_sns_version_response::UpgradeInProgress,
     governance::Version,
+    governance_error::ErrorType,
     topics::{ListTopicsRequest, ListTopicsResponse},
     ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
     FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
@@ -45,19 +53,15 @@ use ic_sns_governance_api::pb::v1::{
     GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
     GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
     GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceApi,
-    ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-    ListProposalsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters,
-    RewardEvent, SetMode, SetModeResponse,
+    GovernanceError, ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse,
+    ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse,
+    NervousSystemParameters, RewardEvent, SetMode, SetModeResponse,
 };
 #[cfg(feature = "test")]
 use ic_sns_governance_api::pb::v1::{
     AddMaturityRequest, AddMaturityResponse, AdvanceTargetVersionRequest,
     AdvanceTargetVersionResponse, MintTokensRequest, MintTokensResponse,
     RefreshCachedUpgradeStepsRequest, RefreshCachedUpgradeStepsResponse,
-};
-use ic_stable_structures::{
-    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
-    DefaultMemoryImpl,
 };
 use prost::Message;
 use rand::{RngCore, SeedableRng};
@@ -66,22 +70,8 @@ use std::{
     boxed::Box,
     cell::RefCell,
     convert::TryFrom,
-    ops::Deref,
     time::{Duration, SystemTime},
 };
-
-/// Constants to define memory segments.  Must not change.
-const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
-
-thread_local! {
-    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
-        MemoryManager::init(DefaultMemoryImpl::default())
-    );
-
-    // The memory where the governance reads and writes its state during an upgrade.
-    pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
-        RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
-}
 
 /// Size of the buffer for stable memory reads and writes.
 ///
@@ -287,11 +277,8 @@ fn canister_init_(init_payload: sns_gov_pb::Governance) {
 fn canister_pre_upgrade() {
     log!(INFO, "Executing pre upgrade");
 
-    UPGRADES_MEMORY.with(|um| {
-        let memory = um.borrow();
-
-        store_protobuf(memory.deref(), &governance().proto)
-            .expect("Failed to encode protobuf pre_upgrade");
+    with_upgrades_memory(|memory| {
+        store_protobuf(memory, &governance().proto).expect("Failed to encode protobuf pre_upgrade")
     });
 
     log!(INFO, "Completed pre upgrade");
@@ -316,16 +303,14 @@ fn canister_post_upgrade() {
     // Meaning there is no real possibility of these bytes being misinterpreted
     // TODO(NNS1-4037) Remove conditional after deploying the updated version to production
     let governance_proto = if &magic_bytes == b"MGR" && mgr_version_byte[0] == 1 {
-        UPGRADES_MEMORY
-            .with(|um| {
-                let result: Result<sns_gov_pb::Governance, _> =
-                    load_protobuf(um.borrow().deref());
-                result
-            })
-            .expect(
-                "Error deserializing canister state post-upgrade with MemoryManager memory segment. \
+        with_upgrades_memory(|memory| {
+            let result: Result<sns_gov_pb::Governance, _> = load_protobuf(memory);
+            result
+        })
+        .expect(
+            "Error deserializing canister state post-upgrade with MemoryManager memory segment. \
              CANISTER MIGHT HAVE BROKEN STATE!!!!.",
-            )
+        )
     } else {
         let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
         sns_gov_pb::Governance::decode(reader)
@@ -721,7 +706,10 @@ fn reset_timers(_request: ResetTimersRequest) -> ResetTimersResponse {
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}
 
 /// Serve an HttpRequest made to this canister
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 pub fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/journal/json" => {
@@ -839,6 +827,19 @@ async fn refresh_cached_upgrade_steps(
         .refresh_cached_upgrade_steps(deployed_version)
         .await;
     RefreshCachedUpgradeStepsResponse {}
+}
+
+#[cfg(feature = "test")]
+#[update(hidden = true)]
+async fn add_allowed_extension(request: AddAllowedExtensionRequest) {
+    log!(INFO, "Adding an allowed extension!");
+    let hash = <[u8; 32]>::try_from(request.wasm_hash).expect("Hash must be valid 32-bytes");
+    let extension = request
+        .spec
+        .expect("ExtensionSpec is required")
+        .try_into()
+        .unwrap();
+    add_allowed_extension_spec(hash, extension);
 }
 
 fn main() {

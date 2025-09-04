@@ -27,7 +27,7 @@ use ic_https_outcalls_consensus::{
 use ic_ingress_manager::{bouncer::IngressBouncer, IngressManager, RandomStateKind};
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
-    consensus_pool::{ConsensusBlockCache, ConsensusPoolCache},
+    consensus_pool::ConsensusPoolCache,
     execution_environment::IngressHistoryReader,
     messaging::{MessageRouting, XNetPayloadBuilder},
     p2p::{artifact_manager::JoinGuard, state_sync::StateSyncClient},
@@ -41,6 +41,7 @@ use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::create_udp_socket;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{
@@ -149,7 +150,6 @@ impl Bouncers {
         time_source: Arc<dyn TimeSource>,
         message_router: Arc<dyn MessageRouting>,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-        consensus_block_cache: Arc<dyn ConsensusBlockCache>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Self {
         let ingress = Arc::new(IngressBouncer::new(time_source.clone()));
@@ -162,7 +162,7 @@ impl Bouncers {
         let idkg = Arc::new(IDkgBouncer::new(
             metrics_registry,
             subnet_id,
-            consensus_block_cache,
+            consensus_pool_cache.clone(),
             state_reader.clone(),
         ));
 
@@ -206,7 +206,6 @@ impl AbortableBroadcastChannels {
         artifact_pools: &ArtifactPools,
     ) -> (Self, AbortableBroadcastChannelBuilder) {
         let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
-        let consensus_block_cache = consensus_pool.read().unwrap().get_block_cache();
         let bouncers = Bouncers::new(
             log,
             metrics_registry,
@@ -214,7 +213,6 @@ impl AbortableBroadcastChannels {
             time_source.clone(),
             message_router.clone(),
             consensus_pool_cache.clone(),
-            consensus_block_cache,
             state_reader.clone(),
         );
 
@@ -338,6 +336,7 @@ pub fn setup_consensus_and_p2p(
     malicious_flags: MaliciousFlags,
     node_id: NodeId,
     subnet_id: SubnetId,
+    subnet_type: SubnetType,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_sync_client: Arc<dyn StateSyncClient<Message = StateSyncMessage>>,
@@ -441,6 +440,7 @@ pub fn setup_consensus_and_p2p(
         metrics_registry,
         node_id,
         subnet_id,
+        subnet_type,
         artifact_pools,
         channels,
         Arc::clone(&consensus_crypto) as Arc<_>,
@@ -472,6 +472,7 @@ fn start_consensus(
     metrics_registry: &MetricsRegistry,
     node_id: NodeId,
     subnet_id: SubnetId,
+    subnet_type: SubnetType,
     artifact_pools: ArtifactPools,
     abortable_broadcast_channels: AbortableBroadcastChannels,
     // ConsensusCrypto is an extension of the Crypto trait and we can
@@ -660,6 +661,7 @@ fn start_consensus(
             Arc::clone(&consensus_crypto),
             Arc::clone(&consensus_pool_cache),
             ReplicaConfig { subnet_id, node_id },
+            subnet_type,
             Arc::clone(&registry_client),
             metrics_registry.clone(),
             log.clone(),

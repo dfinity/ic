@@ -611,6 +611,9 @@ pub struct Ledger {
 
     #[serde(default)]
     index_principal: Option<Principal>,
+
+    #[serde(default = "wasm_token_type")]
+    pub token_type: String,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -638,6 +641,10 @@ fn default_decimals() -> u8 {
     ic_ledger_core::tokens::DECIMAL_PLACES as u8
 }
 
+pub fn wasm_token_type() -> String {
+    Tokens::TYPE.to_string()
+}
+
 fn map_metadata_or_trap(arg_metadata: Vec<(String, Value)>) -> Vec<(String, StoredValue)> {
     const DISALLOWED_METADATA_FIELDS: [&str; 7] = [
         METADATA_DECIMALS,
@@ -652,7 +659,7 @@ fn map_metadata_or_trap(arg_metadata: Vec<(String, Value)>) -> Vec<(String, Stor
         .into_iter()
         .map(|(k, v)| {
             if DISALLOWED_METADATA_FIELDS.contains(&k.as_str()) {
-                ic_cdk::trap(&format!(
+                ic_cdk::trap(format!(
                     "Metadata field {} is reserved and cannot be set",
                     k
                 ));
@@ -713,6 +720,7 @@ impl Ledger {
             accounts_overflow_trim_quantity: 0,
             ledger_version: LEDGER_VERSION,
             index_principal,
+            token_type: wasm_token_type(),
         };
 
         if ledger.fee_collector.as_ref().map(|fc| fc.fee_collector) == Some(ledger.minting_account)
@@ -953,7 +961,7 @@ impl Ledger {
         }
         if let Some(transfer_fee) = args.transfer_fee {
             self.transfer_fee = Tokens::try_from(transfer_fee.clone()).unwrap_or_else(|e| {
-                ic_cdk::trap(&format!(
+                ic_cdk::trap(format!(
                     "failed to convert transfer fee {} to tokens: {}",
                     transfer_fee, e
                 ))
@@ -961,7 +969,7 @@ impl Ledger {
         }
         if let Some(max_memo_length) = args.max_memo_length {
             if self.max_memo_length > max_memo_length {
-                ic_cdk::trap(&format!("The max len of the memo can be changed only to be bigger or equal than the current size. Current size: {}", self.max_memo_length));
+                ic_cdk::trap(format!("The max len of the memo can be changed only to be bigger or equal than the current size. Current size: {}", self.max_memo_length));
             }
             self.max_memo_length = max_memo_length;
         }
@@ -1229,6 +1237,10 @@ pub fn clear_stable_blocks_data() {
 
 pub fn balances_len() -> u64 {
     BALANCES_MEMORY.with_borrow(|balances| balances.len())
+}
+
+pub fn read_first_balance() {
+    BALANCES_MEMORY.with_borrow(|balances| balances.first_key_value());
 }
 
 pub fn get_allowances(

@@ -639,9 +639,9 @@ impl NnsInstaller {
             let application_subnets = pocket_ic
                 .topology()
                 .await
-                .subnet_configs
-                .keys()
-                .map(|subnet_id| SubnetId::from(PrincipalId(*subnet_id)))
+                .get_app_subnets()
+                .into_iter()
+                .map(|id| SubnetId::from(PrincipalId::from(id)))
                 .collect();
             nns::cmc::set_authorized_subnetwork_list(
                 pocket_ic,
@@ -1105,8 +1105,7 @@ pub async fn upgrade_nns_canister_to_tip_of_master_or_panic(
 
 pub mod nns {
     use super::*;
-    use ic_nervous_system_agent::helpers::nns as nns_agent_helpers;
-    use ic_nervous_system_agent::nns as nns_agent;
+    use ic_nervous_system_agent::{helpers::nns as nns_agent_helpers, nns as nns_agent};
     pub mod governance {
         use super::*;
 
@@ -1219,6 +1218,29 @@ pub mod nns {
             ic_nervous_system_agent::nns::governance::get_network_economics_parameters(pocket_ic)
                 .await
                 .unwrap()
+        }
+    }
+
+    pub mod registry {
+        use registry_canister::mutations::do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload;
+
+        use super::*;
+
+        pub async fn swap_node_in_subnet_directly(
+            pocket_ic: &PocketIc,
+            payload: SwapNodeInSubnetDirectlyPayload,
+            sender: PrincipalId,
+        ) -> Result<(), RejectResponse> {
+            let agent = PocketIcAgent::new(pocket_ic, sender);
+
+            ic_nervous_system_agent::nns::registry::swap_node_in_subnet_directly(&agent, payload)
+                .await
+                .map_err(|err| match err {
+                    PocketIcCallError::PocketIc(reject) => reject,
+                    err => {
+                        panic!("Unexpected error when performing swap in subnet directly: {err:?}")
+                    }
+                })
         }
     }
 
@@ -1430,8 +1452,7 @@ pub mod nns {
 
 pub mod sns {
     use super::*;
-    use ic_nervous_system_agent::helpers::sns as sns_agent_helpers;
-    use ic_nervous_system_agent::sns::root::SnsCanisters;
+    use ic_nervous_system_agent::{helpers::sns as sns_agent_helpers, sns::root::SnsCanisters};
 
     #[derive(Clone, Debug, PartialEq)]
     pub enum SnsUpgradeError {

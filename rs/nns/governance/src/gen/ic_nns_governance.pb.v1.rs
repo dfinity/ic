@@ -823,6 +823,9 @@ pub mod manage_neuron {
         /// The amount to split to the child neuron.
         #[prost(uint64, tag = "1")]
         pub amount_e8s: u64,
+        /// The memo to use for the child neuron.
+        #[prost(uint64, optional, tag = "2")]
+        pub memo: ::core::option::Option<u64>,
     }
     /// Merge another neuron into this neuron.
     #[derive(
@@ -4132,7 +4135,8 @@ pub struct FinalizeDisburseMaturity {
 pub enum Topic {
     /// The `Unspecified` topic is used as a fallback when
     /// following. That is, if no followees are specified for a given
-    /// topic, the followees for this topic are used instead.
+    /// topic (other than the "Governance" and "SNS & Neurons' Fund" topics),
+    /// the followees for this topic are used instead.
     Unspecified = 0,
     /// A special topic by means of which a neuron can be managed by the
     /// followees for this topic (in this case, there is no fallback to

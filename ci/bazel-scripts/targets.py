@@ -1,22 +1,28 @@
 #!/usr/bin/env python3
 #
-#   targets.py [-h] [--skip_long_tests] [--commit_range COMMIT_RANGE] {build,test}
+#   targets.py [-h] [--skip_long_tests] [--base BASE] [--head HEAD] {build,test,check}
 #
 # This script determines which Bazel targets should be built or tested and writes them separated by newlines to stdout.
 #
-# If --commit_range is passed only bazel targets will be included that have modified inputs within the specified git COMMIT_RANGE.
+# If --base is passed only include targets with modified inputs in `git diff --name-only --merge-base $BASE $HEAD`.
+# When --head is not provided defaults to HEAD.
 #
 # If --skip_long_tests is passed, tests tagged with 'long_test' will be excluded.
 #
-# ./PULL_REQUEST_BAZEL_TARGETS is taken into account to explicitly return targets based on modified files
+# However, long_tests of which a direct source file has been modified will be included.
+#
+# Finally ./PULL_REQUEST_BAZEL_TARGETS is taken into account to explicitly return targets based on modified files
 # even though they're not an explicit dependency of a bazel target or are tagged as `long_test`.
 #
+# When the command is `check` the PULL_REQUEST_BAZEL_TARGETS file is checked for correctness.
+#
 # The script will print the bazel query to stderr which is useful for debugging:
-#   ci/bazel-scripts/targets.py --skip_long_tests --commit_range=master..HEAD test
-#   bazel query --keep_going '(((kind(".*_test", //...)) except attr(tags, long_test, //...)) + set(//pre-commit:shfmt-check //pre-commit:ruff-lint)) except attr(tags, manual, //...)'
+#   ci/bazel-scripts/targets.py --skip_long_tests --base=master test
+#   bazel query --keep_going '((((kind(".*_test", rdeps(//..., set("ci/bazel-scripts/targets.py")))) except attr(tags, long_test, //...)) + attr(tags, long_test, rdeps(//..., set("ci/bazel-scripts/targets.py"), 2))) + set(//pre-commit:ruff-lint)) except attr(tags, "manual|system_test_large|system_test_benchmark|fuzz_test|fi_tests_nightly|nns_tests_nightly|pocketic_tests_nightly", //...)'
 
 import argparse
 import fnmatch
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -26,9 +32,37 @@ from typing import Set
 # regardless of whether those targets explicitly depend on those files or whether they're tagged as `long_test`.
 PULL_REQUEST_BAZEL_TARGETS = "PULL_REQUEST_BAZEL_TARGETS"
 
+# Targets will always be excluded if they have any of the following tags:
+EXCLUDED_TAGS = [
+    "manual",
+    "system_test_large",
+    "system_test_benchmark",
+    "fuzz_test",
+    "fi_tests_nightly",
+    "nns_tests_nightly",
+    "pocketic_tests_nightly",
+]
+
 # Return all bazel targets (//...) sans the long_tests (if --skip_long_tests is specified)
 # in case any file is modified matching any of the following globs:
-all_targets_globs = ["*.bazel", "*.bzl", ".bazelrc", ".bazelversion", "mainnet-*-revisions.json", ".github/*"]
+ALL_TARGETS_BLOBS = [
+    ".bazelrc",
+    ".bazelversion",
+    ".github/*",
+    "*.bazel",
+    "*.bzl",
+    "bazel/*",
+    "mainnet-*-revisions.json",
+]
+
+
+def log(*args, **kwargs):
+    print(*args, **kwargs, file=sys.stderr)
+
+
+def die(*args, **kwargs):
+    log(*args, **kwargs)
+    sys.exit(1)
 
 
 def load_explicit_targets() -> dict[str, Set[str]]:
@@ -75,27 +109,32 @@ def load_explicit_targets() -> dict[str, Set[str]]:
     return explicit_targets_dict
 
 
-def diff_only_query(command: str, commit_range: str, skip_long_tests: bool) -> str:
+def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -> str:
     """
     Return a bazel query for all targets that have modified inputs in the specified git commit range. Taking into account:
-    * To return all targets in case files matching all_targets_globs are modified.
+    * To return all targets in case files matching ALL_TARGETS_BLOBS are modified.
     * To only include test targets in case the bazel command was 'test'.
     * To exclude long_tests if requested.
     """
     modified_files = subprocess.run(
-        ["git", "diff", "--name-only", commit_range], check=True, capture_output=True, text=True
+        ["git", "diff", "--name-only", "--merge-base", base, head], check=True, capture_output=True, text=True
     ).stdout.splitlines()
 
-    # The files matching the all_targets_globs are typically not depended upon by any bazel target
+    log("Calculating targets to test for the following {n} modified files:".format(n=len(modified_files)))
+    for file in modified_files:
+        log(file)
+
+    # The files matching the ALL_TARGETS_BLOBS are typically not depended upon by any bazel target
     # but will determine which bazel targets there are in the first place so in case they're modified
     # simply return all bazel targets. Otherwise return all targets that depend on the modified files.
+    mfiles = " ".join(f'"{f}"' for f in modified_files)
     query = (
         "//..."
-        if any(len(fnmatch.filter(modified_files, glob)) > 0 for glob in all_targets_globs)
+        if any(len(fnmatch.filter(modified_files, glob)) > 0 for glob in ALL_TARGETS_BLOBS)
         # Note that modified_files may contain files not depended upon by any bazel target.
         # `bazel query --keep_going` will ignore those but will return the special exit code 3
         # in case this happens which we check for below.
-        else "rdeps(//..., set({targets}))".format(targets=" ".join(modified_files))
+        else f"rdeps(//..., set({mfiles}))"
     )
 
     # The targets returned by this script will be passed to `bazel test` by the caller (in case there are any).
@@ -106,6 +145,15 @@ def diff_only_query(command: str, commit_range: str, skip_long_tests: bool) -> s
 
     # Exclude the long_tests if requested:
     query = f"({query})" + (" except attr(tags, long_test, //...)" if skip_long_tests else "")
+
+    # Include all long_tests of which a "direct" source file has been modified.
+    # We specify a depth of 2 since a system-test depends on the test binary (1st degree) which depends
+    # on the source file (2nd degree).
+    # This will trigger long_tests if some files other than its .rs file are modified but we think
+    # this is acceptable since it would be good to run the tests if those files close to the test are modified anyways.
+    # To see which source files are within a depth of 2 away from <TEST> use:
+    # bazel query 'filter("^//", kind("source file", deps(<TEST>, 2)))'
+    query = f"({query}) + attr(tags, long_test, rdeps(//..., set({mfiles}), 2))"
 
     # Next, add the explicit targets from the PULL_REQUEST_BAZEL_TARGETS file that match the modified files:
     explicit_targets: Set[str] = set()
@@ -118,37 +166,111 @@ def diff_only_query(command: str, commit_range: str, skip_long_tests: bool) -> s
     return query
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Return bazel targets which should be build/tested")
-    parser.add_argument("command", choices=["build", "test"], help="Bazel command to generate targets for")
-    parser.add_argument("--skip_long_tests", action="store_true", help="Exclude tests tagged as 'long_test'")
-    parser.add_argument(
-        "--commit_range",
-        help="Only include targets with modified inputs in the given git commit range. For example: 'master..HEAD'",
-    )
-    args = parser.parse_args()
-
-    # If no commit range is specified, form a query to return all targets
+def targets(command: str, skip_long_tests: bool, base: str | None, head: str | None):
+    """Print the bazel targets to build or test to stdout."""
+    # If no base is specified, form a query to return all targets
     # but exclude those tagged with 'long_test' (in case --skip_long_tests was specified).
     # Otherwise return a query for all targets that have modified inputs in the specified
     # git commit range taking several factors into account:
     query = (
-        ("//..." + (" except attr(tags, long_test, //...)" if args.skip_long_tests else ""))
-        if args.commit_range is None
-        else diff_only_query(args.command, args.commit_range, args.skip_long_tests)
+        ("//..." + (" except attr(tags, long_test, //...)" if skip_long_tests else ""))
+        if base is None
+        else diff_only_query(command, base, "HEAD" if head is None else head, skip_long_tests)
     )
 
-    # Finally, exclude targets tagged with 'manual' to avoid running manual tests:
-    query = f"({query}) except attr(tags, manual, //...)"
+    # Finally, exclude targets that have any of the excluded tags:
+    excluded_tags_regex = "|".join(EXCLUDED_TAGS)
+    query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...)'
 
-    print(f"bazel query --keep_going '{query}'", file=sys.stderr)
-    result = subprocess.run(["bazel", "query", "--keep_going", query], stderr=subprocess.PIPE, text=True)
+    args = ["bazel", "query", "--keep_going", query]
+    log(shlex.join(args))
+    result = subprocess.run(args, stderr=subprocess.PIPE, text=True)
 
     # As described above, when the query contains files not tracked by bazel,
     # --keep_going will ignore them but will return the special exit code 3 which we ignore:
     if result.returncode not in (0, 3):
-        print(f"Error running `bazel query --keep_going '{query}'`:\n" + result.stderr, file=sys.stderr)
+        log(f"Error running `bazel query --keep_going '{query}'`:\n" + result.stderr)
         sys.exit(result.returncode)
+
+
+def check():
+    """
+    Exit successfully with 0 if PULL_REQUEST_BAZEL_TARGETS:
+    * can be read and parsed.
+    * each pattern matches at least one file tracked by git.
+    * each pattern has at least one explicit target.
+    * each target is valid and when queried results in at least one target after excluding all excluded targets.
+    Otherwise print all errors to stderr and exit erroneously with 1.
+    """
+    try:
+        explicit_targets = load_explicit_targets()
+    except Exception as e:
+        die(f"Error loading {PULL_REQUEST_BAZEL_TARGETS}: {e}!")
+
+    all_files = subprocess.run(["git", "ls-files"], check=True, capture_output=True, text=True).stdout.splitlines()
+
+    errors = []
+    indentation = "    "
+    for pattern, explicit_targets_for_pattern in explicit_targets.items():
+        matches = fnmatch.filter(all_files, pattern)
+        n = len(matches)
+        if n == 0:
+            errors.append(f"Pattern '{pattern}' doesn't match any files tracked by git!")
+        else:
+            # Log successful matches which is useful for debugging
+            # or can be linked to on github.com to inform users of
+            # potentially too wide or otherwise incorrect patterns.
+            # Note that the final ' ' is necessary for GitHub not
+            # to filter the empty line which would hurt readability.
+            log(f"Pattern '{pattern}' matches {n} files:\n" + "\n".join(matches) + "\n ")
+
+        if len(explicit_targets_for_pattern) == 0:
+            errors.append(f"Pattern '{pattern}' has no explicit targets!")
+
+        for target in explicit_targets_for_pattern:
+            excluded_tags_regex = "|".join(EXCLUDED_TAGS)
+            query = f'({target}) except attr(tags, "{excluded_tags_regex}", //...)'
+            result = subprocess.run(["bazel", "query", query], capture_output=True, text=True)
+            if result.returncode != 0:
+                indented_error_msg = f"{indentation}" + f"\n{indentation}".join(result.stderr.strip().splitlines())
+                errors.append(f"Pattern '{pattern}' has problematic target '{target}':\n{indented_error_msg}")
+            elif len(result.stdout.splitlines()) == 0:
+                errors.append(
+                    f"Pattern '{pattern}' with target '{target}' results in no targets after excluding all manual targets!"
+                    + (
+                        f"\n{indentation}It might be you're including the manual non-colocated variant of a system-test."
+                        + f"\n{indentation}Try '{target}_colocate' instead."
+                    )
+                    if target.startswith("//rs/tests")
+                    else ""
+                )
+
+    n = len(errors)
+    if n > 0:
+        die(f"Encountered the following {n} errors:\n" + "\n".join(errors))
+
+    exit(0)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Return bazel targets which should be build/tested")
+    parser.add_argument(
+        "command",
+        choices=["build", "test", "check"],
+        help="Bazel command to generate targets for. If 'check' then check PULL_REQUEST_BAZEL_TARGETS for correctness",
+    )
+    parser.add_argument("--skip_long_tests", action="store_true", help="Exclude tests tagged as 'long_test'")
+    parser.add_argument(
+        "--base",
+        help="Only include targets with modified inputs in `git diff --name-only --merge-base $BASE $HEAD`. When --head is not provided defaults to HEAD.",
+    )
+    parser.add_argument("--head", help="See --base.")
+    args = parser.parse_args()
+
+    if args.command == "check":
+        check()
+
+    targets(args.command, args.skip_long_tests, args.base, args.head)
 
 
 if __name__ == "__main__":

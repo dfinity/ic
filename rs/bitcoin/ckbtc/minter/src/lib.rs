@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::address::BitcoinAddress;
 use crate::logs::{P0, P1};
 use crate::management::CallError;
@@ -49,6 +50,18 @@ const MIN_NANOS: u64 = 60 * SEC_NANOS;
 /// a batch transaction.
 pub const MIN_PENDING_REQUESTS: usize = 20;
 pub const MAX_REQUESTS_PER_BATCH: usize = 100;
+/// Reimbursement fee for when a batch of *pending* withdrawal requests would require more than [`MAX_NUM_INPUTS_IN_TRANSACTION`] inputs.
+///
+/// No transaction was issued (not signed and not sent) but the minter still did some work:
+/// 1) Burn on the ledger for each withdrawal request.
+/// 2) Build transaction candidate to cover the amount in the batch of withdrawal requests.
+///
+/// Heuristic:
+/// * charge 1B cycles for each request (a burn on the ledger on the fiduciary subnet is probably around 50M cycles) and to simplify, since there are at most
+///   [`MAX_REQUESTS_PER_BATCH`] withdrawal requests in a transaction to cancel, we charge [`MAX_REQUESTS_PER_BATCH`] times that amount.
+/// * For the cycles, we use a lower bound on the price of Bitcoin of 1 BTC = 10_000 XDR, so that 10 sats correspond to 1B cycles.
+pub const REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS: u64 =
+    (MAX_REQUESTS_PER_BATCH as u64) * 10;
 
 /// The constants used to compute the minter's fee to cover its own cycle consumption.
 pub const MINTER_FEE_PER_INPUT: u64 = 146;
@@ -300,7 +313,12 @@ fn reimburse_canceled_requests<R: CanisterRuntime>(
     assert!(!requests.is_empty());
     let fees = distribute(total_fee, requests.len() as u64);
     // This assertion makes sure the fee is smaller than each request amount
-    assert!(fees[0] <= state.retrieve_btc_min_amount);
+    assert!(
+        fees[0] <= state.retrieve_btc_min_amount,
+        "BUG: fees {fees:?} for {} withdrawal requests are larger than `retrieve_btc_min_amount` {}",
+        requests.len(),
+        state.retrieve_btc_min_amount
+    );
     for (request, fee) in requests.into_iter().zip(fees.into_iter()) {
         if let Some(account) = request.reimbursement_account {
             let amount = request.amount.saturating_sub(fee);
@@ -403,11 +421,14 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                     "[submit_pending_requests]: error in building transaction ({:?})",
                     err
                 );
-                // Since the transaction otherwise would have more than MAX_NUM_INPUTS, it
-                // is reasonable to charge a fee based on it.
-                let fee = MINTER_FEE_PER_INPUT * MAX_NUM_INPUTS_IN_TRANSACTION as u64;
                 let reason = reimbursement::WithdrawalReimbursementReason::InvalidTransaction(err);
-                reimburse_canceled_requests(s, batch, reason, fee, runtime);
+                reimburse_canceled_requests(
+                    s,
+                    batch,
+                    reason,
+                    REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS,
+                    runtime,
+                );
                 None
             }
             Err(BuildTxError::AmountTooLow) => {

@@ -45,9 +45,8 @@ use ic_registry_client::client::RegistryDataProviderError;
 use ic_registry_keys::{
     make_api_boundary_node_record_key, make_blessed_replica_versions_key, make_canister_ranges_key,
     make_data_center_record_key, make_firewall_rules_record_key, make_node_operator_record_key,
-    make_provisional_whitelist_record_key, make_replica_version_key, make_routing_table_record_key,
-    make_subnet_list_record_key, make_unassigned_nodes_config_record_key, FirewallRulesScope,
-    ROOT_SUBNET_ID_KEY,
+    make_provisional_whitelist_record_key, make_replica_version_key, make_subnet_list_record_key,
+    make_unassigned_nodes_config_record_key, FirewallRulesScope, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_local_store::{Changelog, KeyMutation, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -600,15 +599,6 @@ impl IcConfig {
             &make_canister_ranges_key(CanisterId::from_u64(0)),
             version,
             routing_table_record.clone(),
-        );
-
-        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
-        write_registry_entry(
-            &data_provider,
-            self.target_dir.as_path(),
-            &make_routing_table_record_key(),
-            version,
-            routing_table_record,
         );
 
         fn opturl_to_string_vec(opt_url: Option<Url>) -> Vec<String> {

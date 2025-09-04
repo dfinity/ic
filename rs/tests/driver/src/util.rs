@@ -27,12 +27,11 @@ use ic_agent::{
     Agent, AgentError, Identity, Signature,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
-use ic_cdk::api::management_canister::{
-    ecdsa::SignWithEcdsaResponse, schnorr::SignWithSchnorrResponse,
+use ic_cdk::management_canister::{
+    SignWithEcdsaResult, SignWithSchnorrResult, VetKDDeriveKeyResult,
 };
 use ic_config::ConfigOptional;
 use ic_limits::MAX_INGRESS_TTL;
-use ic_management_canister_types::VetKDDeriveKeyResult;
 use ic_management_canister_types_private::{CanisterStatusResultV2, EmptyBlob, Payload};
 use ic_message::ForwardParams;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
@@ -90,7 +89,7 @@ pub const CANISTER_CREATE_TIMEOUT: Duration = Duration::from_secs(30);
 pub const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
 
 pub const CFG_TEMPLATE_BYTES: &[u8] =
-    include_bytes!("../../../../ic-os/components/ic/generate-ic-config/ic.json5.template");
+    include_bytes!("../../../../ic-os/components/guestos/generate-ic-config/ic.json5.template");
 
 // Requests are multiplexed over H2 requests.
 pub const MAX_CONCURRENT_REQUESTS: usize = 10_000;
@@ -841,25 +840,25 @@ impl<'a> SignerCanister<'a> {
     pub async fn gen_ecdsa_sig(
         &self,
         params: GenEcdsaParams,
-    ) -> Result<SignWithEcdsaResponse, AgentError> {
+    ) -> Result<SignWithEcdsaResult, AgentError> {
         self.agent
             .update(&self.canister_id, "gen_ecdsa_sig")
             .with_arg(Encode!(&params).unwrap())
             .call_and_wait()
             .await
-            .map(|bytes| Decode!(&bytes, SignWithEcdsaResponse).unwrap())
+            .map(|bytes| Decode!(&bytes, SignWithEcdsaResult).unwrap())
     }
 
     pub async fn gen_schnorr_sig(
         &self,
         params: GenSchnorrParams,
-    ) -> Result<SignWithSchnorrResponse, AgentError> {
+    ) -> Result<SignWithSchnorrResult, AgentError> {
         self.agent
             .update(&self.canister_id, "gen_schnorr_sig")
             .with_arg(Encode!(&params).unwrap())
             .call_and_wait()
             .await
-            .map(|bytes| Decode!(&bytes, SignWithSchnorrResponse).unwrap())
+            .map(|bytes| Decode!(&bytes, SignWithSchnorrResult).unwrap())
     }
 
     pub async fn gen_vetkd_key(

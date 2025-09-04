@@ -510,6 +510,20 @@ impl IcpLedger for NNSFixture {
         LEDGER_CANISTER_ID
     }
 
+    async fn icrc2_approve(
+        &self,
+        _spender: icrc_ledger_types::icrc1::account::Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<candid::Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
+    }
+
     async fn icrc3_get_blocks(
         &self,
         _args: Vec<GetBlocksRequest>,
@@ -921,6 +935,20 @@ impl IcpLedger for NNS {
 
     fn canister_id(&self) -> CanisterId {
         self.fixture.canister_id()
+    }
+
+    async fn icrc2_approve(
+        &self,
+        _spender: icrc_ledger_types::icrc1::account::Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<candid::Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 
     async fn icrc3_get_blocks(

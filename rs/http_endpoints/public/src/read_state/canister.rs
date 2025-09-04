@@ -19,13 +19,14 @@ use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
+use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_replicated_state::{canister_state::execution_state::CustomSectionType, ReplicatedState};
 use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, Certificate, CertificateDelegation, HttpReadStateContent, HttpReadStateResponse,
-        HttpRequest, HttpRequestEnvelope, MessageId, ReadState, EXPECTED_MESSAGE_ID_LENGTH,
+        Blob, Certificate, HttpReadStateContent, HttpReadStateResponse, HttpRequest,
+        HttpRequestEnvelope, MessageId, ReadState, EXPECTED_MESSAGE_ID_LENGTH,
     },
     CanisterId, PrincipalId, UserId,
 };
@@ -34,34 +35,46 @@ use std::{
     convert::{Infallible, TryFrom},
     sync::Arc,
 };
-use tokio::sync::watch;
 use tower::{util::BoxCloneService, ServiceBuilder};
+
+#[derive(Copy, Clone, Debug)]
+pub enum Version {
+    // Endpoint with the NNS delegation using the flat format of the canister ranges.
+    V2,
+    // Endpoint with the NNS delegation using the tree format of the canister ranges.
+    V3,
+}
 
 #[derive(Clone)]
 pub struct CanisterReadStateService {
     log: ReplicaLogger,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     time_source: Arc<dyn TimeSource>,
     validator: Arc<dyn HttpRequestVerifier<ReadState, RegistryRootOfTrustProvider>>,
     registry_client: Arc<dyn RegistryClient>,
+    version: Version,
 }
 
 pub struct CanisterReadStateServiceBuilder {
     log: ReplicaLogger,
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     malicious_flags: Option<MaliciousFlags>,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     time_source: Option<Arc<dyn TimeSource>>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
+    version: Version,
 }
 
 impl CanisterReadStateService {
-    pub(crate) fn route() -> &'static str {
-        "/api/v2/canister/{effective_canister_id}/read_state"
+    pub(crate) fn route(version: Version) -> &'static str {
+        match version {
+            Version::V2 => "/api/v2/canister/{effective_canister_id}/read_state",
+            Version::V3 => "/api/v3/canister/{effective_canister_id}/read_state",
+        }
     }
 }
 
@@ -71,17 +84,19 @@ impl CanisterReadStateServiceBuilder {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         registry_client: Arc<dyn RegistryClient>,
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
-        delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+        nns_delegation_reader: NNSDelegationReader,
+        version: Version,
     ) -> Self {
         Self {
             log,
             health_status: None,
             malicious_flags: None,
-            delegation_from_nns,
+            nns_delegation_reader,
             state_reader,
             time_source: None,
             ingress_verifier,
             registry_client,
+            version,
         }
     }
 
@@ -109,14 +124,15 @@ impl CanisterReadStateServiceBuilder {
             health_status: self
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
-            delegation_from_nns: self.delegation_from_nns,
+            nns_delegation_reader: self.nns_delegation_reader,
             state_reader: self.state_reader,
             time_source: self.time_source.unwrap_or(Arc::new(SysTimeSource::new())),
             validator: build_validator(self.ingress_verifier, self.malicious_flags),
             registry_client: self.registry_client,
+            version: self.version,
         };
         Router::new().route(
-            CanisterReadStateService::route(),
+            CanisterReadStateService::route(self.version),
             axum::routing::post(canister_read_state)
                 .with_state(state)
                 .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
@@ -134,11 +150,12 @@ pub(crate) async fn canister_read_state(
     State(CanisterReadStateService {
         log,
         health_status,
-        delegation_from_nns,
+        nns_delegation_reader,
         state_reader,
         time_source,
         validator,
         registry_client,
+        version,
     }): State<CanisterReadStateService>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpReadStateContent>>>,
 ) -> impl IntoResponse {
@@ -150,8 +167,6 @@ pub(crate) async fn canister_read_state(
         );
         return (status, text).into_response();
     }
-
-    let delegation_from_nns = delegation_from_nns.borrow().clone();
 
     // Convert the message to a strongly-typed struct.
     let request = match HttpRequest::<ReadState>::try_from(request) {
@@ -225,6 +240,11 @@ pub(crate) async fn canister_read_state(
         };
 
         let signature = certification.signed.signature.signature.get().0;
+        let delegation_from_nns = match version {
+            Version::V2 => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
+            Version::V3 => nns_delegation_reader
+                .get_delegation(CanisterRangesFilter::Tree(effective_canister_id)),
+        };
         let res = HttpReadStateResponse {
             certificate: Blob(into_cbor(&Certificate {
                 tree,
@@ -289,7 +309,6 @@ fn verify_paths(
             | [b"subnet", _subnet_id, b"public_key" | b"canister_ranges" | b"node"] => {}
             [b"subnet", _subnet_id, b"node", _node_id]
             | [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {}
-            [b"canister_ranges", _subnet_id] => {}
             [b"request_status", request_id]
             | [b"request_status", request_id, b"status" | b"reply" | b"reject_code" | b"reject_message" | b"error_code"] =>
             {
@@ -514,6 +533,31 @@ mod test {
     }
 
     #[test]
+    fn test_canister_ranges_are_not_allowed() {
+        let state = ReplicatedState::new_from_checkpoint(
+            BTreeMap::new(),
+            SystemMetadata::new(subnet_test_id(1), SubnetType::Application),
+            CanisterQueues::default(),
+            RawQueryStats::default(),
+            CanisterSnapshots::default(),
+        );
+
+        let error = verify_paths(
+            &state,
+            &user_test_id(1),
+            &[Path::new(vec![
+                Label::from("canister_ranges"),
+                [0; 32].into(),
+            ])],
+            &CanisterIdSet::all(),
+            canister_test_id(1).get(),
+        )
+        .expect_err("Should fail because canister_ranges are not allowed");
+
+        assert_eq!(error.status, StatusCode::NOT_FOUND)
+    }
+
+    #[test]
     fn test_verify_path() {
         let subnet_id = subnet_test_id(1);
         let mut metadata = SystemMetadata::new(subnet_id, SubnetType::Application);
@@ -550,7 +594,6 @@ mod test {
                         [0; 32].into(),
                         Label::from("reply")
                     ]),
-                    Path::new(vec![Label::from("canister_ranges"), [0; 32].into(),])
                 ],
                 &CanisterIdSet::all(),
                 canister_test_id(1).get(),

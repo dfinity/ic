@@ -33,14 +33,15 @@ use axum_extra::headers::HeaderMapExt;
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use hyper::header;
-use ic_http_endpoints_public::cors_layer;
+use ic_http_endpoints_public::{cors_layer, query, read_state};
 use ic_types::{CanisterId, SubnetId};
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
-    HttpGatewayDetails, InstanceConfig, MockCanisterHttpResponse, RawAddCycles, RawCanisterCall,
-    RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles, RawIngressStatusArgs,
-    RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory,
-    RawSubnetId, RawTime, TickConfigs, Topology,
+    HttpGatewayDetails, IcpFeatures, InitialTime, InstanceConfig, MockCanisterHttpResponse,
+    NonmainnetFeatures, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
+    RawCanisterResult, RawCycles, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
+    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, TickConfigs,
+    Topology,
 };
 use pocket_ic::RejectResponse;
 use serde::Serialize;
@@ -124,7 +125,7 @@ where
         )
         .directory_route(
             "/canister/{ecid}/query",
-            post(handler_query)
+            post(handler_query_v2)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
                 ))
@@ -132,7 +133,7 @@ where
         )
         .directory_route(
             "/canister/{ecid}/read_state",
-            post(handler_canister_read_state)
+            post(handler_canister_read_state_v2)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
                 ))
@@ -140,7 +141,7 @@ where
         )
         .directory_route(
             "/subnet/{sid}/read_state",
-            post(handler_subnet_read_state)
+            post(handler_subnet_read_state_v2)
                 .layer(RequestBodyLimitLayer::new(
                     4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
                 ))
@@ -153,9 +154,49 @@ where
     S: Clone + Send + Sync + 'static,
     AppState: extract::FromRef<S>,
 {
+    ApiRouter::new()
+        .directory_route(
+            "/canister/{ecid}/call",
+            post(handler_call_v3)
+                .layer(RequestBodyLimitLayer::new(
+                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
+                ))
+                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+        )
+        .directory_route(
+            "/canister/{ecid}/query",
+            post(handler_query_v3)
+                .layer(RequestBodyLimitLayer::new(
+                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
+                ))
+                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+        )
+        .directory_route(
+            "/canister/{ecid}/read_state",
+            post(handler_canister_read_state_v3)
+                .layer(RequestBodyLimitLayer::new(
+                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
+                ))
+                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+        )
+        .directory_route(
+            "/subnet/{sid}/read_state",
+            post(handler_subnet_read_state_v3)
+                .layer(RequestBodyLimitLayer::new(
+                    4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
+                ))
+                .layer(axum::middleware::from_fn(verify_cbor_content_header)),
+        )
+}
+
+pub fn instance_api_v4_routes<S>() -> ApiRouter<S>
+where
+    S: Clone + Send + Sync + 'static,
+    AppState: extract::FromRef<S>,
+{
     ApiRouter::new().directory_route(
         "/canister/{ecid}/call",
-        post(handler_call_v3)
+        post(handler_call_v4)
             .layer(RequestBodyLimitLayer::new(
                 4 * 1024 * 1024, // MAX_REQUEST_BODY_SIZE in BN
             ))
@@ -191,6 +232,9 @@ where
         //
         // All the api v3 endpoints
         .nest("/{id}/api/v3", instance_api_v3_routes())
+        //
+        // All the api v4 endpoints
+        .nest("/{id}/api/v4", instance_api_v4_routes())
         //
         // The instance dashboard
         .api_route("/{id}/_/dashboard", get(handler_dashboard))
@@ -723,63 +767,132 @@ pub async fn handler_status(
     handle_raw(api_state, instance_id, op).await
 }
 
-pub async fn handler_call_v3(
+async fn handler_call(
     State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
+    version: CallRequestVersion,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = CallRequest {
         effective_canister_id,
         bytes,
-        version: CallRequestVersion::V3,
+        version,
     };
     handle_raw(api_state, instance_id, op).await
 }
 
 pub async fn handler_call_v2(
-    State(AppState { api_state, .. }): State<AppState>,
-    NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
+    state: State<AppState>,
+    path: NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    let op = CallRequest {
-        effective_canister_id,
-        bytes,
-        version: CallRequestVersion::V2,
-    };
-    handle_raw(api_state, instance_id, op).await
+    handler_call(state, path, bytes, CallRequestVersion::V2).await
 }
 
-pub async fn handler_query(
+pub async fn handler_call_v3(
+    state: State<AppState>,
+    path: NoApi<Path<(InstanceId, CanisterId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    handler_call(state, path, bytes, CallRequestVersion::V3).await
+}
+
+pub async fn handler_call_v4(
+    state: State<AppState>,
+    path: NoApi<Path<(InstanceId, CanisterId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    handler_call(state, path, bytes, CallRequestVersion::V4).await
+}
+
+async fn handler_query(
     State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
+    version: query::Version,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = QueryRequest {
         effective_canister_id,
         bytes,
+        version,
     };
     handle_raw(api_state, instance_id, op).await
 }
 
-pub async fn handler_canister_read_state(
+pub async fn handler_query_v2(
+    state: State<AppState>,
+    path: NoApi<Path<(InstanceId, CanisterId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    handler_query(state, path, bytes, query::Version::V2).await
+}
+
+pub async fn handler_query_v3(
+    state: State<AppState>,
+    path: NoApi<Path<(InstanceId, CanisterId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    handler_query(state, path, bytes, query::Version::V3).await
+}
+
+async fn handler_canister_read_state(
     State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, effective_canister_id))): NoApi<Path<(InstanceId, CanisterId)>>,
     bytes: Bytes,
+    version: read_state::canister::Version,
 ) -> (StatusCode, NoApi<Response<Body>>) {
     let op = CanisterReadStateRequest {
         effective_canister_id,
         bytes,
+        version,
     };
     handle_raw(api_state, instance_id, op).await
+}
+
+pub async fn handler_canister_read_state_v2(
+    state: State<AppState>,
+    path: NoApi<Path<(InstanceId, CanisterId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    handler_canister_read_state(state, path, bytes, read_state::canister::Version::V2).await
+}
+
+pub async fn handler_canister_read_state_v3(
+    state: State<AppState>,
+    path: NoApi<Path<(InstanceId, CanisterId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    handler_canister_read_state(state, path, bytes, read_state::canister::Version::V3).await
 }
 
 pub async fn handler_subnet_read_state(
     State(AppState { api_state, .. }): State<AppState>,
     NoApi(Path((instance_id, subnet_id))): NoApi<Path<(InstanceId, SubnetId)>>,
     bytes: Bytes,
+    version: read_state::subnet::Version,
 ) -> (StatusCode, NoApi<Response<Body>>) {
-    let op = SubnetReadStateRequest { subnet_id, bytes };
+    let op = SubnetReadStateRequest {
+        subnet_id,
+        bytes,
+        version,
+    };
     handle_raw(api_state, instance_id, op).await
+}
+
+pub async fn handler_subnet_read_state_v2(
+    state: State<AppState>,
+    path: NoApi<Path<(InstanceId, SubnetId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    handler_subnet_read_state(state, path, bytes, read_state::subnet::Version::V2).await
+}
+
+pub async fn handler_subnet_read_state_v3(
+    state: State<AppState>,
+    path: NoApi<Path<(InstanceId, SubnetId)>>,
+    bytes: Bytes,
+) -> (StatusCode, NoApi<Response<Body>>) {
+    handler_subnet_read_state(state, path, bytes, read_state::subnet::Version::V3).await
 }
 
 async fn handle_raw<T: Operation + Send + Sync + 'static>(
@@ -1147,19 +1260,6 @@ pub async fn create_instance(
     extract::Json(instance_config): extract::Json<InstanceConfig>,
 ) -> (StatusCode, Json<rest::CreateInstanceResponse>) {
     let mut subnet_configs = instance_config.subnet_config_set;
-    if let Some(ref icp_features) = instance_config.icp_features {
-        subnet_configs = match subnet_configs.try_with_icp_features(icp_features) {
-            Ok(subnet_configs) => subnet_configs,
-            Err(e) => {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(rest::CreateInstanceResponse::Error {
-                        message: format!("Subnet config failed to validate: {}", e),
-                    }),
-                );
-            }
-        };
-    }
 
     let skip_validate_subnet_configs = instance_config
         .state_dir
@@ -1167,6 +1267,19 @@ pub async fn create_instance(
         .map(|state_dir| File::open(state_dir.clone().join("topology.json")).is_ok())
         .unwrap_or_default();
     if !skip_validate_subnet_configs {
+        if let Some(ref icp_features) = instance_config.icp_features {
+            subnet_configs = match subnet_configs.try_with_icp_features(icp_features) {
+                Ok(subnet_configs) => subnet_configs,
+                Err(e) => {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(rest::CreateInstanceResponse::Error {
+                            message: format!("Subnet config failed to validate: {}", e),
+                        }),
+                    );
+                }
+            };
+        }
         if let Err(e) = subnet_configs.validate() {
             return (
                 StatusCode::BAD_REQUEST,
@@ -1202,27 +1315,101 @@ pub async fn create_instance(
         None
     };
 
+    let initial_time = match instance_config.initial_time {
+        Some(InitialTime::Timestamp(raw_time)) => Some(
+            ic_types::Time::from_nanos_since_unix_epoch(raw_time.nanos_since_epoch),
+        ),
+        Some(InitialTime::AutoProgress(_)) | None => None,
+    };
+    let auto_progress = match instance_config.initial_time {
+        Some(InitialTime::AutoProgress(config)) => Some(config),
+        Some(InitialTime::Timestamp(_)) | None => None,
+    };
+    let auto_progress_enabled = auto_progress.is_some();
+
+    if instance_config.http_gateway_config.is_some() && !auto_progress_enabled {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(rest::CreateInstanceResponse::Error {
+                message: "Creating an HTTP gateway requires `AutoProgress` to be enabled via `initial_time`.".to_string()
+            }),
+        );
+    }
+
+    if let Some(ref icp_features) = instance_config.icp_features {
+        // using `let IcpFeatures { }` with explicit field names
+        // to force an update after adding a new field to `IcpFeatures`
+        let IcpFeatures {
+            /* `nns_ui` does not depend on `registry` */
+            registry: _,
+            cycles_minting,
+            icp_token,
+            /* `nns_ui` does not depend on `cycles_token` */
+            cycles_token: _,
+            nns_governance,
+            sns,
+            ii,
+            nns_ui,
+        } = icp_features;
+        if nns_ui.is_some() {
+            if instance_config.http_gateway_config.is_none() {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(rest::CreateInstanceResponse::Error {
+                        message: "The `nns_ui` feature requires an HTTP gateway to be created via `http_gateway_config`.".to_string()
+                    }),
+                );
+            }
+            for (icp_feature, icp_feature_str) in [
+                (cycles_minting, "cycles_minting"),
+                (icp_token, "icp_token"),
+                (nns_governance, "nns_governance"),
+                (sns, "sns"),
+                (ii, "ii"),
+            ] {
+                if icp_feature.is_none() {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(rest::CreateInstanceResponse::Error {
+                            message: format!("The `nns_ui` feature requires the `{}` feature to be enabled, too.", icp_feature_str),
+                        }),
+                    );
+                }
+            }
+        }
+    }
+
     match api_state
-        .add_instance(move |seed| {
-            PocketIc::try_new(
-                runtime,
-                seed,
-                subnet_configs,
-                instance_config.state_dir,
-                instance_config.nonmainnet_features,
-                log_level,
-                instance_config.bitcoind_addr,
-                instance_config.icp_features,
-                instance_config.allow_incomplete_state,
-            )
-        })
+        .add_instance(
+            move |seed, gateway_port| {
+                PocketIc::try_new(
+                    runtime,
+                    seed,
+                    subnet_configs,
+                    instance_config.state_dir,
+                    instance_config
+                        .nonmainnet_features
+                        .unwrap_or(NonmainnetFeatures::default()),
+                    log_level,
+                    instance_config.bitcoind_addr,
+                    instance_config.icp_features,
+                    instance_config.allow_incomplete_state,
+                    initial_time,
+                    auto_progress_enabled,
+                    gateway_port,
+                )
+            },
+            auto_progress,
+            instance_config.http_gateway_config,
+        )
         .await
     {
-        Ok((instance_id, topology)) => (
+        Ok((instance_id, topology, http_gateway_info)) => (
             StatusCode::CREATED,
             Json(rest::CreateInstanceResponse::Created {
                 instance_id,
                 topology,
+                http_gateway_info,
             }),
         ),
         Err(err) => (
@@ -1260,7 +1447,22 @@ pub async fn create_http_gateway(
     State(AppState { api_state, .. }): State<AppState>,
     extract::Json(http_gateway_config): extract::Json<HttpGatewayConfig>,
 ) -> (StatusCode, Json<rest::CreateHttpGatewayResponse>) {
-    match api_state.create_http_gateway(http_gateway_config).await {
+    let listener = match api_state.create_http_gateway_listener(
+        http_gateway_config.ip_addr.clone(),
+        http_gateway_config.port,
+    ) {
+        Ok(listener) => listener,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(rest::CreateHttpGatewayResponse::Error { message: e }),
+            );
+        }
+    };
+    match api_state
+        .create_http_gateway(http_gateway_config, listener)
+        .await
+    {
         Ok(http_gateway_info) => (
             StatusCode::CREATED,
             Json(rest::CreateHttpGatewayResponse::Created(http_gateway_info)),

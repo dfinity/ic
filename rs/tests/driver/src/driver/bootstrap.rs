@@ -61,6 +61,7 @@ pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;
 
 const CONF_IMG_FNAME: &str = "config_disk.img";
 const BITCOIND_ADDR_PATH: &str = "bitcoind_addr";
+const DOGECOIND_ADDR_PATH: &str = "dogecoind_addr";
 const JAEGER_ADDR_PATH: &str = "jaeger_addr";
 const SOCKS_PROXY_PATH: &str = "socks_proxy";
 
@@ -82,6 +83,10 @@ pub fn init_ic(
         test_env.write_json_object(BITCOIND_ADDR_PATH, &bitcoind_addr)?;
     }
 
+    if let Some(dogecoind_addr) = &ic.dogecoind_addr {
+        test_env.write_json_object(DOGECOIND_ADDR_PATH, &dogecoind_addr)?;
+    }
+
     if let Some(jaeger_addr) = &ic.jaeger_addr {
         test_env.write_json_object(JAEGER_ADDR_PATH, &jaeger_addr)?;
     }
@@ -95,7 +100,7 @@ pub fn init_ic(
     // is not supported anymore.
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
 
-    let replica_version = get_guestos_img_version()?;
+    let replica_version = get_guestos_img_version();
     info!(
         logger,
         "Replica Version that is passed is: {:?}", &replica_version
@@ -177,9 +182,9 @@ pub fn init_ic(
 
     let whitelist = ProvisionalWhitelist::All;
     let (ic_os_update_img_sha256, ic_os_update_img_url, ic_os_launch_measurements) = (
-        get_guestos_initial_update_img_sha256()?,
-        get_guestos_initial_update_img_url()?,
-        get_guestos_initial_launch_measurements()?,
+        get_guestos_initial_update_img_sha256(),
+        get_guestos_initial_update_img_url(),
+        get_guestos_initial_launch_measurements(),
     );
     let mut ic_config = IcConfig::new(
         working_dir.path(),
@@ -383,6 +388,7 @@ fn create_config_disk_image(
         malicious_behavior: None,
         query_stats_epoch_length: None,
         bitcoind_addr: None,
+        dogecoind_addr: None,
         jaeger_addr: None,
         socks_proxy: None,
         hostname: None,
@@ -470,6 +476,11 @@ fn create_config_disk_image(
         config.bitcoind_addr = Some(bitcoind_addr.clone());
     }
 
+    // The dogecoind_addr specifies the local dogecoin node that the dogecoin adapter should connect to in the system test environment.
+    if let Ok(dogecoind_addr) = test_env.read_json_object::<String, _>(DOGECOIND_ADDR_PATH) {
+        config.dogecoind_addr = Some(dogecoind_addr.clone());
+    }
+
     // The jaeger_addr specifies the local Jaeger node that the nodes should connect to in the system test environment.
     if let Ok(jaeger_addr) = test_env.read_json_object::<String, _>(JAEGER_ADDR_PATH) {
         config.jaeger_addr = Some(jaeger_addr.clone());
@@ -553,8 +564,8 @@ pub fn setup_nested_vms(
         for node in nodes {
             join_handles.push(s.spawn(|| {
                 let vm_name = &node.name;
-                let url = get_setupos_img_url()?;
-                let hash = get_setupos_img_sha256()?;
+                let url = get_setupos_img_url();
+                let hash = get_setupos_img_sha256();
                 let setupos_image_spec = AttachImageSpec::via_url(url, hash);
 
                 let config_image =

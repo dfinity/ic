@@ -106,8 +106,7 @@ impl Step for UpdateSubnetType {
                 return Ok(());
             }
 
-            let version =
-                get_guestos_img_version().expect("Should be able to read unassigned nodes version");
+            let version = get_guestos_img_version();
             if version.eq(&self.version) {
                 info!(
                     logger,
@@ -165,8 +164,7 @@ impl Step for UpdateApiBoundaryNodes {
         }
 
         // check whether the current version of the API BNs is already the one they should be upgraded to
-        let current_version =
-            get_guestos_img_version().expect("Should be able to read API boundary nodes version");
+        let current_version = get_guestos_img_version();
         if current_version.eq(&self.version) {
             info!(
                 logger,

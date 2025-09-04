@@ -912,11 +912,6 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         "n535v-yiaaa-aaaaq-aadsq-cai",
         "PokedBots",
     );
-    const SEERS_LEDGER_SUITE: (&str, &str, &str) = (
-        "rffwt-piaaa-aaaaq-aabqq-cai",
-        "rlh33-uyaaa-aaaaq-aabrq-cai",
-        "Seers",
-    );
     const SNEED_LEDGER_SUITE: (&str, &str, &str) = (
         "hvgxa-wqaaa-aaaaq-aacia-cai",
         "h3e2i-naaaa-aaaaq-aacja-cai",
@@ -989,7 +984,6 @@ fn should_upgrade_icrc_sns_canisters_with_golden_state() {
         ORIGYN_LEDGER_SUITE,
         PERSONAL_DAO_LEDGER_SUITE,
         POKEDBOTS_LEDGER_SUITE,
-        SEERS_LEDGER_SUITE,
         SNEED_LEDGER_SUITE,
         SONIC_LEDGER_SUITE,
         SWAMPIES_LEDGER_SUITE,

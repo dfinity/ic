@@ -55,8 +55,9 @@
 ///
 use crate::{
     common::rest::{
-        BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet, HttpsConfig,
-        IcpFeatures, InstanceId, MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId,
+        AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet,
+        HttpsConfig, IcpFeatures, InitialTime, InstanceHttpGatewayConfig, InstanceId,
+        MockCanisterHttpResponse, NonmainnetFeatures, RawEffectivePrincipal, RawMessageId, RawTime,
         SubnetId, SubnetKind, SubnetSpec, Topology,
     },
     nonblocking::PocketIc as PocketIcAsync,
@@ -99,7 +100,7 @@ use wslpath::windows_to_wsl;
 pub mod common;
 pub mod nonblocking;
 
-pub const EXPECTED_SERVER_VERSION: &str = "9.0.3";
+pub const EXPECTED_SERVER_VERSION: &str = "10.0.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -153,15 +154,17 @@ impl PocketIcState {
 
 pub struct PocketIcBuilder {
     config: Option<ExtendedSubnetConfigSet>,
+    http_gateway_config: Option<InstanceHttpGatewayConfig>,
     server_binary: Option<PathBuf>,
     server_url: Option<Url>,
     max_request_time_ms: Option<u64>,
     read_only_state_dir: Option<PathBuf>,
     state_dir: Option<PocketIcState>,
-    nonmainnet_features: bool,
+    nonmainnet_features: NonmainnetFeatures,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
     icp_features: IcpFeatures,
+    initial_time: Option<InitialTime>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -169,15 +172,17 @@ impl PocketIcBuilder {
     pub fn new() -> Self {
         Self {
             config: None,
+            http_gateway_config: None,
             server_binary: None,
             server_url: None,
             max_request_time_ms: Some(DEFAULT_MAX_REQUEST_TIME_MS),
             read_only_state_dir: None,
             state_dir: None,
-            nonmainnet_features: false,
+            nonmainnet_features: NonmainnetFeatures::default(),
             log_level: None,
             bitcoind_addr: None,
             icp_features: IcpFeatures::default(),
+            initial_time: None,
         }
     }
 
@@ -199,6 +204,8 @@ impl PocketIcBuilder {
             self.log_level,
             self.bitcoind_addr,
             self.icp_features,
+            self.initial_time,
+            self.http_gateway_config,
         )
     }
 
@@ -214,6 +221,8 @@ impl PocketIcBuilder {
             self.log_level,
             self.bitcoind_addr,
             self.icp_features,
+            self.initial_time,
+            self.http_gateway_config,
         )
         .await
     }
@@ -250,7 +259,7 @@ impl PocketIcBuilder {
         self
     }
 
-    pub fn with_nonmainnet_features(mut self, nonmainnet_features: bool) -> Self {
+    pub fn with_nonmainnet_features(mut self, nonmainnet_features: NonmainnetFeatures) -> Self {
         self.nonmainnet_features = nonmainnet_features;
         self
     }
@@ -408,10 +417,36 @@ impl PocketIcBuilder {
         self
     }
 
-    /// Enables all ICP features supported by PocketIC and implemented by system canisters
+    /// Enables selected ICP features supported by PocketIC and implemented by system canisters
     /// (deployed to the PocketIC instance automatically when creating a new PocketIC instance).
-    pub fn with_all_icp_features(mut self) -> Self {
-        self.icp_features = IcpFeatures::all_icp_features();
+    pub fn with_icp_features(mut self, icp_features: IcpFeatures) -> Self {
+        self.icp_features = icp_features;
+        self
+    }
+
+    /// Sets the initial timestamp of the new instance to the provided value which must be at least
+    /// - 10 May 2021 10:00:01 AM CEST if the `cycles_minting` feature is enabled in `icp_features`;
+    /// - 06 May 2021 21:17:10 CEST otherwise.
+    pub fn with_initial_timestamp(mut self, initial_timestamp_nanos: u64) -> Self {
+        self.initial_time = Some(InitialTime::Timestamp(RawTime {
+            nanos_since_epoch: initial_timestamp_nanos,
+        }));
+        self
+    }
+
+    /// Configures the new instance to make progress automatically,
+    /// i.e., periodically update the time of the IC instance
+    /// to the real time and execute rounds on the subnets.
+    pub fn with_auto_progress(mut self, artificial_delay_ms: Option<u64>) -> Self {
+        let config = AutoProgressConfig {
+            artificial_delay_ms,
+        };
+        self.initial_time = Some(InitialTime::AutoProgress(config));
+        self
+    }
+
+    pub fn with_http_gateway(mut self, http_gateway_config: InstanceHttpGatewayConfig) -> Self {
+        self.http_gateway_config = Some(http_gateway_config);
         self
     }
 }
@@ -523,10 +558,12 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
         read_only_state_dir: Option<PathBuf>,
         state_dir: Option<PocketIcState>,
-        nonmainnet_features: bool,
+        nonmainnet_features: NonmainnetFeatures,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
+        initial_time: Option<InitialTime>,
+        http_gateway_config: Option<InstanceHttpGatewayConfig>,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -550,6 +587,8 @@ impl PocketIc {
                 log_level,
                 bitcoind_addr,
                 icp_features,
+                initial_time,
+                http_gateway_config,
             )
             .await
         });

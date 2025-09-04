@@ -18,14 +18,13 @@ env:
   CI_RUN_ID: ${{ github.run_id }}
 
 jobs:
-
   rust-benchmarks:
     name: Bazel Run Rust Benchmarks
     runs-on:
       # see linux-x86-64 runner group
       labels: rust-benchmarks
     container:
-      image: ghcr.io/dfinity/ic-build@sha256:e0570312bc509da541f8dc2be75782513523ec9c00b47285083d3227d9ccf096
+      image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
       # running on bare metal machine using ubuntu user
       options: --user ubuntu
     timeout-minutes: 720 # 12 hours
@@ -46,6 +45,8 @@ jobs:
           - "//rs/execution_environment:execute_query_bench"
           - "//rs/execution_environment:execute_update_bench"
           - "//rs/execution_environment:wasm_instructions_bench"
+          - "//rs/http_endpoints/..."
+          - "//rs/p2p/..."
     steps:
       - name: Checkout
         uses: actions/checkout@v4

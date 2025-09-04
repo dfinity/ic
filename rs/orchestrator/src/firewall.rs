@@ -192,7 +192,8 @@ impl Firewall {
                         warn!(
                             every_n_seconds => 30,
                             self.logger,
-                            "Failed to get the IPs of all nodes in the registry: {}", err)
+                            "Failed to get the IPs of all nodes in the registry: {}", err
+                        )
                     })
                     .unwrap_or_default()
             })
@@ -262,38 +263,66 @@ impl Firewall {
         // in the registry inclusive.
         let registry_versions = self.get_registry_versions(registry_version);
 
-        // Get the IPs of all nodes on system subnets
-        let system_subnet_node_ips: BTreeSet<IpAddr> = registry_versions
-            .into_iter()
-            .flat_map(|registry_version| {
-                self.registry
-                    .get_system_subnet_nodes_ip_addresses(registry_version)
-                    .inspect_err(|err| {
-                        warn!(
-                        every_n_seconds => 30,
-                        self.logger,
-                        "Failed to get the IPs of system subnet nodes in the registry: {}", err)
-                    })
-                    .unwrap_or_default()
-            })
-            .collect();
+        // Depending on whether the node is a system or app API boundary node, get the IPs of all
+        // system subnet or application subnet nodes
+        let node_ips: BTreeSet<IpAddr> = match self
+            .registry
+            .is_system_api_boundary_node(self.node_id, registry_version)
+        {
+            Ok(true) => registry_versions
+                .into_iter()
+                .flat_map(|registry_version| {
+                    self.registry
+                        .get_system_subnet_nodes_ip_addresses(registry_version)
+                        .inspect_err(|err| {
+                            warn!(
+                                every_n_seconds => 30,
+                                self.logger,
+                                "Failed to get the IPs of system subnet nodes in the registry: {}", err
+                            )
+                        })
+                        .unwrap_or_default()
+                })
+                .collect(),
+            Ok(false) => registry_versions
+                .into_iter()
+                .flat_map(|registry_version| {
+                    self.registry
+                        .get_app_subnet_nodes_ip_addresses(registry_version)
+                        .inspect_err(|err| {
+                            warn!(
+                                every_n_seconds => 30,
+                                self.logger,
+                                "Failed to get the IPs of app subnet nodes in the registry: {}", err
+                            )
+                        })
+                        .unwrap_or_default()
+                })
+                .collect(),
+            Err(err) => {
+                warn!(
+                    every_n_seconds => 30,
+                    self.logger,
+                    "Failed to determine if node is a system or app API boundary node: {}", err);
+                BTreeSet::new()
+            }
+        };
 
         // Then split it to v4 and v6 separately
-        let (system_subnet_node_ipv4s, system_subnet_node_ipv6s) =
-            split_ips_by_address_family(&system_subnet_node_ips);
+        let (node_ipv4s, node_ipv6s) = split_ips_by_address_family(&node_ips);
         info!(
             self.logger,
-            "Whitelisting system subnet node IP addresses ({} v4 and {} v6) for the SOCKS proxy on the firewall",
-            system_subnet_node_ipv4s.len(),
-            system_subnet_node_ipv6s.len()
+            "Whitelisting node IP addresses ({} v4 and {} v6) for the SOCKS proxy on the firewall",
+            node_ipv4s.len(),
+            node_ipv6s.len()
         );
 
         FirewallRule {
-            ipv4_prefixes: system_subnet_node_ipv4s,
-            ipv6_prefixes: system_subnet_node_ipv6s,
+            ipv4_prefixes: node_ipv4s,
+            ipv6_prefixes: node_ipv6s,
             ports: vec![SOCKS_PROXY_PORT.into()],
             action: FirewallAction::Allow as i32,
-            comment: "system subnet nodes for SOCKS proxy".to_string(),
+            comment: "nodes for SOCKS proxy".to_string(),
             user: None,
             direction: Some(FirewallRuleDirection::Inbound as i32),
         }
@@ -704,11 +733,14 @@ mod tests {
     use super::*;
 
     const CFG_TEMPLATE_BYTES: &[u8] =
-        include_bytes!("../../../ic-os/components/ic/generate-ic-config/ic.json5.template");
+        include_bytes!("../../../ic-os/components/guestos/generate-ic-config/ic.json5.template");
     const NFTABLES_GOLDEN_BYTES: &[u8] =
         include_bytes!("../testdata/nftables_assigned_replica.conf.golden");
-    const NFTABLES_BOUNDARY_NODE_GOLDEN_BYTES: &[u8] =
-        include_bytes!("../testdata/nftables_boundary_node.conf.golden");
+    const NFTABLES_BOUNDARY_NODE_APP_SUBNET_GOLDEN_BYTES: &[u8] =
+        include_bytes!("../testdata/nftables_boundary_node_app_subnet.conf.golden");
+    const NFTABLES_BOUNDARY_NODE_SYSTEM_SUBNET_GOLDEN_BYTES: &[u8] =
+        include_bytes!("../testdata/nftables_boundary_node_system_subnet.conf.golden");
+    const API_BOUNDARY_NODE_ID: u64 = 3003;
 
     #[test]
     fn test_firewall_rule_compilation() {
@@ -837,23 +869,45 @@ mod tests {
     fn nftables_golden_test() {
         golden_test(
             Role::AssignedReplica(subnet_test_id(1)),
+            node_test_id(0),
             NFTABLES_GOLDEN_BYTES,
             "assigned_replica",
         );
     }
 
     #[test]
-    fn nftables_golden_boundary_node_test() {
+    fn nftables_golden_boundary_node_system_subnet_test() {
+        // pick the node id such that the API BN's SOCKS proxy serves system subnet nodes
+        // the assert checks that
+        let api_bn_id_for_system_subnet = node_test_id(0);
+        assert!(api_bn_id_for_system_subnet < node_test_id(API_BOUNDARY_NODE_ID));
+
         golden_test(
             Role::BoundaryNode,
-            NFTABLES_BOUNDARY_NODE_GOLDEN_BYTES,
+            api_bn_id_for_system_subnet,
+            NFTABLES_BOUNDARY_NODE_SYSTEM_SUBNET_GOLDEN_BYTES,
+            "boundary_node",
+        );
+    }
+
+    #[test]
+    fn nftables_golden_boundary_node_app_subnet_test() {
+        // pick the node id such that the API BN's SOCKS proxy serves app subnet nodes
+        // the assert checks that
+        let api_bn_id_for_app_subnet = node_test_id(1234);
+        assert!(api_bn_id_for_app_subnet > node_test_id(API_BOUNDARY_NODE_ID));
+
+        golden_test(
+            Role::BoundaryNode,
+            api_bn_id_for_app_subnet,
+            NFTABLES_BOUNDARY_NODE_APP_SUBNET_GOLDEN_BYTES,
             "boundary_node",
         );
     }
 
     /// Runs [`Firewall::check_for_firewall_config`] and compares the output against the specified
     /// golden output.
-    fn golden_test(role: Role, golden_bytes: &[u8], label: &str) {
+    fn golden_test(role: Role, node_id: NodeId, golden_bytes: &[u8], label: &str) {
         let tmp_dir = tempfile::tempdir().unwrap();
         let nftables_config_path = tmp_dir.path().join("nftables.conf");
         let config = get_config();
@@ -870,6 +924,7 @@ mod tests {
             boundary_node_firewall_config,
             tmp_dir.path(),
             role,
+            node_id,
         );
 
         firewall
@@ -933,26 +988,29 @@ mod tests {
         boundary_node_config: BoundaryNodeFirewallConfig,
         tmp_dir: &Path,
         role: Role,
+        node_id: NodeId,
     ) -> Firewall {
-        let node = node_test_id(0);
+        let registry = set_up_registry(role, node_id);
 
-        let registry = set_up_registry(role, node);
-
-        let registry_helper = Arc::new(RegistryHelper::new(node, registry.clone(), no_op_logger()));
+        let registry_helper = Arc::new(RegistryHelper::new(
+            node_id,
+            registry.clone(),
+            no_op_logger(),
+        ));
 
         let (crypto, _) =
-            ic_crypto_test_utils_tls::temp_crypto_component_with_tls_keys(registry, node);
+            ic_crypto_test_utils_tls::temp_crypto_component_with_tls_keys(registry, node_id);
         let catch_up_package_provider = CatchUpPackageProvider::new(
             registry_helper.clone(),
             tmp_dir.join("cups"),
             Arc::new(CryptoReturningOk::default()),
             Arc::new(crypto),
             no_op_logger(),
-            node,
+            node_id,
         );
 
         Firewall::new(
-            node,
+            node_id,
             registry_helper,
             Arc::new(OrchestratorMetrics::new(&ic_metrics::MetricsRegistry::new())),
             config,
@@ -985,7 +1043,7 @@ mod tests {
             &registry_data_provider,
             registry_version,
             system_subnet_node_id,
-            /*ip=*/ "fd5b:693c:f8ea::1",
+            /*ip=*/ "a4c2:7f91:3db6:1e8c:5a4f:cc92:0b37:6e41",
         );
         let system_subnet_record = SubnetRecordBuilder::from(&[system_subnet_node_id])
             .with_subnet_type(SubnetType::System)
@@ -1004,7 +1062,7 @@ mod tests {
             &registry_data_provider,
             registry_version,
             app_subnet_node_id,
-            /*ip=*/ "2.0.0.2",
+            /*ip=*/ "3fda:92b7:4c1e:8a23:7d61:2f9c:ab42:19e5",
         );
         let app_subnet_record = SubnetRecordBuilder::from(&[app_subnet_node_id])
             .with_subnet_type(SubnetType::Application)
@@ -1018,7 +1076,7 @@ mod tests {
         );
 
         // Add an API boundary node
-        let api_boundary_node_id = node_test_id(3003);
+        let api_boundary_node_id = node_test_id(API_BOUNDARY_NODE_ID);
         add_node_record(
             &registry_data_provider,
             registry_version,

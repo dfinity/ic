@@ -1,0 +1,25 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "ic-heap-bytes",
+    srcs = glob(["src/**"]),
+    proc_macro_deps = [
+        # Keep sorted.
+        "//packages/ic-heap-bytes-derive",
+        "@crate_index//:paste",
+    ],
+    version = "0.1.0",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:prometheus",
+        "@crate_index//:tempfile",
+    ],
+)
+
+rust_test(
+    name = "ic-heap-bytes-test",
+    crate = ":ic-heap-bytes",
+)

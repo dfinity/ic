@@ -1218,6 +1218,7 @@ type SpawnResponse = record {
 
 type Split = record {
   amount_e8s : nat64;
+  memo : opt nat64;
 };
 
 type StakeMaturity = record {

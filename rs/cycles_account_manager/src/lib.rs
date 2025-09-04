@@ -104,12 +104,6 @@ impl ResourceSaturation {
         }
     }
 
-    /// Creates a new `ResourceSaturation` like the `new()` constructor, but also
-    /// divides `usage`, `threshold`, and `capacity` by the given `scaling` factor.
-    pub fn new_scaled(usage: u64, threshold: u64, capacity: u64, scaling: u64) -> Self {
-        Self::new(usage / scaling, threshold / scaling, capacity / scaling)
-    }
-
     /// Returns the part of the usage that is above the threshold.
     pub fn usage_above_threshold(&self) -> u64 {
         self.usage.saturating_sub(self.threshold)
@@ -675,7 +669,7 @@ impl CyclesAccountManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> IngressInductionCost {
-        let paying_canister = match ingress.is_addressed_to_subnet(self.own_subnet_id) {
+        let paying_canister = match ingress.is_addressed_to_subnet() {
             // If a subnet message, get effective canister id who will pay for the message.
             true => {
                 if let Ok(Method::UpdateSettings) = Method::from_str(ingress.method_name()) {
