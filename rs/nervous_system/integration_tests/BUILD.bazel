@@ -358,10 +358,12 @@ rust_test(
     data = DEV_DATA + [
         "@kong_backend_canister//file",
         "@kongswap-adaptor-canister//file",
+        "@sns-kongswap-adaptor-v1-canister//file",
     ],
     env = DEV_ENV | {
         "KONG_BACKEND_CANISTER_WASM_PATH": "$(rootpath @kong_backend_canister//file)",
         "KONGSWAP_ADAPTOR_CANISTER_WASM_PATH": "$(rootpath @kongswap-adaptor-canister//file)",
+        "SNS_KONGSWAP_ADAPTOR_V1_CANISTER_WASM_PATH": "$(rootpath sns-kongswap-adaptor-v1-canister//file)",
         "RUST_TEST_NOCAPTURE": "1",
     },
     proc_macro_deps = MACRO_DEPENDENCIES,
