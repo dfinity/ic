@@ -2,10 +2,9 @@ use crate::pb;
 use ic_base_types::SubnetId;
 use ic_management_canister_types::NodeMetrics;
 use rewards_calculation::rewards_calculator_results::{
-    BaseRewards, DailyBaseRewardsType3, DailyResults, NodeMetricsDaily, NodeProviderRewards,
-    NodeResults, NodeStatus,
+    BaseRewards, BaseRewardsType3, NodeMetricsDaily, NodeProviderRewards, NodeResults, NodeStatus,
 };
-use rewards_calculation::types::{DayUtc, SubnetMetricsDailyKey};
+use rewards_calculation::types::DayUtc;
 
 impl From<SubnetId> for pb::ic_node_rewards::v1::SubnetIdKey {
     fn from(subnet_id: SubnetId) -> Self {
@@ -18,15 +17,6 @@ impl From<SubnetId> for pb::ic_node_rewards::v1::SubnetIdKey {
 impl From<pb::ic_node_rewards::v1::SubnetIdKey> for SubnetId {
     fn from(subnet_id: pb::ic_node_rewards::v1::SubnetIdKey) -> Self {
         subnet_id.subnet_id.unwrap().into()
-    }
-}
-
-impl From<pb::ic_node_rewards::v1::SubnetMetricsKey> for SubnetMetricsDailyKey {
-    fn from(key: pb::ic_node_rewards::v1::SubnetMetricsKey) -> Self {
-        Self {
-            day: key.timestamp_nanos.into(),
-            subnet_id: SubnetId::from(key.subnet_id.unwrap()),
-        }
     }
 }
 
@@ -43,6 +33,7 @@ impl From<NodeMetrics> for pb::ic_node_rewards::v1::NodeMetrics {
 impl From<NodeProviderRewards> for pb::rewards_calculator::v1::NodeProviderRewards {
     fn from(
         NodeProviderRewards {
+            day_utc,
             rewards_total_xdr_permyriad,
             base_rewards,
             base_rewards_type3,
@@ -50,6 +41,7 @@ impl From<NodeProviderRewards> for pb::rewards_calculator::v1::NodeProviderRewar
         }: NodeProviderRewards,
     ) -> Self {
         Self {
+            day_utc: Some(day_utc.into()),
             rewards_total_xdr_permyriad: rewards_total_xdr_permyriad.into(),
             base_rewards: base_rewards.into_iter().map(Into::into).collect(),
             base_rewards_type3: base_rewards_type3.into_iter().map(Into::into).collect(),
@@ -65,7 +57,11 @@ impl From<NodeResults> for pb::rewards_calculator::v1::NodeResults {
             node_reward_type,
             region,
             dc_id,
-            daily_results,
+            node_status,
+            performance_multiplier,
+            rewards_reduction,
+            base_rewards,
+            adjusted_rewards,
         }: NodeResults,
     ) -> Self {
         Self {
@@ -73,24 +69,6 @@ impl From<NodeResults> for pb::rewards_calculator::v1::NodeResults {
             node_reward_type: Some(node_reward_type.to_string()),
             region: Some(region),
             dc_id: Some(dc_id),
-            daily_results: daily_results.into_iter().map(Into::into).collect(),
-        }
-    }
-}
-
-impl From<DailyResults> for pb::rewards_calculator::v1::DailyResults {
-    fn from(
-        DailyResults {
-            day,
-            node_status,
-            performance_multiplier,
-            rewards_reduction,
-            base_rewards,
-            adjusted_rewards,
-        }: DailyResults,
-    ) -> Self {
-        Self {
-            day: Some(day.into()),
             node_status: Some(node_status.into()),
             performance_multiplier_percent: Some(performance_multiplier.into()),
             rewards_reduction_percent: Some(rewards_reduction.into()),
@@ -118,19 +96,17 @@ impl From<BaseRewards> for pb::rewards_calculator::v1::BaseRewards {
     }
 }
 
-impl From<DailyBaseRewardsType3> for pb::rewards_calculator::v1::DailyBaseRewardsType3 {
+impl From<BaseRewardsType3> for pb::rewards_calculator::v1::BaseRewardsType3 {
     fn from(
-        DailyBaseRewardsType3 {
-            day,
+        BaseRewardsType3 {
             region,
             nodes_count,
             avg_rewards,
             avg_coefficient,
             value,
-        }: DailyBaseRewardsType3,
+        }: BaseRewardsType3,
     ) -> Self {
         Self {
-            day: Some(day.into()),
             region: Some(region),
             nodes_count: Some(nodes_count as u64),
             avg_rewards_xdr_permyriad: Some(avg_rewards.into()),

@@ -294,6 +294,7 @@ fn test_rewardable_nodes_deleted_nodes() {
         &*REGISTRY_STORE.with(|store| store.clone()),
         from,
         to,
+        None,
     )
     .expect("Failed to fetch rewardable nodes");
 
@@ -342,6 +343,7 @@ fn test_rewardable_nodes_rewardables_till_deleted() {
         &*REGISTRY_STORE.with(|store| store.clone()),
         from,
         to,
+        None,
     )
     .expect("Failed to fetch rewardable nodes");
 
@@ -405,6 +407,7 @@ fn test_node_re_registered_after_deletion() {
         &*REGISTRY_STORE.with(|store| store.clone()),
         from,
         to,
+        None,
     )
     .expect("Failed to fetch rewardables");
 

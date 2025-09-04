@@ -56,25 +56,6 @@ pub mod node_status {
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
-pub struct DailyResults {
-    #[prost(message, optional, tag = "1")]
-    pub day: ::core::option::Option<DayUtc>,
-    #[prost(message, optional, tag = "2")]
-    pub node_status: ::core::option::Option<NodeStatus>,
-    #[prost(message, optional, tag = "3")]
-    pub performance_multiplier_percent:
-        ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
-    #[prost(message, optional, tag = "4")]
-    pub rewards_reduction_percent:
-        ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
-    #[prost(message, optional, tag = "5")]
-    pub base_rewards_xdr_permyriad:
-        ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
-    #[prost(message, optional, tag = "6")]
-    pub adjusted_rewards_xdr_permyriad:
-        ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
-}
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct NodeResults {
     #[prost(message, optional, tag = "1")]
     pub node_id: ::core::option::Option<::ic_base_types::PrincipalId>,
@@ -84,8 +65,20 @@ pub struct NodeResults {
     pub region: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(string, optional, tag = "4")]
     pub dc_id: ::core::option::Option<::prost::alloc::string::String>,
-    #[prost(message, repeated, tag = "5")]
-    pub daily_results: ::prost::alloc::vec::Vec<DailyResults>,
+    #[prost(message, optional, tag = "5")]
+    pub node_status: ::core::option::Option<NodeStatus>,
+    #[prost(message, optional, tag = "6")]
+    pub performance_multiplier_percent:
+        ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
+    #[prost(message, optional, tag = "7")]
+    pub rewards_reduction_percent:
+        ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
+    #[prost(message, optional, tag = "8")]
+    pub base_rewards_xdr_permyriad:
+        ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
+    #[prost(message, optional, tag = "9")]
+    pub adjusted_rewards_xdr_permyriad:
+        ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct BaseRewards {
@@ -99,29 +92,29 @@ pub struct BaseRewards {
     pub region: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
-pub struct DailyBaseRewardsType3 {
-    #[prost(message, optional, tag = "1")]
-    pub day: ::core::option::Option<DayUtc>,
-    #[prost(string, optional, tag = "2")]
+pub struct BaseRewardsType3 {
+    #[prost(string, optional, tag = "1")]
     pub region: ::core::option::Option<::prost::alloc::string::String>,
-    #[prost(uint64, optional, tag = "3")]
+    #[prost(uint64, optional, tag = "2")]
     pub nodes_count: ::core::option::Option<u64>,
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag = "3")]
     pub avg_rewards_xdr_permyriad:
         ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
-    #[prost(message, optional, tag = "5")]
+    #[prost(message, optional, tag = "4")]
     pub avg_coefficient_percent: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
-    #[prost(message, optional, tag = "6")]
+    #[prost(message, optional, tag = "5")]
     pub value_xdr_permyriad: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct NodeProviderRewards {
-    #[prost(uint64, optional, tag = "1")]
+    #[prost(message, optional, tag = "1")]
+    pub day_utc: ::core::option::Option<DayUtc>,
+    #[prost(uint64, optional, tag = "2")]
     pub rewards_total_xdr_permyriad: ::core::option::Option<u64>,
-    #[prost(message, repeated, tag = "2")]
-    pub base_rewards: ::prost::alloc::vec::Vec<BaseRewards>,
     #[prost(message, repeated, tag = "3")]
-    pub base_rewards_type3: ::prost::alloc::vec::Vec<DailyBaseRewardsType3>,
+    pub base_rewards: ::prost::alloc::vec::Vec<BaseRewards>,
     #[prost(message, repeated, tag = "4")]
+    pub base_rewards_type3: ::prost::alloc::vec::Vec<BaseRewardsType3>,
+    #[prost(message, repeated, tag = "5")]
     pub nodes_results: ::prost::alloc::vec::Vec<NodeResults>,
 }

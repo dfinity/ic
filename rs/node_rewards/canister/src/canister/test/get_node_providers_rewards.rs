@@ -608,7 +608,7 @@ fn test_get_node_providers_rewards() {
     .unwrap();
 
     let inner_results = CANISTER_TEST
-        .with_borrow(|canister| canister.calculate_rewards::<TestState>(request))
+        .with_borrow(|canister| canister.calculate_rewards::<TestState>(request, None))
         .unwrap();
     let expected: BTreeMap<PrincipalId, NodeProviderRewards> =
         serde_json::from_str(EXPECTED_TEST_1).unwrap();

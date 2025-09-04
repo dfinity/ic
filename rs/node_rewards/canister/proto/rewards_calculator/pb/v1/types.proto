@@ -33,21 +33,16 @@ message NodeStatus {
   }
 }
 
-message DailyResults {
-  DayUtc day = 1;
-  optional NodeStatus node_status = 2;
-  ic_nervous_system.pb.v1.Decimal performance_multiplier_percent = 3;
-  ic_nervous_system.pb.v1.Decimal rewards_reduction_percent = 4;
-  ic_nervous_system.pb.v1.Decimal base_rewards_xdr_permyriad = 5;
-  ic_nervous_system.pb.v1.Decimal adjusted_rewards_xdr_permyriad = 6;
-}
-
 message NodeResults {
   ic_base_types.pb.v1.PrincipalId node_id = 1;
   optional string node_reward_type = 2;
   optional string region = 3;
   optional string dc_id = 4;
-  repeated DailyResults daily_results = 5;
+  optional NodeStatus node_status = 5;
+  ic_nervous_system.pb.v1.Decimal performance_multiplier_percent = 6;
+  ic_nervous_system.pb.v1.Decimal rewards_reduction_percent = 7;
+  ic_nervous_system.pb.v1.Decimal base_rewards_xdr_permyriad = 8;
+  ic_nervous_system.pb.v1.Decimal adjusted_rewards_xdr_permyriad = 9;
 }
 
 message BaseRewards {
@@ -57,18 +52,18 @@ message BaseRewards {
   optional string region = 4;
 }
 
-message DailyBaseRewardsType3 {
-  DayUtc day = 1;
-  optional string region = 2;
-  optional uint64 nodes_count = 3;
-  ic_nervous_system.pb.v1.Decimal avg_rewards_xdr_permyriad = 4;
-  ic_nervous_system.pb.v1.Decimal avg_coefficient_percent = 5;
-  ic_nervous_system.pb.v1.Decimal value_xdr_permyriad = 6;
+message BaseRewardsType3 {
+  optional string region = 1;
+  optional uint64 nodes_count = 2;
+  ic_nervous_system.pb.v1.Decimal avg_rewards_xdr_permyriad = 3;
+  ic_nervous_system.pb.v1.Decimal avg_coefficient_percent = 4;
+  ic_nervous_system.pb.v1.Decimal value_xdr_permyriad = 5;
 }
 
 message NodeProviderRewards {
-  optional uint64 rewards_total_xdr_permyriad = 1;
-  repeated BaseRewards base_rewards = 2;
-  repeated DailyBaseRewardsType3 base_rewards_type3 = 3;
-  repeated NodeResults nodes_results = 4;
+  DayUtc day_utc = 1;
+  optional uint64 rewards_total_xdr_permyriad = 2;
+  repeated BaseRewards base_rewards = 3;
+  repeated BaseRewardsType3 base_rewards_type3 = 4;
+  repeated NodeResults nodes_results = 5;
 }
