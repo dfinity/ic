@@ -48,10 +48,7 @@ impl DashboardClient {
     }
 
     pub async fn retrieve_proposal_batch(&self, proposal_ids: &[u64]) -> Vec<ProposalInfo> {
-        let mut fut = Vec::with_capacity(proposal_ids.len());
-        for proposal_id in proposal_ids {
-            fut.push(self.retrieve_proposal(proposal_id));
-        }
+        let fut = proposal_ids.iter().map(|id| self.retrieve_proposal(id));
         futures::future::join_all(fut).await
     }
 
