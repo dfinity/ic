@@ -18,7 +18,7 @@ use ic_sns_testing::utils::{
     SnsTestingNetworkValidationError, TREASURY_PRINCIPAL_ID,
 };
 use icp_ledger::Tokens;
-use pocket_ic::common::rest::{EmptyConfig, IcpFeatures};
+use pocket_ic::common::rest::{EmptyConfig, IcpFeatures, InstanceHttpGatewayConfig};
 use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -31,22 +31,6 @@ const DEV_PARTICIPANT_ID: PrincipalId = PrincipalId::new_user_test_id(1000);
 #[derive(CandidType)]
 pub struct TestCanisterInitArgs {
     pub greeting: Option<String>,
-}
-
-// The `nns_ui` feature requires auto progress to be enabled when the instance is created
-// which would make `dev_nns_neuron_id` non-deterministic.
-// Hence, we deploy the NNS dapp separately for now.
-fn all_icp_features_but_nns_ui() -> IcpFeatures {
-    IcpFeatures {
-        registry: Some(EmptyConfig {}),
-        cycles_minting: Some(EmptyConfig {}),
-        icp_token: Some(EmptyConfig {}),
-        cycles_token: Some(EmptyConfig {}),
-        nns_governance: Some(EmptyConfig {}),
-        sns: Some(EmptyConfig {}),
-        ii: Some(EmptyConfig {}),
-        nns_ui: None,
-    }
 }
 
 async fn install_test_canister(pocket_ic: &PocketIc, args: TestCanisterInitArgs) -> CanisterId {
@@ -72,20 +56,38 @@ async fn prepare_network_for_test(
 ) -> (PocketIc, NeuronId) {
     // Preparing the PocketIC-based network
 
+    let all_icp_features = IcpFeatures {
+        registry: Some(EmptyConfig {}),
+        cycles_minting: Some(EmptyConfig {}),
+        icp_token: Some(EmptyConfig {}),
+        cycles_token: Some(EmptyConfig {}),
+        nns_governance: Some(EmptyConfig {}),
+        sns: Some(EmptyConfig {}),
+        ii: Some(EmptyConfig {}),
+        nns_ui: None,
+    };
     let current_time = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos() as u64;
+    let http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: None,
+    };
     let pocket_ic = PocketIcBuilder::new()
-        .with_state_dir(state_dir.clone())
-        .with_icp_features(all_icp_features_but_nns_ui())
+        .with_state_dir(state_dir)
+        .with_icp_features(all_icp_features)
         .with_initial_timestamp(current_time)
+        .with_http_gateway(http_gateway_config)
         .with_nns_subnet()
         .with_sns_subnet()
         .with_ii_subnet()
         .with_application_subnet()
         .build_async()
         .await;
+
     let treasury_principal_id = *TREASURY_PRINCIPAL_ID;
 
     let dev_nns_neuron_id = bootstrap_nns(
@@ -257,17 +259,13 @@ async fn test_sns_testing_basic_scenario_without_sns_neuron_following() {
 
 #[tokio::test]
 pub async fn test_missing_nns_canisters() {
+    let state_dir = TempDir::new().unwrap();
+    let state_dir = state_dir.path().to_path_buf();
+
     let dev_participant_id = PrincipalId::new_user_test_id(1000);
-    // Preparing the PocketIC-based network
-    let pocket_ic = PocketIcBuilder::new()
-        .with_icp_features(all_icp_features_but_nns_ui())
-        .with_nns_subnet()
-        .with_sns_subnet()
-        .with_ii_subnet()
-        .with_application_subnet()
-        .build_async()
-        .await;
-    bootstrap_nns(&pocket_ic, vec![], dev_participant_id).await;
+
+    let (pocket_ic, _dev_nns_neuron_id) =
+        prepare_network_for_test(dev_participant_id, state_dir).await;
 
     // Deleting the ledger-index canister
     pocket_ic
