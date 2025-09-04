@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+
+## 10.0.0 - 2025-09-05
+
 ### Added
 - The function `start_server` and its input type `StartServerParams` to manually start a PocketIC server.
 - The function `PocketIc::upgrade_eop_canister` to upgrade a Motoko EOP canister.
