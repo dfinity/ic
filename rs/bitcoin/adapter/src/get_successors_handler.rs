@@ -63,7 +63,10 @@ const_assert_eq!(
 );
 
 // Max height for sending multiple blocks when connecting the Bitcoin mainnet.
-pub(crate) const MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 750_000;
+pub(crate) const BTC_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 750_000;
+
+// Max height for sending multiple blocks when connecting the Dogecoin mainnet.
+pub(crate) const DOGE_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 4_000_000;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct GetSuccessorsRequest {
@@ -785,9 +788,9 @@ mod test {
         );
         assert!(
             bitcoin::Network::Bitcoin
-                .are_multiple_blocks_allowed(MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT),
+                .are_multiple_blocks_allowed(BTC_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT),
             "Multiple blocks are allowed at {}",
-            MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT
+            BTC_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT
         );
         assert!(
             !bitcoin::Network::Bitcoin.are_multiple_blocks_allowed(900_000),

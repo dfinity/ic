@@ -132,33 +132,34 @@ impl<'de> Deserialize<'de> for AdapterNetwork {
 
 /// Trait that implements differences between Bitcoin and Dogecoin networks.
 pub trait BlockchainNetwork: Copy {
-    /// Header type
+    /// Header type.
     type Header: BlockchainHeader;
-    /// Block type
+    /// Block type.
     type Block: BlockchainBlock<Header = Self::Header>;
-    /// P2P protocol version number
+    /// P2P protocol version number.
     const P2P_PROTOCOL_VERSION: u32;
-    /// Return genesis block header
+    /// Return genesis block header.
     fn genesis_block_header(&self) -> Self::Header;
-    /// Validate the given block header
+    /// Validate the given block header.
     fn validate_header(
         &self,
         store: &impl HeaderStore<Self::Header>,
         header: &Self::Header,
     ) -> Result<(), ValidateHeaderError>;
-    /// Helper used to determine if multiple blocks should be returned.
+    /// Helper used to determine if multiple blocks should be returned
+    /// in [GetSuccessorsResponse].
     fn are_multiple_blocks_allowed(&self, anchor_height: BlockHeight) -> bool;
-    /// Return max blocks bytes
+    /// Return max blocks bytes.
     fn max_blocks_size(&self) -> usize {
         crate::get_successors_handler::MAX_BLOCKS_BYTES
     }
-    /// Return max in flight blocks
+    /// Return max in-flight blocks that is allowed in the adapter state.
     fn max_in_flight_blocks(&self) -> usize {
         crate::get_successors_handler::MAX_IN_FLIGHT_BLOCKS
     }
-    /// Return magic setting.
+    /// Return the magic number of this network.
     fn magic(&self) -> Magic;
-    /// This function returns the port to use based on the network provided.
+    /// Return the p2p port used by the given network type.
     fn p2p_port(&self) -> u16;
 }
 
@@ -181,7 +182,7 @@ impl BlockchainNetwork for bitcoin::Network {
         match self {
             Bitcoin => {
                 anchor_height
-                    <= crate::get_successors_handler::MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT
+                    <= crate::get_successors_handler::BTC_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT
             }
             Testnet | Signet | Regtest | Testnet4 => true,
             other => unreachable!("Unsupported Bitcoin network: {:?}", other),
@@ -230,10 +231,13 @@ impl BlockchainNetwork for bitcoin::dogecoin::Network {
         // TODO(XC-422): use real dogecoin validation
         Ok(())
     }
-    fn are_multiple_blocks_allowed(&self, _anchor_height: BlockHeight) -> bool {
+    fn are_multiple_blocks_allowed(&self, anchor_height: BlockHeight) -> bool {
         use bitcoin::dogecoin::Network::*;
         match self {
-            Dogecoin => false,
+            Dogecoin => {
+                anchor_height
+                    <= crate::get_successors_handler::DOGE_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT
+            }
             Testnet | Regtest => true,
             other => unreachable!("Unsupported Dogecoin network: {:?}", other),
         }
