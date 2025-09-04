@@ -82,7 +82,7 @@ async fn nns_init(args: NnsInitArgs) {
     .await;
 
     // Only start auto progress on the instance after bootstrapping NNS
-    // to keep the execution deterministic as long as possible.
+    // to keep the execution deterministic (modulo initial time) as long as possible.
     pocket_ic.auto_progress().await;
 
     let endpoint = pocket_ic.url().unwrap();
