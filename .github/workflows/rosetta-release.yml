@@ -31,11 +31,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Login to Docker
-        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
-        with:
-          registry: docker.io
-          username: ${{ vars.DOCKER_HUB_USER}}
-          password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+        run: |
+          podman login -u ${{ vars.DOCKER_HUB_USER }} -p ${{ secrets.DOCKER_HUB_PASSWORD }} docker.io
 
       - name: Configure Git
         run: |
