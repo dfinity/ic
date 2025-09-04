@@ -5,8 +5,7 @@ use ic_nns_constants::NODE_REWARDS_CANISTER_ID;
 use ic_nns_test_utils::common::build_node_rewards_test_wasm;
 use ic_node_rewards_canister_api::monthly_rewards::GetNodeProvidersMonthlyXdrRewardsRequest;
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
-    GetHistoricalRewardPeriodsResponse, GetNodeProviderRewardsCalculationRequest,
-    GetNodeProviderRewardsCalculationResponse,
+    GetNodeProviderRewardsCalculationRequest, GetNodeProviderRewardsCalculationResponse,
 };
 use ic_types::PrincipalId;
 use pocket_ic::common::rest::{EmptyConfig, IcpFeatures};
@@ -77,76 +76,31 @@ async fn get_node_provider_rewards_calculation_is_only_callable_in_nonreplicated
     pocket_ic.advance_time(Duration::from_secs(86_400)).await;
     pocket_ic.tick().await;
 
-    for historical in [false, true] {
-        let request = GetNodeProviderRewardsCalculationRequest {
-            from_nanos: past_time_nanos,
-            to_nanos: past_time_nanos,
-            provider_id: Principal::anonymous(),
-            historical,
-        };
-
-        // Non-replicated query call is allowed.
-        let err = query_candid::<_, (GetNodeProviderRewardsCalculationResponse,)>(
-            &pocket_ic,
-            node_rewards_id,
-            "get_node_provider_rewards_calculation",
-            (request.clone(),),
-        )
-        .await
-        .unwrap()
-        .0
-        .unwrap_err();
-        let maybe_historical = if historical { "historical " } else { "" };
-        assert_eq!(
-            err,
-            format!(
-                "No {}rewards found for node provider 2vxsx-fae",
-                maybe_historical
-            )
-        );
-
-        // Replicated update call is not allowed.
-        let err = update_candid::<_, (GetNodeProviderRewardsCalculationResponse,)>(
-            &pocket_ic,
-            node_rewards_id,
-            "get_node_provider_rewards_calculation",
-            (request,),
-        )
-        .await
-        .unwrap()
-        .0
-        .unwrap_err();
-        assert_eq!(
-            err,
-            "Replicated execution of this method is not allowed. Use a non-replicated query call."
-        );
-    }
-}
-
-#[tokio::test]
-async fn get_historical_reward_periods_is_only_callable_in_nonreplicated_mode() {
-    let pocket_ic = setup_env().await;
-    let node_rewards_id = NODE_REWARDS_CANISTER_ID.get().0;
+    let request = GetNodeProviderRewardsCalculationRequest {
+        from_nanos: past_time_nanos,
+        to_nanos: past_time_nanos,
+        provider_id: Principal::anonymous(),
+    };
 
     // Non-replicated query call is allowed.
-    let res = query_candid::<_, (GetHistoricalRewardPeriodsResponse,)>(
+    let err = query_candid::<_, (GetNodeProviderRewardsCalculationResponse,)>(
         &pocket_ic,
         node_rewards_id,
-        "get_historical_reward_periods",
-        (),
+        "get_node_provider_rewards_calculation",
+        (request.clone(),),
     )
     .await
     .unwrap()
     .0
-    .unwrap();
-    assert!(res.is_empty());
+    .unwrap_err();
+    assert_eq!(err, "No rewards found for node provider 2vxsx-fae");
 
     // Replicated update call is not allowed.
-    let err = update_candid::<_, (GetHistoricalRewardPeriodsResponse,)>(
+    let err = update_candid::<_, (GetNodeProviderRewardsCalculationResponse,)>(
         &pocket_ic,
         node_rewards_id,
-        "get_historical_reward_periods",
-        (),
+        "get_node_provider_rewards_calculation",
+        (request,),
     )
     .await
     .unwrap()

@@ -3425,3 +3425,88 @@ fn filtered_mixed_hash_tree() {
         Err(MixedHashTreeFilterError::PathTooLong)
     );
 }
+
+#[test]
+fn pruned_mixed_hash_tree() {
+    let label_a = Label::from("label_a");
+    let label_a_3 = Label::from("label_a_3");
+    let label_a_3_2 = Label::from("label_a_3_2");
+    let label_b = Label::from("label_b");
+    let label_b_2 = Label::from("label_b_2");
+    let label_b_4 = Label::from("label_b_4");
+    let label_b_4_3 = Label::from("label_b_4_3");
+    let label_c = Label::from("label_c");
+
+    let subtree_a_3_map = flatmap!(
+        label_a_3_2 => LabeledTree::Leaf(Vec::from("contents_a_3_2")));
+    let subtree_a_map = flatmap!(
+        label_a_3.clone() => LabeledTree::SubTree(subtree_a_3_map),
+    );
+    let subtree_b_4_map = flatmap!(
+        label_b_4_3 => LabeledTree::Leaf(Vec::from("contents_b_4_3")));
+    let subtree_b_map = flatmap!(
+        label_b_2.clone() => LabeledTree::SubTree(FlatMap::new()),
+        label_b_4 => LabeledTree::SubTree(subtree_b_4_map.clone()),
+    );
+    let root_map = flatmap!(
+        label_a.clone() => LabeledTree::SubTree(subtree_a_map.clone()),
+        label_b.clone() => LabeledTree::SubTree(subtree_b_map),
+        label_c => LabeledTree::Leaf(Vec::from("contents_c")),
+    );
+    let partial_tree = LabeledTree::SubTree(root_map);
+
+    let builder = tree_with_three_levels();
+    let witness_generator = builder.witness_generator().unwrap();
+    let mixed_hash_tree = witness_generator.mixed_hash_tree(&partial_tree).unwrap();
+    let digest = mixed_hash_tree.digest();
+    assert_eq!(*witness_generator.hash_tree().digest(), digest);
+
+    let filter_builder = mixed_hash_tree.filter_builder();
+    assert_eq!(filter_builder.digest(), &digest);
+
+    let dropped_paths = sparse_labeled_tree_from_paths(&[
+        Path::from(vec![
+            "label_a".into(),
+            "label_a_3".into(),
+            "label_a_3_2".into(),
+        ]),
+        Path::from(vec!["label_b".into(), "label_b_4".into()]),
+        Path::from(vec!["label_c".into()]),
+    ])
+    .unwrap();
+
+    let filtered_hash_tree = filter_builder.pruned(&dropped_paths).unwrap();
+
+    assert_eq!(digest, filtered_hash_tree.digest());
+
+    let subtree_a_map_filtered = flatmap!(
+        label_a_3 => LabeledTree::SubTree(FlatMap::new()),
+    );
+
+    let subtree_b_map_filtered = flatmap!(
+        label_b_2 => LabeledTree::SubTree(FlatMap::new()),
+    );
+    let smaller_root_map = flatmap!(
+        label_a => LabeledTree::SubTree(subtree_a_map_filtered),
+        label_b => LabeledTree::SubTree(subtree_b_map_filtered),
+    );
+    let smaller_partial_tree = LabeledTree::SubTree(smaller_root_map);
+
+    let expected_hash_tree = witness_generator
+        .mixed_hash_tree(&smaller_partial_tree)
+        .unwrap();
+    assert_eq!(expected_hash_tree, filtered_hash_tree);
+
+    let too_long_partial_tree = sparse_labeled_tree_from_paths(&[Path::from(vec![
+        "label_a".into(),
+        "label_a_3".into(),
+        "label_a_3_2".into(),
+        "too_long".into(),
+    ])])
+    .unwrap();
+
+    assert_eq!(
+        filter_builder.pruned(&too_long_partial_tree),
+        Err(MixedHashTreeFilterError::PathTooLong)
+    );
+}

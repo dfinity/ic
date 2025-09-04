@@ -100,7 +100,7 @@ use wslpath::windows_to_wsl;
 pub mod common;
 pub mod nonblocking;
 
-pub const EXPECTED_SERVER_VERSION: &str = "9.0.3";
+pub const EXPECTED_SERVER_VERSION: &str = "10.0.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -414,13 +414,6 @@ impl PocketIcBuilder {
             .system
             .push(SubnetSpec::default().with_benchmarking_instruction_config());
         self.config = Some(config);
-        self
-    }
-
-    /// Enables all ICP features supported by PocketIC and implemented by system canisters
-    /// (deployed to the PocketIC instance automatically when creating a new PocketIC instance).
-    pub fn with_all_icp_features(mut self) -> Self {
-        self.icp_features = IcpFeatures::all_icp_features();
         self
     }
 

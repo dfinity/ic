@@ -37,10 +37,11 @@ use ic_http_endpoints_public::{cors_layer, query, read_state};
 use ic_types::{CanisterId, SubnetId};
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
-    HttpGatewayDetails, InitialTime, InstanceConfig, MockCanisterHttpResponse, NonmainnetFeatures,
-    RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult,
-    RawCycles, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId,
-    RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, TickConfigs, Topology,
+    HttpGatewayDetails, IcpFeatures, InitialTime, InstanceConfig, MockCanisterHttpResponse,
+    NonmainnetFeatures, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
+    RawCanisterResult, RawCycles, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
+    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, TickConfigs,
+    Topology,
 };
 use pocket_ic::RejectResponse;
 use serde::Serialize;
@@ -1335,9 +1336,52 @@ pub async fn create_instance(
         );
     }
 
+    if let Some(ref icp_features) = instance_config.icp_features {
+        // using `let IcpFeatures { }` with explicit field names
+        // to force an update after adding a new field to `IcpFeatures`
+        let IcpFeatures {
+            /* `nns_ui` does not depend on `registry` */
+            registry: _,
+            cycles_minting,
+            icp_token,
+            /* `nns_ui` does not depend on `cycles_token` */
+            cycles_token: _,
+            nns_governance,
+            sns,
+            ii,
+            nns_ui,
+        } = icp_features;
+        if nns_ui.is_some() {
+            if instance_config.http_gateway_config.is_none() {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(rest::CreateInstanceResponse::Error {
+                        message: "The `nns_ui` feature requires an HTTP gateway to be created via `http_gateway_config`.".to_string()
+                    }),
+                );
+            }
+            for (icp_feature, icp_feature_str) in [
+                (cycles_minting, "cycles_minting"),
+                (icp_token, "icp_token"),
+                (nns_governance, "nns_governance"),
+                (sns, "sns"),
+                (ii, "ii"),
+            ] {
+                if icp_feature.is_none() {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(rest::CreateInstanceResponse::Error {
+                            message: format!("The `nns_ui` feature requires the `{}` feature to be enabled, too.", icp_feature_str),
+                        }),
+                    );
+                }
+            }
+        }
+    }
+
     match api_state
         .add_instance(
-            move |seed| {
+            move |seed, gateway_port| {
                 PocketIc::try_new(
                     runtime,
                     seed,
@@ -1352,6 +1396,7 @@ pub async fn create_instance(
                     instance_config.allow_incomplete_state,
                     initial_time,
                     auto_progress_enabled,
+                    gateway_port,
                 )
             },
             auto_progress,
@@ -1402,7 +1447,22 @@ pub async fn create_http_gateway(
     State(AppState { api_state, .. }): State<AppState>,
     extract::Json(http_gateway_config): extract::Json<HttpGatewayConfig>,
 ) -> (StatusCode, Json<rest::CreateHttpGatewayResponse>) {
-    match api_state.create_http_gateway(http_gateway_config).await {
+    let listener = match api_state.create_http_gateway_listener(
+        http_gateway_config.ip_addr.clone(),
+        http_gateway_config.port,
+    ) {
+        Ok(listener) => listener,
+        Err(e) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                Json(rest::CreateHttpGatewayResponse::Error { message: e }),
+            );
+        }
+    };
+    match api_state
+        .create_http_gateway(http_gateway_config, listener)
+        .await
+    {
         Ok(http_gateway_info) => (
             StatusCode::CREATED,
             Json(rest::CreateHttpGatewayResponse::Created(http_gateway_info)),
