@@ -155,7 +155,7 @@ async fn set_pre_signature_stash_size(
         subnet_id,
         chain_key_config: Some(ChainKeyConfigUpdate {
             key_configs: key_ids
-                .into_iter()
+                .iter()
                 .map(|key_id| KeyConfigUpdate {
                     key_id: Some(key_id.clone()),
                     pre_signatures_to_create_in_advance: Some(pre_signatures_to_create_in_advance),
