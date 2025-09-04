@@ -25,6 +25,7 @@ pub struct BootstrapOptions {
     pub ic_registry_local_store: Option<PathBuf>,
 
     /// NNS public key override file.
+    #[cfg(feature = "dev")]
     pub nns_public_key_override: Option<PathBuf>,
 
     /// Should point to a directory with files containing the authorized ssh
@@ -107,6 +108,7 @@ impl BootstrapOptions {
                 .context("Failed to write guestos config to config.json")?;
         }
 
+        #[cfg(feature = "dev")]
         if let Some(nns_public_key_override) = &self.nns_public_key_override {
             fs::copy(
                 nns_public_key_override,
