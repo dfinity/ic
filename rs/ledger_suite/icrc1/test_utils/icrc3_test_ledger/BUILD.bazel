@@ -78,6 +78,7 @@ rust_ic_test_suite(
         "//rs/types/base_types",
         "@crate_index//:candid",
         "@crate_index//:ciborium",
+        "@crate_index//:ic-cbor",
         "@crate_index//:ic-certification",
         "@crate_index//:leb128",
         "@crate_index//:num-traits",

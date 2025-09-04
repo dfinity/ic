@@ -10106,6 +10106,7 @@ dependencies = [
  "candid_parser",
  "ciborium",
  "ic-base-types",
+ "ic-cbor",
  "ic-cdk",
  "ic-certification 3.0.3",
  "ic-icrc1",
