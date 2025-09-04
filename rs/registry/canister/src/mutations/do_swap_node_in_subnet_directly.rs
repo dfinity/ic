@@ -157,9 +157,10 @@ impl SwapNodeInSubnetDirectlyPayload {
 mod tests {
 
     use ic_types::PrincipalId;
+    use test_registry_builder::registry_builder::CompliantRegistryBuilder;
 
     use crate::{
-        common::registry_builder::CompliantRegistryBuilder,
+        common::registry_builder_helpers::over_compliant_registry,
         flags::{
             enable_swapping_for_callers, enable_swapping_on_subnets,
             temporarily_disable_node_swapping, temporarily_enable_node_swapping,
@@ -260,7 +261,7 @@ mod tests {
     fn feature_enabled_for_caller() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
 
-        let mut compliant_registry = CompliantRegistryBuilder::default()
+        let compliant_registry = CompliantRegistryBuilder::default()
             .with_operator("operator", "dc", "provider")
             .with_node("operator", "node-1", None)
             .with_node("operator", "node-2", Some("subnet"))
@@ -277,8 +278,9 @@ mod tests {
 
         // First make a call and expect to fail because
         // the feature is not enabled for this caller.
-        let response =
-            compliant_registry.run_mut(|reg| reg.swap_nodes_inner(payload.clone(), operator));
+        let response = over_compliant_registry(&compliant_registry, |reg| {
+            reg.swap_nodes_inner(payload.clone(), operator)
+        });
         let expected_err = SwapError::FeatureDisabledForCaller { caller: operator };
         assert!(
             response.as_ref().is_err_and(|err| err == &expected_err),
@@ -287,8 +289,9 @@ mod tests {
 
         // Enable the feature for the caller
         enable_swapping_for_callers(vec![operator]);
-        let response =
-            compliant_registry.run_mut(|reg| reg.swap_nodes_inner(payload.clone(), operator));
+        let response = over_compliant_registry(&compliant_registry, |reg| {
+            reg.swap_nodes_inner(payload.clone(), operator)
+        });
 
         // Expect the first next error which is the missing
         // subnet in the registry.
@@ -298,7 +301,7 @@ mod tests {
     #[test]
     fn feature_enabled_for_subnet() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
-        let mut compliant_registry = CompliantRegistryBuilder::default()
+        let compliant_registry = CompliantRegistryBuilder::default()
             .with_operator("operator", "dc", "provider")
             .with_node("operator", "node-1", Some("subnet"))
             .with_node("operator", "node-2", None)
@@ -313,8 +316,10 @@ mod tests {
             old_node_id: Some(compliant_registry.node_id("node-1").get()),
         };
 
-        let response =
-            compliant_registry.run_mut(|reg| reg.swap_nodes_inner(payload.clone(), operator));
+        let response = over_compliant_registry(&compliant_registry, |reg| {
+            reg.swap_nodes_inner(payload.clone(), operator)
+        });
+
         let expected_err = SwapError::FeatureDisabledOnSubnet { subnet_id: subnet };
 
         // First call when the feature isn't enabled on the subnet.
@@ -325,7 +330,10 @@ mod tests {
 
         // Now enable the feature and call again.
         enable_swapping_on_subnets(vec![subnet]);
-        let response = compliant_registry.run_mut(|reg| reg.swap_nodes_inner(payload, operator));
+        let response = over_compliant_registry(&compliant_registry, |reg| {
+            reg.swap_nodes_inner(payload.clone(), operator)
+        });
+
         assert!(
             response.is_ok(),
             "Expected the result to be OK but got {response:?}"
@@ -335,7 +343,7 @@ mod tests {
     #[test]
     fn e2e_valid_swap() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
-        let mut compliant_registry = CompliantRegistryBuilder::default()
+        let compliant_registry = CompliantRegistryBuilder::default()
             .with_operator("operator", "dc", "provider")
             .with_node("operator", "node-1", None)
             .with_node("operator", "node-2", Some("subnet"))
@@ -352,8 +360,9 @@ mod tests {
         enable_swapping_for_callers(vec![operator]);
         enable_swapping_on_subnets(vec![subnet]);
 
-        let response =
-            compliant_registry.run_mut(|registry| registry.swap_nodes_inner(payload, operator));
+        let response = over_compliant_registry(&compliant_registry, |reg| {
+            reg.swap_nodes_inner(payload.clone(), operator)
+        });
         assert!(
             response.is_ok(),
             "Expected OK response but got: {response:?}"
