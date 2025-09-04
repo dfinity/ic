@@ -724,7 +724,7 @@ mod test {
         let services = ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED;
         let receiver = Address::new(&socket_1, services);
         let sender = Address::new(&socket_2, ServiceFlags::NONE);
-        let config = ConfigBuilder::<Network>::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let mut version_message = VersionMessage::new(
@@ -768,7 +768,7 @@ mod test {
             60_000,
         );
 
-        let config = ConfigBuilder::<Network>::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
@@ -803,7 +803,7 @@ mod test {
             60_000,
         );
 
-        let config = ConfigBuilder::<Network>::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
@@ -896,8 +896,7 @@ mod test {
     /// This test is used to walk through the initial address discovery process.
     #[tokio::test]
     async fn test_initial_address_discovery_lifecycle() {
-        let config = ConfigBuilder::<Network>::new()
-            .with_network(bitcoin::Network::Signet)
+        let config = ConfigBuilder::default_with(Network::Signet)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, mut network_message_receiver) =
@@ -958,7 +957,7 @@ mod test {
         let runtime = tokio::runtime::Runtime::new().expect("runtime err");
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
 
-        let config = ConfigBuilder::<Network>::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
@@ -1002,7 +1001,7 @@ mod test {
         let runtime = tokio::runtime::Runtime::new().expect("runtime err");
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
         let addr2 = SocketAddr::from_str("192.168.1.1:8333").expect("invalid address");
-        let config = ConfigBuilder::<Network>::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
@@ -1071,7 +1070,7 @@ mod test {
         let runtime = tokio::runtime::Runtime::new().expect("runtime err");
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
         let addr2 = SocketAddr::from_str("192.168.1.1:8333").expect("invalid address");
-        let config = ConfigBuilder::<Network>::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
@@ -1135,7 +1134,7 @@ mod test {
             60_000,
         );
 
-        let config = ConfigBuilder::<Network>::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =
@@ -1183,7 +1182,7 @@ mod test {
             60_000,
         );
 
-        let config = ConfigBuilder::<Network>::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let (network_message_sender, _network_message_receiver) =

@@ -84,26 +84,26 @@ pub fn address_limits(network: AdapterNetwork) -> (usize, usize) {
     }
 }
 
-impl Default for Config<bitcoin::Network> {
-    fn default() -> Self {
-        let network = bitcoin::Network::Bitcoin;
-        Self {
+impl<Network> Config<Network> {
+    /// Return a config of a different network while retaining the rest fields.
+    pub fn with_network<T>(self, network: T) -> Config<T> {
+        Config {
             network,
-            dns_seeds: Default::default(),
-            socks_proxy: Default::default(),
-            nodes: vec![],
-            idle_seconds: default_idle_seconds(),
-            ipv6_only: false,
-            logger: LoggerConfig::default(),
-            incoming_source: Default::default(),
-            address_limits: address_limits(network.into()),
+            dns_seeds: self.dns_seeds,
+            socks_proxy: self.socks_proxy,
+            nodes: self.nodes,
+            idle_seconds: self.idle_seconds,
+            ipv6_only: self.ipv6_only,
+            logger: self.logger,
+            incoming_source: self.incoming_source,
+            address_limits: self.address_limits,
         }
     }
 }
 
-impl Default for Config<bitcoin::dogecoin::Network> {
-    fn default() -> Self {
-        let network = bitcoin::dogecoin::Network::Dogecoin;
+impl<Network: Copy + Into<AdapterNetwork>> Config<Network> {
+    /// Return a config of the given network with default settings for the rest fields.
+    pub fn default_with(network: Network) -> Self {
         Self {
             network,
             dns_seeds: Default::default(),
@@ -128,25 +128,12 @@ pub mod test {
         config: Config<Network>,
     }
 
-    impl<Network> Default for ConfigBuilder<Network>
-    where
-        Config<Network>: Default,
-    {
-        fn default() -> Self {
+    impl<Network: BlockchainNetwork + Into<AdapterNetwork>> ConfigBuilder<Network> {
+        pub fn default_with(network: Network) -> Self {
             Self {
-                config: Config::default(),
+                config: Config::default_with(network),
             }
         }
-    }
-
-    impl<Network: BlockchainNetwork + Into<AdapterNetwork>> ConfigBuilder<Network>
-    where
-        Config<Network>: Default,
-    {
-        pub fn new() -> Self {
-            Self::default()
-        }
-
         pub fn with_dns_seeds(mut self, dns_seeds: Vec<String>) -> Self {
             self.config.dns_seeds = dns_seeds;
             self

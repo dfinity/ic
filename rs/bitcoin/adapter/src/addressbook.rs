@@ -319,7 +319,7 @@ mod test {
     /// and `remove_from_active`.
     #[test]
     fn test_address_book_basics() {
-        let config = ConfigBuilder::<Network>::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let mut book = AddressBook::new(&config, no_op_logger());
@@ -368,7 +368,7 @@ mod test {
     /// addresses that are not valid are skipped while adding the valid addresses.
     #[test]
     fn test_address_manager_add_many() {
-        let config = ConfigBuilder::<Network>::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let mut book = AddressBook::new(&config, no_op_logger());
@@ -392,7 +392,7 @@ mod test {
     /// IPv4 addresses are skipped when in IPv6 only mode.
     #[test]
     fn test_address_book_add_many_ipv6_only() {
-        let config = ConfigBuilder::<Network>::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("::1")])
             .with_ipv6_only(true)
             .build();
@@ -418,7 +418,7 @@ mod test {
     /// the addresses are removed from the pool.
     #[test]
     fn test_discard_address() {
-        let config = ConfigBuilder::<Network>::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("192.168.1.1")])
             .build();
         let mut book = AddressBook::new(&config, no_op_logger());
@@ -450,8 +450,7 @@ mod test {
 
     #[test]
     fn test_discard_address_no_seeds() {
-        let config = ConfigBuilder::<Network>::new()
-            .with_network(Network::Regtest)
+        let config = ConfigBuilder::default_with(Network::Regtest)
             .with_nodes(vec![SocketAddr::from_str("127.0.0.1:8333").unwrap()])
             .build();
         let mut book = AddressBook::new(&config, no_op_logger());
@@ -470,8 +469,7 @@ mod test {
     /// gives the next address in queue but also pushes it to the back of the queue.
     #[test]
     fn test_pop_seed() {
-        let config = ConfigBuilder::<Network>::new()
-            .with_network(Network::Signet)
+        let config = ConfigBuilder::default_with(Network::Signet)
             .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("192.168.1.1")])
             .build();
         let mut book = AddressBook::new(&config, no_op_logger());
@@ -498,8 +496,7 @@ mod test {
     /// IPv4 seeds are filtered out.
     #[test]
     fn test_seeds_ipv6_only() {
-        let config = ConfigBuilder::<Network>::new()
-            .with_network(Network::Signet)
+        let config = ConfigBuilder::default_with(Network::Signet)
             .with_dns_seeds(vec![
                 String::from("127.0.0.1"),
                 String::from("[2401:3f00:1000:23:5000:7bff:fe3d:b81d]"),
@@ -519,7 +516,7 @@ mod test {
     /// 2. If there are no DNS seeds, the seed queue and active addresses is emptied.
     #[test]
     fn test_clear() {
-        let config = ConfigBuilder::<Network>::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("192.168.1.1")])
             .build();
         let mut book = AddressBook::new(&config, no_op_logger());

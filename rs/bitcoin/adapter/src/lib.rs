@@ -243,31 +243,11 @@ pub fn start_server(
 ) {
     match config.network {
         AdapterNetwork::Bitcoin(network) => {
-            let btc_config = Config {
-                network,
-                dns_seeds: config.dns_seeds,
-                socks_proxy: config.socks_proxy,
-                nodes: config.nodes,
-                idle_seconds: config.idle_seconds,
-                ipv6_only: config.ipv6_only,
-                logger: config.logger,
-                incoming_source: config.incoming_source,
-                address_limits: config.address_limits,
-            };
+            let btc_config = config.with_network(network);
             start_server_helper(log, metrics_registry, rt_handle, btc_config)
         }
         AdapterNetwork::Dogecoin(network) => {
-            let doge_config = Config {
-                network,
-                dns_seeds: config.dns_seeds,
-                socks_proxy: config.socks_proxy,
-                nodes: config.nodes,
-                idle_seconds: config.idle_seconds,
-                ipv6_only: config.ipv6_only,
-                logger: config.logger,
-                incoming_source: config.incoming_source,
-                address_limits: config.address_limits,
-            };
+            let doge_config = config.with_network(network);
             start_server_helper(log, metrics_registry, rt_handle, doge_config)
         }
     }
