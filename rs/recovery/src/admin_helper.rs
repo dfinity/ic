@@ -34,7 +34,7 @@ struct KeyConfigRequest {
 /// Struct simplyfiying the creation of `ic-admin` commands for a given NNS [Url].
 #[derive(Clone, Debug)]
 pub struct AdminHelper {
-    pub binary: PathBuf,
+    pub ic_admin: PathBuf,
     pub nns_url: Url,
     pub neuron_args: Option<NeuronArgs>,
 }
@@ -42,18 +42,16 @@ pub struct AdminHelper {
 impl AdminHelper {
     /// Create a new command builder for a given binary path, NNS [Url] and
     /// [NeuronArgs].
-    pub fn new(binary: PathBuf, nns_url: Url, neuron_args: Option<NeuronArgs>) -> Self {
+    pub fn new(ic_admin: PathBuf, nns_url: Url, neuron_args: Option<NeuronArgs>) -> Self {
         Self {
-            binary,
+            ic_admin,
             nns_url,
             neuron_args,
         }
     }
 
     pub fn get_ic_admin_cmd_base(&self) -> IcAdmin {
-        let mut ica = self.binary.clone();
-        ica.push("ic-admin");
-        let mut ic_admin = vec![ica.display().to_string()];
+        let mut ic_admin = vec![self.ic_admin.display().to_string()];
 
         ic_admin.add_argument("nns-url", quote(&self.nns_url));
 
@@ -351,7 +349,7 @@ mod tests {
     use ic_registry_subnet_features::KeyConfig;
     use std::{str::FromStr, time::Duration};
 
-    const FAKE_IC_ADMIN_DIR: &str = "/fake/ic/admin/dir/";
+    const FAKE_IC_ADMIN_DIR: &str = "/fake/ic/admin/dir/ic-admin";
     const FAKE_NNS_URL: &str = "https://fake_nns_url.com:8080";
     const FAKE_SUBNET_ID_1: &str =
         "gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe";

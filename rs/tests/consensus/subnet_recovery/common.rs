@@ -617,7 +617,8 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
     let node_ip = node.get_ip_addr();
 
     let command = format!(
-        r#"/opt/ic/bin/ic-recovery \
+        r#"export PATH="/opt/ic/bin:$PATH"
+        /opt/ic/bin/ic-recovery \
         --nns-url {nns_url} \
         --test --skip-prompts --use-local-binaries \
         app-subnet-recovery \

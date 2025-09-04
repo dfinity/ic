@@ -128,7 +128,7 @@ mod tests {
 
     use std::{path::PathBuf, str::FromStr};
 
-    const FAKE_IC_ADMIN_DIR: &str = "/fake/ic/admin/dir/";
+    const FAKE_IC_ADMIN_DIR: &str = "/fake/ic/admin/dir/ic-admin";
     const FAKE_NNS_URL: &str = "https://fake_nns_url.com:8080";
     const FAKE_SUBNET_ID_1: &str =
         "gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe";

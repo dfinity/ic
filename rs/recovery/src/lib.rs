@@ -205,7 +205,13 @@ impl Recovery {
             info!(logger, "ic-admin exists, skipping download.");
         }
 
-        let admin_helper = AdminHelper::new(binary_dir.clone(), args.nns_url, neuron_args);
+        let ic_admin = if args.use_local_binaries {
+            // When using local binaries, we expect ic-admin to be in PATH
+            PathBuf::from("ic-admin")
+        } else {
+            binary_dir.join("ic-admin")
+        };
+        let admin_helper = AdminHelper::new(ic_admin, args.nns_url, neuron_args);
 
         Ok(Self {
             recovery_dir,
@@ -230,7 +236,8 @@ impl Recovery {
 
     /// Set recovery to a different NNS by creating a new [AdminHelper].
     pub fn set_nns(&mut self, nns_url: Url, neuron_args: Option<NeuronArgs>) {
-        self.admin_helper = AdminHelper::new(self.binary_dir.clone(), nns_url, neuron_args);
+        self.admin_helper =
+            AdminHelper::new(self.binary_dir.join("ic-admin"), nns_url, neuron_args);
     }
 
     // Create directories used to store downloaded states, binaries and results
