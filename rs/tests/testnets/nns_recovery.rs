@@ -40,6 +40,8 @@ fn log_instructions(env: TestEnv) {
     let topology = env.topology_snapshot();
     let num_hosts = topology.unassigned_nodes().count();
 
+    // TODO: assign the unassigned nodes to the NNS subnet.
+
     info!(
         logger,
         "To reboot host VMs run any, or some of the following commands:"
