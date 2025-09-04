@@ -121,6 +121,32 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "pre_signature_stash_management_test",
+    env = MESSAGE_CANISTER_ENV,
+    tags = [
+        "k8s",
+        "long_test",  # since it takes longer than 5 minutes.
+    ],
+    runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/nns/constants",
+        "//rs/registry/canister",
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
     name = "tecdsa_signature_fails_without_cycles_test",
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 1.05% over the month from 2025-02-11 till 2025-03-11.
