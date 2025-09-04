@@ -109,6 +109,14 @@ type GetBlocksResponse = record {
   }
 };
 
+type ICRC3DataCertificate = record {
+  // See https://internetcomputer.org/docs/current/references/ic-interface-spec#certification
+  certificate : blob;
+
+  // CBOR encoded hash_tree
+  hash_tree : blob
+};
+
 service : {
     // Update endpoint to add a block to the ledger
     add_block : (ICRC3Value) -> (AddBlockResult);
@@ -117,6 +125,8 @@ service : {
 
     // Query endpoint to retrieve blocks (ICRC-3 compatible)
     icrc3_get_blocks : (vec GetBlocksArgs) -> (GetBlocksResult) query;
+
+    icrc3_get_tip_certificate : () -> (opt ICRC3DataCertificate) query;
 
     icrc10_supported_standards : () -> (vec StandardRecord) query;
 

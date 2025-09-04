@@ -16,10 +16,14 @@ path = "src/main.rs"
 
 [dependencies]
 candid = { workspace = true }
+ciborium = { workspace = true }
 ic-cdk = { workspace = true }
+ic-certification = { path = "../../../../certification" }
 ic-icrc1 = { path = "../.." }
 icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
+leb128 = { workspace = true }
 num-traits = { workspace = true }
+serde_bytes = { workspace = true }
 
 [dev-dependencies]
 candid_parser = { workspace = true }
