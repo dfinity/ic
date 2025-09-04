@@ -14,11 +14,11 @@ pub struct LocalCspVaultBuilder<R, S, C, P> {
 impl ProdLocalCspVault {
     pub fn builder(
         node_secret_key_store: ProtoSecretKeyStore,
-        canister_secret_key_store: ProtoSecretKeyStore,
+        canister_secret_key_store: InMemorySecretKeyStore,
         public_key_store: ProtoPublicKeyStore,
         metrics: Arc<CryptoMetrics>,
         logger: ReplicaLogger,
-    ) -> LocalCspVaultBuilder<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicKeyStore>
+    ) -> LocalCspVaultBuilder<OsRng, ProtoSecretKeyStore, InMemorySecretKeyStore, ProtoPublicKeyStore>
     {
         LocalCspVaultBuilder {
             csprng: Box::new(|| OsRng),
@@ -35,11 +35,10 @@ impl ProdLocalCspVault {
         key_store_dir: &Path,
         metrics: Arc<CryptoMetrics>,
         logger: ReplicaLogger,
-    ) -> LocalCspVaultBuilder<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicKeyStore>
+    ) -> LocalCspVaultBuilder<OsRng, ProtoSecretKeyStore, InMemorySecretKeyStore, ProtoPublicKeyStore>
     {
         const SKS_DATA_FILENAME: &str = "sks_data.pb";
         const PUBLIC_KEY_STORE_DATA_FILENAME: &str = "public_keys.pb";
-        const CANISTER_SKS_DATA_FILENAME: &str = "canister_sks_data.pb";
 
         let node_secret_key_store = ProtoSecretKeyStore::open(
             key_store_dir,
@@ -47,12 +46,7 @@ impl ProdLocalCspVault {
             Some(new_logger!(logger)),
             Arc::clone(&metrics),
         );
-        let canister_secret_key_store = ProtoSecretKeyStore::open(
-            key_store_dir,
-            CANISTER_SKS_DATA_FILENAME,
-            Some(new_logger!(logger)),
-            Arc::clone(&metrics),
-        );
+        let canister_secret_key_store = InMemorySecretKeyStore::new(Some(new_logger!(logger)));
         let public_key_store = ProtoPublicKeyStore::open(
             key_store_dir,
             PUBLIC_KEY_STORE_DATA_FILENAME,

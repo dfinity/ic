@@ -7841,6 +7841,7 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-secp256k1",
  "ic-secp256r1",
+ "ic-sys",
  "ic-test-utilities-in-memory-logger",
  "ic-test-utilities-registry",
  "ic-test-utilities-time",
@@ -7865,6 +7866,7 @@ dependencies = [
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "tempfile",
+ "thiserror 2.0.12",
  "tokio",
 ]
 
