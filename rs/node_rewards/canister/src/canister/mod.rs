@@ -236,8 +236,6 @@ impl NodeRewardsCanister {
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersRewardsRequest,
     ) -> GetNodeProvidersRewardsResponse {
-        let instruction_counter = telemetry::InstructionCounter::default();
-
         let start_day: DayUtc = request.from_day_timestamp_nanos.into();
         let end_day: DayUtc = request.to_day_timestamp_nanos.into();
         let mut rewards_xdr_permyriad = BTreeMap::new();
@@ -257,7 +255,6 @@ impl NodeRewardsCanister {
                 )
             })?;
         NodeRewardsCanister::schedule_metrics_sync(canister).await;
-        let total_ins = instruction_counter.sum();
 
         let mut current_day = start_day;
         while current_day <= end_day {
@@ -265,12 +262,7 @@ impl NodeRewardsCanister {
 
             let result = canister
                 .with_borrow(|canister| canister.calculate_rewards::<S>(current_day, None))?;
-
-            ic_cdk::println!(
-                "instruction total {}",
-                instruction_counter.sum() + total_ins
-            );
-
+            ic_cdk::println!("day took {} instruction", instruction_counter.sum());
             for (provider_id, provider_rewards) in result.provider_results.into_iter() {
                 let daily_rewards = rewards_xdr_permyriad.entry(provider_id.0).or_insert(0);
                 *daily_rewards += provider_rewards.rewards_total_xdr_permyriad;

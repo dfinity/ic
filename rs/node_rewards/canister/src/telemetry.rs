@@ -1,6 +1,7 @@
 use std::{cell::RefCell, collections::HashMap};
 
 /// Instruction counter helper that counts instructions in the call context.
+#[derive(Debug, Clone, Copy)]
 pub struct InstructionCounter {
     start: u64,
     lap_start: u64,
