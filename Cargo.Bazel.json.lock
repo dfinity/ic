@@ -1,5 +1,5 @@
 {
-  "checksum": "554966de4c5bcda440a8e0c7a3ec534c4c45faba9cc2102c8d84e4e2d3638c30",
+  "checksum": "a195f045d8898d15409a3251abfac09e8cc0200e1f5b9d771cb9b97b54715c41",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -32369,15 +32369,6 @@
           "selects": {}
         },
         "edition": "2018",
-        "rustc_flags": {
-          "common": [],
-          "selects": {
-            "x86_64-apple-darwin": [
-              "-C",
-              "opt-level=0"
-            ]
-          }
-        },
         "version": "0.14.27"
       },
       "license": "MIT",
@@ -32484,15 +32475,6 @@
           "selects": {}
         },
         "edition": "2021",
-        "rustc_flags": {
-          "common": [],
-          "selects": {
-            "x86_64-apple-darwin": [
-              "-C",
-              "opt-level=0"
-            ]
-          }
-        },
         "version": "1.6.0"
       },
       "license": "MIT",
