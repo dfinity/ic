@@ -162,9 +162,8 @@ struct FakeBitcoind<Network: BlockchainNetwork> {
     children: Arc<HashMap<BlockHash, Vec<BlockHash>>>,
 }
 
-impl<Network: BlockchainNetwork> FakeBitcoind<Network>
+impl<Network: BlockchainNetwork + 'static> FakeBitcoind<Network>
 where
-    Network: Clone + 'static,
     Network::Header: for<'de> serde::Deserialize<'de> + Debug + Send + Sync,
     Network::Block: for<'de> serde::Deserialize<'de> + Debug + Send + Sync,
 {
