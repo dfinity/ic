@@ -429,6 +429,54 @@ fn test_node_re_registered_after_deletion() {
 }
 
 #[test]
+fn test_node_for_np_re_registered_after_deletion() {
+    let node_1_id = 1;
+    let no_1_id = 10;
+
+    // Re-register node_1 after it was deleted
+    let node_id = PrincipalId::new_node_test_id(node_1_id);
+    let node_key = format!("{}{}", NODE_RECORD_KEY_PREFIX, node_id);
+    let node_record = NodeRecord {
+        node_reward_type: Some(NodeRewardType::Type0 as i32),
+        node_operator_id: PrincipalId::new_user_test_id(no_1_id).to_vec(),
+        ..NodeRecord::default()
+    };
+
+    add_record_helper(&node_key, 39668, Some(node_record), "2025-07-11");
+
+    let _client = client_for_tests();
+
+    // Range that includes both the deletion and re-registration periods
+    let from = DayUtc::try_from("2025-07-07").unwrap();
+    let to = DayUtc::try_from("2025-07-12").unwrap();
+    let _reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
+    let np_1_id = PrincipalId::new_user_test_id(20);
+
+    let mut rewardables = RegistryQuerier::get_rewardable_nodes_per_provider::<DummyState>(
+        &*REGISTRY_STORE.with(|store| store.clone()),
+        from,
+        to,
+        Some(np_1_id),
+    )
+    .expect("Failed to fetch rewardables");
+
+    let np_1_rewardables = rewardables
+        .remove(&np_1_id)
+        .expect("No rewardables for node provider");
+
+    let node_1_rewardable_days = node_rewardable_days(&np_1_rewardables, node_1_id);
+
+    let expected_days: Vec<DayUtc> = vec![
+        DayUtc::try_from("2025-07-07").unwrap(),
+        // On 2025-07-08, node_1 was deleted, so it should not be rewardable until the 2025-07-11.
+        DayUtc::try_from("2025-07-11").unwrap(),
+        DayUtc::try_from("2025-07-12").unwrap(),
+    ];
+
+    assert_eq!(node_1_rewardable_days, expected_days);
+}
+
+#[test]
 fn test_node_operator_data_returns_expected_data() {
     let _client = client_for_tests();
 
