@@ -64,15 +64,7 @@ const SNS_FEE: u64 = 11143;
 
 #[tokio::test]
 async fn test_treasury_manager() {
-    let wasm_path = std::env::var("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH")
-        .expect("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH must be set.");
-    do_test_treasury_manager(wasm_path).await
-}
-
-async fn test_treasury_manager_v1_release() {
-    let wasm_path = std::env::var("SNS_KONGSWAP_ADAPTOR_V1_CANISTER_WASM_PATH")
-        .expect("SNS_KONGSWAP_ADAPTOR_V1_CANISTER_WASM_PATH must be set.");
-    do_test_treasury_manager(wasm_path)
+    do_test_treasury_manager().await
 }
 
 #[tokio::test]
@@ -80,7 +72,7 @@ async fn test_existing_extension_wasm_rejected() {
     run_existing_extension_wasm_rejected_test().await
 }
 
-async fn do_test_treasury_manager(wasm_path: String) {
+async fn do_test_treasury_manager() {
     let state_dir = TempDir::new().unwrap().path().to_path_buf();
 
     let World {
@@ -115,6 +107,9 @@ async fn do_test_treasury_manager(wasm_path: String) {
 
     let extension_canister_id = {
         let agent = PocketIcAgent::new(&pocket_ic, sender);
+
+        let wasm_path = std::env::var("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH")
+            .expect("KONGSWAP_ADAPTOR_CANISTER_WASM_PATH must be set.");
 
         let wasm_path = PathBuf::from(wasm_path);
 
