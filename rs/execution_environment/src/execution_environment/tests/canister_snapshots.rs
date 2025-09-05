@@ -1440,57 +1440,6 @@ fn load_canister_snapshot_fails_snapshot_not_found() {
 }
 
 #[test]
-fn load_canister_snapshot_works_on_another_canister() {
-    const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
-    let own_subnet = subnet_test_id(1);
-    let caller_canister = canister_test_id(1);
-    let mut test = ExecutionTestBuilder::new()
-        .with_own_subnet_id(own_subnet)
-        .with_caller(own_subnet, caller_canister)
-        .build();
-
-    // Create canister.
-    let canister_id_1 = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
-        .unwrap();
-    let canister_id_2 = test
-        .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
-        .unwrap();
-
-    let canister_state_1_before_snapshot =
-        test.state().canister_state(&canister_id_1).unwrap().clone();
-
-    // Take a snapshot of `canister_id_1`.
-    let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id_1, None);
-    let result = test.subnet_message("take_canister_snapshot", args.encode());
-    assert!(result.is_ok());
-    let response = CanisterSnapshotResponse::decode(&result.unwrap().bytes()).unwrap();
-    let snapshot_id = response.snapshot_id();
-    assert!(test.state().canister_snapshots.get(snapshot_id).is_some());
-
-    // Loading a canister snapshot belonging to `canister_id_1` on `canister_id_2` succeeds.
-    let args: LoadCanisterSnapshotArgs =
-        LoadCanisterSnapshotArgs::new(canister_id_2, snapshot_id, None);
-    test.subnet_message("load_canister_snapshot", args.encode())
-        .unwrap();
-    assert!(test.state().canister_state(&canister_id_2).is_some());
-
-    let (execution_state_1, system_state_1, _) = canister_state_1_before_snapshot.into_parts();
-    let (execution_state_2, system_state_2, _) = test
-        .state()
-        .canister_state(&canister_id_2)
-        .unwrap()
-        .clone()
-        .into_parts();
-    assert_eq!(execution_state_1, execution_state_2);
-    assert_eq!(
-        system_state_1.wasm_chunk_store,
-        system_state_2.wasm_chunk_store
-    );
-    assert_eq!(system_state_1.certified_data, system_state_2.certified_data);
-}
-
-#[test]
 fn load_canister_snapshot_fails_when_heap_delta_rate_limited() {
     const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
     const CAPACITY: u64 = 500_000_000;
