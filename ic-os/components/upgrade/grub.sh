@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 # Common grub utilities for IC-OS components
 
@@ -54,24 +55,15 @@ write_grubenv() {
         echo boot_cycle="$boot_cycle"
         # Fill to make sure we will have 1024 bytes
         echo -n "################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################"
-    ) >"${TMP_FILE}" || {
-        write_log "Error: Failed to write to temporary file ${TMP_FILE}"
-        return 1
-    }
+    ) >"${TMP_FILE}"
 
     # Truncate to arrive at precisely 1024 bytes
-    if ! truncate --size=1024 "${TMP_FILE}"; then
-        write_log "Error: Failed to truncate temporary file to 1024 bytes"
-        return 1
-    fi
+    truncate --size=1024 "${TMP_FILE}"
 
     # Create backup of original file if it exists
     if [ -f "${GRUBENV_FILE}" ]; then
         BACKUP_FILE="${GRUBENV_FILE}.backup.$(date +%s)"
-        if ! cp "${GRUBENV_FILE}" "${BACKUP_FILE}"; then
-            write_log "Error: Failed to create backup of existing grubenv file"
-            return 1
-        fi
+        cp "${GRUBENV_FILE}" "${BACKUP_FILE}"
     fi
 
     # Atomic move: rename temporary file to target file
@@ -103,6 +95,11 @@ write_grubenv() {
 
     if [ "$sync_success" = false ]; then
         write_log "Error: Failed to sync grubenv file to disk after $sync_retries attempts"
+        # Restore backup if sync failed to ensure system stability
+        if [ -f "${BACKUP_FILE}" ]; then
+            write_log "Restoring backup grubenv file due to sync failure"
+            mv "${BACKUP_FILE}" "${GRUBENV_FILE}" 2>/dev/null || true
+        fi
         return 1
     fi
 

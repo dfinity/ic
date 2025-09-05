@@ -266,10 +266,7 @@ case "${ACTION}" in
         boot_cycle=first_boot
         write_log "Setting boot_alternative to ${boot_alternative} and boot_cycle to ${boot_cycle}"
 
-        if ! write_grubenv "${GRUBENV_FILE}" "$boot_alternative" "${boot_cycle}"; then
-            write_log "${SYSTEM_TYPE} upgrade failed: Could not update GRUB environment"
-            exit 1
-        fi
+        write_grubenv "${GRUBENV_FILE}" "$boot_alternative" "${boot_cycle}"
 
         write_log "${SYSTEM_TYPE} upgrade committed to slot ${TARGET_ALTERNATIVE}"
         write_metric_attr "${SYSTEM_TYPE}_boot_action" \
@@ -292,10 +289,7 @@ case "${ACTION}" in
         if [ "$boot_cycle" != "stable" ]; then
             boot_cycle=stable
 
-            if ! write_grubenv "${GRUBENV_FILE}" "$boot_alternative" "$boot_cycle"; then
-                write_log "${SYSTEM_TYPE} confirmation failed: Could not update GRUB environment"
-                exit 1
-            fi
+            write_grubenv "${GRUBENV_FILE}" "$boot_alternative" "$boot_cycle"
 
             write_log "${SYSTEM_TYPE} stable boot confirmed at slot ${CURRENT_ALTERNATIVE}"
             write_metric "${SYSTEM_TYPE}_boot_stable" \
