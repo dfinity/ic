@@ -605,6 +605,12 @@ impl PayloadBuilder {
         self
     }
 
+    /// Pushes the method name onto the stack.
+    pub fn msg_method_name(mut self) -> Self {
+        self.0.push(Ops::MsgMethodName as u8);
+        self
+    }
+
     /// Pushes the size of the argument data onto the stack.
     pub fn msg_arg_data_size(mut self) -> Self {
         self.0.push(Ops::MsgArgDataSize as u8);

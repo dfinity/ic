@@ -88,7 +88,7 @@ use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, SubnetId, UserId,
 };
-use ic_universal_canister::PayloadBuilder;
+use ic_universal_canister::{CallArgs, PayloadBuilder};
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
@@ -1309,6 +1309,8 @@ fn get_canister_status_of_self() {
     let reply = get_reply(result);
     let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
     assert_eq!(status.status(), CanisterStatusType::Running);
+    assert!(status.cycles() <= INITIAL_CYCLES.get());
+    assert!(status.cycles() >= INITIAL_CYCLES.get() - 100_000_000_000);
     assert!(!status.ready_for_migration());
 }
 
@@ -1532,6 +1534,45 @@ fn delete_stopped_canister_succeeds() {
 }
 
 #[test]
+fn delete_canister_via_inter_canister_call() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_u128 << 62)
+        .build();
+
+    let canister_1 = test.universal_canister().unwrap();
+    let canister_2 = test.universal_canister().unwrap();
+
+    let _ = test.stop_canister(canister_2);
+    test.process_stopping_canisters();
+    assert_eq!(
+        test.canister_state(canister_2).status(),
+        CanisterStatusType::Stopped
+    );
+
+    test.set_controller(canister_2, canister_1.get()).unwrap();
+    let delete_canister_args = CanisterIdRecord::from(canister_2).encode();
+    let call_args = CallArgs::default().other_side(delete_canister_args);
+    test.ingress(
+        canister_1,
+        "update",
+        wasm()
+            .call_with_cycles(
+                IC_00,
+                Method::DeleteCanister,
+                call_args,
+                Cycles::from(1_u128 << 61),
+            )
+            .build(),
+    )
+    .unwrap();
+
+    // cycles attached to mgmt canister call are refunded, but cycles from the deleted canister are not refunded
+    let canister_1_balance = test.canister_state(canister_1).system_state.balance().get();
+    assert!(canister_1_balance <= 1_u128 << 62);
+    assert!(canister_1_balance >= (1_u128 << 62) - 100_000_000_000);
+}
+
+#[test]
 fn delete_canister_consumed_cycles_observed() {
     let mut test = ExecutionTestBuilder::new().build();
 
@@ -1564,14 +1605,16 @@ fn delete_canister_consumed_cycles_observed() {
 
 #[test]
 fn deposit_cycles_succeeds_with_enough_cycles() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_u128 << 62)
+        .build();
 
-    let canister_id = test.create_canister(*INITIAL_CYCLES);
+    let canister_id = test.universal_canister().unwrap();
     let deposit_canister = test.universal_canister().unwrap();
 
     let cycles_balance_before = test.canister_state(canister_id).system_state.balance();
 
-    let cycles_to_deposit = Cycles::new(100);
+    let cycles_to_deposit = Cycles::new(1_u128 << 61);
     let deposit_cycles_args = CanisterIdRecord::from(canister_id).encode();
     let payload = wasm()
         .call_with_cycles(
@@ -1590,6 +1633,13 @@ fn deposit_cycles_succeeds_with_enough_cycles() {
         test.canister_state(canister_id).system_state.balance(),
         cycles_balance_before + cycles_to_deposit
     );
+    let depositer_balance = test
+        .canister_state(deposit_canister)
+        .system_state
+        .balance()
+        .get();
+    assert!(depositer_balance <= 1_u128 << 61);
+    assert!(depositer_balance >= (1_u128 << 61) - 100_000_000_000);
 }
 
 #[test]
