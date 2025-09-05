@@ -174,35 +174,54 @@ pub fn registration(env: TestEnv) {
 
     start_nested_vm_group(env.clone());
 
-    // Assert that the GuestOS was started with direct kernel boot.
-    let guest_kernel_cmdline = env
-        .get_nested_vm(HOST_VM_NAME)
-        .expect("Unable to find HostOS node.")
-        .get_guest_ssh()
-        .unwrap()
-        .block_on_bash_script("cat /proc/cmdline")
-        .expect("Could not read /proc/cmdline from GuestOS");
-    assert!(
-        guest_kernel_cmdline.contains("initrd=initrd"),
-        "GuestOS kernel command line does not contain 'initrd=initrd'. This is likely caused by \
-         the guest not being started with direct kernel boot but rather with the GRUB \
-         bootloader. guest_kernel_cmdline: '{guest_kernel_cmdline}'"
-    );
+    let nested_vms = env.get_all_nested_vms().unwrap();
+    let n = nested_vms.len();
+    for node in nested_vms {
+        let node_name = &node.vm_name();
+        info!(
+            logger,
+            "Asserting that the GuestOS was started with direct kernel boot on node {node_name} ..."
+        );
+        let guest_kernel_cmdline = env
+            .get_nested_vm(node_name)
+            .expect("Unable to find HostOS node.")
+            .get_guest_ssh()
+            .unwrap()
+            .block_on_bash_script("cat /proc/cmdline")
+            .expect("Could not read /proc/cmdline from GuestOS");
+        assert!(
+            guest_kernel_cmdline.contains("initrd=initrd"),
+            "GuestOS kernel command line does not contain 'initrd=initrd'. This is likely caused by \
+            the guest not being started with direct kernel boot but rather with the GRUB \
+            bootloader. guest_kernel_cmdline: '{guest_kernel_cmdline}'"
+        );
+    }
 
-    // If the node is able to join successfully, the registry will be updated,
-    // and the new node ID will enter the unassigned pool.
-    info!(logger, "Waiting for node to join ...");
-    let new_topology = block_on(
-        initial_topology.block_for_newer_registry_version_within_duration(
-            NODE_REGISTRATION_TIMEOUT,
-            NODE_REGISTRATION_BACKOFF,
-        ),
-    )
-    .unwrap();
-    info!(logger, "The node successfully came up and registered ...");
-
-    let num_unassigned_nodes = new_topology.unassigned_nodes().count();
-    assert_eq!(num_unassigned_nodes, 1);
+    // If the nodes are able to join successfully, the registry will be updated,
+    // and the new node IDs will enter the unassigned pool.
+    let mut new_topology = initial_topology;
+    retry_with_msg!(
+        format!("Waiting for all {n} nodes to join ..."),
+        logger.clone(),
+        NODE_REGISTRATION_TIMEOUT,
+        NODE_REGISTRATION_BACKOFF,
+        || {
+            new_topology = block_on(
+                new_topology.block_for_newer_registry_version_within_duration(
+                    NODE_REGISTRATION_TIMEOUT,
+                    NODE_REGISTRATION_BACKOFF,
+                ),
+            )
+            .unwrap();
+            let num_unassigned_nodes = new_topology.unassigned_nodes().count();
+            if num_unassigned_nodes == n {
+                Ok(())
+            } else {
+                bail!("Expected {n} unassigned nodes, but found {num_unassigned_nodes}. Waiting for the rest to register ...");
+            }
+        }
+    ).unwrap();
+    info!(logger, "All {n} nodes successfully came up and registered.");
 }
 
 /// nns_recovery_test uses four nodes, which is the minimum subnet size that satisfies 3f+1 for f=1
