@@ -6,7 +6,7 @@ This module contains tests to ensure backwards compatibility of the config_types
 
 ### 1. Fixture Generation System (`fixture.rs`)
 - Generates and maintains test fixtures for a given config version
-- If fixtures for the current config version already exist but the config structure has changed, CI will fail with an error message asking you to increment the config_types version
+- If fixtures for the current config version already exist but the config structure has changed, the generator will fail with an error message asking you to increment the config_types version
 - Stores fixtures in `fixtures/` directory with version information
 
 ### 2. Compatibility Tests (`compatibility_tests.rs`)
@@ -19,7 +19,7 @@ This module contains tests to ensure backwards compatibility of the config_types
 
 ### Generating New Fixtures
 
-After updating config_types (and CONFIG_VERSION const), to generate new fixtures, use the following command:
+After updating config_types (and the CONFIG_VERSION const), to generate new fixtures, use the following command:
 
 ```bash
 bazel run //rs/ic_os/config_types/compatibility_tests:generate_config_types_fixture
