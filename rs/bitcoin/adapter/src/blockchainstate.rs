@@ -360,11 +360,11 @@ impl<Network: BlockchainNetwork> BlockchainState<Network> {
         self.block_cache.values().map(|block| block.len()).sum()
     }
 }
-
-impl<Network: BlockchainNetwork> HeaderStore<Network::Header> for BlockchainState<Network> {
-    fn get_header(&self, hash: &BlockHash) -> Option<(Network::Header, BlockHeight)> {
+// TODO: rename PureHeader -> Header
+impl<Network: BlockchainNetwork> HeaderStore for BlockchainState<Network> {
+    fn get_header(&self, hash: &BlockHash) -> Option<(PureHeader, BlockHeight)> {
         self.get_cached_header(hash)
-            .map(|cached| (cached.header.clone(), cached.height))
+            .map(|cached| (cached.header.clone().into_pure_header(), cached.height))
     }
 
     fn get_initial_hash(&self) -> BlockHash {

@@ -1,7 +1,8 @@
 use bitcoin::consensus::{Decodable, Encodable};
 use bitcoin::p2p::Magic;
 use bitcoin::{block::Header as PureHeader, BlockHash, Work};
-use ic_btc_validation::{HeaderStore, ValidateHeaderError};
+use ic_btc_validation::doge::DogecoinHeaderValidator;
+use ic_btc_validation::{AuxPowHeaderValidator, HeaderStore, ValidateHeaderError};
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
 
@@ -143,7 +144,7 @@ pub trait BlockchainNetwork: Copy {
     /// Validate the given block header.
     fn validate_header(
         &self,
-        store: &impl HeaderStore<Self::Header>,
+        store: &impl HeaderStore,
         header: &Self::Header,
     ) -> Result<(), ValidateHeaderError>;
     /// Helper used to determine if multiple blocks should be returned
@@ -172,7 +173,7 @@ impl BlockchainNetwork for bitcoin::Network {
     }
     fn validate_header(
         &self,
-        store: &impl HeaderStore<Self::Header>,
+        store: &impl HeaderStore,
         header: &Self::Header,
     ) -> Result<(), ValidateHeaderError> {
         ic_btc_validation::validate_header(self, store, header)
@@ -225,11 +226,12 @@ impl BlockchainNetwork for bitcoin::dogecoin::Network {
     }
     fn validate_header(
         &self,
-        _store: &impl HeaderStore<Self::Header>,
-        _header: &Self::Header,
+        store: &impl HeaderStore,
+        header: &Self::Header,
     ) -> Result<(), ValidateHeaderError> {
         // TODO(XC-422): use real dogecoin validation
-        Ok(())
+        let validator = DogecoinHeaderValidator::new(*self);
+        validator.validate_auxpow_header(store, &header)
     }
     fn are_multiple_blocks_allowed(&self, anchor_height: BlockHeight) -> bool {
         use bitcoin::dogecoin::Network::*;
@@ -347,7 +349,6 @@ impl BlockchainBlock for bitcoin::dogecoin::Block {
 
 #[cfg(test)]
 pub mod test_common {
-
     use std::{
         collections::{HashSet, VecDeque},
         net::SocketAddr,
