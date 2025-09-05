@@ -148,19 +148,12 @@ pub fn setup(env: TestEnv) {
     env.topology_snapshot()
         .unassigned_nodes()
         .for_each(|node| node.await_can_login_as_admin_via_ssh().unwrap());
+
+    install_nns_canisters(&env);
 }
 
 pub fn test(env: TestEnv) {
-    // [Phase I] Prepare NNS
-    install_nns_canisters(&env); // DO NOT MERGE - Move to setup
-    let topology_snapshot = &env.topology_snapshot();
-    let an_nns_subnet_node = topology_snapshot.root_subnet().nodes().next().unwrap();
-
-    // [Phase II] Execute and validate the testnet changes
-
     block_on(async move {
-        let runtime = new_subnet_runtime(&topology_snapshot.root_subnet());
-
         // A pre-flight check. Not sure why this is necessary. This was probably
         // cargo culted this from ./create_subnet_test.rs
         let registry_canister = RegistryCanister::new_with_query_timeout(
@@ -174,19 +167,20 @@ pub fn test(env: TestEnv) {
             .collect::<HashSet<SubnetId>>();
         assert!(!original_subnets.is_empty(), "registry contains no subnets");
 
-        subnet_user_sends_icp_to_the_subnet_rental_canister(&runtime).await;
+        subnet_user_sends_icp_to_the_subnet_rental_canister(env.topology_snapshot()).await;
 
         execute_subnet_rental_request(&an_nns_subnet_node, *SUBNET_USER_PRINCIPAL_ID).await;
 
-        let topology_snapshot = execute_fulfill_subnet_rental_request(topology_snapshot).await;
+        let topology_snapshot = execute_fulfill_subnet_rental_request(env.topology_snapshot()).await;
         let new_subnet_id = assert_new_subnet(&topology_snapshot, &original_subnets).await;
 
         assert_rented_subnet_works(new_subnet_id, &topology_snapshot).await;
     });
 }
 
-async fn subnet_user_sends_icp_to_the_subnet_rental_canister(runtime: &Runtime) {
-    let icp_ledger = Canister::new(runtime, LEDGER_CANISTER_ID);
+async fn subnet_user_sends_icp_to_the_subnet_rental_canister(topology_snapshot: &TopologySnapshot) {
+    let runtime = new_subnet_runtime(&topology_snapshot.root_subnet());
+    let icp_ledger = Canister::new(&runtime, LEDGER_CANISTER_ID);
 
     let request = BasicIcrc1Transfer {
         source: Account {
