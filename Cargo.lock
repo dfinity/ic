@@ -13467,6 +13467,7 @@ dependencies = [
  "ic-sns-swap",
  "ic-sns-test-utils",
  "ic-sns-wasm",
+ "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "ic-types",
