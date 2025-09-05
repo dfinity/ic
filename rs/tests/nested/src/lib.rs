@@ -82,6 +82,7 @@ fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>) {
         .with_api_boundary_nodes(1)
         .with_node_provider(principal)
         .with_node_operator(principal)
+        .without_unassigned_config()
         .setup_and_start(env)
         .expect("failed to setup IC under test");
 

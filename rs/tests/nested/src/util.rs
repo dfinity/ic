@@ -12,6 +12,7 @@ use ic_registry_keys::{
     make_blessed_replica_versions_key, make_unassigned_nodes_config_record_key,
 };
 use ic_registry_nns_data_provider::registry::RegistryCanister;
+use ic_registry_transport::Error as RegistryTransportError;
 use ic_system_test_driver::{
     driver::{
         bootstrap::{setup_nested_vms, start_nested_vms},
@@ -93,7 +94,7 @@ pub(crate) async fn elect_guestos_version(
 /// Get the current unassigned nodes configuration from the NNS registry.
 pub(crate) async fn get_unassigned_nodes_config(
     nns_node: &IcNodeSnapshot,
-) -> UnassignedNodesConfigRecord {
+) -> Option<UnassignedNodesConfigRecord> {
     let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
     let unassigned_nodes_config_result = registry_canister
         .get_value(
@@ -102,9 +103,15 @@ pub(crate) async fn get_unassigned_nodes_config(
                 .to_vec(),
             None,
         )
-        .await
-        .unwrap();
-    UnassignedNodesConfigRecord::decode(&*unassigned_nodes_config_result.0).unwrap()
+        .await;
+
+    // The record may not exist, in this case return None
+    match unassigned_nodes_config_result {
+        Err(RegistryTransportError::KeyNotPresent(_)) => None,
+        Ok(res) => Some(res),
+        err @ Err(_) => Some(err.unwrap()),
+    }
+    .map(|v| UnassignedNodesConfigRecord::decode(v.0.as_slice()).unwrap())
 }
 
 /// Get the blessed guestOS version from the NNS registry.

@@ -208,6 +208,10 @@ pub fn init_ic(
 
     ic_config.set_use_specified_ids_allocation_range(specific_ids);
 
+    if ic.skip_unassigned_record {
+        ic_config.skip_unassigned_record();
+    }
+
     info!(test_env.logger(), "Initializing via {:?}", &ic_config);
 
     Ok(ic_config.initialize()?)

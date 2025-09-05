@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/recovery",
     "//rs/registry/keys",
+    "//rs/registry/transport",
     "//rs/registry/nns_data_provider",
     "//rs/registry/subnet_type",
     "//rs/rust_canisters/canister_test",

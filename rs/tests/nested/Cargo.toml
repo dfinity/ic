@@ -19,6 +19,7 @@ ic-recovery = { path = "../../recovery" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-nns-data-provider = { path = "../../registry/nns_data_provider" }
 ic-registry-keys = { path = "../../registry/keys" }
+ic-registry-transport = { path = "../../registry/transport" }
 ic-system-test-driver = { path = "../driver" }
 ic-types = { path = "../../types/types" }
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
