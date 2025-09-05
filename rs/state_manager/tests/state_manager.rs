@@ -27,7 +27,9 @@ use ic_replicated_state::{
     ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages, PageMap,
     ReplicatedState, Stream, SubnetTopology,
 };
-use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_FILE, WASM_FILE};
+use ic_state_layout::{
+    CheckpointLayout, ReadOnly, StateLayout, CANISTER_FILE, SYSTEM_METADATA_FILE, WASM_FILE,
+};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
 use ic_state_manager::{
@@ -3147,9 +3149,10 @@ fn copied_chunks_from_file_group_can_be_skipped_when_applying() {
                     .manifest
                     .file_table
                     .iter()
-                    .filter(|file| file.relative_path.ends_with("canister.pbuf"))
+                    .filter(|file| file.relative_path.ends_with(CANISTER_FILE))
                     .map(|file| state_sync_root.join(&file.relative_path))
                     .collect();
+                assert!(!canister_pbuf_files.is_empty());
 
                 // All canister.pbuf files should be already copied to the scratchpad and we take a snapshot of the metadata.
                 let original_metadata_snapshots: Vec<_> = canister_pbuf_files
