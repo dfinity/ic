@@ -5,6 +5,8 @@ use crate::{
 };
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
+#[allow(unused)]
+use ic_cdk::println;
 use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_constants::{REGISTRY_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID};
 use ic_protobuf::registry::subnet::v1::SubnetFeatures;
@@ -100,6 +102,7 @@ impl FulfillSubnetRentalRequest {
         self.verify_rental_request_exists(env).await?;
 
         let new_subnet_id = self.create_subnet(env).await?;
+
         self.notify_subnet_rental_canister_that_the_subnet_has_been_created(
             new_subnet_id,
             proposal_id,
@@ -254,15 +257,25 @@ impl FulfillSubnetRentalRequest {
             })?;
 
         // Decode response.
-        let NewSubnet { new_subnet_id } = Decode!(&result, NewSubnet).map_err(|err| {
-            GovernanceError::new_with_message(
-                ErrorType::External,
-                format!(
-                    "Unable to decode the response from Registry.create_subnet: {}",
-                    err,
-                ),
-            )
-        })?;
+        let NewSubnet { new_subnet_id } = Decode!(&result, Result<NewSubnet, String>)
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Unable to decode the response from Registry.create_subnet: {}",
+                        err,
+                    ),
+                )
+            })?
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "create_subnet reply from the Registry canister was an Err: {}",
+                        err,
+                    ),
+                )
+            })?;
 
         // Convert to return type.
         let new_subnet_id = new_subnet_id.ok_or_else(|| {
