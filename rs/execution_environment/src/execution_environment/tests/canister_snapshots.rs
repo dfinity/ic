@@ -1440,7 +1440,7 @@ fn load_canister_snapshot_fails_snapshot_not_found() {
 }
 
 #[test]
-fn load_canister_snapshot_does_not_work_when_sender_does_control_originating_snapshot() {
+fn load_canister_snapshot_does_not_work_when_sender_does_not_control_originating_snapshot() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000);
     let own_subnet = subnet_test_id(1);
     let caller_canister = canister_test_id(1);
