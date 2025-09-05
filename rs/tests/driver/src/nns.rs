@@ -8,7 +8,7 @@ use registry_canister::mutations::{
 };
 
 use crate::{
-    driver::test_env_api::{HasPublicApiUrl, IcNodeSnapshot},
+    driver::test_env_api::{HasPublicApiUrl, IcNodeContainer, IcNodeSnapshot, TopologySnapshot},
     util::{create_agent, runtime_from_url},
 };
 use candid::{CandidType, Deserialize, Principal};
@@ -451,11 +451,12 @@ pub async fn submit_external_proposal_with_test_id<T: CandidType>(
 ///
 ///   4. Asserts that the proposal is marked as "successful".
 pub async fn execute_nns_function(
-    an_nns_subnet_node: &IcNodeSnapshot,
+    topology_snapshot: &TopologySnapshot,
     nns_function: NnsFunction,
     payload: impl CandidType,
 ) -> ProposalId {
     // Construct Governance canister client.
+    let an_nns_subnet_node = topology_snapshot.root_subnet().nodes().next().unwrap();
     let nns_subnet = runtime_from_url(
         an_nns_subnet_node.get_public_url(),
         // ID of a canister in the subnet that the node belongs to.
@@ -477,7 +478,7 @@ pub async fn execute_nns_function(
     proposal_id
 }
 
-pub async fn execute_subnet_rental_request(an_nns_subnet_node: &IcNodeSnapshot, user: PrincipalId) {
+pub async fn execute_subnet_rental_request(topology_snapshot: &TopologySnapshot, user: PrincipalId) {
     // TODO(NNS1-3965): Replace.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize, Hash)]
     pub enum RentalConditionId {
@@ -493,7 +494,7 @@ pub async fn execute_subnet_rental_request(an_nns_subnet_node: &IcNodeSnapshot, 
     let user = Principal::from(user);
 
     execute_nns_function(
-        an_nns_subnet_node,
+        topology_snapshot,
         NnsFunction::SubnetRentalRequest,
         SubnetRentalProposalPayload {
             user,
