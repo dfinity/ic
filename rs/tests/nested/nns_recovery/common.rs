@@ -60,6 +60,64 @@ fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
     (1..=num_hosts).map(|i| format!("host-{}", i)).collect()
 }
 
+pub fn assign_unassigned_nodes_to_nns(
+    logger: &Logger,
+    topology: &TopologySnapshot,
+) -> TopologySnapshot {
+    info!(logger, "Adding all unassigned nodes to the NNS subnet...");
+    let nns_subnet = topology.root_subnet();
+    let original_node = nns_subnet.nodes().next().unwrap();
+
+    let new_node_ids: Vec<_> = topology.unassigned_nodes().map(|n| n.node_id).collect();
+    block_on(change_subnet_membership(
+        original_node.get_public_url(),
+        nns_subnet.subnet_id,
+        &new_node_ids,
+        &[original_node.node_id],
+    ))
+    .expect("Failed to change subnet membership");
+
+    info!(
+        logger,
+        "Waiting for new nodes to take over the NNS subnet..."
+    );
+    let new_topology = block_on(topology.block_for_newer_registry_version_within_duration(
+        Duration::from_secs(60),
+        Duration::from_secs(2),
+    ))
+    .unwrap();
+
+    let nns_subnet = new_topology.root_subnet();
+    let num_nns_nodes = nns_subnet.nodes().count();
+    assert_eq!(
+        num_nns_nodes,
+        new_node_ids.len(),
+        "NNS subnet should have {} nodes after removing the original node, but found {} nodes",
+        new_node_ids.len(),
+        num_nns_nodes
+    );
+    for node in nns_subnet.nodes() {
+        node.await_status_is_healthy().unwrap();
+    }
+    info!(logger, "Success: New nodes have taken over the NNS subnet");
+
+    // Readiness wait: ensure the NNS subnet is healthy and making progress
+    let nns_node = nns_subnet.nodes().next().unwrap();
+    info!(
+        logger,
+        "Waiting for NNS subnet to become healthy and make progress after membership changes..."
+    );
+    cert_state_makes_progress_with_retries(
+        &nns_node.get_public_url(),
+        nns_node.effective_canister_id(),
+        &logger,
+        Duration::from_secs(300),
+        Duration::from_secs(10),
+    );
+
+    new_topology
+}
+
 pub fn setup(env: TestEnv, cfg: SetupConfig) {
     assert_version_compatibility();
 
@@ -136,56 +194,9 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
     )
     .unwrap();
 
-    info!(logger, "Adding all nodes to the NNS subnet...");
+    let new_topology = assign_unassigned_nodes_to_nns(&logger, &new_topology);
     let nns_subnet = new_topology.root_subnet();
-    let original_node = nns_subnet.nodes().next().unwrap();
-
-    let new_node_ids: Vec<_> = new_topology.unassigned_nodes().map(|n| n.node_id).collect();
-    block_on(change_subnet_membership(
-        original_node.get_public_url(),
-        nns_subnet.subnet_id,
-        &new_node_ids,
-        &[original_node.node_id],
-    ))
-    .expect("Failed to change subnet membership");
-
-    info!(
-        logger,
-        "Waiting for new nodes to take over the NNS subnet..."
-    );
-    let new_topology = block_on(
-        new_topology.block_for_newer_registry_version_within_duration(
-            Duration::from_secs(60),
-            Duration::from_secs(2),
-        ),
-    )
-    .unwrap();
-
-    let nns_subnet = new_topology.root_subnet();
-    let num_nns_nodes = nns_subnet.nodes().count();
-    assert_eq!(
-        num_nns_nodes, SUBNET_SIZE,
-        "NNS subnet should have {} nodes after removing the original node, but found {} nodes",
-        SUBNET_SIZE, num_nns_nodes
-    );
-    for node in nns_subnet.nodes() {
-        node.await_status_is_healthy().unwrap();
-    }
-    info!(logger, "Success: New nodes have taken over the NNS subnet");
-
-    // Readiness wait: ensure the NNS subnet is healthy and making progress before writing
     let nns_node = nns_subnet.nodes().next().unwrap();
-    info!(
-        logger,
-        "Waiting for NNS subnet to become healthy and make progress after membership changes..."
-    );
-    cert_state_makes_progress_with_retries(
-        &nns_node.get_public_url(),
-        nns_node.effective_canister_id(),
-        &logger,
-        Duration::from_secs(300),
-        Duration::from_secs(10),
-    );
 
     // Mirror production setup by granting backup access to all NNS nodes to a specific SSH key.
     // This is necessary as part of the `DownloadCertifications` step of the recovery to determine
