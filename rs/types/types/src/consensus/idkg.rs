@@ -98,6 +98,17 @@ impl IDkgMasterPublicKeyId {
     pub fn inner(&self) -> &MasterPublicKeyId {
         &self.0
     }
+
+    /// Return the transcript capacity required to create a pre-signature for this key ID
+    pub fn required_pre_sig_capacity(&self) -> usize {
+        match self.inner() {
+            // Ecdsa pre-signatures require working on 2 transcripts in parallel
+            MasterPublicKeyId::Ecdsa(_) => 2,
+            // Schnorr pre-signatures consist of only 1 transcript
+            MasterPublicKeyId::Schnorr(_) => 1,
+            MasterPublicKeyId::VetKd(_) => unreachable!("not an IDkg Key"),
+        }
+    }
 }
 
 impl std::ops::Deref for IDkgMasterPublicKeyId {
@@ -367,6 +378,14 @@ impl IDkgPayload {
                 None
             }
         })
+    }
+
+    /// Return the total transcript capacity consumed by ongoing pre-signatures in this payload
+    pub fn consumed_pre_sig_capacity(&self) -> usize {
+        self.pre_signatures_in_creation
+            .values()
+            .map(|pre_sig| pre_sig.key_id().required_pre_sig_capacity())
+            .sum()
     }
 }
 

@@ -3584,11 +3584,12 @@ fn wasm_page_metrics_are_recorded_for_many_writes(
         r#"
         (module
             (func (export "canister_update write")
-                (local $i i32)
-                (local.set $i (i32.const 1073745920)) ;; 1GiB + 4096
+                (local $address i32)
+                (local.set $address (i32.const 1073745920)) ;; 1GiB + 4096
                 (loop $loop
-                    (i32.store (local.get $i) (i32.const 1))
-                    (br_if $loop (local.tee $i (i32.sub (local.get $i) (i32.const 4096))))
+                    (local.set $address (i32.sub (local.get $address) (i32.const 4096)))
+                    (i32.store (local.get $address) (i32.const 1))
+                    (br_if $loop (local.get $address))
                 )
                 {inject_trap}
             )
@@ -9369,5 +9370,93 @@ fn canister_balance_is_roughly(
             .balance()
             .get(),
         expected_balance,
+    );
+}
+
+#[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
+#[rstest]
+#[case::query_does_not_trap("query", "", ErrorCode::CanisterDidNotReply)]
+#[case::update_does_not_trap("update", "", ErrorCode::CanisterDidNotReply)]
+#[case::query_traps("query", "(unreachable)", ErrorCode::CanisterTrapped)]
+#[case::update_traps("update", "(unreachable)", ErrorCode::CanisterTrapped)]
+fn page_metrics_are_recorded(
+    #[case] call_type: &str,
+    #[case] maybe_trap: &str,
+    #[case] expected_code: ErrorCode,
+) {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = format!(
+        r#"
+        (module
+            (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+            (import "ic0" "stable64_write"
+                (func $stable64_write (param $offset i64) (param $src i64) (param $size i64))
+            )
+            (import "ic0" "stable64_read"
+                (func $stable64_read (param $dst i64) (param $offset i64) (param $size i64))
+            )
+            (func (export "canister_{call_type} test")
+                ;; Two heap reads and writes.
+                (i32.store (i32.const 0) (i32.const 0))
+                (i32.store (i32.const 4194304) (i32.const 0)) ;; 4 MiB
+                (drop (i32.load (i32.const 0)))
+                (drop (i32.load (i32.const 4194304))) ;; 4 MiB
+
+                ;; Two stable memory reads and writes.
+                (drop (call $stable64_grow (i64.const 128)))
+                (call $stable64_write (i64.const 0) (i64.const 0) (i64.const 4))
+                (call $stable64_write (i64.const 4194304) (i64.const 4194304) (i64.const 4))
+                (call $stable64_read (i64.const 0) (i64.const 0) (i64.const 4))
+                (call $stable64_read (i64.const 4194304) (i64.const 4194304) (i64.const 4))
+                {maybe_trap}
+            )
+            (memory 128 128) ;; 8 MiB
+        )"#
+    );
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
+    assert_eq!(err.code(), expected_code);
+
+    let (api_type, wasm_dirty_pages, wasm_accessed_pages) = if call_type == "query" {
+        // At the moment, queries do not report Wasm dirty pages and over-estimate
+        // Wasm accessed pages. This will be fixed in a future PR.
+        ("replicated query", 0.0, 384.0)
+    } else {
+        ("update", 2.0, 2.0)
+    };
+    assert_eq!(
+        fetch_histogram_vec_stats(test.metrics_registry(), "sandboxed_execution_dirty_pages"),
+        metric_vec(&[
+            (
+                &[("api_type", api_type), ("memory_type", "wasm")],
+                HistogramStats {
+                    count: 1,
+                    sum: wasm_dirty_pages
+                }
+            ),
+            (
+                &[("api_type", api_type), ("memory_type", "stable")],
+                HistogramStats { count: 1, sum: 2.0 }
+            ),
+        ])
+    );
+    assert_eq!(
+        fetch_histogram_vec_stats(
+            test.metrics_registry(),
+            "sandboxed_execution_accessed_pages"
+        ),
+        metric_vec(&[
+            (
+                &[("api_type", api_type), ("memory_type", "wasm")],
+                HistogramStats {
+                    count: 1,
+                    sum: wasm_accessed_pages
+                }
+            ),
+            (
+                &[("api_type", api_type), ("memory_type", "stable")],
+                HistogramStats { count: 1, sum: 2.0 }
+            ),
+        ])
     );
 }

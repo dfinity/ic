@@ -91,6 +91,7 @@ impl IcpLedger for DegradedEnv {
         _expires_at: Option<u64>,
         _fee: u64,
         _from_subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount>,
+        _expected_allowance: Option<u64>,
     ) -> Result<candid::Nat, NervousSystemError> {
         unimplemented!()
     }

@@ -331,6 +331,7 @@ system_test_nns(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    enable_head_nns_variant = False,
     env = MESSAGE_CANISTER_ENV | SIGNER_CANISTER_ENV | {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "ecdsa_secp256k1",
         "BENCHMARK_NAME": "tecdsa_performance_test",
@@ -359,6 +360,7 @@ system_test_nns(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    enable_head_nns_variant = False,
     env = MESSAGE_CANISTER_ENV | SIGNER_CANISTER_ENV | {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "schnorr_ed25519",
         "BENCHMARK_NAME": "tschnorr_ed25519_performance_test",
@@ -387,6 +389,7 @@ system_test_nns(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    enable_head_nns_variant = False,
     env = MESSAGE_CANISTER_ENV | SIGNER_CANISTER_ENV | {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "schnorr_bip340",
         "BENCHMARK_NAME": "tschnorr_bip340_performance_test",
@@ -415,6 +418,7 @@ system_test_nns(
         "memory_kibibytes": 512142680,
         "boot_image_minimal_size_gibibytes": 500,
     },
+    enable_head_nns_variant = False,
     env = MESSAGE_CANISTER_ENV | SIGNER_CANISTER_ENV | {
         "TECDSA_PERFORMANCE_TEST_KEY_IDS": "vetkd_bls12_381_g2",
         "BENCHMARK_NAME": "vetkd_performance_test",

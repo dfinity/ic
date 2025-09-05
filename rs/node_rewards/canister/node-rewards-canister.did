@@ -102,20 +102,11 @@ type GetNodeProviderRewardsCalculationRequest = record {
   from_nanos: nat64;
   to_nanos: nat64;
   provider_id: principal;
-  historical: bool;
-};
-
-type HistoricalRewardPeriod = record {
-  from_nanos: nat64;
-  to_nanos: nat64;
-  providers_rewarded: vec principal;
 };
 
 type GetNodeProvidersRewardsResponse = variant { Ok : NodeProvidersRewards; Err : text };
 
 type GetNodeProviderRewardsCalculationResponse = variant { Ok : NodeProviderRewards; Err : text };
-
-type GetHistoricalRewardPeriods = vec HistoricalRewardPeriod;
 
 service : () -> {
     get_node_providers_monthly_xdr_rewards: (GetNodeProvidersMonthlyXdrRewardsRequest) -> (
@@ -123,5 +114,4 @@ service : () -> {
     );
     get_node_providers_rewards: (GetNodeProvidersRewardsRequest) -> (GetNodeProvidersRewardsResponse);
     get_node_provider_rewards_calculation : (GetNodeProviderRewardsCalculationRequest) -> (GetNodeProviderRewardsCalculationResponse) query;
-    get_historical_reward_periods: () -> (GetHistoricalRewardPeriods) query;
 }
