@@ -2003,6 +2003,7 @@ impl CanisterManager {
         origin: CanisterChangeOrigin,
         resource_saturation: &ResourceSaturation,
         long_execution_already_in_progress: &IntCounter,
+        snapshot_exists_without_associated_canister: &IntCounter,
     ) -> (Result<CanisterState, CanisterManagerError>, NumInstructions) {
         let canister_id = canister.canister_id();
         // Check sender is a controller.
@@ -2035,7 +2036,40 @@ impl CanisterManager {
                     NumInstructions::new(0),
                 );
             }
-            Some(snapshot) => snapshot,
+            Some(snapshot) => {
+                // Verify the provided `snapshot_id` belongs to a canister controlled by the sender.
+                let snapshot_canister_id = snapshot.canister_id();
+                match state.canister_state(&snapshot_canister_id) {
+                    None => {
+                        // The below case should never happen as if the snapshot still exists, it
+                        // should be associated with an existing canister. If it happens, it indicates
+                        // a bug, so log an error message for investigation.
+                        snapshot_exists_without_associated_canister.inc();
+                        error!(
+                            self.log,
+                            "[EXC-BUG]: Canister {} does not exist although there's a snapshot {} associated with it.",
+                            snapshot_canister_id,
+                            snapshot_id,
+                        );
+                        return (
+                            Err(CanisterManagerError::CanisterNotFound(snapshot_canister_id)),
+                            NumInstructions::new(0),
+                        );
+                    }
+                    Some(canister_state) => {
+                        if !canister_state.controllers().contains(&sender) {
+                            return (
+                                Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
+                                    canister_id,
+                                    snapshot_id,
+                                }),
+                                NumInstructions::new(0),
+                            );
+                        }
+                    }
+                }
+                snapshot
+            }
         };
         let execution_snapshot = snapshot.execution_snapshot();
 
