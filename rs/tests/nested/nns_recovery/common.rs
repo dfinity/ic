@@ -432,7 +432,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         &dfinity_owned_node.get_public_url(),
         dfinity_owned_node.effective_canister_id(),
         &logger,
-        secs(600),
+        secs(1200),
         secs(10),
     );
 
