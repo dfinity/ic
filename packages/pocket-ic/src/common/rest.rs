@@ -568,25 +568,26 @@ pub struct NonmainnetFeatures {
     pub canister_execution_rate_limiting: Option<NonmainnetFeaturesConfig>,
 }
 
-/// Forward-compatible configuration type used instead of `bool` and `Option<bool>`:
-/// if provided, the corresponding feature is enabled.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
-pub struct EmptyConfig {}
+pub enum IcpFeaturesConfig {
+    #[default]
+    DefaultConfig,
+}
 
 /// Specifies ICP features enabled by deploying their corresponding system canisters
 /// when creating a PocketIC instance and keeping them up to date
 /// during the PocketIC instance lifetime.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct IcpFeatures {
-    pub registry: Option<EmptyConfig>,
+    pub registry: Option<IcpFeaturesConfig>,
     /// If the `cycles_minting` feature is enabled, then the default timestamp of a PocketIC instance is set to 10 May 2021 10:00:01 AM CEST (the smallest value that is strictly larger than the default timestamp hard-coded in the CMC state).
-    pub cycles_minting: Option<EmptyConfig>,
-    pub icp_token: Option<EmptyConfig>,
-    pub cycles_token: Option<EmptyConfig>,
-    pub nns_governance: Option<EmptyConfig>,
-    pub sns: Option<EmptyConfig>,
-    pub ii: Option<EmptyConfig>,
-    pub nns_ui: Option<EmptyConfig>,
+    pub cycles_minting: Option<IcpFeaturesConfig>,
+    pub icp_token: Option<IcpFeaturesConfig>,
+    pub cycles_token: Option<IcpFeaturesConfig>,
+    pub nns_governance: Option<IcpFeaturesConfig>,
+    pub sns: Option<IcpFeaturesConfig>,
+    pub ii: Option<IcpFeaturesConfig>,
+    pub nns_ui: Option<IcpFeaturesConfig>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -781,27 +782,21 @@ impl ExtendedSubnetConfigSet {
             (sns, "sns"),
             (nns_ui, "nns_ui"),
         ] {
-            // using `EmptyConfig { }` explicitly
-            // to force an update after adding a new field to `EmptyConfig`
-            if let Some(EmptyConfig {}) = flag {
+            if let Some(IcpFeaturesConfig::DefaultConfig) = flag {
                 check_empty_subnet(&self.nns, "NNS", icp_feature_str)?;
                 self.nns = Some(self.nns.unwrap_or_default());
             }
         }
         // canisters on the II subnet
         for (flag, icp_feature_str) in [(cycles_token, "cycles_token"), (ii, "ii")] {
-            // using `EmptyConfig { }` explicitly
-            // to force an update after adding a new field to `EmptyConfig`
-            if let Some(EmptyConfig {}) = flag {
+            if let Some(IcpFeaturesConfig::DefaultConfig) = flag {
                 check_empty_subnet(&self.ii, "II", icp_feature_str)?;
                 self.ii = Some(self.ii.unwrap_or_default());
             }
         }
         // canisters on the SNS subnet
         for (flag, icp_feature_str) in [(sns, "sns")] {
-            // using `EmptyConfig { }` explicitly
-            // to force an update after adding a new field to `EmptyConfig`
-            if let Some(EmptyConfig {}) = flag {
+            if let Some(IcpFeaturesConfig::DefaultConfig) = flag {
                 check_empty_subnet(&self.sns, "SNS", icp_feature_str)?;
                 self.sns = Some(self.sns.unwrap_or_default());
             }

@@ -24,7 +24,7 @@ use pocket_ic::{common::rest::ExtendedSubnetConfigSet, nonblocking::PocketIc as 
 use pocket_ic::{
     common::rest::{
         AutoProgressConfig, BlobCompression, CanisterHttpReply, CanisterHttpResponse,
-        CreateInstanceResponse, EmptyConfig, HttpGatewayDetails, HttpsConfig, IcpFeatures,
+        CreateInstanceResponse, HttpGatewayDetails, HttpsConfig, IcpFeatures, IcpFeaturesConfig,
         IncompleteStateConfig, InitialTime, InstanceConfig, InstanceHttpGatewayConfig,
         MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetConfigSet, SubnetKind,
     },
@@ -419,7 +419,7 @@ fn test_invalid_initial_timestamp() {
 fn test_initial_timestamp_with_cycles_minting() {
     let initial_timestamp = 1_620_633_601_000_000_000; // 10 May 2021 10:00:01
     let icp_features = IcpFeatures {
-        cycles_minting: Some(EmptyConfig {}),
+        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
         ..Default::default()
     };
     let pic = PocketIcBuilder::new()
@@ -443,7 +443,7 @@ fn test_initial_timestamp_with_cycles_minting() {
 fn test_invalid_initial_timestamp_with_cycles_minting() {
     let initial_timestamp = 1_620_328_630_000_000_000; // 06 May 2021 21:17:10 CEST
     let icp_features = IcpFeatures {
-        cycles_minting: Some(EmptyConfig {}),
+        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
         ..Default::default()
     };
     let _pic = PocketIcBuilder::new()

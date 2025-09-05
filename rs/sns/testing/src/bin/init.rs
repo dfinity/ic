@@ -3,7 +3,7 @@ use ic_sns_testing::nns_dapp::bootstrap_nns;
 use ic_sns_testing::utils::{get_identity_principal, TREASURY_PRINCIPAL_ID};
 use ic_sns_testing::NnsInitArgs;
 use icp_ledger::Tokens;
-use pocket_ic::common::rest::{EmptyConfig, IcpFeatures};
+use pocket_ic::common::rest::{IcpFeatures, IcpFeaturesConfig};
 use pocket_ic::PocketIcBuilder;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::tempdir;
@@ -23,13 +23,13 @@ async fn nns_init(args: NnsInitArgs) {
     // which would make `deciding_nns_neuron_id` non-deterministic.
     // Hence, we deploy the NNS dapp separately for now.
     let all_icp_features_but_nns_ui = IcpFeatures {
-        registry: Some(EmptyConfig {}),
-        cycles_minting: Some(EmptyConfig {}),
-        icp_token: Some(EmptyConfig {}),
-        cycles_token: Some(EmptyConfig {}),
-        nns_governance: Some(EmptyConfig {}),
-        sns: Some(EmptyConfig {}),
-        ii: Some(EmptyConfig {}),
+        registry: Some(IcpFeaturesConfig::DefaultConfig),
+        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
+        icp_token: Some(IcpFeaturesConfig::DefaultConfig),
+        cycles_token: Some(IcpFeaturesConfig::DefaultConfig),
+        nns_governance: Some(IcpFeaturesConfig::DefaultConfig),
+        sns: Some(IcpFeaturesConfig::DefaultConfig),
+        ii: Some(IcpFeaturesConfig::DefaultConfig),
         nns_ui: None,
     };
     // We set the time of the PocketIC instance to the current time so that

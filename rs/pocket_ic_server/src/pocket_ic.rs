@@ -111,10 +111,10 @@ use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayloadBuilder, Subaccount
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
-    CanisterHttpResponse, EmptyConfig, ExtendedSubnetConfigSet, IcpFeatures, IncompleteStateConfig,
-    MockCanisterHttpResponse, NonmainnetFeatures, NonmainnetFeaturesConfig, RawAddCycles,
-    RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
-    SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
+    CanisterHttpResponse, ExtendedSubnetConfigSet, IcpFeatures, IcpFeaturesConfig,
+    IncompleteStateConfig, MockCanisterHttpResponse, NonmainnetFeatures, NonmainnetFeaturesConfig,
+    RawAddCycles, RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId,
+    RawSetStableMemory, SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
 };
 use pocket_ic::{copy_dir, ErrorCode, RejectCode, RejectResponse};
 use registry_canister::init::RegistryCanisterInitPayload;
@@ -197,10 +197,12 @@ fn default_timestamp(icp_features: &Option<IcpFeatures>) -> SystemTime {
     // To set the ICP/XDR conversion rate, the PocketIC time (in seconds) must be strictly larger than the default timestamp in CMC state.
     let cycles_minting_feature = icp_features
         .as_ref()
-        .map(|icp_features|
-            // using `EmptyConfig { }` explicitly
-            // to force an update after adding a new field to `EmptyConfig`
-            matches!(icp_features.cycles_minting, Some(EmptyConfig {})))
+        .map(|icp_features| {
+            matches!(
+                icp_features.cycles_minting,
+                Some(IcpFeaturesConfig::DefaultConfig)
+            )
+        })
         .unwrap_or_default();
     if cycles_minting_feature {
         UNIX_EPOCH + Duration::from_secs(DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS + 1)
@@ -977,44 +979,28 @@ impl PocketIcSubnets {
                     ii,
                     nns_ui,
                 } = icp_features;
-                // using `EmptyConfig { }` explicitly
-                // to force an update after adding a new field to `EmptyConfig`
-                if let Some(EmptyConfig {}) = registry {
+                if let Some(IcpFeaturesConfig::DefaultConfig) = registry {
                     self.update_registry();
                 }
-                // using `EmptyConfig { }` explicitly
-                // to force an update after adding a new field to `EmptyConfig`
-                if let Some(EmptyConfig {}) = cycles_minting {
+                if let Some(IcpFeaturesConfig::DefaultConfig) = cycles_minting {
                     self.update_cmc(&subnet_kind);
                 }
-                // using `EmptyConfig { }` explicitly
-                // to force an update after adding a new field to `EmptyConfig`
-                if let Some(EmptyConfig {}) = icp_token {
+                if let Some(IcpFeaturesConfig::DefaultConfig) = icp_token {
                     self.deploy_icp_token();
                 }
-                // using `EmptyConfig { }` explicitly
-                // to force an update after adding a new field to `EmptyConfig`
-                if let Some(EmptyConfig {}) = cycles_token {
+                if let Some(IcpFeaturesConfig::DefaultConfig) = cycles_token {
                     self.deploy_cycles_token();
                 }
-                // using `EmptyConfig { }` explicitly
-                // to force an update after adding a new field to `EmptyConfig`
-                if let Some(EmptyConfig {}) = nns_governance {
+                if let Some(IcpFeaturesConfig::DefaultConfig) = nns_governance {
                     self.deploy_nns_governance();
                 }
-                // using `EmptyConfig { }` explicitly
-                // to force an update after adding a new field to `EmptyConfig`
-                if let Some(EmptyConfig {}) = sns {
+                if let Some(IcpFeaturesConfig::DefaultConfig) = sns {
                     self.deploy_sns();
                 }
-                // using `EmptyConfig { }` explicitly
-                // to force an update after adding a new field to `EmptyConfig`
-                if let Some(EmptyConfig {}) = ii {
+                if let Some(IcpFeaturesConfig::DefaultConfig) = ii {
                     self.deploy_ii();
                 }
-                // using `EmptyConfig { }` explicitly
-                // to force an update after adding a new field to `EmptyConfig`
-                if let Some(EmptyConfig {}) = nns_ui {
+                if let Some(IcpFeaturesConfig::DefaultConfig) = nns_ui {
                     self.deploy_nns_ui();
                 }
             }
@@ -1148,10 +1134,12 @@ impl PocketIcSubnets {
             let cycles_ledger_canister_id = if self
                 .icp_features
                 .as_ref()
-                .map(|icp_features|
-                  // using `EmptyConfig { }` explicitly
-                  // to force an update after adding a new field to `EmptyConfig`
-                  matches!(icp_features.cycles_token, Some(EmptyConfig {})))
+                .map(|icp_features| {
+                    matches!(
+                        icp_features.cycles_token,
+                        Some(IcpFeaturesConfig::DefaultConfig)
+                    )
+                })
                 .unwrap_or_default()
             {
                 Some(CYCLES_LEDGER_CANISTER_ID)
