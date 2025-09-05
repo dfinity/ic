@@ -22,16 +22,15 @@ Success::
 
 end::catalog[] */
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use canister_test::Canister;
 use ic_consensus_system_test_utils::node::{
     await_node_certified_height, get_node_certified_height,
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    empty_subnet_update, execute_update_subnet_proposal, get_master_public_key,
-    make_key_ids_for_all_idkg_schemes, run_chain_key_signature_test,
+    await_pre_signature_stash_size, get_master_public_key, make_key_ids_for_all_idkg_schemes,
+    run_chain_key_signature_test, set_pre_signature_stash_size,
 };
-use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
@@ -42,17 +41,13 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-            SubnetSnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
     systest,
-    util::{block_on, runtime_from_url, MessageCanister, MetricsFetcher},
+    util::{block_on, runtime_from_url, MessageCanister},
 };
-use ic_types::{Height, SubnetId};
-use registry_canister::mutations::do_update_subnet::{
-    ChainKeyConfig as ChainKeyConfigUpdate, KeyConfig as KeyConfigUpdate, UpdateSubnetPayload,
-};
-use slog::{info, Logger};
+use ic_types::Height;
+use slog::info;
 
 const MAX_PARALLEL_PRE_SIGNATURES: u32 = 10;
 const DKG_INTERVAL_LENGTH: u64 = 19;
@@ -101,79 +96,6 @@ fn setup(test_env: TestEnv) {
         .expect("Failed to install NNS canisters");
 }
 
-fn await_pre_signature_stash_size(
-    subnet: &SubnetSnapshot,
-    expected_size: usize,
-    key_ids: &[MasterPublicKeyId],
-    log: &Logger,
-) {
-    let metric_vec = key_ids
-        .iter()
-        .map(|key_id| format!("execution_pre_signature_stash_size{{key_id=\"{key_id}\"}}"))
-        .collect::<Vec<_>>();
-    let metrics = MetricsFetcher::new(subnet.nodes(), metric_vec.clone());
-    ic_system_test_driver::retry_with_msg!(
-        format!(
-            "Waiting until pre-signature stashes for key_ids {key_ids:?} are of size {expected_size}",
-        ),
-        log.clone(),
-        READY_WAIT_TIMEOUT,
-        RETRY_BACKOFF,
-        || match block_on(metrics.fetch::<usize>()) {
-            Ok(val) => {
-                for metric in &metric_vec {
-                    let sizes = &val[metric];
-                    assert_eq!(sizes.len(), subnet.nodes().count());
-                    for size in sizes {
-                        if *size != expected_size {
-                            bail!(
-                                "Pre-signature stash for key_id {} is of size {}, but expected {}",
-                                metric, size, expected_size
-                            );
-                        }
-                    }
-                }
-                Ok(())
-            }
-            Err(err) => {
-                bail!("Could not connect to metrics yet {:?}", err);
-            }
-        }
-    )
-    .expect("The subnet did not reach the required pre-signature stash size in time");
-}
-
-async fn set_pre_signature_stash_size(
-    governance: &Canister<'_>,
-    subnet_id: SubnetId,
-    key_ids: &[MasterPublicKeyId],
-    max_parallel_pre_signature_transcripts_in_creation: u32,
-    pre_signatures_to_create_in_advance: u32,
-    log: &Logger,
-) {
-    let proposal_payload = UpdateSubnetPayload {
-        subnet_id,
-        chain_key_config: Some(ChainKeyConfigUpdate {
-            key_configs: key_ids
-                .iter()
-                .map(|key_id| KeyConfigUpdate {
-                    key_id: Some(key_id.clone()),
-                    pre_signatures_to_create_in_advance: Some(pre_signatures_to_create_in_advance),
-                    max_queue_size: Some(20),
-                })
-                .collect(),
-            signature_request_timeout_ns: None,
-            idkg_key_rotation_period_ms: None,
-            max_parallel_pre_signature_transcripts_in_creation: Some(
-                max_parallel_pre_signature_transcripts_in_creation,
-            ),
-        }),
-        ..empty_subnet_update()
-    };
-    execute_update_subnet_proposal(governance, proposal_payload, "Update Chain key config", log)
-        .await;
-}
-
 fn test(test_env: TestEnv) {
     let log = test_env.logger();
     let topology = test_env.topology_snapshot();
@@ -196,6 +118,7 @@ fn test(test_env: TestEnv) {
         key_ids.as_slice(),
         MAX_PARALLEL_PRE_SIGNATURES,
         /* max_stash_size */ 1,
+        /* key_rotation_period */ None,
         &log,
     ));
     await_pre_signature_stash_size(&app_subnet, 1, key_ids.as_slice(), &log);
@@ -210,6 +133,7 @@ fn test(test_env: TestEnv) {
         key_ids.as_slice(),
         /* max_parallel_pre_signatures */ 0,
         /* max_stash_size */ 15,
+        /* key_rotation_period */ None,
         &log,
     ));
     // Sleep for two DKG intervals
@@ -241,6 +165,7 @@ fn test(test_env: TestEnv) {
         key_ids.as_slice(),
         MAX_PARALLEL_PRE_SIGNATURES,
         /* max_stash_size */ 15,
+        /* key_rotation_period */ None,
         &log,
     ));
     await_pre_signature_stash_size(&app_subnet, 15, key_ids.as_slice(), &log);
