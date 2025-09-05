@@ -46,13 +46,9 @@ impl Limiter {
             });
 
             return Err(format!(
-                "More than {} cycles have been minted in the last {} seconds, please try again later. \
-                 {} + {} > {}", // DO NOT MERGE
+                "More than {} cycles have been minted in the last {} seconds, please try again later.",
                 limit,
                 self.get_max_age().as_secs(),
-                count,
-                cycles_to_mint,
-                limit,
             ));
         }
         self.add(now, cycles_to_mint);
