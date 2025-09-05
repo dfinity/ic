@@ -27,7 +27,7 @@ use cycles_minting_canister::{
     IcpXdrConversionRateCertifiedResponse, NotifyError, SubnetSelection,
 };
 use dfn_candid::{candid, candid_one};
-use ic_agent::identity::BasicIdentity;
+use ic_agent::{Agent, identity::BasicIdentity};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_canister_client::{Ed25519KeyPair, Sender};
 use ic_ledger_core::Tokens;
@@ -305,10 +305,7 @@ async fn assert_rented_subnet_works(
         })
     });
 
-    let a_rented_subnet_node = rented_subnet
-        .nodes()
-        .next()
-        .expect("Could not find any node in newly created subnet.");
+    let a_rented_subnet_node = rented_subnet.nodes().next().unwrap();
     let mut agent = assert_create_agent(a_rented_subnet_node.get_public_url().as_str()).await;
     agent.set_identity(
         BasicIdentity::from_pem(std::io::Cursor::new(SUBNET_USER_KEYPAIR.to_pem())).unwrap(),
@@ -326,77 +323,31 @@ async fn assert_rented_subnet_works(
     )
     .await
     .unwrap();
-    let new_canister_principal_id =
+    let new_canister_id =
         CanisterId::unchecked_from_principal(PrincipalId::from(new_canister.canister_id()));
 
     // Verify 2.1: The created canister is actually IN the rented subnet, due to
     // it being created by the rented subnet's user.
     assert_canister_belongs_to_subnet(
         &topology_snapshot,
-        new_canister_principal_id,
         rented_subnet_id,
+        new_canister_id,
     )
     .await;
 
     // This will be used later to verify 6: the canister does not charged cycles.
     let original_cycles_balance =
-        get_cycles_balance(new_canister_principal_id, &rented_subnet).await;
+        get_cycles_balance(new_canister_id, &rented_subnet).await;
 
-    // Verify 3: Can install code into the new canister.
-    ManagementCanister::create(&agent)
-        .install_code(
-            &Principal::from(PrincipalId::from(new_canister_principal_id)),
-            &UNIVERSAL_CANISTER_WASM,
-        )
-        .with_raw_arg(universal_canister_argument_builder().stable_grow(1).build())
-        .call_and_wait()
-        .await
-        .unwrap();
-
-    // Verify 4: Canister can be called.
-    const POETRY: &[u8] = b"This beautiful poetry should be persisted for posterity.";
-    agent
-        .update(
-            &Principal::from(PrincipalId::from(new_canister_principal_id)),
-            "update",
-        )
-        .with_arg(UniversalCanister::stable_writer(0, POETRY))
-        .call_and_wait()
-        .await
-        .unwrap();
-
-    // Verify 5: Call affects the canister's (stable) memory.
-    assert_eq!(
-        agent
-            .query(
-                &Principal::from(PrincipalId::from(new_canister_principal_id)),
-                "query"
-            )
-            .with_arg(
-                universal_canister_argument_builder()
-                    .stable_read(0, POETRY.len() as u32)
-                    .reply_data_append()
-                    .reply()
-                    .build(),
-            )
-            .call()
-            .await
-            .unwrap(),
-        POETRY.to_vec(),
-    );
+    // Verify 3-5: Can install code into the new canister.
+    install_and_call_universal_canister(&agent, &rented_subnet, new_canister_id).await;
 
     // Verify 6: The canister was not charged for the previous two operations.
-    let later_cycles_balance = get_cycles_balance(new_canister_principal_id, &rented_subnet).await;
-    assert_eq!(
-        later_cycles_balance - original_cycles_balance,
-        0,
-        "{original_cycles_balance}",
-    );
+    let later_cycles_balance = get_cycles_balance(new_canister_id, &rented_subnet).await;
+    assert_eq!(later_cycles_balance, original_cycles_balance);
 
     // Verify 7: Other principals are NOT allowed to create canisters in the
     // rented subnet.
-
-    // As another user, try to create a canister in the rented subnet. This is supposed to get blocked.
     assert_that_non_subnet_user_gets_blocked_if_they_try_to_create_a_canister_in_the_rented_subnet(
         &topology_snapshot,
         rented_subnet_id,
@@ -406,8 +357,8 @@ async fn assert_rented_subnet_works(
 
 async fn assert_canister_belongs_to_subnet(
     topology_snapshot: &TopologySnapshot,
-    canister_id: CanisterId,
     expected_subnet_id: SubnetId,
+    canister_id: CanisterId,
 ) {
     // Prepare to call the Registry canister.
     let runtime = new_subnet_runtime(&topology_snapshot.root_subnet());
@@ -429,6 +380,48 @@ async fn assert_canister_belongs_to_subnet(
     // Compare result from get_subnet_for_canister with the required subnet ID.
     let new_canister_subnet_id = get_subnet_for_canister_result.unwrap().subnet_id.unwrap();
     assert_eq!(new_canister_subnet_id, expected_subnet_id.get(),);
+}
+
+async fn install_and_call_universal_canister(
+    agent: &Agent,
+    rented_subnet: &SubnetSnapshot,
+    new_canister_id: CanisterId,
+) {
+    let new_canister_principal = Principal::from(PrincipalId::from(new_canister_id));
+
+    // Install the universal canister WASM.
+    ManagementCanister::create(&agent)
+        .install_code(&new_canister_principal, &UNIVERSAL_CANISTER_WASM)
+        .with_raw_arg(universal_canister_argument_builder().stable_grow(1).build())
+        .call_and_wait()
+        .await
+        .unwrap();
+
+    // Write some data to the canister.
+    const POETRY: &[u8] = b"This beautiful poetry should be persisted for posterity.";
+    agent
+        .update(&new_canister_principal, "update",)
+        .with_arg(UniversalCanister::stable_writer(0, POETRY))
+        .call_and_wait()
+        .await
+        .unwrap();
+
+    // Read the data back.
+    assert_eq!(
+        agent
+            .query(&new_canister_principal, "query")
+            .with_arg(
+                universal_canister_argument_builder()
+                    .stable_read(0, POETRY.len() as u32)
+                    .reply_data_append()
+                    .reply()
+                    .build(),
+            )
+            .call()
+            .await
+            .unwrap(),
+        POETRY.to_vec(),
+    );
 }
 
 async fn get_cycles_balance(canister_id: CanisterId, subnet: &SubnetSnapshot) -> u128 {
