@@ -22,7 +22,7 @@ end::catalog[] */
 
 use anyhow::Result;
 use candid::Principal;
-use canister_test::{Canister, Runtime};
+use canister_test::Canister;
 use cycles_minting_canister::{
     IcpXdrConversionRateCertifiedResponse, NotifyError, SubnetSelection,
 };
@@ -155,11 +155,13 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
+    let topology_snapshot = env.topology_snapshot();
+
     block_on(async move {
         // A pre-flight check. Not sure why this is necessary. This was probably
         // cargo culted this from ./create_subnet_test.rs
         let registry_canister = RegistryCanister::new_with_query_timeout(
-            vec![an_nns_subnet_node.get_public_url()],
+            vec![topology_snapshot.root_subnet().nodes().next().unwrap().get_public_url()],
             Duration::from_secs(10),
         );
         let original_subnets = get_subnet_list_from_registry(&registry_canister)
@@ -169,12 +171,12 @@ pub fn test(env: TestEnv) {
             .collect::<HashSet<SubnetId>>();
         assert!(!original_subnets.is_empty(), "registry contains no subnets");
 
-        subnet_user_sends_icp_to_the_subnet_rental_canister(env.topology_snapshot()).await;
+        subnet_user_sends_icp_to_the_subnet_rental_canister(&topology_snapshot).await;
 
-        execute_subnet_rental_request(&an_nns_subnet_node, *SUBNET_USER_PRINCIPAL_ID).await;
+        execute_subnet_rental_request(&topology_snapshot, *SUBNET_USER_PRINCIPAL_ID).await;
 
         let topology_snapshot =
-            execute_fulfill_subnet_rental_request(env.topology_snapshot()).await;
+            execute_fulfill_subnet_rental_request(&topology_snapshot).await;
         let new_subnet_id = assert_new_subnet(&topology_snapshot, &original_subnets).await;
 
         assert_rented_subnet_works(new_subnet_id, &topology_snapshot).await;
@@ -326,7 +328,7 @@ async fn assert_rented_subnet_works(
     // Verify 2.1: The created canister is actually IN the rented subnet, due to
     // it being created by the rented subnet's user.
     assert_canister_belongs_to_subnet(
-        topology_snapshot,
+        &topology_snapshot,
         new_canister_principal_id,
         rented_subnet_id,
     )
@@ -479,7 +481,8 @@ async fn get_cycles_balance(canister_id: CanisterId, subnet: &SubnetSnapshot) ->
 }
 
 fn install_nns_canisters(env: &TestEnv) {
-    let root_subnet = env.topology_snapshot().root_subnet();
+    let topology_snapshot = env.topology_snapshot();
+    let root_subnet = topology_snapshot.root_subnet();
 
     let nns_node = root_subnet.nodes().next().expect("there is no NNS node");
 
@@ -513,13 +516,13 @@ fn install_nns_canisters(env: &TestEnv) {
         .install(&nns_node, env)
         .expect("NNS canisters not installed");
 
-    create_and_install_mock_exchange_rate_canister(env.topology_snapshot());
-    wait_for_cycles_minting_to_get_price_of_icp(env.topology_snapshot());
+    create_and_install_mock_exchange_rate_canister(&topology_snapshot);
+    wait_for_cycles_minting_to_get_price_of_icp(&topology_snapshot);
 
     info!(&env.logger(), "NNS canisters installed");
 }
 
-fn create_and_install_mock_exchange_rate_canister(topology_snapshot: TopologySnapshot) {
+fn create_and_install_mock_exchange_rate_canister(topology_snapshot: &TopologySnapshot) {
     let exchange_rate_canister_subnet =
         find_subnet_that_hosts_canister_id(&topology_snapshot, EXCHANGE_RATE_CANISTER_ID);
     assert_eq!(
@@ -539,7 +542,7 @@ fn create_and_install_mock_exchange_rate_canister(topology_snapshot: TopologySna
     );
 }
 
-fn wait_for_cycles_minting_to_get_price_of_icp(topology_snapshot: TopologySnapshot) {
+fn wait_for_cycles_minting_to_get_price_of_icp(topology_snapshot: &TopologySnapshot) {
     let nns_subnet = topology_snapshot.root_subnet();
     let runtime = new_subnet_runtime(&nns_subnet);
     let cycles_minting = Canister::new(&runtime, CYCLES_MINTING_CANISTER_ID);
