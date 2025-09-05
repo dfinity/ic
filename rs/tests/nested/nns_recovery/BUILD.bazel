@@ -42,6 +42,18 @@ rust_library(
 )
 
 system_test_nns(
+    name = "nr_large",
+    env = ENV,
+    flaky = True,
+    tags = ["long_test"],
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
+    uses_setupos_img = True,
+    runtime_deps = RUNTIME_DEPS,
+    deps = RUNNER_DEPENDENCIES,
+)
+
+system_test_nns(
     name = "nr_remote",
     env = ENV,
     flaky = True,

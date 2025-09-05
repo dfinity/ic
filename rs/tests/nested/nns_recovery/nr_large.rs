@@ -18,13 +18,13 @@ Success::
 . NNS subnet is functional after the recovery.
 
 Variant::
-. This test variant performs the recovery remotely, i.e. downloads/uploads state and artifacts from a remote node instead of running the recovery tool directly on the node.
+. This test variant performs the recovery on a large NNS subnet, better reflecting the scale of the production NNS.
 
 end::catalog[] */
 
 use anyhow::Result;
 use ic_nested_nns_recovery_common::{
-    setup, test, SetupConfig, TestConfig, DKG_INTERVAL, SUBNET_SIZE,
+    setup, test, SetupConfig, TestConfig, LARGE_DKG_INTERVAL, LARGE_SUBNET_SIZE,
 };
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use std::time::Duration;
@@ -35,14 +35,13 @@ fn main() -> Result<()> {
             setup(
                 env,
                 SetupConfig {
-                    impersonate_upstreams: true,
-                    subnet_size: SUBNET_SIZE,
-                    dkg_interval: DKG_INTERVAL,
+                    subnet_size: LARGE_SUBNET_SIZE,
+                    dkg_interval: LARGE_DKG_INTERVAL,
                 },
             )
         })
         .add_test(systest!(test; TestConfig {
-            subnet_size: SUBNET_SIZE,
+            subnet_size: LARGE_SUBNET_SIZE,
         }))
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .with_overall_timeout(Duration::from_secs(35 * 60))
