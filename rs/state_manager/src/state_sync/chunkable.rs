@@ -2,7 +2,7 @@ use crate::{
     manifest::{build_file_group_chunks, filter_out_zero_chunks, DiffScript},
     state_sync::types::{
         decode_manifest, decode_meta_manifest, state_sync_chunk_type, FileGroupChunks, Manifest,
-        MetaManifest, StateSyncChunk, StateSyncMessage, FILE_CHUNK_ID_OFFSET,
+        ManifestChunkIndex, MetaManifest, StateSyncChunk, StateSyncMessage, FILE_CHUNK_ID_OFFSET,
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK,
     },
     state_sync::StateSync,
@@ -61,6 +61,11 @@ enum DownloadState {
         /// a dedicated chunk id range.
         /// The manifest chunks are not part of `fetch_chunks` because they are fetched in the `Prep` phase.
         fetch_chunks: HashSet<usize>,
+        /// Tracks chunks from file group chunks that were already handled during the copy phase.
+        /// These chunks are still fetched for simplicity, but are skipped when applying file group chunks.
+        ///
+        /// Note that the set contains indices into the manifest's chunk table (`ManifestChunkIndex`).
+        copied_chunks_from_file_group: HashSet<ManifestChunkIndex>,
     },
     /// Successfully completed and delivered the state sync, nothing else to do.
     Complete,
@@ -116,6 +121,7 @@ impl Drop for IncompleteState {
                 manifest: _,
                 state_sync_file_group,
                 fetch_chunks,
+                copied_chunks_from_file_group: _,
             } => {
                 self.metrics
                     .state_sync_metrics
@@ -532,6 +538,7 @@ impl IncompleteState {
                 });
             }
         });
+
         for chunk_idx in corrupted_chunks.lock().unwrap().iter() {
             fetch_chunks.insert(*chunk_idx);
         }
@@ -1156,6 +1163,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                 manifest: _,
                 state_sync_file_group: _,
                 ref fetch_chunks,
+                copied_chunks_from_file_group: _,
             } => {
                 let ids: Vec<_> = fetch_chunks
                     .iter()
@@ -1363,22 +1371,36 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                                 < MANIFEST_CHUNK_ID_OFFSET
                         );
 
+                        // Some individual chunks in file group chunks may already be handled in the copy phase.
+                        // However, we still fetch them to simplify the logic of downloading the file group chunks.
+                        // We keep track of these chunks and skip applying them after extracting them from the file group chunks.
+                        // It will be essential when files are hardlinked as read-only and cannot be overwritten in the future.
+                        let mut copied_chunks_from_file_group = HashSet::new();
                         for (&chunk_id, chunk_table_indices) in state_sync_file_group.iter() {
                             for &chunk_table_index in chunk_table_indices.iter() {
-                                fetch_chunks
+                                let was_present = fetch_chunks
                                     .remove(&(chunk_table_index as usize + FILE_CHUNK_ID_OFFSET));
+
+                                // If `remove()` returns false, this chunk was already handled during the copy phase and should be skipped.
+                                if !was_present {
+                                    copied_chunks_from_file_group.insert(chunk_table_index);
+                                }
                             }
+
                             // We decide to fetch all the file group chunks unconditionally for two reasons:
-                            //     1. `canister.pbuf` files change between checkpoints and are unlikely to be covered in the copy phase.
+                            //     1. `canister.pbuf` files typically change between checkpoints, so they are unlikely to be handled in the copy phase,
+                            //        except in the rare case where we do state sync twice for the same checkpoint (e.g., due to network interruptions).
                             //     2. `canister.pbuf` files are small so there will be only a handful of chunks after grouping.
                             fetch_chunks.insert(chunk_id as usize);
                         }
+
                         let num_fetch_chunks = fetch_chunks.len();
                         self.state = DownloadState::Loading {
                             meta_manifest,
                             manifest,
                             state_sync_file_group,
                             fetch_chunks,
+                            copied_chunks_from_file_group,
                         };
                         self.fetch_started_at = Some(Instant::now());
                         info!(
@@ -1397,6 +1419,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                 ref manifest,
                 ref mut fetch_chunks,
                 ref state_sync_file_group,
+                ref copied_chunks_from_file_group,
             } => {
                 debug!(
                     self.log,
@@ -1472,6 +1495,9 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                 for (chunk_table_index, &(start, end)) in
                     chunk_table_indices.iter().zip(payload_pieces.iter())
                 {
+                    if copied_chunks_from_file_group.contains(&chunk_table_index) {
+                        continue;
+                    }
                     Self::apply_chunk(
                         &self.log,
                         &self.metrics.state_sync_metrics,
