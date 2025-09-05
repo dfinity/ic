@@ -8583,9 +8583,8 @@ fn ic0_msg_cycles_available_u64() {
     }
 }
 
-// Test the result that is close to 2^64.
 #[test]
-fn ic0_msg_cycles_refunded_u64() {
+fn ic0_msg_cycles_refunded128() {
     let mut test: ExecutionTest = ExecutionTestBuilder::new()
         .with_initial_canister_cycles(2 * (1 << 64))
         .build();
