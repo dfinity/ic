@@ -27,7 +27,7 @@ use cycles_minting_canister::{
     IcpXdrConversionRateCertifiedResponse, NotifyError, SubnetSelection,
 };
 use dfn_candid::{candid, candid_one};
-use ic_agent::{Agent, identity::BasicIdentity};
+use ic_agent::{identity::BasicIdentity, Agent};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_canister_client::{Ed25519KeyPair, Sender};
 use ic_ledger_core::Tokens;
@@ -328,16 +328,10 @@ async fn assert_rented_subnet_works(
 
     // Verify 2.1: The created canister is actually IN the rented subnet, due to
     // it being created by the rented subnet's user.
-    assert_canister_belongs_to_subnet(
-        &topology_snapshot,
-        rented_subnet_id,
-        new_canister_id,
-    )
-    .await;
+    assert_canister_belongs_to_subnet(&topology_snapshot, rented_subnet_id, new_canister_id).await;
 
     // This will be used later to verify 6: the canister does not charged cycles.
-    let original_cycles_balance =
-        get_cycles_balance(new_canister_id, &rented_subnet).await;
+    let original_cycles_balance = get_cycles_balance(new_canister_id, &rented_subnet).await;
 
     // Verify 3-5: Can install code into the new canister.
     install_and_call_universal_canister(&agent, new_canister_id).await;
@@ -382,10 +376,7 @@ async fn assert_canister_belongs_to_subnet(
     assert_eq!(new_canister_subnet_id, expected_subnet_id.get(),);
 }
 
-async fn install_and_call_universal_canister(
-    agent: &Agent,
-    new_canister_id: CanisterId,
-) {
+async fn install_and_call_universal_canister(agent: &Agent, new_canister_id: CanisterId) {
     let new_canister_principal = Principal::from(PrincipalId::from(new_canister_id));
 
     // Install the universal canister WASM.
@@ -399,7 +390,7 @@ async fn install_and_call_universal_canister(
     // Write some data to the canister.
     const POETRY: &[u8] = b"This beautiful poetry should be persisted for posterity.";
     agent
-        .update(&new_canister_principal, "update",)
+        .update(&new_canister_principal, "update")
         .with_arg(UniversalCanister::stable_writer(0, POETRY))
         .call_and_wait()
         .await
