@@ -20,5 +20,13 @@ serde = { workspace =true }
 serde_bytes = { workspace =true }
 
 [dev-dependencies]
+pocket-ic = { path = "../../packages/pocket-ic" }
+tempfile = { workspace = true }
 tokio = { workspace = true }
+ic-base-types = { path = "../types/base_types" }
+ic-management-canister-types = { workspace = true }
+ic-nns-test-utils = { path = "../nns/test_utils" }
+registry-canister = { path = "../registry/canister" }
+
+
 

@@ -23,7 +23,7 @@ rust_canister(
 
 rust_test(
     name = "migration_canister",
-    srcs = ["tests/*.rs"],
+    srcs = ["tests/tests.rs"],
     data = [
         # Keep sorted
         "//rs/nns/cmc:cycles-minting-canister",
@@ -46,14 +46,13 @@ rust_test(
         "//rs/nns/constants",
         "//rs/nns/governance/api",
         "//rs/nns/test_utils",
-        "//rs/registry/transport",
-        "//rs/rust_canisters/canister_test",
+        "//rs/registry/canister",
         "//rs/types/base_types",
         "@crate_index//:candid",
         "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:ic-management-canister-types",
+        "@crate_index//:tempfile",
         "@crate_index//:tokio",
-        "@crate_index//:url",
     ],
 )
