@@ -1154,7 +1154,7 @@ async fn with_all_icp_features_and_nns_subnet_state() {
         log_level: None,
         bitcoind_addr: None,
         icp_features: Some(all_icp_features()),
-        allow_incomplete_state: None,
+        incomplete_state: None,
         initial_time: None,
     };
     let response = client

@@ -559,7 +559,7 @@ fn time_on_resumed_instance() {
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
 #[cfg(not(windows))]
 async fn resume_killed_instance_impl(
-    allow_incomplete_state: Option<IncompleteStateConfig>,
+    incomplete_state: Option<IncompleteStateConfig>,
 ) -> Result<(), String> {
     let (mut server, server_url) = start_server(StartServerParams::default()).await;
     let temp_dir = TempDir::new().unwrap();
@@ -627,7 +627,7 @@ async fn resume_killed_instance_impl(
         log_level: None,
         bitcoind_addr: None,
         icp_features: None,
-        allow_incomplete_state,
+        incomplete_state,
         initial_time: None,
     };
     let response = client
@@ -3316,7 +3316,7 @@ async fn with_http_gateway_config_invalid_instance_config() {
         log_level: Some("invalid".to_string()),
         bitcoind_addr: None,
         icp_features: None,
-        allow_incomplete_state: None,
+        incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
     };
     assert_create_instance_failure(&server_url, instance_config, "Failed to parse log level").await;
@@ -3378,7 +3378,7 @@ async fn with_http_gateway_config_invalid_gateway_port() {
         log_level: None,
         bitcoind_addr: None,
         icp_features: None,
-        allow_incomplete_state: None,
+        incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
     };
     assert_create_instance_failure(&server_url, instance_config, "Failed to bind to address").await;
@@ -3427,7 +3427,7 @@ async fn with_http_gateway_config_invalid_gateway_https_config() {
         log_level: None,
         bitcoind_addr: None,
         icp_features: None,
-        allow_incomplete_state: None,
+        incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
     };
     assert_create_instance_failure(

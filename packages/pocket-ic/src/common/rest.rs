@@ -618,7 +618,7 @@ pub struct InstanceConfig {
     pub log_level: Option<String>,
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
     pub icp_features: Option<IcpFeatures>,
-    pub allow_incomplete_state: Option<IncompleteStateConfig>,
+    pub incomplete_state: Option<IncompleteStateConfig>,
     pub initial_time: Option<InitialTime>,
 }
 
