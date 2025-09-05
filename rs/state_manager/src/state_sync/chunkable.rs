@@ -1381,7 +1381,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                                 let was_present = fetch_chunks
                                     .remove(&(chunk_table_index as usize + FILE_CHUNK_ID_OFFSET));
 
-                                // If `remove()` returns false, this chunk was already handled during the copy phase and should be skipped.
+                                // If `remove()` returns false, this chunk was already handled during the copy phase and should not be applied after fetching.
                                 if !was_present {
                                     copied_chunks_from_file_group.insert(chunk_table_index);
                                 }
