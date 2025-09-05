@@ -73,7 +73,6 @@ impl StateSync {
         manifest: Manifest,
         meta_manifest: Arc<MetaManifest>,
     ) {
-        return;
         info!(self.log, "Received state {} at height", height);
         let ro_layout = self
             .state_manager
