@@ -1495,7 +1495,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                 for (chunk_table_index, &(start, end)) in
                     chunk_table_indices.iter().zip(payload_pieces.iter())
                 {
-                    if copied_chunks_from_file_group.contains(&chunk_table_index) {
+                    if copied_chunks_from_file_group.contains(chunk_table_index) {
                         continue;
                     }
                     Self::apply_chunk(
