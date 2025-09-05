@@ -5,7 +5,7 @@ use clap::Parser;
 use std::fs::File;
 use tar::Archive;
 use tempfile::{tempdir, TempDir};
-use zstd::stream::read::Decoder;
+use zstd::Decoder;
 
 use partition_tools::{ext::ExtPartition, Partition};
 
@@ -13,7 +13,7 @@ use partition_tools::{ext::ExtPartition, Partition};
 struct Cli {
     #[arg(long)]
     image: PathBuf,
-    #[arg(long, default_value_t = true)]
+    #[arg(long, action = clap::ArgAction::SetFalse, default_value_t = true)]
     unarchive: bool,
     dest: PathBuf,
 }
@@ -42,6 +42,8 @@ async fn main() -> Result<()> {
         .copy_file_to(Path::new(GUESTOS_PATH), &cli.dest)
         .await
         .unwrap();
+
+    partition.close().await.expect("Could not close partition");
 
     Ok(())
 }
