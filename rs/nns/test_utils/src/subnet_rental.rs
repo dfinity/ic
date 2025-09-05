@@ -3,13 +3,14 @@
 /// this exists is that Subnet Rental canister is optional. You have to call
 /// with_subnet_rental_canister in order for it to be created during NNS
 /// creation.
+#[derive(Default, Clone, Debug)]
 pub struct SubnetRentalCanisterInitPayloadBuilder {
     enabled: bool,
 }
 
 impl SubnetRentalCanisterInitPayloadBuilder {
     pub fn new() -> Self {
-        Self { enabled: false }
+        Self::default()
     }
 
     pub fn enable(&mut self) -> &mut Self {
@@ -19,7 +20,7 @@ impl SubnetRentalCanisterInitPayloadBuilder {
 
     pub fn build(&mut self) -> Option<()> {
         if self.enabled {
-            return Some(());
+            Some(())
         } else {
             None
         }
