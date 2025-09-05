@@ -4,6 +4,7 @@ use anyhow::{bail, Result};
 use futures::future::join_all;
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
+    node::await_subnet_earliest_topology_version,
     rw_message::{
         can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries, store_message,
     },
@@ -174,24 +175,19 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         "NNS subnet should have {} nodes after removing the original node, but found {} nodes",
         cfg.subnet_size, num_nns_nodes
     );
+
+    // Readiness wait: ensure the NNS subnet is healthy and uses the latest registry version
     for node in nns_subnet.nodes() {
         node.await_status_is_healthy().unwrap();
     }
+    await_subnet_earliest_topology_version(
+        &nns_subnet,
+        new_topology.get_registry_version(),
+        &logger,
+    );
     info!(logger, "Success: New nodes have taken over the NNS subnet");
 
-    // Readiness wait: ensure the NNS subnet is healthy and making progress before writing
     let nns_node = nns_subnet.nodes().next().unwrap();
-    info!(
-        logger,
-        "Waiting for NNS subnet to become healthy and make progress after membership changes..."
-    );
-    cert_state_makes_progress_with_retries(
-        &nns_node.get_public_url(),
-        nns_node.effective_canister_id(),
-        &logger,
-        Duration::from_secs(300),
-        Duration::from_secs(10),
-    );
 
     // Mirror production setup by granting backup access to all NNS nodes to a specific SSH key.
     // This is necessary as part of the `DownloadCertifications` step of the recovery to determine
