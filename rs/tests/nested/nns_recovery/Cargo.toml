@@ -23,5 +23,9 @@ name = "ic_nested_nns_recovery_common"
 path = "common.rs"
 
 [[bin]]
+name = "ic-systest-nested-nns-recovery-large"
+path = "nr_large.rs"
+
+[[bin]]
 name = "ic-systest-nested-nns-recovery-remote"
 path = "nr_remote.rs"
