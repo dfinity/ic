@@ -23,8 +23,8 @@ end::catalog[] */
 use anyhow::Result;
 use candid::Principal;
 use canister_test::{Canister, Runtime};
-use cycles_minting_canister::{NotifyError, SubnetSelection};
-use dfn_candid::candid_one;
+use cycles_minting_canister::{IcpXdrConversionRateCertifiedResponse, NotifyError, SubnetSelection};
+use dfn_candid::{candid, candid_one};
 use ic_agent::identity::BasicIdentity;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_canister_client::{Ed25519KeyPair, Sender};
@@ -32,7 +32,8 @@ use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR};
 use ic_nns_constants::{
-    EXCHANGE_RATE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
+    SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_test_utils::{
     cycles_minting::cycles_minting_create_canister, ledger::BasicIcrc1Transfer,
@@ -67,10 +68,16 @@ use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use registry_canister::pb::v1::{GetSubnetForCanisterRequest, SubnetForCanister};
 use slog::info;
-use std::{collections::HashSet, iter::FromIterator, str::FromStr, time::Duration};
+use std::{
+    collections::HashSet,
+    iter::FromIterator,
+    str::FromStr,
+    thread::sleep,
+    time::{Duration, SystemTime},
+};
 
-const PRICE_OF_ICP_IN_XDR_CENTS: u64 = 100; // DO NOT MERGE
-const SUBNET_RENTAL_PAYMENT_AMOUNT_ICP: u64 = 148_000; // DO NOT MERGE
+const PRICE_OF_ICP_IN_XDR_CENTS: u64 = 314;
+const SUBNET_RENTAL_PAYMENT_AMOUNT_ICP: u64 = 49_000;
 
 lazy_static! {
     // This is the principal that will be able to create canisters in the
@@ -145,7 +152,7 @@ pub fn setup(env: TestEnv) {
 
 pub fn test(env: TestEnv) {
     // [Phase I] Prepare NNS
-    install_nns_canisters(&env);
+    install_nns_canisters(&env); // DO NOT MERGE - Move to setup
     let topology_snapshot = &env.topology_snapshot();
     let an_nns_subnet_node = topology_snapshot.root_subnet().nodes().next().unwrap();
 
@@ -154,6 +161,8 @@ pub fn test(env: TestEnv) {
     block_on(async move {
         let runtime = new_subnet_runtime(&topology_snapshot.root_subnet());
 
+        // A pre-flight check. Not sure why this is necessary. This was probably
+        // cargo culted this from ./create_subnet_test.rs
         let registry_canister = RegistryCanister::new_with_query_timeout(
             vec![an_nns_subnet_node.get_public_url()],
             Duration::from_secs(10),
@@ -163,7 +172,6 @@ pub fn test(env: TestEnv) {
             // Convert to HashSet
             .into_iter()
             .collect::<HashSet<SubnetId>>();
-        // Not sure why the NNS subnet is not in original_subnets...
         assert!(!original_subnets.is_empty(), "registry contains no subnets");
 
         subnet_user_sends_icp_to_the_subnet_rental_canister(&runtime).await;
@@ -507,6 +515,7 @@ fn install_nns_canisters(env: &TestEnv) {
         .expect("NNS canisters not installed");
 
     create_and_install_mock_exchange_rate_canister(env.topology_snapshot());
+    wait_for_cycles_minting_to_get_price_of_icp(env.topology_snapshot());
 
     info!(&env.logger(), "NNS canisters installed");
 }
@@ -528,5 +537,65 @@ fn create_and_install_mock_exchange_rate_canister(topology_snapshot: TopologySna
             &runtime,
             PRICE_OF_ICP_IN_XDR_CENTS,
         ),
+    );
+}
+
+fn wait_for_cycles_minting_to_get_price_of_icp(topology_snapshot: TopologySnapshot) {
+    let nns_subnet = topology_snapshot.root_subnet();
+    let runtime = new_subnet_runtime(&nns_subnet);
+    let cycles_minting = Canister::new(&runtime, CYCLES_MINTING_CANISTER_ID);
+
+    fn age_s(timestamp_seconds: u64) -> u64 {
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+
+        now - timestamp_seconds
+    }
+
+    let mut err_budget = 30;
+    for i in 1..=120 {
+        let result: Result<IcpXdrConversionRateCertifiedResponse, _> = block_on(cycles_minting
+            .query_(
+                "get_icp_xdr_conversion_rate",
+                candid,
+                (),
+            )
+        );
+
+        let reply = match result {
+            Ok(ok) => ok,
+            Err(err) => {
+                if err_budget == 0 {
+                    panic!("Giving up on calling the Cycles Minting canister: {:?}", err);
+                }
+
+                println!("The Cycles Minting canister is not responsive (yet): {:?}", err);
+                err_budget -= 1;
+                sleep(Duration::from_secs(1));
+                continue;
+            }
+        };
+
+        if age_s(reply.data.timestamp_seconds) < 600 {
+            assert_eq!(
+                reply.data.xdr_permyriad_per_icp,
+                PRICE_OF_ICP_IN_XDR_CENTS * 100,
+            );
+            println!(
+                "Yay! Updated ICP price found in the Cycles Minting canister \
+                 after {} attempts.",
+                i,
+            );
+            return;
+        }
+
+        sleep(Duration::from_secs(1));
+    };
+
+    panic!(
+        "The Cycles Minting canister did not update its price of ICP from \
+         the (mock) Exchange Rate canister within a reasonable amount of time."
     );
 }
