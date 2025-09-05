@@ -37,7 +37,6 @@ use reqwest::header::CONTENT_LENGTH;
 use reqwest::{Method, StatusCode, Url};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-#[cfg(windows)]
 use std::net::{IpAddr, Ipv4Addr};
 use std::{
     io::Read,
@@ -72,6 +71,24 @@ enum RejectionCode {
     CanisterReject,
     CanisterError,
     Unknown,
+}
+
+fn resolving_client(pic: &PocketIc, host: String) -> Client {
+    // Windows doesn't automatically resolve localhost subdomains.
+    if cfg!(windows) {
+        Client::builder()
+            .resolve(
+                &host,
+                SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                    pic.get_server_url().port().unwrap(),
+                ),
+            )
+            .build()
+            .unwrap()
+    } else {
+        Client::new()
+    }
 }
 
 // Create a counter canister and charge it with 2T cycles.
@@ -2882,20 +2899,7 @@ fn test_http_methods() {
         Method::HEAD,
         Method::PATCH,
     ] {
-        // Windows doesn't automatically resolve localhost subdomains.
-        #[cfg(windows)]
-        let client = Client::builder()
-            .resolve(
-                &host,
-                SocketAddr::new(
-                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                    pic.get_server_url().port().unwrap(),
-                ),
-            )
-            .build()
-            .unwrap();
-        #[cfg(not(windows))]
-        let client = Client::new();
+        let client = resolving_client(&pic, host.clone());
         let res = client.request(method.clone(), url.clone()).send().unwrap();
         // The test canister rejects all request to the path `/` with `StatusCode::BAD_REQUEST`
         // and the error message "The request is not supported by the test canister.".
@@ -3197,7 +3201,7 @@ fn with_http_gateway_config_but_no_auto_progress() {
     endpoint.set_host(Some(&host)).unwrap();
     endpoint.set_path("/asset.txt");
 
-    let client = reqwest::blocking::Client::new();
+    let client = resolving_client(&pic, host);
     let resp = client.get(endpoint.clone()).send().unwrap();
     assert!(resp.status().is_success());
     let msg = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
