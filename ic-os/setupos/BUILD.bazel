@@ -7,7 +7,7 @@ exports_files([
     "config/node_operator_private_key.pem",
     "config/ssh_authorized_keys/admin",
     "data/deployment.json.template",
-    "data/nns_public_key.pem",
+    "data/nns_public_key_override.pem",
 ])
 
 # All setup-os targets are named the same, just stay in different submodules.
