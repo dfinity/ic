@@ -789,13 +789,6 @@ impl PocketIc {
         runtime.block_on(async { self.pocket_ic.stop_live().await })
     }
 
-    #[deprecated(note = "Use `stop_live` instead.")]
-    /// Use `stop_live` instead.
-    pub fn make_deterministic(&mut self) {
-        let runtime = self.runtime.clone();
-        runtime.block_on(async { self.pocket_ic.stop_live().await })
-    }
-
     /// Get the root key of this IC instance. Returns `None` if the IC has no NNS subnet.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn root_key(&self) -> Option<Vec<u8>> {
