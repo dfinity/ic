@@ -453,6 +453,11 @@ pub(crate) enum CanisterManagerError {
         canister_id: CanisterId,
         snapshot_id: SnapshotId,
     },
+    CanisterSnapshotNotController {
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        snapshot_id: SnapshotId,
+    },
     CanisterSnapshotExecutionStateNotFound {
         canister_id: CanisterId,
     },
@@ -646,6 +651,13 @@ impl AsErrorHelp for CanisterManagerError {
                         .to_string(),
                 doc_link: doc_ref("canister-snapshot-invalid-ownership"),
             },
+            CanisterManagerError::CanisterSnapshotNotController { .. } => {
+                ErrorHelp::UserError {
+                    suggestion: "Only a controller of the canister that the snapshot belongs to can load it."
+                        .to_string(),
+                    doc_link: "".to_string(),
+                }
+            }
             CanisterManagerError::CanisterSnapshotExecutionStateNotFound { .. } => {
                 ErrorHelp::UserError {
                     suggestion: "".to_string(),
@@ -995,6 +1007,15 @@ impl From<CanisterManagerError> for UserError {
                     ErrorCode::CanisterRejectedMessage,
                     format!(
                         "The snapshot {} does not belong to canister {}.{additional_help}", snapshot_id, canister_id,
+                    )
+                )
+            }
+            CanisterSnapshotNotController { sender, canister_id, snapshot_id } => {
+                Self::new(
+                    ErrorCode::CanisterRejectedMessage,
+                    format!(
+                        "Only a controller of the canister that snapshot {} belongs to can load it on canister {}. Sender: {}.{additional_help}",
+                        snapshot_id, canister_id, sender,
                     )
                 )
             }

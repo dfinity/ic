@@ -2059,7 +2059,8 @@ impl CanisterManager {
                     Some(canister_state) => {
                         if !canister_state.controllers().contains(&sender) {
                             return (
-                                Err(CanisterManagerError::CanisterSnapshotInvalidOwnership {
+                                Err(CanisterManagerError::CanisterSnapshotNotController {
+                                    sender,
                                     canister_id,
                                     snapshot_id,
                                 }),
