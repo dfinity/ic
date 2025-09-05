@@ -340,7 +340,7 @@ async fn assert_rented_subnet_works(
         get_cycles_balance(new_canister_id, &rented_subnet).await;
 
     // Verify 3-5: Can install code into the new canister.
-    install_and_call_universal_canister(&agent, &rented_subnet, new_canister_id).await;
+    install_and_call_universal_canister(&agent, new_canister_id).await;
 
     // Verify 6: The canister was not charged for the previous two operations.
     let later_cycles_balance = get_cycles_balance(new_canister_id, &rented_subnet).await;
@@ -384,7 +384,6 @@ async fn assert_canister_belongs_to_subnet(
 
 async fn install_and_call_universal_canister(
     agent: &Agent,
-    rented_subnet: &SubnetSnapshot,
     new_canister_id: CanisterId,
 ) {
     let new_canister_principal = Principal::from(PrincipalId::from(new_canister_id));
