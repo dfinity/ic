@@ -4,7 +4,7 @@ workspace(
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("//bazel:mainnet-canisters.bzl", "canisters")
-load("//bazel:mainnet-icos-images.bzl", "mainnet_icos_images")
+load("//rs/tests:common.bzl", "MAINNET_APP_GUESTOS_REVISION", "MAINNET_LATEST_GUESTOS_REVISION", "MAINNET_LATEST_HOSTOS_REVISION", "MAINNET_NNS_GUESTOS_REVISION")
 load("//third_party/jemalloc:repository.bzl", "jemalloc_repository")
 load("//third_party/libfuzzer:repository.bzl", "libfuzzer_repository")
 load("//third_party/lmdb:repository.bzl", "lmdb_repository")
@@ -281,7 +281,22 @@ load("//bazel:idl2json.bzl", "idl_to_json")
 
 idl_to_json(name = "idl2json")
 
-mainnet_icos_images()
+# Mainnet ICOS image support
+load("//bazel:mainnet-icos-images.bzl", "get_mainnet_guestos_images", "get_mainnet_setupos_images")
+
+get_mainnet_setupos_images(
+    versions = [
+        ("mainnet_latest_setupos_disk_image", MAINNET_LATEST_HOSTOS_REVISION),
+    ],
+)
+
+get_mainnet_guestos_images(
+    extract_guestos = "//rs/ic_os/build_tools/partition_tools:extract-guestos",
+    versions = [
+        ("mainnet_latest_guest_img", MAINNET_LATEST_GUESTOS_REVISION),
+        ("mainnet_nns_guest_img", MAINNET_NNS_GUESTOS_REVISION),
+    ],
+)
 
 # Use libsystemd from the host environment
 # Ideally this is pulled hermetically, but as this is only used by infogetty

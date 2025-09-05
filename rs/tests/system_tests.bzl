@@ -333,14 +333,14 @@ def system_test(
 
     if uses_guestos_mainnet_latest_img:
         env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_LATEST_GUESTOS_REVISION
-        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/setupos:mainnet-latest-guest-img.tar.zst" if not uses_dev_mainnet else "//ic-os/setupos:mainnet-latest-guest-dev-img.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "@mainnet_latest_guest_img" if not uses_dev_mainnet else "@mainnet_latest_guest_img_dev"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(MAINNET_LATEST_GUESTOS_REVISION, "guest-os", True, False) if not uses_dev_mainnet else dev_base_download_url(MAINNET_LATEST_GUESTOS_REVISION, "guest-os", True)
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_LATEST_GUESTOS_HASH if not uses_dev_mainnet else MAINNET_LATEST_GUESTOS_DEV_HASH
         # _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = ... # TODO(NODE-1652): Load mainnet measurement once available
 
     if uses_guestos_mainnet_nns_img:
         env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_NNS_GUESTOS_REVISION
-        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "//ic-os/setupos:mainnet-nns-guest-img.tar.zst" if not uses_dev_mainnet else "//ic-os/setupos:mainnet-nns-guest-dev-img.tar.zst"
+        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "@mainnet_nns_guest_img" if not uses_dev_mainnet else "@mainnet_nns_guest_img_dev"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(MAINNET_NNS_GUESTOS_REVISION, "guest-os", True, False) if not uses_dev_mainnet else dev_base_download_url(MAINNET_NNS_GUESTOS_REVISION, "guest-os", True)
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_NNS_GUESTOS_HASH if not uses_dev_mainnet else MAINNET_NNS_GUESTOS_DEV_HASH
         # _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = ... # TODO(NODE-1652): Load mainnet measurement once available
@@ -389,7 +389,7 @@ def system_test(
     if uses_setupos_mainnet_latest_img:
         icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
         env["ENV_DEPS__SETUPOS_DISK_IMG_VERSION"] = MAINNET_LATEST_HOSTOS_REVISION
-        icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:mainnet-latest-test-img.tar.zst" if not uses_dev_mainnet else "//ic-os/setupos:mainnet-latest-dev-test-img.tar.zst"
+        icos_images["ENV_DEPS__SETUPOS_DISK_IMG"] = "//ic-os/setupos:mainnet-latest-test-img.tar.zst" if not uses_dev_mainnet else "//ic-os/setupos:mainnet-latest-test-img-dev.tar.zst"
 
         _env_deps["ENV_DEPS__SETUPOS_BUILD_CONFIG"] = "//ic-os:dev-tools/build-setupos-config-image.sh"
         _env_deps["ENV_DEPS__SETUPOS_CREATE_CONFIG"] = "//rs/ic_os/dev_test_tools/setupos-image-config:setupos-create-config"
