@@ -112,9 +112,9 @@ use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
     CanisterHttpResponse, EmptyConfig, ExtendedSubnetConfigSet, IcpFeatures,
-    MockCanisterHttpResponse, NonmainnetFeatures, RawAddCycles, RawCanisterCall, RawCanisterId,
-    RawEffectivePrincipal, RawMessageId, RawSetStableMemory, SubnetInstructionConfig, SubnetKind,
-    TickConfigs, Topology,
+    MockCanisterHttpResponse, NonmainnetFeatures, NonmainnetFeaturesConfig, RawAddCycles,
+    RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
+    SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
 };
 use pocket_ic::{copy_dir, ErrorCode, RejectCode, RejectResponse};
 use registry_canister::init::RegistryCanisterInitPayload;
@@ -574,44 +574,57 @@ impl PocketIcSubnets {
         // using `let NonmainnetFeatures { }` with explicit field names
         // to force an update after adding a new field to `NonmainnetFeatures`
         let NonmainnetFeatures {
-            enable_beta_features,
-            disable_canister_backtrace,
-            disable_function_name_length_limits,
-            disable_canister_execution_rate_limiting,
+            beta_features,
+            canister_backtrace,
+            function_name_length_limits,
+            canister_execution_rate_limiting,
         } = nonmainnet_features;
-        // using `EmptyConfig { }` explicitly
-        // to force an update after adding a new field to `EmptyConfig`
-        let mut hypervisor_config = if let Some(EmptyConfig {}) = enable_beta_features {
-            crate::beta_features::hypervisor_config()
-        } else {
-            execution_environment::Config::default()
+        let mut hypervisor_config = match beta_features.clone().unwrap_or_default() {
+            NonmainnetFeaturesConfig::Mainnet | NonmainnetFeaturesConfig::Disabled => {
+                execution_environment::Config::default()
+            }
+            NonmainnetFeaturesConfig::Enabled => crate::beta_features::hypervisor_config(),
         };
-        // using `EmptyConfig { }` explicitly
-        // to force an update after adding a new field to `EmptyConfig`
-        if let Some(EmptyConfig {}) = disable_canister_backtrace {
-            hypervisor_config
-                .embedders_config
-                .feature_flags
-                .canister_backtrace = FlagStatus::Disabled;
-        }
-        // using `EmptyConfig { }` explicitly
-        // to force an update after adding a new field to `EmptyConfig`
-        if let Some(EmptyConfig {}) = disable_function_name_length_limits {
-            // the maximum size of a canister WASM is much less than 1GB
-            // and thus the following limits effectively disable all limits
-            hypervisor_config
-                .embedders_config
-                .max_number_exported_functions = 1_000_000_000;
-            hypervisor_config
-                .embedders_config
-                .max_sum_exported_function_name_lengths = 1_000_000_000;
-        }
-        // using `EmptyConfig { }` explicitly
-        // to force an update after adding a new field to `EmptyConfig`
-        if let Some(EmptyConfig {}) = disable_canister_execution_rate_limiting {
-            hypervisor_config.rate_limiting_of_heap_delta = FlagStatus::Disabled;
-            hypervisor_config.rate_limiting_of_instructions = FlagStatus::Disabled;
-        }
+        match canister_backtrace.clone().unwrap_or_default() {
+            NonmainnetFeaturesConfig::Mainnet => (),
+            NonmainnetFeaturesConfig::Enabled => {
+                hypervisor_config
+                    .embedders_config
+                    .feature_flags
+                    .canister_backtrace = FlagStatus::Enabled;
+            }
+            NonmainnetFeaturesConfig::Disabled => {
+                hypervisor_config
+                    .embedders_config
+                    .feature_flags
+                    .canister_backtrace = FlagStatus::Disabled;
+            }
+        };
+        match function_name_length_limits.clone().unwrap_or_default() {
+            NonmainnetFeaturesConfig::Mainnet => (),
+            NonmainnetFeaturesConfig::Enabled => (),
+            NonmainnetFeaturesConfig::Disabled => {
+                // the maximum size of a canister WASM is much less than 1GB
+                // and thus the following limits effectively disable all limits
+                hypervisor_config
+                    .embedders_config
+                    .max_number_exported_functions = 1_000_000_000;
+                hypervisor_config
+                    .embedders_config
+                    .max_sum_exported_function_name_lengths = 1_000_000_000;
+            }
+        };
+        match canister_execution_rate_limiting.clone().unwrap_or_default() {
+            NonmainnetFeaturesConfig::Mainnet => (),
+            NonmainnetFeaturesConfig::Enabled => {
+                hypervisor_config.rate_limiting_of_heap_delta = FlagStatus::Enabled;
+                hypervisor_config.rate_limiting_of_instructions = FlagStatus::Enabled;
+            }
+            NonmainnetFeaturesConfig::Disabled => {
+                hypervisor_config.rate_limiting_of_heap_delta = FlagStatus::Disabled;
+                hypervisor_config.rate_limiting_of_instructions = FlagStatus::Disabled;
+            }
+        };
         if let SubnetInstructionConfig::Benchmarking = instruction_config {
             let instruction_limit = NumInstructions::new(99_999_999_999_999);
             if instruction_limit > subnet_config.scheduler_config.max_instructions_per_round {

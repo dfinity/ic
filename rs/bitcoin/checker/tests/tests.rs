@@ -20,8 +20,8 @@ use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use pocket_ic::{
     common::rest::{
         CanisterHttpHeader, CanisterHttpReject, CanisterHttpReply, CanisterHttpRequest,
-        CanisterHttpResponse, EmptyConfig, MockCanisterHttpResponse, NonmainnetFeatures,
-        RawMessageId,
+        CanisterHttpResponse, MockCanisterHttpResponse, NonmainnetFeatures,
+        NonmainnetFeaturesConfig, RawMessageId,
     },
     query_candid, PocketIc, PocketIcBuilder, RejectCode, RejectResponse,
 };
@@ -65,7 +65,7 @@ impl Setup {
         // Enable nonmainnet_features to avoid CanisterInstallCodeRateLimited error
         // for canister upgrades
         let nonmainnet_features = NonmainnetFeatures {
-            disable_canister_execution_rate_limiting: Some(EmptyConfig::default()),
+            canister_execution_rate_limiting: Some(NonmainnetFeaturesConfig::Disabled),
             ..Default::default()
         };
         let env = PocketIcBuilder::new()

@@ -546,24 +546,32 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
     }
 }
 
-/// Forward-compatible configuration type used instead of `bool` and `Option<bool>`:
-/// if provided, the corresponding feature is enabled.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
-pub struct EmptyConfig {}
+pub enum NonmainnetFeaturesConfig {
+    #[default]
+    Mainnet,
+    Enabled,
+    Disabled,
+}
 
 /// Specifies nonmainnet features enabled in this instance.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct NonmainnetFeatures {
-    /// Enables (beta) features (disabled on the ICP mainnet).
-    pub enable_beta_features: Option<EmptyConfig>,
-    /// Disables canister backtraces (enabled on the ICP mainnet).
-    pub disable_canister_backtrace: Option<EmptyConfig>,
-    /// Disables limits on function name length in canister WASM (enabled on the ICP mainnet).
-    pub disable_function_name_length_limits: Option<EmptyConfig>,
-    /// Disables rate-limiting of canister execution (enabled on the ICP mainnet).
+    /// Beta features (disabled on the ICP mainnet).
+    pub beta_features: Option<NonmainnetFeaturesConfig>,
+    /// Canister backtraces (enabled on the ICP mainnet).
+    pub canister_backtrace: Option<NonmainnetFeaturesConfig>,
+    /// Limits on function name length in canister WASM (enabled on the ICP mainnet).
+    pub function_name_length_limits: Option<NonmainnetFeaturesConfig>,
+    /// Rate-limiting of canister execution (enabled on the ICP mainnet).
     /// Canister execution refers to instructions and memory writes here.
-    pub disable_canister_execution_rate_limiting: Option<EmptyConfig>,
+    pub canister_execution_rate_limiting: Option<NonmainnetFeaturesConfig>,
 }
+
+/// Forward-compatible configuration type used instead of `bool` and `Option<bool>`:
+/// if provided, the corresponding feature is enabled.
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub struct EmptyConfig {}
 
 /// Specifies ICP features enabled by deploying their corresponding system canisters
 /// when creating a PocketIC instance and keeping them up to date
