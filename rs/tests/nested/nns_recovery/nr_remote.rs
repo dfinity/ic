@@ -26,7 +26,14 @@ use std::time::Duration;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(|env| setup(env, SetupConfig {}))
+        .with_setup(|env| {
+            setup(
+                env,
+                SetupConfig {
+                    impersonate_upstreams: true,
+                },
+            )
+        })
         .add_test(systest!(test; TestConfig {}))
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .with_overall_timeout(Duration::from_secs(35 * 60))

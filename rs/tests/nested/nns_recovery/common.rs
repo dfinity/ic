@@ -50,7 +50,9 @@ pub const DKG_INTERVAL: u64 = 9;
 /// GuestOS image, that Node Providers would use as input to guestos-recovery-upgrader.
 pub const RECOVERY_GUESTOS_IMG_VERSION: &str = "RECOVERY_VERSION";
 
-pub struct SetupConfig {}
+pub struct SetupConfig {
+    pub impersonate_upstreams: bool,
+}
 
 pub struct TestConfig {}
 
@@ -58,12 +60,14 @@ fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
     (1..=num_hosts).map(|i| format!("host-{}", i)).collect()
 }
 
-pub fn setup(env: TestEnv, _cfg: SetupConfig) {
+pub fn setup(env: TestEnv, cfg: SetupConfig) {
     assert_version_compatibility();
 
-    setup_ic_infrastructure(&env, Some(DKG_INTERVAL));
+    if cfg.impersonate_upstreams {
+        impersonate_upstreams::setup_upstreams_uvm(&env);
+    }
 
-    impersonate_upstreams::setup_upstreams_uvm(&env);
+    setup_ic_infrastructure(&env, Some(DKG_INTERVAL));
 
     let host_vm_names = get_host_vm_names(SUBNET_SIZE);
     let host_vm_names_refs: Vec<&str> = host_vm_names.iter().map(|s| s.as_str()).collect();
