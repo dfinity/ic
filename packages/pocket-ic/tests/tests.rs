@@ -18,15 +18,18 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
 #[cfg(not(windows))]
-use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
+use pocket_ic::common::rest::{
+    BlockmakerConfigs, ExtendedSubnetConfigSet, IncompleteStateConfig, RawSubnetBlockmaker,
+    TickConfigs,
+};
 #[cfg(not(windows))]
-use pocket_ic::{common::rest::ExtendedSubnetConfigSet, nonblocking::PocketIc as PocketIcAsync};
+use pocket_ic::nonblocking::PocketIc as PocketIcAsync;
 use pocket_ic::{
     common::rest::{
         AutoProgressConfig, BlobCompression, CanisterHttpReply, CanisterHttpResponse,
         CreateInstanceResponse, HttpGatewayDetails, HttpsConfig, IcpFeatures, IcpFeaturesConfig,
-        IncompleteStateConfig, InitialTime, InstanceConfig, InstanceHttpGatewayConfig,
-        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetConfigSet, SubnetKind,
+        InitialTime, InstanceConfig, InstanceHttpGatewayConfig, MockCanisterHttpResponse,
+        RawEffectivePrincipal, RawMessageId, SubnetConfigSet, SubnetKind,
     },
     query_candid, start_server, update_candid, DefaultEffectiveCanisterIdError, ErrorCode,
     IngressStatusResult, PocketIc, PocketIcBuilder, PocketIcState, RejectCode, StartServerParams,
