@@ -1487,8 +1487,8 @@ fn load_canister_snapshot_does_not_work_when_sender_does_control_originating_sna
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
     let message = format!(
-        "The snapshot {} does not belong to canister {}",
-        snapshot_id, canister_id_2,
+        "Only a controller of the canister that snapshot {} belongs to can load it on canister {}. Sender: {}",
+        snapshot_id, canister_id_2, test.user_id().get()
     )
     .to_string();
     assert!(error.description().contains(&message));
