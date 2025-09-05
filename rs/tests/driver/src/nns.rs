@@ -478,7 +478,10 @@ pub async fn execute_nns_function(
     proposal_id
 }
 
-pub async fn execute_subnet_rental_request(topology_snapshot: &TopologySnapshot, user: PrincipalId) {
+pub async fn execute_subnet_rental_request(
+    topology_snapshot: &TopologySnapshot,
+    user: PrincipalId,
+) {
     // TODO(NNS1-3965): Replace.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize, Hash)]
     pub enum RentalConditionId {

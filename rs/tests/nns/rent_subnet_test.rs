@@ -161,7 +161,12 @@ pub fn test(env: TestEnv) {
         // A pre-flight check. Not sure why this is necessary. This was probably
         // cargo culted this from ./create_subnet_test.rs
         let registry_canister = RegistryCanister::new_with_query_timeout(
-            vec![topology_snapshot.root_subnet().nodes().next().unwrap().get_public_url()],
+            vec![topology_snapshot
+                .root_subnet()
+                .nodes()
+                .next()
+                .unwrap()
+                .get_public_url()],
             Duration::from_secs(10),
         );
         let original_subnets = get_subnet_list_from_registry(&registry_canister)
@@ -175,8 +180,7 @@ pub fn test(env: TestEnv) {
 
         execute_subnet_rental_request(&topology_snapshot, *SUBNET_USER_PRINCIPAL_ID).await;
 
-        let topology_snapshot =
-            execute_fulfill_subnet_rental_request(&topology_snapshot).await;
+        let topology_snapshot = execute_fulfill_subnet_rental_request(&topology_snapshot).await;
         let new_subnet_id = assert_new_subnet(&topology_snapshot, &original_subnets).await;
 
         assert_rented_subnet_works(new_subnet_id, &topology_snapshot).await;
