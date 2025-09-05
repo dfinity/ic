@@ -746,7 +746,7 @@ use `PocketIcBuilder::with_nonmainnet_features` when creating a new PocketIC ins
 ```rust
     // We create a PocketIC instance with beta features enabled that are not yet available on the ICP mainnet.
     let nonmainnet_features = NonmainnetFeatures {
-        enable_beta_features: Some(NonmainnetFeaturesConfig::Enabled),
+        beta_features: Some(NonmainnetFeaturesConfig::Enabled),
         ..Default::default()
     };
     let pic = PocketIcBuilder::new()
