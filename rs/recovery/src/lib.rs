@@ -26,7 +26,7 @@ use registry_helper::RegistryPollingStrategy;
 use serde::{Deserialize, Serialize};
 use slog::{info, warn, Logger};
 use ssh_helper::SshHelper;
-use std::io::ErrorKind;
+use std::{env, io::ErrorKind};
 use std::{
     net::IpAddr,
     path::{Path, PathBuf},
@@ -205,7 +205,12 @@ impl Recovery {
             info!(logger, "ic-admin exists, skipping download.");
         }
 
-        let admin_helper = AdminHelper::new(binary_dir.clone(), args.nns_url, neuron_args);
+        let ic_admin = if args.use_local_binaries {
+            PathBuf::from(env::var("IC_ADMIN_BIN").unwrap_or("ic-admin".to_string()))
+        } else {
+            binary_dir.join("ic-admin")
+        };
+        let admin_helper = AdminHelper::new(ic_admin, args.nns_url, neuron_args);
 
         Ok(Self {
             recovery_dir,
@@ -219,18 +224,6 @@ impl Recovery {
             ssh_confirmation,
             logger,
         })
-    }
-
-    /// Construct a [Url] for the NNS endpoint of the given node IP
-    pub fn get_nns_endpoint(node_ip: IpAddr) -> RecoveryResult<Url> {
-        Url::parse(&format!("http://[{}]:8080", node_ip)).map_err(|e| {
-            RecoveryError::invalid_output_error(format!("Failed to parse NNS URL: {}", e))
-        })
-    }
-
-    /// Set recovery to a different NNS by creating a new [AdminHelper].
-    pub fn set_nns(&mut self, nns_url: Url, neuron_args: Option<NeuronArgs>) {
-        self.admin_helper = AdminHelper::new(self.binary_dir.clone(), nns_url, neuron_args);
     }
 
     // Create directories used to store downloaded states, binaries and results
