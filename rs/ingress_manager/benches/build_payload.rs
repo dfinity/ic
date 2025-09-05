@@ -119,6 +119,7 @@ where
             ingress_signature_crypto,
             metrics_registry,
             subnet_id,
+            node_test_id(0),
             no_op_logger(),
             Arc::new(state_manager),
             cycles_account_manager,

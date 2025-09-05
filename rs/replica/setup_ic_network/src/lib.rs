@@ -512,6 +512,7 @@ fn start_consensus(
         Arc::clone(&ingress_sig_crypto) as Arc<_>,
         metrics_registry.clone(),
         subnet_id,
+        node_id,
         log.clone(),
         Arc::clone(&state_reader),
         cycles_account_manager,
