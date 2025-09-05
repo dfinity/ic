@@ -2919,16 +2919,6 @@ impl From<pb_api::governance::governance_cached_metrics::NeuronSubsetMetrics>
     }
 }
 
-impl From<pb_api::governance::MakingSnsProposal> for pb::governance::MakingSnsProposal {
-    fn from(item: pb_api::governance::MakingSnsProposal) -> Self {
-        Self {
-            proposer_id: item.proposer_id,
-            caller: item.caller,
-            proposal: item.proposal.map(|x| x.into()),
-        }
-    }
-}
-
 impl From<pb::XdrConversionRate> for pb_api::XdrConversionRate {
     fn from(item: pb::XdrConversionRate) -> Self {
         Self {
