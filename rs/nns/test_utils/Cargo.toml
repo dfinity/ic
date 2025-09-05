@@ -30,6 +30,7 @@ ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reprod
 ic-crypto-utils-ni-dkg = { path = "../../crypto/utils/ni_dkg" }
 ic-icp-index = { path = "../../ledger_suite/icp/index" }
 ic-icrc1 = { path = "../../ledger_suite/icrc1" }
+ic-ledger-core = { path = "../../ledger_suite/common/ledger_core" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
