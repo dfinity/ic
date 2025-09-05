@@ -295,6 +295,7 @@ get_mainnet_guestos_images(
     versions = [
         ("mainnet_latest_guest_img", MAINNET_LATEST_GUESTOS_REVISION),
         ("mainnet_nns_guest_img", MAINNET_NNS_GUESTOS_REVISION),
+        ("mainnet_app_guest_img", MAINNET_APP_GUESTOS_REVISION),
     ],
 )
 

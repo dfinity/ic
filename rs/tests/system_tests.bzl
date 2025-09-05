@@ -8,7 +8,7 @@ load("@rules_oci//oci:defs.bzl", "oci_load")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("//bazel:defs.bzl", "mcopy", "zstd_compress")
 load("//bazel:mainnet-icos-images.bzl", "base_download_url", "dev_base_download_url")
-load("//rs/tests:common.bzl", "MAINNET_LATEST_GUESTOS_DEV_HASH", "MAINNET_LATEST_GUESTOS_HASH", "MAINNET_LATEST_GUESTOS_REVISION", "MAINNET_LATEST_HOSTOS_DEV_HASH", "MAINNET_LATEST_HOSTOS_HASH", "MAINNET_LATEST_HOSTOS_REVISION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "MAINNET_NNS_GUESTOS_DEV_HASH", "MAINNET_NNS_GUESTOS_HASH", "MAINNET_NNS_GUESTOS_REVISION", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "MAINNET_APP_GUESTOS_DEV_HASH", "MAINNET_APP_GUESTOS_HASH", "MAINNET_APP_GUESTOS_REVISION", "MAINNET_LATEST_GUESTOS_DEV_HASH", "MAINNET_LATEST_GUESTOS_HASH", "MAINNET_LATEST_GUESTOS_REVISION", "MAINNET_LATEST_HOSTOS_DEV_HASH", "MAINNET_LATEST_HOSTOS_HASH", "MAINNET_LATEST_HOSTOS_REVISION", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "MAINNET_NNS_GUESTOS_DEV_HASH", "MAINNET_NNS_GUESTOS_HASH", "MAINNET_NNS_GUESTOS_REVISION", "NNS_CANISTER_ENV", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
     run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
@@ -217,12 +217,14 @@ def system_test(
         uses_guestos_img = True,
         uses_guestos_mainnet_latest_img = False,
         uses_guestos_mainnet_nns_img = False,
+        uses_guestos_mainnet_app_img = False,
         uses_guestos_recovery_dev_img = False,
         uses_guestos_malicious_img = False,
         uses_guestos_update = False,
         uses_guestos_test_update = False,
         uses_guestos_mainnet_nns_update = False,
         uses_guestos_malicious_update = False,
+        uses_guestos_mainnet_app_update = False,
         uses_setupos_img = False,
         uses_setupos_mainnet_latest_img = False,
         uses_hostos_update = False,
@@ -261,12 +263,14 @@ def system_test(
       uses_guestos_img: the test uses the branch GuestOS image
       uses_guestos_mainnet_latest_img: the test uses the latest release mainnet GuestOS image
       uses_guestos_mainnet_nns_img: the test uses the NNS subnet mainnet GuestOS image
+      uses_guestos_mainnet_app_img: the test uses the app subnet mainnet GuestOS image
       uses_guestos_recovery_dev_img: the test uses branch recovery-dev GuestOS image.
       uses_guestos_malicious_img: the test uses the malicious GuestOS image
       uses_guestos_update: the test uses the branch GuestOS update image
       uses_guestos_test_update: the test uses the branch GuestOS update-test image
       uses_guestos_mainnet_nns_update: the test uses the NNS subnet mainnet GuestOS update image
       uses_guestos_malicious_update: the test uses the malicious GuestOS update image
+      uses_guestos_mainnet_app_update: the test uses the app subnet mainnet GuestOS update image
       uses_setupos_img: the test uses the branch SetupOS image
       uses_setupos_mainnet_latest_img: the test uses the latest release mainnet SetupOS image
       uses_hostos_update: the test uses the branch HostOS update image
@@ -314,10 +318,10 @@ def system_test(
     info_file_vars = dict()
 
     # Guardrails for specifying source and target images
-    if int(uses_guestos_img) + int(uses_guestos_mainnet_latest_img) + int(uses_guestos_mainnet_nns_img) + int(uses_guestos_recovery_dev_img) + int(uses_guestos_malicious_img) >= 2:
+    if int(uses_guestos_img) + int(uses_guestos_mainnet_latest_img) + int(uses_guestos_mainnet_nns_img) + int(uses_guestos_mainnet_app_img) + int(uses_guestos_recovery_dev_img) + int(uses_guestos_malicious_img) >= 2:
         fail("More than one initial GuestOS (disk) image was specified!")
 
-    if int(uses_guestos_update) + int(uses_guestos_test_update) + int(uses_guestos_mainnet_nns_update) + int(uses_guestos_malicious_update) >= 2:
+    if int(uses_guestos_update) + int(uses_guestos_test_update) + int(uses_guestos_mainnet_nns_update) + int(uses_guestos_mainnet_app_update) + int(uses_guestos_malicious_update) >= 2:
         fail("More than one target GuestOS (upgrade) image was specified!")
 
     if int(uses_setupos_img) + int(uses_setupos_mainnet_latest_img) >= 2:
@@ -343,6 +347,13 @@ def system_test(
         icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "@mainnet_nns_guest_img" if not uses_dev_mainnet else "@mainnet_nns_guest_img_dev"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(MAINNET_NNS_GUESTOS_REVISION, "guest-os", True, False) if not uses_dev_mainnet else dev_base_download_url(MAINNET_NNS_GUESTOS_REVISION, "guest-os", True)
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_NNS_GUESTOS_HASH if not uses_dev_mainnet else MAINNET_NNS_GUESTOS_DEV_HASH
+        # _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = ... # TODO(NODE-1652): Load mainnet measurement once available
+
+    if uses_guestos_mainnet_app_img:
+        env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_APP_GUESTOS_REVISION
+        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "@mainnet_app_guest_img" if not uses_dev_mainnet else "@mainnet_app_guest_img_dev"
+        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = base_download_url(MAINNET_APP_GUESTOS_REVISION, "guest-os", True, False) if not uses_dev_mainnet else dev_base_download_url(MAINNET_APP_GUESTOS_REVISION, "guest-os", True)
+        env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_APP_GUESTOS_HASH if not uses_dev_mainnet else MAINNET_APP_GUESTOS_DEV_HASH
         # _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = ... # TODO(NODE-1652): Load mainnet measurement once available
 
     if uses_guestos_recovery_dev_img:
@@ -377,6 +388,13 @@ def system_test(
         info_file_vars["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = ["STABLE_VERSION"]
         icos_images["ENV_DEPS__GUESTOS_UPDATE_IMG"] = "//ic-os/guestos/envs/dev-malicious:update-img.tar.zst"
         _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = "//ic-os/guestos/envs/dev-malicious:launch-measurements-test.json"
+
+    if uses_guestos_mainnet_app_update:
+        env["ENV_DEPS__GUESTOS_UPDATE_IMG_VERSION"] = MAINNET_APP_GUESTOS_REVISION
+        env["ENV_DEPS__GUESTOS_UPDATE_IMG_URL"] = base_download_url(MAINNET_APP_GUESTOS_REVISION, "guest-os", True, False) if not uses_dev_mainnet else dev_base_download_url(MAINNET_APP_GUESTOS_REVISION, "guest-os", True)
+        env["ENV_DEPS__GUESTOS_UPDATE_IMG_HASH"] = MAINNET_APP_GUESTOS_HASH if not uses_dev_mainnet else MAINNET_APP_GUESTOS_DEV_HASH
+
+        # _env_deps["ENV_DEPS__GUESTOS_LAUNCH_MEASUREMENTS_FILE"] = ... # TODO(NODE-1652): Load mainnet measurement once available
 
     if uses_setupos_img:
         icos_images["ENV_DEPS__EMPTY_DISK_IMG"] = "//rs/tests/nested:empty-disk-img.tar.zst"
