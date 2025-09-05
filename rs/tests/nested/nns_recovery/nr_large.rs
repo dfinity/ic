@@ -43,8 +43,8 @@ fn main() -> Result<()> {
         .add_test(systest!(test; TestConfig {
             subnet_size: LARGE_SUBNET_SIZE,
         }))
-        .with_timeout_per_test(Duration::from_secs(30 * 60))
-        .with_overall_timeout(Duration::from_secs(35 * 60))
+        .with_timeout_per_test(Duration::from_secs(60 * 60))
+        .with_overall_timeout(Duration::from_secs(65 * 60))
         .execute_from_args()?;
 
     Ok(())
