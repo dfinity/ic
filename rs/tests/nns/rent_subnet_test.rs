@@ -23,7 +23,9 @@ end::catalog[] */
 use anyhow::Result;
 use candid::Principal;
 use canister_test::{Canister, Runtime};
-use cycles_minting_canister::{IcpXdrConversionRateCertifiedResponse, NotifyError, SubnetSelection};
+use cycles_minting_canister::{
+    IcpXdrConversionRateCertifiedResponse, NotifyError, SubnetSelection,
+};
 use dfn_candid::{candid, candid_one};
 use ic_agent::identity::BasicIdentity;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
@@ -32,8 +34,8 @@ use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR};
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
-    SUBNET_RENTAL_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, LEDGER_CANISTER_ID,
+    REGISTRY_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_test_utils::{
     cycles_minting::cycles_minting_create_canister, ledger::BasicIcrc1Transfer,
@@ -171,7 +173,8 @@ pub fn test(env: TestEnv) {
 
         execute_subnet_rental_request(&an_nns_subnet_node, *SUBNET_USER_PRINCIPAL_ID).await;
 
-        let topology_snapshot = execute_fulfill_subnet_rental_request(env.topology_snapshot()).await;
+        let topology_snapshot =
+            execute_fulfill_subnet_rental_request(env.topology_snapshot()).await;
         let new_subnet_id = assert_new_subnet(&topology_snapshot, &original_subnets).await;
 
         assert_rented_subnet_works(new_subnet_id, &topology_snapshot).await;
@@ -552,22 +555,23 @@ fn wait_for_cycles_minting_to_get_price_of_icp(topology_snapshot: TopologySnapsh
 
     let mut err_budget = 30;
     for i in 1..=120 {
-        let result: Result<IcpXdrConversionRateCertifiedResponse, _> = block_on(cycles_minting
-            .query_(
-                "get_icp_xdr_conversion_rate",
-                candid,
-                (),
-            )
-        );
+        let result: Result<IcpXdrConversionRateCertifiedResponse, _> =
+            block_on(cycles_minting.query_("get_icp_xdr_conversion_rate", candid, ()));
 
         let reply = match result {
             Ok(ok) => ok,
             Err(err) => {
                 if err_budget == 0 {
-                    panic!("Giving up on calling the Cycles Minting canister: {:?}", err);
+                    panic!(
+                        "Giving up on calling the Cycles Minting canister: {:?}",
+                        err
+                    );
                 }
 
-                println!("The Cycles Minting canister is not responsive (yet): {:?}", err);
+                println!(
+                    "The Cycles Minting canister is not responsive (yet): {:?}",
+                    err
+                );
                 err_budget -= 1;
                 sleep(Duration::from_secs(1));
                 continue;
@@ -588,7 +592,7 @@ fn wait_for_cycles_minting_to_get_price_of_icp(topology_snapshot: TopologySnapsh
         }
 
         sleep(Duration::from_secs(1));
-    };
+    }
 
     panic!(
         "The Cycles Minting canister did not update its price of ICP from \
