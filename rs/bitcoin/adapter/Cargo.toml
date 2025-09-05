@@ -51,6 +51,10 @@ name = "e2e"
 harness = false
 
 [[bin]]
+name = "ic-btc-adapter"
+path = "bin/ic-btc-adapter/main.rs"
+
+[[bin]]
 name = "adapter-stress-test"
 path = "bin/adapter-stress-test.rs"
 required-features = ["tower"]

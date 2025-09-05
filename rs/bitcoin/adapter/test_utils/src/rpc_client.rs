@@ -381,9 +381,7 @@ impl<T: RpcClientType> RpcClient<T> {
     ) -> Result<V> {
         let raw = serde_json::value::to_raw_value(args)?;
         let req = self.client.build_request(cmd, Some(&raw));
-        eprintln!("req = {:?}", req);
         let resp = self.client.send_request(req).map_err(RpcError::from);
-        eprintln!("resp = {:?}", resp);
         Ok(resp?.result()?)
     }
 

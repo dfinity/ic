@@ -477,6 +477,15 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     Ok(())
 }
 
+fn serve_metrics_service_discovery() -> HttpResponse {
+    let service_discovery = SNS_WASM.with_borrow(SnsWasmCanister::get_metrics_service_discovery);
+    HttpResponseBuilder::ok()
+        .header("Content-Type", "application/json")
+        .header("Cache-Control", "no-store")
+        .with_body_and_content_length(service_discovery.as_bytes())
+        .build()
+}
+
 #[query(
     hidden = true,
     decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
@@ -484,6 +493,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),
+        "/sns_canisters" => serve_metrics_service_discovery(),
         _ => HttpResponseBuilder::not_found().build(),
     }
 }

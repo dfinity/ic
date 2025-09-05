@@ -179,6 +179,7 @@ pub mod storage;
 mod subaccount_index;
 pub mod timer_tasks;
 mod voting;
+mod voting_history_store;
 
 /// Limit the amount of work for skipping unneeded data on the wire when parsing Candid.
 /// The value of 10_000 follows the Candid recommendation.
@@ -205,6 +206,9 @@ thread_local! {
         = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
 
     static ENABLE_FULFILL_SUBNET_RENTAL_REQUEST_PROPOSALS: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
+
+    static ENABLE_KNOWN_NEURON_VOTING_HISTORY: Cell<bool>
         = const { Cell::new(cfg!(feature = "test")) };
 }
 
@@ -243,6 +247,20 @@ pub fn temporarily_enable_fulfill_subnet_rental_request_proposals() -> Temporary
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_fulfill_subnet_rental_request_proposals() -> Temporary {
     Temporary::new(&ENABLE_FULFILL_SUBNET_RENTAL_REQUEST_PROPOSALS, false)
+}
+
+pub fn is_known_neuron_voting_history_enabled() -> bool {
+    ENABLE_KNOWN_NEURON_VOTING_HISTORY.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_known_neuron_voting_history() -> Temporary {
+    Temporary::new(&ENABLE_KNOWN_NEURON_VOTING_HISTORY, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_known_neuron_voting_history() -> Temporary {
+    Temporary::new(&ENABLE_KNOWN_NEURON_VOTING_HISTORY, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {

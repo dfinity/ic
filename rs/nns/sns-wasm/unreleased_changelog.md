@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+* A "/sns_canisters" HTTP endpoint for SNS canisters service discovery, used for prometheus.
+
 ## Changed
 
 ## Deprecated

@@ -3213,6 +3213,14 @@ impl Swap {
 
         ListSnsNeuronRecipesResponse { sns_neuron_recipes }
     }
+
+    /// Checks if the auto-finalization has been attempted and failed.
+    pub fn has_auto_finalization_failed(&self) -> bool {
+        self.auto_finalize_swap_response
+            .as_ref()
+            .map(|auto_finalize_swap_response| auto_finalize_swap_response.has_error_message())
+            .unwrap_or(false)
+    }
 }
 
 /// Computes the actual participation increment for a user

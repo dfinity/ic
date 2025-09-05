@@ -134,7 +134,8 @@ async fn main() {
                 let release_notes = git_repo.release_notes_batch(&canisters, &from, &to);
                 git_repo.checkout(&to);
                 let upgrade_args: Vec<_> = git_repo.encode_args_batch(&canisters, args.clone());
-                let canister_ids = git_repo.parse_canister_id_batch(&canisters).await;
+                let canister_ids: Vec<_> =
+                    canisters.iter().map(TargetCanister::canister_id).collect();
                 let last_upgrade_proposal_ids: Vec<_> = dashboard
                     .list_canister_upgrade_proposals_batch(&canister_ids)
                     .await
@@ -181,7 +182,8 @@ async fn main() {
                 let mut git_repo = GitRepository::clone(git_repo_url);
                 git_repo.checkout(&at);
                 let install_args: Vec<_> = git_repo.encode_args_batch(&canisters, args.clone());
-                let canister_ids = git_repo.parse_canister_id_batch(&canisters).await;
+                let canister_ids: Vec<_> =
+                    canisters.iter().map(TargetCanister::canister_id).collect();
                 let compressed_wasm_hashes = git_repo.build_canister_artifact_batch(&canisters);
 
                 for (index, canister) in canisters.into_iter().enumerate() {

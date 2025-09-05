@@ -32,7 +32,11 @@ jobs:
 
       - name: Login to Docker
         run: |
-          podman login -u ${{ vars.DOCKER_HUB_USER }} -p ${{ secrets.DOCKER_HUB_PASSWORD }} docker.io
+          # --compat-auth-file is required by rules_oci/crane.
+          mkdir -p "$HOME/.docker"
+          podman login \
+            --compat-auth-file="$HOME/.docker/config.json" \
+            -u ${{ vars.DOCKER_HUB_USER }} -p ${{ secrets.DOCKER_HUB_PASSWORD }} docker.io
 
       - name: Configure Git
         run: |

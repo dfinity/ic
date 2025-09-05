@@ -17,9 +17,9 @@ pub enum IncomingSource {
 
 /// This struct contains configuration options for the BTC Adapter.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Config {
+pub struct Config<Network> {
     /// The type of Bitcoin or Dogecoin network we plan to communicate to (e.g. Mainnet, Testnet, etc.).
-    pub network: AdapterNetwork,
+    pub network: Network,
     /// A list of DNS seeds for address discovery.
     #[serde(default)]
     pub dns_seeds: Vec<String>,
@@ -84,43 +84,36 @@ pub fn address_limits(network: AdapterNetwork) -> (usize, usize) {
     }
 }
 
-impl Config {
-    /// This function returns the port to use based on the network provided.
-    pub fn network_port(&self) -> u16 {
-        match self.network {
-            AdapterNetwork::Bitcoin(network) => {
-                use bitcoin::Network::*;
-                match network {
-                    Bitcoin => 8333,
-                    Testnet => 18333,
-                    Testnet4 => 48333,
-                    _ => 8333,
-                }
-            }
-            AdapterNetwork::Dogecoin(network) => {
-                use bitcoin::dogecoin::Network::*;
-                match network {
-                    Dogecoin => 22556,
-                    Testnet => 44556,
-                    _ => 18444,
-                }
-            }
+impl<Network> Config<Network> {
+    /// Return a config of a different network while retaining the rest fields.
+    pub fn with_network<T>(self, network: T) -> Config<T> {
+        Config {
+            network,
+            dns_seeds: self.dns_seeds,
+            socks_proxy: self.socks_proxy,
+            nodes: self.nodes,
+            idle_seconds: self.idle_seconds,
+            ipv6_only: self.ipv6_only,
+            logger: self.logger,
+            incoming_source: self.incoming_source,
+            address_limits: self.address_limits,
         }
     }
 }
 
-impl Default for Config {
-    fn default() -> Self {
+impl<Network: Copy + Into<AdapterNetwork>> Config<Network> {
+    /// Return a config of the given network with default settings for the rest fields.
+    pub fn default_with(network: Network) -> Self {
         Self {
+            network,
             dns_seeds: Default::default(),
-            network: bitcoin::Network::Bitcoin.into(),
             socks_proxy: Default::default(),
             nodes: vec![],
             idle_seconds: default_idle_seconds(),
             ipv6_only: false,
             logger: LoggerConfig::default(),
             incoming_source: Default::default(),
-            address_limits: address_limits(bitcoin::Network::Bitcoin.into()), // Address limits used for Bitcoin mainnet
+            address_limits: address_limits(network.into()),
         }
     }
 }
@@ -129,19 +122,18 @@ impl Default for Config {
 pub mod test {
 
     use super::*;
+    use crate::common::BlockchainNetwork;
 
-    #[derive(Default)]
-    pub struct ConfigBuilder {
-        config: Config,
+    pub struct ConfigBuilder<Network> {
+        config: Config<Network>,
     }
 
-    impl ConfigBuilder {
-        pub fn new() -> Self {
+    impl<Network: BlockchainNetwork + Into<AdapterNetwork>> ConfigBuilder<Network> {
+        pub fn default_with(network: Network) -> Self {
             Self {
-                config: Config::default(),
+                config: Config::default_with(network),
             }
         }
-
         pub fn with_dns_seeds(mut self, dns_seeds: Vec<String>) -> Self {
             self.config.dns_seeds = dns_seeds;
             self
@@ -152,9 +144,9 @@ pub mod test {
             self
         }
 
-        pub fn with_network(mut self, network: AdapterNetwork) -> Self {
+        pub fn with_network(mut self, network: Network) -> Self {
             self.config.network = network;
-            self.config.address_limits = address_limits(network);
+            self.config.address_limits = address_limits(network.into());
             self
         }
 
@@ -163,7 +155,7 @@ pub mod test {
             self
         }
 
-        pub fn build(self) -> Config {
+        pub fn build(self) -> Config<Network> {
             self.config
         }
     }

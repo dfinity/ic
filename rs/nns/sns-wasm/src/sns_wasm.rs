@@ -39,6 +39,7 @@ use ic_sns_root::GetSnsCanistersSummaryResponse;
 use ic_types::{Cycles, SubnetId};
 use ic_wasm;
 use maplit::{btreemap, hashmap};
+use serde_json::{json, Value as JsonValue};
 use std::{
     cell::RefCell,
     collections::{hash_map::Entry, BTreeMap, HashMap, HashSet},
@@ -670,6 +671,50 @@ where
         ListDeployedSnsesResponse {
             instances: self.deployed_sns_list.clone(),
         }
+    }
+
+    /// Returns a JSON string of the metrics service discovery for the deployed SNSes.
+    pub fn get_metrics_service_discovery(&self) -> String {
+        let mut canister_ids_by_type: BTreeMap<&'static str, Vec<PrincipalId>> = BTreeMap::new();
+
+        let mut add_canister_id_to_map =
+            |canister_type: &'static str, canister_id: Option<PrincipalId>| {
+                if let Some(canister_id) = canister_id {
+                    canister_ids_by_type
+                        .entry(canister_type)
+                        .or_default()
+                        .push(canister_id);
+                }
+            };
+
+        for sns in self.deployed_sns_list.iter() {
+            add_canister_id_to_map("root", sns.root_canister_id);
+            add_canister_id_to_map("governance", sns.governance_canister_id);
+            add_canister_id_to_map("ledger", sns.ledger_canister_id);
+            add_canister_id_to_map("swap", sns.swap_canister_id);
+            add_canister_id_to_map("index", sns.index_canister_id);
+            // We can't add the archive canisters as the SNS-WASM canister is not aware of them.
+        }
+
+        let targets_groups: Vec<_> = canister_ids_by_type
+            .into_iter()
+            .map(|(canister_type, canister_ids)| {
+                let targets: Vec<_> = canister_ids
+                    .into_iter()
+                    .map(|canister_id| json!(format!("{canister_id}.raw.icp0.io")))
+                    .collect();
+
+                json! ({
+                    "targets": JsonValue::Array(targets),
+                    "labels": json! ({
+                        "sns_canister_type": canister_type,
+                        "__metrics_path__": "/metrics",
+                    }),
+                })
+            })
+            .collect();
+
+        JsonValue::Array(targets_groups).to_string()
     }
 
     /// Deploys a new SNS based on the parameters of the payload
@@ -5090,6 +5135,53 @@ mod test {
             },
         )
         .await;
+    }
+
+    #[test]
+    fn test_get_metrics_service_discovery() {
+        let mut canister = new_wasm_canister();
+
+        canister.deployed_sns_list.push(DeployedSns {
+            root_canister_id: Some(canister_test_id(1).get()),
+            governance_canister_id: Some(canister_test_id(2).get()),
+            ledger_canister_id: Some(canister_test_id(3).get()),
+            swap_canister_id: Some(canister_test_id(4).get()),
+            index_canister_id: Some(canister_test_id(5).get()),
+        });
+        canister.deployed_sns_list.push(DeployedSns {
+            root_canister_id: Some(canister_test_id(6).get()),
+            governance_canister_id: Some(canister_test_id(7).get()),
+            ledger_canister_id: Some(canister_test_id(8).get()),
+            swap_canister_id: Some(canister_test_id(9).get()),
+            // This isn't realistic, but it verifies the robustness of the
+            // `get_metrics_service_discovery`.
+            index_canister_id: None,
+        });
+
+        let metrics = canister.get_metrics_service_discovery();
+        let expected_json = json!([
+            {
+                "labels": {"__metrics_path__": "/metrics", "sns_canister_type": "governance"},
+                "targets": ["ryjl3-tyaaa-aaaaa-aaaba-cai.raw.icp0.io", "rdmx6-jaaaa-aaaaa-aaadq-cai.raw.icp0.io"]
+            },
+            {
+                "labels": {"__metrics_path__": "/metrics", "sns_canister_type": "index"},
+                "targets": ["rno2w-sqaaa-aaaaa-aaacq-cai.raw.icp0.io"]
+            },
+            {
+                "labels": {"__metrics_path__": "/metrics", "sns_canister_type": "ledger"},
+                "targets": ["r7inp-6aaaa-aaaaa-aaabq-cai.raw.icp0.io", "qoctq-giaaa-aaaaa-aaaea-cai.raw.icp0.io"]
+            },
+            {
+                "labels": {"__metrics_path__": "/metrics", "sns_canister_type": "root"},
+                "targets": ["rrkah-fqaaa-aaaaa-aaaaq-cai.raw.icp0.io", "renrk-eyaaa-aaaaa-aaada-cai.raw.icp0.io"]
+            },
+            {
+                "labels": {"__metrics_path__": "/metrics", "sns_canister_type": "swap"},
+                "targets": ["rkp4c-7iaaa-aaaaa-aaaca-cai.raw.icp0.io", "qjdve-lqaaa-aaaaa-aaaeq-cai.raw.icp0.io"]
+            }
+        ]);
+        assert_eq!(metrics, expected_json.to_string());
     }
 
     mod get_wasm_metadata {
