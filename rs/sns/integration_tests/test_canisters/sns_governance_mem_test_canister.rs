@@ -11,10 +11,7 @@
 
 use dfn_core::println;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{
-    dfn_core_stable_mem_utils::BufferedStableMemWriter,
-    memory_manager_upgrade_storage::store_protobuf,
-};
+use ic_nervous_system_common::memory_manager_upgrade_storage::store_protobuf;
 use ic_sns_governance::{
     governance::HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
     pb::v1::{
@@ -38,7 +35,6 @@ use ic_stable_structures::{
 };
 use icrc_ledger_types::icrc1::account::Subaccount;
 use pretty_bytes::converter;
-use prost::Message;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use std::{cell::RefCell, collections::BTreeMap};
 
@@ -47,8 +43,6 @@ const LOG_PREFIX: &str = "[Governance mem test] ";
 const MAX_POSSIBLE_HEAP_SIZE_IN_PAGES: usize = 4 * 1024 * 1024 / 64;
 
 const WASM_PAGE_SIZE_BYTES: usize = 65536;
-
-const BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100 MiB
 
 const SIZE_OF_NEURON_ID: usize = std::mem::size_of::<Subaccount>();
 
@@ -74,8 +68,6 @@ const DEFAULT_CONTROLLER: PrincipalId = PrincipalId::new(
 
 /// Constants to define memory segments.  Must not change.
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
-
-type VM = VirtualMemory<DefaultMemoryImpl>;
 
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
