@@ -550,8 +550,8 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
 pub enum NonmainnetFeaturesConfig {
     #[default]
     Mainnet,
-    Enabled,
     Disabled,
+    Enabled,
 }
 
 /// Specifies nonmainnet features enabled in this instance.
@@ -602,6 +602,13 @@ pub enum InitialTime {
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub enum IncompleteStateConfig {
+    #[default]
+    Disabled,
+    Enabled,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct InstanceConfig {
     pub subnet_config_set: ExtendedSubnetConfigSet,
     pub http_gateway_config: Option<InstanceHttpGatewayConfig>,
@@ -610,7 +617,7 @@ pub struct InstanceConfig {
     pub log_level: Option<String>,
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
     pub icp_features: Option<IcpFeatures>,
-    pub allow_incomplete_state: Option<EmptyConfig>,
+    pub allow_incomplete_state: Option<IncompleteStateConfig>,
     pub initial_time: Option<InitialTime>,
 }
 

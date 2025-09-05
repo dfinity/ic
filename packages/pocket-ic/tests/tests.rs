@@ -25,8 +25,8 @@ use pocket_ic::{
     common::rest::{
         AutoProgressConfig, BlobCompression, CanisterHttpReply, CanisterHttpResponse,
         CreateInstanceResponse, EmptyConfig, HttpGatewayDetails, HttpsConfig, IcpFeatures,
-        InitialTime, InstanceConfig, InstanceHttpGatewayConfig, MockCanisterHttpResponse,
-        RawEffectivePrincipal, RawMessageId, SubnetConfigSet, SubnetKind,
+        IncompleteStateConfig, InitialTime, InstanceConfig, InstanceHttpGatewayConfig,
+        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetConfigSet, SubnetKind,
     },
     query_candid, start_server, update_candid, DefaultEffectiveCanisterIdError, ErrorCode,
     IngressStatusResult, PocketIc, PocketIcBuilder, PocketIcState, RejectCode, StartServerParams,
@@ -559,7 +559,7 @@ fn time_on_resumed_instance() {
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
 #[cfg(not(windows))]
 async fn resume_killed_instance_impl(
-    allow_incomplete_state: Option<EmptyConfig>,
+    allow_incomplete_state: Option<IncompleteStateConfig>,
 ) -> Result<(), String> {
     let (mut server, server_url) = start_server(StartServerParams::default()).await;
     let temp_dir = TempDir::new().unwrap();
@@ -661,7 +661,7 @@ async fn resume_killed_instance_impl(
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
 #[cfg(not(windows))]
 #[tokio::test]
-async fn resume_killed_instance_strict() {
+async fn resume_killed_instance_default() {
     let err = resume_killed_instance_impl(None).await.unwrap_err();
     assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is incomplete."));
 }
@@ -669,8 +669,18 @@ async fn resume_killed_instance_strict() {
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
 #[cfg(not(windows))]
 #[tokio::test]
+async fn resume_killed_instance_strict() {
+    let err = resume_killed_instance_impl(Some(IncompleteStateConfig::Disabled))
+        .await
+        .unwrap_err();
+    assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is incomplete."));
+}
+
+// Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
+#[cfg(not(windows))]
+#[tokio::test]
 async fn resume_killed_instance() {
-    resume_killed_instance_impl(Some(EmptyConfig {}))
+    resume_killed_instance_impl(Some(IncompleteStateConfig::Enabled))
         .await
         .unwrap();
 }

@@ -111,7 +111,7 @@ use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayloadBuilder, Subaccount
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
-    CanisterHttpResponse, EmptyConfig, ExtendedSubnetConfigSet, IcpFeatures,
+    CanisterHttpResponse, EmptyConfig, ExtendedSubnetConfigSet, IcpFeatures, IncompleteStateConfig,
     MockCanisterHttpResponse, NonmainnetFeatures, NonmainnetFeaturesConfig, RawAddCycles,
     RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
     SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
@@ -2189,7 +2189,7 @@ impl PocketIc {
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
-        allow_incomplete_state: Option<EmptyConfig>,
+        incomplete_state: Option<IncompleteStateConfig>,
         initial_time: Option<Time>,
         auto_progress_enabled: bool,
         gateway_port: Option<u16>,
@@ -2252,12 +2252,9 @@ impl PocketIc {
                     if let Some(allocation_range) = config.alloc_range {
                         range_gen.add_assigned(vec![allocation_range]).unwrap();
                     }
-                    // using `EmptyConfig { }` explicitly
-                    // to force an update after adding a new field to `EmptyConfig`
-                    let expected_state_time = if let Some(EmptyConfig {}) = allow_incomplete_state {
-                        None
-                    } else {
-                        Some(topology.time)
+                    let expected_state_time = match incomplete_state {
+                        None | Some(IncompleteStateConfig::Disabled) => Some(topology.time),
+                        Some(IncompleteStateConfig::Enabled) => None,
                     };
                     SubnetConfigInfo {
                         ranges: config.ranges,
