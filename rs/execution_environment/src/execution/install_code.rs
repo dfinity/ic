@@ -145,7 +145,7 @@ impl InstallCodeHelper {
 
     pub fn clear_certified_data(&mut self) {
         self.steps.push(InstallCodeStep::ClearCertifiedData);
-        self.canister.system_state.certified_data = Vec::new();
+        self.canister.system_state.metadata.certified_data = Vec::new();
     }
 
     pub fn clear_log(&mut self) {
@@ -155,12 +155,12 @@ impl InstallCodeHelper {
 
     pub fn deactivate_global_timer(&mut self) {
         self.steps.push(InstallCodeStep::DeactivateGlobalTimer);
-        self.canister.system_state.global_timer = CanisterTimer::Inactive;
+        self.canister.system_state.metadata.global_timer = CanisterTimer::Inactive;
     }
 
     pub fn bump_canister_version(&mut self) {
         self.steps.push(InstallCodeStep::BumpCanisterVersion);
-        self.canister.system_state.canister_version += 1;
+        self.canister.system_state.metadata.canister_version += 1;
     }
 
     pub fn add_canister_change(
@@ -179,6 +179,7 @@ impl InstallCodeHelper {
         let details = CanisterChangeDetails::code_deployment(mode.into(), module_hash.to_slice());
         self.canister
             .system_state
+            .metadata
             .add_canister_change(timestamp_nanos, origin, details);
     }
 
@@ -262,8 +263,8 @@ impl InstallCodeHelper {
         // send cycles. The execution cycles have already been accounted for in
         // the clean canister state.
         assert_eq!(
-            clean_canister.system_state.balance(),
-            self.canister.system_state.balance()
+            clean_canister.system_state.metadata.balance(),
+            self.canister.system_state.metadata.balance()
         );
 
         let instructions_used = NumInstructions::from(
@@ -286,6 +287,7 @@ impl InstallCodeHelper {
 
         self.canister
             .system_state
+            .metadata
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
                 round.log,
@@ -300,7 +302,7 @@ impl InstallCodeHelper {
                 num_bytes_try_from(es.wasm_memory.size).unwrap()
             });
 
-        if let Some(wasm_memory_limit) = self.canister.system_state.wasm_memory_limit {
+        if let Some(wasm_memory_limit) = self.canister.system_state.metadata.wasm_memory_limit {
             // A Wasm memory limit of 0 means unlimited.
             if wasm_memory_limit.get() != 0 && wasm_memory_usage > wasm_memory_limit {
                 let err = HypervisorError::WasmMemoryLimitExceeded {
@@ -331,6 +333,7 @@ impl InstallCodeHelper {
             match self
                 .canister
                 .system_state
+                .metadata
                 .reserve_cycles(reservation_cycles)
             {
                 Ok(()) => {}
@@ -364,19 +367,19 @@ impl InstallCodeHelper {
             }
 
             let threshold = round.cycles_account_manager.freeze_threshold_cycles(
-                self.canister.system_state.freeze_threshold,
+                self.canister.system_state.metadata.freeze_threshold,
                 self.canister.memory_allocation(),
                 self.canister.memory_usage(),
                 self.canister.message_memory_usage(),
                 self.canister.compute_allocation(),
                 original.subnet_size,
                 round.cost_schedule,
-                self.canister.system_state.reserved_balance(),
+                self.canister.system_state.metadata.reserved_balance(),
             );
-            if self.canister.system_state.balance() < threshold {
+            if self.canister.system_state.metadata.balance() < threshold {
                 let err = CanisterManagerError::InsufficientCyclesInMemoryGrow {
                     bytes,
-                    available: self.canister.system_state.balance(),
+                    available: self.canister.system_state.metadata.balance(),
                     required: threshold,
                 };
                 return finish_err(
@@ -478,7 +481,7 @@ impl InstallCodeHelper {
         self.steps.push(InstallCodeStep::ValidateInput);
 
         let config = &original.config;
-        let id = self.canister.system_state.canister_id;
+        let id = self.canister.system_state.metadata.canister_id;
 
         validate_controller(&self.canister, &original.sender)?;
 
@@ -522,7 +525,7 @@ impl InstallCodeHelper {
         self.reduce_instructions_by(instructions_from_compilation);
 
         let old_memory_usage = self.canister.memory_usage();
-        let memory_allocation = self.canister.system_state.memory_allocation;
+        let memory_allocation = self.canister.system_state.metadata.memory_allocation;
         let old_wasm_custom_sections_memory_used = self
             .canister
             .execution_state
@@ -597,7 +600,7 @@ impl InstallCodeHelper {
 
     /// Takes the canister log.
     pub(crate) fn take_canister_log(&mut self) -> CanisterLog {
-        std::mem::take(&mut self.canister.system_state.canister_log)
+        std::mem::take(&mut self.canister.system_state.metadata.canister_log)
     }
 
     /// Checks the result of Wasm execution and applies the state changes.
@@ -719,7 +722,7 @@ impl InstallCodeHelper {
             execution_state.wasm_memory = wasm_memory;
             execution_state.stable_memory = stable_memory;
             execution_state.exported_globals = globals;
-            match self.canister.system_state.memory_allocation {
+            match self.canister.system_state.metadata.memory_allocation {
                 MemoryAllocation::Reserved(_) => {}
                 MemoryAllocation::BestEffort => {
                     self.allocated_bytes += output.allocated_bytes;
@@ -819,7 +822,7 @@ pub(crate) fn validate_controller(
     if !canister.controllers().contains(controller) {
         return Err(CanisterManagerError::CanisterInvalidController {
             canister_id: canister.canister_id(),
-            controllers_expected: canister.system_state.controllers.clone(),
+            controllers_expected: canister.system_state.metadata.controllers.clone(),
             controller_provided: *controller,
         });
     }
@@ -863,6 +866,7 @@ pub(crate) fn finish_err(
     new_canister.set_log(new_canister_log);
     new_canister
         .system_state
+        .metadata
         .apply_ingress_induction_cycles_debit(
             new_canister.canister_id(),
             round.log,

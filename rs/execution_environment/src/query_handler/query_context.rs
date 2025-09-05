@@ -393,15 +393,15 @@ impl<'a> QueryContext<'a> {
             .get_subnet_size(&self.cycles_account_manager.get_subnet_id())
             .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
         if self.cycles_account_manager.freeze_threshold_cycles(
-            canister.system_state.freeze_threshold,
-            canister.system_state.memory_allocation,
+            canister.system_state.metadata.freeze_threshold,
+            canister.system_state.metadata.memory_allocation,
             canister.memory_usage(),
             canister.message_memory_usage(),
             canister.scheduler_state.compute_allocation,
             subnet_size,
             self.get_cost_schedule(),
-            canister.system_state.reserved_balance(),
-        ) > canister.system_state.balance()
+            canister.system_state.metadata.reserved_balance(),
+        ) > canister.system_state.metadata.balance()
         {
             let canister_id = canister.canister_id();
             return (canister, Err(UserError::new(

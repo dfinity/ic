@@ -177,7 +177,7 @@ impl ResponseHelper {
             );
 
         let canister = clean_canister.clone();
-        let initial_cycles_balance = canister.system_state.balance();
+        let initial_cycles_balance = canister.system_state.metadata.balance();
         let response_sender = response.respondent;
         let mut helper = Self {
             canister,
@@ -200,9 +200,10 @@ impl ResponseHelper {
     fn apply_initial_refunds(&mut self) {
         self.canister
             .system_state
+            .metadata
             .add_cycles(self.refund_for_sent_cycles, CyclesUseCase::NonConsumed);
 
-        self.canister.system_state.add_cycles(
+        self.canister.system_state.metadata.add_cycles(
             self.refund_for_response_transmission,
             CyclesUseCase::RequestAndResponseTransmission,
         );
@@ -238,7 +239,7 @@ impl ResponseHelper {
                 error!(
                     round.log,
                     "[EXC-BUG] Canister {} has a deleted context that has not responded",
-                    self.canister.system_state.canister_id,
+                    self.canister.system_state.metadata.canister_id,
                 );
                 // Since this branch doesn't call `early_finish()`, it needs to manually
                 // revert the subnet memory reservation.
@@ -264,7 +265,7 @@ impl ResponseHelper {
             error!(
                 round.log,
                 "[EXC-BUG] Canister {} is attempting to execute a response, but the execution state does not exist.",
-                self.canister.system_state.canister_id,
+                self.canister.system_state.metadata.canister_id,
             );
             let result = Err(HypervisorError::WasmModuleNotFound);
             return Err(self.early_finish(result, original, round, round_limits));
@@ -323,7 +324,7 @@ impl ResponseHelper {
             canister: clean_canister.clone(),
             refund_for_sent_cycles: paused.refund_for_sent_cycles,
             refund_for_response_transmission: paused.refund_for_response_transmission,
-            initial_cycles_balance: clean_canister.system_state.balance(),
+            initial_cycles_balance: clean_canister.system_state.metadata.balance(),
             response_sender: paused.response_sender,
             applied_subnet_memory_reservation: NumBytes::new(0),
             deallocation_sender: deallocation_sender.clone(),
@@ -366,6 +367,7 @@ impl ResponseHelper {
     ) -> Result<ExecuteMessageResult, (Self, HypervisorError, NumInstructions)> {
         self.canister
             .system_state
+            .metadata
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
                 round.log,
@@ -374,7 +376,7 @@ impl ResponseHelper {
 
         // Check that the cycles balance does not go below zero after applying
         // the Wasm execution state changes.
-        let old_balance = self.canister.system_state.balance();
+        let old_balance = self.canister.system_state.metadata.balance();
         let requested = canister_state_changes
             .system_state_modifications
             .removed_cycles();
@@ -458,20 +460,27 @@ impl ResponseHelper {
         // messages being inducted for free in this edge case. This is acceptable because the cleanup
         // callback is expected to always run and allow the canister to perform important cleanup tasks,
         // like releasing locks or undoing other state changes.
-        let ingress_induction_cycles_debit =
-            self.canister.system_state.ingress_induction_cycles_debit();
+        let ingress_induction_cycles_debit = self
+            .canister
+            .system_state
+            .metadata
+            .ingress_induction_cycles_debit();
         let removed_cycles = canister_state_changes
             .system_state_modifications
             .removed_cycles();
-        if self.canister.system_state.balance() < ingress_induction_cycles_debit + removed_cycles {
+        if self.canister.system_state.metadata.balance()
+            < ingress_induction_cycles_debit + removed_cycles
+        {
             self.canister
                 .system_state
+                .metadata
                 .remove_charge_from_ingress_induction_cycles_debit(
                     ingress_induction_cycles_debit - removed_cycles,
                 );
         }
         self.canister
             .system_state
+            .metadata
             .apply_ingress_induction_cycles_debit(
                 self.canister.canister_id(),
                 round.log,
@@ -586,7 +595,7 @@ impl ResponseHelper {
             info!(
                 round.log,
                 "Canister {} received unaccepted {} cycles as refund from canister {}.",
-                self.canister.system_state.canister_id,
+                self.canister.system_state.metadata.canister_id,
                 self.refund_for_sent_cycles,
                 self.response_sender,
             );
@@ -932,14 +941,14 @@ pub fn execute_response(
         };
 
     let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
-        clean_canister.system_state.freeze_threshold,
-        clean_canister.system_state.memory_allocation,
+        clean_canister.system_state.metadata.freeze_threshold,
+        clean_canister.system_state.metadata.memory_allocation,
         clean_canister.memory_usage(),
         clean_canister.message_memory_usage(),
         clean_canister.compute_allocation(),
         subnet_size,
         round.cost_schedule,
-        clean_canister.system_state.reserved_balance(),
+        clean_canister.system_state.metadata.reserved_balance(),
     );
 
     let original = OriginalContext {

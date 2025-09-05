@@ -341,8 +341,8 @@ impl CanisterStateBuilder {
             ),
         };
 
-        system_state.memory_allocation = self.memory_allocation;
-        system_state.certified_data = self.certified_data;
+        system_state.metadata.memory_allocation = self.memory_allocation;
+        system_state.metadata.certified_data = self.certified_data;
 
         // Add ingress messages to the canister's queues.
         for ingress in self.ingress_queue.into_iter() {
@@ -456,18 +456,18 @@ impl SystemStateBuilder {
     }
 
     pub fn memory_allocation(mut self, memory_allocation: NumBytes) -> Self {
-        self.system_state.memory_allocation =
+        self.system_state.metadata.memory_allocation =
             MemoryAllocation::try_from(memory_allocation).unwrap();
         self
     }
 
     pub fn wasm_memory_threshold(mut self, wasm_memory_threshold: NumBytes) -> Self {
-        self.system_state.wasm_memory_threshold = wasm_memory_threshold;
+        self.system_state.metadata.wasm_memory_threshold = wasm_memory_threshold;
         self
     }
 
     pub fn wasm_memory_limit(mut self, wasm_memory_limit: Option<NumBytes>) -> Self {
-        self.system_state.wasm_memory_limit = wasm_memory_limit;
+        self.system_state.metadata.wasm_memory_limit = wasm_memory_limit;
         self
     }
 
@@ -475,7 +475,8 @@ impl SystemStateBuilder {
         mut self,
         environment_variables: BTreeMap<String, String>,
     ) -> Self {
-        self.system_state.environment_variables = EnvironmentVariables::new(environment_variables);
+        self.system_state.metadata.environment_variables =
+            EnvironmentVariables::new(environment_variables);
         self
     }
 
@@ -507,7 +508,7 @@ impl SystemStateBuilder {
     }
 
     pub fn freeze_threshold(mut self, threshold: NumSeconds) -> Self {
-        self.system_state.freeze_threshold = threshold;
+        self.system_state.metadata.freeze_threshold = threshold;
         self
     }
 

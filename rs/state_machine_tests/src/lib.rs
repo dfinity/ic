@@ -4190,7 +4190,7 @@ impl StateMachine {
         let canister_state = replicated_state
             .canister_state(&canister_id)
             .unwrap_or_else(|| panic!("Canister {} does not exist", canister_id));
-        canister_state.system_state.canister_log.clone()
+        canister_state.system_state.metadata.canister_log.clone()
     }
 
     /// Sets the content of the stable memory for the specified canister.
@@ -4277,6 +4277,7 @@ impl StateMachine {
             .canister_state(&canister_id)
             .unwrap_or_else(|| panic!("Canister {} not found", canister_id))
             .system_state
+            .metadata
             .balance()
             .get()
     }
@@ -4293,8 +4294,9 @@ impl StateMachine {
             .unwrap_or_else(|| panic!("Canister {} not found", canister_id));
         canister_state
             .system_state
+            .metadata
             .add_cycles(Cycles::from(amount), CyclesUseCase::NonConsumed);
-        let balance = canister_state.system_state.balance().get();
+        let balance = canister_state.system_state.metadata.balance().get();
         self.state_manager.commit_and_certify(
             state,
             height.increment(),

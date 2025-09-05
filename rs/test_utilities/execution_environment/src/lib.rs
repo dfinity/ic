@@ -398,6 +398,7 @@ impl ExecutionTest {
         let memory_allocation = self
             .canister_state(canister_id)
             .system_state
+            .metadata
             .memory_allocation;
         let compute_allocation = self
             .canister_state(canister_id)
@@ -418,9 +419,9 @@ impl ExecutionTest {
         let canister = self.canister_state(canister_id);
         let memory_usage = canister.memory_usage();
         let message_memory_usage = canister.message_memory_usage();
-        let memory_allocation = canister.system_state.memory_allocation;
+        let memory_allocation = canister.system_state.metadata.memory_allocation;
         let compute_allocation = canister.scheduler_state.compute_allocation;
-        let freeze_threshold = canister.system_state.freeze_threshold;
+        let freeze_threshold = canister.system_state.metadata.freeze_threshold;
         self.cycles_account_manager.freeze_threshold_cycles(
             freeze_threshold,
             memory_allocation,
@@ -429,7 +430,7 @@ impl ExecutionTest {
             compute_allocation,
             self.subnet_size(),
             self.cost_schedule(),
-            canister.system_state.reserved_balance(),
+            canister.system_state.metadata.reserved_balance(),
         )
     }
 

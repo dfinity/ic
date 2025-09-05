@@ -386,7 +386,7 @@ impl CanisterSnapshot {
             .execution_state
             .as_ref()
             .ok_or(CanisterSnapshotError::EmptyExecutionState(canister_id))?;
-        let global_timer = canister.system_state.global_timer;
+        let global_timer = canister.system_state.metadata.global_timer;
         let hook_status = canister.system_state.task_queue.peek_hook_status();
         let execution_snapshot = ExecutionStateSnapshot {
             wasm_binary: execution_state.wasm_binary.binary.clone(),
@@ -401,9 +401,9 @@ impl CanisterSnapshot {
             canister_id,
             source: SnapshotSource::taken_from_canister(),
             taken_at_timestamp,
-            canister_version: canister.system_state.canister_version,
-            certified_data: canister.system_state.certified_data.clone(),
-            chunk_store: canister.system_state.wasm_chunk_store.clone(),
+            canister_version: canister.system_state.metadata.canister_version,
+            certified_data: canister.system_state.metadata.certified_data.clone(),
+            chunk_store: canister.system_state.metadata.wasm_chunk_store.clone(),
             execution_snapshot,
             size: canister.snapshot_size_bytes(),
         })

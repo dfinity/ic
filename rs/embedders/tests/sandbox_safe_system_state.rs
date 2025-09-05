@@ -227,7 +227,7 @@ fn correct_charging_source_canister_for_a_request() {
         NumSeconds::from(100_000),
     );
 
-    let initial_cycles_balance = system_state.balance();
+    let initial_cycles_balance = system_state.metadata.balance();
 
     let request = RequestBuilder::default()
         .sender(canister_test_id(0))
@@ -308,7 +308,9 @@ fn correct_charging_source_canister_for_a_request() {
         cost_schedule,
     );
 
-    system_state.add_cycles(refund_cycles, CyclesUseCase::RequestAndResponseTransmission);
+    system_state
+        .metadata
+        .add_cycles(refund_cycles, CyclesUseCase::RequestAndResponseTransmission);
 
     // MAX_NUM_INSTRUCTIONS also gets partially refunded in the real
     // ExecutionEnvironmentImpl::execute_canister_response()
@@ -319,7 +321,7 @@ fn correct_charging_source_canister_for_a_request() {
                 SMALL_APP_SUBNET_MAX_SIZE,
                 cost_schedule,
             ),
-        system_state.balance()
+        system_state.metadata.balance()
     );
 }
 
@@ -384,7 +386,7 @@ fn mint_cycles_large_value() {
         .canister_id(CYCLES_MINTING_CANISTER_ID)
         .build();
 
-    system_state.add_cycles(
+    system_state.metadata.add_cycles(
         Cycles::from(1_000_000_000_000_000_u128),
         CyclesUseCase::NonConsumed,
     );
@@ -465,7 +467,8 @@ fn mint_cycles_saturate() {
 #[test]
 fn is_controller_test() {
     let mut system_state = SystemStateBuilder::default().build();
-    system_state.controllers = BTreeSet::from([user_test_id(1).get(), user_test_id(2).get()]);
+    system_state.metadata.controllers =
+        BTreeSet::from([user_test_id(1).get(), user_test_id(2).get()]);
 
     let caller = None;
     let sandbox_safe_system_state = SandboxSafeSystemState::new_for_testing(
@@ -514,9 +517,10 @@ fn call_increases_cycles_consumed_metric() {
             &no_op_logger(),
         )
         .unwrap();
-    assert!(system_state.canister_metrics.consumed_cycles.get() > 0);
+    assert!(system_state.metadata.canister_metrics.consumed_cycles.get() > 0);
     assert_ne!(
         *system_state
+            .metadata
             .canister_metrics
             .get_consumed_cycles_by_use_cases()
             .get(&CyclesUseCase::RequestAndResponseTransmission)
