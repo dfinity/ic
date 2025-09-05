@@ -41,31 +41,41 @@ use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
 use slog::{info, Logger};
 
-/// Four nodes is the minimum subnet size that satisfies 3f+1 for f=1
+/// 4 nodes is the minimum subnet size that satisfies 3f+1 for f=1
 pub const SUBNET_SIZE: usize = 4;
 /// DKG interval of 9 is large enough for a subnet of that size and as small as possible to keep the
 /// test runtime low
 pub const DKG_INTERVAL: u64 = 9;
+
+/// 40 nodes and DKG interval of 199 are the production values for the NNS
+pub const LARGE_SUBNET_SIZE: usize = 40;
+pub const LARGE_DKG_INTERVAL: u64 = 199;
+
 /// RECOVERY_GUESTOS_IMG_VERSION variable is a placeholder for the actual version of the recovery
 /// GuestOS image, that Node Providers would use as input to guestos-recovery-upgrader.
 pub const RECOVERY_GUESTOS_IMG_VERSION: &str = "RECOVERY_VERSION";
 
-pub struct SetupConfig {}
+pub struct SetupConfig {
+    pub subnet_size: usize,
+    pub dkg_interval: u64,
+}
 
-pub struct TestConfig {}
+pub struct TestConfig {
+    pub subnet_size: usize,
+}
 
 fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
     (1..=num_hosts).map(|i| format!("host-{}", i)).collect()
 }
 
-pub fn setup(env: TestEnv, _cfg: SetupConfig) {
+pub fn setup(env: TestEnv, cfg: SetupConfig) {
     assert_version_compatibility();
 
-    setup_ic_infrastructure(&env, Some(DKG_INTERVAL));
+    setup_ic_infrastructure(&env, Some(cfg.dkg_interval));
 
     impersonate_upstreams::setup_upstreams_uvm(&env);
 
-    let host_vm_names = get_host_vm_names(SUBNET_SIZE);
+    let host_vm_names = get_host_vm_names(cfg.subnet_size);
     let host_vm_names_refs: Vec<&str> = host_vm_names.iter().map(|s| s.as_str()).collect();
     setup_nested_vm_group(env.clone(), &host_vm_names_refs);
 
@@ -74,7 +84,7 @@ pub fn setup(env: TestEnv, _cfg: SetupConfig) {
     }
 }
 
-pub fn test(env: TestEnv, _cfg: TestConfig) {
+pub fn test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
     let recovery_img = std::fs::read(get_dependency_path(
@@ -118,13 +128,13 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
             )?;
 
             let num_unassigned_nodes = new_topology.unassigned_nodes().count();
-            if num_unassigned_nodes == SUBNET_SIZE {
+            if num_unassigned_nodes == cfg.subnet_size {
                 info!(logger, "Success: All nodes have registered");
                 Ok(new_topology)
             } else {
                 bail!(
                     "Expected {} unassigned nodes, but found {}",
-                    SUBNET_SIZE,
+                    cfg.subnet_size,
                     num_unassigned_nodes
                 )
             }
@@ -160,9 +170,9 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
     let nns_subnet = new_topology.root_subnet();
     let num_nns_nodes = nns_subnet.nodes().count();
     assert_eq!(
-        num_nns_nodes, SUBNET_SIZE,
+        num_nns_nodes, cfg.subnet_size,
         "NNS subnet should have {} nodes after removing the original node, but found {} nodes",
-        SUBNET_SIZE, num_nns_nodes
+        cfg.subnet_size, num_nns_nodes
     );
     for node in nns_subnet.nodes() {
         node.await_status_is_healthy().unwrap();
@@ -239,7 +249,7 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
 
     // Choose f+1 faulty nodes to break
     let nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
-    let f = (SUBNET_SIZE - 1) / 3;
+    let f = (cfg.subnet_size - 1) / 3;
     let faulty_nodes = &nns_nodes[..(f + 1)];
     let healthy_nodes = &nns_nodes[(f + 1)..];
     info!(
@@ -378,7 +388,7 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
     // trigger the recovery on 2f other nodes.
     info!(logger, "Simulate node provider action on 2f nodes");
     block_on(join_all(
-        get_host_vm_names(SUBNET_SIZE)
+        get_host_vm_names(cfg.subnet_size)
             .iter()
             .filter(|vm_name| {
                 env.get_nested_vm(vm_name)
