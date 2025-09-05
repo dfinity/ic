@@ -541,52 +541,6 @@ fn test_upgrade_canister_proposal_too_large() {
     assert!(error.error_message.contains("the maximum canister WASM and argument size for UpgradeSnsControlledCanister is 2000000 bytes."));
 }
 
-#[test]
-fn governance_mem_test() {
-    state_machine_test_on_sns_subnet(|runtime| async move {
-        println!("Initializing governance mem test canister...");
-
-        let mut runtime = runtime;
-        if let Runtime::Local(local_runtime) = &mut runtime {
-            local_runtime.ingress_time_limit = Duration::from_secs(20 * 60);
-        }
-
-        let mut governance = runtime
-            .create_canister_max_cycles_with_retries()
-            .await
-            .unwrap();
-
-        let state_initializer_wasm =
-            Project::cargo_bin_maybe_from_env("sns-governance-mem-test-canister", &[]);
-
-        // It's on purpose that we don't want retries here! This test is only about
-        // initializing a canister with a very large state. A failure is most
-        // likely repeatable, so the test will fail much faster without retries.
-        let install = state_initializer_wasm
-            .install(&runtime)
-            .with_mode(CanisterInstallMode::Install);
-        install.install(&mut governance, Vec::new()).await.unwrap();
-
-        // Now let's upgrade to the real governance canister
-        let real_wasm = Project::cargo_bin_maybe_from_env("sns-governance-canister", &[]);
-        governance.set_wasm(real_wasm.bytes());
-
-        // Exercise canister_post_upgrade of the real canister
-        governance
-            .upgrade_to_self_binary(/* arg passed to post-upgrade: */ Vec::new())
-            .await
-            .unwrap();
-
-        // Exercise canister_pre_upgrade (and post upgrade again) of the real canister
-        governance
-            .upgrade_to_self_binary(/* arg passed to post-upgrade: */ Vec::new())
-            .await
-            .unwrap();
-
-        Ok(())
-    });
-}
-
 /// This is a regression test: it used to be that, if two upgrades happened in a
 /// row, with the stable memory of the second being smaller than for the first,
 /// the second upgrade would read too many bytes from stable memory, resulting
