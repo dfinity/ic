@@ -393,40 +393,11 @@ async fn assert_rented_subnet_works(
     // rented subnet.
 
     // As another user, try to create a canister in the rented subnet. This is supposed to get blocked.
-    let err = cycles_minting_create_canister(
-        &nns_subnet_runtime,
-        &*NON_SUBNET_USER_SENDER,
-        10 * E8, // amount_e8s
-        |notify_create_canister| {
-            notify_create_canister.subnet_selection = Some(SubnetSelection::Subnet {
-                subnet: rented_subnet_id,
-            });
-        },
+    assert_that_non_subnet_user_gets_blocked_if_they_try_to_create_a_canister_in_the_rented_subnet(
+        &topology_snapshot,
+        rented_subnet_id,
     )
-    .await
-    .unwrap_err();
-
-    match err {
-        NotifyError::Refunded {
-            reason,
-            block_index,
-        } => {
-            for key_word in [
-                "not authorized".to_string(),
-                format!("{}", rented_subnet_id).to_lowercase(),
-                format!("{}", *NON_SUBNET_USER_PRINCIPAL_ID).to_lowercase(),
-            ] {
-                assert!(
-                    reason.contains(&key_word),
-                    "({:?}) {:?} not in {:?}",
-                    block_index,
-                    key_word,
-                    reason,
-                );
-            }
-        }
-        _ => panic!("{:?}", err),
-    }
+    .await;
 }
 
 async fn assert_canister_belongs_to_subnet(
@@ -478,6 +449,46 @@ async fn get_cycles_balance(canister_id: CanisterId, subnet: &SubnetSnapshot) ->
     // Pluck out the one field that we care about from the canister_status
     // result.
     u128::try_from(result.cycles.0).unwrap()
+}
+
+async fn assert_that_non_subnet_user_gets_blocked_if_they_try_to_create_a_canister_in_the_rented_subnet(
+    topology_snapshot: &TopologySnapshot,
+    rented_subnet_id: SubnetId,
+) {
+    let err = cycles_minting_create_canister(
+        &new_subnet_runtime(&topology_snapshot.root_subnet()),
+        &*NON_SUBNET_USER_SENDER,
+        10 * E8, // amount_e8s
+        |notify_create_canister| {
+            notify_create_canister.subnet_selection = Some(SubnetSelection::Subnet {
+                subnet: rented_subnet_id,
+            });
+        },
+    )
+    .await
+    .unwrap_err();
+
+    match err {
+        NotifyError::Refunded {
+            reason,
+            block_index,
+        } => {
+            for key_word in [
+                "not authorized".to_string(),
+                format!("{}", rented_subnet_id).to_lowercase(),
+                format!("{}", *NON_SUBNET_USER_PRINCIPAL_ID).to_lowercase(),
+            ] {
+                assert!(
+                    reason.contains(&key_word),
+                    "({:?}) {:?} not in {:?}",
+                    block_index,
+                    key_word,
+                    reason,
+                );
+            }
+        }
+        _ => panic!("{:?}", err),
+    }
 }
 
 fn install_nns_canisters(env: &TestEnv) {
