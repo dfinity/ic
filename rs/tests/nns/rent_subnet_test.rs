@@ -486,7 +486,9 @@ fn install_nns_canisters(env: &TestEnv) {
 
     let nns_node = root_subnet.nodes().next().expect("there is no NNS node");
 
-    let mut installer = NnsInstallationBuilder::new().with_subnet_rental_canister();
+    let mut installer = NnsInstallationBuilder::new()
+        .with_subnet_rental_canister()
+        .with_exchange_rate_canister();
 
     // Give subnet user an initial amount of ICP, which they will use to pay to
     // rent a new subnet.

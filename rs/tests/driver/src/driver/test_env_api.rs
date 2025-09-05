@@ -1777,6 +1777,7 @@ pub struct NnsInstallationBuilder {
     customizations: NnsCustomizations,
     installation_timeout: Duration,
     is_subnet_rental_canister_enabled: bool,
+    is_exchange_rate_canister_enabled: bool,
 }
 
 impl Default for NnsInstallationBuilder {
@@ -1791,6 +1792,7 @@ impl NnsInstallationBuilder {
             customizations: NnsCustomizations::default(),
             installation_timeout: NNS_CANISTER_INSTALL_TIMEOUT,
             is_subnet_rental_canister_enabled: false,
+            is_exchange_rate_canister_enabled: false,
         }
     }
 
@@ -1811,6 +1813,16 @@ impl NnsInstallationBuilder {
 
     pub fn with_subnet_rental_canister(mut self) -> Self {
         self.is_subnet_rental_canister_enabled = true;
+        self
+    }
+
+    /// WARNING: Due to technical limitations, this does not actually cause
+    /// Exchange Rate canister (XRC) to be created. Rather, this just makes the
+    /// Cycles Minting canister aware of the XRC. Creating XRC is done outside
+    /// of Self. The technical limitation is related to the fact that XRC is NOT
+    /// hosted on the NNS subnet, but rather on the II subnet.
+    pub fn with_exchange_rate_canister(mut self) -> Self {
+        self.is_exchange_rate_canister_enabled = true;
         self
     }
 
@@ -2282,7 +2294,9 @@ pub async fn install_nns_canisters(
 
     if nns_installation_builder.is_subnet_rental_canister_enabled {
         init_payloads.with_subnet_rental_canister();
-        init_payloads.with_exchange_rate_canister(EXCHANGE_RATE_CANISTER_ID); // DO NOT MERGE
+    }
+    if nns_installation_builder.is_exchange_rate_canister_enabled {
+        init_payloads.with_exchange_rate_canister(EXCHANGE_RATE_CANISTER_ID);
     }
 
     // Neurons.
