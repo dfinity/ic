@@ -99,13 +99,12 @@ fn start_adapter<T: RpcClientType + Into<AdapterNetwork>>(
     network: T,
 ) {
     let config = Config {
-        network: network.into(),
         incoming_source: IncomingSource::Path(uds_path.to_path_buf()),
         nodes,
         ipv6_only: true,
         address_limits: (1, 1),
         idle_seconds: 6, // it can take at most 5 seconds for tcp connections etc to be established.
-        ..Default::default()
+        ..Config::default_with(network.into())
     };
 
     start_server(logger, metrics_registry, rt_handle, config);
@@ -1009,7 +1008,7 @@ fn test_btc_mainnet_data() {
         .unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let bitcoind_addr = ic_btc_adapter_test_utils::bitcoind::mock_bitcoin::<bitcoin::Block>(
+    let bitcoind_addr = ic_btc_adapter_test_utils::bitcoind::mock_bitcoin::<bitcoin::Network>(
         rt.handle(),
         headers_data_path,
         blocks_data_path,
@@ -1045,7 +1044,7 @@ fn test_btc_testnet_data() {
         .unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
-    let bitcoind_addr = ic_btc_adapter_test_utils::bitcoind::mock_bitcoin::<bitcoin::Block>(
+    let bitcoind_addr = ic_btc_adapter_test_utils::bitcoind::mock_bitcoin::<bitcoin::Network>(
         rt.handle(),
         headers_data_path,
         blocks_data_path,
