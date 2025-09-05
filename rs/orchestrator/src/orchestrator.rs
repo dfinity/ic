@@ -409,9 +409,9 @@ impl Orchestrator {
                                 OrchestratorControlFlow::Assigned(subnet_id),
                                 OrchestratorControlFlow::Leaving(_),
                             ) => {
-                                UtilityCommand::notify_host(&format!("The node {node_id} has been unassigned from the subnet {subnet_id}\\
-                                     in the registry. Please do not turn off the machine while it completes its graceful removal from the subnet.\\
-                                      This process can take up to 15 minutes. A new message will be displayed here when the node has been \\
+                                UtilityCommand::notify_host(&format!("The node {node_id} has been unassigned from the subnet {subnet_id}\
+                                     in the registry. Please do not turn off the machine while it completes its graceful removal from the subnet.\
+                                      This process can take up to 15 minutes. A new message will be displayed here when the node has been \
                                       successfully removed."), 1);
                             }
                             (

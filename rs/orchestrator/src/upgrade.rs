@@ -664,7 +664,7 @@ enum UnassignmentDecision {
     Later,
     /// Stay in subnet.
     ///
-    /// This means that the node is participating in consensus and the
+    /// This means that the node is participating in consensus and
     /// there are no requests for this node to leave.
     StayInSubnet,
 }
@@ -1175,10 +1175,10 @@ mod tests {
 
     impl Setup {
         fn new() -> Self {
-            Self::new_with_nidkg_height(None)
+            Self::new_with_nidkg_registry_version(None)
         }
 
-        fn new_with_nidkg_height(nidkg_registry_version: Option<u64>) -> Self {
+        fn new_with_nidkg_registry_version(nidkg_registry_version: Option<u64>) -> Self {
             let tmp = tempdir().expect("Unable to create temp directory");
             let rng = reproducible_rng();
             Self {
@@ -1237,8 +1237,8 @@ mod tests {
                 ))
                 .subnet_size(4);
 
-            if let Some(height) = self.nidkg_registry_version {
-                config = config.registry_version(RegistryVersion::new(height));
+            if let Some(version) = self.nidkg_registry_version {
+                config = config.registry_version(RegistryVersion::new(version));
             }
 
             let config = config.build(&mut self.rng);
@@ -1517,9 +1517,9 @@ mod tests {
                 .expect_get_latest_version()
                 .return_const(RegistryVersion::new(latest_registry_version));
 
-            let mut setup = Setup::new_with_nidkg_height(Some(oldest_relevant_version));
-            let key_id = setup.generate_key_transcript(&key_id);
-            let cup = make_cup(Height::from(15), Some(key_id));
+            let mut setup = Setup::new_with_nidkg_registry_version(Some(oldest_relevant_version));
+            let key_transcript = setup.generate_key_transcript(&key_id);
+            let cup = make_cup(Height::from(15), Some(key_transcript));
 
             println!(
                 "Use-case: {oldest_relevant_version}, {node_in_subnet:?}, {expected_decision:?}"
