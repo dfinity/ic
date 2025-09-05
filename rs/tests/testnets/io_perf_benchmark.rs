@@ -4,7 +4,8 @@
 // Alternatively, you can specify the number of hosts via the NUM_PERF_HOSTS environment variable.
 //
 // Set up a testnet containing:
-//   one System subnet with the hosts specified in the PERF_HOSTS environment variable,
+//   one System subnet,
+//   one Application subnet with the hosts specified in the PERF_HOSTS environment variable or selected automatically,
 //   a single API boundary node, single ic-gateway/s and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 64 vCPUs, 480GiB of RAM, and 10 TiB disk.
 //
