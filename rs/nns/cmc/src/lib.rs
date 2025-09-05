@@ -446,6 +446,7 @@ pub type CreateCanisterResult = Result<CanisterId, (String, Option<BlockIndex>)>
 /// an error, contains the index of the refund block.
 pub type TopUpCanisterResult = Result<(), (String, Option<BlockIndex>)>;
 
+#[derive(Debug)]  // DO NOT MERGE
 pub struct TokensToCycles {
     /// Number of 1/10,000ths of XDR that 1 ICP is worth.
     pub xdr_permyriad_per_icp: u64,
@@ -455,6 +456,8 @@ pub struct TokensToCycles {
 
 impl TokensToCycles {
     pub fn to_cycles(&self, icpts: Tokens) -> Cycles {
+        ic_cdk::println!("\n\n  DO NOT MERGE - icpts {:?}  \n", icpts);
+        ic_cdk::println!("  DO NOT MERGE - TokensToCycles {:#?}  \n\n", self);
         Cycles::new(
             icpts.get_e8s() as u128
                 * self.xdr_permyriad_per_icp as u128
