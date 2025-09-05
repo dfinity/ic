@@ -104,11 +104,7 @@ impl NnsCanisters<'_> {
         let identity = Canister::new(runtime, IDENTITY_CANISTER_ID);
         let nns_ui = Canister::new(runtime, NNS_UI_CANISTER_ID);
         let mut sns_wasms = Canister::new(runtime, SNS_WASM_CANISTER_ID);
-
-        let mut subnet_rental = init_payloads
-            .subnet_rental
-            .as_ref()
-            .map(|_not_used| Canister::new(runtime, SUBNET_RENTAL_CANISTER_ID));
+        let mut subnet_rental = Canister::new(runtime, SUBNET_RENTAL_CANISTER_ID);
 
         // Install code into canisters (pass init argument/payload).
 
@@ -129,8 +125,8 @@ impl NnsCanisters<'_> {
             install_genesis_token_canister(&mut genesis_token, init_payloads.genesis_token.clone()),
             install_sns_wasm_canister(&mut sns_wasms, init_payloads.sns_wasms.clone()),
             async {
-                if let Some(subnet_rental) = subnet_rental.as_mut() {
-                    install_subnet_rental_canister(subnet_rental).await;
+                if let Some(()) = init_payloads.subnet_rental {
+                    install_subnet_rental_canister(&mut subnet_rental).await;
                 }
             },
         );
@@ -153,6 +149,7 @@ impl NnsCanisters<'_> {
             identity.set_controller_with_retries(ROOT_CANISTER_ID.get()),
             nns_ui.set_controller_with_retries(ROOT_CANISTER_ID.get()),
             sns_wasms.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            subnet_rental.set_controller_with_retries(ROOT_CANISTER_ID.get()),
         )
         .unwrap();
 
@@ -170,7 +167,8 @@ impl NnsCanisters<'_> {
             identity,
             nns_ui,
             sns_wasms,
-            subnet_rental,
+
+            subnet_rental: init_payloads.subnet_rental.map(|()| subnet_rental),
         }
     }
 
