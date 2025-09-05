@@ -59,7 +59,6 @@ jobs:
       image: ghcr.io/dfinity/ic-build@sha256:9b554adf2402a705f962ad65cc9ec37596d2bd8a7ff5d3ee97b5a933c6dbef11
       options: >-
         -e NODE_NAME --privileged --cgroupns host
-    if: false
     timeout-minutes: 60
     env:
       SHELL_WRAPPER: "/usr/bin/time"
