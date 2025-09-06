@@ -17,6 +17,8 @@ http://dashboard.internetcomputer.org/proposal/138288
 
 * Fix rewards calculation algorithm to extrapolate with 0% failure rate node's performance for node providers with no
   assigned nodes on a given day.
+* Replicated execution of the query endpoints `get_node_provider_rewards_calculation` and `get_historical_reward_periods`
+  is disabled.
 
 # 2025-08-15: Proposal 137910
 

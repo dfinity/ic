@@ -1,10 +1,10 @@
 [package]
-name = "ic-migration-canister"
-version.workspace = true
 authors.workspace = true
-edition.workspace = true
 description.workspace = true
 documentation.workspace = true
+edition.workspace = true
+name = "ic-migration-canister"
+version.workspace = true
 
 [lib]
 crate-type = ["cdylib"]
@@ -15,6 +15,5 @@ futures = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-stable-structures = "0.7.0"
+serde = { workspace = true }
 serde_cbor = { workspace = true }
-serde = { workspace =true }
-serde_bytes = { workspace =true }

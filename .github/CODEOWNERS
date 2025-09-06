@@ -55,8 +55,8 @@ go_deps.bzl               @dfinity/idx
 /packages/ic-dummy-getrandom-for-wasm/          @dfinity/crypto-team
 /packages/ic-ed25519/                           @dfinity/crypto-team
 /packages/ic-ethereum-types/                    @dfinity/cross-chain-team
-/packages/ic-deterministic-heap-bytes/          @dfinity/execution
-/packages/ic-deterministic-heap-bytes-derive/   @dfinity/execution
+/packages/ic-heap-bytes/                        @dfinity/execution
+/packages/ic-heap-bytes-derive/                 @dfinity/execution
 /packages/ic-hpke/                              @dfinity/crypto-team
 /packages/ic-http-types/                        @dfinity/cross-chain-team
 /packages/ic-metrics-assert/                    @dfinity/cross-chain-team
@@ -131,7 +131,6 @@ go_deps.bzl               @dfinity/idx
 /rs/cycles_account_manager/                             @dfinity/execution
 /rs/depcheck/                                           @dfinity/ic-interface-owners
 /rs/determinism_test/                                   @dfinity/execution
-/rs/drun/                                               @dfinity/languages
 /rs/embedders/                                          @dfinity/execution
 /rs/ethereum/                                           @dfinity/cross-chain-team
 /rs/execution_environment/                              @dfinity/execution

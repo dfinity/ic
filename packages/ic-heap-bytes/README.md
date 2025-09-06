@@ -6,7 +6,7 @@ The trait can be easily derived for structs and enums,
 enabling deterministic memory usage estimation:
 
 ```rust
-use ic_deterministic_heap_bytes::DeterministicHeapBytes;
+use ic_heap_bytes::{deterministic_total_bytes, DeterministicHeapBytes};
 
 #[derive(DeterministicHeapBytes)]
 struct MyStruct {
@@ -20,7 +20,7 @@ let s = MyStruct {
 };
 assert_eq!(s.deterministic_heap_bytes(), size_of::<String>() * 2 + 1 + 3 + 5);
 assert_eq!(
-    s.deterministic_total_bytes(),
+    deterministic_total_bytes(&s),
     size_of::<MyStruct>() + size_of::<String>() * 2 + 1 + 3 + 5
 );
 ```
@@ -35,7 +35,7 @@ To mitigate performance impact, field size calculations can be
 approximated using the `#[deterministic_heap_bytes(with = <CLOSURE>)]` attribute:
 
 ```rust
-use ic_deterministic_heap_bytes::DeterministicHeapBytes;
+use ic_heap_bytes::{deterministic_total_bytes, DeterministicHeapBytes};
 
 #[derive(DeterministicHeapBytes)]
 struct CustomHeapBytes {
@@ -51,7 +51,7 @@ let s = CustomHeapBytes {
 };
 assert_eq!(s.deterministic_heap_bytes(), 1 + 2 * size_of::<Vec<String>>() + 17);
 assert_eq!(
-    s.deterministic_total_bytes(),
+    deterministic_total_bytes(&s),
     size_of::<CustomHeapBytes>() + 1 + 2 * size_of::<Vec<String>>() + 17
 );
 ```
@@ -60,7 +60,7 @@ Closure errors are clearly reported:
 
 ```rust
 error[E0282]: type annotations needed
-   --> packages/ic-deterministic-heap-bytes/src/tests.rs:711:30
+   --> packages/ic-heap-bytes/src/tests.rs:711:30
     |
 711 |         #[deterministic_heap_bytes(with = |v| v.len() * size_of::<String>() + 17)]
     |                                            ^  - type must be known at this point
@@ -97,7 +97,7 @@ enum SuperdWith {
 A function name may also be used instead of a closure:
 
 ```rust
-use ic_deterministic_heap_bytes::DeterministicHeapBytes;
+use ic_heap_bytes::{deterministic_total_bytes, DeterministicHeapBytes};
 
 fn vec_approx(v: &[String]) -> usize {
     size_of_val(v) + 17
@@ -117,7 +117,7 @@ let s = CustomHeapBytes {
 };
 assert_eq!(s.deterministic_heap_bytes(), 1 + 2 * size_of::<Vec<String>>() + 17);
 assert_eq!(
-    s.deterministic_total_bytes(),
+    deterministic_total_bytes(&s),
     size_of::<CustomHeapBytes>() + 1 + 2 * size_of::<Vec<String>>() + 17
 );
 ```

@@ -19,23 +19,22 @@ use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
 #[cfg(not(windows))]
 use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
+#[cfg(not(windows))]
+use pocket_ic::{common::rest::ExtendedSubnetConfigSet, nonblocking::PocketIc as PocketIcAsync};
 use pocket_ic::{
     common::rest::{
-        BlobCompression, CanisterHttpReply, CanisterHttpResponse, IcpFeatures,
-        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, SubnetKind,
+        AutoProgressConfig, BlobCompression, CanisterHttpReply, CanisterHttpResponse,
+        CreateInstanceResponse, EmptyConfig, HttpGatewayDetails, HttpsConfig, IcpFeatures,
+        InitialTime, InstanceConfig, InstanceHttpGatewayConfig, MockCanisterHttpResponse,
+        RawEffectivePrincipal, RawMessageId, SubnetConfigSet, SubnetKind,
     },
-    query_candid, update_candid, DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult,
-    PocketIc, PocketIcBuilder, PocketIcState, RejectCode, Time,
-};
-#[cfg(not(windows))]
-use pocket_ic::{
-    common::rest::{CreateInstanceResponse, ExtendedSubnetConfigSet, InstanceConfig},
-    nonblocking::PocketIc as PocketIcAsync,
-    start_server, StartServerParams,
+    query_candid, start_server, update_candid, DefaultEffectiveCanisterIdError, ErrorCode,
+    IngressStatusResult, PocketIc, PocketIcBuilder, PocketIcState, RejectCode, StartServerParams,
+    Time,
 };
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_LENGTH;
-use reqwest::{Method, StatusCode};
+use reqwest::{Method, StatusCode, Url};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 #[cfg(windows)]
@@ -420,7 +419,7 @@ fn test_invalid_initial_timestamp() {
 fn test_initial_timestamp_with_cycles_minting() {
     let initial_timestamp = 1_620_633_601_000_000_000; // 10 May 2021 10:00:01
     let icp_features = IcpFeatures {
-        cycles_minting: true,
+        cycles_minting: Some(EmptyConfig {}),
         ..Default::default()
     };
     let pic = PocketIcBuilder::new()
@@ -444,7 +443,7 @@ fn test_initial_timestamp_with_cycles_minting() {
 fn test_invalid_initial_timestamp_with_cycles_minting() {
     let initial_timestamp = 1_620_328_630_000_000_000; // 06 May 2021 21:17:10 CEST
     let icp_features = IcpFeatures {
-        cycles_minting: true,
+        cycles_minting: Some(EmptyConfig {}),
         ..Default::default()
     };
     let _pic = PocketIcBuilder::new()
@@ -559,7 +558,9 @@ fn time_on_resumed_instance() {
 
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
 #[cfg(not(windows))]
-async fn resume_killed_instance_impl(allow_incomplete_state: Option<bool>) -> Result<(), String> {
+async fn resume_killed_instance_impl(
+    allow_incomplete_state: Option<EmptyConfig>,
+) -> Result<(), String> {
     let (mut server, server_url) = start_server(StartServerParams::default()).await;
     let temp_dir = TempDir::new().unwrap();
 
@@ -620,6 +621,7 @@ async fn resume_killed_instance_impl(allow_incomplete_state: Option<bool>) -> Re
     let client = reqwest::Client::new();
     let instance_config = InstanceConfig {
         subnet_config_set: ExtendedSubnetConfigSet::default(),
+        http_gateway_config: None,
         state_dir: Some(temp_dir.path().to_path_buf()),
         nonmainnet_features: None,
         log_level: None,
@@ -659,7 +661,7 @@ async fn resume_killed_instance_impl(allow_incomplete_state: Option<bool>) -> Re
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
 #[cfg(not(windows))]
 #[tokio::test]
-async fn resume_killed_instance_default() {
+async fn resume_killed_instance_strict() {
     let err = resume_killed_instance_impl(None).await.unwrap_err();
     assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is incomplete."));
 }
@@ -667,16 +669,10 @@ async fn resume_killed_instance_default() {
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
 #[cfg(not(windows))]
 #[tokio::test]
-async fn resume_killed_instance_strict() {
-    let err = resume_killed_instance_impl(Some(false)).await.unwrap_err();
-    assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is incomplete."));
-}
-
-// Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
-#[cfg(not(windows))]
-#[tokio::test]
 async fn resume_killed_instance() {
-    resume_killed_instance_impl(Some(true)).await.unwrap();
+    resume_killed_instance_impl(Some(EmptyConfig {}))
+        .await
+        .unwrap();
 }
 
 #[test]
@@ -3176,4 +3172,275 @@ fn test_invalid_specified_id() {
         .unwrap_err();
     let expected_err = format!("The `specified_id` {} is invalid because it belongs to the canister allocation ranges of the test environment.\\nUse a `specified_id` that matches a canister ID on the ICP mainnet and a test environment that supports canister creation with `specified_id` (e.g., PocketIC).", specified_id);
     assert!(err.contains(&expected_err));
+}
+
+#[test]
+#[should_panic(
+    expected = "Creating an HTTP gateway requires `AutoProgress` to be enabled via `initial_time`."
+)]
+fn with_http_gateway_config_but_no_auto_progress() {
+    let http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: None,
+    };
+    let _pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_http_gateway(http_gateway_config)
+        .build();
+}
+
+// We already have a function `PocketIc::list_instances`,
+// but that function does not take a server URL as argument
+// (it tries to reuse an existing PocketIC server based on PID).
+async fn list_instances(server_url: &Url) -> Vec<String> {
+    let url = server_url.join("instances").unwrap();
+    reqwest::Client::new()
+        .get(url)
+        .send()
+        .await
+        .expect("Failed to get result")
+        .json()
+        .await
+        .expect("Failed to get json")
+}
+
+async fn list_http_gateways(server_url: &Url) -> Vec<HttpGatewayDetails> {
+    let url = server_url.join("http_gateway").unwrap();
+    reqwest::Client::new()
+        .get(url)
+        .send()
+        .await
+        .expect("Failed to get result")
+        .json()
+        .await
+        .expect("Failed to get json")
+}
+
+#[tokio::test]
+async fn with_http_gateway_config_and_cleanup_works() {
+    let server_params = StartServerParams {
+        server_binary: None,
+        reuse: false,
+    };
+    let (_child, server_url) = start_server(server_params).await;
+
+    let http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: None,
+    };
+    let pic = PocketIcBuilder::new()
+        .with_server_url(server_url.clone())
+        .with_application_subnet()
+        .with_http_gateway(http_gateway_config)
+        .with_auto_progress(None)
+        .build_async()
+        .await;
+
+    let instances = list_instances(&server_url).await;
+    assert_eq!(instances.len(), 1);
+    assert!(!instances[0].contains("Deleted"));
+    assert_eq!(list_http_gateways(&server_url).await.len(), 1);
+
+    pic.drop().await;
+
+    let instances = list_instances(&server_url).await;
+    assert_eq!(instances.len(), 1);
+    assert_eq!(instances[0], "Deleted");
+    assert!(list_http_gateways(&server_url).await.is_empty());
+}
+
+async fn assert_create_instance_failure(
+    server_url: &Url,
+    instance_config: InstanceConfig,
+    expected_msg: &str,
+) {
+    // We cannot use `PocketIcBuilder` since we don't want the test to panic at this point.
+    let res = reqwest::Client::new()
+        .post(server_url.join("instances").unwrap())
+        .json(&instance_config)
+        .send()
+        .await
+        .expect("Failed to get result")
+        .json::<CreateInstanceResponse>()
+        .await
+        .expect("Could not parse response for create instance request");
+    match res {
+        CreateInstanceResponse::Error { message } => {
+            assert!(message.contains(expected_msg));
+        }
+        _ => panic!("Unexpected result: {:?}", res),
+    };
+}
+
+#[tokio::test]
+async fn with_http_gateway_config_invalid_instance_config() {
+    let server_params = StartServerParams {
+        server_binary: None,
+        reuse: false,
+    };
+    let (_child, server_url) = start_server(server_params).await;
+
+    // We provide an invalid log level.
+    let subnet_config_set = SubnetConfigSet {
+        application: 1,
+        ..Default::default()
+    };
+    let http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: None,
+    };
+    let auto_progress_config = AutoProgressConfig {
+        artificial_delay_ms: None,
+    };
+    let instance_config = InstanceConfig {
+        subnet_config_set: subnet_config_set.into(),
+        http_gateway_config: Some(http_gateway_config),
+        state_dir: None,
+        nonmainnet_features: None,
+        log_level: Some("invalid".to_string()),
+        bitcoind_addr: None,
+        icp_features: None,
+        allow_incomplete_state: None,
+        initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
+    };
+    assert_create_instance_failure(&server_url, instance_config, "Failed to parse log level").await;
+
+    // We confirm that there are no instances and HTTP gateways
+    // after the failure, i.e., cleanup works.
+    let instances = list_instances(&server_url).await;
+    assert!(instances.is_empty());
+    let http_gateways = list_http_gateways(&server_url).await;
+    assert!(http_gateways.is_empty());
+}
+
+#[tokio::test]
+async fn with_http_gateway_config_invalid_gateway_port() {
+    let server_params = StartServerParams {
+        server_binary: None,
+        reuse: false,
+    };
+    let (_child, server_url) = start_server(server_params).await;
+
+    // We first successfully create an instance with an HTTP gateway
+    // to later craft an invalid HTTP gateway configuration
+    // reusing the same port.
+    let mut http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: None,
+    };
+    let pic = PocketIcBuilder::new()
+        .with_server_url(server_url.clone())
+        .with_application_subnet()
+        .with_http_gateway(http_gateway_config.clone())
+        .with_auto_progress(None)
+        .build_async()
+        .await;
+
+    let instances = list_instances(&server_url).await;
+    assert_eq!(instances.len(), 1);
+    assert!(!instances[0].contains("Deleted"));
+    let http_gateways = list_http_gateways(&server_url).await;
+    assert_eq!(http_gateways.len(), 1);
+
+    // We try to bind to the HTTP gateway to the same port which fails.
+    let http_gateway_port = http_gateways[0].port;
+    http_gateway_config.port = Some(http_gateway_port);
+    let subnet_config_set = SubnetConfigSet {
+        application: 1,
+        ..Default::default()
+    };
+    let auto_progress_config = AutoProgressConfig {
+        artificial_delay_ms: None,
+    };
+    let instance_config = InstanceConfig {
+        subnet_config_set: subnet_config_set.into(),
+        http_gateway_config: Some(http_gateway_config),
+        state_dir: None,
+        nonmainnet_features: None,
+        log_level: None,
+        bitcoind_addr: None,
+        icp_features: None,
+        allow_incomplete_state: None,
+        initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
+    };
+    assert_create_instance_failure(&server_url, instance_config, "Failed to bind to address").await;
+
+    // We confirm that there are no new instances and HTTP gateways
+    // after the failure, i.e., cleanup works.
+    let instances = list_instances(&server_url).await;
+    assert_eq!(instances.len(), 1);
+    assert!(!instances[0].contains("Deleted"));
+    let http_gateways = list_http_gateways(&server_url).await;
+    assert_eq!(http_gateways.len(), 1);
+
+    pic.drop().await;
+}
+
+#[tokio::test]
+async fn with_http_gateway_config_invalid_gateway_https_config() {
+    let server_params = StartServerParams {
+        server_binary: None,
+        reuse: false,
+    };
+    let (_child, server_url) = start_server(server_params).await;
+
+    // We provide invalid paths in `HttpsConfig` which makes HTTP gateway creation fail.
+    let http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: Some(HttpsConfig {
+            cert_path: "".to_string(),
+            key_path: "".to_string(),
+        }),
+    };
+    let subnet_config_set = SubnetConfigSet {
+        application: 1,
+        ..Default::default()
+    };
+    let auto_progress_config = AutoProgressConfig {
+        artificial_delay_ms: None,
+    };
+    let instance_config = InstanceConfig {
+        subnet_config_set: subnet_config_set.into(),
+        http_gateway_config: Some(http_gateway_config),
+        state_dir: None,
+        nonmainnet_features: None,
+        log_level: None,
+        bitcoind_addr: None,
+        icp_features: None,
+        allow_incomplete_state: None,
+        initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
+    };
+    assert_create_instance_failure(
+        &server_url,
+        instance_config,
+        "TLS config could not be created",
+    )
+    .await;
+
+    // We confirm that there are no new instances and HTTP gateways
+    // after the failure, i.e., cleanup works.
+    let instances = list_instances(&server_url).await;
+    assert_eq!(instances.len(), 1);
+    assert_eq!(instances[0], "Deleted"); // an instance was temporarily created, but deleted before returning an error
+    let http_gateways = list_http_gateways(&server_url).await;
+    assert!(http_gateways.is_empty());
+}
+
+#[test]
+fn make_live_after_auto_progress() {
+    let mut pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_auto_progress(None)
+        .build();
+    pic.make_live(None);
 }

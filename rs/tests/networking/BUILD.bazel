@@ -395,6 +395,7 @@ system_test_nns(
     colocated_test_driver_vm_resources = {
         "vcpus": 16,
     },
+    enable_head_nns_variant = False,
     flaky = True,  # flakiness rate of over 1.1% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "colocate",
@@ -416,6 +417,7 @@ system_test_nns(
     colocated_test_driver_vm_resources = {
         "vcpus": 16,
     },
+    enable_head_nns_variant = False,
     flaky = True,  # flakiness rate of 1.83% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "colocate",

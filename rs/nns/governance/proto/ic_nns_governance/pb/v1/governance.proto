@@ -2123,22 +2123,6 @@ message Governance {
   // that it should finish before being called again.
   optional bool spawning_neurons = 19;
 
-  // Records that making an OpenSnsTokenSwap (OSTS) or CreateServiceNervousSystem (CSNS)
-  // proposal is in progress. We only want one of these to be happening at the same time,
-  // because otherwise, it is error prone to enforce that open OSTS or CSNS proposals are
-  // unique. In particular, the result of checking that the proposal currently being made
-  // would be unique is liable to becoming invalid during an .await.
-  //
-  // This is a temporary measure, because OSTS is part of the SNS flow that will
-  // be replaced by 1-proposal very soon.
-  message MakingSnsProposal {
-    ic_nns_common.pb.v1.NeuronId proposer_id = 1;
-    ic_base_types.pb.v1.PrincipalId caller = 2;
-    Proposal proposal = 3;
-  }
-
-  MakingSnsProposal making_sns_proposal = 20;
-
   // Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
   optional XdrConversionRate xdr_conversion_rate = 26;
 
@@ -2171,6 +2155,10 @@ message Governance {
   // Reserved id for deprecated `neurons`
   reserved 1;
   reserved "neurons";
+
+  // Reserved id for deprecated `making_sns_proposal`
+  reserved 20;
+  reserved "making_sns_proposal";
 }
 
 message XdrConversionRate {

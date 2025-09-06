@@ -1,14 +1,12 @@
 [package]
-name = "ic-replica-tests"
-version.workspace = true
 authors.workspace = true
-edition.workspace = true
 description.workspace = true
 documentation.workspace = true
+edition.workspace = true
+name = "ic-replica-tests"
+version.workspace = true
 
 [dependencies]
-crossbeam-channel = { workspace = true }
-ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
 ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-btc-replica-types = { path = "../bitcoin/replica_types" }
@@ -17,6 +15,7 @@ ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-config = { path = "../config" }
 ic-error-types = { path = "../../packages/ic-error-types" }
 ic-execution-environment = { path = "../execution_environment" }
+ic-http-endpoints-async-utils = { path = "../http_endpoints/async_utils" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
@@ -40,7 +39,6 @@ ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 prost = { workspace = true }
 rand = { workspace = true }
-slog = { workspace = true }
 slog-scope = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
@@ -52,9 +50,7 @@ wat = { workspace = true }
 [dev-dependencies]
 assert_matches = { workspace = true }
 candid = { workspace = true }
-canister-test = { path = "../rust_canisters/canister_test" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
-ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-sys = { path = "../sys" }
 ic-test-utilities = { path = "../test_utilities" }
 maplit = "1.0.2"
