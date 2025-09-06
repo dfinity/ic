@@ -2,11 +2,7 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 load(
     "//rs/tests:common.bzl",
     "IC_GATEWAY_RUNTIME_DEPS",
-    "IMPERSONATE_UPSTREAMS_ENV",
-    "IMPERSONATE_UPSTREAMS_RUNTIME_DEPS",
     "MAINNET_ENV",
-    "MESSAGE_CANISTER_ENV",
-    "MESSAGE_CANISTER_RUNTIME_DEPS",
 )
 load("//rs/tests:system_tests.bzl", "system_test_nns")
 
@@ -19,7 +15,6 @@ DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/nns/test_utils",
     "//rs/protobuf",
-    "//rs/recovery",
     "//rs/registry/keys",
     "//rs/registry/nns_data_provider",
     "//rs/registry/subnet_type",
@@ -28,12 +23,9 @@ DEPENDENCIES = [
     "//rs/tests/driver:ic-system-test-driver",
     "//rs/types/types",
     "@crate_index//:anyhow",
-    "@crate_index//:futures",
     "@crate_index//:prost",
-    "@crate_index//:rand",
     "@crate_index//:regex",
     "@crate_index//:reqwest",
-    "@crate_index//:sha2",
     "@crate_index//:slog",
     "@crate_index//:url",
 ]
@@ -187,28 +179,4 @@ system_test_nns(
     uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = RUNNER_DEPENDENCIES,
-)
-
-# WORK IN PROGRESS: End-to-end test of the manual NNS recovery process:
-# - NNS subnet is broken
-# - guestos-recovery-upgrader is used to upgrade the GuestOS to the recovery image
-# - guestos-recovery-engine is used to recover the NNS subnet
-system_test_nns(
-    name = "nns_recovery_test",
-    env = MAINNET_ENV | IMPERSONATE_UPSTREAMS_ENV | MESSAGE_CANISTER_ENV | {
-        "RECOVERY_GUESTOS_IMG_PATH": "$(rootpath //ic-os/guestos/envs/recovery-dev:update-img.tar.zst)",
-    },
-    flaky = True,
-    tags = ["long_test"],
-    test_timeout = "eternal",
-    uses_guestos_test_update = True,
-    uses_setupos_img = True,
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS + IMPERSONATE_UPSTREAMS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + [
-        "//ic-os/guestos/envs/recovery-dev:update-img.tar.zst",
-        "//rs/tests:recovery/binaries",
-    ],
-    deps = RUNNER_DEPENDENCIES + [
-        # Keep sorted.
-        "//rs/tests/consensus/utils",
-    ],
 )
