@@ -266,13 +266,31 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
         for rosetta_block in rosetta_blocks {
             match rosetta_block.get_transaction().operation {
                 crate::common::storage::types::IcrcOperation::Burn { from, amount, .. } => {
+                    let fee = rosetta_block
+                        .get_fee_paid()?
+                        .unwrap_or(Nat(BigUint::zero()));
+                    let burn_amount = Nat(amount.0.checked_add(&fee.0)
+                        .with_context(|| format!("Overflow while adding the fee {} to the amount {} for block at index {}",
+                            fee, amount, rosetta_block.index
+                    ))?);
                     debit(
                         from,
-                        amount,
+                        burn_amount,
                         rosetta_block.index,
                         connection,
                         &mut account_balances_cache,
                     )?;
+                    if let Some(collector) =
+                        get_fee_collector_from_block(&rosetta_block, connection)?
+                    {
+                        credit(
+                            collector,
+                            fee,
+                            rosetta_block.index,
+                            connection,
+                            &mut account_balances_cache,
+                        )?;
+                    }
                 }
                 crate::common::storage::types::IcrcOperation::Mint { to, amount } => {
                     credit(
@@ -282,6 +300,20 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                         connection,
                         &mut account_balances_cache,
                     )?;
+                    let fee = rosetta_block
+                        .get_fee_paid()?
+                        .unwrap_or(Nat(BigUint::zero()));
+                    if let Some(collector) =
+                        get_fee_collector_from_block(&rosetta_block, connection)?
+                    {
+                        credit(
+                            collector,
+                            fee,
+                            rosetta_block.index,
+                            connection,
+                            &mut account_balances_cache,
+                        )?;
+                    }
                 }
                 crate::common::storage::types::IcrcOperation::Approve { from, .. } => {
                     let fee = rosetta_block
