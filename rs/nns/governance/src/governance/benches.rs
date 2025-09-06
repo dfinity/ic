@@ -421,7 +421,7 @@ fn cascading_vote_stable_everything() -> BenchResult {
 }
 
 #[bench(raw)]
-fn single_vote_all_stable() -> BenchResult {
+fn single_vote_all() -> BenchResult {
     cast_vote_cascade_helper(
         SetUpStrategy::SingleVote { num_neurons: 151 },
         Topic::NetworkEconomics,
@@ -429,7 +429,7 @@ fn single_vote_all_stable() -> BenchResult {
 }
 
 #[bench(raw)]
-fn centralized_following_all_stable() -> BenchResult {
+fn centralized_following_all() -> BenchResult {
     cast_vote_cascade_helper(
         SetUpStrategy::Centralized { num_neurons: 151 },
         Topic::NetworkEconomics,
@@ -563,7 +563,7 @@ fn distribute_rewards_with_stable_neurons() -> BenchResult {
 }
 
 #[bench(raw)]
-fn list_neurons_stable() -> BenchResult {
+fn list_neurons() -> BenchResult {
     let mut governance = Governance::new(
         Default::default(),
         Arc::new(MockEnvironment::new(Default::default(), 0)),
@@ -599,7 +599,7 @@ fn list_neurons_stable() -> BenchResult {
 }
 
 #[bench(raw)]
-fn list_neurons_by_subaccount_stable() -> BenchResult {
+fn list_neurons_by_subaccount() -> BenchResult {
     let num_neurons = 100;
     let neurons = (1..=num_neurons)
         .map(|id| {
@@ -753,6 +753,6 @@ fn update_empty() {
 /// embedders crate.
 #[export_name = "canister_query go"]
 fn go() {
-    let _ = list_neurons_stable();
+    let _ = list_neurons();
     ic_cdk::api::msg_reply([]);
 }
