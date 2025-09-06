@@ -14,6 +14,7 @@ use std::{
     cell::{Cell, RefCell},
     ops::Range,
     sync::atomic::{AtomicU64, AtomicUsize, Ordering},
+    time::Duration,
 };
 
 // The upper bound on the number of pages that are memory mapped from the
@@ -242,20 +243,15 @@ impl PageBitmap {
     }
 }
 
-struct ReadBeforeWriteStats {
+#[derive(Default)]
+pub struct MemoryTrackerMetrics {
     read_before_write_count: AtomicUsize,
     direct_write_count: AtomicUsize,
-}
-
-struct MemoryInstructionsStats {
+    sigsegv_count: AtomicUsize,
     mmap_count: AtomicUsize,
     mprotect_count: AtomicUsize,
     copy_page_count: AtomicUsize,
-}
-
-#[derive(Default)]
-pub struct MemoryTrackerMetrics {
-    pub sigsegv_handler_duration_nanos: AtomicU64,
+    sigsegv_handler_duration_nanos: AtomicU64,
 }
 
 pub struct SigsegvMemoryTracker {
@@ -269,9 +265,6 @@ pub struct SigsegvMemoryTracker {
     use_new_signal_handler: bool,
     #[cfg(feature = "sigsegv_handler_checksum")]
     checksum: RefCell<checksum::SigsegChecksum>,
-    read_before_write_stats: ReadBeforeWriteStats,
-    sigsegv_count: AtomicUsize,
-    memory_instructions_stats: MemoryInstructionsStats,
     pub metrics: MemoryTrackerMetrics,
 }
 
@@ -308,16 +301,6 @@ impl SigsegvMemoryTracker {
             use_new_signal_handler,
             #[cfg(feature = "sigsegv_handler_checksum")]
             checksum: RefCell::new(checksum::SigsegChecksum::default()),
-            read_before_write_stats: ReadBeforeWriteStats {
-                read_before_write_count: AtomicUsize::new(0),
-                direct_write_count: AtomicUsize::new(0),
-            },
-            sigsegv_count: AtomicUsize::new(0),
-            memory_instructions_stats: MemoryInstructionsStats {
-                mmap_count: AtomicUsize::new(0),
-                mprotect_count: AtomicUsize::new(0),
-                copy_page_count: AtomicUsize::new(0),
-            },
             metrics: MemoryTrackerMetrics::default(),
         };
 
@@ -332,7 +315,7 @@ impl SigsegvMemoryTracker {
         } else {
             unsafe { mprotect(addr, size.get() as usize, ProtFlags::PROT_NONE)? }
             tracker
-                .memory_instructions_stats
+                .metrics
                 .mprotect_count
                 .fetch_add(1, Ordering::Relaxed);
         }
@@ -345,7 +328,7 @@ impl SigsegvMemoryTracker {
         access_kind: Option<AccessKind>,
         fault_address: *mut libc::c_void,
     ) -> bool {
-        self.sigsegv_count.fetch_add(1, Ordering::Relaxed);
+        self.metrics.sigsegv_count.fetch_add(1, Ordering::Relaxed);
         if self.use_new_signal_handler {
             sigsegv_fault_handler_new(self, access_kind.unwrap(), fault_address)
         } else {
@@ -430,45 +413,51 @@ impl SigsegvMemoryTracker {
         &self.accessed_bitmap
     }
 
-    /// The number of pages that first had a read access and then a write
-    /// access.
+    /// The number of pages that first had a read access and then a write access.
     pub fn read_before_write_count(&self) -> usize {
-        self.read_before_write_stats
-            .read_before_write_count
-            .load(Ordering::Relaxed)
+        self.metrics.read_before_write_count.load(Ordering::Relaxed)
     }
 
     /// The number of pages that had an initial write access.
     pub fn direct_write_count(&self) -> usize {
-        self.read_before_write_stats
-            .direct_write_count
-            .load(Ordering::Relaxed)
+        self.metrics.direct_write_count.load(Ordering::Relaxed)
     }
 
     /// The number of calls to `handle_sigsegv`.
     pub fn sigsegv_count(&self) -> usize {
-        self.sigsegv_count.load(Ordering::Relaxed)
+        self.metrics.sigsegv_count.load(Ordering::Relaxed)
     }
 
     /// The number of calls to `mmap`.
     pub fn mmap_count(&self) -> usize {
-        self.memory_instructions_stats
-            .mmap_count
-            .load(Ordering::Relaxed)
+        self.metrics.mmap_count.load(Ordering::Relaxed)
     }
 
     /// The number of calls to `mprotect`.
     pub fn mprotect_count(&self) -> usize {
-        self.memory_instructions_stats
-            .mprotect_count
-            .load(Ordering::Relaxed)
+        self.metrics.mprotect_count.load(Ordering::Relaxed)
     }
 
     /// The number of pages copied as part of memory instructions.
     pub fn copy_page_count(&self) -> usize {
-        self.memory_instructions_stats
-            .copy_page_count
-            .load(Ordering::Relaxed)
+        self.metrics.copy_page_count.load(Ordering::Relaxed)
+    }
+
+    /// The total time spent in SIGSEGV signal handler.
+    pub fn sigsegv_handler_duration(&self) -> Duration {
+        Duration::from_nanos(
+            self.metrics
+                .sigsegv_handler_duration_nanos
+                .load(Ordering::Relaxed),
+        )
+    }
+
+    /// Add the total time spent in SIGSEGV signal handler.
+    pub fn add_sigsegv_handler_duration(&self, elapsed: Duration) {
+        let elapsed_nanos = elapsed.as_nanos() as u64;
+        self.metrics
+            .sigsegv_handler_duration_nanos
+            .fetch_add(elapsed_nanos, Ordering::Relaxed);
     }
 }
 
@@ -684,7 +673,7 @@ pub fn sigsegv_fault_handler_new(
                 dirty_bitmap.restrict_range_to_unmarked(faulting_page, prefetch_range);
             if accessed_bitmap.is_marked(faulting_page) {
                 tracker
-                    .read_before_write_stats
+                    .metrics
                     .read_before_write_count
                     .fetch_add(1, Ordering::Relaxed);
                 // Ensure that all pages in the range have already been accessed because we are
@@ -705,14 +694,14 @@ pub fn sigsegv_fault_handler_new(
                     .unwrap()
                 };
                 tracker
-                    .memory_instructions_stats
+                    .metrics
                     .mprotect_count
                     .fetch_add(1, Ordering::Relaxed);
                 dirty_bitmap.mark_range(&prefetch_range);
                 tracker.add_dirty_pages(faulting_page, prefetch_range);
             } else {
                 tracker
-                    .read_before_write_stats
+                    .metrics
                     .direct_write_count
                     .fetch_add(1, Ordering::Relaxed);
                 // The first access to the page is a write access. This is a good case because
@@ -801,10 +790,7 @@ fn apply_memory_instructions(
                 FileDescriptor { fd },
                 offset,
             ) => {
-                tracker
-                    .memory_instructions_stats
-                    .mmap_count
-                    .fetch_add(1, Ordering::Relaxed);
+                tracker.metrics.mmap_count.fetch_add(1, Ordering::Relaxed);
                 unsafe {
                     mmap(
                         tracker.page_start_addr_from(range.start),
@@ -819,7 +805,7 @@ fn apply_memory_instructions(
                 };
             }
             ic_replicated_state::page_map::MemoryMapOrData::Data(data) => {
-                tracker.memory_instructions_stats.copy_page_count.fetch_add(
+                tracker.metrics.copy_page_count.fetch_add(
                     (range.end.get() - range.start.get()) as usize,
                     Ordering::Relaxed,
                 );
@@ -836,7 +822,7 @@ fn apply_memory_instructions(
                         .unwrap()
                     };
                     tracker
-                        .memory_instructions_stats
+                        .metrics
                         .mprotect_count
                         .fetch_add(1, Ordering::Relaxed);
                 }
@@ -867,7 +853,7 @@ fn apply_memory_instructions(
             .unwrap()
         };
         tracker
-            .memory_instructions_stats
+            .metrics
             .mprotect_count
             .fetch_add(1, Ordering::Relaxed);
     }

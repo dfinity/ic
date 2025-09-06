@@ -912,12 +912,7 @@ impl WasmtimeInstance {
                 .lock()
                 .unwrap();
 
-            let wasm_sigsegv_handler_duration = Duration::from_nanos(
-                wasm_tracker
-                    .metrics
-                    .sigsegv_handler_duration_nanos
-                    .load(Ordering::Relaxed),
-            );
+            let wasm_sigsegv_handler_duration = wasm_tracker.sigsegv_handler_duration();
 
             // We don't have a tracker for stable memory.
             if !self
@@ -949,12 +944,7 @@ impl WasmtimeInstance {
                 .lock()
                 .unwrap();
 
-            let stable_sigsegv_handler_duration = Duration::from_nanos(
-                stable_tracker
-                    .metrics
-                    .sigsegv_handler_duration_nanos
-                    .load(Ordering::Relaxed),
-            );
+            let stable_sigsegv_handler_duration = stable_tracker.sigsegv_handler_duration();
 
             Ok(PageAccessResults {
                 wasm_dirty_pages,
