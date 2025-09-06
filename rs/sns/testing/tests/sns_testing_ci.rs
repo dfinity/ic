@@ -18,7 +18,7 @@ use ic_sns_testing::utils::{
     SnsTestingNetworkValidationError, TREASURY_PRINCIPAL_ID,
 };
 use icp_ledger::Tokens;
-use pocket_ic::common::rest::{EmptyConfig, IcpFeatures};
+use pocket_ic::common::rest::{IcpFeatures, IcpFeaturesConfig};
 use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -38,13 +38,13 @@ pub struct TestCanisterInitArgs {
 // Hence, we deploy the NNS dapp separately for now.
 fn all_icp_features_but_nns_ui() -> IcpFeatures {
     IcpFeatures {
-        registry: Some(EmptyConfig {}),
-        cycles_minting: Some(EmptyConfig {}),
-        icp_token: Some(EmptyConfig {}),
-        cycles_token: Some(EmptyConfig {}),
-        nns_governance: Some(EmptyConfig {}),
-        sns: Some(EmptyConfig {}),
-        ii: Some(EmptyConfig {}),
+        registry: Some(IcpFeaturesConfig::DefaultConfig),
+        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
+        icp_token: Some(IcpFeaturesConfig::DefaultConfig),
+        cycles_token: Some(IcpFeaturesConfig::DefaultConfig),
+        nns_governance: Some(IcpFeaturesConfig::DefaultConfig),
+        sns: Some(IcpFeaturesConfig::DefaultConfig),
+        ii: Some(IcpFeaturesConfig::DefaultConfig),
         nns_ui: None,
     }
 }
