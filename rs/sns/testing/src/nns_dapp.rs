@@ -1,15 +1,9 @@
-use candid::{CandidType, Encode, Nat, Principal};
-use canister_test::Wasm;
+use candid::{Nat, Principal};
 use futures::future::join_all;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
-use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister_with_controllers;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
-    LEDGER_INDEX_CANISTER_ID, NNS_UI_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
-    SNS_WASM_CANISTER_ID,
-};
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_nns_governance_api::{
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
     neuron::DissolveState, ClaimOrRefreshNeuronFromAccount,
@@ -166,63 +160,5 @@ pub async fn bootstrap_nns(
     .0;
     assert!(res.is_none());
 
-    install_frontend_nns_canisters(pocket_ic).await;
-
     deciding_neuron_id
-}
-
-#[derive(CandidType)]
-struct SnsAggregatorPayload {
-    pub update_interval_ms: u64,
-    pub fast_interval_ms: u64,
-}
-
-#[derive(CandidType)]
-struct NnsDappPayload {
-    args: Vec<(String, String)>,
-}
-
-async fn install_frontend_nns_canisters(pocket_ic: &PocketIc) {
-    let features = &[];
-
-    let nns_dapp_wasm = Wasm::from_location_specified_by_env_var("nns_dapp", features).unwrap();
-
-    if !check_canister_installed(pocket_ic, &NNS_UI_CANISTER_ID).await {
-        // TODO @rvem: perhaps, we may start using configurable endpoint for the IC http interface
-        // which should be considered in NNS dapp configuration.
-        let gateway_port = 8080;
-        let localhost_url = format!("http://localhost:{}", gateway_port);
-        let args = vec![
-              ("API_HOST".to_string(), localhost_url.clone()),
-              ("CYCLES_MINTING_CANISTER_ID".to_string(), CYCLES_MINTING_CANISTER_ID.to_string()),
-              ("DFX_NETWORK".to_string(), "local".to_string()),
-              ("FEATURE_FLAGS".to_string(), "{\"DISABLE_CKTOKENS\":true,\"DISABLE_IMPORT_TOKEN_VALIDATION_FOR_TESTING\":false,\"ENABLE_APY_PORTFOLIO\":true,\"ENABLE_CKTESTBTC\":false,\"ENABLE_DISBURSE_MATURITY\":true,\"ENABLE_LAUNCHPAD_REDESIGN\":true,\"ENABLE_NEW_TABLES\":true,\"ENABLE_NNS_TOPICS\":false,\"ENABLE_SNS_TOPICS\":true}".to_string()),
-              ("FETCH_ROOT_KEY".to_string(), "true".to_string()),
-              ("GOVERNANCE_CANISTER_ID".to_string(), GOVERNANCE_CANISTER_ID.to_string()),
-              ("HOST".to_string(), localhost_url.clone()),
-              /* ICP swap canister is not deployed by sns-testing! */
-              ("ICP_SWAP_URL".to_string(), format!("http://uvevg-iyaaa-aaaak-ac27q-cai.raw.localhost:{}/", gateway_port)),
-              ("IDENTITY_SERVICE_URL".to_string(), format!("http://{}.localhost:{}", IDENTITY_CANISTER_ID, gateway_port)),
-              ("INDEX_CANISTER_ID".to_string(), LEDGER_INDEX_CANISTER_ID.to_string()),
-              ("LEDGER_CANISTER_ID".to_string(), LEDGER_CANISTER_ID.to_string()),
-              ("OWN_CANISTER_ID".to_string(), NNS_UI_CANISTER_ID.to_string()),
-              /* plausible.io API might not work anyway so the value of `PLAUSIBLE_DOMAIN` is pretty much arbitrary */
-              ("PLAUSIBLE_DOMAIN".to_string(), format!("{}.localhost", NNS_UI_CANISTER_ID)),
-              ("ROBOTS".to_string(), "".to_string()),
-              ("SNS_AGGREGATOR_URL".to_string(), format!("http://{}.localhost:{}", SNS_AGGREGATOR_CANISTER_ID, gateway_port)),
-              ("STATIC_HOST".to_string(), localhost_url.clone()),
-              ("TVL_CANISTER_ID".to_string(), NNS_UI_CANISTER_ID.to_string()),
-              ("WASM_CANISTER_ID".to_string(), SNS_WASM_CANISTER_ID.to_string()),
-            ];
-        let nns_dapp_payload = NnsDappPayload { args };
-        install_canister_with_controllers(
-            pocket_ic,
-            "nns-dapp",
-            NNS_UI_CANISTER_ID,
-            Encode!(&nns_dapp_payload).unwrap(),
-            nns_dapp_wasm,
-            vec![ROOT_CANISTER_ID.get()],
-        )
-        .await;
-    };
 }

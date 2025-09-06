@@ -1327,15 +1327,6 @@ pub async fn create_instance(
     };
     let auto_progress_enabled = auto_progress.is_some();
 
-    if instance_config.http_gateway_config.is_some() && !auto_progress_enabled {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(rest::CreateInstanceResponse::Error {
-                message: "Creating an HTTP gateway requires `AutoProgress` to be enabled via `initial_time`.".to_string()
-            }),
-        );
-    }
-
     if let Some(ref icp_features) = instance_config.icp_features {
         // using `let IcpFeatures { }` with explicit field names
         // to force an update after adding a new field to `IcpFeatures`
