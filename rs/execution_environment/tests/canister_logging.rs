@@ -1,5 +1,6 @@
 use ic_base_types::PrincipalId;
 use ic_config::execution_environment::Config as ExecutionConfig;
+use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SubnetConfig;
 use ic_management_canister_types_private::{
     self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
@@ -72,18 +73,28 @@ fn readable_logs_without_backtraces(
         .collect()
 }
 
-fn setup_env() -> StateMachine {
+fn setup_env_with(replicated_inter_canister_log_fetch: FlagStatus) -> StateMachine {
     let subnet_type = SubnetType::Application;
     let mut subnet_config = SubnetConfig::new(subnet_type);
     subnet_config.scheduler_config.max_instructions_per_round = MAX_INSTRUCTIONS_PER_ROUND;
     subnet_config.scheduler_config.max_instructions_per_message = MAX_INSTRUCTIONS_PER_MESSAGE;
     subnet_config.scheduler_config.max_instructions_per_slice = MAX_INSTRUCTIONS_PER_SLICE;
-    let config = StateMachineConfig::new(subnet_config, ExecutionConfig::default());
+    let config = StateMachineConfig::new(
+        subnet_config,
+        ExecutionConfig {
+            replicated_inter_canister_log_fetch,
+            ..Default::default()
+        },
+    );
     StateMachineBuilder::new()
         .with_config(Some(config))
         .with_subnet_type(subnet_type)
         .with_checkpoints_enabled(false)
         .build()
+}
+
+fn setup_env() -> StateMachine {
+    setup_env_with(FlagStatus::Disabled)
 }
 
 fn create_canister(env: &StateMachine, settings: CanisterSettingsArgs) -> CanisterId {
@@ -161,29 +172,31 @@ fn test_fetch_canister_logs_via_submit_ingress() {
 }
 
 #[test]
-fn test_fetch_canister_logs_via_execute_ingress() {
-    // Test fetch_canister_logs API call results.
-    let env = setup_env();
-    let canister_id = create_and_install_canister(
-        &env,
-        CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibilityV2::Public)
-            .build(),
-        wat_canister().build_wasm(),
-    );
-    let result = env.execute_ingress_as(
-        PrincipalId::new_anonymous(), // Any public user.
-        CanisterId::ic_00(),
-        "fetch_canister_logs",
-        FetchCanisterLogsRequest::new(canister_id).encode(),
-    );
-    assert_eq!(
-        result,
-        Err(UserError::new(
-            ErrorCode::CanisterRejectedMessage,
-            "ic00 method fetch_canister_logs can not be called via ingress messages",
-        ))
-    );
+fn test_fetch_canister_logs_via_replicated_ingress() {
+    // Test fetch_canister_logs call fails for replicated ingress.
+    for replicated_inter_canister_log_fetch in [FlagStatus::Disabled, FlagStatus::Enabled] {
+        let env = setup_env_with(replicated_inter_canister_log_fetch);
+        let canister_id = create_and_install_canister(
+            &env,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_visibility(LogVisibilityV2::Public)
+                .build(),
+            wat_canister().build_wasm(),
+        );
+        let result = env.execute_ingress_as(
+            PrincipalId::new_anonymous(), // Any public user.
+            CanisterId::ic_00(),
+            "fetch_canister_logs",
+            FetchCanisterLogsRequest::new(canister_id).encode(),
+        );
+        assert_eq!(
+            result,
+            Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                "ic00 method fetch_canister_logs can not be called via ingress messages",
+            ))
+        );
+    }
 }
 
 #[test]
@@ -273,6 +286,7 @@ fn test_fetch_canister_logs_via_inter_canister_update_call() {
     let reject_message = get_reject(result);
     let expected_message =
         "fetch_canister_logs API is only accessible to end users in non-replicated mode";
+    // let expected_message = "fetch_canister_logs API is only accessible in non-replicated mode";
     assert!(
         reject_message.contains(expected_message),
         "Expected: {}\nActual: {}",
@@ -281,6 +295,70 @@ fn test_fetch_canister_logs_via_inter_canister_update_call() {
     );
 }
 
+/*
+bazel test //rs/execution_environment:execution_environment_misc_integration_tests/canister_logging_test \
+  --test_output=streamed \
+  --test_arg=--nocapture \
+  --test_arg=test_fetch_canister_logs_via_inter_canister_update_call
+
+*/
+//#[ignore]
+#[test]
+fn test_fetch_canister_logs_via_inter_canister_update_call_enabled() {
+    let env = setup_env_with(FlagStatus::Enabled);
+    let canister_a = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new().build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+    let canister_b = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Public)
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"message"))
+            .build_wasm(),
+    );
+
+    env.advance_time(Duration::from_secs(1));
+    let timestamp1 = env.time();
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+    env.advance_time(Duration::from_secs(1));
+
+    let timestamp2 = env.time();
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+
+    env.advance_time(Duration::from_secs(1));
+    let timestamp3 = env.time();
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+
+    let result = env.execute_ingress(
+        canister_a,
+        "update",
+        wasm()
+            .call_with_cycles(
+                CanisterId::ic_00(),
+                "fetch_canister_logs",
+                call_args()
+                    .other_side(FetchCanisterLogsRequest::new(canister_b).encode())
+                    .on_reject(wasm().reject_message().reject()),
+                Cycles::new(2_000_000),
+            )
+            .build(),
+    );
+    assert_eq!(
+        readable_logs_without_backtraces(result),
+        vec![
+            (0, timestamp1, "message".to_string()),
+            (1, timestamp2, "message".to_string()),
+            (2, timestamp3, "message".to_string()),
+        ]
+    );
+}
+
+// TODO: temporary ignore, because the reject message changed to "register canister not found in get_active_canister"
+//#[ignore]
 #[test]
 fn test_fetch_canister_logs_via_composite_query_call() {
     // Test that fetch_canister_logs API is not accessible via composite query call.
@@ -318,6 +396,77 @@ fn test_fetch_canister_logs_via_composite_query_call() {
             )
             .build(),
     );
+
+    // This is expected to fail, because fetch_canister_logs is not accessible via composite query.
+    let error = actual_result.unwrap_err();
+    assert_eq!(error.code(), ErrorCode::CanisterDidNotReply);
+    // TODO(EXC-1655): fix reject response propagation.
+    let expected_error_message = "did not produce a response";
+    assert!(
+        error.description().contains(expected_error_message),
+        "Expected: {}\nActual: {}",
+        expected_error_message,
+        error.description()
+    );
+}
+
+/*
+bazel test //rs/execution_environment:execution_environment_misc_integration_tests/canister_logging_test \
+  --test_output=streamed \
+  --test_arg=--nocapture \
+  --test_arg=test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enabled
+
+*/
+#[test]
+fn test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enabled() {
+    // Test that fetch_canister_logs API is not accessible via composite query call.
+    // There are 3 actors with the following controller relatioship: user -> canister_a -> canister_b.
+    // The user uses composite_query to canister_a to fetch logs of canister_b, which should fail.
+    //let (env, canister_a, user) = setup_with_controller(UNIVERSAL_CANISTER_WASM.to_vec());
+
+    let user = PrincipalId::new_user_test_id(42);
+    let env = setup_env_with(FlagStatus::Enabled);
+    let canister_a = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(LogVisibilityV2::Controllers)
+            .with_controllers(vec![user])
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
+
+    // Create canister_b controlled by canister_a.
+    let canister_b = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![canister_a.get()])
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"message"))
+            .build_wasm(),
+    );
+    // Record some logs in canister_b.
+    let _ = env.execute_ingress(canister_b, "test", vec![]);
+
+    // User attempts to fetch logs of canister_b via canister_a.
+    let actual_result = env.query_as(
+        user,
+        canister_a,
+        "composite_query",
+        wasm()
+            .call_simple(
+                CanisterId::ic_00(),
+                "fetch_canister_logs",
+                call_args()
+                    .other_side(FetchCanisterLogsRequest::new(canister_b).encode())
+                    .on_reject(wasm().reject_message().reject()),
+            )
+            .build(),
+    );
+
+    println!("ABC user: {user:?}");
+    println!("ABC canister_a: {canister_a:?}");
+    println!("ABC canister_b: {canister_b:?}");
 
     // This is expected to fail, because fetch_canister_logs is not accessible via composite query.
     let error = actual_result.unwrap_err();
