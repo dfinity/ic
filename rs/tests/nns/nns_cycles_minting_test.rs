@@ -317,7 +317,7 @@ pub fn test(env: TestEnv) {
                 .await
                 .unwrap();
 
-        assert_eq!(new_canister_status.controller(), controller_pid);
+        assert_eq!(new_canister_status.controllers(), vec![controller_pid]);
         let config = CyclesAccountManagerConfig::application_subnet();
         let fees = scale_cycles(
             config.canister_creation_fee
@@ -378,7 +378,7 @@ pub fn test(env: TestEnv) {
             .await
             .unwrap();
 
-        assert_eq!(new_canister_status.controller(), controller_pid);
+        assert_eq!(new_canister_status.controllers(), vec![controller_pid]);
         assert_eq!(
             new_canister_status.cycles(),
             icpts_to_cycles.to_cycles(nns_amount).get()
