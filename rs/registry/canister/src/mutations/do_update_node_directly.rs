@@ -14,7 +14,7 @@ use ic_protobuf::registry::{crypto::v1::PublicKey, subnet::v1::SubnetRecord};
 use ic_registry_canister_api::UpdateNodeDirectlyPayload;
 use ic_registry_keys::{make_crypto_node_key, make_node_record_key};
 use ic_registry_transport::update;
-use ic_types::{PrincipalId, crypto::KeyPurpose};
+use ic_types::{crypto::KeyPurpose, PrincipalId};
 
 // Since nodes update their keys in turn, every potential update delay will carry over to all
 // subsequent slots. At some point we might end up in a situation where many nodes race for an update,
@@ -110,20 +110,21 @@ impl Registry {
         // 4. Disallow updating if the most recent key update on the subnet is not old enough.
         //    If the node has no timestamp, skip all checks.
         if previous_timestamp_set
-            && let Some(last_key_update_timestamp) = self.last_key_update_on_subnet(subnet_record) {
-                // The node is on a signing subnet, and has a timestamp
-                let key_rotation_period_on_subnet =
-                    (idkg_key_rotation_period_ms as f64 / subnet_size as f64 * DELAY_COMPENSATION)
-                        as u64;
-                let sum = last_key_update_timestamp
-                    .checked_add(key_rotation_period_on_subnet)
-                    .ok_or_else(|| {
-                        "Integer overflow when adding key rotation period on subnet.".to_string()
-                    })?;
-                if Duration::from_millis(sum) > duration_since_unix_epoch {
-                    return Err("the signing subnet had a key update recently".to_string());
-                }
+            && let Some(last_key_update_timestamp) = self.last_key_update_on_subnet(subnet_record)
+        {
+            // The node is on a signing subnet, and has a timestamp
+            let key_rotation_period_on_subnet = (idkg_key_rotation_period_ms as f64
+                / subnet_size as f64
+                * DELAY_COMPENSATION) as u64;
+            let sum = last_key_update_timestamp
+                .checked_add(key_rotation_period_on_subnet)
+                .ok_or_else(|| {
+                    "Integer overflow when adding key rotation period on subnet.".to_string()
+                })?;
+            if Duration::from_millis(sum) > duration_since_unix_epoch {
+                return Err("the signing subnet had a key update recently".to_string());
             }
+        }
 
         // 5. Deserialize and validate the pk
         let valid_idkg_dealing_encryption_pk = {
@@ -205,7 +206,7 @@ mod test {
     use ic_crypto_node_key_validation::ValidNodePublicKeys;
     use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
     use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, SubnetRecord};
-    use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig};
+    use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
     use ic_test_utilities_types::ids::subnet_test_id;
     use std::ops::Add;
 

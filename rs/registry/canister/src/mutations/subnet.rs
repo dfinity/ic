@@ -7,7 +7,7 @@ use crate::{
 use candid::Encode;
 use dfn_core::call;
 use ic_base_types::{
-    CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId, subnet_id_into_protobuf,
+    subnet_id_into_protobuf, CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
 };
 use ic_cdk::println;
 use ic_management_canister_types_private::{
@@ -388,13 +388,14 @@ impl Registry {
 
             // Ensure the subnet being targeted is not the same as the subnet being recovered.
             if let Some(own_subnet_id) = own_subnet_id
-                && subnet_id == &own_subnet_id {
-                    return Err(format!(
-                        "Attempted to recover chain key '{}' by requesting it from itself. \
+                && subnet_id == &own_subnet_id
+            {
+                return Err(format!(
+                    "Attempted to recover chain key '{}' by requesting it from itself. \
                          Subnets cannot recover chain keys from themselves.",
-                        key_id,
-                    ));
-                }
+                    key_id,
+                ));
+            }
 
             // Ensure that the targeted subnet actually holds the key.
             let subnet_id = SubnetId::new(*subnet_id);

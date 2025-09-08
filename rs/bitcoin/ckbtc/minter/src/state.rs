@@ -757,9 +757,10 @@ impl CkBtcMinterState {
 
         if let Some(req) = self.pending_retrieve_btc_requests.last()
             && let Some(last_submission_time) = self.last_transaction_submission_time_ns
-            && self.max_time_in_queue_nanos < req.received_at.saturating_sub(last_submission_time) {
-                return true;
-            }
+            && self.max_time_in_queue_nanos < req.received_at.saturating_sub(last_submission_time)
+        {
+            return true;
+        }
 
         false
     }

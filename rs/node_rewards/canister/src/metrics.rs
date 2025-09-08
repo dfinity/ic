@@ -4,10 +4,10 @@ use candid::Principal;
 use ic_base_types::{NodeId, SubnetId};
 use ic_cdk::api::call::CallResult;
 use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
-use ic_node_rewards_canister_protobuf::KeyRange;
 use ic_node_rewards_canister_protobuf::pb::ic_node_rewards::v1::{
     SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue,
 };
+use ic_node_rewards_canister_protobuf::KeyRange;
 use ic_stable_structures::StableBTreeMap;
 use itertools::Itertools;
 use rewards_calculation::types::{DayUtc, NodeMetricsDailyRaw, SubnetMetricsDailyKey, UnixTsNanos};
@@ -211,25 +211,26 @@ where
 
         let mut last_total_metrics: HashMap<_, _> = HashMap::new();
         if let Some((timestamp_nanos, _)) = subnets_metrics_by_day.first_key_value()
-            && timestamp_nanos < &start_day {
-                last_total_metrics = subnets_metrics_by_day
-                    .pop_first()
-                    .unwrap()
-                    .1
-                    .into_iter()
-                    .flat_map(|(k, v)| {
-                        v.nodes_metrics.into_iter().map(move |node_metrics| {
+            && timestamp_nanos < &start_day
+        {
+            last_total_metrics = subnets_metrics_by_day
+                .pop_first()
+                .unwrap()
+                .1
+                .into_iter()
+                .flat_map(|(k, v)| {
+                    v.nodes_metrics.into_iter().map(move |node_metrics| {
+                        (
+                            (k.subnet_id, node_metrics.node_id),
                             (
-                                (k.subnet_id, node_metrics.node_id),
-                                (
-                                    node_metrics.num_blocks_proposed_total,
-                                    node_metrics.num_blocks_failed_total,
-                                ),
-                            )
-                        })
+                                node_metrics.num_blocks_proposed_total,
+                                node_metrics.num_blocks_failed_total,
+                            ),
+                        )
                     })
-                    .collect();
-            };
+                })
+                .collect();
+        };
 
         for (_, subnets_metrics) in subnets_metrics_by_day {
             // current_total_metrics holds the total metrics for the current day per node per subnet.

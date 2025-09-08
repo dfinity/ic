@@ -8,7 +8,7 @@ use serde::Serialize;
 use ic_base_types::PrincipalId;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;
-use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue, registry_mutation};
+use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
 
 use prost::Message;
 use std::collections::BTreeMap;
@@ -73,9 +73,10 @@ impl Registry {
         }
 
         if let Some(set_ipv6_none) = payload.set_ipv6_to_none
-            && set_ipv6_none {
-                node_operator_record.ipv6 = None;
-            }
+            && set_ipv6_none
+        {
+            node_operator_record.ipv6 = None;
+        }
 
         if let Some(max_rewardable_nodes) = payload.max_rewardable_nodes {
             // It might make sense to allow setting this to None, but for now we keep the same

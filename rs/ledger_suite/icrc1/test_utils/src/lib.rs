@@ -1,12 +1,12 @@
 use candid::{Nat, Principal};
-use ic_agent::Identity;
 use ic_agent::identity::BasicIdentity;
+use ic_agent::Identity;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_ed25519::{PrivateKey as Ed25519SecretKey, PrivateKeyFormat};
 use ic_icrc1::{Block, Operation, Transaction};
-use ic_ledger_core::Tokens;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::TokensType;
+use ic_ledger_core::Tokens;
 use ic_ledger_hash_of::HashOf;
 use ic_secp256k1::PrivateKey as Secp256k1PrivateKey;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -542,9 +542,10 @@ impl TransactionsAndBalances {
 
                     // Remove allowance entry if it's now zero
                     if let Some(allowance) = self.allowances.get(&(from, spender_account))
-                        && allowance.get_e8s() == 0 {
-                            self.allowances.remove(&(from, spender_account));
-                        }
+                        && allowance.get_e8s() == 0
+                    {
+                        self.allowances.remove(&(from, spender_account));
+                    }
                 }
             }
             Operation::Approve {

@@ -3,8 +3,8 @@ use std::{
     future::Future,
     hash::Hash,
     sync::{
-        Arc,
         atomic::{AtomicBool, Ordering},
+        Arc,
     },
 };
 
@@ -97,9 +97,10 @@ where
                 self.tasks_by_key.remove(key);
             }
             if let Some(Err(e)) = &result
-                && e.is_cancelled() {
-                    continue;
-                }
+                && e.is_cancelled()
+            {
+                continue;
+            }
             break result;
         };
 

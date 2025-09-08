@@ -1,6 +1,6 @@
 use crate::invariants::common::{
-    InvariantCheckError, RegistrySnapshot, get_node_records_from_snapshot,
-    get_subnet_ids_from_snapshot, get_value_from_snapshot,
+    get_node_records_from_snapshot, get_subnet_ids_from_snapshot, get_value_from_snapshot,
+    InvariantCheckError, RegistrySnapshot,
 };
 
 use std::{
@@ -16,7 +16,7 @@ use ic_protobuf::registry::firewall::v1::{
     FirewallAction, FirewallRule, FirewallRuleDirection, FirewallRuleSet,
 };
 use ic_registry_keys::{
-    FirewallRulesScope, get_firewall_rules_record_principal_id, make_firewall_rules_record_key,
+    get_firewall_rules_record_principal_id, make_firewall_rules_record_key, FirewallRulesScope,
 };
 
 const COMMENT_SIZE: usize = 255;
@@ -78,15 +78,17 @@ fn validate_firewall_rule_principals(
         let record_key = String::from_utf8(key.clone()).unwrap();
         if let Some(principal_id) = get_firewall_rules_record_principal_id(&record_key)
             && let Some(firewall_rules) = get_firewall_rules(snapshot, record_key.to_string())
-                && !principal_ids.contains(&principal_id) && !firewall_rules.entries.is_empty() {
-                    return Err(InvariantCheckError {
-                        msg: format!(
-                            "Firewall rule entry refers to non-existing principal: {:?}",
-                            record_key
-                        ),
-                        source: None,
-                    });
-                }
+            && !principal_ids.contains(&principal_id)
+            && !firewall_rules.entries.is_empty()
+        {
+            return Err(InvariantCheckError {
+                msg: format!(
+                    "Firewall rule entry refers to non-existing principal: {:?}",
+                    record_key
+                ),
+                source: None,
+            });
+        }
     }
 
     Ok(())
@@ -202,23 +204,24 @@ fn validate_firewall_rule(rule: &FirewallRule) -> Result<(), InvariantCheckError
 
     //Check that if a user is specified, it is not empty nor too long
     if let Some(user) = &rule.user
-        && (user.is_empty() || user.len() > USER_SIZE) {
-            return Err(InvariantCheckError {
-                msg: format!("User name {:?} is invalid", user),
-                source: None,
-            });
-        }
+        && (user.is_empty() || user.len() > USER_SIZE)
+    {
+        return Err(InvariantCheckError {
+            msg: format!("User name {:?} is invalid", user),
+            source: None,
+        });
+    }
 
     // Check that the direction is one of the existing enum values
     if let Some(direction) = rule.direction
         && FirewallRuleDirection::try_from(direction).unwrap_or(FirewallRuleDirection::Unspecified)
             == FirewallRuleDirection::Unspecified
-        {
-            return Err(InvariantCheckError {
-                msg: format!("Direction {:?} is invalid", direction,),
-                source: None,
-            });
-        }
+    {
+        return Err(InvariantCheckError {
+            msg: format!("Direction {:?} is invalid", direction,),
+            source: None,
+        });
+    }
 
     Ok(())
 }

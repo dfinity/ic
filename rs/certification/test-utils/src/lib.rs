@@ -1,5 +1,5 @@
 use ic_crypto_internal_seed::Seed;
-use rand::{CryptoRng, Rng, RngCore, thread_rng};
+use rand::{thread_rng, CryptoRng, Rng, RngCore};
 use serde::Serialize;
 
 use ic_crypto_internal_threshold_sig_bls12381::api::{
@@ -8,17 +8,17 @@ use ic_crypto_internal_threshold_sig_bls12381::api::{
 use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_crypto_tree_hash::{
-    Digest, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, MixedHashTree,
-    WitnessGenerator, flatmap,
+    flatmap, Digest, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree,
+    MixedHashTree, WitnessGenerator,
 };
 use ic_crypto_utils_threshold_sig_der::public_key_to_der;
 use ic_types::messages::Blob;
 use ic_types::{
-    CanisterId, CryptoHashOfPartialState, NumberOfNodes, SubnetId,
     consensus::certification::CertificationContent,
     crypto::Signable,
+    crypto::{threshold_sig::ThresholdSigPublicKey, CryptoHash},
     crypto::{CombinedThresholdSig, CombinedThresholdSigOf},
-    crypto::{CryptoHash, threshold_sig::ThresholdSigPublicKey},
+    CanisterId, CryptoHashOfPartialState, NumberOfNodes, SubnetId,
 };
 
 const REPLICA_TIME: u64 = 1234567;
@@ -346,9 +346,10 @@ impl CertificateBuilder {
             return subnet_id;
         }
         if let Some(delegation_builder) = &self.delegation
-            && let CertificateData::SubnetData { subnet_id, .. } = delegation_builder.data {
-                return subnet_id;
-            }
+            && let CertificateData::SubnetData { subnet_id, .. } = delegation_builder.data
+        {
+            return subnet_id;
+        }
         panic!(
             "No subnet_id present. Either set a delegation with SubnetData or set the subnet_id manually using 'with_delegation_subnet_id'"
         )

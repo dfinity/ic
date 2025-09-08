@@ -8,9 +8,9 @@ use ic_protobuf::registry::{
 };
 use ic_registry_canister_chunkify::decode_high_capacity_registry_value;
 use ic_registry_keys::{
-    FirewallRulesScope, NODE_RECORD_KEY_PREFIX, make_crypto_node_key, make_crypto_tls_cert_key,
-    make_firewall_rules_record_key, make_node_operator_record_key, make_node_record_key,
-    make_subnet_list_record_key,
+    make_crypto_node_key, make_crypto_tls_cert_key, make_firewall_rules_record_key,
+    make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key,
+    FirewallRulesScope, NODE_RECORD_KEY_PREFIX,
 };
 use ic_registry_transport::{
     delete, insert,
@@ -214,7 +214,6 @@ pub fn make_remove_node_registry_mutations(
     ];
 
     let latest_version = registry.latest_version();
-    
 
     keys_to_maybe_remove
         .iter()

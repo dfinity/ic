@@ -489,8 +489,8 @@ pub fn replay<I: CheckInvariants>(
                         state.distribute_kyt_fee(kyt_provider, amount)
                 {
                     return Err(ReplayLogError::InconsistentLog(format!(
-                            "Attempted to distribute {amount} to {kyt_provider}, causing an overdraft of {overdraft}"
-                        )));
+                        "Attempted to distribute {amount} to {kyt_provider}, causing an overdraft of {overdraft}"
+                    )));
                 }
             }
             #[allow(deprecated)]

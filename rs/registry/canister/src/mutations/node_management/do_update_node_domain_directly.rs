@@ -54,9 +54,10 @@ impl Registry {
 
         // Ensure domain name is valid
         if let Some(ref domain) = domain
-            && !domain_to_ascii_strict(domain).is_ok_and(|s| s == *domain) {
-                panic!("invalid domain");
-            }
+            && !domain_to_ascii_strict(domain).is_ok_and(|s| s == *domain)
+        {
+            panic!("invalid domain");
+        }
         node_record.domain = domain;
 
         // Create the mutation

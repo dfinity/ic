@@ -82,9 +82,10 @@ impl PageAllocatorRegistryCore {
         F: FnOnce() -> Arc<PageAllocatorInner>,
     {
         if let Some(weak) = self.table.get(id)
-            && let Some(pa) = weak.upgrade() {
-                return pa;
-            }
+            && let Some(pa) = weak.upgrade()
+        {
+            return pa;
+        }
 
         let pa = f();
 

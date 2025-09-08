@@ -3,39 +3,39 @@ pub mod subnet_call_context_manager;
 #[cfg(test)]
 mod tests;
 
-use crate::CanisterQueues;
 use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
-use crate::{CheckpointLoadingMetrics, canister_state::system_state::CyclesUseCase};
+use crate::CanisterQueues;
+use crate::{canister_state::system_state::CyclesUseCase, CheckpointLoadingMetrics};
 use ic_base_types::{CanisterId, SnapshotId};
 use ic_btc_replica_types::BlockBlob;
-use ic_certification_version::{CURRENT_CERTIFICATION_VERSION, CertificationVersion};
+use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_limits::MAX_INGRESS_TTL;
 use ic_management_canister_types_private::{
-    IC_00, MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse,
+    MasterPublicKeyId, NodeMetrics, NodeMetricsHistoryResponse, IC_00,
 };
 use ic_registry_routing_table::{
-    CANISTER_IDS_PER_SUBNET, CanisterIdRanges, CanisterMigrations, RoutingTable,
-    canister_id_into_u64, difference, intersection,
+    canister_id_into_u64, difference, intersection, CanisterIdRanges, CanisterMigrations,
+    RoutingTable, CANISTER_IDS_PER_SUBNET,
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
-    CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
     batch::BlockmakerMetrics,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
     messages::{CanisterCall, MessageId, Payload, RejectContext, RequestOrResponse, Response},
     node_id_into_protobuf, node_id_try_from_option,
     nominal_cycles::NominalCycles,
-    state_sync::{CURRENT_STATE_SYNC_VERSION, StateSyncVersion},
+    state_sync::{StateSyncVersion, CURRENT_STATE_SYNC_VERSION},
     subnet_id_into_protobuf, subnet_id_try_from_protobuf,
     time::{Time, UNIX_EPOCH},
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
         StreamSlice,
     },
+    CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -931,12 +931,13 @@ impl Stream {
     pub fn push(&mut self, message: RequestOrResponse) {
         self.messages_size_bytes += message.count_bytes();
         if let RequestOrResponse::Response(response) = &message
-            && !response.is_best_effort() {
-                *self
-                    .guaranteed_response_counts
-                    .entry(response.respondent)
-                    .or_insert(0) += 1;
-            }
+            && !response.is_best_effort()
+        {
+            *self
+                .guaranteed_response_counts
+                .entry(response.respondent)
+                .or_insert(0) += 1;
+        }
         self.messages.push(message);
         debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
         debug_assert_eq!(
@@ -985,21 +986,22 @@ impl Stream {
             debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
 
             if let RequestOrResponse::Response(response) = &msg
-                && !response.is_best_effort() {
-                    match self
-                        .guaranteed_response_counts
-                        .get_mut(&response.respondent)
-                    {
-                        Some(0) | None => {
-                            debug_assert!(false);
-                            self.guaranteed_response_counts.remove(&response.respondent);
-                        }
-                        Some(1) => {
-                            self.guaranteed_response_counts.remove(&response.respondent);
-                        }
-                        Some(count) => *count -= 1,
+                && !response.is_best_effort()
+            {
+                match self
+                    .guaranteed_response_counts
+                    .get_mut(&response.respondent)
+                {
+                    Some(0) | None => {
+                        debug_assert!(false);
+                        self.guaranteed_response_counts.remove(&response.respondent);
                     }
+                    Some(1) => {
+                        self.guaranteed_response_counts.remove(&response.respondent);
+                    }
+                    Some(count) => *count -= 1,
                 }
+            }
             debug_assert_eq!(
                 Self::calculate_guaranteed_response_counts(&self.messages),
                 self.guaranteed_response_counts
@@ -1008,10 +1010,11 @@ impl Stream {
             // If we received a reject signal for this message, collect it in
             // `rejected_messages`.
             if let Some(reject_signal) = reject_signals.peek()
-                && reject_signal.index == index {
-                    rejected_messages.push((reject_signal.reason, msg));
-                    reject_signals.next();
-                }
+                && reject_signal.index == index
+            {
+                rejected_messages.push((reject_signal.reason, msg));
+                reject_signals.next();
+            }
         }
         rejected_messages
     }
@@ -1143,19 +1146,20 @@ impl IngressHistoryState {
         // "terminal" ingress status. This way we are not risking deleting any status
         // for a message that is still not in a terminal status.
         if let IngressStatus::Known { state, .. } = &status
-            && state.is_terminal() {
-                let timeout = time + MAX_INGRESS_TTL;
+            && state.is_terminal()
+        {
+            let timeout = time + MAX_INGRESS_TTL;
 
-                // Reset `self.next_terminal_time` in case it is after the current timeout
-                // and the entry is completed or failed.
-                if self.next_terminal_time > timeout && state.is_terminal_with_payload() {
-                    self.next_terminal_time = timeout;
-                }
-                Arc::make_mut(&mut self.pruning_times)
-                    .entry(timeout)
-                    .or_default()
-                    .insert(message_id.clone());
+            // Reset `self.next_terminal_time` in case it is after the current timeout
+            // and the entry is completed or failed.
+            if self.next_terminal_time > timeout && state.is_terminal_with_payload() {
+                self.next_terminal_time = timeout;
             }
+            Arc::make_mut(&mut self.pruning_times)
+                .entry(timeout)
+                .or_default()
+                .insert(message_id.clone());
+        }
         self.memory_usage += status.payload_bytes();
         let old_status = Arc::make_mut(&mut self.statuses).insert(message_id, Arc::new(status));
         if let Some(old) = &old_status {
