@@ -285,12 +285,6 @@ fn test_fetch_canister_logs_via_inter_canister_update_call() {
     );
 }
 
-/*
-bazel test //rs/execution_environment:execution_environment_misc_integration_tests/canister_logging_test \
-  --test_output=streamed \
-  --test_arg=--nocapture \
-  --test_arg=test_fetch_canister_logs_via_inter_canister_update_call
-*/
 #[test]
 fn test_fetch_canister_logs_via_inter_canister_update_call_enabled() {
     // Test fetch_canister_logs call succeeds for inter-canister update call.
@@ -355,7 +349,6 @@ fn test_fetch_canister_logs_via_inter_canister_update_call_enabled() {
     );
 }
 
-// TODO: debug the reject message changed to "register canister not found in get_active_canister"
 #[test]
 fn test_fetch_canister_logs_via_composite_query_call() {
     // Test that fetch_canister_logs API is not accessible via composite query call.
@@ -414,12 +407,6 @@ fn test_fetch_canister_logs_via_composite_query_call() {
     );
 }
 
-/*
-bazel test //rs/execution_environment:execution_environment_misc_integration_tests/canister_logging_test \
-  --test_output=streamed \
-  --test_arg=--nocapture \
-  --test_arg=test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enabled
-*/
 #[test]
 fn test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enabled() {
     // Test that fetch_canister_logs API is not accessible via composite query call.

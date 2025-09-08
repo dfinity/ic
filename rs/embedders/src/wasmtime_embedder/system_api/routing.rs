@@ -193,7 +193,7 @@ pub(super) fn resolve_destination(
                 Err(ResolveDestinationError::UserError(UserError::new(
                     ic_error_types::ErrorCode::CanisterRejectedMessage,
                     format!(
-                        "{} API is no accessible when called from a composite query",
+                        "{} API cannot be called from a composite query",
                         Ic00Method::FetchCanisterLogs
                     ),
                 )))

@@ -218,15 +218,13 @@ impl CanisterManager {
                 }
             },
 
-            Ok(Ic00Method::FetchCanisterLogs) => {
-                Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    format!(
-                        "Ingress message to {} API is only accessible in non-replicated mode",
-                        Ic00Method::FetchCanisterLogs
-                    ),
-                ))
-            },
+            Ok(Ic00Method::FetchCanisterLogs) => Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "Ingress message to {} API is only accessible in non-replicated mode",
+                    Ic00Method::FetchCanisterLogs
+                ),
+            )),
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)
             | Ok(Ic00Method::BitcoinGetSuccessors)
