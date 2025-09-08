@@ -340,7 +340,7 @@ pub struct Config {
     /// The maximum length of an environment variable value.
     pub max_environment_variable_value_length: usize,
 
-    /// Enables the replicated query inter-canister calls to `fetch_canister_logs`.
+    /// Enables the replicated inter-canister calls to `fetch_canister_logs`.
     pub replicated_inter_canister_log_fetch: FlagStatus,
 }
 
