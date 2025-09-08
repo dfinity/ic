@@ -14,7 +14,6 @@ use crate::{
 };
 use ic_interfaces::p2p::state_sync::{AddChunkError, Chunk, ChunkId, Chunkable};
 use ic_logger::{ReplicaLogger, debug, error, fatal, info, trace, warn};
-use ic_state_layout::utils::do_copy_overwrite;
 use ic_state_layout::{CheckpointLayout, ReadOnly, RwPolicy, StateLayout, error::LayoutError};
 use ic_sys::mmap::ScopedMmap;
 use ic_types::{CryptoHashOfState, Height, malicious_flags::MaliciousFlags};
@@ -266,6 +265,54 @@ impl IncompleteState {
         }
     }
 
+    /// Marks the source file as readonly and creates a hard link to the destination.
+    ///
+    /// If the source file is writable, it will be marked as readonly.
+    /// Any existing file at the destination will be removed.
+    fn mark_readonly_and_hardlink_file(
+        _log: &ReplicaLogger,
+        src: &Path,
+        dst: &Path,
+    ) -> std::io::Result<()> {
+        let src_metadata = src.metadata()?;
+        if !src_metadata.permissions().readonly() {
+            #[cfg(target_os = "linux")]
+            {
+                use std::os::unix::ffi::OsStrExt;
+                use std::os::unix::fs::MetadataExt;
+
+                // Writable source files should originate from state_sync_cache, not from existing checkpoints which are already readonly.
+                debug_assert!(
+                    !src.parent()
+                        .unwrap()
+                        .iter()
+                        .any(|p| p.as_bytes() == b"checkpoint")
+                );
+                debug_assert!(
+                    src.parent()
+                        .unwrap()
+                        .iter()
+                        .any(|p| p.as_bytes().starts_with(b"state_sync_cache"))
+                );
+
+                // Writable source files should be newly fetched, not already hardlinked from anywhere else.
+                debug_assert_eq!(src_metadata.nlink(), 1);
+            }
+
+            // Make the source file readonly to prevent accidental modifications
+            let mut permissions = src_metadata.permissions();
+            permissions.set_readonly(true);
+            std::fs::set_permissions(src, permissions)?;
+        }
+
+        // hard_link() requires the destination to not exist.
+        if dst.exists() {
+            std::fs::remove_file(dst)?;
+        }
+
+        std::fs::hard_link(src, dst)
+    }
+
     /// Copy reusable files from previous checkpoint according to diff script.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn copy_files(
@@ -310,15 +357,6 @@ impl IncompleteState {
                         *new_index,
                     );
 
-                    let original_perms = std::fs::metadata(&dst_path).unwrap_or_else(|err| {
-                        fatal!(
-                            log,
-                            "Failed to get metadata of file {}: {}",
-                            dst_path.display(),
-                            err
-                        )
-                    })
-                        .permissions();
                     if validate_data || ALWAYS_VALIDATE {
 
                         let src = std::fs::File::open(&src_path).unwrap_or_else(|err| {
@@ -430,19 +468,18 @@ impl IncompleteState {
                                 == manifest_old.file_table[*old_index].size_bytes as usize
                         {
                             // All the hash sums and the file size match, so we can
-                            // simply copy the whole file.  That's much faster than
+                            // simply hardlink the whole file.  That's much faster than
                             // copying one chunk at a time.
-                            do_copy_overwrite(log, &src_path, &dst_path).unwrap_or_else(
-                                |err| {
-                                    fatal!(
-                                        log,
-                                        "Failed to copy file from {} to {}: {}",
-                                        src_path.display(),
-                                        dst_path.display(),
-                                        err
-                                    )
-                                },
-                            );
+                            Self::mark_readonly_and_hardlink_file(log, &src_path, &dst_path).unwrap_or_else(|err| {
+                                fatal!(
+                                    log,
+                                    "Failed to hardlink file from {} to {}: {}",
+                                    src_path.display(),
+                                    dst_path.display(),
+                                    err
+                                )
+                            });
+
                             metrics
                                 .remaining
                                 .sub(new_chunk_range.len() as i64);
@@ -513,29 +550,22 @@ impl IncompleteState {
                             }
                         }
                     } else {
-                        // Since we do not validate in this else branch, we can simply copy the
+                        // Since we do not validate in this else branch, we can simply hardlink the
                         // file without any extra work
-                        do_copy_overwrite(log, &src_path, &dst_path).unwrap_or_else(|err| {
+                        Self::mark_readonly_and_hardlink_file(log, &src_path, &dst_path).unwrap_or_else(|err| {
                             fatal!(
                                 log,
-                                "Failed to copy file from {} to {}: {}",
+                                "Failed to hardlink file from {} to {}: {}",
                                 src_path.display(),
                                 dst_path.display(),
                                 err
                             )
                         });
+
                         metrics
                             .remaining
                             .sub(new_chunk_range.len() as i64);
                     }
-                    std::fs::set_permissions(&dst_path, original_perms).unwrap_or_else(|err| {
-                        fatal!(
-                            log,
-                            "failed to set permissions for file {}: {}",
-                            dst_path.display(),
-                            err
-                        )
-                    });
                 });
             }
         });

@@ -4117,17 +4117,14 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
                 )
                 .unwrap();
 
-                // Write garbage to the canister memory file so that loading will fail.
-                let canister_layout = state_sync_scratchpad_layout
-                    .canister(&canister_test_id(90))
-                    .unwrap();
-                let canister_memory = canister_layout
-                    .vmemory_0()
-                    .existing_overlays()
-                    .unwrap()
-                    .remove(0);
-                make_mutable(&canister_memory).unwrap();
-                std::fs::write(&canister_memory, b"Garbage").unwrap();
+                // Write garbage to the system_metadata.pbuf file so that loading will fail.
+                let system_metadata = state_sync_scratchpad_layout
+                    .system_metadata()
+                    .raw_path()
+                    .to_path_buf();
+                make_mutable(&system_metadata).unwrap();
+                std::fs::write(&system_metadata, b"Garbage").unwrap();
+                make_readonly(&system_metadata).unwrap();
 
                 let result = panic::catch_unwind(AssertUnwindSafe(|| {
                     pipe_state_sync(msg, chunkable);
