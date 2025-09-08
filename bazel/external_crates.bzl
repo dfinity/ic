@@ -579,6 +579,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "group": crate.spec(
                 version = "^0.13",
             ),
+            "handlebars": crate.spec(
+                version = "^6.3.2",
+            ),
             "hashlink": crate.spec(
                 version = "^0.8.0",
             ),

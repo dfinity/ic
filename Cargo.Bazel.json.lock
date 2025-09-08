@@ -1,5 +1,5 @@
 {
-  "checksum": "8302df3c8391e72434a266be9750616b83092ea0c3105f2b9bc5f8309144084c",
+  "checksum": "9b682f9fdde7c4e6e833d364e1462e8b8f23731d1139b9018537fd5e81791b61",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -19742,6 +19742,185 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "derive_builder 0.20.2": {
+      "name": "derive_builder",
+      "version": "0.20.2",
+      "package_url": "https://github.com/colin-kiegel/rust-derive-builder",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/derive_builder/0.20.2/download",
+          "sha256": "507dfb09ea8b7fa618fcf76e953f4f5e192547945816d5358edffe39f6f94947"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "derive_builder",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "derive_builder",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "derive_builder_macro 0.20.2",
+              "target": "derive_builder_macro"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.20.2"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "derive_builder_core 0.20.2": {
+      "name": "derive_builder_core",
+      "version": "0.20.2",
+      "package_url": "https://github.com/colin-kiegel/rust-derive-builder",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/derive_builder_core/0.20.2/download",
+          "sha256": "2d5bcf7b024d6835cfb3d473887cd966994907effbe9227e8c8219824d06c4e8"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "derive_builder_core",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "derive_builder_core",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "lib_has_std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "darling 0.20.11",
+              "target": "darling"
+            },
+            {
+              "id": "proc-macro2 1.0.95",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.40",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.101",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.20.2"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "derive_builder_macro 0.20.2": {
+      "name": "derive_builder_macro",
+      "version": "0.20.2",
+      "package_url": "https://github.com/colin-kiegel/rust-derive-builder",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/derive_builder_macro/0.20.2/download",
+          "sha256": "ab63b0e2bf4d5928aff72e83a7dace85d7bba5fe12dcc3c5a572d78caffd3f3c"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "derive_builder_macro",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "derive_builder_macro",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "lib_has_std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "derive_builder_core 0.20.2",
+              "target": "derive_builder_core"
+            },
+            {
+              "id": "syn 2.0.101",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.20.2"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "derive_more 0.99.17": {
       "name": "derive_more",
       "version": "0.99.17",
@@ -20899,6 +21078,10 @@
             {
               "id": "group 0.13.0",
               "target": "group"
+            },
+            {
+              "id": "handlebars 6.3.2",
+              "target": "handlebars"
             },
             {
               "id": "hashlink 0.8.3",
@@ -29861,6 +30044,92 @@
           "selects": {}
         },
         "version": "4.5.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "handlebars 6.3.2": {
+      "name": "handlebars",
+      "version": "6.3.2",
+      "package_url": "https://github.com/sunng87/handlebars-rust",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/handlebars/6.3.2/download",
+          "sha256": "759e2d5aea3287cb1190c8ec394f42866cb5bf74fcbf213f354e3c856ea26098"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "handlebars",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "handlebars",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "derive_builder 0.20.2",
+              "target": "derive_builder"
+            },
+            {
+              "id": "log 0.4.20",
+              "target": "log"
+            },
+            {
+              "id": "num-order 1.2.0",
+              "target": "num_order"
+            },
+            {
+              "id": "pest 2.7.1",
+              "target": "pest"
+            },
+            {
+              "id": "serde 1.0.219",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.132",
+              "target": "serde_json"
+            },
+            {
+              "id": "thiserror 2.0.12",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "pest_derive 2.7.1",
+              "target": "pest_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "6.3.2"
       },
       "license": "MIT",
       "license_ids": [
@@ -49445,6 +49714,97 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
+    },
+    "num-modular 0.6.1": {
+      "name": "num-modular",
+      "version": "0.6.1",
+      "package_url": "https://github.com/cmpute/num-modular",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/num-modular/0.6.1/download",
+          "sha256": "17bb261bf36fa7d83f4c294f834e91256769097b3cb505d44831e0a179ac647f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "num_modular",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "num_modular",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.6.1"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "num-order 1.2.0": {
+      "name": "num-order",
+      "version": "1.2.0",
+      "package_url": "https://github.com/cmpute/num-order",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/num-order/1.2.0/download",
+          "sha256": "537b596b97c40fcf8056d153049eb22f481c17ebce72a513ec9286e4986d1bb6"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "num_order",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "num_order",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "num-modular 0.6.1",
+              "target": "num_modular"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.2.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
     },
     "num-rational 0.2.4": {
       "name": "num-rational",
@@ -94933,6 +95293,7 @@
     "goldenfile 1.8.0",
     "gpt 4.1.0",
     "group 0.13.0",
+    "handlebars 6.3.2",
     "hashlink 0.8.3",
     "hex 0.4.3",
     "hex-literal 0.4.1",

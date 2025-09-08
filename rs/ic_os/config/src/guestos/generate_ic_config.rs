@@ -1,6 +1,8 @@
 use anyhow::{ensure, Context, Result};
 use config_types::{GuestOSConfig, Ipv6Config};
 use get_if_addrs::get_if_addrs;
+use handlebars::Handlebars;
+use serde::Serialize;
 use serde_json;
 use std::fs::{read_to_string, write};
 use std::net::Ipv6Addr;
@@ -19,7 +21,9 @@ pub fn generate_ic_config(
 
     let config_vars = get_config_vars(guestos_config)?;
 
-    let output_content = substitute_template(&template_content, &config_vars);
+    let output_content = Handlebars::new()
+        .render_template(&template_content, &config_vars)
+        .context("Failed to render template")?;
 
     write(output_path, &output_content)
         .with_context(|| format!("Failed to write output file: {}", output_path.display()))?;
@@ -46,7 +50,7 @@ pub fn generate_ic_config(
     Ok(())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 struct ConfigVariables {
     ipv6_address: String,
     ipv6_prefix: String,
@@ -204,34 +208,6 @@ fn get_config_vars(guestos_config: &GuestOSConfig) -> Result<ConfigVariables> {
     })
 }
 
-fn substitute_template(template_content: &str, config_vars: &ConfigVariables) -> String {
-    let mut content = template_content.to_string();
-
-    content = content.replace("{{ ipv6_address }}", &config_vars.ipv6_address);
-    content = content.replace("{{ ipv6_prefix }}", &config_vars.ipv6_prefix);
-    content = content.replace("{{ ipv4_address }}", &config_vars.ipv4_address);
-    content = content.replace("{{ ipv4_gateway }}", &config_vars.ipv4_gateway);
-    content = content.replace("{{ domain_name }}", &config_vars.domain_name);
-    content = content.replace("{{ nns_urls }}", &config_vars.nns_urls);
-    content = content.replace(
-        "{{ backup_retention_time_secs }}",
-        &config_vars.backup_retention_time_secs,
-    );
-    content = content.replace(
-        "{{ backup_purging_interval_secs }}",
-        &config_vars.backup_purging_interval_secs,
-    );
-    content = content.replace("{{ malicious_behavior }}", &config_vars.malicious_behavior);
-    content = content.replace(
-        "{{ query_stats_epoch_length }}",
-        &config_vars.query_stats_epoch_length,
-    );
-    content = content.replace("{{ node_reward_type }}", &config_vars.node_reward_type);
-    content = content.replace("{{ jaeger_addr }}", &config_vars.jaeger_addr);
-
-    content
-}
-
 fn get_router_advertisement_ipv6_address() -> Result<String> {
     const MAX_RETRIES: usize = 12;
     const RETRY_DELAY: Duration = Duration::from_secs(10);
@@ -363,7 +339,10 @@ mod tests {
         let config_vars = get_config_vars(&guestos_config).unwrap();
 
         let template_content = String::from_utf8_lossy(IC_JSON5_TEMPLATE_BYTES);
-        let output_content = substitute_template(&template_content, &config_vars);
+        let output_content = Handlebars::new()
+            .render_template(&template_content, &config_vars)
+            .context("Failed to render template")
+            .unwrap();
 
         // Verify that all placeholders were replaced
         assert!(!output_content.contains("{{ ipv6_address }}"));
