@@ -172,8 +172,8 @@ pub fn test(env: TestEnv) {
     let topology_snapshot = env.topology_snapshot();
 
     block_on(async move {
-        // A pre-flight check. Not sure why this is necessary. This was probably
-        // cargo culted this from ./create_subnet_test.rs
+        // Fetch the original set of subnets. This will be used later to detect
+        // which subnet is the new one.
         let registry_canister = RegistryCanister::new_with_query_timeout(
             vec![topology_snapshot
                 .root_subnet()
@@ -188,6 +188,7 @@ pub fn test(env: TestEnv) {
             // Convert to HashSet
             .into_iter()
             .collect::<HashSet<SubnetId>>();
+        // This is just extra defensive, and probably not necessary.
         assert!(!original_subnets.is_empty(), "registry contains no subnets");
 
         subnet_user_sends_icp_to_the_subnet_rental_canister(&topology_snapshot).await;
