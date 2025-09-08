@@ -50,7 +50,7 @@ pub const DKG_INTERVAL: u64 = 9;
 
 /// 40 nodes and DKG interval of 199 are the production values for the NNS
 pub const LARGE_SUBNET_SIZE: usize = 40;
-pub const LARGE_DKG_INTERVAL: u64 = 199;
+pub const LARGE_DKG_INTERVAL: u64 = 49;
 
 /// RECOVERY_GUESTOS_IMG_VERSION variable is a placeholder for the actual version of the recovery
 /// GuestOS image, that Node Providers would use as input to guestos-recovery-upgrader.
