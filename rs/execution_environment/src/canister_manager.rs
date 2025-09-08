@@ -221,7 +221,7 @@ impl CanisterManager {
             Ok(Ic00Method::FetchCanisterLogs) => Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "Ingress message to {} API is only accessible in non-replicated mode",
+                    "{} API is not accessible via ingress in replicated mode",
                     Ic00Method::FetchCanisterLogs
                 ),
             )),
