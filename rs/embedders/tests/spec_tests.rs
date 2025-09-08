@@ -520,7 +520,7 @@ fn run_directive<'a>(
 ) -> Result<(), String> {
     match directive {
         // Here we check that an example module can be parsed and encoded with
-        // wasm-transform and is still validated by wasmtime after the round
+        // wirm and is still validated by wasmtime after the round
         // trip.
         WastDirective::Module(mut wat) => {
             if is_component(&wat) {
@@ -531,7 +531,7 @@ fn run_directive<'a>(
             test_state.create_instance(&wasm, wat_id(&wat));
             Ok(())
         }
-        // wasm-transform itself should throw an error when trying to parse these modules.
+        // wirm itself should throw an error when trying to parse these modules.
         // TODO(RUN-448): Change this to assert `parse_and_encode` returned an error.
         WastDirective::AssertMalformed {
             span: _,
