@@ -2430,10 +2430,11 @@ fn induct_stream_slices_with_messages_from_migrating_canister() {
             );
 
             let mut expected_state = state.clone();
-            // The expected state has the two messages inducted...
-            push_inputs(
+
+            // The expected state has the response @44 inducted...
+            push_input(
                 &mut expected_state,
-                messages_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 43..=44),
+                message_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 44).clone(),
             );
             // ...and a stream with...
             let migration_stream = state.get_stream(&CANISTER_MIGRATION_SUBNET);
@@ -2444,6 +2445,11 @@ fn induct_stream_slices_with_messages_from_migrating_canister() {
                     message_in_stream(migration_stream, 21).clone(),
                     message_in_stream(migration_stream, 22).clone(),
                 ],
+                // ...a reject signal for the request @43...
+                reject_signals: vec![RejectSignal::new(
+                    RejectReason::CanisterMigrating,
+                    43.into(),
+                )],
                 // ...and a `signals_end` incremented by 2.
                 signals_end: 45,
                 ..StreamConfig::default()
@@ -2465,10 +2471,14 @@ fn induct_stream_slices_with_messages_from_migrating_canister() {
             );
 
             metrics.assert_inducted_xnet_messages_eq(&[
-                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SUCCESS, 1),
+                (
+                    LABEL_VALUE_TYPE_REQUEST,
+                    LABEL_VALUE_SENDER_SUBNET_MISMATCH_MIGRATING,
+                    1,
+                ),
                 (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 1),
             ]);
-            assert_eq!(2, metrics.fetch_inducted_payload_sizes_stats().count);
+            assert_eq!(1, metrics.fetch_inducted_payload_sizes_stats().count);
             // No critical errors raised.
             metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
         },
