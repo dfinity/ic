@@ -14,6 +14,8 @@ on the process that this file is part of, see
 
 ## Changed
 
+* The protobuf-encoded `Storable` implementations are changed to `Unbounded`.
+
 ## Deprecated
 
 ## Removed
