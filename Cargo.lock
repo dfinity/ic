@@ -9236,6 +9236,7 @@ dependencies = [
  "tracing",
  "wasmparser 0.228.0",
  "wat",
+ "wirm",
 ]
 
 [[package]]
