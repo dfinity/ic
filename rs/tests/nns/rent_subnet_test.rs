@@ -553,7 +553,7 @@ fn install_nns_canisters(env: &TestEnv) {
         .expect("NNS canisters not installed");
 
     create_and_install_mock_exchange_rate_canister(&topology_snapshot);
-    wait_for_cycles_minting_to_get_price_of_icp(&topology_snapshot);
+    wait_for_cycles_minting_to_get_price_of_icp(&topology_snapshot, &env.logger());
 
     info!(&env.logger(), "NNS canisters installed");
 }
@@ -578,7 +578,10 @@ fn create_and_install_mock_exchange_rate_canister(topology_snapshot: &TopologySn
     );
 }
 
-fn wait_for_cycles_minting_to_get_price_of_icp(topology_snapshot: &TopologySnapshot) {
+fn wait_for_cycles_minting_to_get_price_of_icp(
+    topology_snapshot: &TopologySnapshot,
+    logger: &Logger,
+) {
     let nns_subnet = topology_snapshot.root_subnet();
     let runtime = new_subnet_runtime(&nns_subnet);
     let cycles_minting = Canister::new(&runtime, CYCLES_MINTING_CANISTER_ID);
@@ -607,9 +610,9 @@ fn wait_for_cycles_minting_to_get_price_of_icp(topology_snapshot: &TopologySnaps
                     );
                 }
 
-                println!(
-                    "The Cycles Minting canister is not responsive (yet): {:?}",
-                    err
+                info!(
+                    logger,
+                    "The Cycles Minting canister is not responsive (yet): {:?}", err
                 );
                 err_budget -= 1;
                 sleep(Duration::from_secs(1));
@@ -622,7 +625,8 @@ fn wait_for_cycles_minting_to_get_price_of_icp(topology_snapshot: &TopologySnaps
                 reply.data.xdr_permyriad_per_icp,
                 PRICE_OF_ICP_IN_XDR_CENTS * 100,
             );
-            println!(
+            info!(
+                logger,
                 "Yay! Updated ICP price found in the Cycles Minting canister \
                  after {} attempts.",
                 i,
