@@ -1,16 +1,15 @@
 use super::test_helpers::{
-    basic_governance_proto, DoNothingLedger, TEST_GOVERNANCE_CANISTER_ID, TEST_ROOT_CANISTER_ID,
+    DoNothingLedger, TEST_GOVERNANCE_CANISTER_ID, TEST_ROOT_CANISTER_ID, basic_governance_proto,
 };
 use crate::{
     governance::{Governance, ValidGovernanceProto},
     pb::v1::{
-        get_proposal_response,
+        Ballot, FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse, GetProposal,
+        Governance as GovernanceProto, Proposal, ProposalData, ProposalId, Tally,
+        UpgradeSnsToNextVersion, Vote, WaitForQuietState, get_proposal_response,
         governance::{PendingVersion, Version},
         governance_error::ErrorType,
         proposal::Action,
-        Ballot, FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse, GetProposal,
-        Governance as GovernanceProto, Proposal, ProposalData, ProposalId, Tally,
-        UpgradeSnsToNextVersion, Vote, WaitForQuietState,
     },
     types::test_helpers::NativeEnvironment,
 };

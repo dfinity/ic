@@ -14,8 +14,8 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_keys::FirewallRulesScope;
 use ic_types::{
-    consensus::CatchUpPackage, hostos_version::HostosVersion, NodeId, PrincipalId, RegistryVersion,
-    ReplicaVersion, SubnetId,
+    NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId, consensus::CatchUpPackage,
+    hostos_version::HostosVersion,
 };
 use std::{convert::TryFrom, net::IpAddr, sync::Arc};
 

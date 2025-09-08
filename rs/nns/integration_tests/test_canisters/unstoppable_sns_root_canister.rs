@@ -1,15 +1,15 @@
 use async_trait::async_trait;
-use dfn_candid::{candid_one, CandidOne};
+use dfn_candid::{CandidOne, candid_one};
 use dfn_core::{over_async, over_init, println};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_clients::management_canister_client::ManagementCanisterClientImpl;
 use ic_nervous_system_common::NANO_SECONDS_PER_SECOND;
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_sns_root::{
-    pb::v1::{CanisterCallError, SnsRootCanister},
-    types::Environment,
     ArchiveInfo, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
     LedgerCanisterClient,
+    pb::v1::{CanisterCallError, SnsRootCanister},
+    types::Environment,
 };
 use std::{cell::RefCell, time::Duration};
 

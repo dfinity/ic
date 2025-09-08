@@ -3,8 +3,8 @@
 
 use crate::hasher::Hasher;
 use crate::{
-    Digest, FlatMap, HashTree, HashTreeBuilder, Label, LabeledTree, MixedHashTree, Path,
-    TreeHashError, Witness, WitnessGenerationError, WitnessGenerator, MAX_HASH_TREE_DEPTH,
+    Digest, FlatMap, HashTree, HashTreeBuilder, Label, LabeledTree, MAX_HASH_TREE_DEPTH,
+    MixedHashTree, Path, TreeHashError, Witness, WitnessGenerationError, WitnessGenerator,
 };
 use std::collections::VecDeque;
 use std::fmt;
@@ -588,7 +588,7 @@ impl WitnessBuilder for Witness {
                             Pruned { digest: l },
                             Pruned { digest: r },
                         ),
-                    )
+                    );
                 }
                 (Pruned { .. }, r) => r,
                 (l, Pruned { .. }) => l,
@@ -622,7 +622,7 @@ impl WitnessBuilder for Witness {
                 (l, r) => {
                     return Err(
                         WitnessGenerationError::<Witness>::MergingInconsistentWitnesses(l, r),
-                    )
+                    );
                 }
             };
             Ok(result)
@@ -674,7 +674,7 @@ impl WitnessBuilder for MixedHashTree {
                             Pruned(l),
                             Pruned(r),
                         ),
-                    )
+                    );
                 }
                 (Pruned(_), r) => r,
                 (l, Pruned(_)) => l,
@@ -690,7 +690,7 @@ impl WitnessBuilder for MixedHashTree {
                 (l, r) => {
                     return Err(
                         WitnessGenerationError::<MixedHashTree>::MergingInconsistentWitnesses(l, r),
-                    )
+                    );
                 }
             };
 

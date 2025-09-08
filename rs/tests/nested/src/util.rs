@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
@@ -32,7 +32,7 @@ use ic_system_test_driver::{
     retry_with_msg_async_quiet,
     util::runtime_from_url,
 };
-use ic_types::{hostos_version::HostosVersion, NodeId, ReplicaVersion};
+use ic_types::{NodeId, ReplicaVersion, hostos_version::HostosVersion};
 use prost::Message;
 use regex::Regex;
 use reqwest::Client;
@@ -40,7 +40,7 @@ use std::net::Ipv6Addr;
 use std::time::Duration;
 
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 /// Use an SSH channel to check the version on the running HostOS.
 pub(crate) fn check_hostos_version(node: &NestedVm) -> String {

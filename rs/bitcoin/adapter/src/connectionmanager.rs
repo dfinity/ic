@@ -7,30 +7,30 @@ use std::{
 use bitcoin::p2p::ServiceFlags;
 
 use bitcoin::p2p::{
+    Address, Magic,
     message::{CommandString, NetworkMessage},
     message_network::VersionMessage,
-    Address, Magic,
 };
-use ic_logger::{error, info, trace, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, trace, warn};
 use rand::prelude::*;
 use thiserror::Error;
 use tokio::{
-    sync::mpsc::{channel, Sender},
-    sync::mpsc::{unbounded_channel, Receiver},
+    sync::mpsc::{Receiver, unbounded_channel},
+    sync::mpsc::{Sender, channel},
     task::JoinHandle,
 };
 
 use crate::{
+    Channel, ChannelError, Command, ProcessEvent, ProcessNetworkMessage,
+    ProcessNetworkMessageError,
     addressbook::{
-        validate_services, AddressBook, AddressBookError, AddressEntry, AddressTimestamp,
+        AddressBook, AddressBookError, AddressEntry, AddressTimestamp, validate_services,
     },
     common::{BlockHeight, DEFAULT_CHANNEL_BUFFER_SIZE, MINIMUM_VERSION_NUMBER},
     config::Config,
     connection::{Connection, ConnectionConfig, ConnectionState, PingState},
     metrics::RouterMetrics,
     stream::{StreamConfig, StreamEvent, StreamEventKind},
-    Channel, ChannelError, Command, ProcessEvent, ProcessNetworkMessage,
-    ProcessNetworkMessageError,
 };
 
 /// How the adapter identifies itself to other Bitcoin nodes.
@@ -474,8 +474,7 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
 
         trace!(
             self.logger,
-            "Completed the version handshake with {}",
-            address
+            "Completed the version handshake with {}", address
         );
         Ok(())
     }
@@ -698,8 +697,8 @@ fn connection_limits(address_book: &AddressBook) -> (usize, usize) {
 mod test {
     use super::*;
     use crate::config::test::ConfigBuilder;
-    use bitcoin::p2p::ServiceFlags;
     use bitcoin::Block;
+    use bitcoin::p2p::ServiceFlags;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use std::str::FromStr;

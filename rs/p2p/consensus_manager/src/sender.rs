@@ -1,5 +1,5 @@
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{HashMap, hash_map::Entry},
     marker::PhantomData,
     panic,
     sync::Arc,
@@ -7,11 +7,11 @@ use std::{
 };
 
 use axum::http::Request;
-use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
+use backoff::{ExponentialBackoffBuilder, backoff::Backoff};
 use bytes::Bytes;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::consensus::{ArtifactAssembler, ArtifactTransmit, ArtifactWithOpt};
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, Shutdown, Transport};
 use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
@@ -26,7 +26,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
-use crate::{metrics::ConsensusManagerMetrics, uri_prefix, CommitId, SlotNumber};
+use crate::{CommitId, SlotNumber, metrics::ConsensusManagerMetrics, uri_prefix};
 
 use self::available_slot_set::{AvailableSlot, AvailableSlotSet};
 
@@ -68,10 +68,10 @@ pub struct ConsensusManagerSender<Artifact: IdentifiableArtifact, WireArtifact, 
 }
 
 impl<
-        Artifact: IdentifiableArtifact,
-        WireArtifact: PbArtifact,
-        Assembler: ArtifactAssembler<Artifact, WireArtifact>,
-    > ConsensusManagerSender<Artifact, WireArtifact, Assembler>
+    Artifact: IdentifiableArtifact,
+    WireArtifact: PbArtifact,
+    Assembler: ArtifactAssembler<Artifact, WireArtifact>,
+> ConsensusManagerSender<Artifact, WireArtifact, Assembler>
 {
     pub fn run(
         log: ReplicaLogger,
@@ -337,7 +337,7 @@ async fn send_transmit_to_peer(
 mod available_slot_set {
     use super::SLOT_TABLE_THRESHOLD;
     use crate::{ConsensusManagerMetrics, SlotNumber};
-    use ic_logger::{warn, ReplicaLogger};
+    use ic_logger::{ReplicaLogger, warn};
 
     pub struct AvailableSlot(u64);
 

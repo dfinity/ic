@@ -15,9 +15,11 @@ fn should_verify_valid_signature_using_crypto_for_verification() {
     let (signature, public_key) = ed25519_signature_and_public_key(&message, rng);
     let crypto = new(Arc::new(dummy_registry));
 
-    assert!(crypto
-        .verify_basic_sig_by_public_key(&signature, &message, &public_key)
-        .is_ok());
+    assert!(
+        crypto
+            .verify_basic_sig_by_public_key(&signature, &message, &public_key)
+            .is_ok()
+    );
 }
 
 /// This is a smoke test ensuring that `CryptoComponentForVerificationOnly`
@@ -32,8 +34,10 @@ fn should_fail_verification_on_invalid_signature_using_crypto_for_verification()
 
     let different_message = MessageId::from([1; 32]);
     assert_ne!(message, different_message);
-    assert!(crypto
-        .verify_basic_sig_by_public_key(&signature, &different_message, &public_key)
-        .unwrap_err()
-        .is_signature_verification_error());
+    assert!(
+        crypto
+            .verify_basic_sig_by_public_key(&signature, &different_message, &public_key)
+            .unwrap_err()
+            .is_signature_verification_error()
+    );
 }

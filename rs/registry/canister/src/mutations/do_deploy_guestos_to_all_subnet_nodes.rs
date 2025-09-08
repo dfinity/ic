@@ -8,7 +8,7 @@ use dfn_core::println;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_keys::make_subnet_record_key;
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
+use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue, registry_mutation};
 use prost::Message;
 use serde::Serialize;
 

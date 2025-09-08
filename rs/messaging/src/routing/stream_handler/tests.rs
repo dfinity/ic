@@ -1,8 +1,9 @@
 use super::*;
 use crate::message_routing::{LABEL_REMOTE, METRIC_TIME_IN_BACKLOG, METRIC_TIME_IN_STREAM};
+use MessageBuilder::*;
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
-use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
+use ic_certification_version::{CURRENT_CERTIFICATION_VERSION, CertificationVersion};
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::messaging::LABEL_VALUE_CANISTER_NOT_FOUND;
 use ic_metrics::MetricsRegistry;
@@ -14,14 +15,14 @@ use ic_replicated_state::testing::{ReplicatedStateTesting, SystemStateTesting};
 use ic_replicated_state::{CanisterStatus, ReplicatedState, Stream};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter, fetch_int_counter_vec,
-    fetch_int_gauge_vec, metric_vec, nonzero_values, HistogramStats, MetricVec,
+    HistogramStats, MetricVec, fetch_histogram_stats, fetch_histogram_vec_count, fetch_int_counter,
+    fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec, nonzero_values,
 };
-use ic_test_utilities_state::{register_callback, CanisterStateBuilder};
-use ic_test_utilities_types::ids::{user_test_id, SUBNET_12, SUBNET_23, SUBNET_27};
+use ic_test_utilities_state::{CanisterStateBuilder, register_callback};
+use ic_test_utilities_types::ids::{SUBNET_12, SUBNET_23, SUBNET_27, user_test_id};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_test_utilities_types::xnet::StreamHeaderBuilder;
-use ic_types::messages::{CallbackId, Payload, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE};
+use ic_types::messages::{CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload};
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::xnet::{RejectReason, RejectSignal, StreamFlags, StreamIndexedQueue};
 use ic_types::{CanisterId, CountBytes, Cycles};
@@ -29,7 +30,6 @@ use lazy_static::lazy_static;
 use maplit::btreemap;
 use pretty_assertions::assert_eq;
 use std::convert::TryFrom;
-use MessageBuilder::*;
 
 const LOCAL_SUBNET: SubnetId = SUBNET_12; // g24bn-xymaa-aaaaa-aaaap-yai
 const REMOTE_SUBNET: SubnetId = SUBNET_23; // 5h3gz-qaxaa-aaaaa-aaaap-yai
@@ -1962,8 +1962,8 @@ fn inducting_best_effort_response_into_stopped_canister_does_not_raise_a_critica
 /// Tests that inducting a best-effort response addressed to a non-existent canister does not raise
 /// a critical error.
 #[test]
-fn inducting_best_effort_response_addressed_to_non_existent_canister_does_not_raise_a_critical_error(
-) {
+fn inducting_best_effort_response_addressed_to_non_existent_canister_does_not_raise_a_critical_error()
+ {
     failing_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(|state| {
         // Remove the `LOCAL_CANISTER`.
         state.canister_states.remove(&LOCAL_CANISTER).unwrap();

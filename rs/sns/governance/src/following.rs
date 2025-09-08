@@ -1,7 +1,7 @@
 use crate::pb::v1::{
+    Followee, NeuronId, Topic,
     manage_neuron::SetFollowing,
     neuron::{FolloweesForTopic, TopicFollowees},
-    Followee, NeuronId, Topic,
 };
 use itertools::{Either, Itertools};
 use lazy_static::lazy_static;
@@ -407,11 +407,7 @@ impl TryFrom<SetFollowing> for ValidatedSetFollowing {
             .into_iter()
             .filter_map(
                 |(topic, group)| {
-                    if group.count() > 1 {
-                        Some(topic)
-                    } else {
-                        None
-                    }
+                    if group.count() > 1 { Some(topic) } else { None }
                 },
             )
             .collect::<Vec<_>>();

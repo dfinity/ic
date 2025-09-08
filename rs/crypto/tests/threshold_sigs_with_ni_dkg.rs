@@ -3,10 +3,10 @@ use ic_crypto_temp_crypto::CryptoComponentRng;
 use ic_crypto_temp_crypto::TempCryptoComponentGeneric;
 use ic_crypto_test_utils::crypto_for;
 use ic_crypto_test_utils_ni_dkg::{
-    create_dealings, run_ni_dkg_and_create_single_transcript, NiDkgTestEnvironment,
-    RandomNiDkgConfig,
+    NiDkgTestEnvironment, RandomNiDkgConfig, create_dealings,
+    run_ni_dkg_and_create_single_transcript,
 };
-use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
 use ic_interfaces::crypto::{
     LoadTranscriptResult, NiDkgAlgorithm, ThresholdSigVerifier, ThresholdSigner,
 };
@@ -324,8 +324,8 @@ fn message() -> SignableMock {
 
 mod non_interactive_distributed_key_generation {
     use super::*;
-    use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
     use ic_crypto_internal_types::NodeIndex;
+    use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
     use ic_protobuf::registry::crypto::v1::PublicKey;
     use ic_types::crypto::threshold_sig::ni_dkg::NiDkgDealing;
 

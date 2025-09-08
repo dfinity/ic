@@ -21,7 +21,7 @@ use ic_types::batch::{BatchMessages, CanisterCyclesCostSchedule, ChainKeyData};
 use ic_types::messages::SignedIngress;
 use ic_types::{Height, PrincipalId, ReplicaVersion, SubnetId, Time};
 use maplit::btreemap;
-use mockall::{mock, predicate::*, Sequence};
+use mockall::{Sequence, mock, predicate::*};
 use std::collections::{BTreeMap, BTreeSet};
 
 mock! {

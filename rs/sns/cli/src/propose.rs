@@ -1,20 +1,20 @@
 use crate::{
-    fetch_canister_controllers, get_identity, use_test_neuron_1_owner_identity,
     MakeProposalResponse, NnsGovernanceCanister, SaveOriginalDfxIdentityAndRestoreOnExit,
+    fetch_canister_controllers, get_identity, use_test_neuron_1_owner_identity,
 };
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use clap::{ArgGroup, Parser};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_ID;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::ROOT_CANISTER_ID;
-use ic_nns_governance_api::{manage_neuron::NeuronIdOrSubaccount, proposal::Action, Proposal};
+use ic_nns_governance_api::{Proposal, manage_neuron::NeuronIdOrSubaccount, proposal::Action};
 use itertools::Itertools;
 use std::{
     collections::HashSet,
     fmt::{Debug, Display, Formatter},
-    fs::{write, OpenOptions},
+    fs::{OpenOptions, write},
     path::{Path, PathBuf},
 };
 
@@ -459,7 +459,7 @@ fn ensure_file_exists_and_is_writeable(path: &Path) -> Result<(), SaveToErrors> 
             return Err(SaveToErrors::FileOpenFailed(
                 path.to_path_buf(),
                 e.to_string(),
-            ))
+            ));
         }
     }
 

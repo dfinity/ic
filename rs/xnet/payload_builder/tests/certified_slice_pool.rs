@@ -1,23 +1,23 @@
 use assert_matches::assert_matches;
 use ic_canonical_state::LabelLike;
-use ic_crypto_tree_hash::{flat_map::FlatMap, Label, LabeledTree};
+use ic_crypto_tree_hash::{Label, LabeledTree, flat_map::FlatMap};
 use ic_interfaces_certified_stream_store::DecodeStreamError;
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{messaging::xnet::v1, proxy::ProtoProxy};
 use ic_replicated_state::Stream;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_metrics::{metric_vec, HistogramStats};
+use ic_test_utilities_metrics::{HistogramStats, metric_vec};
 use ic_test_utilities_state::arb_stream_slice;
 use ic_test_utilities_types::xnet::StreamSliceBuilder;
 use ic_types::messages::MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT;
 use ic_types::xnet::{CertifiedStreamSlice, StreamIndex};
 use ic_types::{CountBytes, RegistryVersion, SubnetId};
 use ic_xnet_payload_builder::certified_slice_pool::{
-    certified_slice_count_bytes, testing, CertifiedSliceError, CertifiedSlicePool, InvalidAppend,
-    InvalidSlice, UnpackedStreamSlice, LABEL_STATUS, STATUS_NONE, STATUS_SUCCESS,
+    CertifiedSliceError, CertifiedSlicePool, InvalidAppend, InvalidSlice, LABEL_STATUS,
+    STATUS_NONE, STATUS_SUCCESS, UnpackedStreamSlice, certified_slice_count_bytes, testing,
 };
-use ic_xnet_payload_builder::{max_message_index, ExpectedIndices, MAX_SIGNALS};
+use ic_xnet_payload_builder::{ExpectedIndices, MAX_SIGNALS, max_message_index};
 use maplit::btreemap;
 use mockall::predicate::{always, eq};
 use proptest::prelude::*;

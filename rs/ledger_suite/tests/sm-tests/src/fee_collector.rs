@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
-    arb_account, install_ledger, total_supply, transfer, ChangeFeeCollector, InitArgs,
-    LedgerArgument, UpgradeArgs, FEE, MINTER,
+    ChangeFeeCollector, FEE, InitArgs, LedgerArgument, MINTER, UpgradeArgs, arb_account,
+    install_ledger, total_supply, transfer,
 };
 use candid::{CandidType, Encode};
 use ic_state_machine_tests::StateMachine;

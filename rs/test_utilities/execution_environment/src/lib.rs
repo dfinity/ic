@@ -10,16 +10,16 @@ use ic_config::{
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
+    WasmtimeEmbedder,
     wasm_utils::{compile, decoding::decode_wasm},
     wasmtime_embedder::system_api::InstructionLimits,
-    WasmtimeEmbedder,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
-    execute_canister, CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment,
-    Hypervisor, IngressFilterMetrics, IngressHistoryWriterImpl, InternalHttpQueryHandler,
-    RoundInstructions, RoundLimits,
+    CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment, Hypervisor,
+    IngressFilterMetrics, IngressHistoryWriterImpl, InternalHttpQueryHandler, RoundInstructions,
+    RoundLimits, execute_canister,
 };
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -27,7 +27,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces_state_manager::Labeled;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
     CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions, EmptyBlob,
@@ -37,21 +37,21 @@ use ic_management_canister_types_private::{
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{
-    CanisterIdRange, RoutingTable, WellFormedError, CANISTER_IDS_PER_SUBNET,
+    CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable, WellFormedError,
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{
-        execution_state::SandboxMemory, execution_state::WasmExecutionMode, NextExecution,
-    },
-    page_map::{
-        test_utils::base_only_storage_layout, PageMap, TestPageAllocatorFileDescriptorImpl,
-        PAGE_SIZE,
-    },
-    testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, NetworkTopology,
     PageIndex, ReplicatedState, SubnetTopology,
+    canister_state::{
+        NextExecution, execution_state::SandboxMemory, execution_state::WasmExecutionMode,
+    },
+    page_map::{
+        PAGE_SIZE, PageMap, TestPageAllocatorFileDescriptorImpl,
+        test_utils::base_only_storage_layout,
+    },
+    testing::{CanisterQueuesTesting, ReplicatedStateTesting},
 };
 use ic_test_utilities::{crypto::mock_random_number_generator, state_manager::FakeStateManager};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder};
@@ -61,15 +61,16 @@ use ic_types::crypto::threshold_sig::ni_dkg::{
 };
 use ic_types::messages::CertificateDelegationMetadata;
 use ic_types::{
+    CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
     batch::QueryStats,
-    crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
+    crypto::{AlgorithmId, canister_threshold_sig::MasterPublicKey},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId, Query, QuerySource,
-        RequestOrResponse, Response, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        CallbackId, CanisterCall, CanisterMessage, CanisterTask,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MessageId, Query, QuerySource, RequestOrResponse,
+        Response,
     },
     time::UNIX_EPOCH,
-    CanisterId, Cycles, Height, NumInstructions, QueryStatsEpoch, Time, UserId,
 };
 use ic_types::{ExecutionRound, RegistryVersion, ReplicaVersion};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
@@ -88,7 +89,7 @@ use std::{
 use tempfile::NamedTempFile;
 
 mod wat_canister;
-pub use wat_canister::{wat_canister, wat_fn, WatCanisterBuilder, WatFnCode};
+pub use wat_canister::{WatCanisterBuilder, WatFnCode, wat_canister, wat_fn};
 
 const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
 

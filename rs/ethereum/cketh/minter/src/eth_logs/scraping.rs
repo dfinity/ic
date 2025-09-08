@@ -1,12 +1,12 @@
 use crate::eth_logs::{
-    LogParser, ReceivedErc20LogParser, ReceivedEthLogParser, ReceivedEthOrErc20LogParser,
-    RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
-    RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
+    LogParser, RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
+    RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC, ReceivedErc20LogParser,
+    ReceivedEthLogParser, ReceivedEthOrErc20LogParser,
 };
 use crate::eth_rpc::Topic;
 use crate::numeric::BlockNumber;
-use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::State;
+use crate::state::eth_logs_scraping::LogScrapingId;
 use evm_rpc_client::Hex32;
 use ic_ethereum_types::Address;
 use std::iter::once;

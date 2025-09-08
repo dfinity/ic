@@ -1,5 +1,5 @@
 use anyhow::{Context, Error};
-use ic_stable_structures::{writer::Writer, Memory};
+use ic_stable_structures::{Memory, writer::Writer};
 use serde::{de::DeserializeOwned, ser::Serialize};
 
 pub fn store<M: Memory, T: Serialize>(mut m: M, v: T) -> Result<(), Error> {

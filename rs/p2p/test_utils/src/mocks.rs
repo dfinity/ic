@@ -8,8 +8,8 @@ use ic_interfaces::p2p::{
     state_sync::{AddChunkError, Chunk, ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient},
 };
 use ic_quic_transport::{ConnId, P2PError, Transport};
-use ic_types::artifact::IdentifiableArtifact;
 use ic_types::NodeId;
+use ic_types::artifact::IdentifiableArtifact;
 use mockall::mock;
 
 use crate::consensus::U64Artifact;

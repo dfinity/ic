@@ -4,9 +4,9 @@ use proptest::{
 };
 
 use canister_test::{CanisterInstallMode, InstallCodeArgs};
-use ic_test_utilities::universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use ic_test_utilities_execution_environment::ExecutionTestBuilder;
-use ic_types::{ingress::WasmResult, Cycles};
+use ic_types::{Cycles, ingress::WasmResult};
 
 #[derive(Copy, Clone, Debug)]
 enum GrowCommand {

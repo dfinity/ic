@@ -1,5 +1,5 @@
 use ic_certification::{
-    leaf, Certificate, Delegation, HashTree, LookupResult, SubtreeLookupResult,
+    Certificate, Delegation, HashTree, LookupResult, SubtreeLookupResult, leaf,
 };
 use ic_principal::Principal;
 use ic_verify_bls_signature::verify_bls_signature;
@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 
 pub const IC_STATE_ROOT_DOMAIN_SEPARATOR: &[u8; 14] = b"\x0Dic-state-root";
 
-use ic_canister_sig_creation::{extract_raw_root_pk_from_der, CanisterSigPublicKey};
+use ic_canister_sig_creation::{CanisterSigPublicKey, extract_raw_root_pk_from_der};
 
 /// Verifies that `signature` is a valid canister signature on `message`.
 /// https://internetcomputer.org/docs/current/references/ic-interface-spec#canister-signatures

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use candid::{Decode, Encode, Principal};
 use certificate_orchestrator_interface as ifc;

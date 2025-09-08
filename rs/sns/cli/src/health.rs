@@ -1,8 +1,8 @@
-use crate::table::{as_table, TableRow};
-use crate::utils::{get_snses_with_metadata, SnsWithMetadata};
+use crate::table::{TableRow, as_table};
+use crate::utils::{SnsWithMetadata, get_snses_with_metadata};
 use anyhow::Result;
 use clap::Parser;
-use futures::{stream, StreamExt};
+use futures::{StreamExt, stream};
 use ic_agent::Agent;
 use ic_nervous_system_agent::nns::sns_wasm;
 use ic_sns_governance_api::pb::v1::topics::ListTopicsResponse;

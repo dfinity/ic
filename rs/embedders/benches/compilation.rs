@@ -8,13 +8,13 @@
 //! ```
 
 use candid::Encode;
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 
 use embedders_bench::SetupAction;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
-    wasm_utils::{compile, validate_and_instrument_for_testing},
     WasmtimeEmbedder,
+    wasm_utils::{compile, validate_and_instrument_for_testing},
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_wasm_types::BinaryEncodedWasm;

@@ -15,7 +15,7 @@ use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::logs::Log;
 use ic_cketh_minter::{
     endpoints::{CandidBlockTag, Eip1559TransactionPrice},
-    lifecycle::{init::InitArg as MinterInitArgs, EthereumNetwork, MinterArg},
+    lifecycle::{EthereumNetwork, MinterArg, init::InitArg as MinterInitArgs},
 };
 use ic_ethereum_types::Address;
 use ic_http_types::{HttpRequest, HttpResponse};

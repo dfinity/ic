@@ -1,6 +1,6 @@
 use std::{fs::File, os::unix::fs::FileExt};
 
-use criterion::{criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use memmap2::MmapOptions;
 use rayon::prelude::*;
 

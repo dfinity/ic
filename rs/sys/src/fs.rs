@@ -178,15 +178,15 @@ pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
         flags: libc::c_uint,
     ) -> libc::c_long {
         unsafe {
-        libc::syscall(
-            libc::SYS_copy_file_range,
-            fd_in,
-            off_in,
-            fd_out,
-            off_out,
-            len,
-            flags,
-        )
+            libc::syscall(
+                libc::SYS_copy_file_range,
+                fd_in,
+                off_in,
+                fd_out,
+                off_out,
+                len,
+                flags,
+            )
         }
     }
 
@@ -226,11 +226,7 @@ pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
 
     let (mut can_handle_sparse, mut next_beg) = {
         let ret = unsafe { lseek64(fd_in, srcpos, libc::SEEK_DATA) };
-        if ret == -1 {
-            (false, 0)
-        } else {
-            (true, ret)
-        }
+        if ret == -1 { (false, 0) } else { (true, ret) }
     };
 
     let mut next_end: libc::loff_t = bytes_to_copy;
@@ -595,7 +591,7 @@ fn tmp_name() -> String {
     /// The character length of the random string used for temporary file names.
     const TMP_NAME_LEN: usize = 7;
 
-    use rand::{distributions::Alphanumeric, Rng};
+    use rand::{Rng, distributions::Alphanumeric};
 
     let mut rng = rand::thread_rng();
     std::iter::repeat(())
@@ -782,7 +778,7 @@ fn clone_file_impl(_src: &Path, _dst: &Path) -> Result<(), FileCloneError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{write_atomically_using_tmp_file, Clobber};
+    use super::{Clobber, write_atomically_using_tmp_file};
     use std::fs;
     use std::io::{ErrorKind, Write};
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -1125,8 +1121,10 @@ mod tests {
             let test_sym_link = temp_dir.as_ref().join("test_sym_link");
             std::os::unix::fs::symlink(&test_file, &test_sym_link)
                 .expect("error creating symbolic link");
-            assert!(!is_regular_file(&test_sym_link)
-                .expect("error determining if file is a regular file"));
+            assert!(
+                !is_regular_file(&test_sym_link)
+                    .expect("error determining if file is a regular file")
+            );
         }
 
         #[test]
@@ -1141,8 +1139,10 @@ mod tests {
             let test_hard_link = temp_dir.as_ref().join("test_hard_link");
             create_hard_link_to_existing_file(&test_sym_link, &test_hard_link)
                 .expect("error creating hard link");
-            assert!(!is_regular_file(&test_hard_link)
-                .expect("error determining if file is a regular file"));
+            assert!(
+                !is_regular_file(&test_hard_link)
+                    .expect("error determining if file is a regular file")
+            );
         }
 
         #[test]
@@ -1161,8 +1161,8 @@ mod tests {
     mod open_existing_file_for_write {
         use crate::fs::{open_existing_file_for_write, write_string_using_tmp_file};
         use assert_matches::assert_matches;
-        use std::fs::create_dir;
         use std::fs::Permissions;
+        use std::fs::create_dir;
         use std::io::ErrorKind::{NotFound, PermissionDenied};
         use std::os::unix::fs::PermissionsExt;
 
@@ -1221,8 +1221,8 @@ mod tests {
     mod remove_file {
         use crate::fs::{remove_file, write_string_using_tmp_file};
         use assert_matches::assert_matches;
-        use std::fs::create_dir;
         use std::fs::Permissions;
+        use std::fs::create_dir;
         use std::io::ErrorKind::{NotFound, PermissionDenied};
         use std::os::unix::fs::PermissionsExt;
 

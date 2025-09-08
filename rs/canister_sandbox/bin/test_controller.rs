@@ -6,7 +6,7 @@ use ic_canister_sandbox_backend_lib::{
 };
 use std::{
     os::fd::AsRawFd,
-    sync::{atomic::AtomicBool, Arc},
+    sync::{Arc, atomic::AtomicBool},
 };
 
 struct DummyControllerService {}

@@ -1,5 +1,5 @@
-use super::queue::InputQueue;
 use super::CanisterQueues;
+use super::queue::InputQueue;
 use crate::{InputQueueType, InputSource};
 use ic_types::CanisterId;
 use std::collections::{BTreeSet, VecDeque};
@@ -195,10 +195,10 @@ impl InputSchedule {
                 .chain(remote_schedule.iter())
                 .any(|canister_id| !self.scheduled_senders.contains(canister_id))
         {
-            return Err(
-                format!("Inconsistent input schedules:\n  `local_sender_schedule`: {:?}\n  `remote_sender_schedule`: {:?}\n  `scheduled_senders`: {:?}",
-                self.local_sender_schedule, self.remote_sender_schedule, self.scheduled_senders)
-            );
+            return Err(format!(
+                "Inconsistent input schedules:\n  `local_sender_schedule`: {:?}\n  `remote_sender_schedule`: {:?}\n  `scheduled_senders`: {:?}",
+                self.local_sender_schedule, self.remote_sender_schedule, self.scheduled_senders
+            ));
         }
 
         for (canister_id, input_queue) in input_queues {

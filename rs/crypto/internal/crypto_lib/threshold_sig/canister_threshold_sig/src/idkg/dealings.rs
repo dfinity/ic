@@ -1,7 +1,7 @@
 use crate::*;
 use core::fmt::{self, Debug};
-use ic_types::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealing;
 use ic_types::NumberOfNodes;
+use ic_types::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealing;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
@@ -414,7 +414,7 @@ impl IDkgDealingInternal {
 
                 match previous_commitment {
                     PolynomialCommitment::Pedersen(_) => {
-                        return Err(CanisterThresholdError::UnexpectedCommitmentType)
+                        return Err(CanisterThresholdError::UnexpectedCommitmentType);
                     }
                     PolynomialCommitment::Simple(c) => {
                         let constant_term = self.commitment.constant_term();

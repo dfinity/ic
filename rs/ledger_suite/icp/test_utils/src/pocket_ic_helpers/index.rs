@@ -60,5 +60,8 @@ pub fn wait_until_sync_is_completed(pocket_ic: &PocketIc) {
             return;
         }
     }
-    panic!("The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}", num_blocks_synced, chain_length);
+    panic!(
+        "The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}",
+        num_blocks_synced, chain_length
+    );
 }

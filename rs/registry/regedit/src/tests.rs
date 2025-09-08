@@ -1,6 +1,6 @@
 #![cfg(test)]
 use crate::{
-    args::{universal_projection, Command, RegistrySpec, SourceSpec, VersionSpec},
+    args::{Command, RegistrySpec, SourceSpec, VersionSpec, universal_projection},
     diff::DELETED_MARKER,
     execute_command, normalization,
     snapshot::SPECIAL_FIELD_PREFIX,

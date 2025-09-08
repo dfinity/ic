@@ -879,34 +879,50 @@ fn test_approve_genesis_kyc() {
         neuron_4.id().id => neuron_4.clone(),
     });
     // Before calling `approve_genesis_kyc`, none of the neurons have KYC verified.
-    assert!(!neuron_store
-        .with_neuron(&neuron_1.id(), |n| n.kyc_verified)
-        .unwrap());
-    assert!(!neuron_store
-        .with_neuron(&neuron_2.id(), |n| n.kyc_verified)
-        .unwrap());
-    assert!(!neuron_store
-        .with_neuron(&neuron_3.id(), |n| n.kyc_verified)
-        .unwrap());
-    assert!(!neuron_store
-        .with_neuron(&neuron_4.id(), |n| n.kyc_verified)
-        .unwrap());
+    assert!(
+        !neuron_store
+            .with_neuron(&neuron_1.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
+    assert!(
+        !neuron_store
+            .with_neuron(&neuron_2.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
+    assert!(
+        !neuron_store
+            .with_neuron(&neuron_3.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
+    assert!(
+        !neuron_store
+            .with_neuron(&neuron_4.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
 
     // Approve KYC for neuron_1, neuron_2 and neuron_3.
     approve_genesis_kyc(&mut neuron_store, &[principal_1, principal_2]).unwrap();
 
-    assert!(neuron_store
-        .with_neuron(&neuron_1.id(), |n| n.kyc_verified)
-        .unwrap());
-    assert!(neuron_store
-        .with_neuron(&neuron_2.id(), |n| n.kyc_verified)
-        .unwrap());
-    assert!(neuron_store
-        .with_neuron(&neuron_3.id(), |n| n.kyc_verified)
-        .unwrap());
-    assert!(!neuron_store
-        .with_neuron(&neuron_4.id(), |n| n.kyc_verified)
-        .unwrap());
+    assert!(
+        neuron_store
+            .with_neuron(&neuron_1.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
+    assert!(
+        neuron_store
+            .with_neuron(&neuron_2.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
+    assert!(
+        neuron_store
+            .with_neuron(&neuron_3.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
+    assert!(
+        !neuron_store
+            .with_neuron(&neuron_4.id(), |n| n.kyc_verified)
+            .unwrap()
+    );
 }
 
 // Prepares `num_neurons_same_controller` neurons with the same controller and
@@ -955,16 +971,20 @@ fn test_approve_genesis_kyc_cap_not_exceeded() {
 
     // All 1000 neurons should have KYC verified.
     for neuron in &neurons {
-        assert!(neuron_store
-            .with_neuron(&neuron.id(), |n| n.kyc_verified)
-            .unwrap());
+        assert!(
+            neuron_store
+                .with_neuron(&neuron.id(), |n| n.kyc_verified)
+                .unwrap()
+        );
     }
 
     // The neuron with id 1001 should not have KYC verified.
-    assert!(!neuron_store
-        .with_neuron(&neuron_should_not_have_kyc_verified.id(), |n| n
-            .kyc_verified)
-        .unwrap());
+    assert!(
+        !neuron_store
+            .with_neuron(&neuron_should_not_have_kyc_verified.id(), |n| n
+                .kyc_verified)
+            .unwrap()
+    );
 }
 
 #[test]
@@ -987,8 +1007,10 @@ fn test_approve_genesis_kyc_cap_exceeded() {
 
     // None of the neurons should have KYC verified.
     for neuron in &neurons {
-        assert!(!neuron_store
-            .with_neuron(&neuron.id(), |n| n.kyc_verified)
-            .unwrap());
+        assert!(
+            !neuron_store
+                .with_neuron(&neuron.id(), |n| n.kyc_verified)
+                .unwrap()
+        );
     }
 }

@@ -1,4 +1,4 @@
-use ic_crypto_tree_hash::{flatmap, Digest, FlatMap, Label, LabeledTree, MixedHashTree as T};
+use ic_crypto_tree_hash::{Digest, FlatMap, Label, LabeledTree, MixedHashTree as T, flatmap};
 use proptest::collection::btree_map;
 use proptest::prelude::*;
 

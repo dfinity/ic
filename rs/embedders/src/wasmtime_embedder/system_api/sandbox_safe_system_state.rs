@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    cycles_balance_change::CyclesBalanceChange, routing, routing::ResolveDestinationError, ApiType,
-    CERTIFIED_DATA_MAX_LENGTH,
+    ApiType, CERTIFIED_DATA_MAX_LENGTH, cycles_balance_change::CyclesBalanceChange, routing,
+    routing::ResolveDestinationError,
 };
 use ic_base_types::{CanisterId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
 use ic_cycles_account_manager::{
@@ -11,28 +11,28 @@ use ic_cycles_account_manager::{
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use ic_management_canister_types_private::{
-    CanisterStatusType, CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
+    CanisterStatusType, CreateCanisterArgs, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, RenameCanisterArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, IC_00,
+    UpdateSettingsArgs,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::{
-    is_low_wasm_memory_hook_condition_satisfied, CyclesUseCase,
+    CyclesUseCase, is_low_wasm_memory_hook_condition_satisfied,
 };
 use ic_replicated_state::{
-    canister_state::execution_state::WasmExecutionMode, canister_state::DEFAULT_QUEUE_CAPACITY,
     CallOrigin, ExecutionTask, MessageMemoryUsage, NetworkTopology, SystemState,
+    canister_state::DEFAULT_QUEUE_CAPACITY, canister_state::execution_state::WasmExecutionMode,
 };
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
-    messages::{CallContextId, CallbackId, RejectContext, Request, RequestMetadata, NO_DEADLINE},
+    CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
+    messages::{CallContextId, CallbackId, NO_DEADLINE, RejectContext, Request, RequestMetadata},
     methods::Callback,
     time::CoarseTime,
-    CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
 };
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
@@ -306,9 +306,12 @@ impl SystemStateModifications {
                     Ok(())
                 } else {
                     Err(UserError::new(
-                      ErrorCode::CanisterContractViolation,
-                      format!("Management canister call payload includes sender canister version {:?} that does not match the actual sender canister version {}.", sender_canister_version, canister_version_from_system))
-                    )
+                        ErrorCode::CanisterContractViolation,
+                        format!(
+                            "Management canister call payload includes sender canister version {:?} that does not match the actual sender canister version {}.",
+                            sender_canister_version, canister_version_from_system
+                        ),
+                    ))
                 }
             }
         }
@@ -1013,10 +1016,11 @@ impl SandboxSafeSystemState {
         // available only forApiType::{Update, ReplicatedQuery, ReplyCallback,
         // RejectCallBack} and all of them have CallContextId, hence
         // SystemStateModifications::call_context_balance_taken will never be `None`.
-        debug_assert!(self
-            .system_state_modifications
-            .call_context_balance_taken
-            .is_some());
+        debug_assert!(
+            self.system_state_modifications
+                .call_context_balance_taken
+                .is_some()
+        );
 
         let balance_taken = &mut self
             .system_state_modifications
@@ -1160,7 +1164,12 @@ impl SandboxSafeSystemState {
             .get()
             .overflowing_mul(self.dirty_page_overhead.get());
         if overflow {
-            Err(HypervisorError::ToolchainContractViolation{error: format!("Overflow calculating instruction cost for dirty pages - conversion rate: {}, dirty_pages: {}", self.dirty_page_overhead, dirty_pages)})
+            Err(HypervisorError::ToolchainContractViolation {
+                error: format!(
+                    "Overflow calculating instruction cost for dirty pages - conversion rate: {}, dirty_pages: {}",
+                    self.dirty_page_overhead, dirty_pages
+                ),
+            })
         } else {
             Ok(NumInstructions::from(inst))
         }
@@ -1502,15 +1511,15 @@ mod tests {
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        canister_state::system_state::CyclesUseCase, NetworkTopology, SystemState,
+        NetworkTopology, SystemState, canister_state::system_state::CyclesUseCase,
     };
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
-        batch::CanisterCyclesCostSchedule,
-        messages::{RequestMetadata, NO_DEADLINE},
-        time::CoarseTime,
         CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
         Time,
+        batch::CanisterCyclesCostSchedule,
+        messages::{NO_DEADLINE, RequestMetadata},
+        time::CoarseTime,
     };
 
     use super::{CanisterStatusView, SandboxSafeSystemState, SystemStateModifications};

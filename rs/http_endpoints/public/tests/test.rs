@@ -4,29 +4,29 @@
 pub mod common;
 
 use crate::common::{
-    create_conn_and_send_request, default_get_latest_state, default_latest_certified_height,
-    default_read_certified_state, get_free_localhost_socket_addr, HttpEndpointBuilder,
+    HttpEndpointBuilder, create_conn_and_send_request, default_get_latest_state,
+    default_latest_certified_height, default_read_certified_state, get_free_localhost_socket_addr,
 };
-use axum::body::{to_bytes, Body};
+use axum::body::{Body, to_bytes};
 use bytes::Bytes;
-use futures_util::{future::BoxFuture, FutureExt, StreamExt};
+use futures_util::{FutureExt, StreamExt, future::BoxFuture};
 use http_body::Frame;
 use http_body_util::StreamBody;
-use hyper::{body::Incoming, Method, Request, StatusCode};
+use hyper::{Method, Request, StatusCode, body::Incoming};
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_canister_client::prepare_read_state;
 use ic_canister_client_sender::Sender;
 use ic_canonical_state::encoding::types::{Cycles, SubnetMetrics};
 use ic_certification_test_utils::{
-    serialize_to_cbor, Certificate as TestCertificate, CertificateBuilder, CertificateData,
+    Certificate as TestCertificate, CertificateBuilder, CertificateData, serialize_to_cbor,
 };
 use ic_config::http_handler::Config;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
-use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, MixedHashTree, Path};
+use ic_crypto_tree_hash::{Label, LabeledTree, MixedHashTree, Path, flatmap};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_http_endpoints_public::{query, read_state};
 use ic_http_endpoints_test_agent::{
-    self, wait_for_status_healthy, Call, CanisterReadState, IngressMessage, Query, APPLICATION_CBOR,
+    self, APPLICATION_CBOR, Call, CanisterReadState, IngressMessage, Query, wait_for_status_healthy,
 };
 use ic_interfaces::execution_environment::QueryExecutionError;
 use ic_interfaces_mocks::consensus_pool::MockConsensusPoolCache;
@@ -40,30 +40,30 @@ use ic_read_state_response_parser::parse_subnet_read_state_response;
 use ic_registry_keys::make_crypto_threshold_signing_pubkey_key;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities_state::ReplicatedStateBuilder;
-use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id, NODE_1};
+use ic_test_utilities_types::ids::{NODE_1, canister_test_id, subnet_test_id, user_test_id};
 use ic_types::{
+    CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
     artifact::UnvalidatedArtifactMutation,
     consensus::certification::{Certification, CertificationContent},
     crypto::{
-        threshold_sig::{
-            ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-            ThresholdSigPublicKey,
-        },
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
+        threshold_sig::{
+            ThresholdSigPublicKey,
+            ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        },
     },
     ingress::WasmResult,
     messages::{Blob, Certificate, CertificateDelegation},
     signature::ThresholdSignature,
     time::current_time,
-    CryptoHashOfPartialState, Height, PrincipalId, RegistryVersion,
 };
 use prost::Message;
 use reqwest::header::CONTENT_TYPE;
 use rstest::rstest;
 use rustls::{
+    ClientConfig, DigitallySignedStruct, SignatureScheme,
     client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
     pki_types::{CertificateDer, ServerName, UnixTime},
-    ClientConfig, DigitallySignedStruct, SignatureScheme,
 };
 use serde_bytes::ByteBuf;
 use serde_cbor::value::Value as CBOR;
@@ -72,14 +72,14 @@ use std::{
     convert::Infallible,
     net::TcpStream,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
 };
 use tokio::{
     net::TcpSocket,
     runtime::Runtime,
-    time::{sleep, Duration},
+    time::{Duration, sleep},
 };
 use tokio_rustls::TlsConnector;
 

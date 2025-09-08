@@ -10,8 +10,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
     test_env_api::{
-        load_wasm, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-        NnsCustomizations,
+        HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsCustomizations,
+        load_wasm,
     },
 };
 use ic_system_test_driver::nns::set_authorized_subnetwork_list;

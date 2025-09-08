@@ -16,12 +16,12 @@ use ic_nns_constants::{
 use ic_nns_governance::{
     governance::{Environment, Governance, HeapGrowthPotential, RngError},
     pb::v1::{
-        manage_neuron, manage_neuron::NeuronIdOrSubaccount, proposal, ExecuteNnsFunction,
-        GovernanceError, ManageNeuron, Motion, NetworkEconomics, Proposal, Vote,
+        ExecuteNnsFunction, GovernanceError, ManageNeuron, Motion, NetworkEconomics, Proposal,
+        Vote, manage_neuron, manage_neuron::NeuronIdOrSubaccount, proposal,
     },
 };
 use ic_nns_governance_api::Neuron;
-use ic_nns_governance_api::{manage_neuron_response, ManageNeuronResponse};
+use ic_nns_governance_api::{ManageNeuronResponse, manage_neuron_response};
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1 as sns_swap_pb;
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
@@ -32,7 +32,7 @@ use maplit::btreemap;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::{
-    collections::{hash_map::Entry, BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, hash_map::Entry},
     convert::{TryFrom, TryInto},
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
@@ -41,11 +41,11 @@ use std::{
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 pub const NODE_PROVIDER_REWARD: u64 = 10_000;
 
+use ic_nns_governance::governance::RandomnessGenerator;
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{
-    self, account_to_tla, tla_function, Destination, ToTla, TLA_INSTRUMENTATION_STATE,
+    self, Destination, TLA_INSTRUMENTATION_STATE, ToTla, account_to_tla, tla_function,
 };
-use ic_nns_governance::governance::RandomnessGenerator;
 use ic_nns_governance::{tla_log_request, tla_log_response};
 use ic_node_rewards_canister_api::monthly_rewards::GetNodeProvidersMonthlyXdrRewardsResponse;
 
@@ -291,7 +291,13 @@ impl IcpLedger for FakeDriver {
         );
         println!(
             "Issuing ledger transfer from account {} (subaccount {}) to account {} amount {} fee {}",
-            from_account, from_subaccount.as_ref().map_or_else(||"None".to_string(), ToString::to_string), to_account, amount_e8s, fee_e8s
+            from_account,
+            from_subaccount
+                .as_ref()
+                .map_or_else(|| "None".to_string(), ToString::to_string),
+            to_account,
+            amount_e8s,
+            fee_e8s
         );
         tla_log_request!(
             "WaitForTransfer",
@@ -306,7 +312,9 @@ impl IcpLedger for FakeDriver {
         );
 
         if let Some(err) = self.error_on_next_ledger_call.lock().unwrap().take() {
-            println!("Failing the ledger transfer because we were instructed to fail the next ledger call");
+            println!(
+                "Failing the ledger transfer because we were instructed to fail the next ledger call"
+            );
             tla_log_response!(
                 Destination::new("ledger"),
                 tla::TlaValue::Variant {

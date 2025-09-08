@@ -3,14 +3,14 @@ use crate::{
     logs::INFO,
     pb::{
         sns_root_types::{
-            register_extension_response, CanisterCallError, ListSnsCanistersRequest,
-            ListSnsCanistersResponse, RegisterExtensionRequest, RegisterExtensionResponse,
+            CanisterCallError, ListSnsCanistersRequest, ListSnsCanistersResponse,
+            RegisterExtensionRequest, RegisterExtensionResponse, register_extension_response,
         },
         v1 as pb,
         v1::{
-            governance_error::ErrorType, precise, ChunkedCanisterWasm, ExecuteExtensionOperation,
-            ExtensionInit, ExtensionOperationArg, ExtensionUpgradeArg, GovernanceError, Precise,
-            PreciseMap, RegisterExtension, Topic,
+            ChunkedCanisterWasm, ExecuteExtensionOperation, ExtensionInit, ExtensionOperationArg,
+            ExtensionUpgradeArg, GovernanceError, Precise, PreciseMap, RegisterExtension, Topic,
+            governance_error::ErrorType, precise,
         },
     },
     storage::{cache_registered_extension, get_registered_extension_from_cache},
@@ -26,7 +26,7 @@ use ic_management_canister_types_private::{
     CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
 };
 use ic_nervous_system_common::{
-    ledger::compute_distribution_subaccount_bytes, NANO_SECONDS_PER_SECOND, ONE_HOUR_SECONDS,
+    NANO_SECONDS_PER_SECOND, ONE_HOUR_SECONDS, ledger::compute_distribution_subaccount_bytes,
 };
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, REGISTRY_CANISTER_ID};
 use icrc_ledger_types::icrc1::account::Account;
@@ -720,7 +720,7 @@ pub mod treasury_manager {
     use candid::Nat;
     use sns_treasury_manager::{Account, Allowance, Asset};
 
-    use crate::pb::v1::{precise, Precise, PreciseMap};
+    use crate::pb::v1::{Precise, PreciseMap, precise};
 
     pub fn construct_deposit_allowances(
         arg: Precise,
@@ -1781,8 +1781,8 @@ mod tests {
         pb::{
             sns_root_types::{ListSnsCanistersRequest, ListSnsCanistersResponse},
             v1::{
-                governance, governance::SnsMetadata, Governance as GovernanceProto,
-                NervousSystemParameters,
+                Governance as GovernanceProto, NervousSystemParameters, governance,
+                governance::SnsMetadata,
             },
         },
         types::test_helpers::NativeEnvironment,
@@ -1963,9 +1963,11 @@ mod tests {
         let error = result.unwrap_err();
         assert_eq!(error.error_type, ErrorType::NotFound as i32);
         assert!(error.error_message.contains("Extension canister"));
-        assert!(error
-            .error_message
-            .contains("is not registered with the SNS"));
+        assert!(
+            error
+                .error_message
+                .contains("is not registered with the SNS")
+        );
     }
 
     #[tokio::test]
@@ -1983,9 +1985,11 @@ mod tests {
 
         let error = result.unwrap_err();
         assert_eq!(error.error_type, ErrorType::InvalidProposal as i32);
-        assert!(error
-            .error_message
-            .contains("does not have an operation named invalid_operation"));
+        assert!(
+            error
+                .error_message
+                .contains("does not have an operation named invalid_operation")
+        );
     }
 
     /// Helper function to create a valid RegisterExtension payload for tests
@@ -2136,9 +2140,11 @@ mod tests {
         // Should fail because extension canister is NOT on fiduciary subnet
         let result = validate_register_extension(&governance, register_extension).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("TreasuryManager extensions must be installed on a fiduciary subnet"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("TreasuryManager extensions must be installed on a fiduciary subnet")
+        );
     }
 
     #[tokio::test]
@@ -2170,9 +2176,11 @@ mod tests {
         // Should fail because subnet lookup failed
         let result = validate_register_extension(&governance, register_extension).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("TreasuryManager extensions must be installed on a fiduciary subnet"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("TreasuryManager extensions must be installed on a fiduciary subnet")
+        );
     }
 
     #[tokio::test]
@@ -2587,30 +2595,57 @@ mod tests {
         let test_cases: Vec<(&'static str, u64, u64, u64, u64, Result<(), &'static str>)> = vec![
             (
                 "Positive: exactly 50%",
-                100_000_000, 200_000_000, 50_000_000, 100_000_000, Ok(())
+                100_000_000,
+                200_000_000,
+                50_000_000,
+                100_000_000,
+                Ok(()),
             ),
             (
                 "Positive: below 50%",
-                100_000_000, 200_000_000, 30_000_000, 60_000_000, Ok(())
+                100_000_000,
+                200_000_000,
+                30_000_000,
+                60_000_000,
+                Ok(()),
             ),
             (
                 "Positive: zero amounts",
-                100_000_000, 200_000_000, 0, 0, Ok(())
+                100_000_000,
+                200_000_000,
+                0,
+                0,
+                Ok(()),
             ),
             (
                 "Negative: SNS exceeds 50%",
-                100_000_000, 200_000_000, 51_000_000, 50_000_000,
-                Err("SNS treasury deposit request of 0.51000000 Token exceeds 50% of current SNS Token balance")
+                100_000_000,
+                200_000_000,
+                51_000_000,
+                50_000_000,
+                Err(
+                    "SNS treasury deposit request of 0.51000000 Token exceeds 50% of current SNS Token balance",
+                ),
             ),
             (
                 "Negative: ICP exceeds 50%",
-                100_000_000, 200_000_000, 40_000_000, 101_000_000,
-                Err("ICP treasury deposit request of 1.01000000 Token exceeds 50% of current ICP balance")
+                100_000_000,
+                200_000_000,
+                40_000_000,
+                101_000_000,
+                Err(
+                    "ICP treasury deposit request of 1.01000000 Token exceeds 50% of current ICP balance",
+                ),
             ),
             (
                 "Negative: both exceed 50% (SNS checked first)",
-                100_000_000, 200_000_000, 60_000_000, 120_000_000,
-                Err("SNS treasury deposit request of 0.60000000 Token exceeds 50% of current SNS Token balance")
+                100_000_000,
+                200_000_000,
+                60_000_000,
+                120_000_000,
+                Err(
+                    "SNS treasury deposit request of 0.60000000 Token exceeds 50% of current SNS Token balance",
+                ),
             ),
         ];
 
@@ -2640,15 +2675,30 @@ mod tests {
 
             match expected {
                 Ok(()) => {
-                    assert!(result.is_ok(),
+                    assert!(
+                        result.is_ok(),
                         "{}: Expected success for sns_balance={}, icp_balance={}, sns_request={}, icp_request={}, but got: {:?}",
-                        label, sns_balance, icp_balance, sns_request, icp_request, result);
+                        label,
+                        sns_balance,
+                        icp_balance,
+                        sns_request,
+                        icp_request,
+                        result
+                    );
                 }
                 Err(expected_substr) => {
                     let error = result.unwrap_err();
-                    assert!(error.contains(expected_substr),
+                    assert!(
+                        error.contains(expected_substr),
                         "{}: Expected error containing '{}' for sns_balance={}, icp_balance={}, sns_request={}, icp_request={}, but got: {}",
-                        label, expected_substr, sns_balance, icp_balance, sns_request, icp_request, error);
+                        label,
+                        expected_substr,
+                        sns_balance,
+                        icp_balance,
+                        sns_request,
+                        icp_request,
+                        error
+                    );
                 }
             }
         }
@@ -2828,9 +2878,11 @@ mod tests {
         };
         let result = validate_upgrade_extension(&governance, invalid_canister_id).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("Invalid extension_canister_id"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("Invalid extension_canister_id")
+        );
 
         // Test 3: Extension not registered
         let unregistered_extension = {

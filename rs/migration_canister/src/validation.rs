@@ -12,12 +12,12 @@ use candid::Principal;
 use ic_cdk::api::canister_self;
 
 use crate::{
+    Request, ValidationError,
     canister_state::requests::list_by,
     external_interfaces::{
-        management::{canister_status, CanisterStatusType},
+        management::{CanisterStatusType, canister_status},
         registry::get_subnet_for_canister,
     },
-    Request, ValidationError,
 };
 
 /// Given caller-provided data, returns a `Request` that can very likely be processed or an informative error.

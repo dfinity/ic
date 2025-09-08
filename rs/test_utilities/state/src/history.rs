@@ -2,7 +2,7 @@ use ic_interfaces::execution_environment::{
     IngressHistoryError, IngressHistoryReader, IngressHistoryWriter,
 };
 use ic_replicated_state::ReplicatedState;
-use ic_types::{ingress::IngressStatus, messages::MessageId, Height};
+use ic_types::{Height, ingress::IngressStatus, messages::MessageId};
 use mockall::*;
 use std::sync::Arc;
 

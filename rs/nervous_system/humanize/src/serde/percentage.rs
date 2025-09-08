@@ -1,6 +1,6 @@
 use crate::{format_percentage, parse_percentage};
 use ic_nervous_system_proto::pb::v1::Percentage;
-use serde::{ser::Error, Deserialize, Deserializer, Serializer};
+use serde::{Deserialize, Deserializer, Serializer, ser::Error};
 
 #[cfg(test)]
 mod percentage_tests;

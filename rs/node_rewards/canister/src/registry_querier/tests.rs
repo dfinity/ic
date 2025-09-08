@@ -7,12 +7,12 @@ use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardRates, NodeRewardsTable};
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_canister_client::{
-    test_registry_data_stable_memory_impl, RegistryDataStableMemory, StableCanisterRegistryClient,
-    StorableRegistryKey, StorableRegistryValue,
+    RegistryDataStableMemory, StableCanisterRegistryClient, StorableRegistryKey,
+    StorableRegistryValue, test_registry_data_stable_memory_impl,
 };
 use ic_registry_keys::{
-    make_subnet_list_record_key, DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX,
-    NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
+    DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
+    NODE_REWARDS_TABLE_KEY, make_subnet_list_record_key,
 };
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};

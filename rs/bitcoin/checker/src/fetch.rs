@@ -3,13 +3,13 @@ use crate::state::{
     FetchGuardError, FetchTxStatus, FetchTxStatusError, FetchedTx, HttpGetTxError,
     TransactionCheckData,
 };
-use crate::{providers, state, Config};
+use crate::{Config, providers, state};
 use bitcoin::Transaction;
 use futures::future::try_join_all;
 use ic_btc_checker::{
-    blocklist::is_blocked, get_tx_cycle_cost, CheckTransactionIrrecoverableError,
-    CheckTransactionQueryResponse, CheckTransactionResponse, CheckTransactionRetriable,
-    CheckTransactionStatus, INITIAL_MAX_RESPONSE_BYTES, RETRY_MAX_RESPONSE_BYTES,
+    CheckTransactionIrrecoverableError, CheckTransactionQueryResponse, CheckTransactionResponse,
+    CheckTransactionRetriable, CheckTransactionStatus, INITIAL_MAX_RESPONSE_BYTES,
+    RETRY_MAX_RESPONSE_BYTES, blocklist::is_blocked, get_tx_cycle_cost,
 };
 use ic_btc_interface::Txid;
 use ic_canister_log::log;

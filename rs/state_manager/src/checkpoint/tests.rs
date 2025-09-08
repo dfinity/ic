@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    flush_tip_channel, spawn_tip_thread, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
+    NUMBER_OF_CHECKPOINT_THREADS, StateManagerMetrics, flush_tip_channel, spawn_tip_thread,
 };
 use ic_base_types::NumSeconds;
 use ic_config::state_manager::lsmt_config_default;
@@ -9,13 +9,13 @@ use ic_management_canister_types_private::CanisterStatusType;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    CallContextManager, CanisterStatus, ExecutionState, ExportedFunctions, NumWasmPages, PageIndex,
     canister_state::execution_state::{WasmBinary, WasmMetadata},
     page_map::{Buffer, TestPageAllocatorFileDescriptorImpl},
     testing::{ReplicatedStateTesting, SystemStateTesting},
-    CallContextManager, CanisterStatus, ExecutionState, ExportedFunctions, NumWasmPages, PageIndex,
 };
 use ic_state_layout::{
-    StateLayout, CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR, SYSTEM_METADATA_FILE,
+    CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR, SYSTEM_METADATA_FILE, StateLayout,
 };
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities_logger::with_test_replica_logger;
@@ -26,9 +26,9 @@ use ic_test_utilities_types::{
     messages::IngressBuilder,
 };
 use ic_types::{
+    CanisterId, Cycles, Height,
     malicious_flags::MaliciousFlags,
     messages::{StopCanisterCallId, StopCanisterContext},
-    CanisterId, Cycles, Height,
 };
 use ic_utils_thread::JoinOnDrop;
 use ic_wasm_types::CanisterModule;
@@ -153,12 +153,14 @@ fn can_make_a_checkpoint() {
         assert_eq!(layout.checkpoint_heights().unwrap(), vec![HEIGHT]);
         let checkpoint = layout.checkpoint_verified(HEIGHT).unwrap();
         assert_eq!(checkpoint.canister_ids().unwrap(), vec![canister_id]);
-        assert!(checkpoint
-            .canister(&canister_id)
-            .unwrap()
-            .queues()
-            .deserialize()
-            .is_ok());
+        assert!(
+            checkpoint
+                .canister(&canister_id)
+                .unwrap()
+                .queues()
+                .deserialize()
+                .is_ok()
+        );
 
         // Ensure the expected paths actually exist.
         let checkpoint_path = root.join(CHECKPOINTS_DIR).join("000000000000002a");

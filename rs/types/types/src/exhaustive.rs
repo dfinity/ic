@@ -3,9 +3,9 @@
 use crate::artifact::IngressMessageId;
 use crate::batch::VetKdAgreement;
 use crate::consensus::hashed::Hashed;
+use crate::consensus::idkg::IDkgMasterPublicKeyId;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::QuadrupleInCreation;
-use crate::consensus::idkg::IDkgMasterPublicKeyId;
 use crate::consensus::idkg::{
     CompletedReshareRequest, CompletedSignature, HasIDkgMasterPublicKeyId, IDkgPayload,
     IDkgReshareRequest, IDkgUIDGenerator, MaskedTranscript, MasterKeyTranscript, PreSigId,
@@ -22,13 +22,13 @@ use crate::crypto::canister_threshold_sig::idkg::{
     InitialIDkgDealings, SignedIDkgDealing,
 };
 use crate::crypto::threshold_sig::ni_dkg::{
-    config::{tests::valid_dkg_config_data, NiDkgConfig},
     NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
+    config::{NiDkgConfig, tests::valid_dkg_config_data},
 };
 use crate::crypto::{
-    crypto_hash, AlgorithmId, BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf,
-    CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, CryptoHashable,
-    IndividualMultiSig, IndividualMultiSigOf, Signed, ThresholdSigShare, ThresholdSigShareOf,
+    AlgorithmId, BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CombinedThresholdSig,
+    CombinedThresholdSigOf, CryptoHash, CryptoHashOf, CryptoHashable, IndividualMultiSig,
+    IndividualMultiSigOf, Signed, ThresholdSigShare, ThresholdSigShareOf, crypto_hash,
 };
 use crate::messages::{CallbackId, SignedRequestBytes};
 use crate::signature::{

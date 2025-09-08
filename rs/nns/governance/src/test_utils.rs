@@ -12,7 +12,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_canisters::ledger::IcpLedger;
-use ic_nervous_system_common::{NervousSystemError, E8};
+use ic_nervous_system_common::{E8, NervousSystemError};
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_swap::pb::{
     v1 as sns_swap_pb,
@@ -289,30 +289,26 @@ impl Environment for MockEnvironment {
                 )
             });
 
-        let decode_request_bytes = |bytes| {
-            match method_name {
-                "get_state" => {
-                    match Decode!(bytes, sns_swap_pb::GetStateRequest) {
-                        Ok(ok) => format!("{:#?}", ok),
-                        Err(err) => format!(
-                            "Unable to decode request bytes as GetStateRequest because of {:?}: {}",
-                            err, default_request_bytes_format(bytes),
-                        ),
-                    }
-                }
+        let decode_request_bytes = |bytes| match method_name {
+            "get_state" => match Decode!(bytes, sns_swap_pb::GetStateRequest) {
+                Ok(ok) => format!("{:#?}", ok),
+                Err(err) => format!(
+                    "Unable to decode request bytes as GetStateRequest because of {:?}: {}",
+                    err,
+                    default_request_bytes_format(bytes),
+                ),
+            },
 
-                "list_deployed_snses" => {
-                    match Decode!(bytes, ListDeployedSnsesRequest) {
-                        Ok(ok) => format!("{:#?}", ok),
-                        Err(err) => format!(
-                            "Unable to decode request bytes as ListDeployedSnsesRequest because of {:?}: {}",
-                            err, default_request_bytes_format(bytes),
-                        ),
-                    }
-                }
+            "list_deployed_snses" => match Decode!(bytes, ListDeployedSnsesRequest) {
+                Ok(ok) => format!("{:#?}", ok),
+                Err(err) => format!(
+                    "Unable to decode request bytes as ListDeployedSnsesRequest because of {:?}: {}",
+                    err,
+                    default_request_bytes_format(bytes),
+                ),
+            },
 
-                _ => default_request_bytes_format(bytes)
-            }
+            _ => default_request_bytes_format(bytes),
         };
         fn default_request_bytes_format(bytes: &[u8]) -> String {
             let truncated = if bytes.len() > 16 {

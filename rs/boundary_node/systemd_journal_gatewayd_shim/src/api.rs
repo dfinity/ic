@@ -7,7 +7,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use itertools::{concat, Itertools};
+use itertools::{Itertools, concat};
 use reqwest::Method;
 use url::Url;
 

@@ -9,25 +9,25 @@ use crate::{protocol, rpc};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::{
-    get_wasm_reserved_pages, wasm_execution_error, CanisterStateChanges, ExecutionStateChanges,
-    PausedWasmExecution, SliceExecutionOutput, WasmExecutionResult, WasmExecutor,
+    CanisterStateChanges, ExecutionStateChanges, PausedWasmExecution, SliceExecutionOutput,
+    WasmExecutionResult, WasmExecutor, get_wasm_reserved_pages, wasm_execution_error,
 };
 use ic_embedders::{
-    wasm_utils::WasmImportsDetails, CompilationCache, CompilationResult, WasmExecutionInput,
+    CompilationCache, CompilationResult, WasmExecutionInput, wasm_utils::WasmImportsDetails,
 };
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult, InstanceStats};
 use ic_interfaces_state_manager::StateReader;
 #[cfg(target_os = "linux")]
 use ic_logger::warn;
-use ic_logger::{error, info, ReplicaLogger};
-use ic_metrics::buckets::{decimal_buckets_with_zero, exponential_buckets};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_metrics::MetricsRegistry;
+use ic_metrics::buckets::{decimal_buckets_with_zero, exponential_buckets};
 use ic_replicated_state::canister_state::execution_state::{
     SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary, WasmExecutionMode,
 };
 use ic_replicated_state::{
-    page_map::allocated_pages_count, EmbedderCache, ExecutionState, ExportedFunctions, Memory,
-    PageMap, ReplicatedState,
+    EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap, ReplicatedState,
+    page_map::allocated_pages_count,
 };
 use ic_types::ingress::WasmResult;
 use ic_types::methods::{FuncRef, WasmMethod};
@@ -42,8 +42,8 @@ use std::convert::TryInto;
 use std::os::fd::AsRawFd;
 use std::path::PathBuf;
 use std::process::ExitStatus;
-use std::sync::mpsc::Receiver;
 use std::sync::Weak;
+use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -681,8 +681,13 @@ impl ExecutionTracingState {
         let function_name = self.format_function_name();
         let instructions = self.instructions;
         let duration_ms = duration.as_millis();
-        info!(log, "Executed {canister_id}::{function_name}: instructions = {instructions}, duration = {duration_ms}ms.");
-        eprintln!("Executed {canister_id}::{function_name}: instructions = {instructions}, duration = {duration_ms}ms.");
+        info!(
+            log,
+            "Executed {canister_id}::{function_name}: instructions = {instructions}, duration = {duration_ms}ms."
+        );
+        eprintln!(
+            "Executed {canister_id}::{function_name}: instructions = {instructions}, duration = {duration_ms}ms."
+        );
     }
 
     fn format_function_name(&self) -> String {
@@ -1666,7 +1671,11 @@ impl SandboxedExecutionController {
             self.metrics
                 .sandboxed_execution_instructions_left_error
                 .inc();
-            error!(self.logger, "[EXC-BUG] Canister {} completed execution with more instructions left than the initial limit.", canister_id)
+            error!(
+                self.logger,
+                "[EXC-BUG] Canister {} completed execution with more instructions left than the initial limit.",
+                canister_id
+            )
         }
 
         let canister_state_changes = self.update_execution_state(
@@ -2185,7 +2194,7 @@ mod tests {
     use ic_test_utilities_types::ids::canister_test_id;
     use libc::kill;
     use rstest::rstest;
-    use slog::{o, Drain};
+    use slog::{Drain, o};
     use tempfile::TempDir;
 
     #[test]

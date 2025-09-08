@@ -19,12 +19,12 @@ use ic_management_canister_types_private::CanisterStatusType;
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    CanisterId, CountBytes, Cycles, Height, NumBytes, Time,
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     consensus::Payload,
     ingress::{IngressSets, IngressStatus},
-    messages::{extract_effective_canister_id, MessageId, SignedIngress},
-    CanisterId, CountBytes, Cycles, Height, NumBytes, Time,
+    messages::{MessageId, SignedIngress, extract_effective_canister_id},
 };
 use ic_validator::RequestValidationError;
 use std::{collections::BTreeMap, collections::HashMap, sync::Arc};
@@ -653,8 +653,8 @@ mod tests {
     // would compile but panic at runtime.
     use super::*;
     use crate::{
-        tests::{access_ingress_pool, setup, setup_registry, setup_with_params},
         RandomStateKind,
+        tests::{access_ingress_pool, setup, setup_registry, setup_with_params},
     };
     use assert_matches::assert_matches;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
@@ -666,7 +666,7 @@ mod tests {
     };
     use ic_interfaces_mocks::consensus_pool::MockConsensusTime;
     use ic_interfaces_state_manager_mocks::MockStateManager;
-    use ic_management_canister_types_private::{CanisterIdRecord, Payload, IC_00};
+    use ic_management_canister_types_private::{CanisterIdRecord, IC_00, Payload};
     use ic_metrics::MetricsRegistry;
     use ic_replicated_state::CanisterState;
     use ic_test_utilities::{
@@ -684,14 +684,14 @@ mod tests {
         messages::SignedIngressBuilder,
     };
     use ic_types::{
+        Height, RegistryVersion,
         artifact::IngressMessageId,
         batch::{CanisterCyclesCostSchedule, IngressPayload},
         ingress::{IngressState, IngressStatus},
         malicious_flags::MaliciousFlags,
         messages::{MessageId, SignedIngress},
         state_manager::{StateManagerError, StateManagerResult},
-        time::{expiry_time_from_now, UNIX_EPOCH},
-        Height, RegistryVersion,
+        time::{UNIX_EPOCH, expiry_time_from_now},
     };
     use rand::RngCore;
     use std::sync::RwLock;
@@ -1736,17 +1736,19 @@ mod tests {
                 let payload = IngressPayload::from(vec![msg]);
                 // Validation should succeed since the canister being addressed
                 // exists and has enough cycles.
-                assert!(ingress_manager
-                    .validate_ingress_payload(
-                        &payload,
-                        &HashSet::new(),
-                        &ValidationContext {
-                            time: UNIX_EPOCH,
-                            registry_version: RegistryVersion::from(1),
-                            certified_height: Height::from(0),
-                        },
-                    )
-                    .is_ok());
+                assert!(
+                    ingress_manager
+                        .validate_ingress_payload(
+                            &payload,
+                            &HashSet::new(),
+                            &ValidationContext {
+                                time: UNIX_EPOCH,
+                                registry_version: RegistryVersion::from(1),
+                                certified_height: Height::from(0),
+                            },
+                        )
+                        .is_ok()
+                );
             },
         );
     }

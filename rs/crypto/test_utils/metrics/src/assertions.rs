@@ -3,7 +3,7 @@
 use ic_crypto_internal_logmon::metrics::MetricsResult;
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities_metrics::{
-    fetch_counter_vec, fetch_gauge, fetch_gauge_vec, fetch_int_counter, labels, Labels,
+    Labels, fetch_counter_vec, fetch_gauge, fetch_gauge_vec, fetch_int_counter, labels,
 };
 
 pub struct MetricsObservationsAssert {
@@ -88,7 +88,9 @@ impl MetricsObservationsAssert {
     }
 
     pub fn contains_crypto_secret_key_store_cleanup_error(&self, value: u64) -> &Self {
-        assert!(self.contains_crypto_counter_metric("crypto_secret_key_store_cleanup_error", value));
+        assert!(
+            self.contains_crypto_counter_metric("crypto_secret_key_store_cleanup_error", value)
+        );
         self
     }
 

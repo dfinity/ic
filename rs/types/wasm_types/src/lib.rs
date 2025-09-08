@@ -3,8 +3,8 @@
 mod errors;
 
 pub use errors::{
-    doc_ref, AsErrorHelp, ErrorHelp, WasmEngineError, WasmError, WasmInstrumentationError,
-    WasmValidationError,
+    AsErrorHelp, ErrorHelp, WasmEngineError, WasmError, WasmInstrumentationError,
+    WasmValidationError, doc_ref,
 };
 use ic_heap_bytes::DeterministicHeapBytes;
 use ic_types::DiskBytes;
@@ -400,7 +400,7 @@ impl ModuleStorage {
 
 #[cfg(test)]
 mod tests {
-    use crate::{CanisterModule, MemoryMappableWasmFile, WasmHash, WASM_HASH_LENGTH};
+    use crate::{CanisterModule, MemoryMappableWasmFile, WASM_HASH_LENGTH, WasmHash};
     use std::path::{Path, PathBuf};
     struct TestWasmFile(PathBuf);
     impl MemoryMappableWasmFile for TestWasmFile {

@@ -34,7 +34,7 @@ use ic_consensus_system_test_utils::{
     },
     set_sandbox_env_vars,
 };
-use ic_recovery::{file_sync_helper, get_node_metrics, RecoveryArgs};
+use ic_recovery::{RecoveryArgs, file_sync_helper, get_node_metrics};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_splitting::subnet_splitting::{StepType, SubnetSplitting, SubnetSplittingArgs};
@@ -53,7 +53,7 @@ use ic_types::{CanisterId, Height, PrincipalId, ReplicaVersion};
 
 use anyhow::Result;
 use candid::Principal;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::{thread, time::Duration};
 
 const DKG_INTERVAL: u64 = 9;
@@ -323,11 +323,13 @@ fn verify_common(
     info!(logger, "Verifying the subnet record in the registry");
     assert!(!subnet.raw_subnet_record().halt_at_cup_height);
     assert!(!subnet.raw_subnet_record().is_halted);
-    assert!(subnet
-        .subnet_canister_ranges()
-        .iter()
-        .any(|canister_id_range| canister_id_range
-            .contains(&canister_id_from_principal(canister_id))));
+    assert!(
+        subnet
+            .subnet_canister_ranges()
+            .iter()
+            .any(|canister_id_range| canister_id_range
+                .contains(&canister_id_from_principal(canister_id)))
+    );
 
     info!(logger, "Verifying that the subnet is healthy");
     assert_subnet_is_healthy(

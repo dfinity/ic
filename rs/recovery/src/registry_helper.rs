@@ -19,7 +19,7 @@ use ic_registry_replicator::RegistryReplicator;
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_features::ChainKeyConfig;
 use prost::Message;
-use slog::{error, info, warn, Logger};
+use slog::{Logger, error, info, warn};
 use url::Url;
 
 use std::{

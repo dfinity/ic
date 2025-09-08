@@ -2,21 +2,21 @@
 #![cfg_attr(test, allow(clippy::unit_arg))]
 //! HTTP requests that the Internet Computer is prepared to handle.
 
-use super::{query::QuerySource, Blob};
+use super::{Blob, query::QuerySource};
 use crate::{
+    Height, Time, UserId,
     crypto::SignedBytesWithoutDomainSeparator,
     messages::{
-        message_id::hash_key_val, MessageId, Query, ReadState, SignedIngressContent, UserSignature,
+        MessageId, Query, ReadState, SignedIngressContent, UserSignature, message_id::hash_key_val,
     },
-    Height, Time, UserId,
 };
-use ic_base_types::{hash_of_map, CanisterId, CanisterIdError, NodeId, PrincipalId};
+use ic_base_types::{CanisterId, CanisterIdError, NodeId, PrincipalId, hash_of_map};
 use ic_crypto_tree_hash::{MixedHashTree, Path};
 use ic_heap_bytes::DeterministicHeapBytes;
 use maplit::btreemap;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
-use serde::{ser::SerializeTuple, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, ser::SerializeTuple};
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,

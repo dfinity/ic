@@ -132,7 +132,13 @@ pub fn block_transaction(
             .map_err(|err| Error::invalid_block_identifier(&err))?;
 
     if &rosetta_block.clone().get_block_identifier() != block_identifier {
-        return Err(Error::invalid_block_identifier(&format!("Both index {} and hash {} were provided but they do not match the same block. Actual index {} and hash {}",block_identifier.index,block_identifier.hash,rosetta_block.index,hex::encode(rosetta_block.clone().get_block_hash()))));
+        return Err(Error::invalid_block_identifier(&format!(
+            "Both index {} and hash {} were provided but they do not match the same block. Actual index {} and hash {}",
+            block_identifier.index,
+            block_identifier.hash,
+            rosetta_block.index,
+            hex::encode(rosetta_block.clone().get_block_hash())
+        )));
     }
 
     if &rosetta_block.clone().get_transaction_identifier() != transaction_identifier {
@@ -603,9 +609,9 @@ pub fn call(
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::Metadata;
     use crate::common::storage::types::IcrcOperation;
     use crate::common::storage::types::RosettaBlock;
-    use crate::Metadata;
     use ic_icrc1::blocks::encoded_block_to_generic_block;
     use ic_icrc1_test_utils::valid_blockchain_strategy;
     use ic_icrc1_tokens_u256::U256;
@@ -1228,12 +1234,14 @@ mod test {
                             .iter()
                             .map(|op| op.account.clone().unwrap())
                             .collect::<Vec<AccountIdentifier>>();
-                        assert!(involved_accounts.contains(
-                            &search_transactions_request
-                                .account_identifier
-                                .clone()
-                                .unwrap()
-                        ));
+                        assert!(
+                            involved_accounts.contains(
+                                &search_transactions_request
+                                    .account_identifier
+                                    .clone()
+                                    .unwrap()
+                            )
+                        );
 
                         search_transactions_request.account_identifier = Some(
                             Account {
@@ -1570,8 +1578,11 @@ mod test {
         match result.unwrap_err() {
             Error(err) => {
                 let description = err.description.as_ref().unwrap();
-                assert!(description
-                    .contains("Cannot specify subaccount when aggregate_all_subaccounts is true"));
+                assert!(
+                    description.contains(
+                        "Cannot specify subaccount when aggregate_all_subaccounts is true"
+                    )
+                );
             }
         }
 
@@ -2205,7 +2216,9 @@ mod test {
         println!("Expected total: {}", expected_total);
 
         // Debug: Let's manually check what the SQL query returns by using the storage operations directly
-        println!("Debug: This demonstrates the bug where DISTINCT subaccounts causes incorrect aggregation");
+        println!(
+            "Debug: This demonstrates the bug where DISTINCT subaccounts causes incorrect aggregation"
+        );
         println!("Both None and Some([0;32]) get stored as [0;32] in the database");
         println!("The DISTINCT clause in the aggregation query then treats them as one account");
 
@@ -2224,8 +2237,12 @@ mod test {
                 "✗ BUG CONFIRMED: Aggregated balance mismatch: got {}, expected {}",
                 aggregated_balance, expected_total
             );
-            println!("This happens because both None and Some([0;32]) are stored as [0;32] in the database");
-            println!("The DISTINCT clause in the aggregation SQL treats them as one account instead of two");
+            println!(
+                "This happens because both None and Some([0;32]) are stored as [0;32] in the database"
+            );
+            println!(
+                "The DISTINCT clause in the aggregation SQL treats them as one account instead of two"
+            );
         }
     }
 }

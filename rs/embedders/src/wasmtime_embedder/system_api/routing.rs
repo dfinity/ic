@@ -4,7 +4,7 @@ use std::str::FromStr;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_error_types::UserError;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use ic_management_canister_types_private::{
     BitcoinGetBalanceArgs, BitcoinGetBlockHeadersArgs, BitcoinGetCurrentFeePercentilesArgs,
     BitcoinGetUtxosArgs, BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
@@ -1005,7 +1005,9 @@ mod tests {
             ) {
                 Err(ResolveDestinationError::ChainKeyError(msg)) => assert_eq!(
                     msg,
-                    format!("Requested unknown threshold key {key_id} on subnet {subnet_id}, subnet has keys: []",)
+                    format!(
+                        "Requested unknown threshold key {key_id} on subnet {subnet_id}, subnet has keys: []",
+                    )
                 ),
                 _ => panic!("Unexpected result."),
             };

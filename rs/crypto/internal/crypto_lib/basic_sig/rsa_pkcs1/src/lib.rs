@@ -11,7 +11,7 @@ use ic_crypto_sha2::Sha256;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use num_traits::{FromPrimitive, Zero};
 use rsa::traits::PublicKeyParts;
-use rsa::{pkcs8, Pkcs1v15Sign};
+use rsa::{Pkcs1v15Sign, pkcs8};
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// The object identifier for RSA public keys

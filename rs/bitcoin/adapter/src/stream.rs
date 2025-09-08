@@ -1,25 +1,25 @@
 use bitcoin::io as bitcoin_io;
 use bitcoin::{
-    consensus::{serialize, Decodable, Encodable},
-    p2p::message::RawNetworkMessage,
+    consensus::{Decodable, Encodable, serialize},
     p2p::Magic,
+    p2p::message::RawNetworkMessage,
     {consensus::encode, p2p::message::NetworkMessage},
 };
 use futures::TryFutureExt;
 use http::Uri;
-use ic_logger::{debug, error, info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, error, info};
 use std::{io, net::SocketAddr, time::Duration};
 use thiserror::Error;
 use tokio::{
     io::AsyncWriteExt,
     net::{
-        tcp::{OwnedReadHalf, OwnedWriteHalf},
         TcpStream,
+        tcp::{OwnedReadHalf, OwnedWriteHalf},
     },
     sync::mpsc::{Sender, UnboundedReceiver},
     time::{sleep, timeout},
 };
-use tokio_socks::{tcp::Socks5Stream, Error as SocksError};
+use tokio_socks::{Error as SocksError, tcp::Socks5Stream};
 
 /// This provides a default amount of time to wait before a timeout occurs while
 /// attempting to connect to a BTC node.
@@ -380,7 +380,7 @@ pub mod test {
     use crate::common::DEFAULT_CHANNEL_BUFFER_SIZE;
 
     use super::*;
-    use bitcoin::{consensus::Encodable, Network};
+    use bitcoin::{Network, consensus::Encodable};
     use ic_logger::replica_logger::no_op_logger;
 
     type StreamConfig = super::StreamConfig<bitcoin::Block>;

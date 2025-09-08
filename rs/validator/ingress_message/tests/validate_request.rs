@@ -1,18 +1,18 @@
 use assert_matches::assert_matches;
-use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
 use ic_registry_client_helpers::node_operator::PrincipalId;
+use ic_types::CanisterId;
 use ic_types::messages::Blob;
 use ic_types::messages::HttpRequestContent;
-use ic_types::CanisterId;
 use ic_types::{Time, UserId};
 use ic_validator_http_request_test_utils::DirectAuthenticationScheme::{
     CanisterSignature, UserKeyPair,
 };
 use ic_validator_http_request_test_utils::{
-    all_authentication_schemes, all_authentication_schemes_except, canister_signature,
-    hard_coded_root_of_trust, random_user_key_pair, AuthenticationScheme, CanisterSigner,
-    DirectAuthenticationScheme, HttpRequestBuilder, HttpRequestEnvelopeContent, RootOfTrust,
-    CANISTER_ID_SIGNER, CANISTER_SIGNATURE_SEED, CURRENT_TIME,
+    AuthenticationScheme, CANISTER_ID_SIGNER, CANISTER_SIGNATURE_SEED, CURRENT_TIME,
+    CanisterSigner, DirectAuthenticationScheme, HttpRequestBuilder, HttpRequestEnvelopeContent,
+    RootOfTrust, all_authentication_schemes, all_authentication_schemes_except, canister_signature,
+    hard_coded_root_of_trust, random_user_key_pair,
 };
 use ic_validator_ingress_message::AuthenticationError;
 use ic_validator_ingress_message::AuthenticationError::DelegationContainsCyclesError;
@@ -737,7 +737,7 @@ mod authenticated_requests_direct_canister_signature {
     use crate::RequestValidationError::InvalidSignature;
     use crate::RequestValidationError::UserIdDoesNotMatchPublicKey;
     use ic_validator_http_request_test_utils::AuthenticationScheme::Direct;
-    use ic_validator_http_request_test_utils::{flip_a_bit_mut, HttpRequestEnvelopeFactory};
+    use ic_validator_http_request_test_utils::{HttpRequestEnvelopeFactory, flip_a_bit_mut};
 
     #[test]
     fn should_validate_request_signed_by_canister() {
@@ -1309,8 +1309,8 @@ mod authenticated_requests_delegations {
     }
 
     #[test]
-    fn should_fail_with_invalid_delegation_when_intermediate_delegation_is_an_unverifiable_canister_signature(
-    ) {
+    fn should_fail_with_invalid_delegation_when_intermediate_delegation_is_an_unverifiable_canister_signature()
+     {
         let rng = &mut reproducible_rng();
         let root_of_trust = RootOfTrust::new_random(rng);
         let other_root_of_trust = RootOfTrust::new_random(rng);
@@ -1343,8 +1343,8 @@ mod authenticated_requests_delegations {
     }
 
     #[test]
-    fn should_fail_with_invalid_signature_when_last_delegation_is_an_unverifiable_canister_signature(
-    ) {
+    fn should_fail_with_invalid_signature_when_last_delegation_is_an_unverifiable_canister_signature()
+     {
         let rng = &mut reproducible_rng();
         let root_of_trust = RootOfTrust::new_random(rng);
         let other_root_of_trust = RootOfTrust::new_random(rng);

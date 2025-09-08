@@ -1,8 +1,8 @@
 use crate::ids::canister_test_id;
 use ic_types::{
-    messages::{CallbackId, Request, RequestMetadata, NO_DEADLINE},
-    time::CoarseTime,
     CanisterId, Cycles,
+    messages::{CallbackId, NO_DEADLINE, Request, RequestMetadata},
+    time::CoarseTime,
 };
 
 pub struct RequestBuilder {

@@ -12,7 +12,7 @@ pub use tla_instrumentation::{
 };
 pub use tla_instrumentation_proc_macros::{tla_function, tla_update_method};
 
-pub use tla_instrumentation::checker::{check_tla_code_link, PredicateDescription};
+pub use tla_instrumentation::checker::{PredicateDescription, check_tla_code_link};
 
 use std::path::PathBuf;
 
@@ -223,27 +223,27 @@ fn post_process_trace(trace: &mut Vec<ResolvedStatePair>) {
         for state in &mut [start, end] {
             state
                 .0
-                 .0
+                .0
                 .remove("transaction_fee")
                 .expect("Didn't record the transaction fee");
             state
                 .0
-                 .0
+                .0
                 .remove("min_stake")
                 .expect("Didn't record the min stake");
             state
                 .0
-                 .0
+                .0
                 .remove("cached_maturity_basis_points")
                 .expect("Didn't record the cached maturity basis points");
-            if !state.0 .0.contains_key("governance_to_ledger") {
-                state.0 .0.insert(
+            if !state.0.0.contains_key("governance_to_ledger") {
+                state.0.0.insert(
                     "governance_to_ledger".to_string(),
                     TlaValue::Seq(Vec::new()),
                 );
             }
-            if !state.0 .0.contains_key("ledger_to_governance") {
-                state.0 .0.insert(
+            if !state.0.0.contains_key("ledger_to_governance") {
+                state.0.0.insert(
                     "ledger_to_governance".to_string(),
                     TlaValue::Set(BTreeSet::new()),
                 );

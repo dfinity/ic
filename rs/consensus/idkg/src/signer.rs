@@ -2,10 +2,10 @@
 
 use crate::{
     complaints::IDkgTranscriptLoader,
-    metrics::{timed_call, IDkgPayloadMetrics, ThresholdSignerMetrics},
+    metrics::{IDkgPayloadMetrics, ThresholdSignerMetrics, timed_call},
     utils::{build_signature_inputs, load_transcripts, update_purge_height},
 };
-use ic_consensus_utils::{crypto::ConsensusCrypto, RoundRobin};
+use ic_consensus_utils::{RoundRobin, crypto::ConsensusCrypto};
 use ic_interfaces::{
     crypto::{
         ErrorReproducibility, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
@@ -14,18 +14,19 @@ use ic_interfaces::{
     idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool},
 };
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, StateReader};
-use ic_logger::{debug, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
-    metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     ReplicatedState,
+    metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
 };
 use ic_types::{
+    Height, NodeId,
     artifact::IDkgMessageId,
     consensus::idkg::{
+        EcdsaSigShare, IDkgMessage, IDkgStats, RequestId, SchnorrSigShare, SigShare, VetKdKeyShare,
         common::{CombinedSignature, SignatureScheme, ThresholdSigInputs},
-        ecdsa_sig_share_prefix, schnorr_sig_share_prefix, vetkd_key_share_prefix, EcdsaSigShare,
-        IDkgMessage, IDkgStats, RequestId, SchnorrSigShare, SigShare, VetKdKeyShare,
+        ecdsa_sig_share_prefix, schnorr_sig_share_prefix, vetkd_key_share_prefix,
     },
     crypto::{
         canister_threshold_sig::error::{
@@ -36,7 +37,6 @@ use ic_types::{
         vetkd::{VetKdKeyShareCreationError, VetKdKeyShareVerificationError},
     },
     messages::CallbackId,
-    Height, NodeId,
 };
 use std::{
     cell::RefCell,
@@ -837,9 +837,9 @@ mod tests {
     use crate::test_utils::*;
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        generate_key_transcript, generate_tecdsa_protocol_inputs,
-        generate_tschnorr_protocol_inputs, run_tecdsa_protocol, run_tschnorr_protocol,
-        CanisterThresholdSigTestEnvironment, IDkgParticipants,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
+        generate_tecdsa_protocol_inputs, generate_tschnorr_protocol_inputs, run_tecdsa_protocol,
+        run_tschnorr_protocol,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
@@ -849,17 +849,17 @@ mod tests {
         ThresholdArguments, VetKdArguments,
     };
     use ic_test_utilities::crypto::CryptoReturningOk;
-    use ic_test_utilities_consensus::{idkg::*, IDkgStatsNoOp};
+    use ic_test_utilities_consensus::{IDkgStatsNoOp, idkg::*};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::{
-        ids::{canister_test_id, subnet_test_id, user_test_id, NODE_1, NODE_2, NODE_3},
+        ids::{NODE_1, NODE_2, NODE_3, canister_test_id, subnet_test_id, user_test_id},
         messages::RequestBuilder,
     };
     use ic_types::{
+        Height, Randomness,
         consensus::idkg::*,
         crypto::{AlgorithmId, ExtendedDerivationPath},
         time::UNIX_EPOCH,
-        Height, Randomness,
     };
     use std::{ops::Deref, sync::RwLock};
 

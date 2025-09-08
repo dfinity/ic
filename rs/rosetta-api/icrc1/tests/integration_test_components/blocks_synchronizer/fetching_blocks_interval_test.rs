@@ -6,13 +6,13 @@ use crate::common::local_replica::{
 use candid::{Encode, Nat};
 use ic_agent::Identity;
 use ic_base_types::PrincipalId;
-use ic_icrc1_ledger::InitArgsBuilder;
-use ic_icrc1_ledger::LedgerArgument;
-use ic_icrc1_test_utils::{transfer_args_with_sender, DEFAULT_TRANSFER_FEE};
 use ic_icrc_rosetta::common::storage::storage_client::StorageClient;
 use ic_icrc_rosetta::ledger_blocks_synchronization::blocks_synchronizer::{
-    self, blocks_verifier, RecurrencyMode,
+    self, RecurrencyMode, blocks_verifier,
 };
+use ic_icrc1_ledger::InitArgsBuilder;
+use ic_icrc1_ledger::LedgerArgument;
+use ic_icrc1_test_utils::{DEFAULT_TRANSFER_FEE, transfer_args_with_sender};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;

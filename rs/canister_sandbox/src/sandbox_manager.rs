@@ -27,8 +27,8 @@ use crate::protocol::structs::{
 use crate::{controller_service::ControllerService, protocol};
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
-    wasm_executor::WasmStateChanges, wasm_utils::Segments, InitialStateData, SerializedModuleBytes,
-    WasmtimeEmbedder,
+    InitialStateData, SerializedModuleBytes, WasmtimeEmbedder, wasm_executor::WasmStateChanges,
+    wasm_utils::Segments,
 };
 use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, HypervisorResult, SystemApi, WasmExecutionOutput,
@@ -36,8 +36,8 @@ use ic_interfaces::execution_environment::{
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::Global;
 use ic_replicated_state::{
-    page_map::{PageAllocatorRegistry, PageMapSerialization},
     EmbedderCache, Memory, PageMap,
+    page_map::{PageAllocatorRegistry, PageMapSerialization},
 };
 use ic_types::CanisterId;
 
@@ -496,7 +496,7 @@ impl SandboxManager {
         // and later or concurrent uses of the same cache entry would fail. But
         // we can mmap the data without mutating the fd.
         let initial_state_data: InitialStateData = {
-            use nix::sys::mman::{mmap, MapFlags, ProtFlags};
+            use nix::sys::mman::{MapFlags, ProtFlags, mmap};
             use std::os::{fd::AsRawFd, unix::fs::MetadataExt};
 
             let mmap_size = initial_state_data.metadata().unwrap().size() as usize;

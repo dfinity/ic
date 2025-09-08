@@ -119,7 +119,8 @@ fn baby_giant_big_range() {
     let baby_giant = BabyStepGiantStep::new(&base, lower_bound, upper_bound, 2048, 3);
 
     for _trial in 0..30 {
-        let x = Scalar::from_isize((rng.r#gen::<u64>() % upper_bound as u64) as isize + lower_bound);
+        let x =
+            Scalar::from_isize((rng.r#gen::<u64>() % upper_bound as u64) as isize + lower_bound);
         let tgt = &base * &x;
         assert_eq!(baby_giant.solve(&tgt), Some(x));
     }

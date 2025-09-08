@@ -17,12 +17,12 @@ use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use ic_registry_canister_client::{
-    get_decoded_value, CanisterRegistryClient, RegistryDataStableMemory,
+    CanisterRegistryClient, RegistryDataStableMemory, get_decoded_value,
 };
 use ic_registry_keys::{
     DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
 };
-use ic_registry_node_provider_rewards::{calculate_rewards_v0, RewardsPerNodeProvider};
+use ic_registry_node_provider_rewards::{RewardsPerNodeProvider, calculate_rewards_v0};
 use ic_types::RegistryVersion;
 use rewards_calculation::rewards_calculator::RewardsCalculatorInput;
 use rewards_calculation::rewards_calculator_results::RewardsCalculatorResults;

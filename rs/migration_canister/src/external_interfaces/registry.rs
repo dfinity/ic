@@ -4,7 +4,7 @@ use candid::{CandidType, Principal};
 use ic_cdk::{call::Call, println};
 use serde::Deserialize;
 
-use crate::{processing::ProcessingResult, ValidationError};
+use crate::{ValidationError, processing::ProcessingResult};
 
 const REGISTRY_CANISTER_ID: &str = "rwlgt-iiaaa-aaaaa-aaaaa-cai";
 

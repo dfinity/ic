@@ -1,19 +1,19 @@
 use std::{backtrace::Backtrace, collections::HashMap, ops::Range, sync::Arc, time::Duration};
 
 use futures::StreamExt;
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_p2p_test_utils::{
     consensus::{TestConsensus, U64Artifact},
     fully_connected_localhost_subnet, start_consensus_manager,
     turmoil::{
-        add_peer_manager_to_sim, add_transport_to_sim, run_simulation_for, wait_for,
-        wait_for_timeout, waiter_fut, PeerManagerAction,
+        PeerManagerAction, add_peer_manager_to_sim, add_transport_to_sim, run_simulation_for,
+        wait_for, wait_for_timeout, waiter_fut,
     },
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::{NodeId, RegistryVersion};
-use ic_types_test_utils::ids::{node_test_id, NODE_1, NODE_2, NODE_3};
-use rand::{rngs::ThreadRng, Rng};
+use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, node_test_id};
+use rand::{Rng, rngs::ThreadRng};
 use tokio::{sync::Notify, task::JoinSet};
 use tokio_util::time::DelayQueue;
 use turmoil::Builder;

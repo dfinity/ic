@@ -1,6 +1,6 @@
+use ic_crypto_internal_csp::LocalCspVault;
 use ic_crypto_internal_csp::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
-use ic_crypto_internal_csp::LocalCspVault;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_logger::replica_logger::no_op_logger;
 use proptest::prelude::ProptestConfig;

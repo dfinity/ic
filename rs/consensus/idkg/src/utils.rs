@@ -11,7 +11,7 @@ use ic_interfaces::{
     idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::registry::subnet::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -20,27 +20,27 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     SignWithThresholdContext, ThresholdArguments,
 };
 use ic_types::{
+    Height, RegistryVersion, SubnetId,
     batch::{AvailablePreSignatures, ConsensusResponse},
     consensus::{
+        Block, HasHeight,
         idkg::{
-            common::{BuildSignatureInputsError, ThresholdSigInputs},
             CompletedSignature, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId,
             IDkgMessage, IDkgPayload, IDkgTranscriptParamsRef, PreSigId, RequestId,
             TranscriptLookupError, TranscriptRef,
+            common::{BuildSignatureInputsError, ThresholdSigInputs},
         },
-        Block, HasHeight,
     },
     crypto::{
+        ExtendedDerivationPath,
         canister_threshold_sig::{
-            idkg::{IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings},
             MasterPublicKey, ThresholdEcdsaSigInputs, ThresholdSchnorrSigInputs,
+            idkg::{IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings},
         },
         vetkd::{VetKdArgs, VetKdDerivationContext},
-        ExtendedDerivationPath,
     },
     messages::CallbackId,
     registry::RegistryClientError,
-    Height, RegistryVersion, SubnetId,
 };
 use phantom_newtype::Id;
 use std::{
@@ -158,7 +158,7 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
                 return Err(format!(
                     "transcript(): chain look up failed {:?}: {:?}",
                     transcript_ref, err
-                ))
+                ));
             }
         };
 
@@ -417,7 +417,7 @@ pub fn inspect_idkg_chain_key_initializations(
             Some(pb::chain_key_initialization::Initialization::TranscriptRecord(_)) | None => {
                 return Err(
                     "Error: Failed to find dealings in chain_key_initializations".to_string(),
-                )
+                );
             }
         };
 
@@ -598,14 +598,14 @@ pub(crate) fn update_purge_height(cell: &RefCell<Height>, new_height: Height) ->
 mod tests {
     use super::*;
     use crate::test_utils::{
-        create_available_pre_signature_with_key_transcript_and_height, set_up_idkg_payload,
-        IDkgPayloadTestHelper,
+        IDkgPayloadTestHelper, create_available_pre_signature_with_key_transcript_and_height,
+        set_up_idkg_payload,
     };
     use ic_config::artifact_pool::ArtifactPoolConfig;
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        dummy_values::dummy_initial_idkg_dealing_for_tests, generate_key_transcript,
-        IDkgParticipants,
+        IDkgParticipants, dummy_values::dummy_initial_idkg_dealing_for_tests,
+        generate_key_transcript,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_logger::no_op_logger;
@@ -614,14 +614,14 @@ mod tests {
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_consensus::{fake::Fake, idkg::*};
-    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         batch::ValidationContext,
         consensus::{
+            BlockPayload, Payload, SummaryPayload,
             dkg::DkgSummary,
             idkg::{IDkgPayload, UnmaskedTranscript},
-            BlockPayload, Payload, SummaryPayload,
         },
         crypto::{AlgorithmId, CryptoHashOf},
         time::UNIX_EPOCH,
@@ -1025,9 +1025,11 @@ mod tests {
                 .keys()
                 .copied()
                 .collect();
-            assert!(!pre_signature_ids_not_to_be_delivered
-                .into_iter()
-                .any(|pid| delivered_ids.contains(&pid)));
+            assert!(
+                !pre_signature_ids_not_to_be_delivered
+                    .into_iter()
+                    .any(|pid| delivered_ids.contains(&pid))
+            );
             assert_eq!(
                 BTreeSet::from_iter(pre_signature_ids_to_be_delivered),
                 delivered_ids

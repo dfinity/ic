@@ -1,5 +1,5 @@
 use super::*;
-use candid_parser::utils::{service_equal, CandidSource};
+use candid_parser::utils::{CandidSource, service_equal};
 use ic_nervous_system_clients::canister_status::MemoryMetricsFromManagementCanister;
 use ic_nervous_system_clients::{
     canister_status::{

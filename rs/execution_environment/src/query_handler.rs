@@ -16,7 +16,7 @@ use crate::{
 use candid::Encode;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
-use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
+use ic_crypto_tree_hash::{Label, LabeledTree, LabeledTree::SubTree, flatmap};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
@@ -28,15 +28,15 @@ use ic_metrics::MetricsRegistry;
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
+use ic_types::QueryStatsEpoch;
 use ic_types::batch::QueryStats;
 use ic_types::messages::CertificateDelegationMetadata;
-use ic_types::QueryStatsEpoch;
 use ic_types::{
+    CanisterId, NumInstructions, PrincipalId,
     ingress::WasmResult,
     messages::{Blob, Certificate, CertificateDelegation, Query},
-    CanisterId, NumInstructions, PrincipalId,
 };
-use prometheus::{histogram_opts, labels, Histogram};
+use prometheus::{Histogram, histogram_opts, labels};
 use serde::Serialize;
 use std::convert::Infallible;
 use std::str::FromStr;
@@ -48,7 +48,7 @@ use std::{
     time::Instant,
 };
 use tokio::sync::oneshot;
-use tower::{util::BoxCloneService, Service};
+use tower::{Service, util::BoxCloneService};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
 use ic_management_canister_types_private::{

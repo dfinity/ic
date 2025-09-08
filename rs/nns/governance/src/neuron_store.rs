@@ -1,14 +1,14 @@
 use crate::{
-    governance::{TimeWarp, LOG_PREFIX},
+    CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS, Clock, IcClock,
+    governance::{LOG_PREFIX, TimeWarp},
     neuron::types::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
-    pb::v1::{governance_error::ErrorType, GovernanceError, Topic, VotingPowerEconomics},
+    pb::v1::{GovernanceError, Topic, VotingPowerEconomics, governance_error::ErrorType},
     storage::{
         neuron_indexes::CorruptedNeuronIndexes, neurons::NeuronSections,
         with_stable_neuron_indexes, with_stable_neuron_indexes_mut, with_stable_neuron_store,
         with_stable_neuron_store_mut,
     },
-    Clock, IcClock, CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS,
 };
 use dyn_clone::DynClone;
 use ic_base_types::PrincipalId;

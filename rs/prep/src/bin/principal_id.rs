@@ -103,7 +103,7 @@ fn run_self_signed(fname: Option<PathBuf>, pod: Option<PemOrDer>) -> io::Result<
                 None => {
                     return Err(io::Error::other(
                         "Must specify '--type' option when reading from stdin",
-                    ))
+                    ));
                 }
             }
             io::stdin().read_to_end(&mut buffer)?;

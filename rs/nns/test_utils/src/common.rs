@@ -18,9 +18,8 @@ use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_sns_wasm::init::{SnsWasmCanisterInitPayload, SnsWasmCanisterInitPayloadBuilder};
 use ic_utils::byte_slice_fmt::truncate_and_format;
 use icp_ledger::{
-    self as ledger,
+    self as ledger, LedgerCanisterInitPayload, LedgerCanisterInitPayloadBuilder, Tokens,
     account_identifier::{AccountIdentifier, Subaccount},
-    LedgerCanisterInitPayload, LedgerCanisterInitPayloadBuilder, Tokens,
 };
 use lifeline::LIFELINE_CANISTER_WASM;
 use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
@@ -223,12 +222,14 @@ impl NnsInitPayloadsBuilder {
     }
 
     pub fn build(&mut self) -> NnsInitPayloads {
-        assert!(!self
-            .ledger
-            .init_args()
-            .unwrap()
-            .initial_values
-            .contains_key(&GOVERNANCE_CANISTER_ID.get().into()));
+        assert!(
+            !self
+                .ledger
+                .init_args()
+                .unwrap()
+                .initial_values
+                .contains_key(&GOVERNANCE_CANISTER_ID.get().into())
+        );
         for n in self.governance.proto.neurons.values() {
             let sub = Subaccount(n.account.as_slice().try_into().unwrap_or_else(|e| {
                 panic!(

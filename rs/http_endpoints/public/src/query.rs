@@ -1,15 +1,15 @@
 //! Module that deals with requests to /api/v2/canister/.../query
 
 use crate::{
-    common::{build_validator, validation_error_to_http_error, Cbor, WithTimeout},
     ReplicaHealthStatus,
+    common::{Cbor, WithTimeout, build_validator, validation_error_to_http_error},
 };
 
 use axum::{
+    Router,
     body::Body,
     extract::{DefaultBodyLimit, State},
     response::{IntoResponse, Response},
-    Router,
 };
 use crossbeam::atomic::AtomicCell;
 use http::Request;
@@ -22,10 +22,11 @@ use ic_interfaces::{
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error};
 use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_types::{
+    CanisterId, NodeId,
     ingress::WasmResult,
     malicious_flags::MaliciousFlags,
     messages::{
@@ -33,7 +34,6 @@ use ic_types::{
         HttpRequest, HttpRequestEnvelope, HttpSignedQueryResponse, NodeSignature, Query,
         QueryResponseHash,
     },
-    CanisterId, NodeId,
 };
 use ic_validator::HttpRequestVerifier;
 use std::sync::Arc;
@@ -41,7 +41,7 @@ use std::{
     convert::{Infallible, TryFrom},
     sync::Mutex,
 };
-use tower::{util::BoxCloneService, ServiceBuilder, ServiceExt};
+use tower::{ServiceBuilder, ServiceExt, util::BoxCloneService};
 
 #[derive(Copy, Clone)]
 pub enum Version {

@@ -10,20 +10,20 @@ use ic_interfaces::{
         ArtifactTransmit, ArtifactTransmits, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
     },
 };
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
+use ic_types::NodeId;
 use ic_types::consensus::IsShare;
 use ic_types::crypto::crypto_hash;
-use ic_types::NodeId;
 use ic_types::{
+    Height,
     artifact::CertificationMessageId,
+    consensus::HasHeight,
     consensus::certification::{
         Certification, CertificationMessage, CertificationMessageHash, CertificationShare,
     },
-    consensus::HasHeight,
-    Height,
 };
-use prometheus::{labels, opts, IntCounter, IntGauge};
+use prometheus::{IntCounter, IntGauge, labels, opts};
 use std::collections::{BTreeMap, HashSet};
 
 struct PerTypeMetrics {
@@ -510,15 +510,15 @@ mod tests {
     use ic_types::artifact::IdentifiableArtifact;
     use ic_types::time::UNIX_EPOCH;
     use ic_types::{
+        CryptoHashOfPartialState, Height,
         consensus::certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
         },
         crypto::{
-            threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
             CryptoHash, Signed,
+            threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         },
         signature::*,
-        CryptoHashOfPartialState, Height,
     };
 
     fn gen_content() -> CertificationContent {
@@ -644,10 +644,12 @@ mod tests {
                 ChangeAction::AddToValidated(cert_msg.clone()),
             ]);
             assert_eq!(result.transmits.len(), 2);
-            assert!(!result
-                .transmits
-                .iter()
-                .any(|x| matches!(x, ArtifactTransmit::Abort(_))));
+            assert!(
+                !result
+                    .transmits
+                    .iter()
+                    .any(|x| matches!(x, ArtifactTransmit::Abort(_)))
+            );
             assert!(result.poll_immediately);
             assert_eq!(
                 pool.certification_at_height(Height::from(8)),
@@ -758,10 +760,12 @@ mod tests {
                     panic!("Purging couldn't finish in more than 6 seconds.")
                 }
             }
-            assert!(!result
-                .transmits
-                .iter()
-                .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
+            assert!(
+                !result
+                    .transmits
+                    .iter()
+                    .any(|x| matches!(x, ArtifactTransmit::Deliver(_)))
+            );
             assert_eq!(result.transmits.len(), 2);
             assert!(result.poll_immediately);
             assert_eq!(pool.all_heights_with_artifacts().len(), 0);
@@ -833,21 +837,28 @@ mod tests {
             let share_msg = fake_share(7, 0);
             let cert_msg = fake_cert(8);
 
-            assert!(!pool
-                .unvalidated
-                .contains_key(&CertificationMessageId::from(&share_msg).hash));
-            assert!(!pool
-                .unvalidated
-                .contains_key(&CertificationMessageId::from(&cert_msg).hash));
+            assert!(
+                !pool
+                    .unvalidated
+                    .contains_key(&CertificationMessageId::from(&share_msg).hash)
+            );
+            assert!(
+                !pool
+                    .unvalidated
+                    .contains_key(&CertificationMessageId::from(&cert_msg).hash)
+            );
 
             pool.insert(to_unvalidated(share_msg.clone()));
 
-            assert!(pool
-                .unvalidated
-                .contains_key(&CertificationMessageId::from(&share_msg).hash));
-            assert!(!pool
-                .unvalidated
-                .contains_key(&CertificationMessageId::from(&cert_msg).hash));
+            assert!(
+                pool.unvalidated
+                    .contains_key(&CertificationMessageId::from(&share_msg).hash)
+            );
+            assert!(
+                !pool
+                    .unvalidated
+                    .contains_key(&CertificationMessageId::from(&cert_msg).hash)
+            );
         });
     }
 
@@ -863,24 +874,28 @@ mod tests {
             let share_msg = fake_share(7, 0);
             let cert_msg = fake_cert(8);
 
-            assert!(pool
-                .validated
-                .get(&CertificationMessageId::from(&share_msg))
-                .is_none());
-            assert!(pool
-                .validated
-                .get(&CertificationMessageId::from(&cert_msg))
-                .is_none());
+            assert!(
+                pool.validated
+                    .get(&CertificationMessageId::from(&share_msg))
+                    .is_none()
+            );
+            assert!(
+                pool.validated
+                    .get(&CertificationMessageId::from(&cert_msg))
+                    .is_none()
+            );
 
             let result = pool.apply(vec![
                 ChangeAction::AddToValidated(share_msg.clone()),
                 ChangeAction::AddToValidated(cert_msg.clone()),
             ]);
             assert_eq!(result.transmits.len(), 2);
-            assert!(!result
-                .transmits
-                .iter()
-                .any(|x| matches!(x, ArtifactTransmit::Abort(_))));
+            assert!(
+                !result
+                    .transmits
+                    .iter()
+                    .any(|x| matches!(x, ArtifactTransmit::Abort(_)))
+            );
             assert!(result.poll_immediately);
             assert_eq!(
                 pool.certification_at_height(Height::from(8)),

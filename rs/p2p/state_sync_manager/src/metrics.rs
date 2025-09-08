@@ -1,5 +1,5 @@
 use ic_metrics::{
-    buckets::decimal_buckets, tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry,
+    MetricsRegistry, buckets::decimal_buckets, tokio_metrics_collector::TokioTaskMetricsCollector,
 };
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGauge};
 use tokio_metrics::TaskMonitor;

@@ -6,8 +6,8 @@ use dfn_core::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_gtc::{
-    pb::v1::{AccountState, Gtc},
     LOG_PREFIX,
+    pb::v1::{AccountState, Gtc},
 };
 use ic_nns_gtc_accounts::FORWARD_WHITELIST;
 use prost::Message;

@@ -4,10 +4,10 @@
 //! * Individual error conditions;
 //! * Enumerations of all the error conditions that a method can return.
 
+use ic_types::crypto::AlgorithmId;
 pub use ic_types::crypto::error::{
     InvalidArgumentError, KeyNotFoundError, MalformedDataError, MalformedPublicKeyError,
 };
-use ic_types::crypto::AlgorithmId;
 use serde::{Deserialize, Serialize};
 
 mod conversions;

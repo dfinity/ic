@@ -1,10 +1,10 @@
 use crate::flags::temporarily_enable_chunkifying_large_values;
 use crate::invariants::routing_table::check_routing_table_invariants;
 use crate::registry::Registry;
-use canbench_rs::{bench, bench_fn, BenchResult};
+use canbench_rs::{BenchResult, bench, bench_fn};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_protobuf::registry::routing_table::v1::routing_table::Entry;
 use ic_protobuf::registry::routing_table::v1::RoutingTable;
+use ic_protobuf::registry::routing_table::v1::routing_table::Entry;
 use ic_registry_keys::make_canister_ranges_key;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_transport::upsert;

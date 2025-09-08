@@ -2,7 +2,7 @@ use crate::candid::{CyclesManagement, InitArg};
 use crate::state::State;
 use candid::Principal;
 use proptest::arbitrary::any;
-use proptest::collection::{vec, SizeRange};
+use proptest::collection::{SizeRange, vec};
 use proptest::option;
 use proptest::prelude::Strategy;
 

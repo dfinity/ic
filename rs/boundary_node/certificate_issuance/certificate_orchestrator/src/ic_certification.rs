@@ -3,7 +3,7 @@ use certificate_orchestrator_interface::{
     BoundedString, ExportPackage, IcCertificate, Id, LABEL_DOMAINS, LEFT_GUARD, RIGHT_GUARD,
 };
 use ic_cdk::api::{certified_data_set, data_certificate};
-use ic_certified_map::{labeled, labeled_hash, AsHashTree, Hash as ICHash, RbTree};
+use ic_certified_map::{AsHashTree, Hash as ICHash, RbTree, labeled, labeled_hash};
 use serde::Serialize;
 use serde_cbor::Serializer;
 use sha2::{Digest, Sha256};

@@ -3,11 +3,11 @@ use crate::frame_decoder::FrameDecoder;
 use crate::rpc::MessageSink;
 
 use bytes::{
-    buf::{Buf, BufMut},
     BytesMut,
+    buf::{Buf, BufMut},
 };
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 use std::marker::PhantomData;
 use std::os::unix::{io::AsRawFd, io::RawFd, net::UnixStream};
@@ -235,9 +235,9 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
 }
 
 impl<
-        Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors,
-        M: MuxInto<Message> + 'static + Send,
-    > MessageSink<M> for UnixStreamMessageWriter<Message>
+    Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors,
+    M: MuxInto<Message> + 'static + Send,
+> MessageSink<M> for UnixStreamMessageWriter<Message>
 {
     fn handle(&self, cookie: u64, msg: M) {
         let mut msg: Message = msg.wrap(cookie);

@@ -15,19 +15,19 @@ use ic_icp_index::{
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
-use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::StableBTreeMap;
+use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::{
-    cell::Cell as StableCell, log::Log as StableLog, memory_manager::MemoryManager,
-    storable::Bound, DefaultMemoryImpl, Storable,
+    DefaultMemoryImpl, Storable, cell::Cell as StableCell, log::Log as StableLog,
+    memory_manager::MemoryManager, storable::Bound,
 };
 use icp_ledger::{
     AccountIdentifier, ArchivedEncodedBlocksRange, Block, BlockIndex, GetBlocksArgs,
-    GetEncodedBlocksResult, Operation, QueryEncodedBlocksResponse, MAX_BLOCKS_PER_REQUEST,
+    GetEncodedBlocksResult, MAX_BLOCKS_PER_REQUEST, Operation, QueryEncodedBlocksResponse,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use num_traits::cast::ToPrimitive;
-use scopeguard::{guard, ScopeGuard};
+use scopeguard::{ScopeGuard, guard};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -441,8 +441,10 @@ fn process_balance_changes(block_index: BlockIndex, block: &Block) -> Result<(),
 fn debit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount: u64) {
     change_balance(account_identifier, |balance| {
         if balance < amount {
-            ic_cdk::trap(format!("Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
-                block_index, account_identifier, balance, amount))
+            ic_cdk::trap(format!(
+                "Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
+                block_index, account_identifier, balance, amount
+            ))
         }
         balance - amount
     });
@@ -451,8 +453,10 @@ fn debit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount:
 fn credit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount: u64) {
     change_balance(account_identifier, |balance| {
         if u64::MAX - balance < amount {
-            ic_cdk::trap(format!("Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
-                block_index, account_identifier, balance, amount))
+            ic_cdk::trap(format!(
+                "Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
+                block_index, account_identifier, balance, amount
+            ))
         }
         balance + amount
     });
@@ -525,7 +529,7 @@ fn get_oldest_tx_id(account_identifier: AccountIdentifier) -> Option<BlockIndex>
                     .iter_upper_bound(&last_key)
                     .take_while(|(k, _)| k.0 == account_identifier.hash)
                     .next()
-                    .map(|(key, _)| key.1 .0)
+                    .map(|(key, _)| key.1.0)
             })
     })
 }
@@ -605,9 +609,9 @@ fn get_account_identifier_transactions(
             .range(key..)
             // old txs of the requested account_identifier and skip the start index
             .take_while(|(k, _)| k.0 == key.0)
-            .filter(|(k, _)| k.1 .0 < start)
+            .filter(|(k, _)| k.1.0 < start)
             .take(length)
-            .map(|(k, _)| k.1 .0)
+            .map(|(k, _)| k.1.0)
             .collect::<Vec<BlockIndex>>()
     });
     for id in indices {
@@ -743,7 +747,7 @@ fn test_account_identifier_data_type_storable() {
 
 #[test]
 fn check_candid_interface_compatibility() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
 
     candid::export_service!();
 

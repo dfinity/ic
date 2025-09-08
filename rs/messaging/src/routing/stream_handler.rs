@@ -1,5 +1,5 @@
 use crate::message_routing::{
-    LatencyMetrics, MessageRoutingMetrics, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, LatencyMetrics, MessageRoutingMetrics,
 };
 use ic_base_types::NumBytes;
 use ic_config::execution_environment::Config as HypervisorConfig;
@@ -9,18 +9,18 @@ use ic_interfaces::messaging::{
     LABEL_VALUE_CANISTER_OUT_OF_CYCLES, LABEL_VALUE_CANISTER_STOPPED,
     LABEL_VALUE_CANISTER_STOPPING, LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD,
 };
-use ic_logger::{debug, error, info, trace, ReplicaLogger};
-use ic_metrics::buckets::{add_bucket, decimal_buckets};
+use ic_logger::{ReplicaLogger, debug, error, info, trace};
 use ic_metrics::MetricsRegistry;
+use ic_metrics::buckets::{add_bucket, decimal_buckets};
 use ic_replicated_state::canister_state::system_state::CyclesUseCase::DroppedMessages;
 use ic_replicated_state::metadata_state::{Stream, StreamMap};
 use ic_replicated_state::replicated_state::{
-    ReplicatedStateMessageRouting, LABEL_VALUE_QUEUE_FULL, MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+    LABEL_VALUE_QUEUE_FULL, MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN, ReplicatedStateMessageRouting,
 };
 use ic_replicated_state::{ReplicatedState, StateError};
 use ic_types::messages::{
-    Payload, RejectContext, Request, RequestOrResponse, Response,
-    MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MAX_RESPONSE_COUNT_BYTES,
+    MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MAX_RESPONSE_COUNT_BYTES, Payload, RejectContext,
+    Request, RequestOrResponse, Response,
 };
 use ic_types::xnet::{RejectReason, RejectSignal, StreamIndex, StreamIndexedQueue, StreamSlice};
 use ic_types::{CanisterId, Cycles, SubnetId};
@@ -381,10 +381,12 @@ impl StreamHandlerImpl {
         {
             let loopback_stream = state.get_stream(&self.subnet_id).unwrap();
             debug_assert!(loopback_stream.reject_signals().is_empty());
-            debug_assert!(loopback_stream
-                .messages()
-                .iter()
-                .all(|(_, msg)| matches!(msg, RequestOrResponse::Response(_))));
+            debug_assert!(
+                loopback_stream
+                    .messages()
+                    .iter()
+                    .all(|(_, msg)| matches!(msg, RequestOrResponse::Response(_)))
+            );
         }
 
         state
@@ -434,7 +436,8 @@ impl StreamHandlerImpl {
                         remote_subnet
                     );
                     assert_eq!(
-                        stream_slice.header().begin(), StreamIndex::from(0),
+                        stream_slice.header().begin(),
+                        StreamIndex::from(0),
                         "Signals from subnet {} do not start from 0 in the first communication attempt",
                         remote_subnet
                     );
@@ -776,7 +779,9 @@ impl StreamHandlerImpl {
                     Cycles::zero()
                 }
                 Reject(_, RequestOrResponse::Response(_)) => {
-                    unreachable!("No signals are generated for response induction failures except for CanisterMigrating");
+                    unreachable!(
+                        "No signals are generated for response induction failures except for CanisterMigrating"
+                    );
                 }
             }
         } else if matches!(msg, RequestOrResponse::Request(_)) {

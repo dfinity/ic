@@ -5,8 +5,8 @@ use ic_interfaces::{
     validation::ValidationResult,
 };
 use ic_types::{
-    batch::{iterator_to_bytes, ValidationContext},
     Height,
+    batch::{ValidationContext, iterator_to_bytes},
 };
 use mockall::*;
 

@@ -1,8 +1,8 @@
 use super::test_helpers::{
+    DoNothingLedger, TEST_ARCHIVES_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID,
+    TEST_INDEX_CANISTER_ID, TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID, TEST_SWAP_CANISTER_ID,
     basic_governance_proto, canister_status_for_test,
-    canister_status_from_management_canister_for_test, DoNothingLedger, TEST_ARCHIVES_CANISTER_IDS,
-    TEST_GOVERNANCE_CANISTER_ID, TEST_INDEX_CANISTER_ID, TEST_LEDGER_CANISTER_ID,
-    TEST_ROOT_CANISTER_ID, TEST_SWAP_CANISTER_ID,
+    canister_status_from_management_canister_for_test,
 };
 use super::*;
 use crate::sns_upgrade::CanisterSummary;
@@ -12,10 +12,10 @@ use crate::sns_upgrade::SnsWasm;
 use crate::sns_upgrade::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use crate::{
     pb::v1::{
-        governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
-        upgrade_journal_entry::Event,
         GetUpgradeJournalRequest, ProposalData, Tally, UpgradeJournal, UpgradeJournalEntry,
         UpgradeSnsToNextVersion,
+        governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
+        upgrade_journal_entry::Event,
     },
     sns_upgrade::{ListUpgradeStep, ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsVersion},
     types::test_helpers::NativeEnvironment,
@@ -1058,13 +1058,11 @@ fn add_environment_mock_calls_for_initiate_upgrade(
             env.require_call_canister_invocation(
                 root_canister_id,
                 "change_canister",
-                Encode!(&ChangeCanisterRequest::new(
-                    true,
-                    CanisterInstallMode::Upgrade,
-                    canister_id
+                Encode!(
+                    &ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, canister_id)
+                        .with_wasm(vec![9, 8, 7, 6, 5, 4, 3, 2])
+                        .with_arg(Encode!().unwrap())
                 )
-                .with_wasm(vec![9, 8, 7, 6, 5, 4, 3, 2])
-                .with_arg(Encode!().unwrap()))
                 .unwrap(),
                 // We don't actually look at the response from this call anywhere
                 Some(Ok(Encode!().unwrap())),
@@ -1412,14 +1410,16 @@ fn test_get_upgrade_journal_pagination() {
     });
     assert_eq!(
         response.upgrade_journal.unwrap().entries,
-        vec![governance
-            .proto
-            .upgrade_journal
-            .as_ref()
-            .unwrap()
-            .entries
-            .last()
-            .unwrap()
-            .clone()],
+        vec![
+            governance
+                .proto
+                .upgrade_journal
+                .as_ref()
+                .unwrap()
+                .entries
+                .last()
+                .unwrap()
+                .clone()
+        ],
     );
 }

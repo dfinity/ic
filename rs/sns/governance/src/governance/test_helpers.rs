@@ -6,8 +6,8 @@ use ic_nervous_system_clients::canister_status::{
     CanisterStatusResultFromManagementCanister, CanisterStatusResultV2, CanisterStatusType,
 };
 use ic_nervous_system_common::{
-    ledger::compute_neuron_staking_subaccount_bytes, E8, ONE_DAY_SECONDS,
-    START_OF_2022_TIMESTAMP_SECONDS,
+    E8, ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
+    ledger::compute_neuron_staking_subaccount_bytes,
 };
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use icrc_ledger_types::icrc3::blocks::GetBlocksResult;

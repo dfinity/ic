@@ -1,5 +1,5 @@
 use crate::invariants::common::{
-    get_node_records_from_snapshot, InvariantCheckError, RegistrySnapshot,
+    InvariantCheckError, RegistrySnapshot, get_node_records_from_snapshot,
 };
 
 use std::{
@@ -89,13 +89,15 @@ pub(crate) fn check_endpoint_invariants(
             return Err(InvariantCheckError {
                 msg: format!(
                     "{error_prefix}: Duplicate endpoints detected across nodes; new_valid_endpoints = {}",
-                    new_valid_endpoints.iter().map(|x| if valid_endpoints.contains(x) {
-                        format!("{x:?} (duplicate)")
-                    } else {
-                        format!("{x:?} (new)")
-                    })
-                    .collect::<Vec<String>>()
-                    .join(", ")
+                    new_valid_endpoints
+                        .iter()
+                        .map(|x| if valid_endpoints.contains(x) {
+                            format!("{x:?} (duplicate)")
+                        } else {
+                            format!("{x:?} (new)")
+                        })
+                        .collect::<Vec<String>>()
+                        .join(", ")
                 ),
                 source: None,
             });

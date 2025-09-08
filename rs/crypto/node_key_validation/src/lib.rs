@@ -40,15 +40,15 @@ use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes as BasicSigEd255
 use ic_crypto_internal_multi_sig_bls12381::types::PopBytes as MultiSigBls12381PopBytes;
 use ic_crypto_internal_multi_sig_bls12381::types::PublicKeyBytes as MultiSigBls12381PublicKeyBytes;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    verify_mega_public_key, EccCurveType,
+    EccCurveType, verify_mega_public_key,
 };
 pub use ic_crypto_tls_cert_validation::TlsCertValidationError;
 pub use ic_crypto_tls_cert_validation::ValidTlsCertificate;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
-use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::Time;
+use ic_types::crypto::CurrentNodePublicKeys;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;

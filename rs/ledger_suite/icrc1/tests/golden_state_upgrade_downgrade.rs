@@ -3,16 +3,16 @@ use crate::index::verify_ledger_archive_and_index_block_parity;
 use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc1::Block;
+use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc1_index_ng::{IndexArg, UpgradeArg as IndexUpgradeArg};
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
     AllowancesRecentlyPurged, BlockConsumer, BurnsWithoutSpender, InMemoryLedger,
 };
 use ic_ledger_suite_state_machine_tests::metrics::retrieve_metrics;
 use ic_ledger_suite_state_machine_tests::{
-    generate_transactions, get_all_ledger_and_archive_blocks, get_blocks, list_archives,
-    TransactionGenerationParameters,
+    TransactionGenerationParameters, generate_transactions, get_all_ledger_and_archive_blocks,
+    get_blocks, list_archives,
 };
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_fiduciary_state_or_panic;
 use ic_state_machine_tests::{StateMachine, UserError};
@@ -1127,7 +1127,10 @@ mod index {
                 return;
             }
         }
-        panic!("The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}", num_blocks_synced, chain_length);
+        panic!(
+            "The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}",
+            num_blocks_synced, chain_length
+        );
     }
 
     fn get_index_blocks<I>(

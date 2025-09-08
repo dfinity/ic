@@ -1,6 +1,8 @@
 //! The module is responsible for awaiting messages from bitcoin peers and dispaching them
 //! to the correct component.
 use crate::{
+    AdapterState, BlockchainManagerRequest, BlockchainState, Channel, ProcessEvent,
+    ProcessNetworkMessage, ProcessNetworkMessageError, TransactionManagerRequest,
     blockchainmanager::BlockchainManager,
     common::{BlockLike, DEFAULT_CHANNEL_BUFFER_SIZE},
     config::Config,
@@ -8,8 +10,6 @@ use crate::{
     metrics::RouterMetrics,
     stream::handle_stream,
     transaction_store::TransactionStore,
-    AdapterState, BlockchainManagerRequest, BlockchainState, Channel, ProcessEvent,
-    ProcessNetworkMessage, ProcessNetworkMessageError, TransactionManagerRequest,
 };
 use bitcoin::p2p::message::NetworkMessage;
 use ic_logger::ReplicaLogger;
@@ -18,7 +18,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::{
-    sync::mpsc::{channel, Receiver},
+    sync::mpsc::{Receiver, channel},
     time::interval,
 };
 

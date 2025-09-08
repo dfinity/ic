@@ -5,15 +5,15 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_governance_api::{
-    manage_neuron::NeuronIdOrSubaccount, manage_neuron_response::Command as CommandResponse,
     GovernanceError, KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse, MakeProposalRequest,
     ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NeuronInfo,
-    ProposalActionRequest, ProposalStatus,
+    ProposalActionRequest, ProposalStatus, manage_neuron::NeuronIdOrSubaccount,
+    manage_neuron_response::Command as CommandResponse,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::wait_for_final_state,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
 };
 
 /// Integration test for the known neuron functionality.

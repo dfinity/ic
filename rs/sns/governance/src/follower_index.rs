@@ -2,7 +2,7 @@ use ic_canister_log::log;
 
 use crate::{
     logs::ERROR,
-    pb::v1::{neuron::FolloweesForTopic, Followee, Neuron, NeuronId, Topic},
+    pb::v1::{Followee, Neuron, NeuronId, Topic, neuron::FolloweesForTopic},
 };
 use std::collections::{BTreeMap, BTreeSet};
 

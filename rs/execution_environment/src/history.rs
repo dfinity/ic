@@ -5,14 +5,14 @@ use ic_interfaces::{
     time_source::system_time_now,
 };
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{fatal, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_logger::{ReplicaLogger, fatal};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    Height, Time,
     ingress::{IngressState, IngressStatus},
     messages::MessageId,
     state_manager::StateManagerError,
-    Height, Time,
 };
 use prometheus::{Histogram, HistogramVec};
 use std::{

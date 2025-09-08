@@ -10,10 +10,10 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Parser;
 use reqwest::blocking::ClientBuilder;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use url::Url;
 
 use ic_prep_lib::{
@@ -35,8 +35,7 @@ const UPD_IMG_DEFAULT_SHA256_URL: &str =
 /// in case the replica version id is specified on the command line, but not the
 /// release package url and hash, the following url-template will be used to
 /// specify the update image.
-const UPD_IMG_DEFAULT_URL: &str =
-    "https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img-dev/update-img.tar.zst";
+const UPD_IMG_DEFAULT_URL: &str = "https://download.dfinity.systems/ic/<REPLICA_VERSION>/guest-os/update-img-dev/update-img.tar.zst";
 const CDN_HTTP_ATTEMPTS: usize = 3;
 const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(12);
@@ -407,13 +406,9 @@ impl CliArgs {
             ssh_backup_access: self
                 .ssh_backup_access_file
                 .map_or(vec![], read_keys_from_pub_file),
-            max_ingress_bytes_per_message: self.max_ingress_bytes_per_message.and_then(|x| {
-                if x >= 0 {
-                    Some(x as u64)
-                } else {
-                    None
-                }
-            }),
+            max_ingress_bytes_per_message: self
+                .max_ingress_bytes_per_message
+                .and_then(|x| if x >= 0 { Some(x as u64) } else { None }),
             max_block_payload_size: self.max_block_payload_size,
             allow_empty_update_image: self.allow_empty_update_image,
             use_specified_ids_allocation_range: self.use_specified_ids_allocation_range,
@@ -486,7 +481,11 @@ fn fetch_replica_version_sha256(version_id: ReplicaVersion) -> Result<String> {
         }
     }
 
-    bail!("SHA256 hash is not found at: {}. Make sure the file is downloadable and contains an entry for {}", url, UPD_IMG_FILENAME);
+    bail!(
+        "SHA256 hash is not found at: {}. Make sure the file is downloadable and contains an entry for {}",
+        url,
+        UPD_IMG_FILENAME
+    );
 }
 
 #[cfg(test)]

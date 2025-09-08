@@ -1,4 +1,4 @@
-use crate::candid::{encode_upgrade_args, UpgradeArgs};
+use crate::candid::{UpgradeArgs, encode_upgrade_args};
 use crate::canister::{DownloadableFile, TargetCanister};
 use candid::Principal;
 use std::fmt::{Display, Formatter};

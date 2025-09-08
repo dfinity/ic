@@ -6,18 +6,18 @@ use ic_interfaces_state_manager::{
     TransientStateHashError::*,
 };
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, Method as Ic00Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, IC_00,
+    CanisterIdRecord, CanisterInstallMode, IC_00, InstallCodeArgs, Method as Ic00Method, Payload,
+    ProvisionalCreateCanisterWithCyclesArgs,
 };
 use ic_messaging::MessageRoutingImpl;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities_types::messages::SignedIngressBuilder;
 use ic_types::{
+    CanisterId, CryptoHashOfState, Randomness, RegistryVersion, ReplicaVersion,
     batch::{Batch, BatchMessages, BlockmakerMetrics},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{MessageId, SignedIngress},
     time::UNIX_EPOCH,
-    CanisterId, CryptoHashOfState, Randomness, RegistryVersion, ReplicaVersion,
 };
 use setup::setup;
 use std::{convert::TryFrom, sync::Arc, thread::sleep, time::Duration};

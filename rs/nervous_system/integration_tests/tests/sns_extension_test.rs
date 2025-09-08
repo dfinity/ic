@@ -2,21 +2,21 @@ use candid::{Encode, Nat, Principal};
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nervous_system_agent::{
+    CallCanisters,
     pocketic_impl::PocketIcAgent,
     sns::{
-        governance::{ProposalSubmissionError, SubmittedProposal},
         Sns,
+        governance::{ProposalSubmissionError, SubmittedProposal},
     },
-    CallCanisters,
 };
 use ic_nervous_system_common::{
-    ledger::compute_distribution_subaccount_bytes, E8, ONE_MONTH_SECONDS,
+    E8, ONE_MONTH_SECONDS, ledger::compute_distribution_subaccount_bytes,
 };
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{
-        add_wasms_to_sns_wasm, cycles_ledger, install_canister_with_controllers,
-        load_registry_mutations, nns, sns, sns::governance::propose_and_wait, NnsInstaller,
+        NnsInstaller, add_wasms_to_sns_wasm, cycles_ledger, install_canister_with_controllers,
+        load_registry_mutations, nns, sns, sns::governance::propose_and_wait,
     },
 };
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
@@ -31,18 +31,18 @@ use ic_sns_governance::{
     pb::v1::{AddAllowedExtensionRequest, ExtensionSpec},
 };
 use ic_sns_governance_api::pb::v1::{
-    governance_error, proposal::Action, ChunkedCanisterWasm, ExecuteExtensionOperation,
-    ExtensionInit, ExtensionOperationArg, ExtensionUpgradeArg, GovernanceError, NeuronId,
-    PreciseValue, Proposal, RegisterExtension, UpgradeExtension, Wasm as ApiWasm,
+    ChunkedCanisterWasm, ExecuteExtensionOperation, ExtensionInit, ExtensionOperationArg,
+    ExtensionUpgradeArg, GovernanceError, NeuronId, PreciseValue, Proposal, RegisterExtension,
+    UpgradeExtension, Wasm as ApiWasm, governance_error, proposal::Action,
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_test_utilities::universal_canister::{
     get_universal_canister_wasm, get_universal_canister_wasm_sha256,
 };
-use icp_ledger::{Tokens, DEFAULT_TRANSFER_FEE};
+use icp_ledger::{DEFAULT_TRANSFER_FEE, Tokens};
 use icrc_ledger_types::{icrc::generic_value::Value, icrc1::account::Account};
 use maplit::btreemap;
-use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
+use pocket_ic::{PocketIcBuilder, nonblocking::PocketIc};
 use pretty_assertions::assert_eq;
 use sns_treasury_manager::{Asset, AuditTrailRequest, BalanceBook, BalancesRequest};
 use std::{path::PathBuf, str::FromStr, time::Duration};
@@ -51,11 +51,11 @@ use url::Url;
 
 mod src {
     pub use ic_nns_governance_api::create_service_nervous_system::{
-        initial_token_distribution::{
-            developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
-            TreasuryDistribution,
-        },
         InitialTokenDistribution,
+        initial_token_distribution::{
+            DeveloperDistribution, SwapDistribution, TreasuryDistribution,
+            developer_distribution::NeuronDistribution,
+        },
     };
 } // end mod src
 

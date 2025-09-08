@@ -21,7 +21,7 @@ Success::
 
 end::catalog[] */
 
-use anyhow::{anyhow, ensure, Result};
+use anyhow::{Result, anyhow, ensure};
 use ic_consensus_system_test_utils::{
     impersonate_upstreams::{
         get_upstreams_uvm_ipv6, setup_upstreams_uvm, spoof_node_dns, uvm_serve_recovery_artifacts,
@@ -35,7 +35,7 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            get_dependency_path, secs, HasTopologySnapshot, IcNodeContainer, SshSession,
+            HasTopologySnapshot, IcNodeContainer, SshSession, get_dependency_path, secs,
         },
     },
     retry_with_msg, systest,

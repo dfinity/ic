@@ -3,7 +3,7 @@
 mod canbench;
 
 use candid::Decode;
-use candid::{candid_method, Nat, Principal};
+use candid::{Nat, Principal, candid_method};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::{LogEntry, Sink};
 use ic_cdk::api::{
@@ -13,21 +13,21 @@ use ic_cdk::api::{
 use ic_cdk::futures::{in_executor_context, in_query_executor_context};
 use ic_cdk::{post_upgrade, pre_upgrade, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
+use ic_icrc1::endpoints::{StandardRecord, convert_transfer_error};
 use ic_ledger_canister_core::ledger::LedgerContext;
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
     ledger::{
-        apply_transaction, archive_blocks, block_locations, find_block_in_archive, LedgerAccess,
-        TransferError as CoreTransferError,
+        LedgerAccess, TransferError as CoreTransferError, apply_transaction, archive_blocks,
+        block_locations, find_block_in_archive,
     },
     range_utils,
 };
 use ic_ledger_core::{
     block::{BlockIndex, BlockType, EncodedBlock},
     timestamp::TimeStamp,
-    tokens::{Tokens, DECIMAL_PLACES},
+    tokens::{DECIMAL_PLACES, Tokens},
 };
 use ic_stable_structures::reader::{BufferedReader, Reader};
 use ic_stable_structures::writer::{BufferedWriter, Writer};
@@ -36,25 +36,25 @@ use icp_ledger::IcpAllowanceArgs;
 #[cfg(not(feature = "canbench-rs"))]
 use icp_ledger::InitArgs;
 use icp_ledger::{
-    from_proto_bytes, max_blocks_per_request, protobuf, to_proto_bytes, tokens_into_proto,
     AccountBalanceArgs, AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, Allowances,
     ArchiveInfo, ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives,
     BinaryAccountBalanceArgs, Block, BlockArg, CandidBlock, Decimals, FeatureFlags,
     GetAllowancesArgs, GetBlocksArgs, GetBlocksRes, IterBlocksArgs, IterBlocksRes,
-    LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, RemoveApprovalArgs, SendArgs, Subaccount, Symbol, TipOfChainRes,
-    TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
-    MEMO_SIZE_BYTES,
+    LedgerCanisterPayload, MEMO_SIZE_BYTES, Memo, Name, Operation, PaymentError,
+    QueryBlocksResponse, QueryEncodedBlocksResponse, RemoveApprovalArgs, SendArgs, Subaccount,
+    Symbol, TipOfChainRes, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
+    TransferFeeArgs, from_proto_bytes, max_blocks_per_request, protobuf, to_proto_bytes,
+    tokens_into_proto,
 };
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
+    icrc3::archive::QueryArchiveFn,
     icrc21::lib::{
         build_icrc21_consent_info, build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
         icrc21_check_fee,
     },
-    icrc3::archive::QueryArchiveFn,
 };
 use icrc_ledger_types::{
     icrc1::account::Account, icrc2::transfer_from::TransferFromArgs,
@@ -72,8 +72,8 @@ use icrc_ledger_types::{
     },
 };
 use ledger_canister::{
-    balances_len, get_allowances_list, Ledger, LEDGER, LEDGER_VERSION, MAX_MESSAGE_SIZE_BYTES,
-    UPGRADES_MEMORY,
+    LEDGER, LEDGER_VERSION, Ledger, MAX_MESSAGE_SIZE_BYTES, UPGRADES_MEMORY, balances_len,
+    get_allowances_list,
 };
 use num_traits::cast::ToPrimitive;
 use std::cell::RefCell;
@@ -408,8 +408,10 @@ fn trap_since_notify_is_no_longer_supported() {
         caller_principal_id
     ));
 
-    trap("The notify method is no longer supported. \
-    Please migrate to the CMC notify flow: https://forum.dfinity.org/t/deprecating-the-ledger-notify-flow-for-minting-cycles-in-favor-of-cmc-notify/42502");
+    trap(
+        "The notify method is no longer supported. \
+    Please migrate to the CMC notify flow: https://forum.dfinity.org/t/deprecating-the-ledger-notify-flow-for-minting-cycles-in-favor-of-cmc-notify/42502",
+    );
 }
 
 /// This gives you the index of the last block added to the chain
@@ -569,7 +571,9 @@ fn canister_init(arg: LedgerCanisterPayload) {
             arg.feature_flags,
         ),
         LedgerCanisterPayload::Upgrade(_) => {
-            trap("Cannot initialize the canister with an Upgrade argument. Please provide an Init argument.");
+            trap(
+                "Cannot initialize the canister with an Upgrade argument. Please provide an Init argument.",
+            );
         }
     }
 }
@@ -601,8 +605,10 @@ fn main() {
                         arg.token_name,
                         arg.feature_flags,
                     ),
-                    Err(old_err) =>
-                    trap(format!("Unable to decode init argument.\nDecode as new init returned the error {}\nDecode as old init returned the error {}", new_err, old_err))
+                    Err(old_err) => trap(format!(
+                        "Unable to decode init argument.\nDecode as new init returned the error {}\nDecode as old init returned the error {}",
+                        new_err, old_err
+                    )),
                 }
             }
         }
@@ -631,8 +637,7 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
     {
         let mut ledger = LEDGER.write().unwrap();
         if !memory_manager_found {
-            let msg =
-                "Cannot upgrade from scratch stable memory, please upgrade to memory manager first.";
+            let msg = "Cannot upgrade from scratch stable memory, please upgrade to memory manager first.";
             print(msg);
             panic!("{msg}");
         }
@@ -661,18 +666,22 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
             );
         }
         if ledger.ledger_version < LEDGER_VERSION {
-            panic!("Migration to stable structures not supported in this version, please upgrade to git revision 3ae3649a2366aaca83404b692fc58e4c6e604a25 (https://github.com/dfinity/ic/releases/tag/ledger-suite-icp-2025-03-26) first.");
+            panic!(
+                "Migration to stable structures not supported in this version, please upgrade to git revision 3ae3649a2366aaca83404b692fc58e4c6e604a25 (https://github.com/dfinity/ic/releases/tag/ledger-suite-icp-2025-03-26) first."
+            );
         }
 
         if let Some(args) = args {
             match args {
-            LedgerCanisterPayload::Init(_) => trap("Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."),
-            LedgerCanisterPayload::Upgrade(upgrade_args) => {
-                if let Some(upgrade_args) = upgrade_args {
-                    ledger.upgrade(upgrade_args);
+                LedgerCanisterPayload::Init(_) => trap(
+                    "Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument.",
+                ),
+                LedgerCanisterPayload::Upgrade(upgrade_args) => {
+                    if let Some(upgrade_args) = upgrade_args {
+                        ledger.upgrade(upgrade_args);
+                    }
                 }
             }
-    }
         }
         set_certified_data(
             &ledger
@@ -1026,8 +1035,13 @@ fn get_blocks_() {
         let local_blocks_range = blockchain.num_archived_blocks..blockchain.chain_length();
         let requested_range = args.start..args.start + length;
         let res = if !range_utils::is_subrange(&requested_range, &local_blocks_range) {
-            GetBlocksRes(Err(format!("Requested blocks outside the range stored in the ledger node. Requested [{} .. {}]. Available [{} .. {}].",
-            requested_range.start, requested_range.end, local_blocks_range.start, local_blocks_range.end)))
+            GetBlocksRes(Err(format!(
+                "Requested blocks outside the range stored in the ledger node. Requested [{} .. {}]. Available [{} .. {}].",
+                requested_range.start,
+                requested_range.end,
+                local_blocks_range.start,
+                local_blocks_range.end
+            )))
         } else {
             GetBlocksRes(Ok(blockchain.get_blocks(requested_range)))
         };
@@ -1554,7 +1568,7 @@ fn __get_candid_interface_tmp_hack() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candid_parser::utils::{service_compatible, service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_compatible, service_equal};
     use std::path::PathBuf;
 
     #[test]

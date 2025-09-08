@@ -1,12 +1,13 @@
 use std::{sync::Arc, time::SystemTime};
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{Context, Error, anyhow};
 use async_trait::async_trait;
 use candid::{Encode, Principal};
 use certificate_orchestrator_interface::{LABEL_DOMAINS, LEFT_GUARD, RIGHT_GUARD};
 use ic_agent::{
+    Agent, Certificate,
     hash_tree::{HashTree, HashTreeNode, LookupResult},
-    lookup_value, Agent, Certificate,
+    lookup_value,
 };
 use sha2::{Digest, Sha256};
 

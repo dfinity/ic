@@ -4,7 +4,7 @@ use std::{collections::HashSet, time::Duration};
 use crate::{
     logs::P0,
     metrics::METRICS,
-    storage::{StorableSalt, API_BOUNDARY_NODE_PRINCIPALS, SALT},
+    storage::{API_BOUNDARY_NODE_PRINCIPALS, SALT, StorableSalt},
     time::delay_till_next_month,
 };
 use candid::Principal;
@@ -13,8 +13,8 @@ use ic_cdk::{api::time, call, spawn};
 use ic_cdk_timers::{set_timer, set_timer_interval};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use salt_sharing_api::{
-    ApiBoundaryNodeIdRecord, GetApiBoundaryNodeIdsRequest, InitArg, SaltGenerationStrategy,
-    SALT_SIZE,
+    ApiBoundaryNodeIdRecord, GetApiBoundaryNodeIdsRequest, InitArg, SALT_SIZE,
+    SaltGenerationStrategy,
 };
 
 const REGISTRY_CANISTER_METHOD: &str = "get_api_boundary_node_ids";

@@ -1,4 +1,4 @@
-use ic_logger::{debug, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, info, warn};
 use nix::{
     sys::signal::{self, Signal},
     unistd::Pid,

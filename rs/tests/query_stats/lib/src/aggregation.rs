@@ -20,7 +20,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
-    util::{block_on, UniversalCanister},
+    util::{UniversalCanister, block_on},
 };
 use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
 use slog::info;

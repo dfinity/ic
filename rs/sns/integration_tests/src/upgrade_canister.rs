@@ -19,22 +19,22 @@ use ic_nns_test_utils::state_test_helpers::{
 };
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance::pb::v1::{
-    governance_error::ErrorType, proposal::Action, NervousSystemParameters, NeuronId,
-    NeuronPermissionList, NeuronPermissionType, Proposal, UpgradeSnsControlledCanister,
+    NervousSystemParameters, NeuronId, NeuronPermissionList, NeuronPermissionType, Proposal,
+    UpgradeSnsControlledCanister, governance_error::ErrorType, proposal::Action,
 };
 use ic_sns_test_utils::{
     itest_helpers::{
-        install_governance_canister, install_ledger_canister, install_root_canister,
-        install_swap_canister, state_machine_test_on_sns_subnet, SnsCanisters,
-        SnsTestsInitPayloadBuilder, UserInfo,
+        SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo, install_governance_canister,
+        install_ledger_canister, install_root_canister, install_swap_canister,
+        state_machine_test_on_sns_subnet,
     },
     state_test_helpers::{
-        setup_sns_canisters, sns_root_register_dapp_canisters, state_machine_builder_for_sns_tests,
-        SnsTestCanisterIds,
+        SnsTestCanisterIds, setup_sns_canisters, sns_root_register_dapp_canisters,
+        state_machine_builder_for_sns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
-use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::time::{SystemTime, UNIX_EPOCH};

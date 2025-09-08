@@ -6,41 +6,40 @@ use ic_management_canister_types_private::{
     self as ic00, BitcoinGetUtxosArgs, BoundedHttpHeaders, CanisterChange, CanisterHttpRequestArgs,
     CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType,
     ClearChunkStoreArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
-    FetchCanisterLogsRequest, HttpMethod, LogVisibilityV2, MasterPublicKeyId, Method,
+    FetchCanisterLogsRequest, HttpMethod, IC_00, LogVisibilityV2, MasterPublicKeyId, Method,
     OnLowWasmMemoryHookStatus, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
     ProvisionalTopUpCanisterArgs, SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs,
     TransformContext, TransformFunc, UpdateSettingsArgs, UploadChunkArgs, VetKdCurve, VetKdKeyId,
-    IC_00,
 };
-use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange, RoutingTable};
+use ic_registry_routing_table::{CanisterIdRange, RoutingTable, canister_id_into_u64};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    CanisterStatus, ReplicatedState, SystemState,
     canister_state::{
-        system_state::CyclesUseCase, DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES,
+        DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES, system_state::CyclesUseCase,
     },
     testing::{CanisterQueuesTesting, SystemStateTesting},
-    CanisterStatus, ReplicatedState, SystemState,
 };
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
-    check_ingress_status, expect_canister_did_not_reply, get_reply, ExecutionTest,
-    ExecutionTestBuilder,
+    ExecutionTest, ExecutionTestBuilder, check_ingress_status, expect_canister_did_not_reply,
+    get_reply,
 };
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::{
+    CanisterId, CountBytes, Cycles, PrincipalId, RegistryVersion,
     batch::CanisterCyclesCostSchedule,
     canister_http::{CanisterHttpMethod, Transform},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        CallbackId, Payload, RejectContext, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
-        NO_DEADLINE,
+        CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Payload, RejectContext,
+        RequestOrResponse, Response,
     },
     nominal_cycles::NominalCycles,
     time::UNIX_EPOCH,
-    CanisterId, CountBytes, Cycles, PrincipalId, RegistryVersion,
 };
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
 use more_asserts::assert_gt;
 use std::mem::size_of;
@@ -1197,10 +1196,11 @@ fn stop_canister_creates_entry_in_subnet_call_context_manager() {
         CanisterStatusType::Stopping,
         test.canister_state(canister_id).status()
     );
-    assert!(test
-        .canister_state(canister_id)
-        .system_state
-        .ready_to_stop());
+    assert!(
+        test.canister_state(canister_id)
+            .system_state
+            .ready_to_stop()
+    );
     // SubnetCallContextManager contains a stop canister requests after executing the message.
     assert_eq!(
         test.state()
@@ -1712,10 +1712,10 @@ fn assert_consistent_stop_canister_calls(state: &ReplicatedState, expected_calls
 
     // And ensure that no `StopCanisterCalls` are left over in the `SubnetCallContextManager`.
     assert!(
-            subnet_call_context_manager.stop_canister_calls_len() == 0,
-            "StopCanisterCalls in SubnetCallContextManager without matching canister StopCanisterContexts: {:?}",
-            subnet_call_context_manager.remove_non_local_stop_canister_calls(|_| false)
-        );
+        subnet_call_context_manager.stop_canister_calls_len() == 0,
+        "StopCanisterCalls in SubnetCallContextManager without matching canister StopCanisterContexts: {:?}",
+        subnet_call_context_manager.remove_non_local_stop_canister_calls(|_| false)
+    );
 }
 
 #[test]
@@ -1826,7 +1826,10 @@ fn management_canister_xnet_to_nns_called_from_non_nns() {
     for response in test.xnet_messages().clone() {
         assert_eq!(
             get_reject_message(response),
-            format!("Incorrect sender subnet id: {}. Sender should be on the same subnet or on the NNS subnet.", other_subnet)
+            format!(
+                "Incorrect sender subnet id: {}. Sender should be on the same subnet or on the NNS subnet.",
+                other_subnet
+            )
         );
     }
 }
@@ -1922,7 +1925,10 @@ fn management_canister_xnet_called_from_non_nns() {
     for response in test.xnet_messages().clone() {
         assert_eq!(
             get_reject_message(response),
-            format!("Incorrect sender subnet id: {}. Sender should be on the same subnet or on the NNS subnet.", other_subnet)
+            format!(
+                "Incorrect sender subnet id: {}. Sender should be on the same subnet or on the NNS subnet.",
+                other_subnet
+            )
         );
     }
 }
@@ -2799,9 +2805,10 @@ fn can_create_canister_with_specified_id() {
         .subnet_message("provisional_create_canister_with_cycles", args)
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterAlreadyInstalled, err.code());
-    assert!(err
-        .description()
-        .contains(&format!("Canister {} is already installed.", specified_id)));
+    assert!(
+        err.description()
+            .contains(&format!("Canister {} is already installed.", specified_id))
+    );
 }
 
 // Returns CanisterId by formula 'range_start + (range_end - range_start) * percentile'
@@ -2882,7 +2889,10 @@ fn create_canister_with_invalid_specified_id() {
         Some(specified_id.into()),
     ))
     .unwrap();
-    let expected_err = format!("The `specified_id` {} is invalid because it belongs to the canister allocation ranges of the test environment.\nUse a `specified_id` that matches a canister ID on the ICP mainnet and a test environment that supports canister creation with `specified_id` (e.g., PocketIC).", specified_id);
+    let expected_err = format!(
+        "The `specified_id` {} is invalid because it belongs to the canister allocation ranges of the test environment.\nUse a `specified_id` that matches a canister ID on the ICP mainnet and a test environment that supports canister creation with `specified_id` (e.g., PocketIC).",
+        specified_id
+    );
 
     // Both in an ingress message to create a canister
     let err = test
@@ -3267,9 +3277,11 @@ fn replicated_query_does_not_burn_cycles_on_trap() {
     let ingress_state = test.ingress_state(&message_id);
     if let IngressState::Failed(user_error) = ingress_state {
         assert_eq!(user_error.code(), ErrorCode::CanisterCalledTrap);
-        assert!(user_error
-            .description()
-            .contains("Canister called `ic0.trap`"),);
+        assert!(
+            user_error
+                .description()
+                .contains("Canister called `ic0.trap`"),
+        );
     } else {
         panic!("unexpected ingress state {:?}", ingress_state);
     };
@@ -3281,13 +3293,14 @@ fn replicated_query_does_not_burn_cycles_on_trap() {
     );
 
     // ...and no burned cycles are accounted for in the canister's metrics.
-    assert!(test
-        .canister_state(canister_id)
-        .system_state
-        .canister_metrics
-        .get_consumed_cycles_by_use_cases()
-        .get(&CyclesUseCase::BurnedCycles)
-        .is_none());
+    assert!(
+        test.canister_state(canister_id)
+            .system_state
+            .canister_metrics
+            .get_consumed_cycles_by_use_cases()
+            .get(&CyclesUseCase::BurnedCycles)
+            .is_none()
+    );
 }
 
 #[test]
@@ -4044,15 +4057,16 @@ fn helper_clear_chunk(test: &mut ExecutionTest, canister_id: CanisterId) {
     let result = test.subnet_message("clear_chunk_store", clear_args.encode());
     assert!(result.is_ok());
     // Verify chunk store contains no data.
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .system_state
-        .wasm_chunk_store
-        .keys()
-        .next()
-        .is_none());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .wasm_chunk_store
+            .keys()
+            .next()
+            .is_none()
+    );
 }
 
 #[test]

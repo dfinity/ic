@@ -1,17 +1,17 @@
 #![allow(deprecated)]
 use ic_cdk::api::management_canister::main::{
-    canister_status, CanisterIdRecord, CanisterStatusResponse,
+    CanisterIdRecord, CanisterStatusResponse, canister_status,
 };
 use ic_cdk::{init, post_upgrade, query, update};
 use ic_ledger_suite_orchestrator::candid::Erc20Contract as CandidErc20Contract;
 use ic_ledger_suite_orchestrator::candid::{ManagedCanisterIds, OrchestratorArg, OrchestratorInfo};
 use ic_ledger_suite_orchestrator::lifecycle;
 use ic_ledger_suite_orchestrator::scheduler::{
-    encode_orchestrator_metrics, Erc20Token, IC_CANISTER_RUNTIME,
+    Erc20Token, IC_CANISTER_RUNTIME, encode_orchestrator_metrics,
 };
-use ic_ledger_suite_orchestrator::state::{read_state, TokenId};
-use ic_ledger_suite_orchestrator::storage::read_wasm_store;
+use ic_ledger_suite_orchestrator::state::{TokenId, read_state};
 use ic_ledger_suite_orchestrator::storage::TASKS;
+use ic_ledger_suite_orchestrator::storage::read_wasm_store;
 
 mod dashboard;
 

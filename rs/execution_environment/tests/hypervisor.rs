@@ -4,7 +4,7 @@ use ic_base_types::{NumSeconds, PrincipalId};
 use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
-    wasm_utils::instrumentation::{instruction_to_cost, WasmMemoryType},
+    wasm_utils::instrumentation::{WasmMemoryType, instruction_to_cost},
     wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS,
 };
 use ic_error_types::{ErrorCode, RejectCode};
@@ -21,32 +21,32 @@ use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES};
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
-    canister_state::execution_state::CustomSectionType, ExportedFunctions, MessageMemoryUsage,
-    NumWasmPages, PageIndex, PageMap,
+    ExportedFunctions, MessageMemoryUsage, NumWasmPages, PageIndex, PageMap,
+    canister_state::execution_state::CustomSectionType,
 };
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
-    check_ingress_status, cycles_reserved_for_app_and_verified_app_subnets,
-    expect_canister_did_not_reply, get_reply, wasm_compilation_cost, wat_compilation_cost,
-    ExecutionTest, ExecutionTestBuilder,
+    ExecutionTest, ExecutionTestBuilder, check_ingress_status,
+    cycles_reserved_for_app_and_verified_app_subnets, expect_canister_did_not_reply, get_reply,
+    wasm_compilation_cost, wat_compilation_cost,
 };
 use ic_test_utilities_metrics::{
-    fetch_histogram_vec_stats, fetch_int_counter, metric_vec, HistogramStats,
+    HistogramStats, fetch_histogram_vec_stats, fetch_int_counter, metric_vec,
 };
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::time::CoarseTime;
 use ic_types::{
+    CanisterId, ComputeAllocation, Cycles, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions,
+    Time,
+    ingress::{IngressState, IngressStatus, WasmResult},
+    methods::WasmMethod,
+};
+use ic_types::{
     batch::CanisterCyclesCostSchedule,
     messages::{CanisterMessage, CanisterTask, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE},
 };
-use ic_types::{
-    ingress::{IngressState, IngressStatus, WasmResult},
-    methods::WasmMethod,
-    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, Time,
-    MAX_STABLE_MEMORY_IN_BYTES,
-};
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::assert_gt;
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 use proptest::prelude::*;
@@ -421,9 +421,10 @@ fn ic0_stable_grow_by_0_traps_if_memory_exceeds_4gb() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterTrapped, err.code());
-    assert!(err
-        .description()
-        .contains("32 bit stable memory api used on a memory larger than 4GB"));
+    assert!(
+        err.description()
+            .contains("32 bit stable memory api used on a memory larger than 4GB")
+    );
 }
 
 #[test]
@@ -449,9 +450,10 @@ fn ic0_stable_size_traps_if_memory_exceeds_4gb() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterTrapped, err.code());
-    assert!(err
-        .description()
-        .contains("32 bit stable memory api used on a memory larger than 4GB"));
+    assert!(
+        err.description()
+            .contains("32 bit stable memory api used on a memory larger than 4GB")
+    );
 }
 
 #[test]
@@ -484,9 +486,10 @@ fn ic0_stable_grow_traps_if_stable_memory_exceeds_4gb() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterTrapped, err.code());
-    assert!(err
-        .description()
-        .contains("32 bit stable memory api used on a memory larger than 4GB"));
+    assert!(
+        err.description()
+            .contains("32 bit stable memory api used on a memory larger than 4GB")
+    );
 }
 
 #[test]
@@ -2187,9 +2190,10 @@ fn ic0_msg_reject_fails_if_called_twice() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
-    assert!(err
-        .description()
-        .contains("ic0.msg_reject: the call is already replied"));
+    assert!(
+        err.description()
+            .contains("ic0.msg_reject: the call is already replied")
+    );
 }
 
 fn test_large_syscall(syscall: &str) {
@@ -2738,9 +2742,10 @@ fn ic0_mint_cycles_fails_on_application_subnet() {
     let initial_cycles = test.canister_state(canister_id).system_state.balance();
     let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
-    assert!(err
-        .description()
-        .contains("ic0.mint_cycles128 cannot be executed"));
+    assert!(
+        err.description()
+            .contains("ic0.mint_cycles128 cannot be executed")
+    );
     let canister_state = test.canister_state(canister_id);
     assert_eq!(0, canister_state.system_state.queues().output_queues_len());
     assert_balance_equals(
@@ -2759,9 +2764,10 @@ fn ic0_mint_cycles_fails_on_system_subnet_non_cmc() {
     let initial_cycles = test.canister_state(canister_id).system_state.balance();
     let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
-    assert!(err
-        .description()
-        .contains("ic0.mint_cycles128 cannot be executed"));
+    assert!(
+        err.description()
+            .contains("ic0.mint_cycles128 cannot be executed")
+    );
     let canister_state = test.canister_state(canister_id);
     assert_eq!(0, canister_state.system_state.queues().output_queues_len());
     assert_balance_equals(
@@ -2805,9 +2811,10 @@ fn verify_error_and_no_effect(mut test: ExecutionTest) {
         .build();
     let err = test.ingress(canister_id, "update", payload).unwrap_err();
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
-    assert!(err
-        .description()
-        .contains("ic0.mint_cycles128 cannot be executed"));
+    assert!(
+        err.description()
+            .contains("ic0.mint_cycles128 cannot be executed")
+    );
     let canister_state = test.canister_state(canister_id);
     assert_eq!(0, canister_state.system_state.queues().output_queues_len());
     assert_balance_equals(
@@ -7824,9 +7831,10 @@ fn wasm_memory_grow_respects_reserved_cycles_limit() {
         ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
     );
     assert!(err.description().contains("Canister cannot grow memory by"));
-    assert!(err
-        .description()
-        .contains("due to its reserved cycles limit"));
+    assert!(
+        err.description()
+            .contains("due to its reserved cycles limit")
+    );
 }
 
 #[test]
@@ -7871,9 +7879,10 @@ fn stable_memory_grow_respects_reserved_cycles_limit() {
         ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
     );
     assert!(err.description().contains("Canister cannot grow memory by"));
-    assert!(err
-        .description()
-        .contains("due to its reserved cycles limit"));
+    assert!(
+        err.description()
+            .contains("due to its reserved cycles limit")
+    );
 }
 
 #[test]
@@ -8112,8 +8121,8 @@ fn yield_for_dirty_page_copy_triggers_dts_slice_with_many_pages_on_system_subnet
 }
 
 #[test]
-fn yield_for_dirty_page_copy_does_not_trigger_dts_slice_without_enough_dirty_pages_on_system_subnets(
-) {
+fn yield_for_dirty_page_copy_does_not_trigger_dts_slice_without_enough_dirty_pages_on_system_subnets()
+ {
     let pages_to_touch = 100;
     let wat = generate_wat_to_touch_pages(pages_to_touch);
 

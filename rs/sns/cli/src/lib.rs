@@ -5,7 +5,7 @@ use crate::{
     register_extension::RegisterExtensionArgs,
     upgrade_sns_controlled_canister::UpgradeSnsControlledCanisterArgs,
 };
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use candid::{CandidType, Decode, Encode, IDLArgs};
 use ic_agent::Agent;
 use ic_base_types::PrincipalId;
@@ -13,9 +13,9 @@ use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance_api::{
+    ManageNeuron, ManageNeuronResponse, Proposal,
     manage_neuron::{self, NeuronIdOrSubaccount},
     manage_neuron_response::{self, MakeProposalResponse},
-    ManageNeuron, ManageNeuronResponse, Proposal,
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
@@ -260,7 +260,10 @@ impl DeployTestflightArgs {
                     .neurons_fund_participation
                     .unwrap_or_default()
                 {
-                    println!("Neuron's fund participation was enabled in {}, but is not supported by SNS testflight. Proceeding as if it was disabled.", init_config_file.display());
+                    println!(
+                        "Neuron's fund participation was enabled in {}, but is not supported by SNS testflight. Proceeding as if it was disabled.",
+                        init_config_file.display()
+                    );
                     create_service_nervous_system
                         .swap_parameters
                         .as_mut()

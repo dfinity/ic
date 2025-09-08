@@ -1,7 +1,7 @@
 use ic_types::{
+    Height, Randomness, RegistryVersion, ReplicaVersion, Time,
     batch::{Batch, BatchMessages, BlockmakerMetrics},
     time::UNIX_EPOCH,
-    Height, Randomness, RegistryVersion, ReplicaVersion, Time,
 };
 
 pub struct BatchBuilder {

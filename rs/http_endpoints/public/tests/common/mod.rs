@@ -1,7 +1,7 @@
 use axum::body::Body;
 use hyper::{
-    client::conn::http1::{handshake, SendRequest},
     Method, Request, StatusCode,
+    client::conn::http1::{SendRequest, handshake},
 };
 use hyper_util::rt::TokioIo;
 use ic_config::http_handler::Config;
@@ -40,28 +40,28 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_snapshots::CanisterSnapshots, CanisterQueues, NetworkTopology, ReplicatedState,
-    SystemMetadata,
+    CanisterQueues, NetworkTopology, ReplicatedState, SystemMetadata,
+    canister_snapshots::CanisterSnapshots,
 };
-use ic_test_utilities::crypto::{temp_crypto_component_with_fake_registry, CryptoReturningOk};
+use ic_test_utilities::crypto::{CryptoReturningOk, temp_crypto_component_with_fake_registry};
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
+    CryptoHashOfPartialState, Height, RegistryVersion,
     artifact::UnvalidatedArtifactMutation,
     batch::RawQueryStats,
     consensus::certification::{Certification, CertificationContent},
     crypto::{
-        threshold_sig::{
-            ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-            ThresholdSigPublicKey,
-        },
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
+        threshold_sig::{
+            ThresholdSigPublicKey,
+            ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+        },
     },
     malicious_flags::MaliciousFlags,
     messages::{CertificateDelegation, MessageId, SignedIngress, SignedIngressContent},
     signature::ThresholdSignature,
     time::UNIX_EPOCH,
-    CryptoHashOfPartialState, Height, RegistryVersion,
 };
 use mockall::{mock, predicate::*};
 use prost::Message;
@@ -69,12 +69,12 @@ use std::{collections::BTreeMap, convert::Infallible, net::SocketAddr, sync::Arc
 use tokio::{
     net::{TcpSocket, TcpStream},
     sync::{
-        mpsc::{channel, Receiver, Sender},
+        mpsc::{Receiver, Sender, channel},
         watch,
     },
 };
 use tokio_util::sync::CancellationToken;
-use tower::{util::BoxCloneService, Service, ServiceExt};
+use tower::{Service, ServiceExt, util::BoxCloneService};
 use tower_test::mock::Handle;
 
 pub type IngressFilterHandle =
@@ -155,8 +155,8 @@ pub fn default_read_certified_state(
     Some((rs, mht, cert))
 }
 
-pub fn default_certified_state_reader(
-) -> Option<Box<dyn CertifiedStateSnapshot<State = ReplicatedState> + 'static>> {
+pub fn default_certified_state_reader()
+-> Option<Box<dyn CertifiedStateSnapshot<State = ReplicatedState> + 'static>> {
     struct FakeCertifiedStateSnapshot(Arc<ReplicatedState>, MixedHashTree, Certification);
 
     impl CertifiedStateSnapshot for FakeCertifiedStateSnapshot {

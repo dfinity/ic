@@ -12,7 +12,7 @@ use http::Method;
 use ic_bn_lib::{http::Client, tasks::Run};
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
-use simple_moving_average::{SumTreeSMA, SMA};
+use simple_moving_average::{SMA, SumTreeSMA};
 #[allow(clippy::disallowed_types)]
 use tokio::sync::Mutex;
 use tokio::{
@@ -713,7 +713,7 @@ pub(crate) mod test {
     use super::*;
     use crate::{
         persist::{Persister, Routes},
-        snapshot::{node_test_id, subnet_test_id, CanisterRange, Node, RegistrySnapshot, Subnet},
+        snapshot::{CanisterRange, Node, RegistrySnapshot, Subnet, node_test_id, subnet_test_id},
         test_utils::valid_tls_certificate_and_validation_time,
     };
 

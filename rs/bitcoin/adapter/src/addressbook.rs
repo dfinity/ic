@@ -1,10 +1,10 @@
 use crate::config::Config;
 use bitcoin::p2p::Address;
 use bitcoin::p2p::ServiceFlags;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use rand::{
-    prelude::{IteratorRandom, SliceRandom, StdRng},
     SeedableRng,
+    prelude::{IteratorRandom, SliceRandom, StdRng},
 };
 use std::{
     collections::{HashSet, VecDeque},

@@ -11,9 +11,9 @@ use std::{
 use ic_heap_bytes::DeterministicHeapBytes;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_replicated_state::canister_state::execution_state::WasmMetadata;
-use ic_types::{methods::WasmMethod, DiskBytes, NumInstructions};
+use ic_types::{DiskBytes, NumInstructions, methods::WasmMethod};
 use ic_wasm_types::WasmEngineError;
-use nix::sys::mman::{mmap, MapFlags, ProtFlags};
+use nix::sys::mman::{MapFlags, ProtFlags, mmap};
 use serde::{Deserialize, Serialize};
 use wasmtime::Module;
 

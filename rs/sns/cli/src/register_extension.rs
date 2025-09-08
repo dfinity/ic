@@ -11,15 +11,14 @@ use cycles_minting_canister::{CanisterSettingsArgs, CreateCanister, SubnetSelect
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_management_canister_types_private::BoundedVec;
 use ic_nervous_system_agent::{
-    management_canister,
-    sns::{self, governance::SubmittedProposal, root::SnsCanisters, Sns},
-    CallCanisters, Request,
+    CallCanisters, Request, management_canister,
+    sns::{self, Sns, governance::SubmittedProposal, root::SnsCanisters},
 };
 use ic_nns_constants::CYCLES_LEDGER_CANISTER_ID;
 use ic_sns_governance_api::{
     pb::v1::{
-        proposal::Action, ChunkedCanisterWasm, ExtensionInit, PreciseValue, Proposal, ProposalId,
-        RegisterExtension,
+        ChunkedCanisterWasm, ExtensionInit, PreciseValue, Proposal, ProposalId, RegisterExtension,
+        proposal::Action,
     },
     precise_value::parse_precise_value,
 };

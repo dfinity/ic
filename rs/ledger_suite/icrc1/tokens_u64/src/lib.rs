@@ -3,7 +3,7 @@ use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, Zero};
 use ic_stable_structures::storable::{Bound, Storable};
 use minicbor::{Decode, Encode};
 use num_traits::{Bounded, ToPrimitive};
-use serde::{de::Deserializer, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::Deserializer};
 use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;

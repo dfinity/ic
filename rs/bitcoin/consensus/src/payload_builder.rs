@@ -26,14 +26,14 @@ use ic_interfaces::{
 use ic_interfaces_adapter_client::Options;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{log, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, log, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    batch::{SelfValidatingPayload, ValidationContext, MAX_BITCOIN_PAYLOAD_IN_BYTES},
+    CountBytes, Height, NumBytes, SubnetId,
+    batch::{MAX_BITCOIN_PAYLOAD_IN_BYTES, SelfValidatingPayload, ValidationContext},
     messages::CallbackId,
     state_manager::StateManagerError,
-    CountBytes, Height, NumBytes, SubnetId,
 };
 use std::{collections::BTreeSet, sync::Arc, time::Instant};
 use thiserror::Error;

@@ -220,7 +220,7 @@ pub mod test_common {
         net::SocketAddr,
     };
 
-    use bitcoin::{consensus::deserialize, Block};
+    use bitcoin::{Block, consensus::deserialize};
     use hex::FromHex;
 
     use crate::{Channel, ChannelError, Command};

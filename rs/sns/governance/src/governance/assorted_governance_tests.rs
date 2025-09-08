@@ -6,21 +6,22 @@ use crate::{
     extensions::{ExtensionSpec, ExtensionType, ExtensionVersion},
     governance::{
         test_helpers::{
-            basic_governance_proto, canister_status_for_test,
-            canister_status_from_management_canister_for_test, DoNothingLedger, A_MOTION_PROPOSAL,
-            A_NEURON, A_NEURON_ID, A_NEURON_PRINCIPAL_ID, TEST_ARCHIVES_CANISTER_IDS,
-            TEST_DAPP_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID, TEST_INDEX_CANISTER_ID,
-            TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID, TEST_SWAP_CANISTER_ID,
+            A_MOTION_PROPOSAL, A_NEURON, A_NEURON_ID, A_NEURON_PRINCIPAL_ID, DoNothingLedger,
+            TEST_ARCHIVES_CANISTER_IDS, TEST_DAPP_CANISTER_IDS, TEST_GOVERNANCE_CANISTER_ID,
+            TEST_INDEX_CANISTER_ID, TEST_LEDGER_CANISTER_ID, TEST_ROOT_CANISTER_ID,
+            TEST_SWAP_CANISTER_ID, basic_governance_proto, canister_status_for_test,
+            canister_status_from_management_canister_for_test,
         },
         *,
     },
     pb::v1::{
+        Account as AccountProto, Motion, NervousSystemFunction, NeuronPermissionType, ProposalData,
+        ProposalId, Tally, UpgradeJournalEntry, UpgradeSnsControlledCanister,
+        UpgradeSnsToNextVersion, VotingRewardsParameters, WaitForQuietState,
         governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Versions},
         manage_neuron_response,
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
-        neuron, Account as AccountProto, Motion, NervousSystemFunction, NeuronPermissionType,
-        ProposalData, ProposalId, Tally, UpgradeJournalEntry, UpgradeSnsControlledCanister,
-        UpgradeSnsToNextVersion, VotingRewardsParameters, WaitForQuietState,
+        neuron,
     },
     reward,
     sns_upgrade::{
@@ -38,15 +39,15 @@ use crate::{
 use assert_matches::assert_matches;
 use async_trait::async_trait;
 use candid::{Nat, Principal};
-use futures::{join, FutureExt};
+use futures::{FutureExt, join};
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_canisters::cmc::FakeCmc;
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusType,
 };
 use ic_nervous_system_common::{
-    assert_is_err, assert_is_ok, ledger::compute_neuron_staking_subaccount_bytes, E8,
-    ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
+    E8, ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS, assert_is_err, assert_is_ok,
+    ledger::compute_neuron_staking_subaccount_bytes,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
@@ -1544,13 +1545,11 @@ fn setup_env_for_sns_upgrade_to_next_version_test(
             env.require_call_canister_invocation(
                 root_canister_id,
                 "change_canister",
-                Encode!(&ChangeCanisterRequest::new(
-                    true,
-                    CanisterInstallMode::Upgrade,
-                    canister_id
+                Encode!(
+                    &ChangeCanisterRequest::new(true, CanisterInstallMode::Upgrade, canister_id)
+                        .with_wasm(vec![9, 8, 7, 6, 5, 4, 3, 2])
+                        .with_arg(Encode!().unwrap())
                 )
-                .with_wasm(vec![9, 8, 7, 6, 5, 4, 3, 2])
-                .with_arg(Encode!().unwrap()))
                 .unwrap(),
                 // We don't actually look at the response from this call anywhere
                 Some(Ok(Encode!().unwrap())),
@@ -3527,8 +3526,11 @@ fn test_upgrade_proposals_not_blocked_by_old_upgrade_proposals() {
 
     // Step 2: Check that the proposal is not blocked by an old proposal.
     match governance.check_no_upgrades_in_progress(Some(some_other_proposal_id)) {
-        Ok(_) => {},
-        Err(err) => panic!("The proposal should not have gotten blocked by an old proposal. Instead, it was blocked due to: {:#?}", err),
+        Ok(_) => {}
+        Err(err) => panic!(
+            "The proposal should not have gotten blocked by an old proposal. Instead, it was blocked due to: {:#?}",
+            err
+        ),
     }
 
     // Step 3: Make the proposal newer
@@ -3616,14 +3618,15 @@ fn test_cant_add_generic_nervous_system_function_without_topic() {
         )),
     };
 
-    match crate::proposal::validate_and_render_add_generic_nervous_system_function(&Default::default(), &valid, &Default::default()) {
+    match crate::proposal::validate_and_render_add_generic_nervous_system_function(
+        &Default::default(),
+        &valid,
+        &Default::default(),
+    ) {
         Ok(_) => panic!(
             "Should not be able to add generic nervous system functions without a topic, but was able to add it."
         ),
-        Err(err) => assert_eq!(
-            err,
-            "NervousSystemFunction must have a topic",
-        ),
+        Err(err) => assert_eq!(err, "NervousSystemFunction must have a topic",),
     }
 }
 

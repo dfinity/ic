@@ -4,13 +4,13 @@ use crate::eth_rpc_client::MultiCallError;
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount};
-use crate::state::audit::{process_event, EventType};
+use crate::state::audit::{EventType, process_event};
 use crate::state::transactions::{
-    create_transaction, CreateTransactionError, Reimbursed, ReimbursementIndex,
-    ReimbursementRequest, WithdrawalRequest,
+    CreateTransactionError, Reimbursed, ReimbursementIndex, ReimbursementRequest,
+    WithdrawalRequest, create_transaction,
 };
-use crate::state::{mutate_state, read_state, State, TaskType};
-use crate::tx::{lazy_refresh_gas_fee_estimate, GasFeeEstimate};
+use crate::state::{State, TaskType, mutate_state, read_state};
+use crate::tx::{GasFeeEstimate, lazy_refresh_gas_fee_estimate};
 use candid::Nat;
 use evm_rpc_client::{SendRawTransactionStatus, TransactionReceipt as EvmTransactionReceipt};
 use futures::future::join_all;
@@ -387,11 +387,17 @@ async fn finalize_transactions_batch() {
             for ((hash, withdrawal_id), result) in zip(txs_to_finalize, results) {
                 match result {
                     Ok(Some(receipt)) => {
-                        log!(DEBUG, "Received transaction receipt {receipt:?} for transaction {hash} and withdrawal ID {withdrawal_id}");
+                        log!(
+                            DEBUG,
+                            "Received transaction receipt {receipt:?} for transaction {hash} and withdrawal ID {withdrawal_id}"
+                        );
                         match receipts.get(&withdrawal_id) {
                             // by construction we never query twice the same transaction hash, which is a field in TransactionReceipt.
                             Some(existing_receipt) => {
-                                log!(INFO, "ERROR: received different receipts for transaction {hash} with withdrawal ID {withdrawal_id}: {existing_receipt:?} and {receipt:?}. Will retry later");
+                                log!(
+                                    INFO,
+                                    "ERROR: received different receipts for transaction {hash} with withdrawal ID {withdrawal_id}: {existing_receipt:?} and {receipt:?}. Will retry later"
+                                );
                                 return;
                             }
                             None => {

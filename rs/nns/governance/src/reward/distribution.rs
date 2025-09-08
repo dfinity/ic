@@ -234,7 +234,7 @@ mod test {
     use crate::neuron::{DissolveStateAndAge, Neuron, NeuronBuilder};
     use crate::pb::v1::VotingPowerEconomics;
     use crate::test_utils::{
-        test_subaccount_for_neuron_id, MockEnvironment, MockRandomness, StubCMC, StubIcpLedger,
+        MockEnvironment, MockRandomness, StubCMC, StubIcpLedger, test_subaccount_for_neuron_id,
     };
     use ic_base_types::PrincipalId;
     use ic_nervous_system_timers::test::run_pending_timers_every_interval_for_count;

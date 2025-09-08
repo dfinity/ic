@@ -1,9 +1,9 @@
 use candid::{CandidType, Principal};
 use ic_base_types::{CanisterId, CanisterIdError, PrincipalId, PrincipalIdError};
 use ic_crypto_sha2::Sha224;
-use ic_stable_structures::{storable::Bound, Storable};
+use ic_stable_structures::{Storable, storable::Bound};
 use icrc_ledger_types::icrc1::account::Account;
-use serde::{de, de::Error, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de, de::Error};
 use std::borrow::Cow;
 use std::{
     convert::{TryFrom, TryInto},
@@ -11,7 +11,7 @@ use std::{
     str::FromStr,
 };
 
-use crate::{protobuf as proto, AccountIdBlob};
+use crate::{AccountIdBlob, protobuf as proto};
 
 /// While this is backed by an array of length 28, it's canonical representation
 /// is a hex string of length 64. The first 8 characters are the CRC-32 encoded
@@ -507,9 +507,11 @@ fn test_account_id_from_hex() {
     );
 
     let length_64 = "0000000000000000000000000000000000000000000000000000000000000000";
-    assert!(AccountIdentifier::from_hex(length_64)
-        .unwrap_err()
-        .contains("Checksum failed"));
+    assert!(
+        AccountIdentifier::from_hex(length_64)
+            .unwrap_err()
+            .contains("Checksum failed")
+    );
 
     // Try again with correct checksum
     let length_64 = "807077e900000000000000000000000000000000000000000000000000000000";

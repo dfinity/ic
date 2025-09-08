@@ -1,17 +1,17 @@
 use ic_consensus_idkg::{
-    metrics::{key_id_label, CounterPerMasterPublicKeyId, IDkgPayloadStats, KEY_ID_LABEL},
+    metrics::{CounterPerMasterPublicKeyId, IDkgPayloadStats, KEY_ID_LABEL, key_id_label},
     utils::CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
 };
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
 use ic_metrics::{
-    buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,
+    buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
 };
 use ic_types::{
+    CountBytes, Height, Time,
     batch::BatchPayload,
     consensus::{Block, BlockPayload, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank},
-    CountBytes, Height, Time,
 };
 use prometheus::{
     GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,

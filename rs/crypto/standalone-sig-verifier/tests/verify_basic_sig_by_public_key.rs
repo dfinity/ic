@@ -23,7 +23,7 @@ fn should_error_when_algorithm_unsupported() {
 mod ed25519 {
     use crate::assert_wrong_algorithm_used;
     use assert_matches::assert_matches;
-    use ic_crypto_internal_test_vectors::ed25519::{crypto_lib_testvec, Ed25519TestVector};
+    use ic_crypto_internal_test_vectors::ed25519::{Ed25519TestVector, crypto_lib_testvec};
     use ic_crypto_standalone_sig_verifier::verify_basic_sig_by_public_key;
     use ic_types::crypto::{AlgorithmId, CryptoError};
     use strum::IntoEnumIterator;

@@ -2,12 +2,12 @@ use ic_embedders::wasmtime_embedder::system_api::sandbox_safe_system_state::Requ
 use ic_error_types::UserError;
 use ic_management_canister_types_private::QueryMethod;
 use ic_metrics::{
-    buckets::{decimal_buckets, decimal_buckets_with_zero},
     MetricsRegistry,
+    buckets::{decimal_buckets, decimal_buckets_with_zero},
 };
 use ic_types::{
-    NumInstructions, NumMessages, NumSlices, Time, MAX_STABLE_MEMORY_IN_BYTES,
-    MAX_WASM_MEMORY_IN_BYTES,
+    MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumInstructions, NumMessages, NumSlices,
+    Time,
 };
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
 use std::{cell::RefCell, rc::Rc, time::Instant};

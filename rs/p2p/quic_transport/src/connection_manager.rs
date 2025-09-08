@@ -30,8 +30,8 @@ use std::{
 };
 
 use axum::{
-    body::Body, body::HttpBody, extract::Request, extract::State, middleware::from_fn_with_state,
-    middleware::Next, Router,
+    Router, body::Body, body::HttpBody, extract::Request, extract::State, middleware::Next,
+    middleware::from_fn_with_state,
 };
 use futures::StreamExt;
 use ic_base_types::NodeId;
@@ -39,12 +39,12 @@ use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfig};
 use ic_crypto_utils_tls::node_id_from_certificate_der;
 use ic_http_endpoints_async_utils::JoinMap;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_metrics::MetricsRegistry;
 use quinn::{
-    crypto::rustls::{QuicClientConfig, QuicServerConfig},
     AsyncUdpSocket, ConnectError, Connection, ConnectionError, Endpoint, EndpointConfig, Incoming,
     Runtime, TokioRuntime, VarInt,
+    crypto::rustls::{QuicClientConfig, QuicServerConfig},
 };
 use rustls::pki_types::CertificateDer;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
@@ -54,9 +54,9 @@ use tokio::{runtime::Handle, select, task::JoinSet};
 use tokio_util::{sync::CancellationToken, time::DelayQueue};
 
 use crate::{
+    Shutdown, SubnetTopology,
     connection_handle::ConnectionHandle,
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
-    Shutdown, SubnetTopology,
 };
 use crate::{metrics::QuicTransportMetrics, request_handler::start_stream_acceptor};
 
@@ -141,7 +141,9 @@ enum ConnectionEstablishError {
         cause: ConnectionError,
     },
     // The following errors should be infallible/internal.
-    #[error("Failed to establish outbound connection to peer {peer_id:?} due to errors in the parameters being used. {cause:?}")]
+    #[error(
+        "Failed to establish outbound connection to peer {peer_id:?} due to errors in the parameters being used. {cause:?}"
+    )]
     BadConnectParameters {
         peer_id: NodeId,
         cause: ConnectError,

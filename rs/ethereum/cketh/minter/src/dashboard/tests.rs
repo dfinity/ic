@@ -11,11 +11,11 @@ use ic_cketh_minter::numeric::{
     BlockNumber, CkTokenAmount, Erc20Value, GasAmount, LedgerBurnIndex, LedgerMintIndex, LogIndex,
     TransactionNonce, Wei, WeiPerGas,
 };
-use ic_cketh_minter::state::audit::{apply_state_transition, EventType};
+use ic_cketh_minter::state::audit::{EventType, apply_state_transition};
 use ic_cketh_minter::state::eth_logs_scraping::LogScrapingId;
 use ic_cketh_minter::state::transactions::{
-    create_transaction, Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex,
-    WithdrawalRequest,
+    Erc20WithdrawalRequest, EthWithdrawalRequest, ReimbursementIndex, WithdrawalRequest,
+    create_transaction,
 };
 use ic_cketh_minter::state::{MintedEvent, State};
 use ic_cketh_minter::tx::{
@@ -1505,8 +1505,8 @@ fn ckerc20_withdrawal_flow(
 }
 
 mod assertions {
-    use crate::dashboard::filters::lower_alphanumeric;
     use crate::dashboard::DashboardTemplate;
+    use crate::dashboard::filters::lower_alphanumeric;
     use askama::Template;
     use ic_cketh_minter::erc20::CkErc20Token;
     use ic_cketh_minter::state::eth_logs_scraping::LogScrapingId;

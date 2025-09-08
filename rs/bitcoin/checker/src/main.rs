@@ -1,13 +1,12 @@
 #![allow(deprecated)]
-use bitcoin::{consensus::Decodable, Address, Transaction};
+use bitcoin::{Address, Transaction, consensus::Decodable};
 use candid::Nat;
 use ic_btc_checker::{
-    blocklist::is_blocked, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse,
-    CheckArg, CheckMode, CheckTransactionArgs, CheckTransactionIrrecoverableError,
-    CheckTransactionQueryArgs, CheckTransactionQueryResponse, CheckTransactionResponse,
-    CheckTransactionRetriable, CheckTransactionStatus, CheckTransactionStrArgs,
-    CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
-    RETRY_MAX_RESPONSE_BYTES,
+    BtcNetwork, CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    CheckAddressArgs, CheckAddressResponse, CheckArg, CheckMode, CheckTransactionArgs,
+    CheckTransactionIrrecoverableError, CheckTransactionQueryArgs, CheckTransactionQueryResponse,
+    CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus,
+    CheckTransactionStrArgs, RETRY_MAX_RESPONSE_BYTES, blocklist::is_blocked, get_tx_cycle_cost,
 };
 use ic_btc_interface::Txid;
 use ic_canister_log::{export as export_logs, log};
@@ -25,9 +24,9 @@ mod logs;
 mod providers;
 mod state;
 
-use fetch::{check_for_blocked_input_addresses, FetchEnv, FetchResult, TryFetchResult};
-use logs::{Log, LogEntry, Priority, DEBUG, WARN};
-use state::{get_config, set_config, Config, FetchGuardError, FetchTxStatus, HttpGetTxError};
+use fetch::{FetchEnv, FetchResult, TryFetchResult, check_for_blocked_input_addresses};
+use logs::{DEBUG, Log, LogEntry, Priority, WARN};
+use state::{Config, FetchGuardError, FetchTxStatus, HttpGetTxError, get_config, set_config};
 
 #[derive(PartialOrd, Ord, PartialEq, Eq)]
 enum HttpsOutcallStatus {
@@ -305,7 +304,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
                 Err(_) => {
                     return http::HttpResponseBuilder::bad_request()
                         .with_body_and_content_length("failed to parse the 'time' parameter")
-                        .build()
+                        .build();
                 }
             },
             None => 0,
@@ -348,7 +347,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
                 Err(_) => {
                     return http::HttpResponseBuilder::bad_request()
                         .with_body_and_content_length("failed to parse the 'page' parameter")
-                        .build()
+                        .build();
                 }
             },
             None => 0,
@@ -419,7 +418,7 @@ impl FetchEnv for BtcCheckerCanisterEnv {
                 }
                 let tx = match provider.btc_network() {
                     BtcNetwork::Regtest { .. } => {
-                        use serde_json::{from_slice, from_value, Value};
+                        use serde_json::{Value, from_slice, from_value};
                         let json: Value = from_slice(response.body.as_slice()).map_err(|err| {
                             HttpGetTxError::TxEncoding(format!("JSON parsing error {}", err))
                         })?;
@@ -554,7 +553,7 @@ fn main() {}
 
 #[test]
 fn check_candid_interface_compatibility() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
 
     candid::export_service!();
 

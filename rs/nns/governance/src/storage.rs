@@ -1,5 +1,5 @@
 use crate::{
-    governance::{voting_power_snapshots::VotingPowerSnapshots, LOG_PREFIX},
+    governance::{LOG_PREFIX, voting_power_snapshots::VotingPowerSnapshots},
     pb::v1::{ArchivedMonthlyNodeProviderRewards, AuditEvent},
     reward::distribution::RewardsDistributionStateMachine,
     voting::VotingStateMachines,
@@ -7,8 +7,8 @@ use crate::{
 
 use ic_cdk::println;
 use ic_stable_structures::{
-    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     DefaultMemoryImpl, Memory, StableBTreeMap, StableLog, Storable,
+    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
 };
 use std::cell::RefCell;
 

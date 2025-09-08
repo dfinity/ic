@@ -1,5 +1,5 @@
-use crate::governance::voting_power_snapshots::VotingPowerSnapshots;
 use crate::governance::Governance;
+use crate::governance::voting_power_snapshots::VotingPowerSnapshots;
 
 use ic_nervous_system_timer_task::RecurringSyncTask;
 use std::cell::RefCell;
@@ -85,8 +85,8 @@ mod tests {
     use ic_nervous_system_common::ONE_DAY_SECONDS;
     use ic_nns_common::pb::v1::NeuronId;
     use ic_stable_structures::{
-        memory_manager::{MemoryId, MemoryManager},
         DefaultMemoryImpl,
+        memory_manager::{MemoryId, MemoryManager},
     };
     use ic_types::PrincipalId;
     use icp_ledger::Subaccount;

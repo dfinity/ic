@@ -11,17 +11,17 @@ use std::{
 };
 
 use crate::page_map::{
+    CheckpointSerialization, LABEL_OP_FLUSH, LABEL_OP_MERGE, LABEL_TYPE_INDEX,
+    LABEL_TYPE_PAGE_DATA, MappingSerialization, MemoryInstruction, MemoryInstructions,
+    MemoryMapOrData, PageDelta, PersistenceError, StorageMetrics,
     checkpoint::{Checkpoint, Mapping, ZEROED_PAGE},
-    CheckpointSerialization, MappingSerialization, MemoryInstruction, MemoryInstructions,
-    MemoryMapOrData, PageDelta, PersistenceError, StorageMetrics, LABEL_OP_FLUSH, LABEL_OP_MERGE,
-    LABEL_TYPE_INDEX, LABEL_TYPE_PAGE_DATA,
 };
 
 use bit_vec::BitVec;
 use ic_config::state_manager::LsmtConfig;
-use ic_sys::{PageBytes, PageIndex, PAGE_SIZE};
+use ic_sys::{PAGE_SIZE, PageBytes, PageIndex};
 use ic_types::Height;
-use itertools::{izip, Itertools};
+use itertools::{Itertools, izip};
 use phantom_newtype::{AmountOf, Id};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -1511,11 +1511,7 @@ impl MergeCandidate {
             (existing_lengths.len() + 1).saturating_sub(MAX_NUMBER_OF_FILES),
         );
         assert!(result <= existing_lengths.len());
-        if result <= 1 {
-            None
-        } else {
-            Some(result)
-        }
+        if result <= 1 { None } else { Some(result) }
     }
 }
 

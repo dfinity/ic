@@ -3,12 +3,11 @@ use std::borrow::Cow;
 use assert_matches::assert_matches;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
-    wasm_utils::{
-        validate_and_instrument_for_testing,
-        validation::{extract_custom_section_name, RESERVED_SYMBOLS},
-        Complexity, WasmImportsDetails, WasmValidationDetails,
-    },
     WasmtimeEmbedder,
+    wasm_utils::{
+        Complexity, WasmImportsDetails, WasmValidationDetails, validate_and_instrument_for_testing,
+        validation::{RESERVED_SYMBOLS, extract_custom_section_name},
+    },
 };
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::replica_logger::no_op_logger;
@@ -961,7 +960,8 @@ fn can_reject_module_with_custom_sections_too_big() {
     let max_custom_sections_size = NumBytes::new(14);
     assert_eq!(
         validate_wasm_binary(
-            &wasm, &EmbeddersConfig {
+            &wasm,
+            &EmbeddersConfig {
                 max_custom_sections: 3,
                 max_custom_sections_size,
                 ..Default::default()
@@ -970,8 +970,7 @@ fn can_reject_module_with_custom_sections_too_big() {
         Err(WasmValidationError::InvalidCustomSection(format!(
             "Invalid custom sections: total size of the custom sections exceeds the maximum allowed: size {} bytes, allowed {} bytes",
             size, max_custom_sections_size
-        )
-        ))
+        )))
     );
 }
 

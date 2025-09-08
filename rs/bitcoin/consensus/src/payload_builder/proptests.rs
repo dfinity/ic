@@ -7,16 +7,16 @@ use ic_interfaces::batch_payload::{BatchPayloadBuilder, ProposalContext};
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-use ic_types::{batch::ValidationContext, time::UNIX_EPOCH, Height, NumBytes};
+use ic_types::{Height, NumBytes, batch::ValidationContext, time::UNIX_EPOCH};
 use proptest::{prelude::*, proptest};
 use std::sync::Arc;
 
 use crate::{
-    payload_builder::tests::{
-        mock_registry_client, mock_state_manager, MockAdapterClient, CERTIFIED_HEIGHT,
-        REGISTRY_VERSION,
-    },
     BitcoinPayloadBuilder,
+    payload_builder::tests::{
+        CERTIFIED_HEIGHT, MockAdapterClient, REGISTRY_VERSION, mock_registry_client,
+        mock_state_manager,
+    },
 };
 
 const MAX_BTC_BLOCK_SIZE: usize = 4 * 1024 * 1024;
@@ -85,9 +85,11 @@ fn proptest_round(
         validation_context: &validation_context,
     };
 
-    assert!(bitcoin_payload_builder
-        .validate_payload(height, &proposal_context, &payload, &[])
-        .is_ok());
+    assert!(
+        bitcoin_payload_builder
+            .validate_payload(height, &proposal_context, &payload, &[])
+            .is_ok()
+    );
 }
 
 fn prop_adapter_responses() -> impl Strategy<Value = Vec<BitcoinAdapterResponse>> {

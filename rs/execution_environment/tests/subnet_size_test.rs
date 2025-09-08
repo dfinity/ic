@@ -12,11 +12,11 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
-use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use ic_test_utilities_types::messages::SignedIngressBuilder;
 use ic_types::canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES;
 use ic_types::ingress::WasmResult;
-use ic_types::messages::{SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES};
+use ic_types::messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, SignedIngressContent};
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId,
 };
@@ -38,8 +38,8 @@ const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 0;
 // instruction cost of executing inc method on the test canister
 fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
     use ic_config::embedders::MeteringType;
-    use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
     use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
+    use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
 
     let instruction_to_cost = match config.embedders_config.metering_type {
         MeteringType::New => instruction_to_cost,
@@ -1171,8 +1171,7 @@ fn test_subnet_size_execute_message_cost() {
     assert_eq!(reference_instructions_cost, 2019);
     let simulated_cost = simulate_execute_message_cost(subnet_type, reference_subnet_size);
     assert_eq!(
-        simulated_cost,
-        reference_cost,
+        simulated_cost, reference_cost,
         "subnet_size={reference_subnet_size}, simulated_cost={simulated_cost}, reference_cost={reference_cost}"
     );
 

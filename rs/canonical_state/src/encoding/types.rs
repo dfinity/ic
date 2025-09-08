@@ -14,9 +14,9 @@ use crate::CertificationVersion;
 use ic_error_types::TryFromError;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
+    Time,
     time::CoarseTime,
     xnet::{RejectReason, RejectSignal, StreamIndex},
-    Time,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -353,17 +353,14 @@ pub(crate) fn try_from_deltas(
                 // lead to duplicates or a stream_index of `signals_end`.
                 return Err(ProxyDecodeError::Other(format!(
                     "StreamHeader: {:?} found bad delta: `0` is not allowed in `reject_signal_deltas` {:?}",
-                    reason,
-                    deltas,
+                    reason, deltas,
                 )));
             }
             if stream_index < StreamIndex::new(*delta) {
                 // Reject signal deltas are invalid.
                 return Err(ProxyDecodeError::Other(format!(
                     "StreamHeader: {:?} reject signals are invalid, got `signals_end` {:?}, `reject_signal_deltas` {:?}",
-                    reason,
-                    signals_end,
-                    deltas,
+                    reason, signals_end, deltas,
                 )));
             }
             stream_index -= StreamIndex::new(*delta);
@@ -419,7 +416,7 @@ impl TryFrom<RequestOrResponse> for ic_types::messages::RequestOrResponse {
             other => Err(ProxyDecodeError::Other(format!(
                 "RequestOrResponse: expected exactly one of `request` or `response` to be `Some(_)`, got `{:?}`",
                 other
-            )))
+            ))),
         }
     }
 }

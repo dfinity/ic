@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 #[cfg(test)]
-use proptest::prelude::{any, prop_oneof, Strategy};
+use proptest::prelude::{Strategy, any, prop_oneof};
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use std::fs::Permissions;

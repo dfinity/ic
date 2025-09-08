@@ -1,6 +1,6 @@
 use anyhow::Result;
-use cycles_minting::{make_user_ed25519, TestAgent, UserHandle};
-use cycles_minting_canister::{SubnetFilter, SubnetSelection, CREATE_CANISTER_REFUND_FEE};
+use cycles_minting::{TestAgent, UserHandle, make_user_ed25519};
+use cycles_minting_canister::{CREATE_CANISTER_REFUND_FEE, SubnetFilter, SubnetSelection};
 use dfn_candid::candid_one;
 use ic_canister_client::{HttpClient, Sender};
 use ic_management_canister_types_private::{CanisterIdRecord, CanisterStatusResultV2};

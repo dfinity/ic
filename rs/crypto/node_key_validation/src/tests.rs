@@ -276,7 +276,7 @@ mod committee_signing_public_key_validation {
         let corrupted_committee_signing_key = {
             let mut public_key = valid_committee_signing_public_key();
             public_key.key_value[0] ^= 0xff; // this flips the compression flag and thus
-                                             // makes the encoding of the point invalid
+            // makes the encoding of the point invalid
             public_key
         };
 

@@ -10,7 +10,7 @@ use ic_nervous_system_long_message::is_message_over_threshold;
 #[cfg(test)]
 use ic_nervous_system_temporary::Temporary;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use ic_stable_structures::{storable::Bound, StableBTreeMap, Storable};
+use ic_stable_structures::{StableBTreeMap, Storable, storable::Bound};
 use prost::Message;
 use std::{
     borrow::Cow,
@@ -224,22 +224,24 @@ impl Governance {
     /// It processes voting state machines until the soft limit is reached or there is no work to do.
     pub async fn process_voting_state_machines(&mut self) {
         let mut proposals_with_new_votes_cast = vec![];
-        with_voting_state_machines_mut(|voting_state_machines| loop {
-            if voting_state_machines
-                .with_next_machine(|(proposal_id, machine)| {
-                    if !machine.is_voting_finished() {
-                        proposals_with_new_votes_cast.push(proposal_id);
-                    }
-                    // We need to keep track of which proposals we processed
-                    self.process_machine_until_soft_limit(machine, over_soft_message_limit);
-                })
-                .is_none()
-            {
-                break;
-            };
+        with_voting_state_machines_mut(|voting_state_machines| {
+            loop {
+                if voting_state_machines
+                    .with_next_machine(|(proposal_id, machine)| {
+                        if !machine.is_voting_finished() {
+                            proposals_with_new_votes_cast.push(proposal_id);
+                        }
+                        // We need to keep track of which proposals we processed
+                        self.process_machine_until_soft_limit(machine, over_soft_message_limit);
+                    })
+                    .is_none()
+                {
+                    break;
+                };
 
-            if over_soft_message_limit() {
-                break;
+                if over_soft_message_limit() {
+                    break;
+                }
             }
         });
 
@@ -531,7 +533,10 @@ impl ProposalVotingStateMachine {
                         // This is a bad inconsistency, but there is
                         // nothing that can be done about it at this
                         // place.  We somehow have followers recorded that don't exist.
-                        eprintln!("error in cast_vote_and_cascade_follow when gathering induction votes: {:?}", e);
+                        eprintln!(
+                            "error in cast_vote_and_cascade_follow when gathering induction votes: {:?}",
+                            e
+                        );
                         Vote::Unspecified
                     }
                 };
@@ -557,7 +562,10 @@ impl ProposalVotingStateMachine {
                         // This is a bad inconsistency, but there is
                         // nothing that can be done about it at this
                         // place.  We somehow have followers recorded that don't exist.
-                        eprintln!("error in cast_vote_and_cascade_follow when gathering induction votes: {:?}", e);
+                        eprintln!(
+                            "error in cast_vote_and_cascade_follow when gathering induction votes: {:?}",
+                            e
+                        );
                     }
                 };
 
@@ -594,16 +602,16 @@ mod test {
         neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
         neuron_store::NeuronStore,
         pb::v1::{
-            proposal::Action, Ballot, Followees, Motion, Proposal, ProposalData, Tally, Topic,
-            Vote, VotingPowerEconomics, WaitForQuietState,
+            Ballot, Followees, Motion, Proposal, ProposalData, Tally, Topic, Vote,
+            VotingPowerEconomics, WaitForQuietState, proposal::Action,
         },
         storage::with_voting_state_machines_mut,
         test_utils::{
             ExpectedCallCanisterMethodCallArguments, MockEnvironment, StubCMC, StubIcpLedger,
         },
         voting::{
-            temporarily_set_over_soft_message_limit, ProposalVotingStateMachine,
-            VotingStateMachines,
+            ProposalVotingStateMachine, VotingStateMachines,
+            temporarily_set_over_soft_message_limit,
         },
     };
     use candid::Encode;

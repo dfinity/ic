@@ -237,7 +237,9 @@ impl From<LedgerBurnError> for WithdrawalError {
                 failed_burn_amount,
                 ledger,
             } => {
-                panic!("BUG: withdrawal amount {failed_burn_amount} on the ckETH ledger {ledger:?} should always be higher than the ledger transaction fee {minimum_burn_amount}")
+                panic!(
+                    "BUG: withdrawal amount {failed_burn_amount} on the ckETH ledger {ledger:?} should always be higher than the ledger transaction fee {minimum_burn_amount}"
+                )
             }
         }
     }

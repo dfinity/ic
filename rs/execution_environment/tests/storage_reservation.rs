@@ -11,7 +11,7 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
-use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use ic_types::{CanisterId, Cycles, NumBytes};
 use more_asserts::{assert_gt, assert_lt};
 
@@ -318,8 +318,8 @@ fn test_storage_reservation_triggered_in_take_canister_snapshot_without_enough_c
 }
 
 #[test]
-fn test_storage_reservation_triggered_in_upload_and_load_canister_snapshot_with_enough_cycles_available(
-) {
+fn test_storage_reservation_triggered_in_upload_and_load_canister_snapshot_with_enough_cycles_available()
+ {
     let (env, canister_id) = setup(SUBNET_MEMORY_CAPACITY, None);
     assert_eq!(reserved_balance(&env, canister_id), 0);
 
@@ -447,7 +447,9 @@ fn instruction_and_reserved_cycles_exceed_canister_balance_setup() -> (StateMach
         }
         iterations += 1;
         if iterations > 100 {
-            panic!("Could not trigger storage reservation after 100 steps - maybe the storage reservation threshold increased and more fillup canisters are needed?");
+            panic!(
+                "Could not trigger storage reservation after 100 steps - maybe the storage reservation threshold increased and more fillup canisters are needed?"
+            );
         }
     }
 

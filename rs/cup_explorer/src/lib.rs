@@ -12,18 +12,18 @@ use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{
+    RegistryVersion, SubnetId,
     consensus::{CatchUpContentProtobufBytes, CatchUpPackage},
     crypto::{
-        threshold_sig::ni_dkg::NiDkgTargetSubnet, CombinedThresholdSig, CombinedThresholdSigOf,
+        CombinedThresholdSig, CombinedThresholdSigOf, threshold_sig::ni_dkg::NiDkgTargetSubnet,
     },
-    RegistryVersion, SubnetId,
 };
 use prost::Message;
 use tokio::{fs, runtime::Handle, task};
 use url::Url;
 
 use crate::{
-    registry::{get_nodes, RegistryCanisterClient},
+    registry::{RegistryCanisterClient, get_nodes},
     util::{http_url, make_logger},
 };
 
@@ -243,8 +243,12 @@ pub fn verify(
         "\nConfirmed that subnet {} was halted on this CUP as of {}.",
         subnet_id, block.context.time
     );
-    println!("This means that the CUP represents the latest state of the subnet while the subnet remains halted.");
-    println!("The subnet may ONLY be restarted via a recovery proposal using the same state hash as listed above.");
+    println!(
+        "This means that the CUP represents the latest state of the subnet while the subnet remains halted."
+    );
+    println!(
+        "The subnet may ONLY be restarted via a recovery proposal using the same state hash as listed above."
+    );
 
     println!("\nSearching for a recovery proposal...");
     for version in dkg_version.get() + 1..=latest_version.get() {
@@ -291,7 +295,11 @@ pub fn verify(
     }
 
     println!("The subnet has not been recovered yet.");
-    println!("A recovery proposal should specify a time and height that is greater than the time and height of the CUP above.");
-    println!("Additionally, the proposed state hash should be equal to the one in the provided CUP, to ensure there were no modifications to the state.");
+    println!(
+        "A recovery proposal should specify a time and height that is greater than the time and height of the CUP above."
+    );
+    println!(
+        "Additionally, the proposed state hash should be equal to the one in the provided CUP, to ensure there were no modifications to the state."
+    );
     SubnetStatus::Halted
 }

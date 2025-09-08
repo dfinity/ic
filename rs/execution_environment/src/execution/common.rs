@@ -2,7 +2,7 @@
 // TODO(RUN-60): Move helper functions here.
 
 use crate::execution_environment::ExecutionResponse;
-use crate::{as_round_instructions, metrics::CallTreeMetrics, ExecuteMessageResult, RoundLimits};
+use crate::{ExecuteMessageResult, RoundLimits, as_round_instructions, metrics::CallTreeMetrics};
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, ExecutionStateChanges, SliceExecutionOutput},
@@ -14,7 +14,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
 };
-use ic_logger::{error, fatal, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, fatal, info, warn};
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -103,7 +103,7 @@ pub(crate) fn action_to_request_response(
 ) -> ExecutionResponse {
     let (response_payload, refund) = match action {
         CallContextAction::NotYetResponded | CallContextAction::AlreadyResponded => {
-            return ExecutionResponse::Empty
+            return ExecutionResponse::Empty;
         }
 
         CallContextAction::NoResponse { refund } => (
@@ -202,7 +202,9 @@ pub(crate) fn action_to_ingress_response(
         warn!(
             log,
             "[EXC-BUG] No funds can be included with an ingress message: user {}, canister_id {}, message_id {}.",
-            user_id, canister_id, message_id
+            user_id,
+            canister_id,
+            message_id
         );
     }
     match ingress_status {
@@ -610,10 +612,10 @@ mod test {
     use ic_logger::LoggerImpl;
     use ic_logger::ReplicaLogger;
     use ic_replicated_state::{CanisterState, SchedulerState, SystemState};
-    use ic_types::messages::CallbackId;
-    use ic_types::messages::NO_DEADLINE;
     use ic_types::Cycles;
     use ic_types::Time;
+    use ic_types::messages::CallbackId;
+    use ic_types::messages::NO_DEADLINE;
 
     #[test]
     fn test_wasm_result_to_query_response_refunds_correctly() {

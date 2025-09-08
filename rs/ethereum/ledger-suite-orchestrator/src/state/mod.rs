@@ -5,11 +5,11 @@ mod tests;
 
 use crate::candid::{CyclesManagement, InitArg};
 use crate::scheduler::{Erc20Token, InvalidManageInstalledCanistersError, Task};
-use crate::storage::memory::{state_memory, StableMemory};
 use crate::storage::WasmHashError;
+use crate::storage::memory::{StableMemory, state_memory};
 use candid::Principal;
 use ic_cdk::trap;
-use ic_stable_structures::{storable::Bound, Cell, Storable};
+use ic_stable_structures::{Cell, Storable, storable::Bound};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_bytes::ByteArray;
 use std::borrow::Cow;

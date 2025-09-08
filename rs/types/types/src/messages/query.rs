@@ -1,9 +1,9 @@
 use crate::{
-    messages::{
-        http::{representation_independent_hash_call_or_query, CallOrQuery},
-        HasCanisterId, HttpRequestError, HttpUserQuery, MessageId,
-    },
     CanisterId, PrincipalId, UserId,
+    messages::{
+        HasCanisterId, HttpRequestError, HttpUserQuery, MessageId,
+        http::{CallOrQuery, representation_independent_hash_call_or_query},
+    },
 };
 use ic_management_canister_types_private::IC_00;
 use std::convert::TryFrom;

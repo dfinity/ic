@@ -1,9 +1,10 @@
 use crate::labeled_tree_visitor::LabeledTreeVisitor;
 use ic_canonical_state::{
+    LabelLike,
     encoding::{decode_message, decode_stream_header},
     size_limit_visitor::{Matcher, SizeLimitVisitor},
     subtree_visitor::{Pattern, SubtreeVisitor},
-    traverse, LabelLike,
+    traverse,
 };
 use ic_crypto_tree_hash::{FlatMap, Label, LabeledTree};
 use ic_interfaces_certified_stream_store::DecodeStreamError;
@@ -11,8 +12,8 @@ use ic_protobuf::messaging::xnet::v1;
 use ic_protobuf::proxy::ProtoProxy;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    xnet::{StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
     SubnetId,
+    xnet::{StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
 };
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -282,10 +283,13 @@ pub fn decode_slice_from_tree(
         }
 
         if queue.begin() < header.begin() || header.end() < queue.end() {
-            return Err(DecodeStreamError::SerializationError(
-                format!("the range of message indices [{}, {}) does not agree with the range in header [{}, {})",
-                        queue.begin(), queue.end(), header.begin(), header.end())
-            ));
+            return Err(DecodeStreamError::SerializationError(format!(
+                "the range of message indices [{}, {}) does not agree with the range in header [{}, {})",
+                queue.begin(),
+                queue.end(),
+                header.begin(),
+                header.end()
+            )));
         }
     }
 

@@ -1,7 +1,7 @@
 use std::{net::SocketAddr, time::Duration};
 
 use candid::Principal;
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
+use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use ic_bn_lib::http::server;
 use ic_types::messages::{Blob, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery};
 use rand::prelude::*;

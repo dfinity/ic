@@ -200,7 +200,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
 /// Prints a question to the user and returns `true`
 /// if the user replied with a yes.
 pub fn consent_given(question: &str) -> bool {
-    use std::io::{stdin, stdout, Write};
+    use std::io::{Write, stdin, stdout};
     println!("{} [Y/n] ", question);
     let _ = stdout().flush();
     let mut s = String::new();

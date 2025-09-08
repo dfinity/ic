@@ -1,5 +1,5 @@
 use anyhow::Result;
-use ic_agent::{agent::RejectCode, export::Principal, AgentError};
+use ic_agent::{AgentError, agent::RejectCode, export::Principal};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
@@ -9,9 +9,9 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    assert_http_submit_fails, assert_reject, block_on, set_controller, UniversalCanister,
+    UniversalCanister, assert_http_submit_fails, assert_reject, block_on, set_controller,
 };
-use ic_universal_canister::{management, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, management, wasm};
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::ManagementCanister;
 

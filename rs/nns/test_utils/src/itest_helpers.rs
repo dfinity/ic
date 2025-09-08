@@ -8,12 +8,12 @@ use crate::{
 };
 use candid::Encode;
 use canister_test::{
-    local_test_with_config_e, local_test_with_config_with_mutations_on_system_subnet, Canister,
-    Project, Runtime, Wasm,
+    Canister, Project, Runtime, Wasm, local_test_with_config_e,
+    local_test_with_config_with_mutations_on_system_subnet,
 };
 use cycles_minting_canister::CyclesCanisterInitPayload;
-use dfn_candid::{candid_one, CandidOne};
-use futures::{future::join_all, FutureExt};
+use dfn_candid::{CandidOne, candid_one};
+use futures::{FutureExt, future::join_all};
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
 use ic_management_canister_types_private::CanisterInstallMode;
@@ -23,19 +23,19 @@ use ic_nns_common::{
     types::{NeuronId, ProposalId},
 };
 use ic_nns_constants::*;
-use ic_nns_governance_api::{test_api::TimeWarp, Governance, NnsFunction, ProposalStatus};
+use ic_nns_governance_api::{Governance, NnsFunction, ProposalStatus, test_api::TimeWarp};
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_registry_transport::pb::v1::RegistryMutation;
 use ic_sns_wasm::{init::SnsWasmCanisterInitPayload, pb::v1::AddWasmRequest};
 use ic_test_utilities::universal_canister::{
-    call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
+    UNIVERSAL_CANISTER_WASM, call_args, wasm as universal_canister_argument_builder,
 };
 use ic_types::Cycles;
 use icp_ledger as ledger;
 use ledger::LedgerCanisterInitPayload;
 use lifeline::LIFELINE_CANISTER_WASM;
-use on_wire::{bytes, IntoWire};
+use on_wire::{IntoWire, bytes};
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayload;
 use std::{future::Future, path::Path, thread, time::SystemTime};

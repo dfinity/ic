@@ -61,7 +61,7 @@ use ic_system_test_driver::driver::{
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
 use nns_dapp::{nns_dapp_customizations, set_authorized_subnets};
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 

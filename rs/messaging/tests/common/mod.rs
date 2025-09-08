@@ -6,16 +6,16 @@ use ic_config::{
     subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig},
 };
 use ic_interfaces_certified_stream_store::EncodeStreamError;
-use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
+use ic_registry_routing_table::{RoutingTable, routing_table_insert_subnet};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig, UserError};
 use ic_types::{
+    Cycles,
     messages::{MessageId, RequestOrResponse},
     xnet::StreamHeader,
-    Cycles,
 };
 use proptest::prop_compose;
-use random_traffic_test::{extract_metrics, Config as CanisterConfig, Record as CanisterRecord};
+use random_traffic_test::{Config as CanisterConfig, Record as CanisterRecord, extract_metrics};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 

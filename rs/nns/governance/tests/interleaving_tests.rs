@@ -3,8 +3,8 @@
 //! canister).
 use assert_matches::assert_matches;
 use common::{increase_dissolve_delay_raw, set_dissolve_delay_raw};
-use fixtures::{principal, NNSBuilder, NeuronBuilder, NNS};
-use futures::{channel::mpsc, future::FutureExt, StreamExt};
+use fixtures::{NNS, NNSBuilder, NeuronBuilder, principal};
+use futures::{StreamExt, channel::mpsc, future::FutureExt};
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::E8;
 use ic_neurons_fund::{
@@ -14,16 +14,16 @@ use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance::{
     governance::{Environment, Governance},
     pb::v1::{
-        manage_neuron::Disburse, settle_neurons_fund_participation_request,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
-        SettleNeuronsFundParticipationRequest,
+        SettleNeuronsFundParticipationRequest, manage_neuron::Disburse,
+        settle_neurons_fund_participation_request,
     },
 };
 use ic_nns_governance_api::{
-    neuron::DissolveState, neurons_fund_snapshot::NeuronsFundNeuronPortion, proposal::Action,
     CreateServiceNervousSystem, IdealMatchedParticipationFunction, NetworkEconomics,
     NeuronsFundData, NeuronsFundParticipation, NeuronsFundSnapshot, Proposal, ProposalData,
-    SwapParticipationLimits,
+    SwapParticipationLimits, neuron::DissolveState,
+    neurons_fund_snapshot::NeuronsFundNeuronPortion, proposal::Action,
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::DeployedSns;

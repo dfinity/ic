@@ -5,8 +5,8 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces::crypto::ThresholdSchnorrSigVerifier;
-use ic_types::crypto::canister_threshold_sig::error::ThresholdSchnorrCombineSigSharesError;
 use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::canister_threshold_sig::error::ThresholdSchnorrCombineSigSharesError;
 
 #[test]
 fn should_combine_sig_shares_successfully() {

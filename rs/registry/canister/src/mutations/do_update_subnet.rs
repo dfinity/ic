@@ -1,7 +1,7 @@
 use crate::{common::LOG_PREFIX, mutations::common::has_duplicates, registry::Registry};
 use candid::{CandidType, Deserialize};
 use dfn_core::println;
-use ic_base_types::{subnet_id_into_protobuf, SubnetId};
+use ic_base_types::{SubnetId, subnet_id_into_protobuf};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::registry::subnet::v1::{
     SubnetFeatures as SubnetFeaturesPb, SubnetRecord as SubnetRecordPb,
@@ -1120,22 +1120,26 @@ mod tests {
         registry.do_update_subnet(payload);
 
         // Make sure it's actually in the list of enabled chain keys.
-        assert!(registry
-            .get_chain_key_enabled_subnet_list(&master_public_key_held_by_subnet)
-            .unwrap()
-            .subnets
-            .contains(&subnet_id_into_protobuf(subnet_id)));
+        assert!(
+            registry
+                .get_chain_key_enabled_subnet_list(&master_public_key_held_by_subnet)
+                .unwrap()
+                .subnets
+                .contains(&subnet_id_into_protobuf(subnet_id))
+        );
 
         // Make sure config contains the key.
-        assert!(registry
-            .get_subnet_or_panic(subnet_id)
-            .chain_key_config
-            .unwrap()
-            .key_configs
-            .iter()
-            .map(|key_config| key_config.key_id.clone().unwrap())
-            .collect::<Vec<_>>()
-            .contains(&(&master_public_key_held_by_subnet).into()));
+        assert!(
+            registry
+                .get_subnet_or_panic(subnet_id)
+                .chain_key_config
+                .unwrap()
+                .key_configs
+                .iter()
+                .map(|key_config| key_config.key_id.clone().unwrap())
+                .collect::<Vec<_>>()
+                .contains(&(&master_public_key_held_by_subnet).into())
+        );
 
         // The next payload to disable the chain key.
         let mut payload = make_empty_update_payload(subnet_id);
@@ -1145,21 +1149,25 @@ mod tests {
         registry.do_update_subnet(payload);
 
         // Ensure it's now removed from list of enabled subnets.
-        assert!(!registry
-            .get_chain_key_enabled_subnet_list(&master_public_key_held_by_subnet)
-            .unwrap()
-            .subnets
-            .contains(&subnet_id_into_protobuf(subnet_id)));
+        assert!(
+            !registry
+                .get_chain_key_enabled_subnet_list(&master_public_key_held_by_subnet)
+                .unwrap()
+                .subnets
+                .contains(&subnet_id_into_protobuf(subnet_id))
+        );
         // Ensure the config still  has the key.
-        assert!(registry
-            .get_subnet_or_panic(subnet_id)
-            .chain_key_config
-            .unwrap()
-            .key_configs
-            .iter()
-            .map(|key_config| key_config.key_id.clone().unwrap())
-            .collect::<Vec<_>>()
-            .contains(&(&master_public_key_held_by_subnet).into()));
+        assert!(
+            registry
+                .get_subnet_or_panic(subnet_id)
+                .chain_key_config
+                .unwrap()
+                .key_configs
+                .iter()
+                .map(|key_config| key_config.key_id.clone().unwrap())
+                .collect::<Vec<_>>()
+                .contains(&(&master_public_key_held_by_subnet).into())
+        );
     }
 
     #[test]

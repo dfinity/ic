@@ -110,13 +110,13 @@ macro_rules! proptest_strategy_for_enum {
 mod common {
     use super::*;
     use ic_crypto_internal_seed::Seed;
-    use ic_types::crypto::KeyPurpose;
     use ic_types::NodeId;
     use ic_types::PrincipalId;
     use ic_types::RegistryVersion;
     use ic_types::SubnetId;
+    use ic_types::crypto::KeyPurpose;
     use proptest::array::uniform24;
-    use proptest::prelude::{prop, Strategy};
+    use proptest::prelude::{Strategy, prop};
     use strum::IntoEnumIterator;
 
     pub(crate) const MAX_ALGORITHM_ID_INDEX: i32 = 20;
@@ -370,11 +370,11 @@ mod crypto_error {
     use super::*;
     use crate::common::{arb_key_purpose, arb_node_id, arb_registry_version, arb_subnet_id};
     use crate::registry_client_error::arb_registry_client_error;
+    use ic_types::Height;
+    use ic_types::crypto::CryptoError;
     use ic_types::crypto::threshold_sig::ni_dkg::{
         NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
     };
-    use ic_types::crypto::CryptoError;
-    use ic_types::Height;
     use proptest::collection::btree_set;
     use proptest::prelude::{BoxedStrategy, Just, Strategy};
     use proptest::prop_oneof;

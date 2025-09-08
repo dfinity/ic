@@ -20,24 +20,24 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_management_canister_types_private::{MasterPublicKeyId, Payload, VetKdDeriveKeyResult};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::chain_keys::ChainKeysRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::{
-    metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     ReplicatedState,
+    metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
 };
 use ic_types::crypto::vetkd::{VetKdKeyShareCombinationError, VetKdKeyVerificationError};
 use ic_types::{
+    CountBytes, Height, NumBytes, SubnetId, Time,
     batch::{
-        bytes_to_vetkd_payload, vetkd_payload_to_bytes, ConsensusResponse, ValidationContext,
-        VetKdAgreement, VetKdErrorCode, VetKdPayload,
+        ConsensusResponse, ValidationContext, VetKdAgreement, VetKdErrorCode, VetKdPayload,
+        bytes_to_vetkd_payload, vetkd_payload_to_bytes,
     },
     crypto::vetkd::{VetKdArgs, VetKdDerivationContext, VetKdEncryptedKey},
     messages::{CallbackId, Payload as ResponsePayload, RejectContext},
-    CountBytes, Height, NumBytes, SubnetId, Time,
 };
 use num_traits::ops::saturating::SaturatingSub;
 use std::time::Duration;
@@ -360,7 +360,7 @@ impl VetKdPayloadBuilderImpl {
             Err(error) => {
                 return invalid_artifact_err(InvalidVetKdPayloadReason::DecodingError(format!(
                     "{error:?}",
-                )))
+                )));
             }
         };
         let encrypted_key = VetKdEncryptedKey {
@@ -549,7 +549,7 @@ mod tests {
     use assert_matches::assert_matches;
     use core::{convert::From, iter::Iterator, time::Duration};
     use ic_consensus_mocks::{
-        dependencies_with_subnet_records_with_raw_state_manager, Dependencies,
+        Dependencies, dependencies_with_subnet_records_with_raw_state_manager,
     };
     use ic_interfaces::consensus::{InvalidPayloadReason, PayloadValidationFailure};
     use ic_interfaces::idkg::IDkgChangeAction;
@@ -560,12 +560,12 @@ mod tests {
     use ic_registry_subnet_features::ChainKeyConfig;
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_types::RegistryVersion;
     use ic_types::consensus::idkg::IDkgMessage;
     use ic_types::state_manager::StateManagerError;
     use ic_types::subnet_id_into_protobuf;
-    use ic_types::time::current_time;
     use ic_types::time::UNIX_EPOCH;
-    use ic_types::RegistryVersion;
+    use ic_types::time::current_time;
     use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
     use std::str::FromStr;
 

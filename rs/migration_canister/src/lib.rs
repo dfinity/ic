@@ -5,7 +5,7 @@
 use candid::{CandidType, Principal};
 use ic_cdk::futures::spawn;
 use ic_cdk_timers::set_timer_interval;
-use ic_stable_structures::{storable::Bound, Storable};
+use ic_stable_structures::{Storable, storable::Bound};
 use serde::{Deserialize, Serialize};
 use serde_cbor::{from_slice, to_vec};
 use std::{borrow::Cow, time::Duration};

@@ -1,7 +1,7 @@
 use clap::Parser;
 use ic_http_endpoints_async_utils::shutdown_signal;
 use ic_logger::{info, new_replica_logger_from_config, warn};
-use ic_registry_replicator::{args::RegistryReplicatorArgs, RegistryReplicator};
+use ic_registry_replicator::{RegistryReplicator, args::RegistryReplicatorArgs};
 use tokio_util::sync::CancellationToken;
 
 #[tokio::main]

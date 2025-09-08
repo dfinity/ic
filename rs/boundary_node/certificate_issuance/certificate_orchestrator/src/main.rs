@@ -1,6 +1,6 @@
 use std::{cell::RefCell, cmp::Reverse, collections::BTreeMap, thread::LocalKey, time::Duration};
 
-use candid::{candid_method, Principal};
+use candid::{Principal, candid_method};
 use certificate_orchestrator_interface::{
     BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError,
     DispenseTaskResponse, EncryptedPair, ExportCertificatesCertifiedResponse,
@@ -21,8 +21,8 @@ use ic_cdk::{
 use ic_cdk::{init, query, update};
 use ic_cdk_timers::set_timer_interval;
 use ic_stable_structures::{
-    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     DefaultMemoryImpl, StableBTreeMap,
+    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
 };
 use priority_queue::PriorityQueue;
 use prometheus::{CounterVec, Encoder, Gauge, GaugeVec, Opts, Registry, TextEncoder};
@@ -1044,7 +1044,7 @@ mod tests {
 
     #[test]
     fn check_candid_interface() {
-        use candid_parser::utils::{service_equal, CandidSource};
+        use candid_parser::utils::{CandidSource, service_equal};
 
         candid::export_service!();
         let new_interface = __export_service();

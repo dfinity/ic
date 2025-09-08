@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use certificate_orchestrator_interface::{self as ifc, EncryptedPair, IcCertificate, Id};
-use futures::{stream, StreamExt, TryStreamExt};
-use ic_agent::{hash_tree::HashTree, Agent, Certificate};
+use futures::{StreamExt, TryStreamExt, stream};
+use ic_agent::{Agent, Certificate, hash_tree::HashTree};
 use mockall::automock;
 use serde::Serialize;
 
@@ -221,7 +221,7 @@ impl Export for CanisterExporter {
                 return Err(match err {
                     Error::Unauthorized => ExportError::UnexpectedError(anyhow!("unauthorized")),
                     Error::UnexpectedError(err) => ExportError::UnexpectedError(anyhow!(err)),
-                })
+                });
             }
         }
     }

@@ -5,11 +5,11 @@ pub mod vetkd;
 
 mod hash;
 
-pub use hash::crypto_hash;
 pub use hash::CryptoHashDomain;
 pub use hash::CryptoHashable;
 pub use hash::CryptoHashableTestDummy;
 pub use hash::DOMAIN_IC_REQUEST;
+pub use hash::crypto_hash;
 
 mod sign;
 
@@ -28,8 +28,8 @@ use crate::{CountBytes, NodeId, RegistryVersion, SubnetId};
 use core::fmt::Formatter;
 use ic_base_types::PrincipalId;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
-use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::ThresholdSigPublicKeyBytesConversionError;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::ThresholdSigPublicKeyBytesConversionError;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
@@ -521,7 +521,10 @@ impl fmt::Debug for CryptoError {
                 node_id, key_purpose, registry_version
             ),
 
-            CryptoError::TlsCertNotFound { node_id, registry_version } => write!(
+            CryptoError::TlsCertNotFound {
+                node_id,
+                registry_version,
+            } => write!(
                 f,
                 "Cannot find TLS public key certificate record for node with ID {:?} at registry version {:?} ",
                 node_id, registry_version
@@ -650,10 +653,12 @@ impl fmt::Debug for CryptoError {
                 "Cannot find root subnet public key at registry version {:?}",
                 registry_version
             ),
-            CryptoError::InternalError { internal_error } =>
-                write!(f, "Internal error: {}", internal_error),
-            CryptoError::TransientInternalError { internal_error: transient_internal_error } =>
-                write!(f, "Transient internal error: {}", transient_internal_error),
+            CryptoError::InternalError { internal_error } => {
+                write!(f, "Internal error: {}", internal_error)
+            }
+            CryptoError::TransientInternalError {
+                internal_error: transient_internal_error,
+            } => write!(f, "Transient internal error: {}", transient_internal_error),
         }
     }
 }

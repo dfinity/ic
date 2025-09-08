@@ -6,7 +6,7 @@ use darling::FromVariant;
 use proc_macro::TokenStream;
 use proc_macro2::Ident;
 use quote::quote;
-use syn::{parse_macro_input, Data, DataEnum, DeriveInput};
+use syn::{Data, DataEnum, DeriveInput, parse_macro_input};
 
 #[proc_macro_derive(LogPriorityLevels, attributes(log_level))]
 pub fn derive_log_priority(input: TokenStream) -> TokenStream {

@@ -149,10 +149,10 @@ impl<R: CanisterApi, F: ConfidentialityFormatting<Input = OutputConfig>, A: Reso
 }
 
 impl<
-        R: CanisterApi,
-        F: ConfidentialityFormatting<Input = OutputRuleMetadata>,
-        A: ResolveAccessLevel,
-    > EntityGetter for IncidentGetter<R, F, A>
+    R: CanisterApi,
+    F: ConfidentialityFormatting<Input = OutputRuleMetadata>,
+    A: ResolveAccessLevel,
+> EntityGetter for IncidentGetter<R, F, A>
 {
     type Input = api::IncidentId;
     type Output = Vec<api::OutputRuleMetadata>;
@@ -203,10 +203,10 @@ impl<
 }
 
 impl<
-        R: CanisterApi,
-        F: ConfidentialityFormatting<Input = OutputRuleMetadata>,
-        A: ResolveAccessLevel,
-    > EntityGetter for RuleGetter<R, F, A>
+    R: CanisterApi,
+    F: ConfidentialityFormatting<Input = OutputRuleMetadata>,
+    A: ResolveAccessLevel,
+> EntityGetter for RuleGetter<R, F, A>
 {
     type Input = api::RuleId;
     type Output = api::OutputRuleMetadata;

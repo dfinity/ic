@@ -6,21 +6,21 @@ use ic_consensus_idkg::{
     utils::{get_idkg_chain_key_config_if_enabled, inspect_idkg_chain_key_initializations},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
+    Height, RegistryVersion, SubnetId, Time,
     batch::ValidationContext,
     consensus::{
-        idkg, Block, BlockPayload, CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon,
-        Payload, RandomBeaconContent, Rank, SummaryPayload,
+        Block, BlockPayload, CatchUpContent, CatchUpPackage, HashedBlock, HashedRandomBeacon,
+        Payload, RandomBeaconContent, Rank, SummaryPayload, idkg,
     },
     crypto::{
-        crypto_hash, threshold_sig::ni_dkg::NiDkgTag, CombinedThresholdSig, CombinedThresholdSigOf,
-        CryptoHash, Signed,
+        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed, crypto_hash,
+        threshold_sig::ni_dkg::NiDkgTag,
     },
     signature::ThresholdSignature,
-    Height, RegistryVersion, SubnetId, Time,
 };
 use phantom_newtype::Id;
 
@@ -249,10 +249,10 @@ mod tests {
     use ic_logger::no_op_logger;
     use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetRecord};
     use ic_types::{
-        consensus::HasVersion,
-        crypto::{threshold_sig::ni_dkg::NiDkgTag, CryptoHash},
-        registry::RegistryClientError,
         Height, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, Time,
+        consensus::HasVersion,
+        crypto::{CryptoHash, threshold_sig::ni_dkg::NiDkgTag},
+        registry::RegistryClientError,
     };
     use ic_types_test_utils::ids::subnet_test_id;
 

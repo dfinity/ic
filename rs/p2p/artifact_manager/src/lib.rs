@@ -12,11 +12,11 @@ use ic_interfaces::{
 use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_metrics::MetricsRegistry;
 use ic_types::{artifact::*, messages::SignedIngress};
-use prometheus::{histogram_opts, labels, Histogram};
+use prometheus::{Histogram, histogram_opts, labels};
 use std::{
     sync::{
-        atomic::{AtomicBool, Ordering::SeqCst},
         Arc, RwLock,
+        atomic::{AtomicBool, Ordering::SeqCst},
     },
     thread::{Builder as ThreadBuilder, JoinHandle},
     time::Duration,
@@ -283,10 +283,10 @@ struct Processor<A: IdentifiableArtifact + Send, P: MutablePool<A>, C> {
 }
 
 impl<
-        A: IdentifiableArtifact + Send,
-        P: MutablePool<A>,
-        C: PoolMutationsProducer<P, Mutations = <P as MutablePool<A>>::Mutations>,
-    > Processor<A, P, C>
+    A: IdentifiableArtifact + Send,
+    P: MutablePool<A>,
+    C: PoolMutationsProducer<P, Mutations = <P as MutablePool<A>>::Mutations>,
+> Processor<A, P, C>
 {
     fn new(pool: Arc<RwLock<P>>, change_set_producer: C) -> Self {
         Self {
@@ -298,10 +298,10 @@ impl<
 }
 
 impl<
-        A: IdentifiableArtifact + Send,
-        P: MutablePool<A> + Send + Sync + 'static,
-        C: PoolMutationsProducer<P, Mutations = <P as MutablePool<A>>::Mutations>,
-    > ArtifactProcessor<A> for Processor<A, P, C>
+    A: IdentifiableArtifact + Send,
+    P: MutablePool<A> + Send + Sync + 'static,
+    C: PoolMutationsProducer<P, Mutations = <P as MutablePool<A>>::Mutations>,
+> ArtifactProcessor<A> for Processor<A, P, C>
 {
     #[instrument(skip_all)]
     fn process_changes(
@@ -403,7 +403,7 @@ mod tests {
     use std::{convert::Infallible, sync::Arc};
     use tokio::sync::mpsc::channel;
 
-    use crate::{run_artifact_processor, ArtifactProcessor};
+    use crate::{ArtifactProcessor, run_artifact_processor};
 
     #[tokio::test]
     async fn test_read_batch_with_closing_channel_after_consuming_all() {

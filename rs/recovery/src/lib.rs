@@ -21,10 +21,10 @@ use ic_replay::{
     cmd::{AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, SubCommand},
     player::StateParams,
 };
-use ic_types::{messages::HttpStatusResponse, Height, ReplicaVersion, SubnetId};
+use ic_types::{Height, ReplicaVersion, SubnetId, messages::HttpStatusResponse};
 use registry_helper::RegistryPollingStrategy;
 use serde::{Deserialize, Serialize};
-use slog::{info, warn, Logger};
+use slog::{Logger, info, warn};
 use ssh_helper::SshHelper;
 use std::io::ErrorKind;
 use std::{
@@ -37,7 +37,7 @@ use std::{
 };
 use steps::*;
 use url::Url;
-use util::{block_on, parse_hex_str, DataLocation};
+use util::{DataLocation, block_on, parse_hex_str};
 
 pub mod admin_helper;
 pub mod app_subnet_recovery;

@@ -1,8 +1,8 @@
 use std::{borrow::Cow, fmt::Display};
 
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
-use ic_stable_structures::storable::Bound;
 use ic_stable_structures::Storable;
+use ic_stable_structures::storable::Bound;
 
 const BYTE: u32 = 1;
 const KB: u32 = 1024 * BYTE;

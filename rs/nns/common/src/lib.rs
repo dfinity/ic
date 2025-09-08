@@ -1,5 +1,5 @@
 use crate::pb::v1::{NeuronId, ProposalId};
-use ic_stable_structures::{storable::Bound, Storable};
+use ic_stable_structures::{Storable, storable::Bound};
 use num_traits::bounds::{LowerBounded, UpperBounded};
 use std::borrow::Cow;
 

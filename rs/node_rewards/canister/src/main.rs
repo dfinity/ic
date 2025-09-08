@@ -3,7 +3,7 @@ use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
-use ic_node_rewards_canister::storage::{RegistryStoreStableMemoryBorrower, METRICS_MANAGER};
+use ic_node_rewards_canister::storage::{METRICS_MANAGER, RegistryStoreStableMemoryBorrower};
 use ic_node_rewards_canister::telemetry;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
@@ -138,7 +138,7 @@ fn get_node_provider_rewards_calculation(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
     #[test]
     fn test_implemented_interface_matches_declared_interface_exactly() {
         let declared_interface = CandidSource::Text(include_str!("../node-rewards-canister.did"));

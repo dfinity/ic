@@ -12,7 +12,7 @@ use ic_nns_governance_api::{GovernanceError, Neuron, NeuronInfo};
 use ic_nns_gtc::{
     pb::v1::AccountState,
     test_constants::{
-        TestIdentity, TEST_IDENTITY_1, TEST_IDENTITY_2, TEST_IDENTITY_3, TEST_IDENTITY_4,
+        TEST_IDENTITY_1, TEST_IDENTITY_2, TEST_IDENTITY_3, TEST_IDENTITY_4, TestIdentity,
     },
 };
 use ic_nns_test_utils::{
@@ -25,7 +25,7 @@ use ic_nns_test_utils::{
 use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;
 use icp_ledger::{
-    AccountIdentifier, BinaryAccountBalanceArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, BinaryAccountBalanceArgs, DEFAULT_TRANSFER_FEE, Subaccount, Tokens,
 };
 use std::{collections::HashSet, convert::TryFrom, sync::Arc, time::SystemTime};
 

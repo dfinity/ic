@@ -1,7 +1,7 @@
 //! Metrics exported by the registry client
 
-use ic_metrics::buckets::decimal_buckets;
 use ic_metrics::MetricsRegistry;
+use ic_metrics::buckets::decimal_buckets;
 use prometheus::{HistogramVec, IntGauge};
 
 pub(crate) struct Metrics {

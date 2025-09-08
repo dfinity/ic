@@ -7,22 +7,22 @@ pub mod test_utils;
 use bit_vec::BitVec;
 pub use checkpoint::{CheckpointSerialization, MappingSerialization};
 use ic_config::state_manager::LsmtConfig;
-use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_metrics::MetricsRegistry;
+use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_sys::PageBytes;
-pub use ic_sys::{PageIndex, PAGE_SIZE};
+pub use ic_sys::{PAGE_SIZE, PageIndex};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 pub use page_allocator::{
-    allocated_pages_count, PageAllocator, PageAllocatorRegistry, PageAllocatorSerialization,
-    PageDeltaSerialization, PageSerialization,
+    PageAllocator, PageAllocatorRegistry, PageAllocatorSerialization, PageDeltaSerialization,
+    PageSerialization, allocated_pages_count,
 };
 pub use storage::{
-    BaseFileSerialization, MergeCandidate, OverlayFileSerialization, Shard, StorageLayout,
-    StorageResult, StorageSerialization, MAX_NUMBER_OF_FILES,
+    BaseFileSerialization, MAX_NUMBER_OF_FILES, MergeCandidate, OverlayFileSerialization, Shard,
+    StorageLayout, StorageResult, StorageSerialization,
 };
 use storage::{OverlayFile, OverlayVersion, Storage};
 
-use ic_types::{Height, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES};
+use ic_types::{Height, MAX_STABLE_MEMORY_IN_BYTES, NumOsPages};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use int_map::{Bounds, IntMap};

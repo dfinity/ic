@@ -5,7 +5,7 @@ use crate::{
     config::Config,
     metrics::BlockchainStateMetrics,
 };
-use bitcoin::{block::Header as BlockHeader, BlockHash};
+use bitcoin::{BlockHash, block::Header as BlockHeader};
 
 use bitcoin::Work;
 use ic_btc_validation::{HeaderStore, ValidateHeaderError};
@@ -380,7 +380,7 @@ impl HeaderStore for BlockchainState {
 
 #[cfg(test)]
 mod test {
-    use bitcoin::{consensus::Decodable, Block, Network, TxMerkleNode};
+    use bitcoin::{Block, Network, TxMerkleNode, consensus::Decodable};
     use ic_metrics::MetricsRegistry;
 
     use super::*;

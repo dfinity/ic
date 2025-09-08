@@ -1,7 +1,7 @@
 use crate::{
     are_fulfill_subnet_rental_request_proposals_enabled,
     governance::Environment,
-    pb::v1::{governance_error::ErrorType, FulfillSubnetRentalRequest, GovernanceError},
+    pb::v1::{FulfillSubnetRentalRequest, GovernanceError, governance_error::ErrorType},
 };
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};

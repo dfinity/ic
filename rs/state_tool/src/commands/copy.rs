@@ -155,10 +155,12 @@ mod tests {
         .unwrap();
 
         assert!(dst_layout.checkpoint_heights().unwrap().is_empty());
-        assert!(load_metadata_proto(&dst_layout.states_metadata())
-            .unwrap()
-            .by_height
-            .is_empty());
+        assert!(
+            load_metadata_proto(&dst_layout.states_metadata())
+                .unwrap()
+                .by_height
+                .is_empty()
+        );
 
         do_copy_with_state_layouts(
             env.state_manager.state_layout(),
@@ -178,11 +180,13 @@ mod tests {
                 .len(),
             1
         );
-        assert!(load_metadata_proto(&dst_layout.states_metadata())
-            .unwrap()
-            .by_height[&1]
-            .manifest
-            .is_some());
+        assert!(
+            load_metadata_proto(&dst_layout.states_metadata())
+                .unwrap()
+                .by_height[&1]
+                .manifest
+                .is_some()
+        );
 
         env.checkpointed_tick();
         env.checkpointed_tick();
@@ -220,10 +224,12 @@ mod tests {
         .unwrap();
 
         assert!(dst_layout.checkpoint_heights().unwrap().is_empty());
-        assert!(load_metadata_proto(&dst_layout.states_metadata())
-            .unwrap()
-            .by_height
-            .is_empty());
+        assert!(
+            load_metadata_proto(&dst_layout.states_metadata())
+                .unwrap()
+                .by_height
+                .is_empty()
+        );
 
         do_copy_with_state_layouts(
             env.state_manager.state_layout(),
@@ -246,16 +252,20 @@ mod tests {
                 .len(),
             2
         );
-        assert!(load_metadata_proto(&dst_layout.states_metadata())
-            .unwrap()
-            .by_height[&1]
-            .manifest
-            .is_some());
-        assert!(load_metadata_proto(&dst_layout.states_metadata())
-            .unwrap()
-            .by_height[&3]
-            .manifest
-            .is_some());
+        assert!(
+            load_metadata_proto(&dst_layout.states_metadata())
+                .unwrap()
+                .by_height[&1]
+                .manifest
+                .is_some()
+        );
+        assert!(
+            load_metadata_proto(&dst_layout.states_metadata())
+                .unwrap()
+                .by_height[&3]
+                .manifest
+                .is_some()
+        );
     }
 
     #[test]
@@ -273,10 +283,12 @@ mod tests {
         .unwrap();
 
         assert!(dst_layout.checkpoint_heights().unwrap().is_empty());
-        assert!(load_metadata_proto(&dst_layout.states_metadata())
-            .unwrap()
-            .by_height
-            .is_empty());
+        assert!(
+            load_metadata_proto(&dst_layout.states_metadata())
+                .unwrap()
+                .by_height
+                .is_empty()
+        );
 
         do_copy_with_state_layouts(
             env.state_manager.state_layout(),
@@ -296,10 +308,12 @@ mod tests {
                 .len(),
             1
         );
-        assert!(load_metadata_proto(&dst_layout.states_metadata())
-            .unwrap()
-            .by_height[&4]
-            .manifest
-            .is_some());
+        assert!(
+            load_metadata_proto(&dst_layout.states_metadata())
+                .unwrap()
+                .by_height[&4]
+                .manifest
+                .is_some()
+        );
     }
 }

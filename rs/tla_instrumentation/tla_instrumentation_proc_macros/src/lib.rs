@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, AttributeArgs, ItemFn, Lit, Meta, NestedMeta};
+use syn::{AttributeArgs, ItemFn, Lit, Meta, NestedMeta, parse_macro_input};
 
 use syn::parse::{Parse, ParseStream};
 use syn::{Expr, Ident, Token};

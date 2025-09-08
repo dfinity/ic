@@ -1,12 +1,12 @@
 use crate::{
-    providers::{parse_authorization_header_from_url, Provider},
     BtcNetwork, CheckMode,
+    providers::{Provider, parse_authorization_header_from_url},
 };
 use bitcoin::{Address, Transaction};
 use ic_btc_interface::Txid;
 use ic_cdk::api::call::RejectionCode;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::{storable::Bound, Cell, DefaultMemoryImpl, Storable};
+use ic_stable_structures::{Cell, DefaultMemoryImpl, Storable, storable::Bound};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;

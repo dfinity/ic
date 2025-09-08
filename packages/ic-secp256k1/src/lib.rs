@@ -7,11 +7,11 @@
 
 use hex_literal::hex;
 use k256::{
-    elliptic_curve::{
-        generic_array::{typenum::Unsigned, GenericArray},
-        Curve,
-    },
     AffinePoint, Scalar, Secp256k1,
+    elliptic_curve::{
+        Curve,
+        generic_array::{GenericArray, typenum::Unsigned},
+    },
 };
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use std::sync::LazyLock;
@@ -143,10 +143,10 @@ impl DerivationPath {
         pt: AffinePoint,
         chain_code: &[u8; 32],
     ) -> ([u8; 32], Scalar, AffinePoint) {
-        use k256::elliptic_curve::{
-            group::prime::PrimeCurveAffine, group::GroupEncoding, ops::MulByGenerator,
-        };
         use k256::ProjectivePoint;
+        use k256::elliptic_curve::{
+            group::GroupEncoding, group::prime::PrimeCurveAffine, ops::MulByGenerator,
+        };
 
         let mut ckd_input = pt.to_bytes();
 
@@ -258,7 +258,7 @@ fn der_decode_rfc5915_privatekey(der: &[u8]) -> Result<Vec<u8>, KeyDecodingError
             return Err(KeyDecodingError::InvalidKeyEncoding(format!(
                 "Unexpected number of elements {}",
                 x
-            )))
+            )));
         }
     };
 
@@ -269,7 +269,7 @@ fn der_decode_rfc5915_privatekey(der: &[u8]) -> Result<Vec<u8>, KeyDecodingError
             _ => {
                 return Err(KeyDecodingError::InvalidKeyEncoding(
                     "Version field was not an integer".to_string(),
-                ))
+                ));
             }
         };
 
@@ -279,7 +279,7 @@ fn der_decode_rfc5915_privatekey(der: &[u8]) -> Result<Vec<u8>, KeyDecodingError
             _ => {
                 return Err(KeyDecodingError::InvalidKeyEncoding(
                     "Not an octet string".to_string(),
-                ))
+                ));
             }
         };
 
@@ -520,7 +520,7 @@ impl PrivateKey {
     /// The message is hashed with SHA-256 and the signature is
     /// normalized (using the minimum-s approach of BitCoin)
     pub fn sign_message_with_ecdsa(&self, message: &[u8]) -> [u8; 64] {
-        use k256::ecdsa::{signature::Signer, Signature};
+        use k256::ecdsa::{Signature, signature::Signer};
 
         let ecdsa = k256::ecdsa::SigningKey::from(&self.key);
         let sig: Signature = ecdsa.sign(message);
@@ -540,7 +540,7 @@ impl PrivateKey {
             return self.sign_digest_with_ecdsa(&zdigest);
         }
 
-        use k256::ecdsa::{signature::hazmat::PrehashSigner, Signature};
+        use k256::ecdsa::{Signature, signature::hazmat::PrehashSigner};
         let ecdsa = k256::ecdsa::SigningKey::from(&self.key);
         let sig: Signature = ecdsa.sign_prehash(digest).expect("Failed to sign digest");
         sig.to_bytes().into()

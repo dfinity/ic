@@ -142,9 +142,11 @@ fn test_ledger_update_lock_same_neuron_cannot_lock_twice() {
         .lock_neuron_for_command(neuron_id.id, inflight_command.clone())
         .unwrap();
 
-    assert!(test_governance_mut()
-        .lock_neuron_for_command(neuron_id.id, inflight_command)
-        .is_err());
+    assert!(
+        test_governance_mut()
+            .lock_neuron_for_command(neuron_id.id, inflight_command)
+            .is_err()
+    );
 }
 
 #[test]
@@ -187,9 +189,11 @@ fn test_ledger_update_lock_same_neuron_cannot_lock_after_retained() {
         neuron_lock.retain();
     }
 
-    assert!(test_governance_mut()
-        .lock_neuron_for_command(neuron_id.id, inflight_command)
-        .is_err());
+    assert!(
+        test_governance_mut()
+            .lock_neuron_for_command(neuron_id.id, inflight_command)
+            .is_err()
+    );
 }
 
 #[test]
@@ -210,21 +214,20 @@ fn test_ledger_update_lock_compatible_with_neuron_async_lock() {
         let _neuron_lock = test_governance_mut()
             .lock_neuron_for_command(neuron_id.id, inflight_command.clone())
             .unwrap();
-        assert!(Governance::acquire_neuron_async_lock(
-            &TEST_GOVERNANCE,
-            neuron_id,
-            1,
-            command.clone()
-        )
-        .is_err());
+        assert!(
+            Governance::acquire_neuron_async_lock(&TEST_GOVERNANCE, neuron_id, 1, command.clone())
+                .is_err()
+        );
     }
 
     {
         let _neuron_lock =
             Governance::acquire_neuron_async_lock(&TEST_GOVERNANCE, neuron_id, 1, command.clone())
                 .unwrap();
-        assert!(test_governance_mut()
-            .lock_neuron_for_command(neuron_id.id, inflight_command)
-            .is_err());
+        assert!(
+            test_governance_mut()
+                .lock_neuron_for_command(neuron_id.id, inflight_command)
+                .is_err()
+        );
     }
 }

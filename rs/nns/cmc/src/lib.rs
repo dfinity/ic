@@ -16,7 +16,7 @@ use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use ic_xrc_types::ExchangeRate;
 use icp_ledger::{
-    AccountIdentifier, BlockIndex, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, BlockIndex, DEFAULT_TRANSFER_FEE, Memo, SendArgs, Subaccount, Tokens,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire, NewType};
@@ -507,8 +507,7 @@ impl std::fmt::Display for UpdateSubnetTypeError {
                 write!(
                     f,
                     "The subnet type provided {} has the following assigned subnets {:?} and cannot be removed.",
-                    subnet_type,
-                    subnet_ids
+                    subnet_type, subnet_ids
                 )
             }
         }

@@ -215,7 +215,10 @@ fn backtrace_test_ic0_trap() {
         canister_id,
         "ic0_trap",
         ErrorCode::CanisterCalledTrap,
-        &format!("Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called `ic0.trap` with message: '{}'", IC0_TRAP_ERROR),
+        &format!(
+            "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called `ic0.trap` with message: '{}'",
+            IC0_TRAP_ERROR
+        ),
         IC0_TRAP_BACKTRACE,
     );
 }

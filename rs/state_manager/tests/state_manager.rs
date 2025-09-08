@@ -1,9 +1,9 @@
 use assert_matches::assert_matches;
 use ic_base_types::SnapshotId;
-use ic_config::state_manager::{lsmt_config_default, Config};
+use ic_config::state_manager::{Config, lsmt_config_default};
 use ic_crypto_tree_hash::{
-    flatmap, sparse_labeled_tree_from_paths, Label, LabeledTree, LookupStatus, MixedHashTree,
-    Path as LabelPath,
+    Label, LabeledTree, LookupStatus, MixedHashTree, Path as LabelPath, flatmap,
+    sparse_labeled_tree_from_paths,
 };
 use ic_interfaces::certification::Verifier;
 use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId, StateSyncClient};
@@ -19,34 +19,34 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages, PageMap,
+    ReplicatedState, Stream, SubnetTopology,
     canister_snapshots::CanisterSnapshot,
     canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
     metadata_state::ApiBoundaryNodeEntry,
     page_map::{PageIndex, Shard, StorageLayout},
     testing::ReplicatedStateTesting,
-    ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages, PageMap,
-    ReplicatedState, Stream, SubnetTopology,
 };
-use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_FILE, WASM_FILE};
+use ic_state_layout::{CheckpointLayout, ReadOnly, SYSTEM_METADATA_FILE, StateLayout, WASM_FILE};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
 use ic_state_manager::{
+    NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY, StateManagerImpl,
     state_sync::{
-        types::{
-            StateSyncMessage, DEFAULT_CHUNK_SIZE, FILE_GROUP_CHUNK_ID_OFFSET,
-            MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK,
-        },
         StateSync,
+        types::{
+            DEFAULT_CHUNK_SIZE, FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET,
+            META_MANIFEST_CHUNK, StateSyncMessage,
+        },
     },
     testing::StateManagerTesting,
-    StateManagerImpl, NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY,
 };
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities_consensus::fake::FakeVerifier;
 use ic_test_utilities_io::{make_mutable, make_readonly, write_all_at};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    fetch_histogram_vec_stats, fetch_int_counter_vec, fetch_int_gauge, Labels,
+    Labels, fetch_histogram_vec_stats, fetch_int_counter_vec, fetch_int_gauge,
 };
 use ic_test_utilities_state::{arb_stream, arb_stream_slice, canister_ids};
 use ic_test_utilities_tmpdir::tmpdir;
@@ -60,18 +60,18 @@ use ic_types::batch::{
 };
 use ic_types::state_manager::StateManagerError;
 use ic_types::{
+    CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes, PrincipalId,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::CallbackId,
     time::{Time, UNIX_EPOCH},
     xnet::{StreamIndex, StreamIndexedQueue},
-    CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, NumBytes, PrincipalId,
 };
-use ic_types::{epoch_from_height, QueryStatsEpoch};
+use ic_types::{QueryStatsEpoch, epoch_from_height};
 use maplit::{btreemap, btreeset};
 use nix::sys::time::TimeValLike;
 use nix::sys::{
-    stat::{utimensat, UtimensatFlags},
+    stat::{UtimensatFlags, utimensat},
     time::TimeSpec,
 };
 use proptest::prelude::*;
@@ -556,10 +556,12 @@ fn checkpoint_marked_ro_at_restart() {
         // Check that there are mutable files before the restart...
         let checkpoints_path = state_manager.state_layout().checkpoints();
 
-        assert!(std::panic::catch_unwind(|| {
-            assert_all_files_are_readonly(&checkpoints_path);
-        })
-        .is_err());
+        assert!(
+            std::panic::catch_unwind(|| {
+                assert_all_files_are_readonly(&checkpoints_path);
+            })
+            .is_err()
+        );
 
         // ...but not after.
         restart_fn(state_manager, None);
@@ -2065,11 +2067,13 @@ fn should_keep_the_last_checkpoint_on_restart() {
         let state_manager = restart_fn(state_manager, Some(height(3)));
 
         assert_eq!(height(4), state_manager.latest_state_height());
-        assert!(state_manager
-            .state_layout()
-            .backup_heights()
-            .unwrap()
-            .is_empty());
+        assert!(
+            state_manager
+                .state_layout()
+                .backup_heights()
+                .unwrap()
+                .is_empty()
+        );
     });
 }
 
@@ -2646,18 +2650,22 @@ fn test_start_and_cancel_state_sync() {
                 height: height(2),
                 hash: CryptoHash(vec![0; 32]),
             };
-            assert!(dst_state_sync
-                .maybe_start_state_sync(&malicious_id)
-                .is_none());
+            assert!(
+                dst_state_sync
+                    .maybe_start_state_sync(&malicious_id)
+                    .is_none()
+            );
 
             // the dst state manager won't fetch the state with a mismatched height.
             let malicious_id = StateSyncArtifactId {
                 height: height(100),
                 hash: hash2.get(),
             };
-            assert!(dst_state_sync
-                .maybe_start_state_sync(&malicious_id)
-                .is_none());
+            assert!(
+                dst_state_sync
+                    .maybe_start_state_sync(&malicious_id)
+                    .is_none()
+            );
 
             // starting state sync for state @2 should succeed with the correct artifact ID.
             let chunkable = dst_state_sync
@@ -3318,9 +3326,11 @@ fn can_group_small_files_in_state_sync() {
             let result = pipe_manifest(&msg, &mut *chunkable, false);
             assert_matches!(result, Ok(false));
 
-            assert!(chunkable
-                .chunks_to_download()
-                .any(|chunk_id| chunk_id.get() == FILE_GROUP_CHUNK_ID_OFFSET));
+            assert!(
+                chunkable
+                    .chunks_to_download()
+                    .any(|chunk_id| chunk_id.get() == FILE_GROUP_CHUNK_ID_OFFSET)
+            );
 
             pipe_state_sync(msg, chunkable);
 
@@ -3945,7 +3955,9 @@ fn do_not_crash_in_loop_due_to_corrupted_state_sync() {
                 drop(dst_state_sync);
                 let dst_state_manager = match Arc::try_unwrap(dst_state_manager) {
                     Ok(sm) => sm,
-                    Err(_) => panic!("Please make sure other strong references of dst_state_manager have been dropped"),
+                    Err(_) => panic!(
+                        "Please make sure other strong references of dst_state_manager have been dropped"
+                    ),
                 };
                 // State manager restarts and won't crash again due to the corrupted checkpoint because it will be archived.
                 let (_metrics, dst_state_manager) = restart_fn(dst_state_manager, None);
@@ -4327,8 +4339,8 @@ fn can_short_circuit_state_sync() {
 
 #[test]
 fn can_reuse_chunk_hashes_when_computing_manifest() {
-    use ic_state_manager::manifest::{compute_manifest, validate_manifest, RehashManifest};
     use ic_state_manager::ManifestMetrics;
+    use ic_state_manager::manifest::{RehashManifest, compute_manifest, validate_manifest};
     use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 
     state_manager_test(|metrics, state_manager| {
@@ -4456,8 +4468,8 @@ fn certified_read_can_certify_ingress_history_entry() {
 
 #[test]
 fn certified_read_can_certify_time() {
-    use std::time::Duration;
     use LabeledTree::*;
+    use std::time::Duration;
 
     state_manager_test(|_metrics, state_manager| {
         let (_, mut state) = state_manager.take_tip();
@@ -4975,11 +4987,13 @@ fn report_diverged_checkpoint() {
                     .diverged_checkpoint_heights()
                     .unwrap()
             );
-            assert!(state_manager
-                .state_layout()
-                .diverged_state_heights()
-                .unwrap()
-                .is_empty());
+            assert!(
+                state_manager
+                    .state_layout()
+                    .diverged_state_heights()
+                    .unwrap()
+                    .is_empty()
+            );
             let last_diverged = fetch_int_gauge(
                 metrics,
                 "state_manager_last_diverged_state_timestamp_seconds",
@@ -5085,11 +5099,13 @@ fn report_diverged_state() {
                     .diverged_state_heights()
                     .unwrap()
             );
-            assert!(state_manager
-                .state_layout()
-                .diverged_checkpoint_heights()
-                .unwrap()
-                .is_empty());
+            assert!(
+                state_manager
+                    .state_layout()
+                    .diverged_checkpoint_heights()
+                    .unwrap()
+                    .is_empty()
+            );
             let last_diverged = fetch_int_gauge(
                 metrics,
                 "state_manager_last_diverged_state_timestamp_seconds",
@@ -5182,11 +5198,13 @@ fn remove_old_diverged_checkpoint() {
             }),
         ],
         |metrics, state_manager| {
-            assert!(state_manager
-                .state_layout()
-                .diverged_checkpoint_heights()
-                .unwrap()
-                .is_empty());
+            assert!(
+                state_manager
+                    .state_layout()
+                    .diverged_checkpoint_heights()
+                    .unwrap()
+                    .is_empty()
+            );
             let last_diverged = fetch_int_gauge(
                 metrics,
                 "state_manager_last_diverged_state_timestamp_seconds",
@@ -5789,14 +5807,16 @@ fn can_delete_canister() {
         state_manager.flush_tip_channel();
 
         // Check that the checkpoint does not contain the canister
-        assert!(!state_manager
-            .state_layout()
-            .checkpoint_verified(height(3))
-            .unwrap()
-            .canister(&canister_test_id(100))
-            .unwrap()
-            .raw_path()
-            .exists());
+        assert!(
+            !state_manager
+                .state_layout()
+                .checkpoint_verified(height(3))
+                .unwrap()
+                .canister(&canister_test_id(100))
+                .unwrap()
+                .raw_path()
+                .exists()
+        );
 
         assert_error_counters(metrics);
     });
@@ -6409,12 +6429,16 @@ fn wasm_binaries_can_be_correctly_switched_from_memory_to_checkpoint() {
         // and file contents can be correctly read.
         // Note that `wasm_file_not_loaded_and_path_matches()` needs to be called before `as_slice()`
         // because the path is no longer visible after we load the wasm file and thus cannot be checked.
-        assert!(canister_wasm_binary
-            .wasm_file_not_loaded_and_path_matches(canister_layout.wasm().raw_path()));
+        assert!(
+            canister_wasm_binary
+                .wasm_file_not_loaded_and_path_matches(canister_layout.wasm().raw_path())
+        );
         assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
 
-        assert!(snapshot_wasm_binary
-            .wasm_file_not_loaded_and_path_matches(snapshot_layout.wasm().raw_path()));
+        assert!(
+            snapshot_wasm_binary
+                .wasm_file_not_loaded_and_path_matches(snapshot_layout.wasm().raw_path())
+        );
         assert_eq!(snapshot_wasm_binary.as_slice(), EMPTY_WASM);
 
         assert_error_counters(metrics);
@@ -6451,8 +6475,10 @@ fn wasm_binaries_can_be_correctly_switched_from_checkpoint_to_checkpoint() {
             .binary;
 
         // After checkpointing at height 1, wasm binary the canister is backed by file in checkpoint@1.
-        assert!(canister_wasm_binary
-            .wasm_file_not_loaded_and_path_matches(canister_layout.wasm().raw_path()));
+        assert!(
+            canister_wasm_binary
+                .wasm_file_not_loaded_and_path_matches(canister_layout.wasm().raw_path())
+        );
         assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
 
         // We create a snapshot from the canister, which already has wasm binary backed by file on disk.
@@ -6500,12 +6526,16 @@ fn wasm_binaries_can_be_correctly_switched_from_checkpoint_to_checkpoint() {
 
         // After checkpointing at height 2, wasm binaries of both the canister and the snapshot are backed by files in checkpoint@2
         // and file contents can be correctly read.
-        assert!(canister_wasm_binary
-            .wasm_file_not_loaded_and_path_matches(canister_layout.wasm().raw_path()));
+        assert!(
+            canister_wasm_binary
+                .wasm_file_not_loaded_and_path_matches(canister_layout.wasm().raw_path())
+        );
         assert_eq!(canister_wasm_binary.as_slice(), EMPTY_WASM);
 
-        assert!(snapshot_wasm_binary
-            .wasm_file_not_loaded_and_path_matches(snapshot_layout.wasm().raw_path()));
+        assert!(
+            snapshot_wasm_binary
+                .wasm_file_not_loaded_and_path_matches(snapshot_layout.wasm().raw_path())
+        );
         assert_eq!(snapshot_wasm_binary.as_slice(), EMPTY_WASM);
 
         assert_error_counters(metrics);
@@ -6868,8 +6898,8 @@ fn restore_chunk_store_from_snapshot() {
     assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
 
     env.clear_chunk_store(canister_id).unwrap();
-    assert!(env
-        .install_chunked_code(InstallChunkedCodeArgs::new(
+    assert!(
+        env.install_chunked_code(InstallChunkedCodeArgs::new(
             CanisterInstallModeV2::Upgrade(None),
             canister_id,
             None,
@@ -6877,7 +6907,8 @@ fn restore_chunk_store_from_snapshot() {
             empty_wasm().module_hash().to_vec(),
             vec![],
         ))
-        .is_err());
+        .is_err()
+    );
 
     env.load_canister_snapshot(LoadCanisterSnapshotArgs::new(
         canister_id,
@@ -6903,8 +6934,8 @@ fn restore_chunk_store_from_snapshot() {
     assert!(env.execute_ingress(canister_id, "read", vec![],).is_err(),);
 
     env.clear_chunk_store(canister_id).unwrap();
-    assert!(env
-        .install_chunked_code(InstallChunkedCodeArgs::new(
+    assert!(
+        env.install_chunked_code(InstallChunkedCodeArgs::new(
             CanisterInstallModeV2::Upgrade(None),
             canister_id,
             None,
@@ -6912,7 +6943,8 @@ fn restore_chunk_store_from_snapshot() {
             empty_wasm().module_hash().to_vec(),
             vec![],
         ))
-        .is_err());
+        .is_err()
+    );
 
     // We want to test that the snapshot is still the same after checkpointing.
     env.checkpointed_tick();

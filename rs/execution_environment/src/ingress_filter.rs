@@ -1,5 +1,5 @@
 use crate::query_handler::QueryScheduler;
-use crate::{metrics::IngressFilterMetrics, ExecutionEnvironment};
+use crate::{ExecutionEnvironment, metrics::IngressFilterMetrics};
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{ExecutionMode, IngressFilterService};
 use ic_interfaces_state_manager::StateReader;
@@ -12,7 +12,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tokio::sync::oneshot;
-use tower::{util::BoxCloneService, Service};
+use tower::{Service, util::BoxCloneService};
 
 #[derive(Clone)]
 pub(crate) struct IngressFilterServiceImpl {

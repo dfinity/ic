@@ -1,28 +1,28 @@
+use crate::Config;
 use crate::metrics::{
     AdapterMetrics, LABEL_BODY_RECEIVE_SIZE, LABEL_CONNECT, LABEL_DOWNLOAD,
     LABEL_HEADER_RECEIVE_SIZE, LABEL_HTTP_METHOD, LABEL_REQUEST_HEADERS, LABEL_RESPONSE_HEADERS,
     LABEL_UPLOAD, LABEL_URL_PARSE,
 };
-use crate::Config;
 use core::convert::TryFrom;
-use http::{header::USER_AGENT, HeaderName, HeaderValue, Uri};
+use http::{HeaderName, HeaderValue, Uri, header::USER_AGENT};
 use http_body_util::{BodyExt, Full};
 use hyper::body::Incoming;
 use hyper::{
+    Method,
     body::Bytes,
     header::{HeaderMap, ToStrError},
-    Method,
 };
 use hyper_rustls::HttpsConnector;
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_socks2::SocksConnector;
-use hyper_util::client::legacy::{connect::HttpConnector, Client};
+use hyper_util::client::legacy::{Client, connect::HttpConnector};
 use hyper_util::rt::TokioExecutor;
 use ic_https_outcalls_service::{
-    https_outcalls_service_server::HttpsOutcallsService, HttpHeader, HttpMethod,
-    HttpsOutcallRequest, HttpsOutcallResponse,
+    HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse,
+    https_outcalls_service_server::HttpsOutcallsService,
 };
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug};
 use ic_metrics::MetricsRegistry;
 use parking_lot::{RwLock, RwLockUpgradableReadGuard};
 use rand::{seq::SliceRandom, thread_rng};
@@ -562,7 +562,7 @@ fn add_fallback_user_agent_header(header_map: &mut HeaderMap) {
 mod tests {
     use super::*;
     use rand::distributions::Alphanumeric;
-    use rand::{thread_rng, Rng};
+    use rand::{Rng, thread_rng};
 
     #[test]
     // Verify that hyper does not panic within header limits.

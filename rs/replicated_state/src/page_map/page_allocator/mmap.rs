@@ -4,14 +4,14 @@ use crate::page_map::{
 
 use super::page_allocator_registry::PageAllocatorRegistry;
 use super::{
-    MmapPageSerialization, Page, PageAllocatorSerialization, PageDeltaSerialization,
-    PageValidation, ALLOCATED_PAGES,
+    ALLOCATED_PAGES, MmapPageSerialization, Page, PageAllocatorSerialization,
+    PageDeltaSerialization, PageValidation,
 };
 use cvt::{cvt, cvt_r};
-use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
+use ic_sys::{PAGE_SIZE, PageBytes, PageIndex, page_bytes_from_ptr};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use libc::{c_void, close};
-use nix::sys::mman::{madvise, mmap, munmap, MapFlags, MmapAdvise, ProtFlags};
+use nix::sys::mman::{MapFlags, MmapAdvise, ProtFlags, madvise, mmap, munmap};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::os::raw::c_int;
@@ -102,36 +102,40 @@ impl PageInner {
     }
     // See the comments of `PageValidation`.
     #[inline]
-    unsafe fn is_valid(&self) -> bool { unsafe {
-        let ptr = self.ptr.0 as *const u16;
-        *ptr.add(self.validation.non_zero_word_index as usize)
-            == self.validation.non_zero_word_value
-    }}
+    unsafe fn is_valid(&self) -> bool {
+        unsafe {
+            let ptr = self.ptr.0 as *const u16;
+            *ptr.add(self.validation.non_zero_word_index as usize)
+                == self.validation.non_zero_word_value
+        }
+    }
 
     // See the comments of `PageValidation`.
-    unsafe fn compute_validation(&self) -> PageValidation { unsafe {
-        // Search for the first non-zero 8-byte word.
-        let mut ptr = self.ptr.0 as *const u64;
-        let end = self.ptr.0.add(PAGE_SIZE) as *const u64;
-        while ptr != end && *ptr == 0 {
-            ptr = ptr.add(1);
+    unsafe fn compute_validation(&self) -> PageValidation {
+        unsafe {
+            // Search for the first non-zero 8-byte word.
+            let mut ptr = self.ptr.0 as *const u64;
+            let end = self.ptr.0.add(PAGE_SIZE) as *const u64;
+            while ptr != end && *ptr == 0 {
+                ptr = ptr.add(1);
+            }
+            if ptr == end {
+                // The page contains only zeros.
+                return PageValidation::default();
+            }
+            // We found the non-zero 8-byte word. Now find the non-zero two-byte
+            // word within it. The `while` loop below is guaranteed to stop after
+            // at most four steps.
+            let mut ptr = ptr as *const u16;
+            while *ptr == 0 {
+                ptr = ptr.add(1);
+            }
+            PageValidation {
+                non_zero_word_index: ptr.offset_from(self.ptr.0 as *const u16) as u16,
+                non_zero_word_value: *ptr,
+            }
         }
-        if ptr == end {
-            // The page contains only zeros.
-            return PageValidation::default();
-        }
-        // We found the non-zero 8-byte word. Now find the non-zero two-byte
-        // word within it. The `while` loop below is guaranteed to stop after
-        // at most four steps.
-        let mut ptr = ptr as *const u16;
-        while *ptr == 0 {
-            ptr = ptr.add(1);
-        }
-        PageValidation {
-            non_zero_word_index: ptr.offset_from(self.ptr.0 as *const u16) as u16,
-            non_zero_word_value: *ptr,
-        }
-    }}
+    }
 }
 
 /// A page allocator that uses a memory-mapped file as a backing store of pages.
@@ -408,19 +412,21 @@ impl AllocationArea {
     unsafe fn allocate_page(
         &mut self,
         page_allocator: Option<&Arc<PageAllocatorInner>>,
-    ) -> PageInner { unsafe {
-        assert!(!self.is_empty());
-        let ptr = PagePtr(self.start);
-        let offset = self.offset;
-        self.start = self.start.add(PAGE_SIZE);
-        self.offset += PAGE_SIZE as FileOffset;
-        PageInner {
-            ptr,
-            offset,
-            page_allocator: page_allocator.cloned(),
-            validation: PageValidation::default(),
+    ) -> PageInner {
+        unsafe {
+            assert!(!self.is_empty());
+            let ptr = PagePtr(self.start);
+            let offset = self.offset;
+            self.start = self.start.add(PAGE_SIZE);
+            self.offset += PAGE_SIZE as FileOffset;
+            PageInner {
+                ptr,
+                offset,
+                page_allocator: page_allocator.cloned(),
+                validation: PageValidation::default(),
+            }
         }
-    }}
+    }
 }
 
 /// The unique identifier of a page allocator. It is used to ensure the 1:1
@@ -759,25 +765,27 @@ impl MmapBasedPageAllocatorCore {
 // Preconditions:
 // - the range is mapped as shared and writable.
 // - the range is not empty.
-unsafe fn madvise_remove(start_ptr: *mut u8, end_ptr: *mut u8) { unsafe {
-    let ptr = start_ptr as *mut c_void;
-    let size = end_ptr.offset_from(start_ptr);
-    assert!(size > 0);
-    // MacOS does not support punching holes in the file with `MADV_REMOVE`.
-    // On MacOS we use the closest option: `MADV_DONTNEED`.
-    #[cfg(target_os = "linux")]
-    let advise = MmapAdvise::MADV_REMOVE;
-    #[cfg(not(target_os = "linux"))]
-    let advise = MmapAdvise::MADV_DONTNEED;
-    // SAFETY: the range is mapped as shared and writable by precondition.
-    madvise(ptr, size as usize, advise).unwrap_or_else(|err| {
-        panic!(
-            "Failed to madvise a page range {:?}..{:?}:
+unsafe fn madvise_remove(start_ptr: *mut u8, end_ptr: *mut u8) {
+    unsafe {
+        let ptr = start_ptr as *mut c_void;
+        let size = end_ptr.offset_from(start_ptr);
+        assert!(size > 0);
+        // MacOS does not support punching holes in the file with `MADV_REMOVE`.
+        // On MacOS we use the closest option: `MADV_DONTNEED`.
+        #[cfg(target_os = "linux")]
+        let advise = MmapAdvise::MADV_REMOVE;
+        #[cfg(not(target_os = "linux"))]
+        let advise = MmapAdvise::MADV_DONTNEED;
+        // SAFETY: the range is mapped as shared and writable by precondition.
+        madvise(ptr, size as usize, advise).unwrap_or_else(|err| {
+            panic!(
+                "Failed to madvise a page range {:?}..{:?}:
         {}",
-            start_ptr, end_ptr, err
-        )
-    });
-}}
+                start_ptr, end_ptr, err
+            )
+        });
+    }
+}
 
 // Frees the memory used by the given pages.
 // Precondition:
@@ -819,9 +827,9 @@ fn free_pages(mut pages: Vec<PagePtr>) {
 // On Linux it uses `ftruncate64()`.
 // On MacOS it uses `ftruncate()` that accepts 64-bit offset.
 #[cfg(target_os = "linux")]
-unsafe fn truncate_file(fd: RawFd, offset: FileOffset) -> c_int { unsafe {
-    libc::ftruncate64(fd, offset)
-}}
+unsafe fn truncate_file(fd: RawFd, offset: FileOffset) -> c_int {
+    unsafe { libc::ftruncate64(fd, offset) }
+}
 #[cfg(not(target_os = "linux"))]
 unsafe fn truncate_file(fd: RawFd, offset: FileOffset) -> c_int {
     libc::ftruncate(fd, offset)
@@ -831,16 +839,18 @@ unsafe fn truncate_file(fd: RawFd, offset: FileOffset) -> c_int {
 // On Linux it uses `fstat64()`.
 // On MacOS it uses `fstat()` that returns 64-bit `st_size`.
 #[cfg(target_os = "linux")]
-unsafe fn get_file_length(fd: RawFd) -> FileOffset { unsafe {
-    let mut stat = std::mem::MaybeUninit::<libc::stat64>::uninit();
-    cvt(libc::fstat64(fd, stat.as_mut_ptr())).unwrap_or_else(|err| {
-        panic!(
-            "MmapPageAllocator failed to get the length of the file #{}: {}",
-            fd, err
-        )
-    });
-    stat.assume_init().st_size
-}}
+unsafe fn get_file_length(fd: RawFd) -> FileOffset {
+    unsafe {
+        let mut stat = std::mem::MaybeUninit::<libc::stat64>::uninit();
+        cvt(libc::fstat64(fd, stat.as_mut_ptr())).unwrap_or_else(|err| {
+            panic!(
+                "MmapPageAllocator failed to get the length of the file #{}: {}",
+                fd, err
+            )
+        });
+        stat.assume_init().st_size
+    }
+}
 #[cfg(not(target_os = "linux"))]
 unsafe fn get_file_length(fd: RawFd) -> FileOffset {
     let mut stat = std::mem::MaybeUninit::<libc::stat>::uninit();

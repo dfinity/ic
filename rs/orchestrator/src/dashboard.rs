@@ -4,10 +4,10 @@ use crate::{
     upgrade::ReplicaProcess,
 };
 pub use ic_dashboard::Dashboard;
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_types::{
-    consensus::HasHeight, hostos_version::HostosVersion, NodeId, RegistryVersion, ReplicaVersion,
-    SubnetId,
+    NodeId, RegistryVersion, ReplicaVersion, SubnetId, consensus::HasHeight,
+    hostos_version::HostosVersion,
 };
 use std::{
     process::Command,

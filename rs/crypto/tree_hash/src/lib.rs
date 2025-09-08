@@ -2,7 +2,7 @@
 #![deny(clippy::unwrap_used)]
 
 use ic_crypto_sha2::Sha256;
-use serde::{ser::SerializeSeq, Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer, ser::SerializeSeq};
 use serde_bytes::Bytes;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
@@ -626,7 +626,7 @@ impl MixedHashTree {
             t = match t.search_label(entry.as_ref()) {
                 SearchStatus::Found(t) => t,
                 SearchStatus::Absent | SearchStatus::Lt | SearchStatus::Gt => {
-                    return LookupStatus::Absent
+                    return LookupStatus::Absent;
                 }
                 SearchStatus::Unknown => return LookupStatus::Unknown,
             }

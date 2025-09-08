@@ -14,14 +14,14 @@ use ic_management_canister_types::{
 // changing them would propagate to changes to state machine tests
 // which would be a bit more involved.
 pub use ic_management_canister_types_private::{
-    self as ic00, CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, IC_00,
+    self as ic00, CanisterIdRecord, CanisterInstallMode, IC_00, InstallCodeArgs,
 };
 use ic_management_canister_types_private::{CanisterSettingsArgsBuilder, CanisterStatusResultV2};
 use ic_registry_transport::pb::v1::RegistryMutation;
-use ic_replica_tests::{canister_test_async, LocalTestRuntime};
+use ic_replica_tests::{LocalTestRuntime, canister_test_async};
 pub use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use ic_state_machine_tests::StateMachine;
-pub use ic_types::{ingress::WasmResult, CanisterId, Cycles, PrincipalId};
+pub use ic_types::{CanisterId, Cycles, PrincipalId, ingress::WasmResult};
 use on_wire::{FromWire, IntoWire, NewType};
 use std::{
     convert::{AsRef, TryFrom},

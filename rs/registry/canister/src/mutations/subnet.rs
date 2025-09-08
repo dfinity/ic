@@ -7,7 +7,7 @@ use crate::{
 use candid::Encode;
 use dfn_core::call;
 use ic_base_types::{
-    subnet_id_into_protobuf, CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
+    CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId, subnet_id_into_protobuf,
 };
 use ic_cdk::println;
 use ic_management_canister_types_private::{
@@ -118,10 +118,10 @@ impl Registry {
                 .intersection(&subnet_members)
                 .collect::<HashSet<_>>();
             if !intersection.is_empty() {
-                panic!("{}set_subnet_membership_mutation: Subnet {:} already contains some members that are to be added: {:?}",
-                   LOG_PREFIX,
-                   s_id,
-                   intersection);
+                panic!(
+                    "{}set_subnet_membership_mutation: Subnet {:} already contains some members that are to be added: {:?}",
+                    LOG_PREFIX, s_id, intersection
+                );
             }
         }
 

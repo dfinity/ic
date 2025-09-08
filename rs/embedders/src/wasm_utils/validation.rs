@@ -7,7 +7,7 @@ use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_replicated_state::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmMetadata,
 };
-use ic_types::{NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES};
+use ic_types::{MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions};
 use ic_wasm_transform::{Body, DataSegment, DataSegmentKind, Module};
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 use std::{
@@ -19,11 +19,11 @@ use crate::wasmtime_embedder::{
     STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
 };
 use crate::{
-    wasm_utils::instrumentation::{
-        main_memory_type, WasmMemoryType, ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
-        DIRTY_PAGES_COUNTER_GLOBAL_NAME,
-    },
     MAX_WASM_STACK_SIZE, MIN_GUARD_REGION_SIZE,
+    wasm_utils::instrumentation::{
+        ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME, WasmMemoryType,
+        main_memory_type,
+    },
 };
 use wasmparser::{CompositeInnerType, ExternalKind, FuncType, Operator, TypeRef, ValType};
 
@@ -986,27 +986,24 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
                     };
                     set_imports_details(&mut imports_details, import_module, field);
                     match valid_system_apis.get(field) {
-                        Some(signatures) => {
-                            match signatures.get(import_module) {
-                                Some(signature) => {
-                                    validate_function_signature(
-                                        signature,
-                                        field,
-                                        func_ty,
-                                    )?;
-                                },
-                                None => {return Err(WasmValidationError::InvalidImportSection(format!(
+                        Some(signatures) => match signatures.get(import_module) {
+                            Some(signature) => {
+                                validate_function_signature(signature, field, func_ty)?;
+                            }
+                            None => {
+                                return Err(WasmValidationError::InvalidImportSection(format!(
                                     "Module imports function {:?} from {:?}, expected to be imported from one of {:?} instead.",
-                                    field, import_module, signatures.keys(),
-                                )))}
-
+                                    field,
+                                    import_module,
+                                    signatures.keys(),
+                                )));
                             }
                         },
                         None => {
                             return Err(WasmValidationError::InvalidImportSection(format!(
                                 "Module imports function '{}' from '{}' that is not exported by the runtime.",
                                 field, import_module,
-                            )))
+                            )));
                         }
                     }
                 }
@@ -1027,12 +1024,12 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
                 TypeRef::Global(_) => {
                     return Err(WasmValidationError::InvalidImportSection(
                         "Importing globals is not allowed.".to_string(),
-                    ))
+                    ));
                 }
                 TypeRef::Tag(_) => {
                     return Err(WasmValidationError::InvalidImportSection(
                         "Importing tags is not allowed.".to_string(),
-                    ))
+                    ));
                 }
             }
         }
@@ -1210,7 +1207,7 @@ fn validate_global_section(module: &Module, max_globals: usize) -> Result<(), Wa
                 return Err(WasmValidationError::InvalidGlobalSection(format!(
                     "Unsupported global type: {:?}",
                     global.ty.content_type
-                )))
+                )));
             }
         }
     }
@@ -1377,9 +1374,9 @@ fn validate_custom_section(
             total_custom_sections_size += size_custom_section;
             if total_custom_sections_size > config.max_custom_sections_size {
                 return Err(WasmValidationError::InvalidCustomSection(format!(
-                        "Invalid custom sections: total size of the custom sections exceeds the maximum allowed: size {} bytes, allowed {} bytes",
-                        total_custom_sections_size, config.max_custom_sections_size
-                    )));
+                    "Invalid custom sections: total size of the custom sections exceeds the maximum allowed: size {} bytes, allowed {} bytes",
+                    total_custom_sections_size, config.max_custom_sections_size
+                )));
             }
 
             validated_custom_sections.insert(

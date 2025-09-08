@@ -15,12 +15,12 @@ use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
+    Height, RegistryVersion, SubnetId,
     consensus::{
         BlockProposal, CatchUpPackage, ConsensusMessage, ConsensusMessageHashable, Finalization,
         HasHeight, Notarization, RandomBeacon, RandomTape,
     },
     time::UNIX_EPOCH,
-    Height, RegistryVersion, SubnetId,
 };
 use prost::Message;
 use std::{

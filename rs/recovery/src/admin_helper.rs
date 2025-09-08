@@ -370,7 +370,8 @@ mod tests {
             )
             .join(" ");
 
-        assert_eq!(result,
+        assert_eq!(
+            result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
             propose-to-update-subnet \
@@ -379,7 +380,7 @@ mod tests {
             --is-halted true \
             --ssh-readonly-access \"fake public key\" \
             --summary \"Halt subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe, for recovery and update ssh readonly access\""
-            );
+        );
     }
 
     #[test]
@@ -392,7 +393,8 @@ mod tests {
             )
             .join(" ");
 
-        assert_eq!(result,
+        assert_eq!(
+            result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
             propose-to-create-subnet \
@@ -404,7 +406,8 @@ mod tests {
             --is-halted \
             --subnet-type system \
             --summary Create subnet with id gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe nqpqw-cp42a-rmdsx-fpui3-ncne5-kzq6o-m67an-w25cx-zu636-lcf2v-fqe \
-            --test-neuron-proposer");
+            --test-neuron-proposer"
+        );
     }
 
     #[test]
@@ -444,7 +447,8 @@ mod tests {
             )
             .join(" ");
 
-        assert_eq!(result,
+        assert_eq!(
+            result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
             propose-to-update-recovery-cup \
@@ -453,7 +457,8 @@ mod tests {
             --state-hash fake_state_hash \
             --summary \"Recover subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe.\" \
             --time-ns 123456 \
-            --test-neuron-proposer");
+            --test-neuron-proposer"
+        );
     }
 
     #[test]
@@ -506,7 +511,8 @@ mod tests {
             )
             .join(" ");
 
-        assert_eq!(result,
+        assert_eq!(
+            result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
             --use-hsm \
@@ -530,7 +536,8 @@ mod tests {
             --registry-version 666 \
             --summary \"Recover subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe.\" \
             --time-ns 123456 \
-            --proposer fake_neuron_id");
+            --proposer fake_neuron_id"
+        );
     }
 
     #[test]
@@ -542,14 +549,16 @@ mod tests {
             )
             .join(" ");
 
-        assert_eq!(result,
+        assert_eq!(
+            result,
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
             propose-to-deploy-guestos-to-all-subnet-nodes \
             gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
             fake_replica_version \
             --summary \"Upgrade replica version of subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe.\" \
-            --test-neuron-proposer");
+            --test-neuron-proposer"
+        );
     }
 
     fn subnet_id_from_str(subnet_id: &str) -> SubnetId {

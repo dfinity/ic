@@ -15,18 +15,18 @@ use ic_system_test_driver::{
         test_env_api::{HasPublicApiUrl, IcNodeContainer},
     },
     systest,
-    util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
+    util::{UniversalCanister, assert_create_agent, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::{
-    ckbtc_setup, create_canister, install_bitcoin_canister, install_btc_checker, install_ledger,
-    install_minter, subnet_app, subnet_sys, upgrade_btc_checker,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, ckbtc_setup,
+    create_canister, install_bitcoin_canister, install_btc_checker, install_ledger, install_minter,
+    subnet_app, subnet_sys, upgrade_btc_checker,
     utils::{
-        assert_account_balance, assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
-        generate_blocks, get_btc_address, get_rpc_client, send_to_btc_address, start_canister,
-        stop_canister, upgrade_canister, wait_for_bitcoin_balance, wait_for_mempool_change,
-        BITCOIN_NETWORK_TRANSFER_FEE, BTC_BLOCK_REWARD,
+        BITCOIN_NETWORK_TRANSFER_FEE, BTC_BLOCK_REWARD, assert_account_balance,
+        assert_mint_transaction, assert_no_new_utxo, assert_no_transaction, generate_blocks,
+        get_btc_address, get_rpc_client, send_to_btc_address, start_canister, stop_canister,
+        upgrade_canister, wait_for_bitcoin_balance, wait_for_mempool_change,
     },
-    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};

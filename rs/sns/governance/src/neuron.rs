@@ -1,12 +1,12 @@
 use crate::{
     logs::ERROR,
     pb::v1::{
+        Ballot, Empty, GovernanceError, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+        NeuronPermissionType, ProposalId, Topic, Vote,
         governance_error::ErrorType,
         manage_neuron,
         neuron::{DissolveState, FolloweesForTopic, TopicFollowees},
         proposal::Action,
-        Ballot, Empty, GovernanceError, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
-        NeuronPermissionType, ProposalId, Topic, Vote,
     },
 };
 use ic_base_types::PrincipalId;
@@ -167,11 +167,13 @@ impl Neuron {
             Ok(())
         } else {
             let caller_permissions = self.permissions_for_principal(caller);
-            Err(GovernanceError::new_with_message(ErrorType::NotAuthorized,
-            format!(
-                "Caller '{caller:?}' is not authorized to modify permissions {permissions_to_change} for neuron '{}' as it does not have any of {sufficient_permissions:?}. (Caller's permissions are {caller_permissions})",
-                self.id.as_ref().expect("Neuron must have a NeuronId"),
-            )))
+            Err(GovernanceError::new_with_message(
+                ErrorType::NotAuthorized,
+                format!(
+                    "Caller '{caller:?}' is not authorized to modify permissions {permissions_to_change} for neuron '{}' as it does not have any of {sufficient_permissions:?}. (Caller's permissions are {caller_permissions})",
+                    self.id.as_ref().expect("Neuron must have a NeuronId"),
+                ),
+            ))
         }
     }
 
@@ -584,7 +586,7 @@ impl Neuron {
                 if current_dd > desired_dd {
                     return Err(GovernanceError::new_with_message(
                         ErrorType::InvalidCommand,
-                        "Can't set a dissolve delay that is smaller than the current dissolve delay."
+                        "Can't set a dissolve delay that is smaller than the current dissolve delay.",
                     ));
                 }
 

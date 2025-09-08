@@ -1,6 +1,6 @@
 use candid::{Nat, Principal};
 #[cfg(feature = "u256")]
-use ethnum::{u256, U256};
+use ethnum::{U256, u256};
 use minicbor::{Decode, Encode};
 use proptest::collection::vec as pvec;
 use proptest::prelude::*;

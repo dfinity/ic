@@ -152,7 +152,9 @@ impl Registry {
         // Disabled until the direct replacement of nodes that are active in a subnet is possible.
         let replacements_of_nodes_in_subnets_enabled = false;
         if let Some(subnet_id) = is_node_in_subnet {
-            if let Some(new_node_id) = new_node_id && replacements_of_nodes_in_subnets_enabled {
+            if let Some(new_node_id) = new_node_id
+                && replacements_of_nodes_in_subnets_enabled
+            {
                 // The node is in a subnet and is being replaced with a new node.
                 // Update the subnet record with the new node membership.
                 let mut subnet_record = self.get_subnet_or_panic(subnet_id);
@@ -177,7 +179,8 @@ impl Registry {
                     subnet_record.encode_to_vec(),
                 ));
             } else {
-                panic!("{}do_remove_node_directly: Cannot remove a node that is a member of a subnet. This node is a member of Subnet: {}",
+                panic!(
+                    "{}do_remove_node_directly: Cannot remove a node that is a member of a subnet. This node is a member of Subnet: {}",
                     LOG_PREFIX,
                     make_subnet_record_key(subnet_id)
                 );
@@ -311,28 +314,34 @@ mod tests {
         registry.do_replace_node_with_another(payload, node_operator_id, new_node_id);
 
         // Verify the removed node's API boundary node record has been removed
-        assert!(registry
-            .get(
-                make_api_boundary_node_record_key(old_node_id).as_bytes(),
-                registry.latest_version()
-            )
-            .is_none());
+        assert!(
+            registry
+                .get(
+                    make_api_boundary_node_record_key(old_node_id).as_bytes(),
+                    registry.latest_version()
+                )
+                .is_none()
+        );
 
         // Verify the replacement node has been turned into an API boundary node
-        assert!(registry
-            .get(
-                make_api_boundary_node_record_key(new_node_id).as_bytes(),
-                registry.latest_version()
-            )
-            .is_some());
+        assert!(
+            registry
+                .get(
+                    make_api_boundary_node_record_key(new_node_id).as_bytes(),
+                    registry.latest_version()
+                )
+                .is_some()
+        );
 
         // Verify the old node is removed from the registry
-        assert!(registry
-            .get(
-                make_node_record_key(old_node_id).as_bytes(),
-                registry.latest_version()
-            )
-            .is_none());
+        assert!(
+            registry
+                .get(
+                    make_node_record_key(old_node_id).as_bytes(),
+                    registry.latest_version()
+                )
+                .is_none()
+        );
 
         // Verify the new node is present in the registry
         assert!(registry.get_node(new_node_id).is_some());
@@ -662,12 +671,14 @@ mod tests {
         assert_eq!(actual_membership, expected_membership);
 
         // Verify the old node is removed from the registry
-        assert!(registry
-            .get(
-                make_node_record_key(node_ids[0]).as_bytes(),
-                registry.latest_version()
-            )
-            .is_none());
+        assert!(
+            registry
+                .get(
+                    make_node_record_key(node_ids[0]).as_bytes(),
+                    registry.latest_version()
+                )
+                .is_none()
+        );
 
         // Verify the new node is present in the registry
         assert!(registry.get_node(node_ids[1]).is_some());

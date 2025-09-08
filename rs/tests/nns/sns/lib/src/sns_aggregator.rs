@@ -1,12 +1,12 @@
 use std::{
     sync::{
-        atomic::{AtomicUsize, Ordering},
         Arc,
+        atomic::{AtomicUsize, Ordering},
     },
     time::{Duration, Instant},
 };
 
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use candid::{Decode, Principal};
 use ic_agent::Agent;
 use ic_registry_subnet_type::SubnetType;
@@ -20,28 +20,28 @@ use ic_system_test_driver::{
         engine::Engine,
         metrics::{LoadTestMetrics, RequestOutcome},
     },
-    sns_client::{openchat_create_service_nervous_system_proposal, SnsClient},
+    sns_client::{SnsClient, openchat_create_service_nervous_system_proposal},
 };
 use ic_system_test_driver::{
     driver::{
         ic::InternetComputer,
         test_env::{TestEnv, TestEnvAttribute},
         test_env_api::{
-            get_dependency_path, load_wasm, GetFirstHealthyNodeSnapshot, HasPublicApiUrl,
-            HasTopologySnapshot, IcNodeContainer,
+            GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            get_dependency_path, load_wasm,
         },
     },
     util::block_on,
 };
 use ic_utils::{
     call::SyncCall,
-    interfaces::{http_request::HttpResponse, HttpRequestCanister, ManagementCanister},
+    interfaces::{HttpRequestCanister, ManagementCanister, http_request::HttpResponse},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use slog::{info, Logger};
+use slog::{Logger, info};
 
-use super::sns_deployment::{self, install_nns, install_sns, SnsSaleParticipants};
+use super::sns_deployment::{self, SnsSaleParticipants, install_nns, install_sns};
 
 use ic_base_types::PrincipalId;
 

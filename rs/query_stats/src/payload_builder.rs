@@ -9,12 +9,13 @@ use ic_interfaces::{
     validation::ValidationError,
 };
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    CanisterId, Height, NodeId, NumBytes, QueryStatsEpoch,
     batch::{LocalQueryStats, QueryStats, QueryStatsPayload, ValidationContext},
-    epoch_from_height, CanisterId, Height, NodeId, NumBytes, QueryStatsEpoch,
+    epoch_from_height,
 };
 use std::{
     collections::BTreeSet,
@@ -166,7 +167,7 @@ impl QueryStatsPayloadBuilderImpl {
                         "Current stats are uninitialized. This warning should go away after some minutes if the replica is processing query calls."
                     );
                     vec![]
-                }
+                };
             }
         };
 
@@ -230,7 +231,7 @@ impl QueryStatsPayloadBuilderImpl {
             Err(err) => {
                 return Err(invalid_artifact(
                     InvalidQueryStatsPayloadReason::DeserializationFailed(err),
-                ))
+                ));
             }
         };
 
@@ -420,10 +421,10 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_state::ReplicatedStateBuilder;
     use ic_types::{
+        RegistryVersion,
         batch::{CanisterQueryStats, QueryStats, RawQueryStats},
         crypto::{CryptoHash, CryptoHashOf},
         time::UNIX_EPOCH,
-        RegistryVersion,
     };
     use ic_types_test_utils::ids::{canister_test_id, node_test_id};
     use std::{ops::Range, time::Duration};
@@ -791,9 +792,11 @@ mod tests {
             proposal_context.validation_context,
         );
 
-        assert!(payload_builder
-            .validate_payload_impl(height, proposal_context, &payload, past_payloads)
-            .is_ok());
+        assert!(
+            payload_builder
+                .validate_payload_impl(height, proposal_context, &payload, past_payloads)
+                .is_ok()
+        );
 
         (
             QueryStatsPayload::deserialize(&payload).unwrap().unwrap(),

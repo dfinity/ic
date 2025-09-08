@@ -7,8 +7,8 @@ use ic_management_canister_types::NodeMetricsHistoryRecord;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
 use ic_registry_canister_client::RegistryDataStableMemory;
 use ic_registry_canister_client::{
-    test_registry_data_stable_memory_impl, StableCanisterRegistryClient, StorableRegistryKey,
-    StorableRegistryValue,
+    StableCanisterRegistryClient, StorableRegistryKey, StorableRegistryValue,
+    test_registry_data_stable_memory_impl,
 };
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};

@@ -163,7 +163,7 @@ mod pocket_ic_query_call {
     use super::*;
     use candid::Principal;
     use ic_management_canister_types::CanisterId;
-    use pocket_ic::{nonblocking, PocketIc, RejectResponse};
+    use pocket_ic::{PocketIc, RejectResponse, nonblocking};
 
     /// Provides an implementation of the [`CanisterHttpQuery`] trait in the case where the canister
     /// HTTP requests are made through an instance of [`PocketIc`].

@@ -3,14 +3,14 @@
 //! wire format.
 
 use crate::{
+    CryptoHashOfPartialState, Height,
     consensus::certification::{Certification, CertificationContent, CertificationShare},
     crypto::{CryptoHash, Signed},
     replica_version::ReplicaVersionParseError,
     xnet::CertifiedStreamSlice,
-    CryptoHashOfPartialState, Height,
 };
 use ic_protobuf::messaging::xnet::v1 as pb;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use std::convert::TryFrom;
 
 #[cfg(test)]

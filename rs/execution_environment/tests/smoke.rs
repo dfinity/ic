@@ -1,4 +1,4 @@
-use candid::{decode_one, encode_args, CandidType};
+use candid::{CandidType, decode_one, encode_args};
 use ic_management_canister_types_private::{EmptyBlob, Payload};
 use ic_state_machine_tests::{StateMachine, WasmResult};
 use serde::Deserialize;

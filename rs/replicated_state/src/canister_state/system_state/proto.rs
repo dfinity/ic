@@ -1,5 +1,5 @@
 use super::*;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 
 impl From<CyclesUseCase> for pb::CyclesUseCase {
@@ -126,7 +126,7 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                 prepaid_execution_cycles,
             } => {
                 use pb::execution_task::{
-                    aborted_execution::Input as PbInput, CanisterTask as PbCanisterTask,
+                    CanisterTask as PbCanisterTask, aborted_execution::Input as PbInput,
                 };
                 let input = match input {
                     CanisterMessageOrTask::Message(CanisterMessage::Response(v)) => {
@@ -185,7 +185,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
         let task = match task {
             pb::execution_task::Task::AbortedExecution(aborted) => {
                 use pb::execution_task::{
-                    aborted_execution::Input as PbInput, CanisterTask as PbCanisterTask,
+                    CanisterTask as PbCanisterTask, aborted_execution::Input as PbInput,
                 };
                 let input = aborted
                     .input

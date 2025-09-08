@@ -6,16 +6,16 @@ use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_crypto_utils_threshold_sig::{verify_combined, verify_combined_with_cache};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_types::{
+    CanisterId, CryptoHashOfPartialState, PrincipalId, SubnetId, Time,
     consensus::certification::CertificationContent,
     crypto::{
-        threshold_sig::ThresholdSigPublicKey, CombinedThresholdSig, CombinedThresholdSigOf,
-        CryptoHash,
+        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash,
+        threshold_sig::ThresholdSigPublicKey,
     },
     messages::{Blob, Certificate},
-    CanisterId, CryptoHashOfPartialState, PrincipalId, SubnetId, Time,
 };
 use serde::Deserialize;
-use tree_deserializer::{types::Leb128EncodedU64, LabeledTreeDeserializer};
+use tree_deserializer::{LabeledTreeDeserializer, types::Leb128EncodedU64};
 
 #[cfg(test)]
 mod tests;
@@ -76,7 +76,10 @@ impl fmt::Display for CertificateValidationError {
                     "canister id does not match the canister id range specified in the certificate"
                 )
             }
-            Self::SubnetIdMismatch { provided_subnet_id, delegation_subnet_id } => write!(
+            Self::SubnetIdMismatch {
+                provided_subnet_id,
+                delegation_subnet_id,
+            } => write!(
                 f,
                 "provided subnet id {} does not match subnet id in delegation {}",
                 provided_subnet_id, delegation_subnet_id,

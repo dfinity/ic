@@ -1,10 +1,10 @@
 use hex_literal::hex;
 use p256::elliptic_curve::{
-    group::{ff::PrimeField, GroupEncoding},
+    Field, Group,
+    group::{GroupEncoding, ff::PrimeField},
     ops::{LinearCombination, Reduce},
     scalar::IsHigh,
     sec1::FromEncodedPoint,
-    Field, Group,
 };
 use std::ops::{Mul, Neg};
 use std::sync::LazyLock;

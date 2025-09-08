@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use ic_agent::{
-    agent::{RejectCode, RejectResponse},
     AgentError,
+    agent::{RejectCode, RejectResponse},
 };
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::GetFirstHealthyNodeSnapshot;

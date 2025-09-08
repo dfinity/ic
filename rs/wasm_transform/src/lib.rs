@@ -152,7 +152,11 @@ impl std::fmt::Display for Error {
                 write!(f, "Multiple start sections")
             }
             Error::InvalidMemoryReservedByte { func_range } => {
-                write!(f, "Found a `memory.*` instruction with an invalid reserved byte in function at {:?}", func_range)
+                write!(
+                    f,
+                    "Found a `memory.*` instruction with an invalid reserved byte in function at {:?}",
+                    func_range
+                )
             }
             Error::UnknownInstruction => {
                 write!(f, "Fonud an unknown instruction")

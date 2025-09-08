@@ -7,15 +7,15 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_governance_api::{
+    AddOrRemoveNodeProvider, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, NnsFunction, NodeProvider, ProposalActionRequest, ProposalStatus,
     add_or_remove_node_provider::Change, manage_neuron::NeuronIdOrSubaccount,
-    manage_neuron_response::Command as CommandResponse, AddOrRemoveNodeProvider,
-    MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
-    NnsFunction, NodeProvider, ProposalActionRequest, ProposalStatus,
+    manage_neuron_response::Command as CommandResponse,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{submit_external_update_proposal, wait_for_final_state},
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
     registry::{get_value, get_value_or_panic, prepare_add_node_payload},
 };
 use ic_protobuf::registry::node::v1::NodeRecord;

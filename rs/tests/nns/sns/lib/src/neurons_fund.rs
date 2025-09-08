@@ -1,10 +1,10 @@
 use candid::Principal;
-use ic_agent::{agent::EnvelopeContent, Identity, Signature};
+use ic_agent::{Identity, Signature, agent::EnvelopeContent};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::ed25519_public_key_to_der;
 use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance_api::{neuron::DissolveState, Neuron};
+use ic_nns_governance_api::{Neuron, neuron::DissolveState};
 use ic_rosetta_test_utils::EdKeypair;
 use ic_system_test_driver::{
     canister_agent::HasCanisterAgentCapability,

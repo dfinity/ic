@@ -161,7 +161,9 @@ impl Ic00MethodPermissions {
         } else {
             Err(UserError::new(
                 ErrorCode::CanisterContractViolation,
-                format!("Incorrect sender subnet id: {sender_subnet_id}. Sender should be on the same subnet or on the NNS subnet."),
+                format!(
+                    "Incorrect sender subnet id: {sender_subnet_id}. Sender should be on the same subnet or on the NNS subnet."
+                ),
             ))
         }
     }

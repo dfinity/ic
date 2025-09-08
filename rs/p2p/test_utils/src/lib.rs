@@ -1,9 +1,9 @@
-use axum::{http::Request, Router};
+use axum::{Router, http::Request};
 use bytes::Bytes;
 use consensus::{TestConsensus, U64Artifact};
 use futures::{
-    future::{join_all, BoxFuture},
     FutureExt,
+    future::{BoxFuture, join_all},
 };
 use ic_artifact_downloader::FetchArtifact;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
@@ -18,22 +18,22 @@ use ic_protobuf::registry::{
     node::v1::{ConnectionEndpoint, NodeRecord},
     subnet::v1::SubnetRecord,
 };
-use ic_quic_transport::{create_udp_socket, ConnId, QuicTransport, SubnetTopology, Transport};
+use ic_quic_transport::{ConnId, QuicTransport, SubnetTopology, Transport, create_udp_socket};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_node_record_key;
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_registry::{add_subnet_record, get_mainnet_delta_00_6d_c1};
 use ic_test_utilities_types::ids::subnet_test_id;
-use rcgen::{generate_simple_self_signed, CertifiedKey};
+use rcgen::{CertifiedKey, generate_simple_self_signed};
 use rustls::pki_types::{CertificateDer, PrivatePkcs8KeyDer, ServerName, UnixTime};
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
     str::FromStr,
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc, Mutex, RwLock,
+        atomic::{AtomicU64, Ordering},
     },
     time::Duration,
 };

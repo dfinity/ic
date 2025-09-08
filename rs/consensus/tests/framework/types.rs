@@ -21,7 +21,7 @@ use ic_interfaces::{
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_test_artifact_pool::ingress_pool::TestIngressPool;
@@ -30,16 +30,16 @@ use ic_test_utilities::{
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state_manager::FakeStateManager, xnet_payload_builder::FakeXNetPayloadBuilder,
 };
-use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, IDkgStatsNoOp};
+use ic_test_utilities_consensus::{IDkgStatsNoOp, batch::MockBatchPayloadBuilder};
 use ic_types::{
+    NodeId, SubnetId,
     artifact::IdentifiableArtifact,
     consensus::{
-        certification::CertificationMessage, dkg::Message as DkgMessage, idkg::IDkgMessage,
-        CatchUpPackage, ConsensusMessage,
+        CatchUpPackage, ConsensusMessage, certification::CertificationMessage,
+        dkg::Message as DkgMessage, idkg::IDkgMessage,
     },
     replica_config::ReplicaConfig,
     time::{Time, UNIX_EPOCH},
-    NodeId, SubnetId,
 };
 use rand_chacha::ChaChaRng;
 use std::{

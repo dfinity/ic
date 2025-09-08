@@ -1,13 +1,13 @@
 #![allow(deprecated)]
-use candid::{decode_one, Encode, Principal};
+use candid::{Encode, Principal, decode_one};
 use ic_base_types::PrincipalId;
 use ic_btc_checker::{
-    blocklist, get_tx_cycle_cost, BtcNetwork, CheckAddressArgs, CheckAddressResponse, CheckArg,
-    CheckMode, CheckTransactionArgs, CheckTransactionIrrecoverableError, CheckTransactionQueryArgs,
-    CheckTransactionQueryResponse, CheckTransactionResponse, CheckTransactionRetriable,
-    CheckTransactionStatus, CheckTransactionStrArgs, InitArg, UpgradeArg,
-    CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
-    INITIAL_MAX_RESPONSE_BYTES,
+    BtcNetwork, CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    CheckAddressArgs, CheckAddressResponse, CheckArg, CheckMode, CheckTransactionArgs,
+    CheckTransactionIrrecoverableError, CheckTransactionQueryArgs, CheckTransactionQueryResponse,
+    CheckTransactionResponse, CheckTransactionRetriable, CheckTransactionStatus,
+    CheckTransactionStrArgs, INITIAL_MAX_RESPONSE_BYTES, InitArg, UpgradeArg, blocklist,
+    get_tx_cycle_cost,
 };
 use ic_btc_interface::Txid;
 use ic_cdk::api::call::RejectionCode;
@@ -16,14 +16,15 @@ use ic_management_canister_types::CanisterId;
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use pocket_ic::{
+    PocketIc, PocketIcBuilder, RejectCode, RejectResponse,
     common::rest::{
         CanisterHttpHeader, CanisterHttpReject, CanisterHttpReply, CanisterHttpRequest,
         CanisterHttpResponse, EmptyConfig, MockCanisterHttpResponse, NonmainnetFeatures,
         RawMessageId,
     },
-    query_candid, PocketIc, PocketIcBuilder, RejectCode, RejectResponse,
+    query_candid,
 };
 use std::str::FromStr;
 
@@ -208,7 +209,9 @@ fn test_check_address() {
             address: "n47QBape2PcisN2mkHR2YnhqoBr56iPhJh".to_string(),
         },),
     );
-    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a Bitcoin mainnet address")));
+    assert!(
+        result.is_err_and(|err| format!("{:?}", err).contains("Not a Bitcoin mainnet address"))
+    );
 
     // Test CheckMode::AcceptAll
     env.upgrade_canister(
@@ -252,7 +255,9 @@ fn test_check_address() {
             address: blocked_address,
         },),
     );
-    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Not a Bitcoin testnet address")));
+    assert!(
+        result.is_err_and(|err| format!("{:?}", err).contains("Not a Bitcoin testnet address"))
+    );
 
     // Test CheckMode::RejectAll
     env.upgrade_canister(

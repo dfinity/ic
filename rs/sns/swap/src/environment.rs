@@ -40,12 +40,12 @@ pub struct CanisterClients<
 }
 
 impl<
-        SnsRootClientT: SnsRootClient,
-        SnsGovernanceClientT: SnsGovernanceClient,
-        SnsLedgerT: ICRC1Ledger,
-        IcpLedgerT: ICRC1Ledger,
-        NnsGovernanceClientT: NnsGovernanceClient,
-    > CanisterEnvironment
+    SnsRootClientT: SnsRootClient,
+    SnsGovernanceClientT: SnsGovernanceClient,
+    SnsLedgerT: ICRC1Ledger,
+    IcpLedgerT: ICRC1Ledger,
+    NnsGovernanceClientT: NnsGovernanceClient,
+> CanisterEnvironment
     for CanisterClients<
         SnsRootClientT,
         SnsGovernanceClientT,

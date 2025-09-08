@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Error};
+use anyhow::{Context, Error, anyhow};
 use async_trait::async_trait;
 use cloudflare::{
     endpoints::{
@@ -8,7 +8,7 @@ use cloudflare::{
         },
         zone::{ListZones, ListZonesParams, Zone},
     },
-    framework::{async_api::Client, auth::Credentials, Environment, HttpApiClientConfig},
+    framework::{Environment, HttpApiClientConfig, async_api::Client, auth::Credentials},
 };
 
 use crate::dns::{Create, Delete, Record};

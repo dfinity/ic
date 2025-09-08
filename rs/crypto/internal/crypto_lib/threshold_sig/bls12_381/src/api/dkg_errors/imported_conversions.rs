@@ -8,8 +8,8 @@ mod create_dealing_error_conversions_v2 {
     // TODO (CRP-818): Remove the v2 and merge.
     use crate::api::ni_dkg_errors::{CspDkgCreateDealingError, CspDkgCreateReshareDealingError};
     use ic_types::crypto::error::{InternalError, InvalidArgumentError};
-    use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::MalformedFsEncryptionPublicKeyError;
+    use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
 
     impl From<CspDkgCreateDealingError> for DkgCreateDealingError {
         fn from(csp_create_dealing_error: CspDkgCreateDealingError) -> Self {
@@ -100,8 +100,8 @@ mod create_dealing_error_conversions_v2 {
 mod verify_dealing_error_conversions {
 
     use crate::api::ni_dkg_errors::{CspDkgVerifyDealingError, CspDkgVerifyReshareDealingError};
-    use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::MalformedFsEncryptionPublicKeyError;
+    use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
 
     impl From<CspDkgVerifyDealingError> for DkgVerifyDealingError {
         fn from(csp_verify_dealing_error: CspDkgVerifyDealingError) -> Self {

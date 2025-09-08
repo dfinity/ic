@@ -1,11 +1,11 @@
 //! Defines canister threshold signature types.
+use crate::crypto::AlgorithmId;
+use crate::crypto::ExtendedDerivationPath;
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptType,
     IDkgUnmaskedTranscriptOrigin,
 };
 use crate::crypto::impl_display_using_debug;
-use crate::crypto::AlgorithmId;
-use crate::crypto::ExtendedDerivationPath;
 use crate::{NumberOfNodes, Randomness};
 use core::fmt;
 use ic_base_types::NodeId;
@@ -221,10 +221,13 @@ impl EcdsaPreSignatureQuadruple {
         kappa_unmasked: &IDkgTranscript,
     ) -> Result<(), error::EcdsaPresignatureQuadrupleCreationError> {
         match &kappa_unmasked.transcript_type {
-            IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(_)) |
-             IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random) => Ok(()),
-            _ => Err(error::EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(
-                format!("`kappa_unmasked` transcript expected to have type `Unmasked` with `ReshareMasked` or `Random` origin, but found transcript of type {:?}", kappa_unmasked.transcript_type))
+            IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(_))
+            | IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random) => Ok(()),
+            _ => Err(
+                error::EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(format!(
+                    "`kappa_unmasked` transcript expected to have type `Unmasked` with `ReshareMasked` or `Random` origin, but found transcript of type {:?}",
+                    kappa_unmasked.transcript_type
+                )),
             ),
         }
     }
@@ -234,8 +237,11 @@ impl EcdsaPreSignatureQuadruple {
     ) -> Result<(), error::EcdsaPresignatureQuadrupleCreationError> {
         match &lambda_masked.transcript_type {
             IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random) => Ok(()),
-            _ => Err(error::EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(
-                format!("`lambda_masked` transcript expected to have type `Masked` with `Random` origin, but found transcript of type {:?}", lambda_masked.transcript_type))
+            _ => Err(
+                error::EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(format!(
+                    "`lambda_masked` transcript expected to have type `Masked` with `Random` origin, but found transcript of type {:?}",
+                    lambda_masked.transcript_type
+                )),
             ),
         }
     }
@@ -246,13 +252,19 @@ impl EcdsaPreSignatureQuadruple {
         kappa_times_lambda: &IDkgTranscript,
     ) -> Result<(), error::EcdsaPresignatureQuadrupleCreationError> {
         match &kappa_times_lambda.transcript_type {
-            IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(id_l, id_r))
-            if *id_l == kappa_unmasked.transcript_id && *id_r == lambda_masked.transcript_id
-            => {
+            IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(
+                id_l,
+                id_r,
+            )) if *id_l == kappa_unmasked.transcript_id && *id_r == lambda_masked.transcript_id => {
                 Ok(())
             }
-            _ => Err(error::EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(
-                format!("`kappa_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},{:?})`, but found transcript of type {:?}", kappa_unmasked.transcript_id, lambda_masked.transcript_id, kappa_times_lambda.transcript_type))
+            _ => Err(
+                error::EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(format!(
+                    "`kappa_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},{:?})`, but found transcript of type {:?}",
+                    kappa_unmasked.transcript_id,
+                    lambda_masked.transcript_id,
+                    kappa_times_lambda.transcript_type
+                )),
             ),
         }
     }
@@ -262,12 +274,15 @@ impl EcdsaPreSignatureQuadruple {
         key_times_lambda: &IDkgTranscript,
     ) -> Result<(), error::EcdsaPresignatureQuadrupleCreationError> {
         match &key_times_lambda.transcript_type {
-            IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(_, id_r, ))
-            if *id_r == lambda_masked.transcript_id => {
-                Ok(())
-            }
-            _ => Err(error::EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(
-                format!("`key_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked(_,{:?})`, but found transcript of type {:?}", lambda_masked.transcript_id, key_times_lambda.transcript_type))
+            IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(
+                _,
+                id_r,
+            )) if *id_r == lambda_masked.transcript_id => Ok(()),
+            _ => Err(
+                error::EcdsaPresignatureQuadrupleCreationError::InvalidTranscriptOrigin(format!(
+                    "`key_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked(_,{:?})`, but found transcript of type {:?}",
+                    lambda_masked.transcript_id, key_times_lambda.transcript_type
+                )),
             ),
         }
     }
@@ -443,8 +458,11 @@ impl ThresholdEcdsaSigInputs {
                 key_id_from_mult,
                 _,
             )) if *key_id_from_mult == key_transcript.transcript_id => Ok(()),
-            _ => Err(error::ThresholdEcdsaSigInputsCreationError::InvalidQuadrupleOrigin(
-                format!("Quadruple transcript `key_times_lambda` expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},_)`, but found transcript of type {:?}", key_transcript.transcript_id, presig_quadruple.key_times_lambda.transcript_type))
+            _ => Err(
+                error::ThresholdEcdsaSigInputsCreationError::InvalidQuadrupleOrigin(format!(
+                    "Quadruple transcript `key_times_lambda` expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},_)`, but found transcript of type {:?}",
+                    key_transcript.transcript_id, presig_quadruple.key_times_lambda.transcript_type
+                )),
             ),
         }
     }
@@ -739,8 +757,8 @@ impl SchnorrPreSignatureTranscript {
                     format!(
                         "Expected unmasked transcript with origin `Random`, but found transcript of type {:?}",
                         blinder_unmasked.transcript_type
-                    )
-                )
+                    ),
+                ),
             );
         }
         Ok(())

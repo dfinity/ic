@@ -13,11 +13,11 @@ end::catalog[] */
 
 use anyhow::Result;
 use ic_consensus_system_test_utils::ssh_access::{
-    assert_authentication_fails, assert_authentication_works, fail_to_update_subnet_record,
-    fail_updating_ssh_keys_for_all_unassigned_nodes, generate_key_strings,
-    get_updatesshreadonlyaccesskeyspayload, get_updatesubnetpayload_with_keys,
-    update_ssh_keys_for_all_unassigned_nodes, update_subnet_record,
-    wait_until_authentication_fails, wait_until_authentication_is_granted, AuthMean,
+    AuthMean, assert_authentication_fails, assert_authentication_works,
+    fail_to_update_subnet_record, fail_updating_ssh_keys_for_all_unassigned_nodes,
+    generate_key_strings, get_updatesshreadonlyaccesskeyspayload,
+    get_updatesubnetpayload_with_keys, update_ssh_keys_for_all_unassigned_nodes,
+    update_subnet_record, wait_until_authentication_fails, wait_until_authentication_is_granted,
 };
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_registry_subnet_type::SubnetType;

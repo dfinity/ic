@@ -1,6 +1,6 @@
 use super::*;
 use crate::test_visitors::{NoopVisitor, TraceEntry, TracingVisitor};
-use crate::visitor::{named_blob, named_num, named_subtree, subtree, Visitor};
+use crate::visitor::{Visitor, named_blob, named_num, named_subtree, subtree};
 use Matcher::*;
 use TraceEntry::{EndSubtree, EnterEdge, StartSubtree, VisitBlob, VisitNum};
 
@@ -125,7 +125,7 @@ fn multiple_subtrees() {
         ],
     );
     assert_eq!(4 * MESSAGE_SIZE, size) // 3 messages included, 4th message
-                                       // exceeded the limit.
+    // exceeded the limit.
 }
 
 /// Tests stacking two `SizeLimitVisitors`.

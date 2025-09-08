@@ -19,7 +19,7 @@ use ic_canister_client_sender::SigKeys;
 use ic_crypto_utils_threshold_sig_der::{
     parse_threshold_sig_key, parse_threshold_sig_key_from_der,
 };
-use ic_http_utils::file_downloader::{check_file_hash, FileDownloader};
+use ic_http_utils::file_downloader::{FileDownloader, check_file_hash};
 use ic_interfaces_registry::{RegistryClient, RegistryDataProvider};
 use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_clients::{
@@ -39,16 +39,20 @@ use ic_nervous_system_root::change_canister::{
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
+    AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, InstallCodeRequest,
+    MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, NnsFunction,
+    NodeProvider, ProposalActionRequest, RewardNodeProviders, StopOrStartCanister,
+    UpdateCanisterSettings,
     add_or_remove_node_provider::Change,
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
     create_service_nervous_system::{
+        GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
         governance_parameters::VotingRewardParameters,
         initial_token_distribution::{
-            developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
-            TreasuryDistribution,
+            DeveloperDistribution, SwapDistribution, TreasuryDistribution,
+            developer_distribution::NeuronDistribution,
         },
-        swap_parameters, GovernanceParameters, InitialTokenDistribution, LedgerParameters,
-        SwapParameters,
+        swap_parameters,
     },
     install_code::CanisterInstallMode as GovernanceInstallMode,
     proposal::Action,
@@ -61,10 +65,6 @@ use ic_nns_governance_api::{
     update_canister_settings::{
         CanisterSettings, Controllers, LogVisibility as GovernanceLogVisibility,
     },
-    AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, InstallCodeRequest,
-    MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest, NnsFunction,
-    NodeProvider, ProposalActionRequest, RewardNodeProviders, StopOrStartCanister,
-    UpdateCanisterSettings,
 };
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
@@ -81,7 +81,7 @@ use ic_protobuf::registry::{
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
     routing_table::v1::{
-        routing_table::Entry as RoutingTableEntry, CanisterMigrations, RoutingTable,
+        CanisterMigrations, RoutingTable, routing_table::Entry as RoutingTableEntry,
     },
     subnet::v1::{SubnetListRecord, SubnetRecord as SubnetRecordProto},
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
@@ -92,16 +92,16 @@ use ic_registry_client_helpers::{
     ecdsa_keys::EcdsaKeysRegistry, hostos_version::HostosRegistry, subnet::SubnetRegistry,
 };
 use ic_registry_keys::{
-    get_node_operator_id_from_record_key, get_node_record_node_id, is_node_operator_record_key,
-    is_node_record_key, make_api_boundary_node_record_key, make_blessed_replica_versions_key,
-    make_canister_migrations_record_key, make_crypto_node_key,
+    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, CANISTER_RANGES_PREFIX, FirewallRulesScope,
+    NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
+    ROOT_SUBNET_ID_KEY, get_node_operator_id_from_record_key, get_node_record_node_id,
+    is_node_operator_record_key, is_node_record_key, make_api_boundary_node_record_key,
+    make_blessed_replica_versions_key, make_canister_migrations_record_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
     make_replica_version_key, make_subnet_list_record_key, make_subnet_record_key,
-    make_unassigned_nodes_config_record_key, FirewallRulesScope,
-    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, CANISTER_RANGES_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX,
-    NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
+    make_unassigned_nodes_config_record_key,
 };
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
@@ -116,8 +116,9 @@ use ic_sns_wasm::pb::v1::{
     SnsVersion, SnsWasm, UpdateAllowedPrincipalsRequest, UpdateSnsSubnetListRequest,
 };
 use ic_types::{
-    crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
-    subnet_id_try_from_protobuf, CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
+    CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId,
+    crypto::{KeyPurpose, threshold_sig::ThresholdSigPublicKey},
+    subnet_id_try_from_protobuf,
 };
 use indexmap::IndexMap;
 use itertools::izip;
@@ -142,9 +143,9 @@ use registry_canister::mutations::{
     do_update_nodes_hostos_version::DeployHostosToSomeNodes,
     do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
     firewall::{
+        AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
         add_firewall_rules_compute_entries, compute_firewall_ruleset_hash,
         remove_firewall_rules_compute_entries, update_firewall_rules_compute_entries,
-        AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
     },
     node_management::do_remove_nodes::RemoveNodesPayload,
     prepare_canister_migration::PrepareCanisterMigrationPayload,
@@ -155,7 +156,7 @@ use std::{
     collections::{BTreeMap, HashSet},
     convert::TryFrom,
     fmt::Debug,
-    fs::{metadata, read_to_string, File},
+    fs::{File, metadata, read_to_string},
     io::Read,
     net::Ipv6Addr,
     path::{Path, PathBuf},
@@ -1629,7 +1630,9 @@ impl ProposalPayload<InsertUpgradePathEntriesRequest>
         let sns_governance_canister_id = self.sns_governance_canister_id.map(|c| c.into());
 
         if sns_governance_canister_id.is_none() && !force_upgrade_main_upgrade_path {
-            panic!("You must provide --force-upgrade-main-upgrade-path option if not specifying --sns-governance-canister-id option");
+            panic!(
+                "You must provide --force-upgrade-main-upgrade-path option if not specifying --sns-governance-canister-id option"
+            );
         }
 
         // Note, we are filling in the JsonSnsVersions (b/c they can be optional) so that
@@ -2875,13 +2878,9 @@ impl ProposalPayload<BitcoinSetConfigProposal> for ProposeToSetBitcoinConfig {
             watchdog_canister: self
                 .watchdog_canister
                 .map(|principal_id| principal_id.map(Principal::from)),
-            disable_api_if_not_fully_synced: self.disable_api_if_not_fully_synced.map(|flag| {
-                if flag {
-                    Flag::Enabled
-                } else {
-                    Flag::Disabled
-                }
-            }),
+            disable_api_if_not_fully_synced: self
+                .disable_api_if_not_fully_synced
+                .map(|flag| if flag { Flag::Enabled } else { Flag::Disabled }),
             fees: Some(Fees {
                 get_utxos_base: self.get_utxos_base,
                 get_utxos_cycles_per_ten_instructions: self.get_utxos_cycles_per_ten_instructions,
@@ -3452,7 +3451,9 @@ impl HostosVersionFlag {
     // TODO: If we upgrade clap, this can be replaced with `group` attributes.
     fn simplify(&self) -> &Option<String> {
         if self.hostos_version_id.is_some() && self.clear_hostos_version {
-            panic!("Only one of --hostos-version-id or --clear-hostos-version can be specified at once.");
+            panic!(
+                "Only one of --hostos-version-id or --clear-hostos-version can be specified at once."
+            );
         }
 
         // When `--clear-hostos-version` is set, `--hostos-version-id` must be
@@ -3715,8 +3716,7 @@ async fn find_reachable_nns_urls(nns_urls: Vec<Url>) -> Vec<Url> {
                 }
                 eprintln!(
                     "WARNING: None of the provided NNS urls are reachable. Retrying in 5 seconds... ({}/{})",
-                    i,
-                    retries_max
+                    i, retries_max
                 );
                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             }
@@ -5362,7 +5362,8 @@ async fn test_add_firewall_rules(
     if positions.len() != new_rules.len() {
         panic!(
             "Number of provided positions differs from number of provided rules. Positions: {:?}, Rules: {:?}.",
-            positions.len(), new_rules.len()
+            positions.len(),
+            new_rules.len()
         );
     }
 
@@ -5444,7 +5445,8 @@ async fn test_update_firewall_rules(
     if positions.len() != new_rules.len() {
         panic!(
             "Number of provided positions differs from number of provided rules. Positions: {:?}, Rules: {:?}.",
-            positions.len(), new_rules.len()
+            positions.len(),
+            new_rules.len()
         );
     }
 

@@ -21,7 +21,10 @@ pub enum ErrorHelp {
 impl std::fmt::Display for ErrorHelp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ErrorHelp::UserError { suggestion, doc_link } => {
+            ErrorHelp::UserError {
+                suggestion,
+                doc_link,
+            } => {
                 if !suggestion.is_empty() {
                     write!(f, "{}", suggestion)?;
                     if !doc_link.is_empty() {
@@ -32,9 +35,15 @@ impl std::fmt::Display for ErrorHelp {
                 } else {
                     Ok(())
                 }
-            },
-            ErrorHelp::ToolchainError => write!(f, "If you are running this canister in a test environment (e.g., dfx), make sure the test environment is up to date. Otherwise, this is likely an error with the compiler/CDK toolchain being used to build the canister. Please report the error to IC devs on the forum: https://forum.dfinity.org and include which language/CDK was used to create the canister."),
-            ErrorHelp::InternalError => write!(f, "This is an internal error on the IC. Please report it to IC devs on the forum: https://forum.dfinity.org"),
+            }
+            ErrorHelp::ToolchainError => write!(
+                f,
+                "If you are running this canister in a test environment (e.g., dfx), make sure the test environment is up to date. Otherwise, this is likely an error with the compiler/CDK toolchain being used to build the canister. Please report the error to IC devs on the forum: https://forum.dfinity.org and include which language/CDK was used to create the canister."
+            ),
+            ErrorHelp::InternalError => write!(
+                f,
+                "This is an internal error on the IC. Please report it to IC devs on the forum: https://forum.dfinity.org"
+            ),
         }
     }
 }

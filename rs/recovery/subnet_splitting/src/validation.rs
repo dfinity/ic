@@ -8,7 +8,7 @@ use ic_base_types::SubnetId;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_recovery::error::{RecoveryError, RecoveryResult};
 use ic_types::{consensus::HasHeight, crypto::threshold_sig::ThresholdSigPublicKey};
-use slog::{error, info, Logger};
+use slog::{Logger, error, info};
 use url::Url;
 
 use std::{fmt::Display, path::Path};

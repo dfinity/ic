@@ -1,10 +1,10 @@
 use crate::{
     canister_manager::{
+        CanisterManager,
         types::{
             CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult, InstallCodeContext,
             PausedInstallCodeExecution, StopCanisterResult, UploadChunkResult,
         },
-        CanisterManager,
     },
     canister_settings::CanisterSettings,
     execution::{
@@ -24,8 +24,8 @@ use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_utils_canister_threshold_sig::derive_threshold_public_key;
 use ic_cycles_account_manager::{
-    is_delayed_ingress_induction_cost, CyclesAccountManager, IngressInductionCost,
-    ResourceSaturation,
+    CyclesAccountManager, IngressInductionCost, ResourceSaturation,
+    is_delayed_ingress_induction_cost,
 };
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -33,11 +33,11 @@ use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
 };
 use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
     CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, CreateCanisterArgs,
-    DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EmptyBlob,
+    DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EmptyBlob, IC_00,
     InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
     MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
     ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
@@ -47,15 +47,16 @@ use ic_management_canister_types_private::{
     StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse, TakeCanisterSnapshotArgs,
     UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
     UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse, UploadChunkArgs,
-    VetKdDeriveKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
+    VetKdDeriveKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
     canister_state::{
-        system_state::{CyclesUseCase, PausedExecutionId},
         NextExecution,
+        system_state::{CyclesUseCase, PausedExecutionId},
     },
     metadata_state::subnet_call_context_manager::{
         EcdsaArguments, InstallCodeCall, InstallCodeCallId, ReshareChainKeyContext,
@@ -63,27 +64,26 @@ use ic_replicated_state::{
         SubnetCallContext, ThresholdArguments, VetKdArguments,
     },
     page_map::PageAllocatorFileDescriptor,
-    CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
 };
 use ic_types::{
+    CanisterId, Cycles, ExecutionRound, Height, NumBytes, NumInstructions, RegistryVersion,
+    ReplicaVersion, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ChainKeyData},
     canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES},
     crypto::{
+        ExtendedDerivationPath,
         canister_threshold_sig::{MasterPublicKey, PublicKey},
         threshold_sig::ni_dkg::{NiDkgMasterPublicKeyId, NiDkgTargetId},
-        ExtendedDerivationPath,
     },
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        extract_effective_canister_id, CanisterCall, CanisterCallOrTask, CanisterMessage,
-        CanisterMessageOrTask, CanisterTask, Payload, RejectContext, Request, Response,
+        CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask, CanisterTask,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, RejectContext, Request, Response,
         SignedIngressContent, StopCanisterCallId, StopCanisterContext,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        extract_effective_canister_id,
     },
     methods::SystemMethod,
     nominal_cycles::NominalCycles,
-    CanisterId, Cycles, ExecutionRound, Height, NumBytes, NumInstructions, RegistryVersion,
-    ReplicaVersion, SubnetId, Time,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
 use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread};
@@ -785,11 +785,11 @@ impl ExecutionEnvironment {
                                     ),
                                 };
                                 info!(
-                                            self.log,
-                                            "Finished executing create_canister message after {:?} with result: {:?}",
-                                            since.elapsed().as_secs_f64(),
-                                            result
-                                        );
+                                    self.log,
+                                    "Finished executing create_canister message after {:?} with result: {:?}",
+                                    since.elapsed().as_secs_f64(),
+                                    result
+                                );
 
                                 result
                             }
@@ -1947,7 +1947,7 @@ impl ExecutionEnvironment {
                     round_limits,
                     subnet_size,
                     cost_schedule,
-                )
+                );
             }
             CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
                 CanisterCall::Request(request)
@@ -2406,7 +2406,7 @@ impl ExecutionEnvironment {
                         format!("Canister {} not found.", &canister_id),
                     )),
                     NumInstructions::new(0),
-                )
+                );
             }
             Some(canister) => canister,
         };
@@ -2452,7 +2452,7 @@ impl ExecutionEnvironment {
                         format!("Canister {} not found.", &canister_id),
                     )),
                     NumInstructions::new(0),
-                )
+                );
             }
             Some(canister) => canister,
         };
@@ -2519,7 +2519,7 @@ impl ExecutionEnvironment {
                 return Err(UserError::new(
                     ErrorCode::CanisterNotFound,
                     format!("Canister {} not found.", &canister_id),
-                ))
+                ));
             }
             Some(canister) => canister,
         };
@@ -2555,7 +2555,7 @@ impl ExecutionEnvironment {
                 return Err(UserError::new(
                     ErrorCode::CanisterNotFound,
                     format!("Canister {} not found.", &canister_id),
-                ))
+                ));
             }
             Some(canister) => canister,
         };
@@ -2596,7 +2596,7 @@ impl ExecutionEnvironment {
                 return Err(UserError::new(
                     ErrorCode::CanisterNotFound,
                     format!("Canister {} not found.", old_id),
-                ))
+                ));
             }
             Some(canister) => canister,
         };
@@ -2653,7 +2653,7 @@ impl ExecutionEnvironment {
                         format!("Canister {} not found.", &canister_id),
                     )),
                     NumInstructions::new(0),
-                )
+                );
             }
             Some(canister) => canister,
         };
@@ -2698,7 +2698,7 @@ impl ExecutionEnvironment {
                         format!("Canister {} not found.", &canister_id),
                     )),
                     NumInstructions::new(0),
-                )
+                );
             }
             Some(canister) => canister,
         };
@@ -3024,10 +3024,12 @@ impl ExecutionEnvironment {
                     if !refund.is_zero() {
                         self.metrics.ingress_with_cycles_error.inc();
                         warn!(
-                                self.log,
-                                "[EXC-BUG] No funds can be included with an ingress message: user {}, canister_id {}, message_id {}.",
-                                ingress.source, ingress.receiver, ingress.message_id
-                            );
+                            self.log,
+                            "[EXC-BUG] No funds can be included with an ingress message: user {}, canister_id {}, message_id {}.",
+                            ingress.source,
+                            ingress.receiver,
+                            ingress.message_id
+                        );
                     }
                     let status = match response {
                         Ok((payload, ..)) => IngressStatus::Known {
@@ -3464,7 +3466,7 @@ impl ExecutionEnvironment {
                 return Err(UserError::new(
                     ErrorCode::UnknownManagementMessage,
                     format!("Expected an install code message, but found {}", other),
-                ))
+                ));
             }
         };
 
@@ -3553,7 +3555,9 @@ impl ExecutionEnvironment {
         match old_canister.next_execution() {
             NextExecution::None | NextExecution::StartNew => {}
             NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
-                panic!("Attempt to start a new `install_code` execution while the previous execution is still in progress.");
+                panic!(
+                    "Attempt to start a new `install_code` execution while the previous execution is still in progress."
+                );
             }
         }
 
@@ -3651,7 +3655,8 @@ impl ExecutionEnvironment {
                             execution_duration,
                             result.old_wasm_hash,
                             result.new_wasm_hash,
-                            instructions_used.display());
+                            instructions_used.display()
+                        );
 
                         Ok((EmptyBlob.encode(), Some(canister_id)))
                     }
@@ -3662,7 +3667,8 @@ impl ExecutionEnvironment {
                             canister_id,
                             execution_duration,
                             err,
-                            instructions_used.display());
+                            instructions_used.display()
+                        );
                         Err(err.into())
                     }
                 };

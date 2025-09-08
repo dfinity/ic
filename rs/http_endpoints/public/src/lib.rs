@@ -25,10 +25,10 @@ cfg_if::cfg_if! {
 }
 
 pub use call::{
-    call_async, call_sync, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle,
+    IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle, call_async, call_sync,
 };
-pub use common::cors_layer;
 use common::CONTENT_TYPE_CBOR;
+pub use common::cors_layer;
 use ic_http_endpoints_async_utils::start_tcp_listener;
 use ic_nns_delegation_manager::NNSDelegationReader;
 pub use query::QueryServiceBuilder;
@@ -51,15 +51,15 @@ use crate::{
 };
 
 use axum::{
+    Router,
     error_handling::HandleErrorLayer,
     extract::{DefaultBodyLimit, MatchedPath, State},
     middleware::Next,
     response::Redirect,
     routing::get,
-    Router,
 };
 use crossbeam::atomic::AtomicCell;
-use hyper::{body::Incoming, Request, StatusCode};
+use hyper::{Request, StatusCode, body::Incoming};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use ic_config::http_handler::Config;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
@@ -72,17 +72,17 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_metrics::{histogram_vec_timer::HistogramVecTimer, MetricsRegistry};
+use ic_logger::{ReplicaLogger, error, info, warn};
+use ic_metrics::{MetricsRegistry, histogram_vec_timer::HistogramVecTimer};
 use ic_pprof::PprofCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_tracing::ReloadHandles;
 use ic_types::{
+    Height, NodeId, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     malicious_flags::MaliciousFlags,
     messages::{MessageId, QueryResponseHash, ReplicaHealthStatus, SignedIngress},
-    Height, NodeId, SubnetId,
 };
 use std::{
     io::Write,
@@ -95,10 +95,10 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::mpsc::{Receiver, Sender},
     sync::watch,
-    time::{sleep, timeout, Instant},
+    time::{Instant, sleep, timeout},
 };
 use tokio_util::sync::CancellationToken;
-use tower::{limit::GlobalConcurrencyLimitLayer, BoxError, Service, ServiceBuilder};
+use tower::{BoxError, Service, ServiceBuilder, limit::GlobalConcurrencyLimitLayer};
 use tower_http::{limit::RequestBodyLimitLayer, trace::TraceLayer};
 
 /// [TLS Application-Layer Protocol Negotiation (ALPN) Protocol `HTTP/2 over TLS` ID][spec]
@@ -758,13 +758,13 @@ pub(crate) mod tests {
 
     use axum::body::Body;
     use bytes::Bytes;
-    use futures_util::{future::select_all, stream::pending, FutureExt};
+    use futures_util::{FutureExt, future::select_all, stream::pending};
     use http::{
+        HeaderName, HeaderValue, Method,
         header::{
             ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS,
             ACCESS_CONTROL_ALLOW_ORIGIN, CONTENT_TYPE,
         },
-        HeaderName, HeaderValue, Method,
     };
     use http_body_util::Empty;
     use http_body_util::Full;

@@ -1,8 +1,8 @@
-use crate::{balances_len, execute_transfer_not_async, post_upgrade_internal, pre_upgrade, Tokens};
+use crate::{Tokens, balances_len, execute_transfer_not_async, post_upgrade_internal, pre_upgrade};
 use assert_matches::assert_matches;
 use candid::{Nat, Principal};
 use ic_canister_log::Sink;
-use ic_ledger_canister_core::ledger::{blocks_to_archive, remove_archived_blocks, LedgerAccess};
+use ic_ledger_canister_core::ledger::{LedgerAccess, blocks_to_archive, remove_archived_blocks};
 use ic_ledger_core::block::BlockIndex;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;

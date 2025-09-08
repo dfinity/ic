@@ -1,7 +1,7 @@
 use ic_crypto_internal_basic_sig_rsa_pkcs1::*;
 use ic_types::crypto::CryptoError;
 use wycheproof::rsa_pkcs1_verify::{Test, TestGroup};
-use wycheproof::{rsa_pkcs1_verify, HashFunction, TestResult};
+use wycheproof::{HashFunction, TestResult, rsa_pkcs1_verify};
 
 #[test]
 fn should_pass_wycheproof_tests() {

@@ -5,10 +5,10 @@ use ic_crypto_sha2::Sha256;
 use ic_management_canister_types::CanisterSettings;
 use ic_nns_constants::{REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_test_utils::common::{
-    build_mainnet_registry_wasm, build_registry_wasm, NnsInitPayloadsBuilder,
+    NnsInitPayloadsBuilder, build_mainnet_registry_wasm, build_registry_wasm,
 };
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
+use pocket_ic::{PocketIcBuilder, nonblocking::PocketIc};
 use rate_limits_api::InitArg;
 use serde::de::DeserializeOwned;
 /// Builds the WASM for the rate-limit canister.

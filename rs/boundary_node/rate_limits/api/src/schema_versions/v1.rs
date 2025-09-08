@@ -8,9 +8,9 @@ use humantime::{format_duration, parse_duration};
 use ipnet::IpNet;
 use regex::Regex;
 use serde::{
+    Deserialize, Serialize,
     de::{self, Deserializer, Error},
     ser::Serializer,
-    Deserialize, Serialize,
 };
 
 pub const SCHEMA_VERSION: u64 = 1;
@@ -316,10 +316,12 @@ mod test {
         limit: 100/1s
         "};
 
-        assert!(RateLimitRule::from_bytes_yaml(rule_raw.as_bytes())
-            .unwrap_err()
-            .to_string()
-            .contains("v4 prefix must be"));
+        assert!(
+            RateLimitRule::from_bytes_yaml(rule_raw.as_bytes())
+                .unwrap_err()
+                .to_string()
+                .contains("v4 prefix must be")
+        );
 
         let rule_raw = indoc! {"
         canister_id: aaaaa-aa
@@ -331,10 +333,12 @@ mod test {
         limit: 100/1s
         "};
 
-        assert!(RateLimitRule::from_bytes_yaml(rule_raw.as_bytes())
-            .unwrap_err()
-            .to_string()
-            .contains("v6 prefix must be"));
+        assert!(
+            RateLimitRule::from_bytes_yaml(rule_raw.as_bytes())
+                .unwrap_err()
+                .to_string()
+                .contains("v6 prefix must be")
+        );
 
         // limit: block with ip prefixes
         let rule_raw = indoc! {"
@@ -347,10 +351,12 @@ mod test {
         limit: block
         "};
 
-        assert!(RateLimitRule::from_bytes_yaml(rule_raw.as_bytes())
-            .unwrap_err()
-            .to_string()
-            .contains("ip_prefix_group only makes sense with"));
+        assert!(
+            RateLimitRule::from_bytes_yaml(rule_raw.as_bytes())
+                .unwrap_err()
+                .to_string()
+                .contains("ip_prefix_group only makes sense with")
+        );
 
         // No conditions
         let rule_raw = indoc! {"
@@ -360,10 +366,12 @@ mod test {
         limit: 100/1s
         "};
 
-        assert!(RateLimitRule::from_bytes_yaml(rule_raw.as_bytes())
-            .unwrap_err()
-            .to_string()
-            .contains("at least one filtering condition must be"));
+        assert!(
+            RateLimitRule::from_bytes_yaml(rule_raw.as_bytes())
+                .unwrap_err()
+                .to_string()
+                .contains("at least one filtering condition must be")
+        );
 
         let rules = indoc! {"
         - canister_id: aaaaa-aa

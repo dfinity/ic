@@ -11,9 +11,9 @@ use ic_protobuf::registry::{
     hostos_version::v1::HostosVersionRecord, node::v1::NodeRecord, subnet::v1::SubnetListRecord,
 };
 use ic_registry_keys::{
+    CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, HOSTOS_VERSION_KEY_PREFIX,
     get_api_boundary_node_record_node_id, get_node_record_node_id, make_node_record_key,
-    make_subnet_list_record_key, CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX,
-    HOSTOS_VERSION_KEY_PREFIX,
+    make_subnet_list_record_key,
 };
 use prost::Message;
 use url::Url;
@@ -233,7 +233,7 @@ mod tests {
     use prost::Message;
 
     use super::{
-        get_api_boundary_node_records_from_snapshot, get_value_from_snapshot, RegistrySnapshot,
+        RegistrySnapshot, get_api_boundary_node_records_from_snapshot, get_value_from_snapshot,
     };
 
     #[test]

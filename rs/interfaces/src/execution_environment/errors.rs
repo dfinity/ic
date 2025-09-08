@@ -1,9 +1,9 @@
 use ic_base_types::{NumBytes, PrincipalIdBlobParseError};
 use ic_error_types::UserError;
 use ic_heap_bytes::DeterministicHeapBytes;
-use ic_types::{methods::WasmMethod, CanisterId, Cycles, DiskBytes, NumInstructions};
+use ic_types::{CanisterId, Cycles, DiskBytes, NumInstructions, methods::WasmMethod};
 use ic_wasm_types::{
-    doc_ref, AsErrorHelp, ErrorHelp, WasmEngineError, WasmInstrumentationError, WasmValidationError,
+    AsErrorHelp, ErrorHelp, WasmEngineError, WasmInstrumentationError, WasmValidationError, doc_ref,
 };
 use serde::{Deserialize, Serialize};
 
@@ -61,8 +61,11 @@ impl std::error::Error for CanisterOutOfCyclesError {}
 impl std::fmt::Display for CanisterOutOfCyclesError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = if self.reveal_top_up {
-            format!("Canister {} is out of cycles: please top up the canister with at least {} additional cycles",
-            self.canister_id, (self.threshold + self.requested) - self.available)
+            format!(
+                "Canister {} is out of cycles: please top up the canister with at least {} additional cycles",
+                self.canister_id,
+                (self.threshold + self.requested) - self.available
+            )
         } else {
             format!("Canister {} is out of cycles", self.canister_id)
         };
@@ -306,7 +309,10 @@ impl std::fmt::Display for HypervisorError {
                 write!(f, "Canister encountered a Wasm engine error: {}", err)
             }
             Self::ReservedPagesForOldMotoko => {
-                write!(f, "Canister tried to allocate pages reserved for upgrading older versions of Motoko.")
+                write!(
+                    f,
+                    "Canister tried to allocate pages reserved for upgrading older versions of Motoko."
+                )
             }
             Self::Aborted => {
                 // This error should never be visible to end users.
@@ -380,15 +386,17 @@ impl std::fmt::Display for HypervisorError {
                 )
             }
             Self::WasmMemoryLimitExceeded { bytes, limit } => {
-                write!(f,
-                        "Canister exceeded its current Wasm memory limit of {} bytes. \
+                write!(
+                    f,
+                    "Canister exceeded its current Wasm memory limit of {} bytes. \
                         The peak Wasm memory usage was {} bytes. \
                         If the canister reaches 4GiB, then it may stop functioning and may become unrecoverable. \
                         Please reach out to the canister owner to investigate the reason for the increased memory usage. \
                         It might be necessary to move data from the Wasm memory to the stable memory. \
                         If such high Wasm memory usage is expected and safe, then the developer can increase \
                         the Wasm memory limit in the canister settings.",
-                        limit.get(), bytes.get()
+                    limit.get(),
+                    bytes.get()
                 )
             }
             Self::EnvironmentVariableIndexOutOfBounds { index, length } => {

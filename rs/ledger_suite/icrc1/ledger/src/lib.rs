@@ -2,14 +2,14 @@
 mod tests;
 
 use candid::{
-    types::number::{Int, Nat},
     CandidType, Principal,
+    types::number::{Int, Nat},
 };
 use ic_base_types::PrincipalId;
-use ic_canister_log::{log, Sink};
+use ic_canister_log::{Sink, log};
 use ic_certification::{
-    hash_tree::{empty, fork, label, leaf, Label},
     HashTree,
+    hash_tree::{Label, empty, fork, label, leaf},
 };
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{Block, LedgerAllowances, LedgerBalances, Transaction};
@@ -19,7 +19,7 @@ use ic_ledger_canister_core::{archive::Archive, blockchain::BlockDataContainer};
 use ic_ledger_canister_core::{
     archive::ArchiveCanisterWasm,
     blockchain::Blockchain,
-    ledger::{apply_transaction, block_locations, LedgerContext, LedgerData, TransactionInfo},
+    ledger::{LedgerContext, LedgerData, TransactionInfo, apply_transaction, block_locations},
     range_utils,
 };
 use ic_ledger_core::balances::BalancesStore;
@@ -31,8 +31,8 @@ use ic_ledger_core::{
 };
 use ic_ledger_hash_of::HashOf;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::{storable::Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
+use ic_stable_structures::{Storable, storable::Bound};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc3::archive::{ArchivedRange, QueryBlockArchiveFn, QueryTxArchiveFn},
@@ -46,11 +46,11 @@ use icrc_ledger_types::{
     },
 };
 use icrc_ledger_types::{
-    icrc103::get_allowances::Allowance as Allowance103,
-    icrc3::{blocks::GetBlocksResponse, transactions::GetTransactionsResponse},
+    icrc3::transactions::Transaction as Tx, icrc103::get_allowances::Allowances,
 };
 use icrc_ledger_types::{
-    icrc103::get_allowances::Allowances, icrc3::transactions::Transaction as Tx,
+    icrc3::{blocks::GetBlocksResponse, transactions::GetTransactionsResponse},
+    icrc103::get_allowances::Allowance as Allowance103,
 };
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
@@ -969,7 +969,10 @@ impl Ledger {
         }
         if let Some(max_memo_length) = args.max_memo_length {
             if self.max_memo_length > max_memo_length {
-                ic_cdk::trap(format!("The max len of the memo can be changed only to be bigger or equal than the current size. Current size: {}", self.max_memo_length));
+                ic_cdk::trap(format!(
+                    "The max len of the memo can be changed only to be bigger or equal than the current size. Current size: {}",
+                    self.max_memo_length
+                ));
             }
             self.max_memo_length = max_memo_length;
         }

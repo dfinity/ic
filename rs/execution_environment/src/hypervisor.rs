@@ -3,13 +3,13 @@ use ic_config::execution_environment::{Config, MAX_COMPILATION_CACHE_SIZE};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
+    CompilationCache, CompilationCacheBuilder, CompilationResult, WasmExecutionInput,
+    WasmtimeEmbedder,
     wasm_executor::{WasmExecutionResult, WasmExecutor, WasmExecutorImpl},
     wasm_utils::decoding::decoded_wasm_size,
     wasmtime_embedder::system_api::{
-        sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
+        ApiType, ExecutionParameters, sandbox_safe_system_state::SandboxSafeSystemState,
     },
-    CompilationCache, CompilationCacheBuilder, CompilationResult, WasmExecutionInput,
-    WasmtimeEmbedder,
 };
 use ic_heap_bytes::HeapBytes;
 use ic_interfaces::execution_environment::{
@@ -18,15 +18,15 @@ use ic_interfaces::execution_environment::{
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_management_canister_types_private::LogVisibilityV2;
-use ic_metrics::buckets::{decimal_buckets_with_zero, linear_buckets};
 use ic_metrics::MetricsRegistry;
+use ic_metrics::buckets::{decimal_buckets_with_zero, linear_buckets};
 use ic_replicated_state::{
     ExecutionState, MessageMemoryUsage, NetworkTopology, ReplicatedState, SystemState,
 };
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
-    messages::RequestMetadata, methods::FuncRef, CanisterId, DiskBytes, NumBytes, NumInstructions,
-    SubnetId, Time,
+    CanisterId, DiskBytes, NumBytes, NumInstructions, SubnetId, Time, messages::RequestMetadata,
+    methods::FuncRef,
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounter, IntGaugeVec};
@@ -36,7 +36,7 @@ use std::{
 };
 
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
-use crate::execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
+use crate::execution_environment::{CompilationCostHandling, RoundLimits, as_round_instructions};
 use crate::metrics::CallTreeMetrics;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 

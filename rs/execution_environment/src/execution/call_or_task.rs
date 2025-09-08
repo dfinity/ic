@@ -20,10 +20,10 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use ic_replicated_state::{
-    canister_state::execution_state::WasmExecutionMode, num_bytes_try_from, CallContextAction,
-    CallOrigin, CanisterState,
+    CallContextAction, CallOrigin, CanisterState,
+    canister_state::execution_state::WasmExecutionMode, num_bytes_try_from,
 };
 use ic_types::messages::{
     CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
@@ -160,7 +160,7 @@ pub fn execute_call_or_task(
                 err,
                 original,
                 round,
-            )
+            );
         }
     };
 

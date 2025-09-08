@@ -1,24 +1,23 @@
 use crate::{
-    as_num_instructions,
+    IngressHistoryWriterImpl, RoundLimits, as_num_instructions,
     canister_manager::{
-        uninstall_canister, AddCanisterChangeToHistory, CanisterManager, CanisterManagerError,
-        CanisterMgrConfig, DtsInstallCodeResult, InstallCodeContext, StopCanisterResult,
-        WasmSource, MAX_SLICE_SIZE_BYTES,
+        AddCanisterChangeToHistory, CanisterManager, CanisterManagerError, CanisterMgrConfig,
+        DtsInstallCodeResult, InstallCodeContext, MAX_SLICE_SIZE_BYTES, StopCanisterResult,
+        WasmSource, uninstall_canister,
     },
     canister_settings::CanisterSettings,
-    execution_environment::{as_round_instructions, CompilationCostHandling, RoundCounters},
+    execution_environment::{CompilationCostHandling, RoundCounters, as_round_instructions},
     hypervisor::Hypervisor,
     types::{IngressResponse, Response},
-    IngressHistoryWriterImpl, RoundLimits,
 };
 use assert_matches::assert_matches;
 use candid::{CandidType, Decode, Encode};
 use ic_base_types::{EnvironmentVariables, NumSeconds, PrincipalId};
 use ic_config::{
     execution_environment::{
-        Config, CANISTER_GUARANTEED_CALLBACK_QUOTA, DEFAULT_WASM_MEMORY_LIMIT,
-        MAX_ENVIRONMENT_VARIABLES, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
-        MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH, MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
+        CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, DEFAULT_WASM_MEMORY_LIMIT,
+        MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH, MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
+        MAX_ENVIRONMENT_VARIABLES, MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
         SUBNET_CALLBACK_SOFT_LIMIT,
     },
     flag_status::FlagStatus,
@@ -26,7 +25,7 @@ use ic_config::{
 };
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::{
-    wasm_utils::instrumentation::{instruction_to_cost, WasmMemoryType},
+    wasm_utils::instrumentation::{WasmMemoryType, instruction_to_cost},
     wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits},
 };
 use ic_error_types::{ErrorCode, UserError};
@@ -37,56 +36,57 @@ use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
     CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgsBuilder,
     CanisterSnapshotResponse, CanisterStatusResultV2, CanisterStatusType, CanisterUpgradeOptions,
-    ChunkHash, ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, EnvironmentVariable,
+    ChunkHash, ClearChunkStoreArgs, CreateCanisterArgs, EmptyBlob, EnvironmentVariable, IC_00,
     InstallCodeArgsV2, LoadCanisterSnapshotArgs, Method, NodeMetricsHistoryArgs,
     NodeMetricsHistoryResponse, OnLowWasmMemoryHookStatus, Payload, RenameCanisterArgs,
     RenameToArgs, StoredChunksArgs, StoredChunksReply, SubnetInfoArgs, SubnetInfoResponse,
     TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadChunkArgs, UploadChunkReply,
-    WasmMemoryPersistence, IC_00,
+    WasmMemoryPersistence,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
+use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    CallContextManager, CallOrigin, CanisterState, CanisterStatus, ReplicatedState,
     canister_state::system_state::{
-        wasm_chunk_store::{self, ChunkValidationResult},
         CyclesUseCase,
+        wasm_chunk_store::{self, ChunkValidationResult},
     },
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, SystemStateTesting},
-    CallContextManager, CallOrigin, CanisterState, CanisterStatus, ReplicatedState,
 };
 use ic_state_machine_tests::{
-    two_subnets_simple, StateMachine, StateMachineBuilder, StateMachineConfig,
+    StateMachine, StateMachineBuilder, StateMachineConfig, two_subnets_simple,
 };
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     state_manager::FakeStateManager,
-    universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM},
+    universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm},
 };
 use ic_test_utilities_execution_environment::{
-    assert_delta, cycles_reserved_for_app_and_verified_app_subnets, get_reply,
+    ExecutionTest, ExecutionTestBuilder, assert_delta,
+    cycles_reserved_for_app_and_verified_app_subnets, get_reply,
     get_routing_table_with_specified_ids_allocation_range, wasm_compilation_cost, wat_canister,
-    wat_compilation_cost, wat_fn, ExecutionTest, ExecutionTestBuilder,
+    wat_compilation_cost, wat_fn,
 };
 use ic_test_utilities_state::{
-    get_running_canister, get_stopped_canister, get_stopped_canister_with_controller,
-    get_stopping_canister, CallContextBuilder, CanisterStateBuilder, ReplicatedStateBuilder,
+    CallContextBuilder, CanisterStateBuilder, ReplicatedStateBuilder, get_running_canister,
+    get_stopped_canister, get_stopped_canister_with_controller, get_stopping_canister,
 };
 use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
     messages::{IngressBuilder, RequestBuilder},
 };
 use ic_types::{
-    batch::CanisterCyclesCostSchedule,
-    ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CallbackId, CanisterCall, StopCanisterCallId, StopCanisterContext, NO_DEADLINE},
-    nominal_cycles::NominalCycles,
-    time::UNIX_EPOCH,
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, SubnetId, UserId,
+    batch::CanisterCyclesCostSchedule,
+    ingress::{IngressState, IngressStatus, WasmResult},
+    messages::{CallbackId, CanisterCall, NO_DEADLINE, StopCanisterCallId, StopCanisterContext},
+    nominal_cycles::NominalCycles,
+    time::UNIX_EPOCH,
 };
 use ic_universal_canister::PayloadBuilder;
 use ic_wasm_types::CanisterModule;
@@ -471,9 +471,10 @@ fn upgrade_non_existing_canister_fails() {
         .upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterNotFound);
-    assert!(err
-        .description()
-        .contains(&format!("Canister {} not found", canister_id)));
+    assert!(
+        err.description()
+            .contains(&format!("Canister {} not found", canister_id))
+    );
 }
 
 #[test]
@@ -484,9 +485,10 @@ fn upgrade_canister_with_no_wasm_fails() {
         .upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterWasmModuleNotFound);
-    assert!(err
-        .description()
-        .contains("the canister contains no Wasm module"));
+    assert!(
+        err.description()
+            .contains("the canister contains no Wasm module")
+    );
 }
 
 #[test]
@@ -938,9 +940,10 @@ fn install_puts_canister_back_after_invalid_wasm() {
         .unwrap_err();
 
     assert_eq!(err.code(), ErrorCode::CanisterInvalidWasm);
-    assert!(err
-        .description()
-        .contains("Canister's Wasm module is not valid"));
+    assert!(
+        err.description()
+            .contains("Canister's Wasm module is not valid")
+    );
     // Canister should still be in the replicated state.
     assert!(test.state().canister_state(&canister_id).is_some());
 }
@@ -1014,10 +1017,11 @@ fn stop_a_running_canister() {
     );
 
     // It should also be ready to stop.
-    assert!(test
-        .canister_state(canister_id)
-        .system_state
-        .ready_to_stop());
+    assert!(
+        test.canister_state(canister_id)
+            .system_state
+            .ready_to_stop()
+    );
 }
 
 #[test]
@@ -1138,9 +1142,10 @@ fn stop_a_non_existing_canister() {
         .unwrap_err();
 
     assert_eq!(err.code(), ErrorCode::CanisterNotFound);
-    assert!(err
-        .description()
-        .contains(&format!("Canister {} not found", non_existing_canister_id)));
+    assert!(
+        err.description()
+            .contains(&format!("Canister {} not found", non_existing_canister_id))
+    );
 }
 
 #[test]
@@ -1448,9 +1453,10 @@ fn delete_non_existing_canister_fails() {
 
     let err = test.delete_canister(canister_id).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterNotFound);
-    assert!(err
-        .description()
-        .contains(&format!("Canister {} not found", canister_id)));
+    assert!(
+        err.description()
+            .contains(&format!("Canister {} not found", canister_id))
+    );
 }
 
 #[test]
@@ -2601,9 +2607,10 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
         .unwrap_err();
 
     assert_eq!(err.code(), ErrorCode::InsufficientMemoryAllocation);
-    assert!(err
-        .description()
-        .contains("Canister was given 64.44 KiB memory allocation but at least"));
+    assert!(
+        err.description()
+            .contains("Canister was given 64.44 KiB memory allocation but at least")
+    );
 
     // canister history memory usage at the beginning of update_settings
     let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
@@ -2653,11 +2660,13 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
     };
     store.insert_chunk(validated_chunk);
 
-    assert!(state
-        .canister_state(&canister_test_id(0))
-        .unwrap()
-        .execution_state
-        .is_some());
+    assert!(
+        state
+            .canister_state(&canister_test_id(0))
+            .unwrap()
+            .execution_state
+            .is_some()
+    );
 
     assert_eq!(
         state
@@ -2975,7 +2984,10 @@ fn fails_with_missing_main_memory_option_for_enhanced_orthogonal_persistence() {
         )
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
-    assert_eq!(error.description(), "Missing upgrade option: Enhanced orthogonal persistence requires the `wasm_memory_persistence` upgrade option.");
+    assert_eq!(
+        error.description(),
+        "Missing upgrade option: Enhanced orthogonal persistence requires the `wasm_memory_persistence` upgrade option."
+    );
 }
 
 #[test]
@@ -3003,7 +3015,10 @@ fn fails_with_missing_upgrade_option_for_enhanced_orthogonal_persistence() {
         .upgrade_canister(canister_id, version2_wasm)
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
-    assert_eq!(error.description(), "Missing upgrade option: Enhanced orthogonal persistence requires the `wasm_memory_persistence` upgrade option.");
+    assert_eq!(
+        error.description(),
+        "Missing upgrade option: Enhanced orthogonal persistence requires the `wasm_memory_persistence` upgrade option."
+    );
 }
 
 #[test]
@@ -3042,7 +3057,10 @@ fn fails_when_keeping_main_memory_without_enhanced_orthogonal_persistence() {
             )
             .unwrap_err();
         assert_eq!(error.code(), ErrorCode::CanisterContractViolation);
-        assert_eq!(error.description(), "Invalid upgrade option: The `wasm_memory_persistence: opt Keep` upgrade option requires that the new canister module supports enhanced orthogonal persistence.");
+        assert_eq!(
+            error.description(),
+            "Invalid upgrade option: The `wasm_memory_persistence: opt Keep` upgrade option requires that the new canister module supports enhanced orthogonal persistence."
+        );
     }
 }
 
@@ -4945,12 +4963,14 @@ fn update_settings_respects_reserved_cycles_limit_on_memory_allocation() {
         err.code(),
         ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
     );
-    assert!(err
-        .description()
-        .contains("Cannot increase memory allocation"));
-    assert!(err
-        .description()
-        .contains("due to its reserved cycles limit"));
+    assert!(
+        err.description()
+            .contains("Cannot increase memory allocation")
+    );
+    assert!(
+        err.description()
+            .contains("due to its reserved cycles limit")
+    );
 }
 
 #[test]
@@ -4990,9 +5010,10 @@ fn install_respects_reserved_cycles_limit_on_memory_grow() {
         ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
     );
     assert!(err.description().contains("Canister cannot grow memory by"));
-    assert!(err
-        .description()
-        .contains("due to its reserved cycles limit"));
+    assert!(
+        err.description()
+            .contains("due to its reserved cycles limit")
+    );
 }
 
 #[test]
@@ -5779,12 +5800,13 @@ fn clear_chunk_store_works() {
         initial_memory_usage,
         test.canister_state(canister_id).memory_usage()
     );
-    assert!(test
-        .canister_state(canister_id)
-        .system_state
-        .wasm_chunk_store
-        .get_chunk_data(&hash)
-        .is_some());
+    assert!(
+        test.canister_state(canister_id)
+            .system_state
+            .wasm_chunk_store
+            .get_chunk_data(&hash)
+            .is_some()
+    );
 
     // After clearing, the chunk should be absent and memory usage should be
     // zero.
@@ -5797,12 +5819,13 @@ fn clear_chunk_store_works() {
         test.canister_state(canister_id).memory_usage(),
         initial_memory_usage
     );
-    assert!(test
-        .canister_state(canister_id)
-        .system_state
-        .wasm_chunk_store
-        .get_chunk_data(&hash)
-        .is_none());
+    assert!(
+        test.canister_state(canister_id)
+            .system_state
+            .wasm_chunk_store
+            .get_chunk_data(&hash)
+            .is_none()
+    );
 }
 
 #[test]
@@ -6070,11 +6093,13 @@ fn chunk_store_methods_succeed_from_canister_itself() {
         .canister_from_cycles_and_binary(CYCLES, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
 
-    assert!(!test
-        .canister_state(uc)
-        .system_state
-        .controllers
-        .contains(&uc.into()));
+    assert!(
+        !test
+            .canister_state(uc)
+            .system_state
+            .controllers
+            .contains(&uc.into())
+    );
 
     let methods = [
         (

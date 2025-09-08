@@ -8,12 +8,12 @@ use crate::protocol::structs;
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_management_canister_types_private::Global;
 use ic_replicated_state::{
+    NumWasmPages,
     page_map::{
         BaseFileSerialization, CheckpointSerialization, MappingSerialization,
         OverlayFileSerialization, PageAllocatorSerialization, PageMapSerialization,
         StorageSerialization,
     },
-    NumWasmPages,
 };
 use ic_types::CanisterId;
 use serde::{Deserialize, Serialize};
@@ -321,8 +321,8 @@ mod tests {
     use ic_config::{flag_status::FlagStatus, subnet_config::CyclesAccountManagerConfig};
     use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
     use ic_embedders::wasmtime_embedder::system_api::{
-        sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
-        InstructionLimits,
+        ApiType, ExecutionParameters, InstructionLimits,
+        sandbox_safe_system_state::SandboxSafeSystemState,
     };
     use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
     use ic_registry_subnet_type::SubnetType;
@@ -331,10 +331,10 @@ mod tests {
     };
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::{
+        ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId, Time,
         batch::CanisterCyclesCostSchedule,
         messages::{CallContextId, RequestMetadata},
         methods::{FuncRef, WasmMethod},
-        ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId, Time,
     };
 
     use crate::protocol::{

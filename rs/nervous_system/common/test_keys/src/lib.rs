@@ -1,5 +1,5 @@
 use ic_base_types::PrincipalId;
-use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair};
+use ic_canister_client_sender::{Ed25519KeyPair, ed25519_public_key_to_der};
 use ic_types::crypto::{AlgorithmId, UserPublicKey};
 use lazy_static::lazy_static;
 use rand::SeedableRng;

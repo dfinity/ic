@@ -1,10 +1,10 @@
 use crate::{
-    app_subnet_recovery, app_subnet_recovery::AppSubnetRecovery, error::RecoveryError,
-    nns_recovery_failover_nodes, nns_recovery_failover_nodes::NNSRecoveryFailoverNodes,
-    nns_recovery_same_nodes, nns_recovery_same_nodes::NNSRecoverySameNodes, steps::Step,
-    RecoveryResult,
+    RecoveryResult, app_subnet_recovery, app_subnet_recovery::AppSubnetRecovery,
+    error::RecoveryError, nns_recovery_failover_nodes,
+    nns_recovery_failover_nodes::NNSRecoveryFailoverNodes, nns_recovery_same_nodes,
+    nns_recovery_same_nodes::NNSRecoverySameNodes, steps::Step,
 };
-use slog::{info, warn, Logger};
+use slog::{Logger, info, warn};
 use strum::EnumMessage;
 
 use std::{fmt::Debug, iter::Peekable};

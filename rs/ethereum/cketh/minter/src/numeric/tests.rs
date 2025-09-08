@@ -65,7 +65,7 @@ mod transaction_nonce {
 }
 
 mod wei {
-    use crate::numeric::{wei_from_milli_ether, Wei};
+    use crate::numeric::{Wei, wei_from_milli_ether};
 
     #[test]
     fn should_not_overflow_when_converting_from_milli_ether() {

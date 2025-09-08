@@ -1,8 +1,8 @@
 use crate::messages::RequestBuilder;
 use ic_types::{
+    CanisterId,
     messages::{Request, RequestOrResponse},
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
-    CanisterId,
 };
 
 pub struct StreamSliceBuilder {

@@ -7,8 +7,8 @@ use ic_nns_governance::timer_tasks::schedule_tasks;
 use ic_nns_governance::{
     governance::{Governance, REWARD_DISTRIBUTION_PERIOD_SECONDS},
     pb::v1::{
-        proposal::Action, Ballot, Proposal, ProposalData, ProposalRewardStatus, Topic, Vote,
-        WaitForQuietState,
+        Ballot, Proposal, ProposalData, ProposalRewardStatus, Topic, Vote, WaitForQuietState,
+        proposal::Action,
     },
     proposals::sum_weighted_voting_power,
 };

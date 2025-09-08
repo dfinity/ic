@@ -1,8 +1,8 @@
 use crate::pb::v1::{
-    sns_init_payload, DappCanisters, DeveloperDistribution, FractionalDeveloperVotingPower,
-    NeuronDistribution, SnsInitPayload, SwapDistribution, TreasuryDistribution,
+    DappCanisters, DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution,
+    SnsInitPayload, SwapDistribution, TreasuryDistribution, sns_init_payload,
 };
-use ic_nns_governance_api::{create_service_nervous_system, CreateServiceNervousSystem};
+use ic_nns_governance_api::{CreateServiceNervousSystem, create_service_nervous_system};
 
 fn divide_perfectly(field_name: &str, dividend: u64, divisor: u64) -> Result<u64, String> {
     match dividend.checked_rem(divisor) {

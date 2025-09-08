@@ -3,7 +3,7 @@ use crate::canister_state::queues::pb_queues;
 use assert_matches::assert_matches;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
-use ic_types::messages::{Payload, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64};
+use ic_types::messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, Payload};
 use ic_types::time::UNIX_EPOCH;
 use maplit::btreeset;
 use std::collections::BTreeSet;
@@ -326,9 +326,10 @@ fn test_expiration_of_non_expiring_messages() {
 
     // No messages are expiring.
     assert!(!pool.has_expired_deadlines(Time::from_nanos_since_unix_epoch(u64::MAX)));
-    assert!(pool
-        .expire_messages(Time::from_nanos_since_unix_epoch(u64::MAX))
-        .is_empty());
+    assert!(
+        pool.expire_messages(Time::from_nanos_since_unix_epoch(u64::MAX))
+            .is_empty()
+    );
 
     // Sanity check.
     assert_eq!(4, pool.len());

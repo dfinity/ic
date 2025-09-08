@@ -46,7 +46,7 @@ use std::net::Ipv4Addr;
 use std::time::Duration;
 use tokio::runtime::Runtime;
 
-use anyhow::{anyhow, format_err, Error};
+use anyhow::{Error, anyhow, format_err};
 
 use candid::Encode;
 

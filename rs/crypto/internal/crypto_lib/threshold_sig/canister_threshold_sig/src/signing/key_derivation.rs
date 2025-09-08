@@ -1,5 +1,5 @@
 use crate::*;
-use ic_crypto_internal_hmac::{hkdf, Hmac, Sha512};
+use ic_crypto_internal_hmac::{Hmac, Sha512, hkdf};
 
 /// Derivation Index
 ///

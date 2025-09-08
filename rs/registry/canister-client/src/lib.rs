@@ -4,9 +4,9 @@
 
 use async_trait::async_trait;
 use ic_interfaces_registry::{RegistryClientResult, RegistryClientVersionedResult};
+use ic_types::RegistryVersion;
 use ic_types::registry::RegistryClientError;
 use ic_types::registry::RegistryClientError::DecodeError;
-use ic_types::RegistryVersion;
 use std::collections::{BTreeMap, HashSet};
 
 mod stable_canister_client;

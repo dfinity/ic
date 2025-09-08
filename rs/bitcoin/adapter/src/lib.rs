@@ -5,7 +5,7 @@
 //! component to provide blocks and collect outgoing transactions.
 
 use bitcoin::p2p::message::NetworkMessage;
-use bitcoin::{block::Header as BlockHeader, BlockHash};
+use bitcoin::{BlockHash, block::Header as BlockHeader};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use std::{
@@ -52,7 +52,7 @@ mod transaction_store;
 mod get_successors_handler;
 
 pub use common::{AdapterNetwork, BlockLike};
-pub use config::{address_limits, Config, IncomingSource};
+pub use config::{Config, IncomingSource, address_limits};
 
 use crate::{
     blockchainstate::BlockchainState, get_successors_handler::GetSuccessorsHandler,

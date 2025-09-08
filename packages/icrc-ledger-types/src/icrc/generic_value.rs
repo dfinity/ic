@@ -299,7 +299,10 @@ impl TryFrom<Value> for Account {
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         let mut array = value.as_array()?;
         if array.len() > 2 {
-            return Err(format!("Account should be an array of either one or two elements but found an array of {} elements", array.len()));
+            return Err(format!(
+                "Account should be an array of either one or two elements but found an array of {} elements",
+                array.len()
+            ));
         }
         let owner = Principal::try_from_slice(array.remove(0).as_blob()?.as_slice())
             .map_err(|err| format!("Unable to decode the owner of the account, error {err}"))?;
@@ -523,7 +526,7 @@ fn test_test_vectors() {
 #[cfg(test)]
 pub fn arb_value() -> impl proptest::prelude::Strategy<Value = Value> {
     use num_bigint::{BigInt, Sign};
-    use proptest::prelude::{any, prop_oneof, Just};
+    use proptest::prelude::{Just, any, prop_oneof};
     use proptest::strategy::Strategy;
 
     // https://altsysrq.github.io/proptest-book/proptest/tutorial/recursive.html

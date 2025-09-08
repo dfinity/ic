@@ -7,13 +7,13 @@ use std::{
 };
 
 use axum::{
+    Router,
     body::Body,
     extract::{Path, Request},
     http::{HeaderMap, HeaderName, Method, StatusCode},
     middleware::map_response,
     response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
-    Router,
 };
 use clap::Parser;
 use hyper::body::Incoming;
@@ -27,7 +27,7 @@ use serde_json::json;
 use tokio::{
     net::TcpListener,
     select, signal,
-    time::{sleep, Duration},
+    time::{Duration, sleep},
 };
 use tokio_rustls::TlsAcceptor;
 use tower::Service;

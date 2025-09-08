@@ -6,7 +6,7 @@ use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common::{
-    ledger::compute_neuron_staking_subaccount_bytes, ONE_DAY_SECONDS, ONE_YEAR_SECONDS,
+    ONE_DAY_SECONDS, ONE_YEAR_SECONDS, ledger::compute_neuron_staking_subaccount_bytes,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
@@ -16,18 +16,18 @@ use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::governance::INITIAL_NEURON_DISSOLVE_DELAY;
 use ic_nns_governance_api::{
+    Account as GovernanceAccount, GovernanceError, ListNeurons, MakeProposalRequest, ManageNeuron,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Motion, Neuron,
+    NeuronState, ProposalActionRequest, Topic,
     governance_error::ErrorType,
     list_neurons::NeuronSubaccount,
     manage_neuron::{Command, DisburseMaturity, Merge, NeuronIdOrSubaccount, Spawn},
     manage_neuron_response::{self, Command as CommandResponse},
     neuron::DissolveState,
-    Account as GovernanceAccount, GovernanceError, ListNeurons, MakeProposalRequest, ManageNeuron,
-    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Motion, Neuron,
-    NeuronState, ProposalActionRequest, Topic,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
     state_test_helpers::{
         ledger_account_balance, list_neurons, list_neurons_by_principal, nns_add_hot_key,
         nns_claim_or_refresh_neuron, nns_disburse_maturity, nns_disburse_neuron,
@@ -40,8 +40,8 @@ use ic_nns_test_utils::{
 };
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
-    protobuf::AccountIdentifier as AccountIdentifierProto, tokens_from_proto, AccountBalanceArgs,
-    AccountIdentifier, BinaryAccountBalanceArgs, Subaccount, Tokens,
+    AccountBalanceArgs, AccountIdentifier, BinaryAccountBalanceArgs, Subaccount, Tokens,
+    protobuf::AccountIdentifier as AccountIdentifierProto, tokens_from_proto,
 };
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -690,7 +690,7 @@ fn check_state_machine_tla_traces(
 ) {
     use candid::{Decode, Encode};
     use canister_test::WasmResult;
-    use ic_nns_governance::governance::tla::{perform_trace_check, UpdateTrace};
+    use ic_nns_governance::governance::tla::{UpdateTrace, perform_trace_check};
     let wasm_res = sm
         .query(
             gov_canister_id,

@@ -555,11 +555,10 @@ where
         funds,
     ) {
         0 => Ok(()),
-        err_code =>
-            Err(format!("ic0.call_perform returned the error code '{}' indicating the call could not be made, when calling {} on canister {:?}",
-                        err_code,
-                        method,
-                        id)),
+        err_code => Err(format!(
+            "ic0.call_perform returned the error code '{}' indicating the call could not be made, when calling {} on canister {:?}",
+            err_code, method, id
+        )),
     }
 }
 

@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod prost {
     use ic_protobuf::messaging::xnet::v1::{
-        witness::{Fork, Known, WitnessEnum},
         Witness,
+        witness::{Fork, Known, WitnessEnum},
     };
     use prost::{DecodeError, Message};
 
@@ -48,17 +48,19 @@ mod prost {
         // refuse to decode it.
         let witness = recursive_witness(50);
         let result = encoding_roundtrip(&witness);
-        assert!(result
-            .expect_err("recursion limit not reached")
-            .to_string()
-            .contains("recursion limit reached"));
+        assert!(
+            result
+                .expect_err("recursion limit not reached")
+                .to_string()
+                .contains("recursion limit reached")
+        );
     }
 }
 
 #[cfg(test)]
 mod serde_cbor {
     use assert_matches::assert_matches;
-    use serde_cbor::{from_slice, Value};
+    use serde_cbor::{Value, from_slice};
 
     /// Returns a CBOR encoded vector containing a vector, containing a vector, etc.
     /// recursively to the requested depth.
@@ -84,17 +86,19 @@ mod serde_cbor {
 
         // But not a recursive array of depth 128.
         let buf = recursive_vec(128);
-        assert!(from_slice::<Value>(&buf)
-            .expect_err("recursion limit not reached")
-            .to_string()
-            .contains("recursion limit exceeded"));
+        assert!(
+            from_slice::<Value>(&buf)
+                .expect_err("recursion limit not reached")
+                .to_string()
+                .contains("recursion limit exceeded")
+        );
     }
 }
 
 #[cfg(test)]
 mod serde_json {
     use assert_matches::assert_matches;
-    use serde_json::{from_slice, Value};
+    use serde_json::{Value, from_slice};
 
     /// Returns a JSON encoded vector containing a vector, containing a vector, etc.
     /// recursively to the requested depth.
@@ -116,9 +120,11 @@ mod serde_json {
 
         // But not a recursive array of depth 128.
         let buf = recursive_vec(128);
-        assert!(from_slice::<Value>(&buf)
-            .expect_err("recursion limit not reached")
-            .to_string()
-            .contains("recursion limit exceeded"));
+        assert!(
+            from_slice::<Value>(&buf)
+                .expect_err("recursion limit not reached")
+                .to_string()
+                .contains("recursion limit exceeded")
+        );
     }
 }

@@ -1,11 +1,12 @@
 //! Module that deals with requests to /api/{v3,v4}/canister/.../call.
 
 use super::{
-    ingress_watcher::{IngressWatcherHandle, SubscriptionError},
     IngressError, IngressValidator,
+    ingress_watcher::{IngressWatcherHandle, SubscriptionError},
 };
 use crate::{
-    common::{into_cbor, Cbor, WithTimeout},
+    HttpError,
+    common::{Cbor, WithTimeout, into_cbor},
     metrics::{
         HttpHandlerMetrics, SYNC_CALL_EARLY_RESPONSE_CERTIFICATION_TIMEOUT,
         SYNC_CALL_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION,
@@ -14,18 +15,17 @@ use crate::{
         SYNC_CALL_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT, SYNC_CALL_STATUS_IS_INVALID_UTF8,
         SYNC_CALL_STATUS_IS_NOT_LEAF,
     },
-    HttpError,
 };
 use axum::{
+    Router,
     body::Body,
     extract::{DefaultBodyLimit, State},
     response::{IntoResponse, Response},
-    Router,
 };
 use http::Request;
 use hyper::StatusCode;
 use ic_crypto_tree_hash::{
-    sparse_labeled_tree_from_paths, Label, LookupStatus, MixedHashTree, Path,
+    Label, LookupStatus, MixedHashTree, Path, sparse_labeled_tree_from_paths,
 };
 use ic_error_types::UserError;
 use ic_interfaces_state_manager::StateReader;
@@ -33,14 +33,14 @@ use ic_logger::{error, warn};
 use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    CanisterId,
     consensus::certification::Certification,
     messages::{Blob, Certificate, HttpCallContent, HttpRequestEnvelope, MessageId},
-    CanisterId,
 };
 use serde_cbor::Value as CBOR;
 use std::{collections::BTreeMap, convert::Infallible, sync::Arc, time::Duration};
 use tokio_util::time::FutureExt;
-use tower::{util::BoxCloneService, ServiceBuilder};
+use tower::{ServiceBuilder, util::BoxCloneService};
 
 const LOG_EVERY_N_SECONDS: i32 = 10;
 

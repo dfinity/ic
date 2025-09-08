@@ -8,14 +8,14 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
+    Cycles, ExecutionRound, Height, NodeId, NumInstructions, Randomness, RegistryVersion,
+    ReplicaVersion, Time,
     batch::{CanisterCyclesCostSchedule, ChainKeyData},
     ingress::{IngressStatus, WasmResult},
     messages::{
         CertificateDelegation, CertificateDelegationMetadata, MessageId, Query,
         SignedIngressContent,
     },
-    Cycles, ExecutionRound, Height, NodeId, NumInstructions, Randomness, RegistryVersion,
-    ReplicaVersion, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -1474,11 +1474,13 @@ impl fmt::Display for WasmExecutionOutput {
             },
             Err(err) => format!("{}", err),
         };
-        write!(f, "wasm_result => [{}], instructions left => {}, instance_stats => [ accessed pages => {}, dirty pages => {}]",
-               wasm_result_str,
-               self.num_instructions_left,
-               self.instance_stats.wasm_accessed_pages + self.instance_stats.stable_accessed_pages,
-               self.instance_stats.wasm_dirty_pages + self.instance_stats.stable_dirty_pages,
+        write!(
+            f,
+            "wasm_result => [{}], instructions left => {}, instance_stats => [ accessed pages => {}, dirty pages => {}]",
+            wasm_result_str,
+            self.num_instructions_left,
+            self.instance_stats.wasm_accessed_pages + self.instance_stats.stable_accessed_pages,
+            self.instance_stats.wasm_dirty_pages + self.instance_stats.stable_dirty_pages,
         )
     }
 }
@@ -1504,89 +1506,121 @@ mod tests {
     fn test_subnet_available_memory() {
         let mut available: SubnetAvailableMemory =
             SubnetAvailableMemory::new_for_testing(1 << 30, (1 << 30) - 5, 1 << 20);
-        assert!(available
-            .try_decrement(NumBytes::from(10), NumBytes::from(5), NumBytes::from(5))
-            .is_ok());
-        assert!(available
-            .try_decrement(
-                NumBytes::from((1 << 30) - 10),
-                NumBytes::from((1 << 30) - 10),
-                NumBytes::from(0),
-            )
-            .is_ok());
-        assert!(available
-            .try_decrement(NumBytes::from(1), NumBytes::from(1), NumBytes::from(1))
-            .is_err());
-        assert!(available
-            .try_decrement(NumBytes::from(1), NumBytes::from(0), NumBytes::from(0))
-            .is_err());
+        assert!(
+            available
+                .try_decrement(NumBytes::from(10), NumBytes::from(5), NumBytes::from(5))
+                .is_ok()
+        );
+        assert!(
+            available
+                .try_decrement(
+                    NumBytes::from((1 << 30) - 10),
+                    NumBytes::from((1 << 30) - 10),
+                    NumBytes::from(0),
+                )
+                .is_ok()
+        );
+        assert!(
+            available
+                .try_decrement(NumBytes::from(1), NumBytes::from(1), NumBytes::from(1))
+                .is_err()
+        );
+        assert!(
+            available
+                .try_decrement(NumBytes::from(1), NumBytes::from(0), NumBytes::from(0))
+                .is_err()
+        );
 
         let mut available: SubnetAvailableMemory =
             SubnetAvailableMemory::new_for_testing(1 << 30, (1 << 30) - 5, 1 << 20);
-        assert!(available
-            .try_decrement(NumBytes::from(10), NumBytes::from(5), NumBytes::from(5))
-            .is_ok());
-        assert!(available
-            .try_decrement(
-                NumBytes::from((1 << 20) - 5),
-                NumBytes::from(0),
-                NumBytes::from((1 << 20) - 5),
-            )
-            .is_ok());
-        assert!(available
-            .try_decrement(NumBytes::from(1), NumBytes::from(1), NumBytes::from(1))
-            .is_err());
-        assert!(available
-            .try_decrement(NumBytes::from(1), NumBytes::from(0), NumBytes::from(0))
-            .is_ok());
+        assert!(
+            available
+                .try_decrement(NumBytes::from(10), NumBytes::from(5), NumBytes::from(5))
+                .is_ok()
+        );
+        assert!(
+            available
+                .try_decrement(
+                    NumBytes::from((1 << 20) - 5),
+                    NumBytes::from(0),
+                    NumBytes::from((1 << 20) - 5),
+                )
+                .is_ok()
+        );
+        assert!(
+            available
+                .try_decrement(NumBytes::from(1), NumBytes::from(1), NumBytes::from(1))
+                .is_err()
+        );
+        assert!(
+            available
+                .try_decrement(NumBytes::from(1), NumBytes::from(0), NumBytes::from(0))
+                .is_ok()
+        );
 
         let mut available: SubnetAvailableMemory =
             SubnetAvailableMemory::new_for_testing(1 << 30, -1, -1);
-        assert!(available
-            .try_decrement(NumBytes::from(1), NumBytes::from(1), NumBytes::from(1))
-            .is_err());
-        assert!(available
-            .try_decrement(NumBytes::from(10), NumBytes::from(0), NumBytes::from(0))
-            .is_ok());
-        assert!(available
-            .try_decrement(
-                NumBytes::from((1 << 30) - 10),
-                NumBytes::from(0),
-                NumBytes::from(0)
-            )
-            .is_ok());
-        assert!(available
-            .try_decrement(NumBytes::from(1), NumBytes::from(0), NumBytes::from(0))
-            .is_err());
+        assert!(
+            available
+                .try_decrement(NumBytes::from(1), NumBytes::from(1), NumBytes::from(1))
+                .is_err()
+        );
+        assert!(
+            available
+                .try_decrement(NumBytes::from(10), NumBytes::from(0), NumBytes::from(0))
+                .is_ok()
+        );
+        assert!(
+            available
+                .try_decrement(
+                    NumBytes::from((1 << 30) - 10),
+                    NumBytes::from(0),
+                    NumBytes::from(0)
+                )
+                .is_ok()
+        );
+        assert!(
+            available
+                .try_decrement(NumBytes::from(1), NumBytes::from(0), NumBytes::from(0))
+                .is_err()
+        );
 
-        assert!(available
-            .try_decrement(
-                NumBytes::from(u64::MAX),
-                NumBytes::from(0),
-                NumBytes::from(0)
-            )
-            .is_err());
-        assert!(available
-            .try_decrement(
-                NumBytes::from(u64::MAX),
-                NumBytes::from(u64::MAX),
-                NumBytes::from(u64::MAX)
-            )
-            .is_err());
-        assert!(available
-            .try_decrement(
-                NumBytes::from(i64::MAX as u64 + 1),
-                NumBytes::from(0),
-                NumBytes::from(0)
-            )
-            .is_err());
-        assert!(available
-            .try_decrement(
-                NumBytes::from(i64::MAX as u64 + 1),
-                NumBytes::from(i64::MAX as u64 + 1),
-                NumBytes::from(i64::MAX as u64 + 1),
-            )
-            .is_err());
+        assert!(
+            available
+                .try_decrement(
+                    NumBytes::from(u64::MAX),
+                    NumBytes::from(0),
+                    NumBytes::from(0)
+                )
+                .is_err()
+        );
+        assert!(
+            available
+                .try_decrement(
+                    NumBytes::from(u64::MAX),
+                    NumBytes::from(u64::MAX),
+                    NumBytes::from(u64::MAX)
+                )
+                .is_err()
+        );
+        assert!(
+            available
+                .try_decrement(
+                    NumBytes::from(i64::MAX as u64 + 1),
+                    NumBytes::from(0),
+                    NumBytes::from(0)
+                )
+                .is_err()
+        );
+        assert!(
+            available
+                .try_decrement(
+                    NumBytes::from(i64::MAX as u64 + 1),
+                    NumBytes::from(i64::MAX as u64 + 1),
+                    NumBytes::from(i64::MAX as u64 + 1),
+                )
+                .is_err()
+        );
 
         let mut available = SubnetAvailableMemory::new_for_testing(44, 45, 30);
         assert_eq!(available.get_execution_memory(), 44);

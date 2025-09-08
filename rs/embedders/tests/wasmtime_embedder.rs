@@ -4,11 +4,12 @@ use ic_config::{
     flag_status::FlagStatus,
 };
 use ic_embedders::{
-    wasm_utils::instrumentation::instruction_to_cost,
     wasm_utils::instrumentation::WasmMemoryType,
+    wasm_utils::instrumentation::instruction_to_cost,
     wasmtime_embedder::{
-        system_api::{sandbox_safe_system_state::CallbackUpdate, ApiType},
-        system_api_complexity, CanisterMemoryType,
+        CanisterMemoryType,
+        system_api::{ApiType, sandbox_safe_system_state::CallbackUpdate},
+        system_api_complexity,
     },
 };
 use ic_interfaces::execution_environment::{
@@ -17,14 +18,14 @@ use ic_interfaces::execution_environment::{
 use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
-use ic_test_utilities_embedders::{WasmtimeInstanceBuilder, DEFAULT_NUM_INSTRUCTIONS};
+use ic_test_utilities_embedders::{DEFAULT_NUM_INSTRUCTIONS, WasmtimeInstanceBuilder};
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
 use ic_types::{
+    Cycles, NumBytes, NumInstructions, PrincipalId,
     ingress::WasmResult,
     messages::RejectContext,
     methods::{FuncRef, WasmClosure, WasmMethod},
     time::UNIX_EPOCH,
-    Cycles, NumBytes, NumInstructions, PrincipalId,
 };
 
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;

@@ -1,8 +1,8 @@
 //! Support for materializing (part of) a [`LazyTree`] as a [`LabeledTree`].
 
 use super::LazyTree;
-use ic_crypto_tree_hash::{FlatMap, LabeledTree};
 use LazyTree::*;
+use ic_crypto_tree_hash::{FlatMap, LabeledTree};
 
 /// A pattern to be used for filtering the parts of a [`LazyTree`] to be
 /// materialized. A [`LabeledTree`] with no values.

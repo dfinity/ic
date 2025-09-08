@@ -16,18 +16,18 @@ use crate::{
 use backoff::ExponentialBackoffBuilder;
 use get_if_addrs::get_if_addrs;
 use ic_config::{
-    metrics::{Config as MetricsConfig, Exporter},
     Config,
+    metrics::{Config as MetricsConfig, Exporter},
 };
 use ic_crypto::CryptoComponent;
-use ic_crypto_node_key_generation::{generate_node_keys_once, NodeKeyGenerationError};
+use ic_crypto_node_key_generation::{NodeKeyGenerationError, generate_node_keys_once};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_image_upgrader::ImageUpgrader;
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_replicator::RegistryReplicator;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::{hostos_version::HostosVersion, ReplicaVersion, SubnetId};
+use ic_types::{ReplicaVersion, SubnetId, hostos_version::HostosVersion};
 use std::{
     collections::HashMap,
     convert::TryFrom,
@@ -122,25 +122,30 @@ impl Orchestrator {
             1,
         );
 
-        UtilityCommand::notify_host("\nONBOARDING MAY NOT YET BE COMPLETE:\nIf a 'Join request successful!' message has NOT yet been logged, please wait for up to 10 minutes...\n", 3);
+        UtilityCommand::notify_host(
+            "\nONBOARDING MAY NOT YET BE COMPLETE:\nIf a 'Join request successful!' message has NOT yet been logged, please wait for up to 10 minutes...\n",
+            3,
+        );
 
         let version = replica_version.clone();
-        thread::spawn(move || loop {
-            // Sleep early because IPv4 takes several minutes to configure
-            thread::sleep(Duration::from_secs(10 * 60));
-            let (ipv4, ipv6) = Self::get_ip_addresses();
+        thread::spawn(move || {
+            loop {
+                // Sleep early because IPv4 takes several minutes to configure
+                thread::sleep(Duration::from_secs(10 * 60));
+                let (ipv4, ipv6) = Self::get_ip_addresses();
 
-            let message = indoc::formatdoc!(
-                r#"
+                let message = indoc::formatdoc!(
+                    r#"
                     Node-id: {node_id}
                     Replica version: {version}
                     IPv6: {ipv6}
                     IPv4: {ipv4}
 
                 "#
-            );
+                );
 
-            UtilityCommand::notify_host(&message, 1);
+                UtilityCommand::notify_host(&message, 1);
+            }
         });
 
         let slog_logger = logger.inner_logger.root.clone();

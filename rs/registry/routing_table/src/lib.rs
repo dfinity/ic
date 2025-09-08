@@ -907,11 +907,12 @@ where
 
         // Ranges are sorted and disjoint.
         if let Some(previous_range) = previous_range
-            && previous_range.end >= range.start {
-                return Err(CanisterIdRangeNotSortedOrNotDisjoint(format!(
-                    "previous_end {} >= current_start {}",
-                    previous_range.end, range.start
-                )));
+            && previous_range.end >= range.start
+        {
+            return Err(CanisterIdRangeNotSortedOrNotDisjoint(format!(
+                "previous_end {} >= current_start {}",
+                previous_range.end, range.start
+            )));
         }
         previous_range = Some(range)
     }

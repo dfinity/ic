@@ -1,8 +1,8 @@
 use anyhow::Result;
 use canister_test::{Canister, Project, Wasm};
-use cycles_minting::{make_user_ed25519, TestAgent, UserHandle};
-use cycles_minting_canister::{TokensToCycles, CREATE_CANISTER_REFUND_FEE, DEFAULT_CYCLES_PER_XDR};
-use dfn_candid::{candid_one, CandidOne};
+use cycles_minting::{TestAgent, UserHandle, make_user_ed25519};
+use cycles_minting_canister::{CREATE_CANISTER_REFUND_FEE, DEFAULT_CYCLES_PER_XDR, TokensToCycles};
+use dfn_candid::{CandidOne, candid_one};
 use ic_canister_client::{HttpClient, Sender};
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_ledger_core::tokens::CheckedAdd;
@@ -469,8 +469,11 @@ pub fn test(env: TestEnv) {
             .unwrap_err();
 
         info!(logger, "error: {}", err);
-        assert!(err
-            .contains("cycles have been minted in the last 3600 seconds, please try again later"));
+        assert!(
+            err.contains(
+                "cycles have been minted in the last 3600 seconds, please try again later"
+            )
+        );
 
         let refund_block = refund_block.unwrap();
         tst.check_refund(

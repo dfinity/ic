@@ -1,7 +1,7 @@
 use anyhow::Result;
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_btc_adapter_test_utils::bitcoin::{hashes::Hash, Txid};
+use ic_btc_adapter_test_utils::bitcoin::{Txid, hashes::Hash};
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
@@ -15,14 +15,14 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::{
-    ckbtc_setup, create_canister, install_bitcoin_canister, install_btc_checker, install_ledger,
-    install_minter, subnet_app, subnet_sys,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, TRANSFER_FEE, ckbtc_setup,
+    create_canister, install_bitcoin_canister, install_btc_checker, install_ledger, install_minter,
+    subnet_app, subnet_sys,
     utils::{
-        generate_blocks, get_btc_address, get_rpc_client, retrieve_btc, send_to_btc_address,
-        wait_for_finalization_no_new_blocks, wait_for_mempool_change, wait_for_update_balance,
-        BITCOIN_NETWORK_TRANSFER_FEE,
+        BITCOIN_NETWORK_TRANSFER_FEE, generate_blocks, get_btc_address, get_rpc_client,
+        retrieve_btc, send_to_btc_address, wait_for_finalization_no_new_blocks,
+        wait_for_mempool_change, wait_for_update_balance,
     },
-    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, TRANSFER_FEE,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::transfer::TransferArg;

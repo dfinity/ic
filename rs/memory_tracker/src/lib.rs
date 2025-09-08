@@ -1,14 +1,14 @@
 use bit_vec::BitVec;
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug};
 use ic_replicated_state::{
-    page_map::{FileDescriptor, MemoryInstructions},
     PageIndex, PageMap,
+    page_map::{FileDescriptor, MemoryInstructions},
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{NumBytes, NumOsPages};
 use nix::{
     errno::Errno,
-    sys::mman::{mmap, mprotect, MapFlags, ProtFlags},
+    sys::mman::{MapFlags, ProtFlags, mmap, mprotect},
 };
 use std::{
     cell::{Cell, RefCell},

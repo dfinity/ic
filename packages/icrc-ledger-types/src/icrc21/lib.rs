@@ -475,7 +475,7 @@ pub fn build_icrc21_consent_info(
                 None => {
                     return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
                         description: "transfer args should be provided".to_string(),
-                    }))
+                    }));
                 }
             };
             display_message_builder = display_message_builder
@@ -497,13 +497,14 @@ pub fn build_icrc21_consent_info(
 
 pub fn icrc21_check_fee(fee: &Option<Nat>, ledger_fee: &Nat) -> Result<(), Icrc21Error> {
     if let Some(fee) = fee
-        && fee != ledger_fee {
-            return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                description: format!(
-                    "The fee specified in the arguments ({}) is different than the ledger fee ({})",
-                    fee, ledger_fee
-                ),
-            }));
-        }
+        && fee != ledger_fee
+    {
+        return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
+            description: format!(
+                "The fee specified in the arguments ({}) is different than the ledger fee ({})",
+                fee, ledger_fee
+            ),
+        }));
+    }
     Ok(())
 }

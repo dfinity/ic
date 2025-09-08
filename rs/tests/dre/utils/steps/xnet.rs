@@ -4,7 +4,7 @@ use ic_system_test_driver::{
     util::runtime_from_url,
 };
 use itertools::Itertools;
-use xnet_slo_test_lib::{test_async_impl, Config};
+use xnet_slo_test_lib::{Config, test_async_impl};
 
 #[derive(Clone)]
 pub struct XNet {

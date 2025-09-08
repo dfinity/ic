@@ -10,9 +10,9 @@ use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
 use ic_ckbtc_minter::state::eventlog::Event;
 use ic_ckbtc_minter::state::{
-    read_state, BtcRetrievalStatusV2, RetrieveBtcStatus, RetrieveBtcStatusV2,
+    BtcRetrievalStatusV2, RetrieveBtcStatus, RetrieveBtcStatusV2, read_state,
 };
-use ic_ckbtc_minter::tasks::{schedule_now, TaskType};
+use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
 use ic_ckbtc_minter::updates::retrieve_btc::{
     RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk, RetrieveBtcWithApprovalArgs,
     RetrieveBtcWithApprovalError,
@@ -22,11 +22,11 @@ use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs,
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
+use ic_ckbtc_minter::{IC_CANISTER_RUNTIME, MinterInfo};
 use ic_ckbtc_minter::{
     state::eventlog::{EventType, GetEventsArg},
     storage, {Log, LogEntry, Priority},
 };
-use ic_ckbtc_minter::{MinterInfo, IC_CANISTER_RUNTIME};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use icrc_ledger_types::icrc1::account::Account;
 use std::str::FromStr;
@@ -268,7 +268,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                         .with_body_and_content_length(
                             "failed to parse the 'account_to_utxos_start' parameter",
                         )
-                        .build()
+                        .build();
                 }
             },
             None => 0,
@@ -287,7 +287,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 Err(_) => {
                     return HttpResponseBuilder::bad_request()
                         .with_body_and_content_length("failed to parse the 'time' parameter")
-                        .build()
+                        .build();
                 }
             },
             None => 0,
@@ -352,7 +352,7 @@ fn main() {}
 /// Checks the real candid interface against the one declared in the did file
 #[test]
 fn check_candid_interface_compatibility() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
 
     fn source_to_str(source: &CandidSource) -> String {
         match source {

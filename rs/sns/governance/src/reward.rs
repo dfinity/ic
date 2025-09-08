@@ -461,7 +461,7 @@ impl Div<Duration> for Duration {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
+    use ic_nervous_system_common::{E8, assert_is_err, assert_is_ok};
     use pretty_assertions::{assert_eq, assert_ne};
 
     const TRANSITION_ROUND_COUNT: u64 = 42;
@@ -597,35 +597,45 @@ mod test {
 
     #[test]
     fn test_round_duration_seconds_validation() {
-        assert_is_err!(VotingRewardsParameters {
-            round_duration_seconds: None,
-            ..VOTING_REWARDS_PARAMETERS
-        }
-        .validate());
-        assert_is_err!(VotingRewardsParameters {
-            round_duration_seconds: Some(0),
-            ..VOTING_REWARDS_PARAMETERS
-        }
-        .validate());
-        assert_is_err!(VotingRewardsParameters {
-            round_duration_seconds: Some(31557601), // 365.25 days + 1 s.
-            ..VOTING_REWARDS_PARAMETERS
-        }
-        .validate());
-        assert_is_ok!(VotingRewardsParameters {
-            round_duration_seconds: Some(31557600), // This is just shy of our "insane" threshold.
-            ..VOTING_REWARDS_PARAMETERS
-        }
-        .validate());
+        assert_is_err!(
+            VotingRewardsParameters {
+                round_duration_seconds: None,
+                ..VOTING_REWARDS_PARAMETERS
+            }
+            .validate()
+        );
+        assert_is_err!(
+            VotingRewardsParameters {
+                round_duration_seconds: Some(0),
+                ..VOTING_REWARDS_PARAMETERS
+            }
+            .validate()
+        );
+        assert_is_err!(
+            VotingRewardsParameters {
+                round_duration_seconds: Some(31557601), // 365.25 days + 1 s.
+                ..VOTING_REWARDS_PARAMETERS
+            }
+            .validate()
+        );
+        assert_is_ok!(
+            VotingRewardsParameters {
+                round_duration_seconds: Some(31557600), // This is just shy of our "insane" threshold.
+                ..VOTING_REWARDS_PARAMETERS
+            }
+            .validate()
+        );
     }
 
     #[test]
     fn test_reward_rate_transition_duration_seconds_validation() {
-        assert_is_err!(VotingRewardsParameters {
-            reward_rate_transition_duration_seconds: None,
-            ..VOTING_REWARDS_PARAMETERS
-        }
-        .validate());
+        assert_is_err!(
+            VotingRewardsParameters {
+                reward_rate_transition_duration_seconds: None,
+                ..VOTING_REWARDS_PARAMETERS
+            }
+            .validate()
+        );
     }
 
     #[test]
@@ -666,16 +676,20 @@ mod test {
 
     #[test]
     fn test_initial_reward_rate_basis_points_validation() {
-        assert_is_err!(VotingRewardsParameters {
-            initial_reward_rate_basis_points: None,
-            ..VOTING_REWARDS_PARAMETERS
-        }
-        .validate());
-        assert_is_err!(VotingRewardsParameters {
-            initial_reward_rate_basis_points: Some(10_001), // > 100%
-            ..VOTING_REWARDS_PARAMETERS
-        }
-        .validate());
+        assert_is_err!(
+            VotingRewardsParameters {
+                initial_reward_rate_basis_points: None,
+                ..VOTING_REWARDS_PARAMETERS
+            }
+            .validate()
+        );
+        assert_is_err!(
+            VotingRewardsParameters {
+                initial_reward_rate_basis_points: Some(10_001), // > 100%
+                ..VOTING_REWARDS_PARAMETERS
+            }
+            .validate()
+        );
 
         let valid = VotingRewardsParameters {
             initial_reward_rate_basis_points: Some(1_00), // 1%
@@ -696,24 +710,30 @@ mod test {
 
     #[test]
     fn test_final_reward_rate_basis_points_validation() {
-        assert_is_err!(VotingRewardsParameters {
-            final_reward_rate_basis_points: None,
-            ..VOTING_REWARDS_PARAMETERS
-        }
-        .validate());
+        assert_is_err!(
+            VotingRewardsParameters {
+                final_reward_rate_basis_points: None,
+                ..VOTING_REWARDS_PARAMETERS
+            }
+            .validate()
+        );
 
         let max = VOTING_REWARDS_PARAMETERS
             .initial_reward_rate_basis_points
             .unwrap();
-        assert_is_ok!(VotingRewardsParameters {
-            final_reward_rate_basis_points: Some(max),
-            ..VOTING_REWARDS_PARAMETERS
-        }
-        .validate());
-        assert_is_err!(VotingRewardsParameters {
-            final_reward_rate_basis_points: Some(max + 1),
-            ..VOTING_REWARDS_PARAMETERS
-        }
-        .validate());
+        assert_is_ok!(
+            VotingRewardsParameters {
+                final_reward_rate_basis_points: Some(max),
+                ..VOTING_REWARDS_PARAMETERS
+            }
+            .validate()
+        );
+        assert_is_err!(
+            VotingRewardsParameters {
+                final_reward_rate_basis_points: Some(max + 1),
+                ..VOTING_REWARDS_PARAMETERS
+            }
+            .validate()
+        );
     }
 }

@@ -1,7 +1,7 @@
 use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
     pb::v1::{
-        update_canister_settings::LogVisibility, GovernanceError, Topic, UpdateCanisterSettings,
+        GovernanceError, Topic, UpdateCanisterSettings, update_canister_settings::LogVisibility,
     },
     proposals::call_canister::CallCanister,
 };

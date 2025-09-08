@@ -1,4 +1,4 @@
-use crate::{balances_len, AccountIdentifier, Ledger, StorableAllowance};
+use crate::{AccountIdentifier, Ledger, StorableAllowance, balances_len};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_canister_core::{
     archive::Archive,
@@ -14,8 +14,8 @@ use ic_ledger_core::{
 };
 use ic_stable_structures::Storable;
 use icp_ledger::{
-    apply_operation, ArchiveOptions, Block, Memo, Operation, PaymentError, Transaction,
-    TransferError, DEFAULT_TRANSFER_FEE,
+    ArchiveOptions, Block, DEFAULT_TRANSFER_FEE, Memo, Operation, PaymentError, Transaction,
+    TransferError, apply_operation,
 };
 use proptest::prelude::{any, prop_assert_eq, proptest};
 use proptest::strategy::Strategy;

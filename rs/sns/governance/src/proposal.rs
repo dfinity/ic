@@ -2,16 +2,24 @@ use crate::{
     cached_upgrade_steps::render_two_versions_as_markdown_table,
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
     extensions::{
+        ValidatedExecuteExtensionOperation, ValidatedRegisterExtension, ValidatedUpgradeExtension,
         validate_execute_extension_operation, validate_register_extension,
-        validate_upgrade_extension, ValidatedExecuteExtensionOperation, ValidatedRegisterExtension,
-        ValidatedUpgradeExtension,
+        validate_upgrade_extension,
     },
     governance::{
-        bytes_to_subaccount, log_prefix, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER,
-        TREASURY_SUBACCOUNT_NONCE,
+        NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER, TREASURY_SUBACCOUNT_NONCE, bytes_to_subaccount,
+        log_prefix,
     },
     logs::{ERROR, INFO},
     pb::v1::{
+        AdvanceSnsTargetVersion, DeregisterDappCanisters, ExecuteExtensionOperation,
+        ExecuteGenericNervousSystemFunction, Governance, GovernanceError, LogVisibility,
+        ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata, MintSnsTokens,
+        Motion, NervousSystemFunction, NervousSystemParameters, Proposal, ProposalData,
+        ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
+        RegisterExtension, SetTopicsForCustomProposals, SnsVersion, Tally, Topic, Topic as TopicPb,
+        TransferSnsTreasuryFunds, UpgradeExtension, UpgradeSnsControlledCanister,
+        UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
         governance::{SnsMetadata, Version},
         governance_error::ErrorType,
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
@@ -22,16 +30,8 @@ use crate::{
             MintSnsTokensActionAuxiliary, TransferSnsTreasuryFundsActionAuxiliary,
         },
         transfer_sns_treasury_funds::TransferFrom,
-        AdvanceSnsTargetVersion, DeregisterDappCanisters, ExecuteExtensionOperation,
-        ExecuteGenericNervousSystemFunction, Governance, GovernanceError, LogVisibility,
-        ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata, MintSnsTokens,
-        Motion, NervousSystemFunction, NervousSystemParameters, Proposal, ProposalData,
-        ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
-        RegisterExtension, SetTopicsForCustomProposals, SnsVersion, Tally, Topic, Topic as TopicPb,
-        TransferSnsTreasuryFunds, UpgradeExtension, UpgradeSnsControlledCanister,
-        UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
     },
-    sns_upgrade::{get_proposal_id_that_added_wasm, get_upgrade_params, UpgradeSnsParams},
+    sns_upgrade::{UpgradeSnsParams, get_proposal_id_that_added_wasm, get_upgrade_params},
     treasury::assess_treasury_balance,
     types::{Environment, Wasm},
     validate_chars_count, validate_len, validate_required_field,
@@ -41,8 +41,8 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{
-    denominations_to_tokens, i2d, ledger::compute_distribution_subaccount_bytes, ledger_validation,
-    DEFAULT_TRANSFER_FEE, E8, ONE_DAY_SECONDS,
+    DEFAULT_TRANSFER_FEE, E8, ONE_DAY_SECONDS, denominations_to_tokens, i2d,
+    ledger::compute_distribution_subaccount_bytes, ledger_validation,
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_nervous_system_timestamp::format_timestamp_for_humans;
@@ -155,7 +155,7 @@ pub(crate) fn get_action_auxiliary(
                      because proposal not found.",
                     proposal_id,
                 ),
-            ))
+            ));
         }
     };
 
@@ -1627,7 +1627,9 @@ fn validate_and_render_register_dapp_canisters(
 
     let num_canisters_to_register = register_dapp_canisters.canister_ids.len();
     if num_canisters_to_register > MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL {
-        return Err(format!("RegisterDappCanisters cannot specify more than {MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL} canister ids"));
+        return Err(format!(
+            "RegisterDappCanisters cannot specify more than {MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL} canister ids"
+        ));
     }
 
     let canisters_to_register = register_dapp_canisters
@@ -1680,7 +1682,9 @@ fn validate_and_render_deregister_dapp_canisters(
     }
 
     if deregister_dapp_canisters.canister_ids.len() > MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL {
-        return Err(format!("DeregisterDappCanisters cannot specify more than {MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL} canister ids"));
+        return Err(format!(
+            "DeregisterDappCanisters cannot specify more than {MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL} canister ids"
+        ));
     }
 
     if deregister_dapp_canisters.new_controllers.is_empty() {
@@ -2827,9 +2831,9 @@ mod tests {
     use crate::{
         governance::{Governance, ValidGovernanceProto},
         pb::v1::{
-            governance::{self, Version},
             Ballot, ChunkedCanisterWasm, Empty, Governance as GovernanceProto, NeuronId, Proposal,
             ProposalId, Subaccount, Topic, WaitForQuietState,
+            governance::{self, Version},
         },
         sns_upgrade::{
             CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
@@ -3863,8 +3867,8 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
     /// }
     ///
     /// It also is set to only upgrade root.
-    fn setup_for_upgrade_sns_to_next_version_validation_tests(
-    ) -> (NativeEnvironment, GovernanceProto) {
+    fn setup_for_upgrade_sns_to_next_version_validation_tests()
+    -> (NativeEnvironment, GovernanceProto) {
         let expected_wasm_hash_requested = Sha256::hash(&[6]).to_vec();
         let root_canister_id = *SNS_ROOT_CANISTER_ID;
 
@@ -4076,8 +4080,8 @@ Version {
     }
 
     #[test]
-    fn fail_validation_for_upgrade_sns_to_next_version_when_more_than_one_canister_change_in_version(
-    ) {
+    fn fail_validation_for_upgrade_sns_to_next_version_when_more_than_one_canister_change_in_version()
+     {
         let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {});
         let (mut env, governance_proto) = setup_for_upgrade_sns_to_next_version_validation_tests();
 
@@ -4620,11 +4624,17 @@ Version {
         .unwrap();
 
         for canister_id in register_dapp_canisters.canister_ids {
-            assert!(rendered_proposal.contains(&format!("\n- {canister_id}")), "rendered proposal \"{rendered_proposal}\" does not contain canister id \"- {canister_id}\"");
+            assert!(
+                rendered_proposal.contains(&format!("\n- {canister_id}")),
+                "rendered proposal \"{rendered_proposal}\" does not contain canister id \"- {canister_id}\""
+            );
         }
 
         for line in rendered_proposal.lines() {
-            assert!(!line.starts_with(char::is_whitespace), "rendered proposal \"{rendered_proposal}\" contains a line that starts with whitespace");
+            assert!(
+                !line.starts_with(char::is_whitespace),
+                "rendered proposal \"{rendered_proposal}\" contains a line that starts with whitespace"
+            );
         }
     }
 
@@ -4643,13 +4653,19 @@ Version {
         .unwrap();
 
         for canister_id in register_dapp_canisters.canister_ids {
-            assert!(rendered_proposal.contains(&format!("\n- {canister_id}")), "rendered proposal \"{rendered_proposal}\" does not contain canister id \"- {canister_id}\"");
+            assert!(
+                rendered_proposal.contains(&format!("\n- {canister_id}")),
+                "rendered proposal \"{rendered_proposal}\" does not contain canister id \"- {canister_id}\""
+            );
         }
 
         rendered_proposal.contains(&format!("{MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL}"));
 
         for line in rendered_proposal.lines() {
-            assert!(!line.starts_with(char::is_whitespace), "rendered proposal \"{rendered_proposal}\" contains a line that starts with whitespace");
+            assert!(
+                !line.starts_with(char::is_whitespace),
+                "rendered proposal \"{rendered_proposal}\" contains a line that starts with whitespace"
+            );
         }
     }
 
@@ -4747,11 +4763,17 @@ Version {
         .unwrap();
 
         for canister_id in deregister_dapp_canisters.canister_ids {
-            assert!(rendered_proposal.contains(&format!("\n- {canister_id}")), "rendered proposal \"{rendered_proposal}\" does not contain canister id {canister_id}");
+            assert!(
+                rendered_proposal.contains(&format!("\n- {canister_id}")),
+                "rendered proposal \"{rendered_proposal}\" does not contain canister id {canister_id}"
+            );
         }
 
         for line in rendered_proposal.lines() {
-            assert!(!line.starts_with(char::is_whitespace), "rendered proposal \"{rendered_proposal}\" contains a line that starts with whitespace");
+            assert!(
+                !line.starts_with(char::is_whitespace),
+                "rendered proposal \"{rendered_proposal}\" contains a line that starts with whitespace"
+            );
         }
     }
 
@@ -5052,7 +5074,9 @@ Version {
         .unwrap();
         assert_eq!(
             render,
-            format!("# Proposal to change ledger parameters:\n# Set token transfer fee: {new_fee} token-quantums. \n")
+            format!(
+                "# Proposal to change ledger parameters:\n# Set token transfer fee: {new_fee} token-quantums. \n"
+            )
         );
     }
 

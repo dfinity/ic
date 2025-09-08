@@ -2,13 +2,13 @@ use std::io::Write;
 
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::{
-    page_map::{test_utils::base_only_storage_layout, TestPageAllocatorFileDescriptorImpl},
     PageIndex, PageMap,
+    page_map::{TestPageAllocatorFileDescriptorImpl, test_utils::base_only_storage_layout},
 };
-use ic_sys::{PageBytes, PAGE_SIZE};
+use ic_sys::{PAGE_SIZE, PageBytes};
 use ic_types::{Height, NumBytes, NumOsPages};
 use libc::c_void;
-use nix::sys::mman::{mmap, MapFlags, ProtFlags};
+use nix::sys::mman::{MapFlags, ProtFlags, mmap};
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
@@ -16,7 +16,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use crate::{
-    new_signal_handler_available, AccessKind, DirtyPageTracking, PageBitmap, SigsegvMemoryTracker,
+    AccessKind, DirtyPageTracking, PageBitmap, SigsegvMemoryTracker, new_signal_handler_available,
 };
 
 /// Sets up the SigsegvMemoryTracker to track accesses to a region of memory. Returns:

@@ -2,7 +2,7 @@ mod processable_utxos_for_account {
     use crate::state::invariants::CheckInvariantsImpl;
     use crate::state::{CkBtcMinterState, ProcessableUtxos, SuspendedReason};
     use crate::test_fixtures::{
-        ignored_utxo, init_args, ledger_account, quarantined_utxo, utxo, DAY, NOW,
+        DAY, NOW, ignored_utxo, init_args, ledger_account, quarantined_utxo, utxo,
     };
     use crate::updates::update_balance::SuspendedUtxo;
     use candid::Principal;
@@ -183,7 +183,7 @@ mod processable_utxos_for_account {
 
 mod suspended_utxos {
     use crate::state::{SuspendedReason, SuspendedUtxos};
-    use crate::test_fixtures::{ledger_account, utxo, DAY, NOW};
+    use crate::test_fixtures::{DAY, NOW, ledger_account, utxo};
     use maplit::btreemap;
     use std::collections::BTreeMap;
 

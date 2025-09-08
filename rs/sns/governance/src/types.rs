@@ -1,32 +1,13 @@
 use crate::{
     following::TOPICS,
-    governance::{Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
+    governance::{Governance, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER, TimeWarp},
     logs::INFO,
     pb::{
         sns_root_types::{
-            set_dapp_controllers_request::CanisterIds, ManageDappCanisterSettingsRequest,
-            RegisterDappCanistersRequest, SetDappControllersRequest,
+            ManageDappCanisterSettingsRequest, RegisterDappCanistersRequest,
+            SetDappControllersRequest, set_dapp_controllers_request::CanisterIds,
         },
         v1::{
-            claim_swap_neurons_request::{
-                neuron_recipe::{self, Participant},
-                NeuronRecipe, NeuronRecipes,
-            },
-            claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
-            get_neuron_response,
-            governance::{
-                self,
-                neuron_in_flight_command::{self, SyncCommand},
-                Mode, SnsMetadata, Version,
-            },
-            governance_error::ErrorType,
-            manage_neuron,
-            manage_neuron_response::{
-                self, DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
-            },
-            nervous_system_function::FunctionType,
-            neuron::{FolloweesForTopic, TopicFollowees},
-            proposal::Action,
             ChunkedCanisterWasm, ClaimSwapNeuronsError, ClaimSwapNeuronsResponse,
             ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters, Empty,
             ExecuteGenericNervousSystemFunction, Followee, GovernanceError,
@@ -36,6 +17,24 @@ use crate::{
             NeuronPermissionList, NeuronPermissionType, ProposalId, RegisterDappCanisters,
             RewardEvent, SnsVersion, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
             UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+            claim_swap_neurons_request::{
+                NeuronRecipe, NeuronRecipes,
+                neuron_recipe::{self, Participant},
+            },
+            claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
+            get_neuron_response,
+            governance::{
+                self, Mode, SnsMetadata, Version,
+                neuron_in_flight_command::{self, SyncCommand},
+            },
+            governance_error::ErrorType,
+            manage_neuron,
+            manage_neuron_response::{
+                self, DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
+            },
+            nervous_system_function::FunctionType,
+            neuron::{FolloweesForTopic, TopicFollowees},
+            proposal::Action,
         },
     },
     proposal::ValidGenericNervousSystemFunction,
@@ -51,8 +50,8 @@ use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallModeError, StoredChunksReply,
 };
 use ic_nervous_system_common::{
-    hash_to_hex_string, ledger_validation::MAX_LOGO_LENGTH, NervousSystemError,
-    DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
+    DEFAULT_TRANSFER_FEE, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
+    hash_to_hex_string, ledger_validation::MAX_LOGO_LENGTH,
 };
 use ic_nervous_system_common_validation::validate_proposal_url;
 use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
@@ -714,7 +713,8 @@ impl NervousSystemParameters {
         } else if wait_for_quiet_deadline_increase_seconds > initial_voting_period_seconds / 2 {
             Err(format!(
                 "NervousSystemParameters.wait_for_quiet_deadline_increase_seconds is {}, but must be less than or equal to half the initial voting period, {}",
-                initial_voting_period_seconds, initial_voting_period_seconds / 2
+                initial_voting_period_seconds,
+                initial_voting_period_seconds / 2
             ))
         } else {
             Ok(())
@@ -895,9 +895,9 @@ impl NervousSystemParameters {
 
         if max_number_of_principals_per_neuron < Self::MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_FLOOR {
             Err(format!(
-                    "NervousSystemParameters.max_number_of_principals_per_neuron must be greater than or equal to {}",
-                    Self::MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_FLOOR
-                ))
+                "NervousSystemParameters.max_number_of_principals_per_neuron must be greater than or equal to {}",
+                Self::MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_FLOOR
+            ))
         } else if max_number_of_principals_per_neuron
             > Self::MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_CEILING
         {
@@ -1631,7 +1631,9 @@ impl SnsMetadata {
             ));
         }
         if !logo.starts_with(PREFIX) {
-            return Err(format!("SnsMetadata.logo must be a base64 encoded PNG, but the provided string does't begin with `{PREFIX}`."));
+            return Err(format!(
+                "SnsMetadata.logo must be a base64 encoded PNG, but the provided string does't begin with `{PREFIX}`."
+            ));
         }
         if base64::decode(&logo[PREFIX.len()..]).is_err() {
             return Err("Couldn't decode base64 in SnsMetadata.logo".to_string());

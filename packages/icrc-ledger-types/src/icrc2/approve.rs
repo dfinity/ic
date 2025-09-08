@@ -59,14 +59,16 @@ impl fmt::Display for ApproveError {
                     balance
                 )
             }
-            Self::AllowanceChanged { current_allowance } =>
-                write!(
-                    f,
-                    "expected_allowance does not match actual allowance, current allowance is {}",
-                    current_allowance
-                ),
-            Self::Expired { ledger_time } =>
-                write!(f, "the transaction expired before the ledger had a chance to apply it, current time is {}", ledger_time),
+            Self::AllowanceChanged { current_allowance } => write!(
+                f,
+                "expected_allowance does not match actual allowance, current allowance is {}",
+                current_allowance
+            ),
+            Self::Expired { ledger_time } => write!(
+                f,
+                "the transaction expired before the ledger had a chance to apply it, current time is {}",
+                ledger_time
+            ),
             Self::TooOld {} => write!(f, "transaction's created_at_time is too far in the past"),
             Self::CreatedInFuture { ledger_time } => write!(
                 f,
@@ -82,7 +84,7 @@ impl fmt::Display for ApproveError {
             Self::GenericError {
                 error_code,
                 message,
-            } => write!(f, "{} {}", error_code, message)
+            } => write!(f, "{} {}", error_code, message),
         }
     }
 }

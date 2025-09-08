@@ -1,7 +1,7 @@
-use crate::canister::test::test_utils::{
-    setup_thread_local_canister_for_test, TestState, CANISTER_TEST, VM,
-};
 use crate::canister::NodeRewardsCanister;
+use crate::canister::test::test_utils::{
+    CANISTER_TEST, TestState, VM, setup_thread_local_canister_for_test,
+};
 use crate::metrics::MetricsManager;
 use futures_util::FutureExt;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
@@ -16,8 +16,8 @@ use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::{
-    make_data_center_record_key, make_node_operator_record_key, make_node_record_key,
-    NODE_REWARDS_TABLE_KEY,
+    NODE_REWARDS_TABLE_KEY, make_data_center_record_key, make_node_operator_record_key,
+    make_node_record_key,
 };
 use ic_types::PrincipalId;
 use maplit::btreemap;

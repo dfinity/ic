@@ -3,7 +3,7 @@ use crate::{
     metrics::OrchestratorMetrics,
     registry_helper::RegistryHelper,
 };
-use ic_logger::{debug, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, warn};
 use ic_registry_client_helpers::unassigned_nodes::UnassignedNodeRegistry;
 use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::{

@@ -1,6 +1,6 @@
+use crate::EVM_RPC_ID_STAGING;
 use crate::lifecycle::init::InitArg;
 use crate::state::State;
-use crate::EVM_RPC_ID_STAGING;
 use candid::{Nat, Principal};
 
 pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
@@ -58,7 +58,7 @@ pub mod arb {
     use proptest::{
         array::{uniform20, uniform32},
         collection::vec,
-        prelude::{any, Strategy},
+        prelude::{Strategy, any},
     };
 
     pub fn arb_checked_amount_of<Unit>() -> impl Strategy<Value = CheckedAmountOf<Unit>> {

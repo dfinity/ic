@@ -11,8 +11,8 @@ use ic_base_types::SubnetId;
 use ic_crypto_internal_types::NodeIndex;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use serde::{de::Error, Deserialize, Deserializer, Serialize};
-use std::collections::{btree_map, BTreeMap, BTreeSet};
+use serde::{Deserialize, Deserializer, Serialize, de::Error};
+use std::collections::{BTreeMap, BTreeSet, btree_map};
 use std::convert::TryFrom;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
@@ -908,8 +908,7 @@ impl IDkgTranscript {
         if self.transcript_type != transcript_type_from_params_op {
             return Err(format!(
                 "transcript's type ({:?}) does not match transcript type derived from param's transcript operation ({:?})",
-                self.transcript_type,
-                transcript_type_from_params_op,
+                self.transcript_type, transcript_type_from_params_op,
             ));
         }
         if self.verified_dealings.len() < params.collection_threshold().get() as usize {
@@ -1281,7 +1280,7 @@ fn should_fail_deserializing_invalid_initial_idkg_dealings() {
     use crate::crypto::canister_threshold_sig::IDkgUnmaskedTranscriptOrigin;
     use crate::{PrincipalId, SubnetId};
     use ic_crypto_test_utils_canister_threshold_sigs::set_of_nodes;
-    use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+    use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
     use ic_protobuf::proxy::ProxyDecodeError;
     use ic_protobuf::registry::subnet::v1::InitialIDkgDealings as InitialIDkgDealingsProto;
     use rand::Rng;

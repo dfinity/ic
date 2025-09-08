@@ -1,4 +1,4 @@
-use crate::blocklist::{is_blocked, ETH_ADDRESS_BLOCKLIST, SAMPLE_BLOCKED_ADDRESS};
+use crate::blocklist::{ETH_ADDRESS_BLOCKLIST, SAMPLE_BLOCKED_ADDRESS, is_blocked};
 use ic_ethereum_types::Address;
 use std::str::FromStr;
 

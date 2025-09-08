@@ -1,7 +1,7 @@
 use super::{CanisterIdRange, CanisterIdRanges, CanisterMigrations, RoutingTable};
-use ic_base_types::{subnet_id_into_protobuf, subnet_id_try_from_protobuf, CanisterId};
+use ic_base_types::{CanisterId, subnet_id_into_protobuf, subnet_id_try_from_protobuf};
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     registry::routing_table::v1 as pb,
     types::v1 as pb_types,
 };

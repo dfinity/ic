@@ -1,7 +1,7 @@
 use crate::chain_key::{InitialChainKeyConfigInternal, KeyConfigRequestInternal};
 use crate::{common::LOG_PREFIX, registry::Registry};
 use candid::{CandidType, Deserialize, Encode};
-use dfn_core::api::{call, CanisterId};
+use dfn_core::api::{CanisterId, call};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
@@ -21,7 +21,7 @@ use ic_registry_keys::{
 };
 use ic_registry_subnet_features::{KeyConfig as KeyConfigInternal, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
+use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue, registry_mutation};
 use on_wire::bytes;
 use prost::Message;
 use serde::Serialize;

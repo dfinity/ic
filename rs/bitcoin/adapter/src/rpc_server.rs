@@ -1,25 +1,25 @@
 use crate::{
-    blockchainstate::BlockchainState,
-    get_successors_handler::{GetSuccessorsRequest, GetSuccessorsResponse},
-    metrics::{ServiceMetrics, LABEL_GET_SUCCESSOR, LABEL_SEND_TRANSACTION},
     BlockchainManagerRequest, Config, GetSuccessorsHandler, IncomingSource,
     TransactionManagerRequest,
+    blockchainstate::BlockchainState,
+    get_successors_handler::{GetSuccessorsRequest, GetSuccessorsResponse},
+    metrics::{LABEL_GET_SUCCESSOR, LABEL_SEND_TRANSACTION, ServiceMetrics},
 };
-use bitcoin::{consensus::Encodable, hashes::Hash, BlockHash};
+use bitcoin::{BlockHash, consensus::Encodable, hashes::Hash};
 use ic_btc_service::{
-    btc_service_server::{BtcService, BtcServiceServer},
     BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,
     BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
+    btc_service_server::{BtcService, BtcServiceServer},
 };
 use ic_http_endpoints_async_utils::{incoming_from_nth_systemd_socket, incoming_from_path};
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug};
 use ic_metrics::MetricsRegistry;
 use std::convert::{TryFrom, TryInto};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::mpsc;
 use tokio::sync::watch;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{Request, Response, Status, transport::Server};
 
 struct BtcServiceImpl {
     last_received_tx: watch::Sender<Option<Instant>>,

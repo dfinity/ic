@@ -14,8 +14,8 @@ use ic_registry_local_store::{
 };
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, registry::RegistryClientError, RegistryVersion,
-    SubnetId,
+    RegistryVersion, SubnetId, crypto::threshold_sig::ThresholdSigPublicKey,
+    registry::RegistryClientError,
 };
 use thiserror::Error;
 use tokio::sync::RwLock;

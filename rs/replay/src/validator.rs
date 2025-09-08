@@ -5,8 +5,8 @@ use std::{
 };
 
 use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, dkg_pool::DkgPoolImpl};
-use ic_config::{artifact_pool::ArtifactPoolConfig, Config};
-use ic_consensus::consensus::{validator::Validator, ValidatorMetrics};
+use ic_config::{Config, artifact_pool::ArtifactPoolConfig};
+use ic_consensus::consensus::{ValidatorMetrics, validator::Validator};
 use ic_consensus_certification::CertificationCrypto;
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
@@ -27,15 +27,15 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    Height, NodeId, PrincipalId, SubnetId,
     artifact::ConsensusMessageId,
     consensus::{
-        certification::{Certification, CertificationShare},
         Block, ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable, HasBlockHash,
         HasCommittee,
+        certification::{Certification, CertificationShare},
     },
     crypto::CryptoHashOf,
     replica_config::ReplicaConfig,
-    Height, NodeId, PrincipalId, SubnetId,
 };
 use serde::{Deserialize, Serialize};
 

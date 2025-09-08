@@ -1,7 +1,7 @@
 #![allow(deprecated)]
 use crate::{
-    do_set_icp_xdr_conversion_rate, environment::Environment, mutate_state, read_state, State,
-    ONE_MINUTE_SECONDS,
+    ONE_MINUTE_SECONDS, State, do_set_icp_xdr_conversion_rate, environment::Environment,
+    mutate_state, read_state,
 };
 use async_trait::async_trait;
 use candid::CandidType;
@@ -268,7 +268,10 @@ impl std::fmt::Display for GetExchangeRateError {
                         write!(f, "The XRC could not find enough stablecoin rates")
                     }
                     ExchangeRateError::StablecoinRateZeroRate => {
-                        write!(f, "The XRC's stablecoin rate is zero and it cannot determine a valid rate")
+                        write!(
+                            f,
+                            "The XRC's stablecoin rate is zero and it cannot determine a valid rate"
+                        )
                     }
                     ExchangeRateError::ForexInvalidTimestamp => {
                         write!(f, "The request's timestamp could not be found in the XRC")
@@ -467,8 +470,16 @@ enum ValidateExchangeRateError {
 impl std::fmt::Display for ValidateExchangeRateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ValidateExchangeRateError::NotEnoughIcpSources { received, queried } => write!(f, "Not enough exchange sources for rate's ICP base asset. Expected: {} Received: {} Queried: {}", MINIMUM_ICP_SOURCES, received, queried),
-            ValidateExchangeRateError::NotEnoughCxdrSources { received, queried } => write!(f, "Not enough forex sources for rate's CXDR quote asset. Expected: {} Received: {} Queried: {}", MINIMUM_CXDR_SOURCES, received, queried),
+            ValidateExchangeRateError::NotEnoughIcpSources { received, queried } => write!(
+                f,
+                "Not enough exchange sources for rate's ICP base asset. Expected: {} Received: {} Queried: {}",
+                MINIMUM_ICP_SOURCES, received, queried
+            ),
+            ValidateExchangeRateError::NotEnoughCxdrSources { received, queried } => write!(
+                f,
+                "Not enough forex sources for rate's CXDR quote asset. Expected: {} Received: {} Queried: {}",
+                MINIMUM_CXDR_SOURCES, received, queried
+            ),
         }
     }
 }
@@ -899,8 +910,8 @@ mod test {
     }
 
     #[test]
-    fn test_periodic_calls_the_xrc_and_rejects_the_rates_timestamp_then_sets_the_next_attempt_a_minute_in_future(
-    ) {
+    fn test_periodic_calls_the_xrc_and_rejects_the_rates_timestamp_then_sets_the_next_attempt_a_minute_in_future()
+     {
         thread_local! {
             static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
         }

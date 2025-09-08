@@ -12,13 +12,13 @@ use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::routing_table::v1 as pb;
 use ic_registry_canister_chunkify::decode_high_capacity_registry_value;
 use ic_registry_keys::{
-    make_canister_migrations_record_key, make_canister_ranges_key, CANISTER_RANGES_PREFIX,
+    CANISTER_RANGES_PREFIX, make_canister_migrations_record_key, make_canister_ranges_key,
 };
 use ic_registry_routing_table::{
-    routing_table_insert_subnet, CanisterIdRange, CanisterIdRanges, CanisterMigrations,
-    RoutingTable,
+    CanisterIdRange, CanisterIdRanges, CanisterMigrations, RoutingTable,
+    routing_table_insert_subnet,
 };
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
 use ic_registry_transport::{delete, upsert};
 use prost::Message;
 use std::cmp::Ordering;

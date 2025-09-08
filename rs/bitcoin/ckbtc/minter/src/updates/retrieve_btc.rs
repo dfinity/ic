@@ -3,12 +3,12 @@ use crate::logs::P0;
 use crate::logs::P1;
 use crate::management::check_withdrawal_destination_address;
 use crate::memo::{BurnMemo, Status};
-use crate::tasks::{schedule_now, TaskType};
+use crate::tasks::{TaskType, schedule_now};
 use crate::{
-    address::{account_to_bitcoin_address, BitcoinAddress, ParseAddressError},
-    guard::{retrieve_btc_guard, GuardError},
-    state::{self, mutate_state, read_state, RetrieveBtcRequest},
     IC_CANISTER_RUNTIME,
+    address::{BitcoinAddress, ParseAddressError, account_to_bitcoin_address},
+    guard::{GuardError, retrieve_btc_guard},
+    state::{self, RetrieveBtcRequest, mutate_state, read_state},
 };
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
@@ -307,7 +307,7 @@ pub async fn retrieve_btc_with_approval(
                     error
                 ),
                 error_code: ErrorCode::CheckCallFailed as u64,
-            })
+            });
         }
         Ok(status) => match status {
             BtcAddressCheckStatus::Tainted => {
@@ -409,32 +409,39 @@ async fn burn_ckbtcs(user: Principal, amount: u64, memo: Memo) -> Result<u64, Re
 
     match result {
         Ok(block_index) => Ok(block_index.0.to_u64().expect("nat does not fit into u64")),
-        Err(TransferError::InsufficientFunds { balance }) => Err(RetrieveBtcError::InsufficientFunds {
-            balance: balance.0.to_u64().expect("unreachable: ledger balance does not fit into u64")
-        }),
+        Err(TransferError::InsufficientFunds { balance }) => {
+            Err(RetrieveBtcError::InsufficientFunds {
+                balance: balance
+                    .0
+                    .to_u64()
+                    .expect("unreachable: ledger balance does not fit into u64"),
+            })
+        }
         Err(TransferError::TemporarilyUnavailable) => {
             Err(RetrieveBtcError::TemporarilyUnavailable(
                 "cannot burn ckBTC: the ledger is busy".to_string(),
             ))
         }
-        Err(TransferError::GenericError { error_code, message }) => {
-            Err(RetrieveBtcError::TemporarilyUnavailable(format!(
-                "cannot burn ckBTC: the ledger fails with: {} (error code {})", message, error_code
-            )))
-        }
+        Err(TransferError::GenericError {
+            error_code,
+            message,
+        }) => Err(RetrieveBtcError::TemporarilyUnavailable(format!(
+            "cannot burn ckBTC: the ledger fails with: {} (error code {})",
+            message, error_code
+        ))),
         Err(TransferError::BadFee { expected_fee }) => ic_cdk::trap(format!(
             "unreachable: the ledger demands the fee of {} even though the fee field is unset",
             expected_fee
         )),
-        Err(TransferError::Duplicate{ duplicate_of }) => ic_cdk::trap(format!(
+        Err(TransferError::Duplicate { duplicate_of }) => ic_cdk::trap(format!(
             "unreachable: the ledger reports duplicate ({}) even though the create_at_time field is unset",
             duplicate_of
         )),
-        Err(TransferError::CreatedInFuture{..}) => ic_cdk::trap(
-            "unreachable: the ledger reports CreatedInFuture even though the create_at_time field is unset"
+        Err(TransferError::CreatedInFuture { .. }) => ic_cdk::trap(
+            "unreachable: the ledger reports CreatedInFuture even though the create_at_time field is unset",
         ),
         Err(TransferError::TooOld) => ic_cdk::trap(
-            "unreachable: the ledger reports TooOld even though the create_at_time field is unset"
+            "unreachable: the ledger reports TooOld even though the create_at_time field is unset",
         ),
         Err(TransferError::BadBurn { min_burn_amount }) => ic_cdk::trap(format!(
             "the minter is misconfigured: retrieve_btc_min_amount {} is less than ledger's min_burn_amount {}",
@@ -479,22 +486,36 @@ async fn burn_ckbtcs_icrc2(
 
     match result {
         Ok(block_index) => Ok(block_index.0.to_u64().expect("nat does not fit into u64")),
-        Err(TransferFromError::InsufficientFunds { balance }) => Err(RetrieveBtcWithApprovalError::InsufficientFunds {
-            balance: balance.0.to_u64().expect("unreachable: ledger balance does not fit into u64")
-        }),
-        Err(TransferFromError::InsufficientAllowance { allowance }) => Err(RetrieveBtcWithApprovalError::InsufficientAllowance {
-            allowance: allowance.0.to_u64().expect("unreachable: ledger balance does not fit into u64")
-        }),
+        Err(TransferFromError::InsufficientFunds { balance }) => {
+            Err(RetrieveBtcWithApprovalError::InsufficientFunds {
+                balance: balance
+                    .0
+                    .to_u64()
+                    .expect("unreachable: ledger balance does not fit into u64"),
+            })
+        }
+        Err(TransferFromError::InsufficientAllowance { allowance }) => {
+            Err(RetrieveBtcWithApprovalError::InsufficientAllowance {
+                allowance: allowance
+                    .0
+                    .to_u64()
+                    .expect("unreachable: ledger balance does not fit into u64"),
+            })
+        }
         Err(TransferFromError::TemporarilyUnavailable) => {
             Err(RetrieveBtcWithApprovalError::TemporarilyUnavailable(
                 "cannot burn ckBTC: the ledger is busy".to_string(),
             ))
         }
-        Err(TransferFromError::GenericError { error_code, message }) => {
-            Err(RetrieveBtcWithApprovalError::TemporarilyUnavailable(format!(
-                "cannot burn ckBTC: the ledger fails with: {} (error code {})", message, error_code
-            )))
-        }
+        Err(TransferFromError::GenericError {
+            error_code,
+            message,
+        }) => Err(RetrieveBtcWithApprovalError::TemporarilyUnavailable(
+            format!(
+                "cannot burn ckBTC: the ledger fails with: {} (error code {})",
+                message, error_code
+            ),
+        )),
         Err(TransferFromError::BadFee { expected_fee }) => ic_cdk::trap(format!(
             "unreachable: the ledger demands the fee of {} even though the fee field is unset",
             expected_fee
@@ -503,11 +524,11 @@ async fn burn_ckbtcs_icrc2(
             "unreachable: the ledger reports duplicate ({}) even though the create_at_time field is unset",
             duplicate_of
         )),
-        Err(TransferFromError::CreatedInFuture {..}) => ic_cdk::trap(
-            "unreachable: the ledger reports CreatedInFuture even though the create_at_time field is unset"
+        Err(TransferFromError::CreatedInFuture { .. }) => ic_cdk::trap(
+            "unreachable: the ledger reports CreatedInFuture even though the create_at_time field is unset",
         ),
         Err(TransferFromError::TooOld) => ic_cdk::trap(
-            "unreachable: the ledger reports TooOld even though the create_at_time field is unset"
+            "unreachable: the ledger reports TooOld even though the create_at_time field is unset",
         ),
         Err(TransferFromError::BadBurn { min_burn_amount }) => ic_cdk::trap(format!(
             "the minter is misconfigured: retrieve_btc_min_amount {} is less than ledger's min_burn_amount {}",

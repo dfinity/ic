@@ -3,7 +3,7 @@ use crate::{
     scheduling::valid_set_rule::ValidSetRule,
 };
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
-use ic_logger::{debug, trace, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, trace};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{batch::BatchMessages, messages::SignedIngressContent};
 use std::sync::Arc;

@@ -1,8 +1,8 @@
 #![deny(missing_docs)]
 use crate::consensus::{
+    ConsensusCrypto,
     metrics::BlockMakerMetrics,
     status::{self, Status},
-    ConsensusCrypto,
 };
 use ic_consensus_dkg::payload_builder::create_payload as create_dkg_payload;
 use ic_consensus_idkg::{self as idkg, metrics::IDkgPayloadMetrics};
@@ -15,20 +15,21 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{debug, error, trace, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, error, trace, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    CountBytes, Height, NodeId, RegistryVersion, SubnetId,
     batch::{BatchPayload, ValidationContext},
     consensus::{
+        Block, BlockMetadata, BlockPayload, BlockProposal, DataPayload, HasHeight, HasRank,
+        HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
         block_maker::SubnetRecords,
         dkg::{DkgDataPayload, DkgPayload},
-        hashed, Block, BlockMetadata, BlockPayload, BlockProposal, DataPayload, HasHeight, HasRank,
-        HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
+        hashed,
     },
     replica_config::ReplicaConfig,
     time::current_time,
-    CountBytes, Height, NodeId, RegistryVersion, SubnetId,
 };
 use num_traits::ops::saturating::SaturatingSub;
 use std::{
@@ -601,15 +602,15 @@ pub(super) fn is_time_to_make_block(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies, MockPayloadBuilder};
+    use ic_consensus_mocks::{Dependencies, MockPayloadBuilder, dependencies_with_subnet_params};
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_consensus::IDkgStatsNoOp;
-    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::{dkg, HasHeight, HasVersion},
+        consensus::{HasHeight, HasVersion, dkg},
         crypto::CryptoHash,
         *,
     };

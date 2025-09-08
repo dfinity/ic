@@ -1,9 +1,9 @@
 use super::*;
 use ic_nervous_system_chunks::test_data::MEGA_BLOB;
 use ic_registry_transport::pb::v1::{
-    high_capacity_registry_mutation, high_capacity_registry_value,
+    HighCapacityRegistryValue, Precondition, high_capacity_registry_mutation,
+    high_capacity_registry_value,
     registry_mutation::{self, Type as MutationType},
-    HighCapacityRegistryValue, Precondition,
 };
 use prost::Message;
 use std::{

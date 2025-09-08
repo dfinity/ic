@@ -1,9 +1,9 @@
 use ic_cdk::eprintln;
 use ic_nervous_system_chunks::Chunks;
 use ic_registry_transport::pb::v1::{
-    high_capacity_registry_mutation, high_capacity_registry_value, registry_mutation,
     HighCapacityRegistryAtomicMutateRequest, HighCapacityRegistryMutation,
     HighCapacityRegistryValue, LargeValueChunkKeys, RegistryAtomicMutateRequest, RegistryMutation,
+    high_capacity_registry_mutation, high_capacity_registry_value, registry_mutation,
 };
 use ic_stable_structures::Memory;
 
@@ -64,11 +64,7 @@ pub fn dechunkify_registry_value<M: Memory>(
         high_capacity_registry_value::Content::Value(value) => Some(value),
 
         high_capacity_registry_value::Content::DeletionMarker(deletion_marker) => {
-            if deletion_marker {
-                None
-            } else {
-                Some(vec![])
-            }
+            if deletion_marker { None } else { Some(vec![]) }
         }
 
         high_capacity_registry_value::Content::LargeValueChunkKeys(large_value_chunk_keys) => {

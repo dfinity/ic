@@ -6,9 +6,9 @@ use wasmtime::{
     RefType, Store, Table, TableType, Val, ValType,
 };
 use wast::{
+    QuoteWat, Wast, WastArg, WastDirective, Wat,
     parser::ParseBuffer,
     token::{Id, Span},
-    QuoteWat, Wast, WastArg, WastDirective, Wat,
 };
 
 /// Tests shouldn't be run on these files.
@@ -20,9 +20,9 @@ const FILES_TO_SKIP: &[&str] = &["names.wast"];
 mod convert {
     use wasmtime::Store;
     use wast::{
+        WastArg, WastRet,
         core::{AbstractHeapType, HeapType, NanPattern, V128Pattern, WastArgCore},
         token::{F32, F64},
-        WastArg, WastRet,
     };
 
     fn heap_type(heap_type: HeapType) -> wasmtime::Val {
@@ -219,9 +219,9 @@ mod convert {
     }
 
     fn val_equal(left: &wasmtime::Val, right: &WastRet, store: &Store<()>) -> bool {
+        use WastRet::Core as C;
         use wasmtime::Val as V;
         use wast::core::WastRetCore as R;
-        use WastRet::Core as C;
 
         match (left, right) {
             (V::I32(l), C(R::I32(r))) => l == r,
@@ -627,7 +627,7 @@ fn run_directive<'a>(
                     .map(|_| ())
                     .map_err(error_to_string),
                 wast::WastExecute::Wat(Wat::Component(_)) | wast::WastExecute::Get { .. } => {
-                    return Ok(())
+                    return Ok(());
                 }
             };
             match error {

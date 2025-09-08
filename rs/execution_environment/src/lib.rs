@@ -16,8 +16,8 @@ pub mod util;
 
 use crate::ingress_filter::IngressFilterServiceImpl;
 pub use execution_environment::{
-    as_num_instructions, as_round_instructions, execute_canister, CompilationCostHandling,
-    ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse, RoundInstructions, RoundLimits,
+    CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse,
+    RoundInstructions, RoundLimits, as_num_instructions, as_round_instructions, execute_canister,
 };
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{Hypervisor, HypervisorMetrics};
@@ -35,8 +35,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{CallOrigin, NetworkTopology, ReplicatedState};
 use ic_types::{
-    messages::{CallContextId, MessageId},
     Height, SubnetId,
+    messages::{CallContextId, MessageId},
 };
 pub use metrics::IngressFilterMetrics;
 pub use query_handler::InternalHttpQueryHandler;

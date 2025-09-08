@@ -1,6 +1,6 @@
 use crate::governance::{
-    disburse_maturity::{finalize_maturity_disbursement, get_delay_until_next_finalization},
     Governance,
+    disburse_maturity::{finalize_maturity_disbursement, get_delay_until_next_finalization},
 };
 
 use async_trait::async_trait;

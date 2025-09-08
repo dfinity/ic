@@ -1,4 +1,4 @@
-use ic_config::{subnet_config::SubnetConfig, Config};
+use ic_config::{Config, subnet_config::SubnetConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::execution_environment::IngressHistoryReader;
@@ -12,21 +12,21 @@ use ic_protobuf::types::v1::PrincipalId as PrincipalIdIdProto;
 use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_keys::{
-    make_canister_ranges_key, make_provisional_whitelist_record_key, ROOT_SUBNET_ID_KEY,
+    ROOT_SUBNET_ID_KEY, make_canister_ranges_key, make_provisional_whitelist_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
+use ic_registry_routing_table::{RoutingTable, routing_table_insert_subnet};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities_consensus::fake::FakeVerifier;
 use ic_test_utilities_registry::{
-    add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
+    SubnetRecordBuilder, add_subnet_record, insert_initial_dkg_transcript,
 };
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
-    malicious_flags::MaliciousFlags, replica_config::ReplicaConfig, CanisterId, NodeId,
-    PrincipalId, RegistryVersion, SubnetId,
+    CanisterId, NodeId, PrincipalId, RegistryVersion, SubnetId, malicious_flags::MaliciousFlags,
+    replica_config::ReplicaConfig,
 };
 use std::sync::Arc;
 

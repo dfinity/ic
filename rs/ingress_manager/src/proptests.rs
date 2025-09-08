@@ -28,8 +28,8 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
-    artifact::IngressMessageId, batch::ValidationContext, messages::SignedIngress,
-    time::UNIX_EPOCH, CountBytes, Height, NumBytes, RegistryVersion,
+    CountBytes, Height, NumBytes, RegistryVersion, artifact::IngressMessageId,
+    batch::ValidationContext, messages::SignedIngress, time::UNIX_EPOCH,
 };
 use proptest::prelude::*;
 use std::collections::HashSet;

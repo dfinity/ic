@@ -1,7 +1,7 @@
 use candid::Principal;
 use ic_base_types::PrincipalId;
-use ic_stable_structures::storable::Bound;
 use ic_stable_structures::Storable;
+use ic_stable_structures::storable::Bound;
 use prost::Message;
 use std::borrow::Cow;
 

@@ -1,6 +1,6 @@
 use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
-    pb::v1::{install_code::CanisterInstallMode, GovernanceError, InstallCode, Topic},
+    pb::v1::{GovernanceError, InstallCode, Topic, install_code::CanisterInstallMode},
     proposals::call_canister::CallCanister,
 };
 

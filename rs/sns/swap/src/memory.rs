@@ -2,9 +2,9 @@ use crate::pb::v1::Ticket;
 use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_stable_structures::{
+    DefaultMemoryImpl, StableBTreeMap, Vec as StableVec,
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     storable::Blob,
-    DefaultMemoryImpl, StableBTreeMap, Vec as StableVec,
 };
 use std::cell::RefCell;
 

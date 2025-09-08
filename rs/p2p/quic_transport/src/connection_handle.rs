@@ -9,11 +9,11 @@ use prost::Message;
 use quinn::Connection;
 
 use crate::{
+    ConnId, MAX_MESSAGE_SIZE_BYTES, MessagePriority, P2PError, ResetStreamOnDrop,
     metrics::{
-        observe_conn_error, observe_read_to_end_error, observe_stopped_error, observe_write_error,
-        QuicTransportMetrics, INFALIBBLE,
+        INFALIBBLE, QuicTransportMetrics, observe_conn_error, observe_read_to_end_error,
+        observe_stopped_error, observe_write_error,
     },
-    ConnId, MessagePriority, P2PError, ResetStreamOnDrop, MAX_MESSAGE_SIZE_BYTES,
 };
 
 static CONN_ID_SEQ: AtomicU64 = AtomicU64::new(1);
@@ -183,11 +183,11 @@ mod tests {
     use assert_matches::assert_matches;
     use bytes::Bytes;
     use ic_p2p_test_utils::{
-        generate_self_signed_cert, turmoil::CustomUdp, SkipServerVerification,
+        SkipServerVerification, generate_self_signed_cert, turmoil::CustomUdp,
     };
     use quinn::{
-        crypto::rustls::QuicClientConfig, ClientConfig, Endpoint, EndpointConfig, ReadError,
-        ReadToEndError,
+        ClientConfig, Endpoint, EndpointConfig, ReadError, ReadToEndError,
+        crypto::rustls::QuicClientConfig,
     };
     use rstest::rstest;
     use std::{

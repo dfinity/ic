@@ -3,7 +3,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::block::BlockType;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
-    GetBlocksArgs, QueryBlocksResponse, QueryEncodedBlocksResponse, MAX_BLOCKS_PER_REQUEST,
+    GetBlocksArgs, MAX_BLOCKS_PER_REQUEST, QueryBlocksResponse, QueryEncodedBlocksResponse,
 };
 use on_wire::FromWire;
 

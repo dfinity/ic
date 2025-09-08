@@ -1,10 +1,10 @@
 use super::*;
 use assert_matches::assert_matches;
-use candid_parser::utils::{service_equal, CandidSource};
+use candid_parser::utils::{CandidSource, service_equal};
 use ic_sns_governance::pb::v1::{
+    UpgradeJournal, UpgradeJournalEntry,
     governance::{Version, Versions},
     upgrade_journal_entry::{Event, UpgradeStepsRefreshed},
-    UpgradeJournal, UpgradeJournalEntry,
 };
 use pretty_assertions::assert_eq;
 use std::collections::HashSet;

@@ -4,12 +4,12 @@ use candid::{CandidType, Principal};
 use ic_cdk::{
     api::{canister_self, canister_version},
     call::Call,
-    management_canister::{canister_info, CanisterInfoArgs, CanisterInfoResult},
+    management_canister::{CanisterInfoArgs, CanisterInfoResult, canister_info},
     println,
 };
 use serde::Deserialize;
 
-use crate::{processing::ProcessingResult, ValidationError};
+use crate::{ValidationError, processing::ProcessingResult};
 
 // ========================================================================= //
 // `update_settings`

@@ -1,4 +1,7 @@
 use crate::{
+    CHECKPOINTS, DataLocation, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_DATA_PATH,
+    IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, IC_STATE_EXCLUDES, NEW_IC_STATE,
+    OLD_IC_STATE, Recovery,
     admin_helper::IcAdmin,
     command_helper::{confirm_exec_cmd, exec_cmd},
     error::{RecoveryError, RecoveryResult},
@@ -7,10 +10,7 @@ use crate::{
     registry_helper::RegistryHelper,
     replay_helper,
     ssh_helper::SshHelper,
-    util::{block_on, parse_hex_str, SshUser},
-    DataLocation, Recovery, CHECKPOINTS, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_DATA_PATH,
-    IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, IC_STATE_EXCLUDES, NEW_IC_STATE,
-    OLD_IC_STATE,
+    util::{SshUser, block_on, parse_hex_str},
 };
 use core::convert::From;
 use ic_artifact_pool::certification_pool::CertificationPoolImpl;
@@ -19,8 +19,8 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::certification::CertificationPool;
 use ic_metrics::MetricsRegistry;
 use ic_replay::cmd::{GetRecoveryCupCmd, SubCommand};
-use ic_types::{consensus::certification::CertificationMessage, Height, SubnetId};
-use slog::{debug, info, warn, Logger};
+use ic_types::{Height, SubnetId, consensus::certification::CertificationMessage};
+use slog::{Logger, debug, info, warn};
 use std::{collections::HashMap, net::IpAddr, path::PathBuf, process::Command, thread, time};
 
 /// Subnet recovery is composed of several steps. Each recovery step comprises a
@@ -837,9 +837,11 @@ pub struct UpdateLocalStoreStep {
 
 impl Step for UpdateLocalStoreStep {
     fn descr(&self) -> String {
-        format!("Update registry local store by executing:\nic-replay {:?} --subnet-id {:?} update-registry-local-store",
+        format!(
+            "Update registry local store by executing:\nic-replay {:?} --subnet-id {:?} update-registry-local-store",
             self.work_dir.join("ic.json5"),
-            self.subnet_id)
+            self.subnet_id
+        )
     }
 
     fn exec(&self) -> RecoveryResult<()> {

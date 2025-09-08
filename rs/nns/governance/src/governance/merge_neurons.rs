@@ -1,11 +1,11 @@
 use crate::{
     governance::ledger_helper::{BurnNeuronFeesOperation, NeuronStakeTransferOperation},
-    neuron::{combine_aged_stakes, DissolveStateAndAge, Neuron},
+    neuron::{DissolveStateAndAge, Neuron, combine_aged_stakes},
     neuron_store::NeuronStore,
     pb::v1::{
+        GovernanceError, NeuronState, ProposalData, ProposalStatus, VotingPowerEconomics,
         governance_error::ErrorType,
         manage_neuron::{Merge, NeuronIdOrSubaccount},
-        GovernanceError, NeuronState, ProposalData, ProposalStatus, VotingPowerEconomics,
     },
 };
 use ic_base_types::PrincipalId;
@@ -625,7 +625,7 @@ mod tests {
     use super::*;
     use crate::{
         neuron::{DissolveStateAndAge, NeuronBuilder},
-        pb::v1::{proposal::Action, Followees, ManageNeuron, NeuronType, Proposal, Topic},
+        pb::v1::{Followees, ManageNeuron, NeuronType, Proposal, Topic, proposal::Action},
         storage::reset_stable_memory,
     };
     use assert_matches::assert_matches;

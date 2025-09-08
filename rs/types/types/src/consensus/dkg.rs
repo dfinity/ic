@@ -2,19 +2,19 @@
 
 use super::*;
 use crate::{
+    ReplicaVersion,
     artifact::PbArtifact,
     crypto::threshold_sig::ni_dkg::{
+        NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
         config::NiDkgConfig,
         errors::{
             create_transcript_error::DkgCreateTranscriptError,
             verify_dealing_error::DkgVerifyDealingError,
         },
-        NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
     },
     messages::CallbackId,
     registry::RegistryClientError,
     state_manager::StateManagerError,
-    ReplicaVersion,
 };
 use ic_protobuf::types::v1 as pb;
 use serde_with::serde_as;

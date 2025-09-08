@@ -52,13 +52,16 @@ impl fmt::Display for TransferFromError {
                 "the minimum number of tokens to be burned is {}",
                 min_burn_amount
             ),
-            Self::InsufficientFunds { balance } =>
-                write!(
-                    f,
-                    "the debit account doesn't have enough funds to complete the transaction, current balance: {}",
-                    balance
-                ),
-            Self::InsufficientAllowance { allowance } => write!(f, "the spender account does not have sufficient allowance, current allowance is {}", allowance),
+            Self::InsufficientFunds { balance } => write!(
+                f,
+                "the debit account doesn't have enough funds to complete the transaction, current balance: {}",
+                balance
+            ),
+            Self::InsufficientAllowance { allowance } => write!(
+                f,
+                "the spender account does not have sufficient allowance, current allowance is {}",
+                allowance
+            ),
             Self::TooOld {} => write!(f, "transaction's created_at_time is too far in the past"),
             Self::CreatedInFuture { ledger_time } => write!(
                 f,

@@ -39,14 +39,14 @@ use std::{
 
 use async_trait::async_trait;
 use axum::{
-    http::{Request, Response},
     Router,
+    http::{Request, Response},
 };
 use bytes::Bytes;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use ic_metrics::MetricsRegistry;
 use phantom_newtype::AmountOf;
 use quinn::{

@@ -1,10 +1,10 @@
 use clap::Parser;
-use ic_sns_testing::nns_dapp::bootstrap_nns;
-use ic_sns_testing::utils::{get_identity_principal, TREASURY_PRINCIPAL_ID};
 use ic_sns_testing::NnsInitArgs;
+use ic_sns_testing::nns_dapp::bootstrap_nns;
+use ic_sns_testing::utils::{TREASURY_PRINCIPAL_ID, get_identity_principal};
 use icp_ledger::Tokens;
-use pocket_ic::common::rest::{EmptyConfig, IcpFeatures};
 use pocket_ic::PocketIcBuilder;
+use pocket_ic::common::rest::{EmptyConfig, IcpFeatures};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::tempdir;
 

@@ -2,10 +2,10 @@ use super::Step;
 
 use anyhow::bail;
 use ic_agent::{
-    agent::http_transport::reqwest_transport::reqwest::{redirect::Policy, Client, ClientBuilder},
+    Agent,
+    agent::http_transport::reqwest_transport::reqwest::{Client, ClientBuilder, redirect::Policy},
     export::Principal,
     identity::AnonymousIdentity,
-    Agent,
 };
 use ic_boundary_nodes_system_test_utils::constants::COUNTER_CANISTER_WAT;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
@@ -16,7 +16,7 @@ use ic_system_test_driver::{
     retry_with_msg_async,
 };
 use ic_utils::interfaces::ManagementCanister;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::{net::SocketAddr, time::Duration};
 
 const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(30);

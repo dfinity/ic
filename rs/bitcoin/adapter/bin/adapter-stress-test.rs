@@ -1,15 +1,15 @@
 use std::{convert::TryFrom, path::PathBuf, time::Duration};
 
-use bitcoin::{consensus::Decodable, Block, BlockHash};
+use bitcoin::{Block, BlockHash, consensus::Decodable};
 use clap::Parser;
 use ic_btc_adapter::AdapterNetwork;
 use ic_btc_service::{
-    btc_service_client::BtcServiceClient, BtcServiceGetSuccessorsRequest,
-    BtcServiceGetSuccessorsResponse,
+    BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,
+    btc_service_client::BtcServiceClient,
 };
 use tokio::{
     net::UnixStream,
-    time::{sleep, Instant},
+    time::{Instant, sleep},
 };
 use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;

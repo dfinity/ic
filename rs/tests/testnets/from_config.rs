@@ -63,7 +63,7 @@
 // Happy testing!
 
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use os_qualification_utils::{IcConfig, IC_CONFIG};
+use os_qualification_utils::{IC_CONFIG, IcConfig};
 
 fn main() -> anyhow::Result<()> {
     let mut config = std::env::var(IC_CONFIG)

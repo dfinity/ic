@@ -1,5 +1,5 @@
 use clap::Parser;
-use ic_cup_explorer::{explore, verify, SubnetStatus};
+use ic_cup_explorer::{SubnetStatus, explore, verify};
 use ic_types::SubnetId;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

@@ -12,13 +12,13 @@ use ic_nns_test_utils::{
     },
 };
 use ic_sns_governance::pb::v1::{
-    proposal::Action, ManageLedgerParameters, NervousSystemParameters, NeuronId,
-    NeuronPermissionList, NeuronPermissionType, Proposal,
+    ManageLedgerParameters, NervousSystemParameters, NeuronId, NeuronPermissionList,
+    NeuronPermissionType, Proposal, proposal::Action,
 };
 use ic_sns_test_utils::{
     itest_helpers::SnsTestsInitPayloadBuilder,
     state_test_helpers::{
-        setup_sns_canisters, state_machine_builder_for_sns_tests, SnsTestCanisterIds,
+        SnsTestCanisterIds, setup_sns_canisters, state_machine_builder_for_sns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;

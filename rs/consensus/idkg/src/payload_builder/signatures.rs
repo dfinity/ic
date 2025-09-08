@@ -3,9 +3,9 @@ use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{Payload, SignWithECDSAReply, SignWithSchnorrReply};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext;
 use ic_types::{
-    consensus::idkg::{self, common::CombinedSignature, IDkgMasterPublicKeyId},
-    messages::{CallbackId, RejectContext},
     Time,
+    consensus::idkg::{self, IDkgMasterPublicKeyId, common::CombinedSignature},
+    messages::{CallbackId, RejectContext},
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -142,8 +142,8 @@ pub(crate) fn update_signature_agreements(
 mod tests {
     use super::*;
     use crate::test_utils::{
-        create_available_pre_signature, into_idkg_contexts, set_up_idkg_payload,
-        TestThresholdSignatureBuilder,
+        TestThresholdSignatureBuilder, create_available_pre_signature, into_idkg_contexts,
+        set_up_idkg_payload,
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -152,11 +152,11 @@ mod tests {
     use ic_test_utilities_consensus::idkg::*;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
+        Height,
         consensus::idkg::IDkgPayload,
         crypto::canister_threshold_sig::{
             ThresholdEcdsaCombinedSignature, ThresholdSchnorrCombinedSignature,
         },
-        Height,
     };
     use std::collections::BTreeSet;
 
@@ -302,9 +302,11 @@ mod tests {
 
         // Only the pre-signature for the completed request should be removed
         assert_eq!(idkg_payload.available_pre_signatures.len(), 3);
-        assert!(!idkg_payload
-            .available_pre_signatures
-            .contains_key(&pre_sig_ids[1]));
+        assert!(
+            !idkg_payload
+                .available_pre_signatures
+                .contains_key(&pre_sig_ids[1])
+        );
 
         assert_eq!(idkg_payload.signature_agreements.len(), 2);
         let Some(idkg::CompletedSignature::Unreported(response_1)) =
@@ -382,9 +384,11 @@ mod tests {
 
         // Only the pre-signature for the completed request should be removed
         assert_eq!(idkg_payload.available_pre_signatures.len(), 1);
-        assert!(!idkg_payload
-            .available_pre_signatures
-            .contains_key(&pre_sig_ids[0]));
+        assert!(
+            !idkg_payload
+                .available_pre_signatures
+                .contains_key(&pre_sig_ids[0])
+        );
 
         assert_eq!(idkg_payload.signature_agreements.len(), 1);
         let Some(idkg::CompletedSignature::Unreported(response_1)) =

@@ -1,18 +1,19 @@
 use crate::metrics::HttpHandlerMetrics;
 use ic_http_endpoints_async_utils::JoinMap;
-use ic_logger::{info, ReplicaLogger};
-use ic_types::{messages::MessageId, Height};
+use ic_logger::{ReplicaLogger, info};
+use ic_types::{Height, messages::MessageId};
 use std::{
     cmp::max,
-    collections::{btree_map, hash_map::Entry, BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet, btree_map, hash_map::Entry},
     sync::Arc,
 };
 use tokio::{
     runtime::Handle,
     select,
     sync::{
-        mpsc::{channel, Receiver, Sender},
-        oneshot, watch, Notify,
+        Notify,
+        mpsc::{Receiver, Sender, channel},
+        oneshot, watch,
     },
     task::JoinHandle,
 };
@@ -383,7 +384,9 @@ impl IngressWatcher {
                     }
                     // Invalid invariants.
                     Some((MessageExecutionStatus::InProgress, _)) => {
-                        panic!("Invalid variant. Execution status must be `Completed` if it is in `completed_execution_heights`.");
+                        panic!(
+                            "Invalid variant. Execution status must be `Completed` if it is in `completed_execution_heights`."
+                        );
                     }
                     None => {
                         panic!("Message should be in `self.notifiers`.");

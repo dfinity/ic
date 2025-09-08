@@ -24,7 +24,7 @@ use crate::{
 use ic_types::CanisterId;
 use nix::{
     errno::Errno,
-    sys::wait::{wait, WaitStatus},
+    sys::wait::{WaitStatus, wait},
     unistd::Pid,
 };
 

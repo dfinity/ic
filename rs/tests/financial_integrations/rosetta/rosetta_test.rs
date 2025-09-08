@@ -34,16 +34,16 @@ use ic_system_test_driver::{
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{
-            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, get_dependency_path,
         },
     },
     util::block_on,
 };
-use ic_types::{messages::Blob, CanisterId};
+use ic_types::{CanisterId, messages::Blob};
 use icp_ledger::{
-    protobuf::TipOfChainRequest, tokens_from_proto, AccountBalanceArgs, AccountIdentifier,
-    ArchiveOptions, BlockIndex, Certification, LedgerCanisterInitPayload, TipOfChainRes, Tokens,
-    DEFAULT_TRANSFER_FEE,
+    AccountBalanceArgs, AccountIdentifier, ArchiveOptions, BlockIndex, Certification,
+    DEFAULT_TRANSFER_FEE, LedgerCanisterInitPayload, TipOfChainRes, Tokens,
+    protobuf::TipOfChainRequest, tokens_from_proto,
 };
 use lazy_static::lazy_static;
 use slog::info;
@@ -270,7 +270,10 @@ pub fn test(env: TestEnv) {
         rosetta_api_serv.stop();
 
         let (_cert, tip_idx) = get_tip(&ledger).await;
-        info!(log, "Starting Rosetta again to see if it properly fetches blocks in batches from all the archives");
+        info!(
+            log,
+            "Starting Rosetta again to see if it properly fetches blocks in batches from all the archives"
+        );
         let mut rosetta_api_serv = RosettaApiHandle::start(
             env.logger(),
             rosetta_api_bin_path.clone(),

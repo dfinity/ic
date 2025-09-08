@@ -1,12 +1,11 @@
 use crate::{
+    InternalErrorCode,
     wasm_utils::instrumentation::WasmMemoryType,
     wasmtime_embedder::{
-        convert_backtrace,
+        STABLE_MEMORY_NAME, StoreData, WASM_HEAP_MEMORY_NAME, convert_backtrace,
         system_api::SystemApiImpl,
         system_api_complexity::{overhead, overhead_native},
-        StoreData, STABLE_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
     },
-    InternalErrorCode,
 };
 use ic_config::{
     embedders::{FeatureFlags, StableMemoryPageLimit},

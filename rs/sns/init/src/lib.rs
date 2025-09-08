@@ -1,6 +1,6 @@
 use crate::pb::v1::{
-    sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower,
     FractionalDeveloperVotingPower as FractionalDVP, SnsInitPayload, SwapDistribution,
+    sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower,
 };
 use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -8,7 +8,7 @@ use ic_icrc1_index_ng::{IndexArg, InitArg};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{ledger_validation, DEFAULT_TRANSFER_FEE, E8};
+use ic_nervous_system_common::{DEFAULT_TRANSFER_FEE, E8, ledger_validation};
 use ic_nervous_system_proto::pb::v1::{Canister, Countries};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
@@ -19,9 +19,9 @@ use ic_nns_constants::{
 use ic_sns_governance::{
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
-        governance::{SnsMetadata, Version},
         Governance, NervousSystemParameters, Neuron, NeuronPermissionList, NeuronPermissionType,
         VotingRewardsParameters,
+        governance::{SnsMetadata, Version},
     },
 };
 use ic_sns_root::pb::v1::SnsRootCanister;
@@ -1187,12 +1187,10 @@ impl SnsInitPayload {
             .final_reward_rate_basis_points
             .ok_or("Error: final_reward_rate_basis_points must be specified")?;
         if final_reward_rate_basis_points > initial_reward_rate_basis_points {
-            Err(
-                format!(
-                    "Error: final_reward_rate_basis_points ({}) must be less than or equal to initial_reward_rate_basis_points ({})", final_reward_rate_basis_points,
-                    initial_reward_rate_basis_points
-                )
-            )
+            Err(format!(
+                "Error: final_reward_rate_basis_points ({}) must be less than or equal to initial_reward_rate_basis_points ({})",
+                final_reward_rate_basis_points, initial_reward_rate_basis_points
+            ))
         } else {
             Ok(())
         }
@@ -1302,7 +1300,8 @@ impl SnsInitPayload {
         } else if wait_for_quiet_deadline_increase_seconds > initial_voting_period_seconds / 2 {
             Err(format!(
                 "NervousSystemParameters.wait_for_quiet_deadline_increase_seconds is {}, but must be less than or equal to half the initial voting period, {}",
-                initial_voting_period_seconds, initial_voting_period_seconds / 2
+                initial_voting_period_seconds,
+                initial_voting_period_seconds / 2
             ))
         } else {
             Ok(())
@@ -1383,32 +1382,24 @@ impl SnsInitPayload {
     fn validate_confirmation_text(&self) -> Result<(), String> {
         if let Some(confirmation_text) = &self.confirmation_text {
             if MAX_CONFIRMATION_TEXT_BYTES < confirmation_text.len() {
-                return Err(
-                    format!(
-                        "NervousSystemParameters.confirmation_text must be fewer than {} bytes, given bytes: {}",
-                        MAX_CONFIRMATION_TEXT_BYTES,
-                        confirmation_text.len(),
-                    )
-                );
+                return Err(format!(
+                    "NervousSystemParameters.confirmation_text must be fewer than {} bytes, given bytes: {}",
+                    MAX_CONFIRMATION_TEXT_BYTES,
+                    confirmation_text.len(),
+                ));
             }
             let confirmation_text_length = confirmation_text.chars().count();
             if confirmation_text_length < MIN_CONFIRMATION_TEXT_LENGTH {
-                return Err(
-                    format!(
-                        "NervousSystemParameters.confirmation_text must be greater than {} characters, given character count: {}",
-                        MIN_CONFIRMATION_TEXT_LENGTH,
-                        confirmation_text_length,
-                    )
-                );
+                return Err(format!(
+                    "NervousSystemParameters.confirmation_text must be greater than {} characters, given character count: {}",
+                    MIN_CONFIRMATION_TEXT_LENGTH, confirmation_text_length,
+                ));
             }
             if MAX_CONFIRMATION_TEXT_LENGTH < confirmation_text_length {
-                return Err(
-                    format!(
-                        "NervousSystemParameters.confirmation_text must be fewer than {} characters, given character count: {}",
-                        MAX_CONFIRMATION_TEXT_LENGTH,
-                        confirmation_text_length,
-                    )
-                );
+                return Err(format!(
+                    "NervousSystemParameters.confirmation_text must be fewer than {} characters, given character count: {}",
+                    MAX_CONFIRMATION_TEXT_LENGTH, confirmation_text_length,
+                ));
             }
         }
         Ok(())
@@ -1947,23 +1938,23 @@ impl SnsInitPayload {
 #[cfg(test)]
 mod test {
     use crate::{
+        FractionalDeveloperVotingPower, ICRC1_TOKEN_LOGO_KEY, MAX_CONFIRMATION_TEXT_LENGTH,
+        MAX_DAPP_CANISTERS_COUNT, MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP,
+        MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT, MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S,
+        MaxNeuronsFundParticipationValidationError, MinDirectParticipationThresholdValidationError,
+        NeuronBasketConstructionParametersValidationError,
+        NeuronsFundParticipationConstraintsValidationError, RestrictedCountriesValidationError,
+        SnsCanisterIds, SnsInitPayload,
         pb::v1::{
             DappCanisters, DeveloperDistribution, FractionalDeveloperVotingPower as FractionalDVP,
             NeuronDistribution, SwapDistribution,
         },
-        FractionalDeveloperVotingPower, MaxNeuronsFundParticipationValidationError,
-        MinDirectParticipationThresholdValidationError,
-        NeuronBasketConstructionParametersValidationError,
-        NeuronsFundParticipationConstraintsValidationError, RestrictedCountriesValidationError,
-        SnsCanisterIds, SnsInitPayload, ICRC1_TOKEN_LOGO_KEY, MAX_CONFIRMATION_TEXT_LENGTH,
-        MAX_DAPP_CANISTERS_COUNT, MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP,
-        MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT, MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S,
     };
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_icrc1_ledger::LedgerArgument;
     use ic_nervous_system_common::{
-        ledger_validation::{self, MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH},
         E8, ONE_MONTH_SECONDS,
+        ledger_validation::{self, MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH},
     };
     use ic_nervous_system_proto::pb::v1::{Canister, Countries};
     use ic_nns_constants::{
@@ -2381,9 +2372,11 @@ initial_token_distribution: !FractionalDeveloperVotingPower
                 confirmation_text: Some("".to_string()),
                 ..SnsInitPayload::with_valid_values_for_testing_post_execution()
             };
-            assert!(sns_init_payload
-                .build_canister_payloads(&sns_canister_ids, None, false)
-                .is_err());
+            assert!(
+                sns_init_payload
+                    .build_canister_payloads(&sns_canister_ids, None, false)
+                    .is_err()
+            );
         }
         // Test that `confirmation_text` set to a very long string is rejected.
         {
@@ -2395,9 +2388,11 @@ initial_token_distribution: !FractionalDeveloperVotingPower
                 ),
                 ..SnsInitPayload::with_valid_values_for_testing_post_execution()
             };
-            assert!(sns_init_payload
-                .build_canister_payloads(&sns_canister_ids, None, false)
-                .is_err());
+            assert!(
+                sns_init_payload
+                    .build_canister_payloads(&sns_canister_ids, None, false)
+                    .is_err()
+            );
         }
     }
 
@@ -2883,7 +2878,7 @@ initial_token_distribution: !FractionalDeveloperVotingPower
         {
             let sns_init_payload = SnsInitPayload {
                 fallback_controller_principal_ids: vec![
-                    PrincipalId::new_user_test_id(1).to_string()
+                    PrincipalId::new_user_test_id(1).to_string(),
                 ],
                 ..sns_init_payload.clone()
             };
@@ -3129,8 +3124,8 @@ initial_token_distribution: !FractionalDeveloperVotingPower
     }
 
     #[test]
-    fn test_neurons_fund_participation_constraints_validation_for_post_execution_fail_due_to_unspecified_min_direct_participation_threshold(
-    ) {
+    fn test_neurons_fund_participation_constraints_validation_for_post_execution_fail_due_to_unspecified_min_direct_participation_threshold()
+     {
         let template_init_payload = SnsInitPayload::with_valid_values_for_testing_post_execution();
         let ideal_matched_participation_function = template_init_payload
             .neurons_fund_participation_constraints
@@ -3166,8 +3161,8 @@ initial_token_distribution: !FractionalDeveloperVotingPower
     }
 
     #[test]
-    fn test_neurons_fund_participation_constraints_validation_for_post_execution_fail_due_to_min_direct_participation_gt_min_direct_participation_threshold(
-    ) {
+    fn test_neurons_fund_participation_constraints_validation_for_post_execution_fail_due_to_min_direct_participation_gt_min_direct_participation_threshold()
+     {
         let template_init_payload = SnsInitPayload::with_valid_values_for_testing_post_execution();
         let ideal_matched_participation_function = template_init_payload
             .neurons_fund_participation_constraints
@@ -3205,8 +3200,8 @@ initial_token_distribution: !FractionalDeveloperVotingPower
     }
 
     #[test]
-    fn test_neurons_fund_participation_constraints_validation_for_post_execution_fail_due_to_max_direct_participation_lt_min_direct_participation_threshold(
-    ) {
+    fn test_neurons_fund_participation_constraints_validation_for_post_execution_fail_due_to_max_direct_participation_lt_min_direct_participation_threshold()
+     {
         let template_init_payload = SnsInitPayload::with_valid_values_for_testing_post_execution();
         let ideal_matched_participation_function = template_init_payload
             .neurons_fund_participation_constraints
@@ -3245,8 +3240,8 @@ initial_token_distribution: !FractionalDeveloperVotingPower
     }
 
     #[test]
-    fn test_neurons_fund_participation_constraints_validation_for_post_execution_fail_due_to_unspecified_max_neurons_fund_participation(
-    ) {
+    fn test_neurons_fund_participation_constraints_validation_for_post_execution_fail_due_to_unspecified_max_neurons_fund_participation()
+     {
         let template_init_payload = SnsInitPayload::with_valid_values_for_testing_post_execution();
         let ideal_matched_participation_function = template_init_payload
             .neurons_fund_participation_constraints
@@ -3281,8 +3276,8 @@ initial_token_distribution: !FractionalDeveloperVotingPower
     }
 
     #[test]
-    fn test_neurons_fund_participation_constraints_validation_for_post_execution_fail_due_to_max_neurons_fund_participation_lt_min_direct_participation(
-    ) {
+    fn test_neurons_fund_participation_constraints_validation_for_post_execution_fail_due_to_max_neurons_fund_participation_lt_min_direct_participation()
+     {
         let template_init_payload = SnsInitPayload::with_valid_values_for_testing_post_execution();
         let ideal_matched_participation_function = template_init_payload
             .neurons_fund_participation_constraints
@@ -3321,8 +3316,8 @@ initial_token_distribution: !FractionalDeveloperVotingPower
     }
 
     #[test]
-    fn test_neurons_fund_participation_constraints_validation_for_post_execution_fail_due_to_max_neurons_fund_participation_lt_max_direct_participation(
-    ) {
+    fn test_neurons_fund_participation_constraints_validation_for_post_execution_fail_due_to_max_neurons_fund_participation_lt_max_direct_participation()
+     {
         let template_init_payload = SnsInitPayload::with_valid_values_for_testing_post_execution();
         let ideal_matched_participation_function = template_init_payload
             .neurons_fund_participation_constraints

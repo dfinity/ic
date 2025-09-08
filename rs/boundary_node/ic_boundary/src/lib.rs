@@ -17,4 +17,4 @@ pub mod test_utils;
 mod tls_verify;
 
 pub use crate::core::main;
-pub use crate::http::handlers::{status, Health, RootKey};
+pub use crate::http::handlers::{Health, RootKey, status};

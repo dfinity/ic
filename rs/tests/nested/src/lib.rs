@@ -12,16 +12,15 @@ use ic_consensus_system_test_utils::{
     },
     set_sandbox_env_vars,
     ssh_access::{
-        get_updatesubnetpayload_with_keys, update_subnet_record,
-        wait_until_authentication_is_granted, AuthMean,
+        AuthMean, get_updatesubnetpayload_with_keys, update_subnet_record,
+        wait_until_authentication_is_granted,
     },
     upgrade::assert_assigned_replica_version,
 };
 use ic_recovery::{
-    get_node_metrics,
+    RecoveryArgs, get_node_metrics,
     nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
     util::DataLocation,
-    RecoveryArgs,
 };
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
@@ -30,7 +29,7 @@ use ic_system_test_driver::{
         constants::SSH_USERNAME,
         driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
         ic::{InternetComputer, Subnet},
-        ic_gateway_vm::{IcGatewayVm, IC_GATEWAY_VM_NAME},
+        ic_gateway_vm::{IC_GATEWAY_VM_NAME, IcGatewayVm},
         nested::NestedVms,
         test_env::TestEnv,
         test_env_api::*,
@@ -44,7 +43,7 @@ use ic_types::Height;
 use rand::seq::SliceRandom;
 use reqwest::Client;
 use sha2::{Digest, Sha256};
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 mod util;
 use util::{
@@ -740,7 +739,10 @@ pub fn upgrade_hostos(env: TestEnv) {
     ));
     info!(logger, "Elected target HostOS version");
 
-    info!(logger, "Retrieving the current boot ID from the host before we upgrade so we can determine when it rebooted post upgrade...");
+    info!(
+        logger,
+        "Retrieving the current boot ID from the host before we upgrade so we can determine when it rebooted post upgrade..."
+    );
     let host_boot_id_pre_upgrade = get_host_boot_id(&host);
     info!(
         logger,
@@ -833,7 +835,10 @@ pub fn recovery_upgrader_test(env: TestEnv) {
         .await
         .expect("guest didn't come up as expected");
 
-        info!(logger, "Retrieving the current boot ID from the host before we update boot_args so we can determine when it rebooted...");
+        info!(
+            logger,
+            "Retrieving the current boot ID from the host before we update boot_args so we can determine when it rebooted..."
+        );
         let host_boot_id_pre_reboot = get_host_boot_id(&host);
         info!(
             logger,

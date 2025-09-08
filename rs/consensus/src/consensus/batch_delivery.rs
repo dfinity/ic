@@ -22,26 +22,26 @@ use ic_interfaces::{
     messaging::{MessageRouting, MessageRoutingError},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{debug, error, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, error, info, warn};
 use ic_management_canister_types_private::{ReshareChainKeyResponse, SetupInitialDKGResponse};
 use ic_protobuf::{
     log::consensus_log_entry::v1::ConsensusLogEntry,
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
 use ic_types::{
+    Height, PrincipalId, Randomness, SubnetId,
     batch::{
         Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData, ConsensusResponse,
     },
     consensus::{
-        idkg::{self},
         Block, HasVersion,
+        idkg::{self},
     },
     crypto::threshold_sig::{
-        ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
         ThresholdSigPublicKey,
+        ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
     },
     messages::{CallbackId, Payload, RejectContext},
-    Height, PrincipalId, Randomness, SubnetId,
 };
 use std::collections::BTreeMap;
 
@@ -454,10 +454,9 @@ fn generate_dkg_response_payload(
                         RejectCode::CanisterReject,
                         format!(
                             "Failed to extract public key from high threshold transcript with id {:?}: {}",
-                            high_threshold_transcript.dkg_id,
-                            err,
+                            high_threshold_transcript.dkg_id, err,
                         ),
-                    )))
+                    )));
                 }
             };
             let subnet_threshold_public_key = PublicKeyProto::from(threshold_sig_pk);
@@ -470,10 +469,9 @@ fn generate_dkg_response_payload(
                         RejectCode::CanisterReject,
                         format!(
                             "Failed to encode threshold signature public key of transcript id {:?} into DER: {}",
-                            high_threshold_transcript.dkg_id,
-                            err,
+                            high_threshold_transcript.dkg_id, err,
                         ),
-                    )))
+                    )));
                 }
             };
             let fresh_subnet_id =
@@ -523,11 +521,11 @@ mod tests {
     use ic_management_canister_types_private::{SetupInitialDKGResponse, VetKdCurve, VetKdKeyId};
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
+        PrincipalId, SubnetId,
         crypto::threshold_sig::ni_dkg::{
             NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
         messages::{CallbackId, Payload},
-        PrincipalId, SubnetId,
     };
     use std::str::FromStr;
 

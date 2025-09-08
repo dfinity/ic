@@ -4,8 +4,8 @@ use crate::endpoints::CandidBlockTag;
 use crate::erc20::{CkErc20Token, CkTokenSymbol};
 use crate::eth_logs::{EventSource, ReceivedEvent};
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
-use crate::lifecycle::upgrade::UpgradeArg;
 use crate::lifecycle::EthereumNetwork;
+use crate::lifecycle::upgrade::UpgradeArg;
 use crate::logs::DEBUG;
 use crate::map::DedupMultiKeyMap;
 use crate::numeric::{
@@ -20,7 +20,7 @@ use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
 use ic_ethereum_types::Address;
 use ic_secp256k1::PublicKey;
 use std::cell::RefCell;
-use std::collections::{btree_map, BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet, btree_map};
 use std::fmt::{Display, Formatter};
 use strum_macros::EnumIter;
 use transactions::EthTransactions;
@@ -612,7 +612,7 @@ where
 
 pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
     use ic_cdk::api::management_canister::ecdsa::{
-        ecdsa_public_key, EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument,
+        EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument, ecdsa_public_key,
     };
 
     fn to_public_key(response: &EcdsaPublicKeyResponse) -> PublicKey {

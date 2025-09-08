@@ -11,16 +11,17 @@ use ic_nns_constants::{
     SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::{
+    ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse, GovernanceError,
+    Neuron,
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
-    neuron::DissolveState, ClaimOrRefreshNeuronFromAccount,
-    ClaimOrRefreshNeuronFromAccountResponse, GovernanceError, Neuron,
+    neuron::DissolveState,
 };
 use icp_ledger::Tokens;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
-use pocket_ic::nonblocking::{update_candid_as, PocketIc};
+use pocket_ic::nonblocking::{PocketIc, update_candid_as};
 
-use crate::utils::{check_canister_installed, ALL_SNS_TESTING_CANISTER_IDS};
+use crate::utils::{ALL_SNS_TESTING_CANISTER_IDS, check_canister_installed};
 
 async fn validate_subnet_setup(pocket_ic: &PocketIc) {
     let topology = pocket_ic.topology().await;

@@ -1,6 +1,6 @@
 use super::*;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     state::{
         canister_snapshot_bits::v1 as pb_canister_snapshot_bits,
         canister_state_bits::v1 as pb_canister_state_bits,

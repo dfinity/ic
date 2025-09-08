@@ -1,4 +1,5 @@
 use crate::{
+    CUPS_DIR, DataLocation, NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step,
     cli::{
         consent_given, print_height_info, read_optional, read_optional_data_location,
         read_optional_node_ids, read_optional_subnet_id, read_optional_version,
@@ -8,13 +9,12 @@ use crate::{
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
     util::SshUser,
-    DataLocation, NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, CUPS_DIR,
 };
 use clap::Parser;
 use ic_base_types::{NodeId, SubnetId};
 use ic_types::ReplicaVersion;
 use serde::{Deserialize, Serialize};
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::{iter::Peekable, net::IpAddr};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};

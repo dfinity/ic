@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests;
 
-pub use super::event::{Event, EventType};
 use super::State;
+pub use super::event::{Event, EventType};
 use crate::erc20::CkTokenSymbol;
 use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::eth_logs_scraping::LogScrapingId::Erc20DepositWithoutSubaccount;

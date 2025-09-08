@@ -10,13 +10,13 @@ use ic_agent::Agent;
 use ic_btc_interface::{OutPoint, Utxo};
 use ic_ckbtc_minter::address::BitcoinAddress;
 use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
-use ic_ckbtc_minter::state::eventlog::{replay, Event, EventType};
-use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use ic_ckbtc_minter::state::CkBtcMinterState;
+use ic_ckbtc_minter::state::eventlog::{Event, EventType, replay};
+use ic_ckbtc_minter::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use ic_ckbtc_minter::{
+    BuildTxError, ECDSAPublicKey, MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY, Network,
     build_unsigned_transaction_from_inputs, process_maybe_finalized_transactions,
-    resubmit_transactions, state, tx, BuildTxError, ECDSAPublicKey, Network,
-    MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY,
+    resubmit_transactions, state, tx,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use maplit::btreeset;
@@ -33,7 +33,7 @@ pub mod mock {
     use ic_btc_interface::Utxo;
     use ic_ckbtc_minter::management::CallError;
     use ic_ckbtc_minter::updates::update_balance::UpdateBalanceError;
-    use ic_ckbtc_minter::{tx, CanisterRuntime, GetUtxosRequest, GetUtxosResponse, Network};
+    use ic_ckbtc_minter::{CanisterRuntime, GetUtxosRequest, GetUtxosResponse, Network, tx};
     use ic_management_canister_types_private::DerivationPath;
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
@@ -279,18 +279,24 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
         replaced_reason,
         &runtime,
     );
-    assert!(!state
-        .submitted_transactions
-        .iter()
-        .any(|tx| tx.txid == resubmitted_txid));
-    assert!(state
-        .submitted_transactions
-        .iter()
-        .any(|tx| tx.txid == cancellation_txid));
-    assert!(state
-        .stuck_transactions
-        .iter()
-        .any(|tx| tx.txid == resubmitted_txid));
+    assert!(
+        !state
+            .submitted_transactions
+            .iter()
+            .any(|tx| tx.txid == resubmitted_txid)
+    );
+    assert!(
+        state
+            .submitted_transactions
+            .iter()
+            .any(|tx| tx.txid == cancellation_txid)
+    );
+    assert!(
+        state
+            .stuck_transactions
+            .iter()
+            .any(|tx| tx.txid == resubmitted_txid)
+    );
 
     // Check if transaction is canceled once cancellation tx is finalized.
     now += MIN_RESUBMISSION_DELAY.as_nanos() as u64;
@@ -324,24 +330,32 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
         main_account,
         &runtime,
     );
-    assert!(!state
-        .stuck_transactions
-        .iter()
-        .any(|tx| tx.txid == stuck_tx.txid));
-    assert!(!state
-        .stuck_transactions
-        .iter()
-        .any(|tx| tx.txid == resubmitted_txid));
-    assert!(!state
-        .submitted_transactions
-        .iter()
-        .any(|tx| tx.txid == cancellation_txid));
+    assert!(
+        !state
+            .stuck_transactions
+            .iter()
+            .any(|tx| tx.txid == stuck_tx.txid)
+    );
+    assert!(
+        !state
+            .stuck_transactions
+            .iter()
+            .any(|tx| tx.txid == resubmitted_txid)
+    );
+    assert!(
+        !state
+            .submitted_transactions
+            .iter()
+            .any(|tx| tx.txid == cancellation_txid)
+    );
     assert!(maybe_finalized_transactions.is_empty());
     assert!(!state.available_utxos.contains(&used_utxo));
-    assert!(resubmitted_tx
-        .used_utxos
-        .iter()
-        .all(|utxo| utxo == &used_utxo || state.available_utxos.contains(utxo)));
+    assert!(
+        resubmitted_tx
+            .used_utxos
+            .iter()
+            .all(|utxo| utxo == &used_utxo || state.available_utxos.contains(utxo))
+    );
 }
 
 #[tokio::test]
@@ -439,9 +453,9 @@ trait GetEventsFile {
 
     async fn retrieve_and_store_events(&self) {
         use candid::Encode;
-        use flate2::bufread::GzEncoder;
         use flate2::Compression;
-        use ic_agent::{identity::AnonymousIdentity, Agent};
+        use flate2::bufread::GzEncoder;
+        use ic_agent::{Agent, identity::AnonymousIdentity};
         use std::fs::File;
         use std::io::{BufReader, BufWriter, Read, Write};
 

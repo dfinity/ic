@@ -218,10 +218,18 @@ fn batch_verification_works() {
 #[test]
 fn test_der_public_key_conversions() {
     let test_data = [
-        (hex!("b3997656ba51ff6da37b61d8d549ec80717266ecf48fb5da52b654412634844c"),
-         hex!("302a300506032b6570032100b3997656ba51ff6da37b61d8d549ec80717266ecf48fb5da52b654412634844c")),
-        (hex!("a5afb5feb6dfb6ddf5dd6563856fff5484f5fe304391d9ed06697861f220c610"),
-         hex!("302a300506032b6570032100a5afb5feb6dfb6ddf5dd6563856fff5484f5fe304391d9ed06697861f220c610")),
+        (
+            hex!("b3997656ba51ff6da37b61d8d549ec80717266ecf48fb5da52b654412634844c"),
+            hex!(
+                "302a300506032b6570032100b3997656ba51ff6da37b61d8d549ec80717266ecf48fb5da52b654412634844c"
+            ),
+        ),
+        (
+            hex!("a5afb5feb6dfb6ddf5dd6563856fff5484f5fe304391d9ed06697861f220c610"),
+            hex!(
+                "302a300506032b6570032100a5afb5feb6dfb6ddf5dd6563856fff5484f5fe304391d9ed06697861f220c610"
+            ),
+        ),
     ];
 
     for (raw, der) in &test_data {
@@ -240,7 +248,9 @@ fn test_der_public_key_conversions() {
 
 #[test]
 fn can_parse_pkcs8_v1_der_secret_key() {
-    let pkcs8_v1 = hex!("302e020100300506032b657004220420d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842");
+    let pkcs8_v1 = hex!(
+        "302e020100300506032b657004220420d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f44755842"
+    );
     let sk = PrivateKey::deserialize_pkcs8(&pkcs8_v1).unwrap();
 
     assert_eq!(
@@ -268,7 +278,9 @@ cj1BoSMDIQD1+si816/7QQVbbOqgIFv+zizVvGq1QOMLg20pABvT8Q==
 #[test]
 fn can_parse_pkcs8_v2_der_secret_key() {
     // From ring test data
-    let pkcs8_v2 = hex!("3051020101300506032b657004220420d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f4475584281210019bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1");
+    let pkcs8_v2 = hex!(
+        "3051020101300506032b657004220420d4ee72dbf913584ad5b6d8f1f769f8ad3afe7c28cbf1d4fbe097a88f4475584281210019bf44096984cdfe8541bac167dc3b96c85086aa30b6b6cb0c5c38ad703166e1"
+    );
 
     let sk = PrivateKey::deserialize_pkcs8(&pkcs8_v2).unwrap();
 
@@ -307,17 +319,26 @@ fn can_pass_old_basic_sig_utils_parsing_tests() {
     }
 
     let tests = [
-        PublicKeyParsingTest::new(hex!("B3997656BA51FF6DA37B61D8D549EC80717266ECF48FB5DA52B654412634844C"),
-                                  hex!("302A300506032B6570032100B3997656BA51FF6DA37B61D8D549EC80717266ECF48FB5DA52B654412634844C"),
-                                  "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAs5l2VrpR/22je2HY1UnsgHFyZuz0j7XaUrZUQSY0hEw=\n-----END PUBLIC KEY-----\n"
+        PublicKeyParsingTest::new(
+            hex!("B3997656BA51FF6DA37B61D8D549EC80717266ECF48FB5DA52B654412634844C"),
+            hex!(
+                "302A300506032B6570032100B3997656BA51FF6DA37B61D8D549EC80717266ECF48FB5DA52B654412634844C"
+            ),
+            "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAs5l2VrpR/22je2HY1UnsgHFyZuz0j7XaUrZUQSY0hEw=\n-----END PUBLIC KEY-----\n",
         ),
-        PublicKeyParsingTest::new(hex!("A5AFB5FEB6DFB6DDF5DD6563856FFF5484F5FE304391D9ED06697861F220C610"),
-                                  hex!("302A300506032B6570032100A5AFB5FEB6DFB6DDF5DD6563856FFF5484F5FE304391D9ED06697861F220C610"),
-                                  "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEApa+1/rbftt313WVjhW//VIT1/jBDkdntBml4YfIgxhA=\n-----END PUBLIC KEY-----\n"
+        PublicKeyParsingTest::new(
+            hex!("A5AFB5FEB6DFB6DDF5DD6563856FFF5484F5FE304391D9ED06697861F220C610"),
+            hex!(
+                "302A300506032B6570032100A5AFB5FEB6DFB6DDF5DD6563856FFF5484F5FE304391D9ED06697861F220C610"
+            ),
+            "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEApa+1/rbftt313WVjhW//VIT1/jBDkdntBml4YfIgxhA=\n-----END PUBLIC KEY-----\n",
         ),
-        PublicKeyParsingTest::new(hex!("C8413108F121CB794A10804D15F613E40ECC7C78A4EC567040DDF78467C71DFF"),
-                                  hex!("302A300506032B6570032100C8413108F121CB794A10804D15F613E40ECC7C78A4EC567040DDF78467C71DFF"),
-                                  "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAyEExCPEhy3lKEIBNFfYT5A7MfHik7FZwQN33hGfHHf8=\n-----END PUBLIC KEY-----\n"
+        PublicKeyParsingTest::new(
+            hex!("C8413108F121CB794A10804D15F613E40ECC7C78A4EC567040DDF78467C71DFF"),
+            hex!(
+                "302A300506032B6570032100C8413108F121CB794A10804D15F613E40ECC7C78A4EC567040DDF78467C71DFF"
+            ),
+            "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAyEExCPEhy3lKEIBNFfYT5A7MfHik7FZwQN33hGfHHf8=\n-----END PUBLIC KEY-----\n",
         ),
     ];
 

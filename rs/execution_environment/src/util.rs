@@ -1,6 +1,6 @@
 use crate::types::Response;
 use ic_interfaces::execution_environment::IngressHistoryWriter;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error};
 use ic_replicated_state::ReplicatedState;
 use ic_types::CanisterId;
 use prometheus::IntCounter;

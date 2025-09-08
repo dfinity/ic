@@ -16,10 +16,10 @@ use ic_types::batch::TotalQueryStats;
 use ic_types::methods::SystemMethod;
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{
-    messages::{CanisterMessage, Ingress, Request, RequestOrResponse, Response},
-    methods::WasmMethod,
     AccumulatedPriority, CanisterId, CanisterLog, ComputeAllocation, ExecutionRound,
     MemoryAllocation, NumBytes, PrincipalId, Time,
+    messages::{CanisterMessage, Ingress, Request, RequestOrResponse, Response},
+    methods::WasmMethod,
 };
 use ic_types::{LongExecutionMode, NumInstructions};
 use ic_validate_eq::ValidateEq;
@@ -356,12 +356,13 @@ impl CanisterState {
                 // To avoid subtraction, we check for
                 // `memory_used > memory_allocation + canister_history_memory_usage` instead.
                 if memory_used > reserved_bytes + canister_history_memory_usage {
-                    return Err(format!("Invariant broken: Memory of canister {} exceeds the memory allocation: used {}, memory allocation {}, canister history memory usage {}",
-                    self.canister_id(),
-                    memory_used,
-                    reserved_bytes,
-                    canister_history_memory_usage,
-                ));
+                    return Err(format!(
+                        "Invariant broken: Memory of canister {} exceeds the memory allocation: used {}, memory allocation {}, canister history memory usage {}",
+                        self.canister_id(),
+                        memory_used,
+                        reserved_bytes,
+                        canister_history_memory_usage,
+                    ));
                 }
             }
             MemoryAllocation::BestEffort => (),
@@ -374,13 +375,23 @@ impl CanisterState {
                 WasmExecutionMode::Wasm64 => config.max_wasm64_memory_size,
             };
             if wasm_memory_usage > wasm_memory_limit {
-                return Err(format!("Invariant broken: Wasm memory of canister {} exceeds the limit allowed: used {}, allowed {}", self.canister_id(), wasm_memory_usage, wasm_memory_limit));
+                return Err(format!(
+                    "Invariant broken: Wasm memory of canister {} exceeds the limit allowed: used {}, allowed {}",
+                    self.canister_id(),
+                    wasm_memory_usage,
+                    wasm_memory_limit
+                ));
             }
 
             let stable_memory_usage = execution_state.stable_memory_usage();
             let stable_memory_limit = config.max_stable_memory_size;
             if stable_memory_usage > stable_memory_limit {
-                return Err(format!("Invariant broken: Stable memory of canister {} exceeds the limit allowed: used {}, allowed {}", self.canister_id(), stable_memory_usage, stable_memory_limit));
+                return Err(format!(
+                    "Invariant broken: Stable memory of canister {} exceeds the limit allowed: used {}, allowed {}",
+                    self.canister_id(),
+                    stable_memory_usage,
+                    stable_memory_limit
+                ));
             }
         }
 
@@ -658,5 +669,5 @@ pub fn num_bytes_try_from(pages: NumWasmPages) -> Result<NumBytes, String> {
 }
 
 pub mod testing {
-    pub use super::queues::testing::{new_canister_output_queues_for_test, CanisterQueuesTesting};
+    pub use super::queues::testing::{CanisterQueuesTesting, new_canister_output_queues_for_test};
 }

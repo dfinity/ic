@@ -166,24 +166,23 @@ pub fn mock_env_variables(config: &IcConfig) {
         }
     }
 
-    update_env_variables(
-            vec![
-                (
-                    config.target_version.to_string(),
-                    GUESTOS_UPDATE_IMG_VERSION,
-                ),
-                (
-                    format!("http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.zst", config.target_version),
-                    GUESTOS_UPDATE_IMG_URL,
-                ),
-                (
-                    block_on(fetch_update_file_sha256_with_retry(
-                        &config.target_version,
-                    )),
-                    GUESTOS_UPDATE_IMG_HASH,
-                ),
-            ],
-        );
+    update_env_variables(vec![
+        (
+            config.target_version.to_string(),
+            GUESTOS_UPDATE_IMG_VERSION,
+        ),
+        (
+            format!(
+                "http://download.proxy-global.dfinity.network:8080/ic/{}/guest-os/update-img/update-img.tar.zst",
+                config.target_version
+            ),
+            GUESTOS_UPDATE_IMG_URL,
+        ),
+        (
+            block_on(fetch_update_file_sha256_with_retry(&config.target_version)),
+            GUESTOS_UPDATE_IMG_HASH,
+        ),
+    ]);
 
     // TODO(NODE-1679): Simplify this check once the measurements are available in the repo.
     match block_on(fetch_update_file_measurements_with_retry(

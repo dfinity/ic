@@ -1,3 +1,4 @@
+use crate::WithdrawalFee;
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::reimbursement::ReimburseWithdrawalTask;
@@ -7,7 +8,6 @@ use crate::state::{
     RetrieveBtcRequest, SubmittedBtcTransaction, SubmittedWithdrawalRequests, SuspendedReason,
 };
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit, ReimbursementReason};
-use crate::WithdrawalFee;
 use candid::Principal;
 pub use event::{EventType, ReplacedReason};
 use ic_btc_interface::{Txid, Utxo};
@@ -299,7 +299,7 @@ pub fn replay<I: CheckInvariants>(
                 return Err(ReplayLogError::InconsistentLog(format!(
                     "The first event is not Init: {:?}",
                     payload
-                )))
+                )));
             }
         },
         None => return Err(ReplayLogError::EmptyLog),
@@ -404,7 +404,7 @@ pub fn replay<I: CheckInvariants>(
                         return Err(ReplayLogError::InconsistentLog(format!(
                             "Cannot replace a non-existent transaction {}",
                             &old_txid
-                        )))
+                        )));
                     }
                 };
                 let requests = match reason {
@@ -413,13 +413,19 @@ pub fn replay<I: CheckInvariants>(
                             panic!("Cannot cancel a cancelation request")
                         }
                         SubmittedWithdrawalRequests::ToConfirm { requests } => {
-                            assert!(new_utxos.is_some(), "BUG: Cancel transaction {new_txid} must have `new_utxos` to use different UTXOs than the transaction it tries to cancel");
-                            debug_assert!(new_utxos.as_ref()
-                                .unwrap()
-                                .iter()
-                                .collect::<BTreeSet<_>>()
-                                .is_subset(&old_utxos.iter().collect::<BTreeSet<_>>()),
-                            "BUG: UTXOs from cancel transaction must be a subset of the UTXOS from the transaction to cancel. New UTXOs {new_utxos:?}. Old UTXOs: {old_utxos:?}");
+                            assert!(
+                                new_utxos.is_some(),
+                                "BUG: Cancel transaction {new_txid} must have `new_utxos` to use different UTXOs than the transaction it tries to cancel"
+                            );
+                            debug_assert!(
+                                new_utxos
+                                    .as_ref()
+                                    .unwrap()
+                                    .iter()
+                                    .collect::<BTreeSet<_>>()
+                                    .is_subset(&old_utxos.iter().collect::<BTreeSet<_>>()),
+                                "BUG: UTXOs from cancel transaction must be a subset of the UTXOS from the transaction to cancel. New UTXOs {new_utxos:?}. Old UTXOs: {old_utxos:?}"
+                            );
                             SubmittedWithdrawalRequests::ToCancel { requests, reason }
                         }
                     },
@@ -482,7 +488,9 @@ pub fn replay<I: CheckInvariants>(
                     if let Err(Overdraft(overdraft)) =
                         state.distribute_kyt_fee(kyt_provider, amount)
                     {
-                        return Err(ReplayLogError::InconsistentLog(format!("Attempted to distribute {amount} to {kyt_provider}, causing an overdraft of {overdraft}")));
+                        return Err(ReplayLogError::InconsistentLog(format!(
+                            "Attempted to distribute {amount} to {kyt_provider}, causing an overdraft of {overdraft}"
+                        )));
                     }
                 }
             }

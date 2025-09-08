@@ -214,7 +214,7 @@ fn rename_canister(_: RenameCanisterArgs) {
 #[cfg(test)]
 mod test {
     use crate::*;
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
     use ic_management_canister_types_private::*;
 
     #[test]

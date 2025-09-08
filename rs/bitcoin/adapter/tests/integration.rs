@@ -1,8 +1,8 @@
 use bitcoin::{
-    consensus::encode::deserialize, dogecoin::Network as DogeNetwork, Amount, BlockHash,
-    Network as BtcNetwork,
+    Amount, BlockHash, Network as BtcNetwork, consensus::encode::deserialize,
+    dogecoin::Network as DogeNetwork,
 };
-use ic_btc_adapter::{start_server, AdapterNetwork, Config, IncomingSource};
+use ic_btc_adapter::{AdapterNetwork, Config, IncomingSource, start_server};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::{
     bitcoind::{Conf, Daemon},
@@ -14,7 +14,7 @@ use ic_btc_replica_types::{
 };
 use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig;
 use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError};
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_metrics::MetricsRegistry;
 use std::{
     collections::{HashMap, HashSet},

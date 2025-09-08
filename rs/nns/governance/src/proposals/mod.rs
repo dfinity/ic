@@ -1,6 +1,6 @@
 use crate::{
     governance::LOG_PREFIX,
-    pb::v1::{governance_error::ErrorType, GovernanceError, ProposalData, Topic, Vote},
+    pb::v1::{GovernanceError, ProposalData, Topic, Vote, governance_error::ErrorType},
 };
 use ic_base_types::CanisterId;
 use ic_cdk::println;

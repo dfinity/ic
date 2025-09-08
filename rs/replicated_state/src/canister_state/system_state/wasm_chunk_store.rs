@@ -1,11 +1,11 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use ic_sys::{PageBytes, PageIndex, PAGE_SIZE};
+use ic_sys::{PAGE_SIZE, PageBytes, PageIndex};
 use ic_types::{NumBytes, NumOsPages};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 
-use crate::{page_map::PageAllocatorFileDescriptor, PageMap};
+use crate::{PageMap, page_map::PageAllocatorFileDescriptor};
 
 pub mod proto;
 
@@ -154,7 +154,8 @@ impl WasmChunkStore {
         } else if self.metadata.chunks.len() as u64 * CHUNK_SIZE >= max_size.get() {
             ChunkValidationResult::ValidationError(format!(
                 "Wasm chunk store has already reached maximum capacity of {} bytes or the maximum number of entries, {}",
-                max_size, max_size.get() / CHUNK_SIZE
+                max_size,
+                max_size.get() / CHUNK_SIZE
             ))
         } else {
             ChunkValidationResult::Insert(ValidatedChunk { chunk, hash })

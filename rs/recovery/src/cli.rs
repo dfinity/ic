@@ -1,5 +1,6 @@
 //! Calls the recovery library.
 use crate::{
+    DataLocation, NeuronArgs, RecoveryArgs,
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs},
     args_merger::merge,
     error::GracefulExpect,
@@ -13,16 +14,15 @@ use crate::{
     util,
     util::data_location_from_str,
     util::subnet_id_from_str,
-    DataLocation, NeuronArgs, RecoveryArgs,
 };
 use core::fmt::Debug;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
-use serde::{de::DeserializeOwned, Serialize};
-use slog::{info, warn, Logger};
+use serde::{Serialize, de::DeserializeOwned};
+use slog::{Logger, info, warn};
 use std::{
     convert::TryFrom,
     fmt::Display,
-    io::{stdin, stdout, Write},
+    io::{Write, stdin, stdout},
     str::FromStr,
 };
 use strum::EnumMessage;
@@ -239,11 +239,7 @@ pub fn read_input(logger: &Logger, prompt: &str) -> String {
 /// input to `None`.
 fn read_optional_input(logger: &Logger, prompt: &str) -> Option<String> {
     let input = read_input(logger, &format!("(Optional) {}", prompt));
-    if input.is_empty() {
-        None
-    } else {
-        Some(input)
-    }
+    if input.is_empty() { None } else { Some(input) }
 }
 
 pub fn read_optional_node_ids(logger: &Logger, prompt: &str) -> Option<Vec<NodeId>> {

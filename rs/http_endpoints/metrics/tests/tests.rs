@@ -9,12 +9,12 @@ use prometheus::{
 use reqwest::{Body, Client, Error, Method, Response, StatusCode};
 use std::net::SocketAddr;
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
     Arc,
+    atomic::{AtomicUsize, Ordering},
 };
 use tokio::{
     net::TcpSocket,
-    sync::mpsc::{channel, Sender},
+    sync::mpsc::{Sender, channel},
 };
 
 // Get a free port on this host to which we can connect transport to.

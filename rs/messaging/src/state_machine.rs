@@ -1,5 +1,5 @@
 use crate::message_routing::{
-    ApiBoundaryNodes, MessageRoutingMetrics, NodePublicKeys, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+    ApiBoundaryNodes, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, MessageRoutingMetrics, NodePublicKeys,
 };
 use crate::routing::demux::Demux;
 use crate::routing::stream_builder::StreamBuilder;
@@ -8,7 +8,7 @@ use ic_interfaces::execution_environment::{
     ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
 use ic_interfaces::time_source::system_time_now;
-use ic_logger::{error, fatal, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, fatal};
 use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase::DroppedMessages;

@@ -1,10 +1,10 @@
 use ic_certification_test_utils::{
-    create_certificate_labeled_tree, generate_root_of_trust, CertificateBuilder, CertificateData,
+    CertificateBuilder, CertificateData, create_certificate_labeled_tree, generate_root_of_trust,
 };
 use ic_types::{
+    CanisterId, SubnetId,
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{Blob, CertificateDelegation},
-    CanisterId, SubnetId,
 };
 use rand::thread_rng;
 

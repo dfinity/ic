@@ -1,8 +1,8 @@
-use axum::extract::State;
-use axum::http::{header, StatusCode};
-use axum::response::IntoResponse;
 use axum::Router;
-use ic_tracing::{utils::SharedBuffer, ReloadHandles};
+use axum::extract::State;
+use axum::http::{StatusCode, header};
+use axum::response::IntoResponse;
+use ic_tracing::{ReloadHandles, utils::SharedBuffer};
 use std::io::BufReader;
 use std::time::Duration;
 use tokio::sync::oneshot;

@@ -1,8 +1,8 @@
 use ic_interfaces_registry::{RegistryDataProvider, RegistryRecord};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, registry::RegistryDataProviderError,
-    RegistryVersion,
+    RegistryVersion, crypto::threshold_sig::ThresholdSigPublicKey,
+    registry::RegistryDataProviderError,
 };
 use std::sync::Arc;
 use url::Url;

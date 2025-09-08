@@ -4,7 +4,7 @@ use crate::{
 };
 use ethers_core::abi::AbiDecode;
 use ethers_core::utils::rlp;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::str::FromStr;
 
 pub fn empty_logs() -> Vec<ethers_core::types::Log> {
@@ -32,7 +32,7 @@ pub fn send_raw_transaction_response() -> ethers_core::types::TxHash {
 }
 
 pub fn block_response(block_number: u64) -> ethers_core::types::Block<ethers_core::types::TxHash> {
-    use ethers_core::types::{H256, H64};
+    use ethers_core::types::{H64, H256};
 
     let mut hash = [0_u8; 32];
     hex::decode_to_slice(&DEFAULT_BLOCK_HASH[2..], &mut hash).unwrap();

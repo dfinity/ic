@@ -2,12 +2,12 @@ use ic_canister_client_sender::Sender;
 use ic_crypto_tree_hash::Path;
 use ic_read_state_response_parser::RequestStatus;
 use ic_types::{
+    CanisterId, Time,
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
         HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, MessageId, SignedRequestBytes,
     },
     time::expiry_time_from_now,
-    CanisterId, Time,
 };
 use serde_cbor::value::Value as CBOR;
 use std::convert::TryFrom;
@@ -219,7 +219,7 @@ fn sign_query(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair};
+    use ic_canister_client_sender::{Ed25519KeyPair, ed25519_public_key_to_der};
     use ic_crypto_test_utils_root_of_trust::MockRootOfTrustProvider;
     use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
     use ic_test_utilities_types::ids::node_test_id;
@@ -277,10 +277,12 @@ mod tests {
         assert_eq!(id, request.id());
 
         // The envelope can be successfully authenticated
-        assert!(request_validator()
-            .validate_request(&request, test_start_time, &MockRootOfTrustProvider::new())
-            .unwrap()
-            .contains(&request.content().canister_id()));
+        assert!(
+            request_validator()
+                .validate_request(&request, test_start_time, &MockRootOfTrustProvider::new())
+                .unwrap()
+                .contains(&request.content().canister_id())
+        );
     }
 
     /// Create an HttpRequest with a non-anonymous user and then verify
@@ -320,10 +322,12 @@ mod tests {
         assert_eq!(id, request.id());
 
         // The envelope can be successfully authenticated
-        assert!(request_validator()
-            .validate_request(&request, test_start_time, &MockRootOfTrustProvider::new())
-            .unwrap()
-            .contains(&request.content().canister_id()));
+        assert!(
+            request_validator()
+                .validate_request(&request, test_start_time, &MockRootOfTrustProvider::new())
+                .unwrap()
+                .contains(&request.content().canister_id())
+        );
     }
 
     /// Create an HttpRequest with an explicit anonymous user and then
@@ -355,10 +359,12 @@ mod tests {
         assert_eq!(id, request.id());
 
         // The envelope can be successfully authenticated
-        assert!(request_validator()
-            .validate_request(&request, test_start_time, &MockRootOfTrustProvider::new())
-            .unwrap()
-            .contains(&request.content().canister_id()));
+        assert!(
+            request_validator()
+                .validate_request(&request, test_start_time, &MockRootOfTrustProvider::new())
+                .unwrap()
+                .contains(&request.content().canister_id())
+        );
     }
 
     #[test]

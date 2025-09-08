@@ -1,6 +1,6 @@
 use crate::pb::v1::{
-    valuation::{Token as TokenPb, ValuationFactors as ValuationFactorsPb},
     Account as AccountPb, Valuation as ValuationPb,
+    valuation::{Token as TokenPb, ValuationFactors as ValuationFactorsPb},
 };
 use crate::proposal::TreasuryAccount;
 use candid::Principal;

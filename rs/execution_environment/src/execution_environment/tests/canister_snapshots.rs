@@ -16,29 +16,29 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    CanisterState, ExecutionState, SchedulerState,
     canister_state::{
-        execution_state::{WasmBinary, WasmExecutionMode},
-        system_state::{wasm_chunk_store::CHUNK_SIZE, CyclesUseCase},
         WASM_PAGE_SIZE_IN_BYTES,
+        execution_state::{WasmBinary, WasmExecutionMode},
+        system_state::{CyclesUseCase, wasm_chunk_store::CHUNK_SIZE},
     },
     metadata_state::UnflushedCheckpointOp,
-    CanisterState, ExecutionState, SchedulerState,
 };
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities_execution_environment::{
-    cycles_reserved_for_app_and_verified_app_subnets, get_output_messages, ExecutionTest,
-    ExecutionTestBuilder,
+    ExecutionTest, ExecutionTestBuilder, cycles_reserved_for_app_and_verified_app_subnets,
+    get_output_messages,
 };
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
 use ic_types::{
+    CanisterId, Cycles, NumInstructions, SnapshotId,
     batch::CanisterCyclesCostSchedule,
     ingress::WasmResult,
     messages::{Payload, RejectContext, RequestOrResponse},
     time::UNIX_EPOCH,
-    CanisterId, Cycles, NumInstructions, SnapshotId,
 };
 use ic_types_test_utils::ids::user_test_id;
-use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use more_asserts::assert_gt;
 use std::borrow::Borrow;
 
@@ -1616,29 +1616,31 @@ fn load_canister_snapshot_succeeds() {
     let result = test.subnet_message("clear_chunk_store", clear_args.encode());
     assert!(result.is_ok());
     // Verify chunk store contains no data.
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .system_state
-        .wasm_chunk_store
-        .keys()
-        .next()
-        .is_none());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .wasm_chunk_store
+            .keys()
+            .next()
+            .is_none()
+    );
 
     // Load an existing snapshot.
     helper_load_snapshot(&mut test, canister_id, snapshot_id);
 
     // Verify chunk store contains data.
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .system_state
-        .wasm_chunk_store
-        .keys()
-        .next()
-        .is_some());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .system_state
+            .wasm_chunk_store
+            .keys()
+            .next()
+            .is_some()
+    );
 
     // Checks after state changed through loading.
     let canister_version_after = test

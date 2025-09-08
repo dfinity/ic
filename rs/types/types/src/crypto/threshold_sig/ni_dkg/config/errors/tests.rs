@@ -1,6 +1,6 @@
 use super::*;
-use crate::crypto::tests::set_of;
 use crate::PrincipalId;
+use crate::crypto::tests::set_of;
 
 fn node_id(id: u64) -> NodeId {
     NodeId::from(PrincipalId::new_node_test_id(id))

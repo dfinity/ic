@@ -3,8 +3,8 @@ use ic_base_types::{NodeId, RegistryVersion};
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
 use ic_registry_keys::{
-    get_api_boundary_node_record_node_id, make_api_boundary_node_record_key,
-    API_BOUNDARY_NODE_RECORD_KEY_PREFIX,
+    API_BOUNDARY_NODE_RECORD_KEY_PREFIX, get_api_boundary_node_record_node_id,
+    make_api_boundary_node_record_key,
 };
 use ic_types::registry::RegistryClientError;
 use std::collections::HashSet;
@@ -191,17 +191,25 @@ mod tests {
             version,
         );
 
-        assert!(registry
-            .is_system_api_boundary_node(node_id(1), version)
-            .unwrap());
-        assert!(registry
-            .is_system_api_boundary_node(node_id(2), version)
-            .unwrap());
-        assert!(!registry
-            .is_system_api_boundary_node(node_id(3), version)
-            .unwrap());
-        assert!(!registry
-            .is_system_api_boundary_node(node_id(4), version)
-            .unwrap());
+        assert!(
+            registry
+                .is_system_api_boundary_node(node_id(1), version)
+                .unwrap()
+        );
+        assert!(
+            registry
+                .is_system_api_boundary_node(node_id(2), version)
+                .unwrap()
+        );
+        assert!(
+            !registry
+                .is_system_api_boundary_node(node_id(3), version)
+                .unwrap()
+        );
+        assert!(
+            !registry
+                .is_system_api_boundary_node(node_id(4), version)
+                .unwrap()
+        );
     }
 }

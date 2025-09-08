@@ -2,15 +2,15 @@ use ic_base_types::PrincipalId;
 use ic_nervous_system_agent::helpers::await_with_timeout;
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nervous_system_integration_tests::{
+    SectionTimer,
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{
         self, hash_sns_wasms, nns, sns,
         sns::governance::{
-            set_automatically_advance_target_version_flag, EXPECTED_UPGRADE_DURATION_MAX_SECONDS,
-            EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
+            EXPECTED_UPGRADE_DURATION_MAX_SECONDS, EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
+            set_automatically_advance_target_version_flag,
         },
     },
-    SectionTimer,
 };
 use ic_sns_governance::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
 use ic_sns_governance_api::pb::v1::upgrade_journal_entry;

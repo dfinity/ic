@@ -12,7 +12,7 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities::universal_canister::{
-    wasm, UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM,
+    UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM, wasm,
 };
 use ic_types::CanisterId;
 
@@ -281,8 +281,8 @@ fn take_download_upload_load_snapshot_roundtrip_one_global() {
     }
 }
 
-fn test_env_for_global_timer_on_low_wasm_memory(
-) -> (StateMachine, CanisterId, SnapshotId, WasmResult) {
+fn test_env_for_global_timer_on_low_wasm_memory()
+-> (StateMachine, CanisterId, SnapshotId, WasmResult) {
     let env = StateMachineBuilder::new()
         .with_snapshot_download_enabled(true)
         .with_snapshot_upload_enabled(true)

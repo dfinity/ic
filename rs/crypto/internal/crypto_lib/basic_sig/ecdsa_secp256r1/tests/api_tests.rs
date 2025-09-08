@@ -2,9 +2,9 @@
 //   openssl ecparam -name prime256v1 -genkey -noout -out private.ec.key
 //   openssl ec -in private.ec.key -pubout -outform DER -out ecpubkey.der
 //   hexdump -ve '1/1 "%.2x"' ecpubkey.der
-const ECDSA_P256_PK_1_DER_HEX : &str = "3059301306072a8648ce3d020106082a8648ce3d03010703420004485c32997ce7c6d38ca82c821185c689d424fac7c9695bb97786c4248aab6428949bcd163e2bcf3eeeac4f200b38fbd053f82c4e1776dc9c6dc8db9b7c35e06f";
+const ECDSA_P256_PK_1_DER_HEX: &str = "3059301306072a8648ce3d020106082a8648ce3d03010703420004485c32997ce7c6d38ca82c821185c689d424fac7c9695bb97786c4248aab6428949bcd163e2bcf3eeeac4f200b38fbd053f82c4e1776dc9c6dc8db9b7c35e06f";
 
-const SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX : &str = "3045022100c69c75c6d6c449ea936094476e8bfcad90d831a6437a87117615add6d6a5168802201e2e4535976794286fa264eb81d7b14b3f168ab7f62ad5c0b9d6ebfc64eb0c8c";
+const SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX: &str = "3045022100c69c75c6d6c449ea936094476e8bfcad90d831a6437a87117615add6d6a5168802201e2e4535976794286fa264eb81d7b14b3f168ab7f62ad5c0b9d6ebfc64eb0c8c";
 
 // A DER-encoded Ed25519 public key, to test that parsing non-ECDSA keys
 // gracefully fails.
@@ -51,7 +51,7 @@ mod keygen {
     //     -conv_form compressed
     #[test]
     fn rejects_compressed_points() {
-        const COMPRESSED : &str = "3039301306072a8648ce3d020106082a8648ce3d030107032200029b18562f6d49c62626023683c31923b5b99825a05761cad69a856ee174bd879b";
+        const COMPRESSED: &str = "3039301306072a8648ce3d020106082a8648ce3d030107032200029b18562f6d49c62626023683c31923b5b99825a05761cad69a856ee174bd879b";
 
         let pk_der = hex::decode(COMPRESSED).unwrap();
         let pk_result = public_key_from_der(&pk_der);
@@ -200,9 +200,11 @@ mod sig_conv_tests {
         let bytes = vec![0; SignatureBytes::SIZE + 1];
         let result = SignatureBytes::try_from(bytes);
         assert!(result.is_err());
-        assert!(result
-            .expect_err("Unexpected success.")
-            .is_malformed_signature());
+        assert!(
+            result
+                .expect_err("Unexpected success.")
+                .is_malformed_signature()
+        );
     }
 
     #[test]
@@ -210,8 +212,10 @@ mod sig_conv_tests {
         let bytes = vec![0; SignatureBytes::SIZE - 1];
         let result = SignatureBytes::try_from(bytes);
         assert!(result.is_err());
-        assert!(result
-            .expect_err("Unexpected success.")
-            .is_malformed_signature());
+        assert!(
+            result
+                .expect_err("Unexpected success.")
+                .is_malformed_signature()
+        );
     }
 }

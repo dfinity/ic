@@ -4,8 +4,8 @@ use ic_registry_canister_chunkify::chunkify_composite_mutation;
 use ic_registry_transport::pb::v1::{
     HighCapacityRegistryAtomicMutateRequest, RegistryAtomicMutateRequest,
 };
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::DefaultMemoryImpl;
+use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use prost::Message;
 use std::cell::RefCell;
 

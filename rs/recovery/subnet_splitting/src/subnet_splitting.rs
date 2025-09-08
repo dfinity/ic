@@ -18,6 +18,7 @@ use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
+    IC_REGISTRY_LOCAL_STORE, NeuronArgs, Recovery, RecoveryArgs,
     cli::{consent_given, read_optional, wait_for_confirmation},
     error::{RecoveryError, RecoveryResult},
     get_node_heights_from_metrics,
@@ -26,13 +27,12 @@ use ic_recovery::{
     registry_helper::RegistryPollingStrategy,
     steps::{AdminStep, Step, UploadAndRestartStep},
     util::DataLocation,
-    NeuronArgs, Recovery, RecoveryArgs, IC_REGISTRY_LOCAL_STORE,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use serde::{Deserialize, Serialize};
-use slog::{error, warn, Logger};
+use slog::{Logger, error, warn};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 use url::Url;

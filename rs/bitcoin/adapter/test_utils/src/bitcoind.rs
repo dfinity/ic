@@ -12,6 +12,7 @@ use std::{
 use bitcoin::p2p::{Magic, ServiceFlags};
 
 use bitcoin::{
+    BlockHash,
     block::Header as BlockHeader,
     consensus::{deserialize_partial, encode, serialize},
     p2p::{
@@ -19,13 +20,12 @@ use bitcoin::{
         message_blockdata::{GetHeadersMessage, Inventory},
         message_network::VersionMessage,
     },
-    BlockHash,
 };
 use ic_btc_adapter::BlockLike;
 
 use bitcoin::io as bitcoin_io;
 
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},

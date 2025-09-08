@@ -1,8 +1,8 @@
 use candid::Principal;
 use ic_stable_structures::{
+    DefaultMemoryImpl, StableBTreeMap, Storable,
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     storable::Bound,
-    DefaultMemoryImpl, StableBTreeMap, Storable,
 };
 use serde::{Deserialize, Serialize};
 use serde_cbor::{from_slice, to_vec};

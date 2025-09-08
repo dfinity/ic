@@ -34,12 +34,12 @@ use ic_system_test_driver::{
         },
     },
     nns::vote_and_execute_proposal,
-    util::{block_on, MessageCanister, SignerCanister},
+    util::{MessageCanister, SignerCanister, block_on},
 };
 use ic_types::{Height, PrincipalId, ReplicaVersion};
 use ic_types_test_utils::ids::subnet_test_id;
 use ic_vetkeys::{DerivedPublicKey, EncryptedVetKey, TransportSecretKey};
-use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
+use k256::ecdsa::{Signature, VerifyingKey, signature::hazmat::PrehashVerifier};
 use registry_canister::mutations::{
     do_create_subnet::{
         CanisterCyclesCostSchedule, CreateSubnetPayload, InitialChainKeyConfig,
@@ -48,7 +48,7 @@ use registry_canister::mutations::{
     do_recover_subnet::RecoverSubnetPayload,
     do_update_subnet::{ChainKeyConfig, KeyConfig as KeyConfigUpdate, UpdateSubnetPayload},
 };
-use slog::{debug, info, Logger};
+use slog::{Logger, debug, info};
 use std::{fmt::Debug, time::Duration};
 
 pub const KEY_ID1: &str = "secp256k1";

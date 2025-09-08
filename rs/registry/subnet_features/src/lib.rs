@@ -2,7 +2,7 @@ use candid::CandidType;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::types::v1 as pb_types;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     registry::subnet::v1 as pb,
 };
 use serde::{Deserialize, Serialize};

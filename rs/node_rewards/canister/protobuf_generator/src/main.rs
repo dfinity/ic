@@ -1,4 +1,4 @@
-use ic_node_rewards_protobuf_generator::{generate_prost_files, ProtoPaths};
+use ic_node_rewards_protobuf_generator::{ProtoPaths, generate_prost_files};
 use std::path::PathBuf;
 
 fn main() {

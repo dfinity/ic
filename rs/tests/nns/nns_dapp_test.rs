@@ -13,7 +13,7 @@ Success:: The test driver can download an HTML page from II and NNS frontend dap
 
 end::catalog[] */
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 use candid::Principal;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
@@ -21,9 +21,9 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     group::SystemTestGroup,
     ic::{InternetComputer, Subnet},
-    ic_gateway_vm::{HasIcGatewayVm, IcGatewayVm, IC_GATEWAY_VM_NAME},
+    ic_gateway_vm::{HasIcGatewayVm, IC_GATEWAY_VM_NAME, IcGatewayVm},
     test_env::TestEnv,
-    test_env_api::{secs, HasTopologySnapshot},
+    test_env_api::{HasTopologySnapshot, secs},
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;

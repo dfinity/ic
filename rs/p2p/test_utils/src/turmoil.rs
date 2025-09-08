@@ -10,13 +10,13 @@ use std::{
 };
 
 use crate::{
+    RegistryConsensusHandle,
     consensus::{TestConsensus, U64Artifact},
     create_peer_manager_and_registry_handle, temp_crypto_component_with_tls_keys,
-    RegistryConsensusHandle,
 };
 use axum::Router;
 use bytes::BytesMut;
-use futures::{future::BoxFuture, FutureExt};
+use futures::{FutureExt, future::BoxFuture};
 use ic_artifact_downloader::FetchArtifact;
 use ic_artifact_manager::create_artifact_handler;
 use ic_consensus_manager::AbortableBroadcastChannel;
@@ -30,10 +30,10 @@ use ic_quic_transport::SubnetTopology;
 use ic_quic_transport::{QuicTransport, Transport};
 use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{NodeId, RegistryVersion};
-use quinn::{self, udp::EcnCodepoint, AsyncUdpSocket, UdpPoller};
+use quinn::{self, AsyncUdpSocket, UdpPoller, udp::EcnCodepoint};
 use tokio::{
     select,
-    sync::{mpsc, oneshot, watch, Notify},
+    sync::{Notify, mpsc, oneshot, watch},
 };
 use turmoil::Sim;
 
@@ -422,8 +422,8 @@ pub fn add_transport_to_sim<F>(
     });
 }
 
-pub fn waiter_fut(
-) -> impl Fn(NodeId, Arc<dyn Transport>) -> BoxFuture<'static, ()> + Clone + 'static {
+pub fn waiter_fut()
+-> impl Fn(NodeId, Arc<dyn Transport>) -> BoxFuture<'static, ()> + Clone + 'static {
     |_, _| {
         async move {
             loop {

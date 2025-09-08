@@ -1,17 +1,17 @@
 //! Module that deals with requests to /api/v2/status
 use crate::common::{self, Cbor};
 
-use axum::{extract::State, Router};
+use axum::{Router, extract::State};
 use crossbeam::atomic::AtomicCell;
 use ic_crypto_utils_threshold_sig_der::public_key_to_der;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    ReplicaVersion, SubnetId,
     messages::{Blob, HttpStatusResponse, ReplicaHealthStatus},
     replica_version::REPLICA_BINARY_HASH,
-    ReplicaVersion, SubnetId,
 };
 use std::sync::Arc;
 

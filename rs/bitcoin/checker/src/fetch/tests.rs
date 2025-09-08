@@ -1,12 +1,12 @@
 use super::*;
-use crate::{providers::Provider, CheckTransactionIrrecoverableError};
+use crate::{CheckTransactionIrrecoverableError, providers::Provider};
 use bitcoin::{
-    absolute::LockTime, address::Address, hashes::Hash, transaction::Version, Amount, OutPoint,
-    PubkeyHash, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
+    Amount, OutPoint, PubkeyHash, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
+    absolute::LockTime, address::Address, hashes::Hash, transaction::Version,
 };
 use ic_btc_checker::{
-    blocklist, BtcNetwork, CheckMode, CHECK_TRANSACTION_CYCLES_REQUIRED,
-    CHECK_TRANSACTION_CYCLES_SERVICE_FEE,
+    BtcNetwork, CHECK_TRANSACTION_CYCLES_REQUIRED, CHECK_TRANSACTION_CYCLES_SERVICE_FEE, CheckMode,
+    blocklist,
 };
 use ic_cdk::api::call::RejectionCode;
 use std::cell::RefCell;

@@ -1,7 +1,7 @@
 //! This module contains the metric struct for the vetKD feature
 
 use ic_management_canister_types_private::MasterPublicKeyId;
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use prometheus::{HistogramVec, IntCounterVec};
 
 const KEY_ID_LABEL: &str = "key_id";

@@ -10,7 +10,7 @@ use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl,
     consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl},
 };
-use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, Config};
+use ic_config::{Config, artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig};
 use ic_consensus::consensus::batch_delivery::deliver_batches;
 use ic_consensus_certification::VerifierImpl;
 use ic_consensus_utils::{
@@ -33,7 +33,7 @@ use ic_interfaces_registry::{RegistryClient, RegistryRecord, RegistryValue};
 use ic_interfaces_state_manager::{
     PermanentStateHashError, StateHashError, StateManager, StateReader,
 };
-use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, new_replica_logger_from_config, warn};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
@@ -51,29 +51,29 @@ use ic_registry_local_store::{
 use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_records;
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
-    dechunkify_delta, dechunkify_get_value_response_content,
+    GetChunk, dechunkify_delta, dechunkify_get_value_response_content,
     deserialize_get_changes_since_response, deserialize_get_latest_version_response,
     deserialize_get_value_response, serialize_get_changes_since_request,
-    serialize_get_value_request, GetChunk,
+    serialize_get_value_request,
 };
 use ic_state_manager::StateManagerImpl;
 use ic_types::{
+    CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
+    RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
     batch::{Batch, BatchMessages, BlockmakerMetrics},
     consensus::{
-        certification::{Certification, CertificationContent, CertificationShare},
         CatchUpContentProtobufBytes, CatchUpPackage, HasHeight, HasVersion,
+        certification::{Certification, CertificationContent, CertificationShare},
     },
     crypto::{
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         CombinedThresholdSig, CombinedThresholdSigOf, Signed,
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
     },
     ingress::{IngressState, IngressStatus, WasmResult},
     malicious_flags::MaliciousFlags,
     messages::{Query, QuerySource},
     signature::ThresholdSignature,
     time::{current_time, expiry_time_from_now},
-    CryptoHashOfPartialState, CryptoHashOfState, Height, NodeId, PrincipalId, Randomness,
-    RegistryVersion, ReplicaVersion, SubnetId, Time, UserId,
 };
 use mockall::automock;
 use serde::{Deserialize, Serialize};
@@ -1065,7 +1065,8 @@ impl Player {
                     assert!(
                         self.registry.get_latest_version() >= new_version,
                         "The registry client couldn't be updated to version {:?} (highest available version is {:?})",
-                        new_version, self.registry.get_latest_version()
+                        new_version,
+                        self.registry.get_latest_version()
                     );
                     println!("Updated the registry.");
                 }
@@ -1188,7 +1189,8 @@ impl Player {
             Some(replica_version) if replica_version != self.replica_version => {
                 println!(
                     "⚠️  Please use the replay tool of version {} to continue backup recovery from height {:?}",
-                    replica_version, last_cup.height()
+                    replica_version,
+                    last_cup.height()
                 );
                 return Err(ReplayError::UpgradeDetected(
                     self.get_latest_state_params(None, Vec::new()),
@@ -1537,7 +1539,10 @@ fn is_manual_share_investigation_required(
         }
         [] => false,
         other => {
-            println!("Found {} different hashes with enough shares to produce valid certifications, investigate manually!", other.len());
+            println!(
+                "Found {} different hashes with enough shares to produce valid certifications, investigate manually!",
+                other.len()
+            );
             true
         }
     }
@@ -1673,9 +1678,8 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_registry_canister_api::{Chunk, GetChunkRequest};
     use ic_registry_transport::pb::v1::{
-        high_capacity_registry_value, HighCapacityRegistryDelta,
-        HighCapacityRegistryGetChangesSinceResponse, HighCapacityRegistryValue,
-        LargeValueChunkKeys,
+        HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
+        HighCapacityRegistryValue, LargeValueChunkKeys, high_capacity_registry_value,
     };
     use ic_test_utilities_consensus::fake::FakeSigner;
     use ic_test_utilities_types::ids::node_test_id;
@@ -1780,10 +1784,12 @@ mod tests {
         let hashes = get_share_certified_hashes(Height::from(3), f, &pool, &malicious);
         assert_eq!(hashes.len(), 2);
         assert_ne!(hashes[0], hashes[1]);
-        assert!(hashes
-            .into_iter()
-            .map(|h| h.get().0)
-            .all(|h| h == vec![1] || h == vec![2]));
+        assert!(
+            hashes
+                .into_iter()
+                .map(|h| h.get().0)
+                .all(|h| h == vec![1] || h == vec![2])
+        );
         assert!(is_manual_share_investigation_required(
             &pool,
             &malicious,

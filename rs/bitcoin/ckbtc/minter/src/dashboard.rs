@@ -1,7 +1,7 @@
+use crate::Network;
 use crate::address;
 use crate::state;
 use crate::tx::DisplayAmount;
-use crate::Network;
 use ic_btc_interface::Txid;
 use icrc_ledger_types::icrc1::account::Account;
 use state::CkBtcMinterState;
@@ -579,7 +579,11 @@ fn txid_link_on(txid: &Txid, btc_network: Network) -> String {
 fn test_txid_link() {
     assert_eq!(
         txid_link_on(
-            &[242, 194, 69, 195, 134, 114, 165, 216, 251, 165, 165, 202, 164, 77, 206, 242, 119, 165, 46, 145, 106, 6, 3, 39, 47, 145, 40, 111, 43, 5, 39, 6].into(),
+            &[
+                242, 194, 69, 195, 134, 114, 165, 216, 251, 165, 165, 202, 164, 77, 206, 242, 119,
+                165, 46, 145, 106, 6, 3, 39, 47, 145, 40, 111, 43, 5, 39, 6
+            ]
+            .into(),
             Network::Mainnet
         ),
         "<a target='_blank' href='https://mempool.space/tx/0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2'><code>0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2</code></a>"
@@ -587,7 +591,11 @@ fn test_txid_link() {
 
     assert_eq!(
         txid_link_on(
-            &[242, 194, 69, 195, 134, 114, 165, 216, 251, 165, 165, 202, 164, 77, 206, 242, 119, 165, 46, 145, 106, 6, 3, 39, 47, 145, 40, 111, 43, 5, 39, 6].into(),
+            &[
+                242, 194, 69, 195, 134, 114, 165, 216, 251, 165, 165, 202, 164, 77, 206, 242, 119,
+                165, 46, 145, 106, 6, 3, 39, 47, 145, 40, 111, 43, 5, 39, 6
+            ]
+            .into(),
             Network::Testnet
         ),
         "<a target='_blank' href='https://mempool.space/testnet4/tx/0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2'><code>0627052b6f28912f2703066a912ea577f2ce4da4caa5a5fbd8a57286c345c2f2</code></a>"

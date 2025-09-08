@@ -2,13 +2,13 @@ use std::{
     collections::HashSet,
     fmt,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
     time::Duration,
 };
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use candid::{Decode, Encode, Principal};
 use certificate_orchestrator_interface as ifc;
@@ -17,13 +17,13 @@ use serde::Serialize;
 use trust_dns_resolver::{error::ResolveErrorKind, proto::rr::RecordType};
 
 use crate::{
+    TASK_DELAY_SEC, TASK_ERROR_DELAY_SEC,
     acme::{self, FinalizeError},
     certificate::{self, GetCert, GetCertError, Pair},
     check::Check,
     decoder_config,
     dns::{self, Resolve},
     registration::{Id, Registration, State},
-    TASK_DELAY_SEC, TASK_ERROR_DELAY_SEC,
 };
 
 fn truncated(s: &str, n: usize) -> String {
@@ -536,9 +536,9 @@ mod tests {
     use anyhow::Error;
     use mockall::predicate;
     use trust_dns_resolver::{
+        Name,
         lookup::Lookup,
         proto::{op::Query, rr::Record as TrustRecord},
-        Name,
     };
 
     use crate::{

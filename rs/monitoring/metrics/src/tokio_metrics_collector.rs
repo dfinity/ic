@@ -1,8 +1,9 @@
 use std::sync::{Arc, Mutex};
 
 use prometheus::{
+    Gauge, IntCounter,
     core::{Collector, Desc, Opts},
-    proto, Gauge, IntCounter,
+    proto,
 };
 use tokio_metrics::TaskMonitor;
 

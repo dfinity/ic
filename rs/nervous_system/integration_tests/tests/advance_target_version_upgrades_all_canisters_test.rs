@@ -7,8 +7,8 @@ use ic_nervous_system_integration_tests::{
         sns::{
             self,
             governance::{
-                set_automatically_advance_target_version_flag,
                 EXPECTED_UPGRADE_DURATION_MAX_SECONDS, EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
+                set_automatically_advance_target_version_flag,
             },
         },
     },

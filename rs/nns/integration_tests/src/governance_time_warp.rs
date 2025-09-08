@@ -7,17 +7,17 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_governance_api::{
+    GovernanceError, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Neuron,
+    NeuronInfo,
     governance_error::ErrorType,
     manage_neuron::{Disburse, NeuronIdOrSubaccount},
     manage_neuron_response,
     neuron::DissolveState,
     test_api::TimeWarp,
-    GovernanceError, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Neuron,
-    NeuronInfo,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
 };
 use icp_ledger::AccountIdentifier;
 

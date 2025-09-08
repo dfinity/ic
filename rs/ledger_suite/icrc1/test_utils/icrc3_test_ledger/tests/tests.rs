@@ -402,8 +402,8 @@ fn production_ledger_wasm() -> Vec<u8> {
 
 #[test]
 fn test_icrc3_blocks_compatibility_with_production_ledger() {
-    use ic_ledger_suite_state_machine_tests::test_icrc3_blocks_compatibility_with_production_ledger;
     use ic_ledger_suite_state_machine_tests::InitArgs;
+    use ic_ledger_suite_state_machine_tests::test_icrc3_blocks_compatibility_with_production_ledger;
 
     fn encode_init_args(args: InitArgs) -> ic_icrc1_ledger::LedgerArgument {
         use ic_icrc1_ledger::{

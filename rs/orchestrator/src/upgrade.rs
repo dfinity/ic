@@ -10,23 +10,23 @@ use ic_consensus_dkg::get_vetkey_public_keys;
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_image_upgrader::{
-    error::{UpgradeError, UpgradeResult},
     ImageUpgrader, Rebooting,
+    error::{UpgradeError, UpgradeResult},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::proxy::try_from_option_field;
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{
+    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
     consensus::{CatchUpPackage, HasHeight},
     crypto::{
         canister_threshold_sig::MasterPublicKey,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetSubnet},
     },
-    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use std::{
     collections::{BTreeMap, HashMap},
@@ -956,12 +956,12 @@ mod tests {
 
     use super::*;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
     };
     use ic_crypto_test_utils_ni_dkg::{
-        run_ni_dkg_and_create_single_transcript, NiDkgTestEnvironment, RandomNiDkgConfig,
+        NiDkgTestEnvironment, RandomNiDkgConfig, run_ni_dkg_and_create_single_transcript,
     };
-    use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+    use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
     use ic_management_canister_types_private::{
         EcdsaCurve, EcdsaKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
     };
@@ -972,20 +972,20 @@ mod tests {
     use ic_types::{
         batch::ValidationContext,
         consensus::{
-            dkg::DkgSummary,
-            idkg::{self, MasterKeyTranscript, TranscriptAttributes},
             Block, BlockPayload, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload,
             RandomBeacon, RandomBeaconContent, Rank, SummaryPayload,
+            dkg::DkgSummary,
+            idkg::{self, MasterKeyTranscript, TranscriptAttributes},
         },
         crypto::{
+            AlgorithmId, CryptoHash, CryptoHashOf,
             canister_threshold_sig::idkg::IDkgTranscript,
             threshold_sig::ni_dkg::{NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTranscript},
-            AlgorithmId, CryptoHash, CryptoHashOf,
         },
         signature::ThresholdSignature,
         time::UNIX_EPOCH,
     };
-    use tempfile::{tempdir, TempDir};
+    use tempfile::{TempDir, tempdir};
 
     fn make_ecdsa_key_id() -> MasterPublicKeyId {
         MasterPublicKeyId::Ecdsa(EcdsaKeyId {

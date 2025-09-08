@@ -1,15 +1,15 @@
 use crate::eth_logs::{
-    report_transaction_error, LogParser, LogScraping, ReceivedErc20LogScraping,
-    ReceivedEthLogScraping, ReceivedEthOrErc20LogScraping, ReceivedEvent, ReceivedEventError,
+    LogParser, LogScraping, ReceivedErc20LogScraping, ReceivedEthLogScraping,
+    ReceivedEthOrErc20LogScraping, ReceivedEvent, ReceivedEventError, report_transaction_error,
 };
-use crate::eth_rpc::{is_response_too_large, Topic};
+use crate::eth_rpc::{Topic, is_response_too_large};
 use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, BlockRangeInclusive, LedgerMintIndex};
 use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::{
-    audit::process_event, event::EventType, mutate_state, read_state, State, TaskType,
+    State, TaskType, audit::process_event, event::EventType, mutate_state, read_state,
 };
 use evm_rpc_client::{BlockTag, GetLogsArgs, Hex20, Hex32, LogEntry, Nat256};
 use ic_canister_log::log;

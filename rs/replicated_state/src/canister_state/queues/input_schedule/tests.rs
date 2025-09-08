@@ -2,9 +2,9 @@ use super::*;
 use crate::canister_state::queues::{
     message_pool::MessagePool, tests::input_queue_type_from_local_canisters,
 };
+use InputQueueType::*;
 use assert_matches::assert_matches;
 use ic_test_utilities_types::messages::RequestBuilder;
-use InputQueueType::*;
 
 #[test]
 fn test_input_source() {

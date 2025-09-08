@@ -1,7 +1,7 @@
 use crate::universal_canister::UniversalCanister;
 use crate::{
-    assert_reply, ledger_wasm, out_of_band_upgrade, stop_canister, LedgerAccount,
-    LedgerMetadataValue, LedgerSuiteOrchestrator, MINTER_PRINCIPAL,
+    LedgerAccount, LedgerMetadataValue, LedgerSuiteOrchestrator, MINTER_PRINCIPAL, assert_reply,
+    ledger_wasm, out_of_band_upgrade, stop_canister,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};

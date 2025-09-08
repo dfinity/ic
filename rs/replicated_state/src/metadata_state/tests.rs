@@ -6,14 +6,14 @@ use crate::metadata_state::subnet_call_context_manager::{
 };
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    generate_ecdsa_presig_quadruple, generate_key_transcript, setup_unmasked_random_params,
-    CanisterThresholdSigTestEnvironment, IDkgParticipants,
+    CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_ecdsa_presig_quadruple,
+    generate_key_transcript, setup_unmasked_random_params,
 };
-use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
 use ic_error_types::{ErrorCode, UserError};
 use ic_limits::MAX_INGRESS_TTL;
 use ic_management_canister_types_private::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, IC_00,
+    EcdsaCurve, EcdsaKeyId, IC_00, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::queues::v1 as pb_queues;
@@ -21,27 +21,27 @@ use ic_protobuf::state::system_metadata::v1 as pb_metadata;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_test_utilities_types::{
     ids::{
-        canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id, SUBNET_0,
-        SUBNET_1, SUBNET_2,
+        SUBNET_0, SUBNET_1, SUBNET_2, canister_test_id, message_test_id, node_test_id,
+        subnet_test_id, user_test_id,
     },
     messages::{RequestBuilder, ResponseBuilder},
     xnet::{StreamHeaderBuilder, StreamSliceBuilder},
 };
 use ic_types::{
+    Cycles, ExecutionRound, Height,
     batch::BlockmakerMetrics,
     canister_http::{CanisterHttpMethod, CanisterHttpRequestContext, Replication},
-    consensus::idkg::{common::PreSignature, IDkgMasterPublicKeyId, PreSigId},
+    consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
     crypto::{
-        canister_threshold_sig::{
-            idkg::{IDkgDealers, IDkgReceivers, IDkgTranscript},
-            SchnorrPreSignatureTranscript,
-        },
         AlgorithmId,
+        canister_threshold_sig::{
+            SchnorrPreSignatureTranscript,
+            idkg::{IDkgDealers, IDkgReceivers, IDkgTranscript},
+        },
     },
     ingress::WasmResult,
     messages::{CallbackId, CanisterCall, Payload, Request, RequestMetadata},
     time::CoarseTime,
-    Cycles, ExecutionRound, Height,
 };
 use ic_types::{canister_http::Transform, time::current_time};
 use lazy_static::lazy_static;
@@ -1976,10 +1976,12 @@ fn blockmaker_metrics_time_series_check_observe_works() {
     );
 
     // Check `metrics_since()` returns nothing for a time after the last observation.
-    assert!(metrics
-        .metrics_since(later_batch_time + Duration::from_secs(365 * 24 * 3600))
-        .next()
-        .is_none());
+    assert!(
+        metrics
+            .metrics_since(later_batch_time + Duration::from_secs(365 * 24 * 3600))
+            .next()
+            .is_none()
+    );
 
     // Check `observe()` does nothing with a batch time before the last obseration.
     let metrics_before = metrics.clone();
@@ -2045,9 +2047,11 @@ fn blockmaker_metrics_time_series_observe_prunes() {
             subnet_stats: (1, 0).into(),
         },
     );
-    assert!(metrics
-        .metrics_since(batch_time)
-        .eq(expected_snapshots.iter()));
+    assert!(
+        metrics
+            .metrics_since(batch_time)
+            .eq(expected_snapshots.iter())
+    );
     // Check `test_id_2` was observed in the running stats.
     assert_eq!(
         metrics.running_stats(),
@@ -2083,9 +2087,11 @@ fn blockmaker_metrics_time_series_observe_prunes() {
             subnet_stats: (2, 0).into(),
         },
     );
-    assert!(metrics
-        .metrics_since(batch_time)
-        .eq(expected_snapshots.iter()));
+    assert!(
+        metrics
+            .metrics_since(batch_time)
+            .eq(expected_snapshots.iter())
+    );
     // `test_id_1` should be pruned from the running stats.
     assert_eq!(
         metrics.running_stats(),
@@ -2147,9 +2153,11 @@ fn blockmaker_metrics_time_series_observe_prunes() {
             subnet_stats: (4, 0).into(),
         },
     );
-    assert!(metrics
-        .metrics_since(batch_time)
-        .eq(expected_snapshots.iter()));
+    assert!(
+        metrics
+            .metrics_since(batch_time)
+            .eq(expected_snapshots.iter())
+    );
     assert_eq!(
         metrics.running_stats(),
         Some((

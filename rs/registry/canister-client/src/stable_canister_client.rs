@@ -1,15 +1,15 @@
-use crate::stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue};
 use crate::CanisterRegistryClient;
+use crate::stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue};
 use async_trait::async_trait;
 use ic_cdk::println;
 use ic_interfaces_registry::{
-    empty_zero_registry_record, RegistryClientResult, RegistryClientVersionedResult,
-    RegistryRecord, ZERO_REGISTRY_VERSION,
+    RegistryClientResult, RegistryClientVersionedResult, RegistryRecord, ZERO_REGISTRY_VERSION,
+    empty_zero_registry_record,
 };
 use ic_nervous_system_canisters::registry::Registry;
 use ic_registry_transport::pb::v1::RegistryDelta;
-use ic_types::registry::RegistryClientError;
 use ic_types::RegistryVersion;
+use ic_types::registry::RegistryClientError;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashSet};
 use std::marker::PhantomData;

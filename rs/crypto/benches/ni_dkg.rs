@@ -1,23 +1,23 @@
-use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
+use criterion::measurement::Measurement;
 use criterion::{
-    criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion, SamplingMode,
+    BenchmarkGroup, BenchmarkId, Criterion, SamplingMode, criterion_group, criterion_main,
 };
 
 use rand::CryptoRng;
 
 use ic_base_types::RegistryVersion;
 use ic_crypto_test_utils_ni_dkg::{
-    create_dealing, create_dealings, create_transcript, load_transcript, retain_only_active_keys,
-    run_ni_dkg_and_create_single_transcript, verify_dealing, NiDkgTestEnvironment,
-    RandomNiDkgConfig,
+    NiDkgTestEnvironment, RandomNiDkgConfig, create_dealing, create_dealings, create_transcript,
+    load_transcript, retain_only_active_keys, run_ni_dkg_and_create_single_transcript,
+    verify_dealing,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_types::NodeId;
 use ic_types::consensus::get_faults_tolerated;
 use ic_types::crypto::threshold_sig::ni_dkg::{
-    config::NiDkgConfig, NiDkgDealing, NiDkgTag, NiDkgTranscript,
+    NiDkgDealing, NiDkgTag, NiDkgTranscript, config::NiDkgConfig,
 };
-use ic_types::NodeId;
 use rand::Rng;
 use std::collections::{BTreeMap, HashSet};
 

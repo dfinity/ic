@@ -36,7 +36,7 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::{HasIcPrepDir, TestEnv};
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{block_on, runtime_from_url, UNIVERSAL_CANISTER_WASM};
+use ic_system_test_driver::util::{UNIVERSAL_CANISTER_WASM, block_on, runtime_from_url};
 use ic_types::RegistryVersion;
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;

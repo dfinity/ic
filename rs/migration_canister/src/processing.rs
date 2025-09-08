@@ -4,23 +4,23 @@
 //! process several requests concurrently.
 
 use crate::{
+    Event, RequestState, ValidationError,
     canister_state::{
-        requests::{insert_request, list_by, remove_request},
         MethodGuard,
+        requests::{insert_request, list_by, remove_request},
     },
     external_interfaces::{
         management::{
-            canister_status, get_canister_info, rename_canister, set_exclusive_controller,
-            set_original_controllers, CanisterStatusType,
+            CanisterStatusType, canister_status, get_canister_info, rename_canister,
+            set_exclusive_controller, set_original_controllers,
         },
         registry::migrate_canister,
     },
-    Event, RequestState, ValidationError,
 };
 use futures::future::join_all;
 use ic_cdk::{
     api::time,
-    management_canister::{subnet_info, SubnetInfoArgs},
+    management_canister::{SubnetInfoArgs, subnet_info},
     println,
 };
 use std::{convert::Infallible, future::Future, iter::zip};

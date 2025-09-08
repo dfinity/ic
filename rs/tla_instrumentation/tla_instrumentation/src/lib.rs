@@ -424,9 +424,7 @@ macro_rules! tla_log_response {
 /// is used instead.
 #[macro_export]
 macro_rules! tla_log_method_call {
-    ($update:expr, $global:expr) => {{
-        $crate::log_method_call($update, $global)
-    }};
+    ($update:expr, $global:expr) => {{ $crate::log_method_call($update, $global) }};
 }
 
 #[macro_export]

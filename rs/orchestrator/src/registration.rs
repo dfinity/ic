@@ -6,18 +6,18 @@ use crate::{
     utils::http_endpoint_to_url,
 };
 use candid::Encode;
-use ic_agent::{export::Principal, Agent};
+use ic_agent::{Agent, export::Principal};
 use ic_config::{
+    Config,
     http_handler::Config as HttpConfig,
     initial_ipv4_config::IPv4Config as InitialIPv4Config,
     message_routing::Config as MsgRoutingConfig,
     metrics::{Config as MetricsConfig, Exporter},
     transport::TransportConfig,
-    Config,
 };
 use ic_interfaces::crypto::IDkgKeyRotationResult;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_registry_canister_api::{AddNodePayload, IPv4Config, UpdateNodeDirectlyPayload};
@@ -27,7 +27,7 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_local_store::LocalStore;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::{crypto::KeyPurpose, messages::MessageId, NodeId, RegistryVersion, SubnetId};
+use ic_types::{NodeId, RegistryVersion, SubnetId, crypto::KeyPurpose, messages::MessageId};
 use idna::domain_to_ascii_strict;
 use prost::Message;
 use rand::prelude::*;
@@ -92,7 +92,10 @@ impl NodeRegistration {
                     Box::new(signer)
                 }
                 None => {
-                    UtilityCommand::notify_host("Node operator private key found but could not be successfully read. Falling back to HSM.", 1);
+                    UtilityCommand::notify_host(
+                        "Node operator private key found but could not be successfully read. Falling back to HSM.",
+                        1,
+                    );
                     Box::new(Hsm)
                 }
             },
@@ -790,16 +793,16 @@ mod tests {
         use ic_registry_local_store::LocalStoreImpl;
         use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
         use ic_test_utilities_in_memory_logger::{
-            assertions::LogEntriesAssert, InMemoryReplicaLogger,
+            InMemoryReplicaLogger, assertions::LogEntriesAssert,
         };
         use ic_types::{
+            PrincipalId,
             consensus::CatchUpContentProtobufBytes,
             crypto::{
                 AlgorithmId, BasicSigOf, CombinedThresholdSigOf, CryptoResult,
                 CurrentNodePublicKeys,
             },
             registry::RegistryClientError,
-            PrincipalId,
         };
         use mockall::{predicate::*, *};
         use slog::Level;
@@ -1060,8 +1063,8 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn should_not_log_anything_if_check_keys_with_registry_succeeds_and_latest_rotation_too_recent(
-        ) {
+        async fn should_not_log_anything_if_check_keys_with_registry_succeeds_and_latest_rotation_too_recent()
+         {
             let in_memory_logger = InMemoryReplicaLogger::new();
             let setup = Setup::builder()
                 .with_check_keys_with_registry_result(Ok(()))

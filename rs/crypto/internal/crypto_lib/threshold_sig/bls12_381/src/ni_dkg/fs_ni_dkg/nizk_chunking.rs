@@ -3,7 +3,7 @@
 
 use crate::ni_dkg::fs_ni_dkg::forward_secure::{CHUNK_SIZE, NUM_CHUNKS};
 use crate::ni_dkg::fs_ni_dkg::random_oracles::{
-    random_oracle, random_oracle_to_scalar, HashedMap, UniqueHash,
+    HashedMap, UniqueHash, random_oracle, random_oracle_to_scalar,
 };
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
 use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes};
@@ -214,7 +214,10 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
     let p_sub_s = Scalar::from_usize(ss).neg();
 
     // y0 <- getRandomG1
-    let y0 = G1Affine::hash(b"ic-crypto-nizk-chunking-proof-y0", &rng.r#gen::<[u8; 32]>());
+    let y0 = G1Affine::hash(
+        b"ic-crypto-nizk-chunking-proof-y0",
+        &rng.r#gen::<[u8; 32]>(),
+    );
 
     let g1 = &instance.g1_gen;
 

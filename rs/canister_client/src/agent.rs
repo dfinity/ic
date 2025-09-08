@@ -6,15 +6,15 @@ use crate::{
 use backoff::backoff::Backoff;
 use ic_canister_client_sender::Sender;
 use ic_crypto_tree_hash::Path;
-use ic_management_canister_types_private::{InstallCodeArgs, Method, Payload, IC_00};
+use ic_management_canister_types_private::{IC_00, InstallCodeArgs, Method, Payload};
 use ic_protobuf::types::v1 as pb;
-use ic_read_state_response_parser::{parse_read_state_response, RequestStatus};
+use ic_read_state_response_parser::{RequestStatus, parse_read_state_response};
 use ic_types::{
+    CanisterId,
     consensus::catchup::CatchUpPackageParam,
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{Blob, HttpStatusResponse, MessageId, ReplicaHealthStatus},
     time::expiry_time_from_now,
-    CanisterId,
 };
 use prost::Message;
 use serde_cbor::value::Value as CBOR;
@@ -304,7 +304,7 @@ impl Agent {
                         return Err(format!(
                             "unexpected result: {:?} - {:?}",
                             request_status.status, request_status.reject_message
-                        ))
+                        ));
                     }
                 },
                 Err(e) => return Err(format!("Unexpected error: {:?}", e)),

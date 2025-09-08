@@ -4,9 +4,9 @@
 use ic_embedders::wasmtime_embedder::system_api::ApiType;
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_types::{
+    Cycles, PrincipalId,
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
-    Cycles, PrincipalId,
 };
 
 fn run_go_export(wat: &str) {

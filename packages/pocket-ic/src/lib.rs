@@ -63,9 +63,8 @@ use crate::{
     nonblocking::PocketIc as PocketIcAsync,
 };
 use candid::{
-    decode_args, encode_args,
+    Principal, decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
-    Principal,
 };
 use flate2::read::GzDecoder;
 use ic_management_canister_types::{
@@ -84,7 +83,7 @@ use std::{
     net::{IpAddr, SocketAddr},
     path::PathBuf,
     process::{Child, Command},
-    sync::{mpsc::channel, Arc},
+    sync::{Arc, mpsc::channel},
     thread,
     thread::JoinHandle,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -503,7 +502,10 @@ impl TryFrom<Time> for SystemTime {
         if roundtrip.as_nanos_since_unix_epoch() == nanos {
             Ok(system_time)
         } else {
-            Err(format!("Converting UNIX timestamp {} in nanoseconds to SystemTime failed due to losing precision", nanos))
+            Err(format!(
+                "Converting UNIX timestamp {} in nanoseconds to SystemTime failed due to losing precision",
+                nanos
+            ))
         }
     }
 }
@@ -1805,7 +1807,11 @@ pub struct RejectResponse {
 impl std::fmt::Display for RejectResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Follows [agent-rs](https://github.com/dfinity/agent-rs/blob/a651dbbe69e61d4e8508c144cd60cfa3118eeb3a/ic-agent/src/agent/agent_error.rs#L54)
-        write!(f, "PocketIC returned a rejection error: reject code {:?}, reject message {}, error code {:?}", self.reject_code, self.reject_message, self.error_code)
+        write!(
+            f,
+            "PocketIC returned a rejection error: reject code {:?}, reject message {}, error code {:?}",
+            self.reject_code, self.reject_message, self.error_code
+        )
     }
 }
 
@@ -1921,7 +1927,14 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
                 "https://github.com/dfinity/pocketic/releases/download/{}/pocket-ic-{}-{}.gz",
                 EXPECTED_SERVER_VERSION, arch, os
             );
-            println!("Failed to validate PocketIC server binary: `{}`. Going to download PocketIC server {} from {} to the local path {}. To avoid downloads during test execution, please specify the path to the (ungzipped and executable) PocketIC server {} using the function `PocketIcBuilder::with_server_binary` or using the `POCKET_IC_BIN` environment variable.", e, EXPECTED_SERVER_VERSION, server_url, default_bin_path.display(), EXPECTED_SERVER_VERSION);
+            println!(
+                "Failed to validate PocketIC server binary: `{}`. Going to download PocketIC server {} from {} to the local path {}. To avoid downloads during test execution, please specify the path to the (ungzipped and executable) PocketIC server {} using the function `PocketIcBuilder::with_server_binary` or using the `POCKET_IC_BIN` environment variable.",
+                e,
+                EXPECTED_SERVER_VERSION,
+                server_url,
+                default_bin_path.display(),
+                EXPECTED_SERVER_VERSION
+            );
             if let Err(e) = download_pocketic_server(server_url, out).await {
                 let _ = std::fs::remove_file(default_bin_path);
                 panic!("{}", e);
@@ -1935,7 +1948,10 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
                 }
                 if start.elapsed() > std::time::Duration::from_secs(60) {
                     let _ = std::fs::remove_file(&default_bin_path);
-                    panic!("Timed out waiting for PocketIC server being available at the local path {}.", default_bin_path.display());
+                    panic!(
+                        "Timed out waiting for PocketIC server being available at the local path {}.",
+                        default_bin_path.display()
+                    );
                 }
                 std::thread::sleep(std::time::Duration::from_millis(100));
             }

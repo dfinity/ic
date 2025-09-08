@@ -5,9 +5,9 @@ use ic_crypto_tree_hash_test_utils::MAX_HASH_TREE_DEPTH;
 
 mod mixed_hash_tree {
     use super::*;
+    use MixedHashTree::*;
     use ic_crypto_tree_hash::MixedHashTree;
     use ic_crypto_tree_hash_test_utils::arbitrary::arbitrary_mixed_hash_tree;
-    use MixedHashTree::*;
 
     #[test_strategy::proptest]
     fn merge_of_big_tree_is_idempotent(#[strategy(arbitrary_mixed_hash_tree())] t: MixedHashTree) {
@@ -241,8 +241,8 @@ mod mixed_hash_tree {
 
 mod witness {
     use super::*;
-    use ic_crypto_tree_hash::Witness;
     use Witness::*;
+    use ic_crypto_tree_hash::Witness;
 
     #[test]
     fn merge_of_pruned_is_idempotent() {

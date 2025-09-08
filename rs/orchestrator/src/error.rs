@@ -1,8 +1,8 @@
 use ic_http_utils::file_downloader::FileDownloadError;
 use ic_image_upgrader::error::UpgradeError;
 use ic_types::{
-    registry::RegistryClientError, replica_version::ReplicaVersionParseError, Height, NodeId,
-    RegistryVersion, ReplicaVersion, SubnetId,
+    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId, registry::RegistryClientError,
+    replica_version::ReplicaVersionParseError,
 };
 use std::{
     error::Error,

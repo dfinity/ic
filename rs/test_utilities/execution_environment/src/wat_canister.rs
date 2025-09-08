@@ -426,7 +426,9 @@ impl WatCanisterBuilder {
             let message_size = message.len() as i32;
 
             if offset + message_size > MEMORY_LIMIT {
-                panic!("Memory limit exceeded, current implementation supports only 1 page of memory (64KiB)");
+                panic!(
+                    "Memory limit exceeded, current implementation supports only 1 page of memory (64KiB)"
+                );
             }
 
             self.memory.insert(message.to_vec(), offset);

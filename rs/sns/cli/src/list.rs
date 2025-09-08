@@ -1,5 +1,5 @@
-use crate::table::{as_table, TableRow};
-use crate::utils::{get_snses_with_metadata, SnsWithMetadata};
+use crate::table::{TableRow, as_table};
+use crate::utils::{SnsWithMetadata, get_snses_with_metadata};
 use anyhow::Result;
 use clap::Parser;
 use ic_agent::Agent;

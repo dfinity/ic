@@ -4,19 +4,19 @@ use crate::pb::v1::{Motion, VotingPowerEconomics};
 use crate::test_utils::MockRandomness;
 use crate::{
     governance::{
-        test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING, Governance,
-        MAX_NUMBER_OF_NEURONS,
+        Governance, MAX_NUMBER_OF_NEURONS,
+        test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
     },
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder},
     neuron_store::NeuronStore,
     pb::v1::{
-        install_code::CanisterInstallMode, proposal::Action, Ballot, BallotInfo,
-        CreateServiceNervousSystem, ExecuteNnsFunction, Followees, InstallCode, KnownNeuron,
-        ListProposalInfo, NnsFunction, Proposal, ProposalData, Topic, Vote,
+        Ballot, BallotInfo, CreateServiceNervousSystem, ExecuteNnsFunction, Followees, InstallCode,
+        KnownNeuron, ListProposalInfo, NnsFunction, Proposal, ProposalData, Topic, Vote,
+        install_code::CanisterInstallMode, proposal::Action,
     },
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
-use canbench_rs::{bench, bench_fn, BenchResult};
+use canbench_rs::{BenchResult, bench, bench_fn};
 use futures::FutureExt;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;

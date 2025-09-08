@@ -1,5 +1,5 @@
 use ic_types::ReplicaVersion;
-use serde::{de::Error, Deserialize, Deserializer, Serializer};
+use serde::{Deserialize, Deserializer, Serializer, de::Error};
 use std::future::Future;
 use tokio::runtime::Runtime;
 

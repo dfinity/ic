@@ -5,12 +5,12 @@ use ic_crypto_prng::{Csprng, RandomnessPurpose};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces_registry::RegistryClient;
 use ic_types::{
+    Height, NodeId, SubnetId,
     consensus::{
-        get_committee_size, get_faults_tolerated, Committee, HasHeight, RandomBeacon, Rank,
-        Threshold,
+        Committee, HasHeight, RandomBeacon, Rank, Threshold, get_committee_size,
+        get_faults_tolerated,
     },
     registry::RegistryClientError,
-    Height, NodeId, SubnetId,
 };
 use rand::seq::SliceRandom;
 use std::sync::Arc;

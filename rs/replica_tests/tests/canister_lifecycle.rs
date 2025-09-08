@@ -1,21 +1,21 @@
 use assert_matches::assert_matches;
 use candid::Encode;
+use ic_config::Config;
 use ic_config::execution_environment::DEFAULT_WASM_MEMORY_LIMIT;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
-use ic_config::Config;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_management_canister_types_private::{
     self as ic00, CanisterChange, CanisterIdRecord, CanisterInstallMode,
-    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, EmptyBlob,
-    InstallCodeArgs, Method, Payload, UpdateSettingsArgs, IC_00,
+    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, EmptyBlob, IC_00,
+    InstallCodeArgs, Method, Payload, UpdateSettingsArgs,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replica_tests as utils;
 use ic_replica_tests::assert_reject;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities::universal_canister::management::CanisterUpgradeOptions;
-use ic_test_utilities::universal_canister::{call_args, management, wasm, UNIVERSAL_CANISTER_WASM};
-use ic_types::{ingress::WasmResult, CanisterId, ComputeAllocation, Cycles, NumBytes, PrincipalId};
+use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, management, wasm};
+use ic_types::{CanisterId, ComputeAllocation, Cycles, NumBytes, PrincipalId, ingress::WasmResult};
 use maplit::btreeset;
 use std::{collections::BTreeSet, mem::size_of, str::FromStr};
 
@@ -539,8 +539,9 @@ fn can_create_canister_with_cycles_from_another_canister() {
 
         // Check that the balance of the created canister is at most the cycles
         // transferred.
-        assert!(new_canister_cycles_balance <= cycles_for_new_canister,
-                "Cycle balance of the newly created canister is larger than the cycles transferred to it"
+        assert!(
+            new_canister_cycles_balance <= cycles_for_new_canister,
+            "Cycle balance of the newly created canister is larger than the cycles transferred to it"
         );
     });
 }

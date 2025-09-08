@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::str::FromStr;
 use tempfile::TempDir;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use url::Url;
 
 use ic_icrc_rosetta_client::RosettaClient;

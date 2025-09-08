@@ -25,9 +25,9 @@ end::catalog[] */
 
 use std::time::Duration;
 
+use anyhow::Result;
 use anyhow::anyhow;
 use anyhow::bail;
-use anyhow::Result;
 use canister_http::*;
 use canister_test::Canister;
 use dfn_candid::candid_one;
@@ -45,7 +45,7 @@ use ic_types::Cycles;
 use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpStressRequest, RemoteHttpStressResponse};
 use serde::{Deserialize, Serialize};
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 const BENCHMARK_REPORT_FILE: &str = "benchmark/benchmark.json";
 const WITH_WARM_UP: bool = true;

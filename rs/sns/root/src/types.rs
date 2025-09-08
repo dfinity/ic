@@ -5,8 +5,8 @@ use ic_base_types::{CanisterId, PrincipalId};
 use serde::{Deserialize, Serialize};
 
 use crate::pb::v1::{
-    register_extension_response, CanisterCallError, Extensions, RegisterExtensionRequest,
-    RegisterExtensionResponse,
+    CanisterCallError, Extensions, RegisterExtensionRequest, RegisterExtensionResponse,
+    register_extension_response,
 };
 
 /// A general trait for the environment in which governance is running.

@@ -1,5 +1,5 @@
 #![allow(deprecated)]
-use crate::{assert_reply, CkEthSetup, JsonRpcProvider, MAX_TICKS};
+use crate::{CkEthSetup, JsonRpcProvider, MAX_TICKS, assert_reply};
 use candid::{Decode, Encode};
 use ic_cdk::api::management_canister::http_request::{
     HttpResponse as OutCallHttpResponse, TransformArgs,
@@ -9,8 +9,8 @@ use ic_management_canister_types_private::CanisterHttpResponsePayload;
 use ic_state_machine_tests::{PayloadBuilder, StateMachine};
 use ic_types::canister_http::{CanisterHttpMethod, CanisterHttpRequestContext};
 use ic_types::messages::CallbackId;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use serde_json::json;
 use std::collections::BTreeMap;
 use std::str::FromStr;

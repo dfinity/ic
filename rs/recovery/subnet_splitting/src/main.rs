@@ -1,13 +1,13 @@
 use clap::Parser;
 use ic_base_types::SubnetId;
-use ic_recovery::{cli, error::RecoveryResult, util, NeuronArgs, RecoveryArgs};
+use ic_recovery::{NeuronArgs, RecoveryArgs, cli, error::RecoveryResult, util};
 use ic_subnet_splitting::{
     subnet_splitting::{SubnetSplitting, SubnetSplittingArgs},
     utils::canister_id_ranges_to_strings,
     validation::validate_artifacts,
 };
 use ic_types::ReplicaVersion;
-use slog::{info, warn, Logger};
+use slog::{Logger, info, warn};
 use url::Url;
 
 use std::path::PathBuf;

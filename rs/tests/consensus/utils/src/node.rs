@@ -1,14 +1,14 @@
-use ic_system_test_driver::driver::test_env_api::{secs, IcNodeContainer, SubnetSnapshot};
+use ic_system_test_driver::driver::test_env_api::{IcNodeContainer, SubnetSnapshot, secs};
 use ic_system_test_driver::{
     driver::test_env_api::{
-        HasPublicApiUrl, IcNodeSnapshot, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+        HasPublicApiUrl, IcNodeSnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF, SshSession,
     },
-    util::{block_on, MetricsFetcher},
+    util::{MetricsFetcher, block_on},
 };
 use ic_types::{Height, RegistryVersion};
 
 use anyhow::{anyhow, bail};
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 use crate::ssh_access::execute_bash_command;
 

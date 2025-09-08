@@ -31,8 +31,8 @@ use ic_consensus_system_test_utils::upgrade::bless_replica_version;
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     ssh_access::{
-        generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
-        wait_until_authentication_is_granted, AuthMean,
+        AuthMean, generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
+        wait_until_authentication_is_granted,
     },
     upgrade::{
         assert_assigned_replica_version, deploy_guestos_to_all_subnet_nodes,
@@ -50,10 +50,10 @@ use ic_system_test_driver::{
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::*,
     },
-    util::{block_on, get_nns_node, MessageCanister},
+    util::{MessageCanister, block_on, get_nns_node},
 };
 use ic_types::Height;
-use slog::{debug, error, info, Logger};
+use slog::{Logger, debug, error, info};
 use std::{
     ffi::OsStr,
     fs,

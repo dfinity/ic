@@ -11,7 +11,7 @@ use ic_interfaces::{
         ValidatedPoolReader,
     },
 };
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::CanisterHttpResponseId,
@@ -178,13 +178,13 @@ mod tests {
     use ic_test_utilities_consensus::fake::FakeSigner;
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
+        CanisterId, RegistryVersion, ReplicaVersion,
         artifact::IdentifiableArtifact,
         canister_http::{CanisterHttpResponseContent, CanisterHttpResponseMetadata},
         crypto::{CryptoHash, Signed},
         messages::CallbackId,
         signature::BasicSignature,
         time::UNIX_EPOCH,
-        CanisterId, RegistryVersion, ReplicaVersion,
     };
 
     use super::*;
@@ -293,10 +293,12 @@ mod tests {
 
         assert!(pool.lookup_validated(&id2).is_none());
         assert!(result.poll_immediately);
-        assert!(!result
-            .transmits
-            .iter()
-            .any(|x| matches!(x, ArtifactTransmit::Abort(_))));
+        assert!(
+            !result
+                .transmits
+                .iter()
+                .any(|x| matches!(x, ArtifactTransmit::Abort(_)))
+        );
         assert_eq!(share1, pool.lookup_validated(&id1).unwrap());
     }
 

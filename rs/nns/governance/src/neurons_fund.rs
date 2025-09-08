@@ -5,8 +5,9 @@ use ic_cdk::println;
 use ic_nervous_system_governance::maturity_modulation::BASIS_POINTS_PER_UNITY;
 use ic_nervous_system_proto::pb::v1::{Decimal as DecimalPb, Percentage as PercentagePb};
 use ic_neurons_fund::{
-    dec_to_u64, rescale_to_icp, u64_to_dec, DeserializableFunction, HalfOpenInterval,
-    IdealMatchingFunction, NeuronsFundParticipationLimits, PolynomialMatchingFunction,
+    DeserializableFunction, HalfOpenInterval, IdealMatchingFunction,
+    NeuronsFundParticipationLimits, PolynomialMatchingFunction, dec_to_u64, rescale_to_icp,
+    u64_to_dec,
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_sns_swap::pb::v1::{
@@ -23,19 +24,18 @@ use std::{
 };
 
 use crate::{
-    governance,
+    Governance, governance,
     neuron_store::{NeuronStore, NeuronsFundNeuron},
     pb::v1::{
-        create_service_nervous_system::SwapParameters, governance_error,
-        neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
         GovernanceError, IdealMatchedParticipationFunction,
         NeuronsFundEconomics as NeuronsFundEconomicsPb,
         NeuronsFundMatchedFundingCurveCoefficients as NeuronsFundMatchedFundingCurveCoefficientsPb,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
         NeuronsFundSnapshot as NeuronsFundSnapshotPb,
         SwapParticipationLimits as SwapParticipationLimitsPb,
+        create_service_nervous_system::SwapParameters, governance_error,
+        neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
     },
-    Governance,
 };
 
 /// The Neurons' Fund should not participate in any SNS swap with more than this portion of its
@@ -2154,9 +2154,10 @@ mod pick_most_important_hotkeys_tests {
 mod test_functions_tests {
     use ic_nervous_system_common::E8;
     use ic_neurons_fund::{
+        InvertError, InvertibleFunction, MatchedParticipationFunction, MatchingFunction,
+        SerializableFunction, ValidatedNeuronsFundParticipationConstraints,
         test_functions::{AnalyticallyInvertibleFunction, LinearFunction, SimpleLinearFunction},
-        u64_to_dec, InvertError, InvertibleFunction, MatchedParticipationFunction,
-        MatchingFunction, SerializableFunction, ValidatedNeuronsFundParticipationConstraints,
+        u64_to_dec,
     };
     use ic_sns_swap::pb::v1::{
         IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionSwapPb,

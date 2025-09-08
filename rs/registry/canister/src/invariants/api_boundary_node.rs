@@ -6,8 +6,8 @@ use std::{
 use ic_base_types::NodeId;
 
 use super::common::{
-    get_api_boundary_node_ids_from_snapshot, get_node_record_from_snapshot, InvariantCheckError,
-    RegistrySnapshot,
+    InvariantCheckError, RegistrySnapshot, get_api_boundary_node_ids_from_snapshot,
+    get_node_record_from_snapshot,
 };
 
 /// Checks API Boundary Node invariants:
@@ -72,7 +72,9 @@ pub(crate) fn check_api_boundary_node_invariants(
 
         if let Some(existing_api_bn) = domain_to_id.get(&domain) {
             return Err(InvariantCheckError {
-                msg: format!("domain {domain} has two nodes associated with it with id={existing_api_bn} and id={api_bn_id}"),
+                msg: format!(
+                    "domain {domain} has two nodes associated with it with id={existing_api_bn} and id={api_bn_id}"
+                ),
                 source: None,
             });
         }

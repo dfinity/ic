@@ -1,4 +1,4 @@
-use clap::{arg, Arg, Command};
+use clap::{Arg, Command, arg};
 use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl,
     consensus_pool::{PoolSectionOps, UncachedConsensusPoolImpl},
@@ -8,9 +8,9 @@ use ic_interfaces::consensus_pool::*;
 use ic_logger::{LoggerImpl, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    consensus::{certification::CertificationMessage, CatchUpPackage, ConsensusMessageHashable},
-    time::current_time,
     NodeId, PrincipalId,
+    consensus::{CatchUpPackage, ConsensusMessageHashable, certification::CertificationMessage},
+    time::current_time,
 };
 use prost::Message;
 use serde::{Deserialize, Serialize};

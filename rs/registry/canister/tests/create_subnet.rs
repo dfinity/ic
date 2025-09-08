@@ -20,7 +20,7 @@ use ic_nns_test_utils::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::{invariant_compliant_mutation_as_atomic_req, INITIAL_MUTATION_ID},
+    registry::{INITIAL_MUTATION_ID, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::subnet::v1::{
     ChainKeyConfig as ChainKeyConfigPb, SubnetListRecord as SubnetListRecordPb,
@@ -29,7 +29,7 @@ use ic_protobuf::registry::subnet::v1::{
 use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
 use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_subnet_features::{
-    ChainKeyConfig, KeyConfig as KeyConfigInternal, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+    ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig as KeyConfigInternal,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryAtomicMutateRequest, upsert};
@@ -199,12 +199,16 @@ fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
 
         let cup_contents = get_cup_contents(&registry, subnet_id).await;
 
-        assert!(cup_contents
-            .initial_ni_dkg_transcript_low_threshold
-            .is_some());
-        assert!(cup_contents
-            .initial_ni_dkg_transcript_high_threshold
-            .is_some());
+        assert!(
+            cup_contents
+                .initial_ni_dkg_transcript_low_threshold
+                .is_some()
+        );
+        assert!(
+            cup_contents
+                .initial_ni_dkg_transcript_high_threshold
+                .is_some()
+        );
 
         Ok(())
     });

@@ -1,18 +1,20 @@
 use crate::webauthn::validate_webauthn_sig;
+use AuthenticationError::*;
+use RequestValidationError::*;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
-use ic_crypto_standalone_sig_verifier::{user_public_key_from_bytes, KeyBytesContentType};
+use ic_crypto_standalone_sig_verifier::{KeyBytesContentType, user_public_key_from_bytes};
 use ic_crypto_tree_hash::Path;
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
 use ic_types::{
+    CanisterId, PrincipalId, Time, UserId,
     crypto::{
-        threshold_sig::RootOfTrustProvider, AlgorithmId, BasicSig, BasicSigOf, CanisterSig,
-        CanisterSigOf, CryptoError, UserPublicKey,
+        AlgorithmId, BasicSig, BasicSigOf, CanisterSig, CanisterSigOf, CryptoError, UserPublicKey,
+        threshold_sig::RootOfTrustProvider,
     },
     messages::{
         Authentication, Delegation, HasCanisterId, HttpRequest, HttpRequestContent, MessageId,
         Query, ReadState, SignedDelegation, SignedIngressContent, UserSignature, WebAuthnSignature,
     },
-    CanisterId, PrincipalId, Time, UserId,
 };
 use std::{
     collections::{BTreeSet, HashSet},
@@ -20,8 +22,6 @@ use std::{
     sync::Arc,
 };
 use thiserror::Error;
-use AuthenticationError::*;
-use RequestValidationError::*;
 
 #[cfg(test)]
 mod tests;
@@ -246,9 +246,13 @@ pub enum RequestValidationError {
     AnonymousSignatureNotAllowed,
     #[error("Canister '{0}' is not one of the delegation targets.")]
     CanisterNotInDelegationTargets(CanisterId),
-    #[error("Too many paths in read state request: got {length} paths, but at most {maximum} are allowed.")]
+    #[error(
+        "Too many paths in read state request: got {length} paths, but at most {maximum} are allowed."
+    )]
     TooManyPaths { length: usize, maximum: usize },
-    #[error("At least one path in read state request is too deep: got {length} labels, but at most {maximum} are allowed.")]
+    #[error(
+        "At least one path in read state request is too deep: got {length} labels, but at most {maximum} are allowed."
+    )]
     PathTooLong { length: usize, maximum: usize },
     #[error(
         "Nonce in request is too big: got {num_bytes} bytes, but at most {maximum} are allowed."

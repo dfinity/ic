@@ -10,14 +10,14 @@ use crate::{
 use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use ic_stable_structures::{storable::Bound, StableBTreeMap, Storable};
+use ic_stable_structures::{StableBTreeMap, Storable, storable::Bound};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use maplit::hashmap;
 use prost::Message;
 use std::{
     borrow::Cow,
-    collections::{btree_map::Entry, BTreeMap as HeapBTreeMap, HashMap},
+    collections::{BTreeMap as HeapBTreeMap, HashMap, btree_map::Entry},
     iter::Peekable,
     ops::{Bound as RangeBound, RangeBounds},
 };

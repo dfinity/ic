@@ -3,8 +3,8 @@ use assert_matches::assert_matches;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
-use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript_and_master_key, InitialNiDkgConfig};
-use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+use ic_crypto_test_utils_ni_dkg::{InitialNiDkgConfig, initial_dkg_transcript_and_master_key};
+use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
 use ic_crypto_utils_ni_dkg::extract_threshold_sig_public_key;
 use ic_nns_test_utils::registry::new_current_node_crypto_keys_mutations;
 use ic_protobuf::registry::node::v1::NodeRecord;
@@ -14,9 +14,9 @@ use ic_protobuf::registry::subnet::v1::{
 use ic_registry_keys::make_catch_up_package_contents_key;
 use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key};
 use ic_registry_transport::insert;
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript};
-use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::RegistryVersion;
+use ic_types::crypto::CurrentNodePublicKeys;
+use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript};
 use ic_types_test_utils::ids::{SUBNET_1, SUBNET_2};
 use prost::Message;
 use rand::RngCore;
@@ -429,8 +429,8 @@ fn high_threshold_public_key_invariant_unable_to_parse_cup() {
 }
 
 #[test]
-fn high_threshold_public_key_invariant_unable_to_parse_initial_ni_dkg_transcript_high_threshold_in_cup(
-) {
+fn high_threshold_public_key_invariant_unable_to_parse_initial_ni_dkg_transcript_high_threshold_in_cup()
+ {
     let mut setup = HighThresholdPublicKeySetup::new();
     let mut snapshot = registry_snapshot_from_threshold_sig_pk_and_cup(
         Some(setup.threshold_sig_pk),
@@ -592,7 +592,10 @@ fn run_test_orphaned_crypto_keys(
         err.to_string(),
         format!(
             "InvariantCheckError: There are {} or {} entries without a corresponding {} entry: [{}]",
-            CRYPTO_RECORD_KEY_PREFIX, CRYPTO_TLS_CERT_KEY_PREFIX, NODE_RECORD_KEY_PREFIX, missing_node_id
+            CRYPTO_RECORD_KEY_PREFIX,
+            CRYPTO_TLS_CERT_KEY_PREFIX,
+            NODE_RECORD_KEY_PREFIX,
+            missing_node_id
         )
     );
 }
@@ -600,7 +603,7 @@ fn run_test_orphaned_crypto_keys(
 mod chain_key_enabled_subnet_lists {
     use super::*;
     use crate::common::test_helpers::invariant_compliant_registry;
-    use ic_base_types::{subnet_id_into_protobuf, SubnetId};
+    use ic_base_types::{SubnetId, subnet_id_into_protobuf};
     use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
     use ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList;
     use ic_protobuf::registry::subnet::v1::{
@@ -608,7 +611,7 @@ mod chain_key_enabled_subnet_lists {
         SubnetRecord as SubnetRecordPb,
     };
     use ic_protobuf::types::v1::{
-        self as pb, master_public_key_id, MasterPublicKeyId as MasterPublicKeyIdPb,
+        self as pb, MasterPublicKeyId as MasterPublicKeyIdPb, master_public_key_id,
     };
     use ic_registry_keys::CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX;
     use ic_registry_subnet_features::KeyConfig;
@@ -813,8 +816,8 @@ mod chain_key_enabled_subnet_lists {
     }
 
     #[test]
-    fn should_fail_subnet_existence_check_for_funky_key_id_lengths_and_characters_but_without_subnet_record(
-    ) {
+    fn should_fail_subnet_existence_check_for_funky_key_id_lengths_and_characters_but_without_subnet_record()
+     {
         const NUM_KEY_IDS: usize = 100;
         let rng = &mut ic_crypto_test_utils_reproducible_rng::reproducible_rng();
         for _ in 0..NUM_KEY_IDS {

@@ -206,50 +206,43 @@ mod tests {
         let table = [
             (
                 "remove argument without value at the beginning of command line succeeds",
-                "rd.debug rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\""
-                    ,
+                "rd.debug rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument without value in the middle of command line succeeds",
-                "rd.initrd=/bin/bash rd.debug rd.escaped=\"this is a multiline argument\""
-                    ,
+                "rd.initrd=/bin/bash rd.debug rd.escaped=\"this is a multiline argument\"",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument without value at the end of command line succeeds",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug"
-                    ,
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument with value at the beginning of command line succeeds",
-                "rd.debug=0 rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\""
-                    ,
+                "rd.debug=0 rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument with value in the middle of command line succeeds",
-                "rd.initrd=/bin/bash rd.debug=0 rd.escaped=\"this is a multiline argument\""
-                    ,
+                "rd.initrd=/bin/bash rd.debug=0 rd.escaped=\"this is a multiline argument\"",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument with value at the end of command line succeeds",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=1"
-                    ,
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=1",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument with quoted value at the beginning of command line succeeds",
-                "rd.debug=\"i am quoted value\" rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\""
-                    ,
+                "rd.debug=\"i am quoted value\" rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
@@ -261,20 +254,21 @@ mod tests {
             ),
             (
                 "remove argument with quoted value at the end of command line succeeds",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",                "rd.debug",
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",
+                "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "argument with substring does not get removed at end of string",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",                "rd.debu",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\""
-                    ,
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",
+                "rd.debu",
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",
             ),
             (
                 "argument removal chomps extra spaces after removal",
-                "rd.initrd=/bin/bash  rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",                "rd.debug",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\""
-                    ,
+                "rd.initrd=/bin/bash  rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",
+                "rd.debug",
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
         ];
         for (name, input, argument_to_remove, expected) in table.iter() {
@@ -298,15 +292,15 @@ actual:   {result:?}",
         let table = [
             (
                 "misquoted argument at the beginning of command line succeeds",
-                "rd.debug=\"misquoted rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\""
+                "rd.debug=\"misquoted rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "misquoted argument in the middle of command line succeeds",
-                "rd.initrd=/bin/bash rd.debug=\"misquoted rd.escaped=\"this is a multiline argument\""
+                "rd.initrd=/bin/bash rd.debug=\"misquoted rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "misquoted argument at the end of command line succeeds",
-                "rd.initrd=/bin/bash misquoted=\"true it's misquoted rd.escaped=\"this is a multiline argument\" rd.debug"
+                "rd.initrd=/bin/bash misquoted=\"true it's misquoted rd.escaped=\"this is a multiline argument\" rd.debug",
             ),
         ];
         for (name, input) in table.iter() {

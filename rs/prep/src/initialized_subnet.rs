@@ -14,7 +14,7 @@ use ic_registry_keys::{
     make_crypto_threshold_signing_pubkey_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::{subnet_id_into_protobuf, RegistryVersion, SubnetId};
+use ic_types::{RegistryVersion, SubnetId, subnet_id_into_protobuf};
 
 use crate::{node::InitializedNode, util::write_registry_entry};
 use crate::{

@@ -8,8 +8,8 @@ use crate::{
     },
     miscellaneous::*,
 };
-use anyhow::bail;
 use anyhow::Context;
+use anyhow::bail;
 use candid::Nat;
 use candid::Principal;
 use ic_types::PrincipalId;

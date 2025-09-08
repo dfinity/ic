@@ -1,6 +1,6 @@
 use crate::{
-    types::{NodeDetails, SubnetRecord},
     SubnetDescriptor,
+    types::{NodeDetails, SubnetRecord},
 };
 use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};

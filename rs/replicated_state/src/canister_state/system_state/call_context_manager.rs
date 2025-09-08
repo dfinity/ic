@@ -7,14 +7,14 @@ use ic_interfaces::execution_environment::HypervisorError;
 use ic_management_canister_types_private::IC_00;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
-    CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, Request,
-    RequestMetadata, Response, NO_DEADLINE,
+    CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, NO_DEADLINE, Request,
+    RequestMetadata, Response,
 };
 use ic_types::methods::Callback;
 use ic_types::time::CoarseTime;
 use ic_types::{
-    user_id_into_protobuf, user_id_try_from_protobuf, CanisterId, Cycles, Funds, NumInstructions,
-    PrincipalId, Time, UserId,
+    CanisterId, Cycles, Funds, NumInstructions, PrincipalId, Time, UserId, user_id_into_protobuf,
+    user_id_try_from_protobuf,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;

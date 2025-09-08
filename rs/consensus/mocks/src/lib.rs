@@ -16,14 +16,14 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::RefMockStateManager};
 use ic_test_utilities_consensus::IDkgStatsNoOp;
-use ic_test_utilities_registry::{setup_registry_non_final, SubnetRecordBuilder};
+use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry_non_final};
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
-    batch::{BatchPayload, ValidationContext},
-    consensus::{block_maker::SubnetRecords, Payload},
-    replica_config::ReplicaConfig,
     Height, RegistryVersion, SubnetId, Time,
+    batch::{BatchPayload, ValidationContext},
+    consensus::{Payload, block_maker::SubnetRecords},
+    replica_config::ReplicaConfig,
 };
 use mockall::predicate::*;
 use mockall::*;

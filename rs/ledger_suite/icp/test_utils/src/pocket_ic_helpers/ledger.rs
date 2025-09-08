@@ -1,9 +1,9 @@
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ledger_core::block::{BlockIndex, BlockType};
 use ic_ledger_core::Tokens;
+use ic_ledger_core::block::{BlockIndex, BlockType};
 use icp_ledger::{
-    AccountIdentifier, ArchiveInfo, Block, GetBlocksArgs, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, TransferArgs, MAX_BLOCKS_PER_REQUEST,
+    AccountIdentifier, ArchiveInfo, Block, GetBlocksArgs, MAX_BLOCKS_PER_REQUEST,
+    QueryBlocksResponse, QueryEncodedBlocksResponse, TransferArgs,
 };
 use icp_ledger::{BinaryAccountBalanceArgs, TransferError};
 use pocket_ic::PocketIc;

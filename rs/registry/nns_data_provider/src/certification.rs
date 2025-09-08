@@ -1,18 +1,17 @@
-use ic_certification::{verify_certified_data, CertificateValidationError};
+use ic_certification::{CertificateValidationError, verify_certified_data};
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces_registry::RegistryRecord;
 use ic_registry_transport::{
-    dechunkify_mutation_value,
+    GetChunk, dechunkify_mutation_value,
     pb::v1::{CertifiedResponse, HighCapacityRegistryAtomicMutateRequest},
-    GetChunk,
 };
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, SubnetId, Time,
+    CanisterId, RegistryVersion, SubnetId, Time, crypto::threshold_sig::ThresholdSigPublicKey,
 };
 use prost::Message;
 use serde::Deserialize;
 use std::{collections::BTreeMap, convert::TryFrom, fmt::Debug};
-use tree_deserializer::{types::Leb128EncodedU64, LabeledTreeDeserializer};
+use tree_deserializer::{LabeledTreeDeserializer, types::Leb128EncodedU64};
 
 #[cfg(test)]
 mod tests;

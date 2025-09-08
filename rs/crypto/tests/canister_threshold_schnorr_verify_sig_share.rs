@@ -1,17 +1,16 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    generate_key_transcript, random_receiver_id, random_receiver_id_excluding,
-    schnorr::environment_with_sig_inputs, CanisterThresholdSigTestEnvironment, CorruptBytes,
-    IntoBuilder,
+    CanisterThresholdSigTestEnvironment, CorruptBytes, IntoBuilder, generate_key_transcript,
+    random_receiver_id, random_receiver_id_excluding, schnorr::environment_with_sig_inputs,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces::crypto::{ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner};
 use ic_types::crypto::canister_threshold_sig::{
-    error::ThresholdSchnorrVerifySigShareError, idkg::IDkgTranscript, ThresholdSchnorrSigInputs,
-    ThresholdSchnorrSigShare,
+    ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
+    error::ThresholdSchnorrVerifySigShareError, idkg::IDkgTranscript,
 };
-use ic_types::{crypto::AlgorithmId, NodeId};
+use ic_types::{NodeId, crypto::AlgorithmId};
 use rand::{CryptoRng, RngCore};
 
 #[test]

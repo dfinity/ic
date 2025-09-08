@@ -1,13 +1,13 @@
 use actix_web_prom::{PrometheusMetrics, PrometheusMetricsBuilder};
 use axum::{
-    body::{to_bytes, Body},
+    body::{Body, to_bytes},
     extract::Request,
     response::Response,
 };
 use bytes::Bytes;
 use prometheus::{
-    register_gauge_vec, register_histogram_vec, register_int_counter_vec, register_int_gauge_vec,
     Encoder, GaugeVec, HistogramTimer, HistogramVec, IntCounterVec, IntGaugeVec,
+    register_gauge_vec, register_histogram_vec, register_int_counter_vec, register_int_gauge_vec,
 };
 use serde_json::Value;
 use std::collections::HashMap;

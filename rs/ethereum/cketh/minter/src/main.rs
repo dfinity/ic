@@ -4,7 +4,7 @@ use candid::Nat;
 use dashboard::DashboardTemplate;
 use ic_canister_log::log;
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
-use ic_cketh_minter::address::{validate_address_as_destination, AddressValidationError};
+use ic_cketh_minter::address::{AddressValidationError, validate_address_as_destination};
 use ic_cketh_minter::deposit::scrape_logs;
 use ic_cketh_minter::endpoints::ckerc20::{
     RetrieveErc20Request, WithdrawErc20Arg, WithdrawErc20Error,
@@ -27,25 +27,25 @@ use ic_cketh_minter::lifecycle::MinterArg;
 use ic_cketh_minter::logs::INFO;
 use ic_cketh_minter::memo::BurnMemo;
 use ic_cketh_minter::numeric::{Erc20Value, LedgerBurnIndex, Wei};
-use ic_cketh_minter::state::audit::{process_event, Event, EventType};
+use ic_cketh_minter::state::audit::{Event, EventType, process_event};
 use ic_cketh_minter::state::eth_logs_scraping::{LogScrapingId, LogScrapingInfo};
 use ic_cketh_minter::state::transactions::{
     Erc20WithdrawalRequest, EthWithdrawalRequest, Reimbursed, ReimbursementIndex,
     ReimbursementRequest,
 };
 use ic_cketh_minter::state::{
-    lazy_call_ecdsa_public_key, mutate_state, read_state, transactions, State, STATE,
+    STATE, State, lazy_call_ecdsa_public_key, mutate_state, read_state, transactions,
 };
 use ic_cketh_minter::tx::lazy_refresh_gas_fee_estimate;
 use ic_cketh_minter::withdraw::{
-    process_reimbursement, process_retrieve_eth_requests, CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
-    CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+    CKERC20_WITHDRAWAL_TRANSACTION_GAS_LIMIT, CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT,
+    process_reimbursement, process_retrieve_eth_requests,
+};
+use ic_cketh_minter::{
+    PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT, SCRAPING_ETH_LOGS_INTERVAL,
+    state, storage,
 };
 use ic_cketh_minter::{endpoints, erc20};
-use ic_cketh_minter::{
-    state, storage, PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, PROCESS_REIMBURSEMENT,
-    SCRAPING_ETH_LOGS_INTERVAL,
-};
 use ic_ethereum_types::Address;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use icrc_ledger_types::icrc1::account::Account;
@@ -1040,7 +1040,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
             Err(error) => {
                 return HttpResponseBuilder::bad_request()
                     .with_body_and_content_length(error)
-                    .build()
+                    .build();
             }
         };
         let dashboard = read_state(|state| DashboardTemplate::from_state(state, paging_parameters));

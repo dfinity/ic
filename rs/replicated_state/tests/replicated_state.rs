@@ -28,13 +28,13 @@ use ic_replicated_state::{
     CanisterState, IngressHistoryState, InputSource, ReplicatedState, SchedulerState, StateError,
     SystemState,
 };
-use ic_test_utilities_state::{arb_replicated_state_with_output_queues, ExecutionStateBuilder};
-use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id, SUBNET_1};
+use ic_test_utilities_state::{ExecutionStateBuilder, arb_replicated_state_with_output_queues};
+use ic_test_utilities_types::ids::{SUBNET_1, canister_test_id, message_test_id, user_test_id};
 use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{CallbackId, RejectContext};
 use ic_types::messages::{
-    CanisterMessage, Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
+    CanisterMessage, MAX_RESPONSE_COUNT_BYTES, Payload, Request, RequestOrResponse, Response,
 };
 use ic_types::time::CoarseTime;
 use ic_types::time::UNIX_EPOCH;
@@ -355,13 +355,15 @@ fn memory_taken_by_canister_queues() {
     assert_wasm_custom_sections_memory_taken(0, &fixture);
 
     // Push a request into a canister input queue.
-    assert!(fixture
-        .state
-        .push_input(
-            request_from(OTHER_CANISTER_ID).into(),
-            &mut subnet_available_guaranteed_response_memory,
-        )
-        .unwrap());
+    assert!(
+        fixture
+            .state
+            .push_input(
+                request_from(OTHER_CANISTER_ID).into(),
+                &mut subnet_available_guaranteed_response_memory,
+            )
+            .unwrap()
+    );
 
     // Reserved memory for one response.
     assert_execution_memory_taken(0, &fixture);
@@ -395,13 +397,15 @@ fn memory_taken_by_canister_queues() {
 
     // Push a best-effort request into a canister input queue.
     let request = best_effort_request_from(OTHER_CANISTER_ID);
-    assert!(fixture
-        .state
-        .push_input(
-            request.clone().into(),
-            &mut subnet_available_guaranteed_response_memory
-        )
-        .unwrap());
+    assert!(
+        fixture
+            .state
+            .push_input(
+                request.clone().into(),
+                &mut subnet_available_guaranteed_response_memory
+            )
+            .unwrap()
+    );
 
     // Best-effort memory used by the response (no reservation).
     assert_execution_memory_taken(0, &fixture);
@@ -437,13 +441,15 @@ fn memory_taken_by_subnet_queues() {
     assert_wasm_custom_sections_memory_taken(0, &fixture);
 
     // Push a guaranteed resoibse request into the subnet input queues.
-    assert!(fixture
-        .state
-        .push_input(
-            request_to(SUBNET_ID.into()).into(),
-            &mut subnet_available_guaranteed_response_memory,
-        )
-        .unwrap());
+    assert!(
+        fixture
+            .state
+            .push_input(
+                request_to(SUBNET_ID.into()).into(),
+                &mut subnet_available_guaranteed_response_memory,
+            )
+            .unwrap()
+    );
 
     // Reserved memory for one response.
     assert_execution_memory_taken(0, &fixture);
@@ -479,13 +485,15 @@ fn memory_taken_by_subnet_queues() {
 
     // Push a best-effort request into the subnet input queues.
     let request = best_effort_request_to(SUBNET_ID.into());
-    assert!(fixture
-        .state
-        .push_input(
-            request.clone().into(),
-            &mut subnet_available_guaranteed_response_memory
-        )
-        .unwrap());
+    assert!(
+        fixture
+            .state
+            .push_input(
+                request.clone().into(),
+                &mut subnet_available_guaranteed_response_memory
+            )
+            .unwrap()
+    );
 
     // Best-effort memory used by the response (no reservation).
     assert_execution_memory_taken(0, &fixture);
@@ -527,13 +535,15 @@ fn memory_taken_by_wasm_custom_sections() {
     assert_wasm_custom_sections_memory_taken(wasm_metadata_memory.get(), &fixture);
 
     // Push a request into a canister input queue.
-    assert!(fixture
-        .state
-        .push_input(
-            request_from(OTHER_CANISTER_ID).into(),
-            &mut subnet_available_guaranteed_response_memory,
-        )
-        .unwrap());
+    assert!(
+        fixture
+            .state
+            .push_input(
+                request_from(OTHER_CANISTER_ID).into(),
+                &mut subnet_available_guaranteed_response_memory,
+            )
+            .unwrap()
+    );
 
     // Reserved memory for one response.
     assert_execution_memory_taken(wasm_metadata_memory.get() as usize, &fixture);
@@ -616,13 +626,15 @@ fn push_subnet_queues_input_respects_subnet_available_guaranteed_response_memory
     assert_wasm_custom_sections_memory_taken(0, &fixture);
 
     // Push a guarnteed response request into the subnet input queues.
-    assert!(fixture
-        .state
-        .push_input(
-            request_to(SUBNET_ID.into()).into(),
-            &mut subnet_available_guaranteed_response_memory,
-        )
-        .unwrap());
+    assert!(
+        fixture
+            .state
+            .push_input(
+                request_to(SUBNET_ID.into()).into(),
+                &mut subnet_available_guaranteed_response_memory,
+            )
+            .unwrap()
+    );
 
     // Reserved memory for one response.
     assert_execution_memory_taken(0, &fixture);
@@ -662,13 +674,15 @@ fn push_subnet_queues_input_respects_subnet_available_guaranteed_response_memory
 
     // Push a best-effort request into the subnet input queues.
     let request = best_effort_request_to(SUBNET_ID.into());
-    assert!(fixture
-        .state
-        .push_input(
-            request.clone().into(),
-            &mut subnet_available_guaranteed_response_memory
-        )
-        .unwrap());
+    assert!(
+        fixture
+            .state
+            .push_input(
+                request.clone().into(),
+                &mut subnet_available_guaranteed_response_memory
+            )
+            .unwrap()
+    );
 
     // Best-effort memory consumed by the request; otherwise, memory usage unchanged.
     assert_execution_memory_taken(0, &fixture);
@@ -688,21 +702,27 @@ fn push_input_queues_respects_local_remote_subnet() {
 
     // Push message from the remote canister, should be in the remote subnet
     // queue.
-    assert!(fixture
-        .push_input(request_from(OTHER_CANISTER_ID).into())
-        .unwrap());
+    assert!(
+        fixture
+            .push_input(request_from(OTHER_CANISTER_ID).into())
+            .unwrap()
+    );
     assert_eq!(fixture.remote_subnet_input_schedule(&CANISTER_ID).len(), 1);
 
     // Push message from the local canister, should be in the local subnet queue.
-    assert!(fixture
-        .push_input(request_from(CANISTER_ID).into())
-        .unwrap());
+    assert!(
+        fixture
+            .push_input(request_from(CANISTER_ID).into())
+            .unwrap()
+    );
     assert_eq!(fixture.local_subnet_input_schedule(&CANISTER_ID).len(), 1);
 
     // Push message from the local subnet, should be in the local subnet queue.
-    assert!(fixture
-        .push_input(request_from(CanisterId::unchecked_from_principal(SUBNET_ID.get())).into())
-        .unwrap());
+    assert!(
+        fixture
+            .push_input(request_from(CanisterId::unchecked_from_principal(SUBNET_ID.get())).into())
+            .unwrap()
+    );
     assert_eq!(fixture.local_subnet_input_schedule(&CANISTER_ID).len(), 2);
 }
 
@@ -872,9 +892,11 @@ fn time_out_messages_updates_subnet_input_schedules_correctly() {
 
     assert_eq!(2, fixture.local_subnet_input_schedule(&CANISTER_ID).len());
     for canister_id in [CANISTER_ID, OTHER_CANISTER_ID] {
-        assert!(fixture
-            .local_subnet_input_schedule(&CANISTER_ID)
-            .contains(&canister_id));
+        assert!(
+            fixture
+                .local_subnet_input_schedule(&CANISTER_ID)
+                .contains(&canister_id)
+        );
     }
     assert_eq!(
         fixture.remote_subnet_input_schedule(&CANISTER_ID),
@@ -1035,28 +1057,32 @@ fn split() {
     fixture.state.metadata.ingress_history = make_ingress_history(&CANISTERS);
 
     // Subnet queues. Should be preserved on subnet A' only.
-    assert!(fixture
-        .push_input(
-            RequestBuilder::default()
-                .sender(CANISTER_1)
-                .receiver(SUBNET_A.into())
-                .build()
-                .into(),
-        )
-        .unwrap());
+    assert!(
+        fixture
+            .push_input(
+                RequestBuilder::default()
+                    .sender(CANISTER_1)
+                    .receiver(SUBNET_A.into())
+                    .build()
+                    .into(),
+            )
+            .unwrap()
+    );
 
     // Set up input schedules. Add a couple of input messages to each canister.
     for sender in CANISTERS {
         for receiver in CANISTERS {
-            assert!(fixture
-                .push_input(
-                    RequestBuilder::default()
-                        .sender(sender)
-                        .receiver(receiver)
-                        .build()
-                        .into(),
-                )
-                .unwrap());
+            assert!(
+                fixture
+                    .push_input(
+                        RequestBuilder::default()
+                            .sender(sender)
+                            .receiver(receiver)
+                            .build()
+                            .into(),
+                    )
+                    .unwrap()
+            );
         }
     }
     for canister in CANISTERS {
@@ -1291,7 +1317,13 @@ fn iter_yields_correct_elements(
         }
 
         if let Some(raw_msg) = requests.pop_front() {
-            prop_assert_eq!(&msg, &raw_msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw_msg);
+            prop_assert_eq!(
+                &msg,
+                &raw_msg,
+                "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.",
+                msg,
+                raw_msg
+            );
         } else {
             prop_assert!(
                 false,

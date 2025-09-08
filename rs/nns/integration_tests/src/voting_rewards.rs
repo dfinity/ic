@@ -10,7 +10,7 @@ use ic_nns_governance_api::{
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
 };
 use std::{
     iter::once,
@@ -103,11 +103,13 @@ fn test_increase_maturity_just_after_init() {
                     sm.tick();
                 }
             }
-            latest_reward_event = dbg!(nns_canisters
-                .governance
-                .query_("get_latest_reward_event", candid, ())
-                .await
-                .unwrap());
+            latest_reward_event = dbg!(
+                nns_canisters
+                    .governance
+                    .query_("get_latest_reward_event", candid, ())
+                    .await
+                    .unwrap()
+            );
         }
         // Async reward distribution
         for _ in 0..5 {

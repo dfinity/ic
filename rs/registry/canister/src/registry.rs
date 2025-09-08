@@ -1,7 +1,7 @@
 use crate::{
     common::LOG_PREFIX,
     pb::v1::{
-        registry_stable_storage::Version as ReprVersion, ChangelogEntry, RegistryStableStorage,
+        ChangelogEntry, RegistryStableStorage, registry_stable_storage::Version as ReprVersion,
     },
     storage::{chunkify_composite_mutation_if_too_large, with_chunks},
 };
@@ -10,13 +10,13 @@ use ic_nervous_system_time_helpers::now_nanoseconds;
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_canister_chunkify::dechunkify_registry_value;
 use ic_registry_transport::{
+    Error,
     pb::v1::{
-        high_capacity_registry_mutation, high_capacity_registry_value, registry_mutation::Type,
         HighCapacityRegistryAtomicMutateRequest, HighCapacityRegistryDelta,
         HighCapacityRegistryMutation, HighCapacityRegistryValue, RegistryAtomicMutateRequest,
-        RegistryMutation, RegistryValue,
+        RegistryMutation, RegistryValue, high_capacity_registry_mutation,
+        high_capacity_registry_value, registry_mutation::Type,
     },
-    Error,
 };
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64;
 use prost::Message;
@@ -1100,9 +1100,9 @@ mod tests {
         let mut serializable_form = registry.serializable_form();
         // Remove half of the entries, but retain the first and the last entry.
         let initial_len = registry.changelog().iter().count();
-        serializable_form
-            .changelog
-            .retain(|entry| entry.version == 1 || rng.r#gen() || entry.version == initial_len as u64);
+        serializable_form.changelog.retain(|entry| {
+            entry.version == 1 || rng.r#gen() || entry.version == initial_len as u64
+        });
         let len_after_random_trim = serializable_form.changelog.len();
         assert!(len_after_random_trim < initial_len);
 
@@ -1138,10 +1138,12 @@ mod tests {
 
         // We should have one changelog entry.
         assert_eq!(1, registry.changelog().iter().count());
-        assert!(registry
-            .changelog()
-            .get(EncodedVersion::from(version).as_ref())
-            .is_some());
+        assert!(
+            registry
+                .changelog()
+                .get(EncodedVersion::from(version).as_ref())
+                .is_some()
+        );
     }
 
     #[test]

@@ -8,11 +8,11 @@ use bitcoin::{
     p2p::message_blockdata::Inventory,
 };
 use hashlink::LinkedHashMap;
-use ic_logger::{debug, info, trace, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, info, trace};
 use ic_metrics::MetricsRegistry;
 
-use crate::metrics::TransactionMetrics;
 use crate::ProcessNetworkMessageError;
+use crate::metrics::TransactionMetrics;
 use crate::{Channel, Command};
 
 /// How long should the transaction manager hold on to a transaction.
@@ -202,10 +202,10 @@ impl TransactionStore {
 mod test {
     use super::*;
     use bitcoin::{
-        absolute::{LockTime, LOCK_TIME_THRESHOLD},
+        Block, Network, Transaction,
+        absolute::{LOCK_TIME_THRESHOLD, LockTime},
         blockdata::constants::genesis_block,
         consensus::serialize,
-        Block, Network, Transaction,
     };
     use ic_logger::replica_logger::no_op_logger;
     use std::str::FromStr;
@@ -237,7 +237,7 @@ mod test {
     #[test]
     fn test_reap() {
         let mut channel = TestChannel::new(vec![
-            SocketAddr::from_str("127.0.0.1:8333").expect("invalid address")
+            SocketAddr::from_str("127.0.0.1:8333").expect("invalid address"),
         ]);
         let mut manager = make_transaction_manager();
         let transaction = get_transaction();
@@ -263,7 +263,7 @@ mod test {
     #[test]
     fn test_broadcast_txids() {
         let mut channel = TestChannel::new(vec![
-            SocketAddr::from_str("127.0.0.1:8333").expect("invalid address")
+            SocketAddr::from_str("127.0.0.1:8333").expect("invalid address"),
         ]);
         let mut manager = make_transaction_manager();
         let transaction = get_transaction();

@@ -1,7 +1,7 @@
 use crate::{
+    CanisterId, CountBytes, Cycles, Funds, NumBytes, Time,
     ingress::WasmResult,
     time::{CoarseTime, UNIX_EPOCH},
-    CanisterId, CountBytes, Cycles, Funds, NumBytes, Time,
 };
 use ic_error_types::{RejectCode, UserError};
 #[cfg(test)]
@@ -15,7 +15,7 @@ use ic_management_canister_types_private::{
     UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     state::queues::v1 as pb_queues,
     types::v1 as pb_types,
 };
@@ -549,12 +549,8 @@ pub enum RequestOrResponse {
 impl ValidateEq for RequestOrResponse {
     fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
         match (self, rhs) {
-            (RequestOrResponse::Request(l), RequestOrResponse::Request(r)) => {
-                l.validate_eq(r)
-            }
-            (RequestOrResponse::Response(l), RequestOrResponse::Response(r)) => {
-                l.validate_eq(r)
-            }
+            (RequestOrResponse::Request(l), RequestOrResponse::Request(r)) => l.validate_eq(r),
+            (RequestOrResponse::Response(l), RequestOrResponse::Response(r)) => l.validate_eq(r),
             _ => Err("RequestOrResponse enum mismatch".to_string()),
         }
     }

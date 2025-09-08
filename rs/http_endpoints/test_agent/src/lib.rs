@@ -1,14 +1,14 @@
 use ic_crypto_tree_hash::Path;
 use ic_http_endpoints_public::{query, read_state};
 use ic_types::{
+    PrincipalId,
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
         HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, MessageId, SignedIngress,
     },
     time::current_time,
-    PrincipalId,
 };
-use reqwest::{header::CONTENT_TYPE, StatusCode};
+use reqwest::{StatusCode, header::CONTENT_TYPE};
 use serde_cbor::Value as CBOR;
 use std::{net::SocketAddr, time::Duration};
 use url::Url;

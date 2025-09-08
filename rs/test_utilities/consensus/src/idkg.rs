@@ -1,6 +1,6 @@
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    generate_ecdsa_presig_quadruple, generate_key_transcript, setup_unmasked_random_params,
-    CanisterThresholdSigTestEnvironment, IDkgParticipants,
+    CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_ecdsa_presig_quadruple,
+    generate_key_transcript, setup_unmasked_random_params,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
@@ -9,12 +9,12 @@ use ic_management_canister_types_private::{
     EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdKeyId,
 };
 use ic_replicated_state::{
+    ReplicatedState,
     metadata_state::subnet_call_context_manager::{
         EcdsaArguments, EcdsaMatchedPreSignature, PreSignatureStash, ReshareChainKeyContext,
         SchnorrArguments, SchnorrMatchedPreSignature, SignWithThresholdContext, ThresholdArguments,
         VetKdArguments,
     },
-    ReplicatedState,
 };
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::{
@@ -22,34 +22,34 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
+    Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,
     batch::ConsensusResponse,
     consensus::{
         certification::Certification,
         idkg::{
-            common::{PreSignature, PreSignatureRef, ThresholdSigInputs},
-            ecdsa::PreSignatureQuadrupleRef,
-            schnorr::PreSignatureTranscriptRef,
             HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId, IDkgPayload, IDkgReshareRequest,
             KeyTranscriptCreation, MaskedTranscript, MasterKeyTranscript, PreSigId, RequestId,
             TranscriptRef, UnmaskedTranscript,
+            common::{PreSignature, PreSignatureRef, ThresholdSigInputs},
+            ecdsa::PreSignatureQuadrupleRef,
+            schnorr::PreSignatureTranscriptRef,
         },
     },
     crypto::{
+        AlgorithmId, ExtendedDerivationPath,
         canister_threshold_sig::{
+            SchnorrPreSignatureTranscript, ThresholdEcdsaSigInputs, ThresholdSchnorrSigInputs,
             idkg::{
                 IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
                 IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
             },
-            SchnorrPreSignatureTranscript, ThresholdEcdsaSigInputs, ThresholdSchnorrSigInputs,
         },
         threshold_sig::ni_dkg::{
             NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
-        AlgorithmId, ExtendedDerivationPath,
     },
     messages::{CallbackId, Payload},
     time::UNIX_EPOCH,
-    Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},

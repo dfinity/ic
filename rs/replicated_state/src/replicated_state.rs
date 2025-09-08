@@ -1,18 +1,18 @@
 use super::{
     canister_state::CanisterState,
     metadata_state::{
-        subnet_call_context_manager::{ReshareChainKeyContext, SignWithThresholdContext},
         IngressHistoryState, Stream, StreamMap, SystemMetadata,
+        subnet_call_context_manager::{ReshareChainKeyContext, SignWithThresholdContext},
     },
 };
 use crate::{
+    CanisterQueues, DroppedMessageMetrics,
     canister_snapshots::{CanisterSnapshot, CanisterSnapshots},
     canister_state::{
         queues::{CanisterInput, CanisterQueuesLoopDetector},
-        system_state::{push_input, CanisterOutputQueuesIterator},
+        system_state::{CanisterOutputQueuesIterator, push_input},
     },
     metadata_state::subnet_call_context_manager::PreSignatureStash,
-    CanisterQueues, DroppedMessageMetrics,
 };
 use ic_base_types::{PrincipalId, SnapshotId};
 use ic_btc_replica_types::BitcoinAdapterResponse;
@@ -26,12 +26,12 @@ use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
+    AccumulatedPriority, CanisterId, Cycles, MemoryAllocation, NumBytes, SubnetId, Time,
     batch::{CanisterCyclesCostSchedule, ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
     messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
     time::CoarseTime,
-    AccumulatedPriority, CanisterId, Cycles, MemoryAllocation, NumBytes, SubnetId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -317,10 +317,20 @@ impl std::fmt::Display for StateError {
                 "Cannot enqueue message. Out of memory: requested {}, available {}",
                 requested, available
             ),
-            StateError::NonMatchingResponse {err_str, originator, callback_id, respondent, deadline} => write!(
+            StateError::NonMatchingResponse {
+                err_str,
+                originator,
+                callback_id,
+                respondent,
+                deadline,
+            } => write!(
                 f,
                 "Cannot enqueue response with callback ID {} due to {} : originator => {}, respondent => {}, deadline => {}",
-                callback_id, err_str, originator, respondent, Time::from(*deadline)
+                callback_id,
+                err_str,
+                originator,
+                respondent,
+                Time::from(*deadline)
             ),
             StateError::BitcoinNonMatchingResponse { callback_id } => {
                 write!(

@@ -8,7 +8,7 @@ use serde::Serialize;
 use ic_base_types::PrincipalId;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation, RegistryValue};
+use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue, registry_mutation};
 
 use prost::Message;
 use std::collections::BTreeMap;

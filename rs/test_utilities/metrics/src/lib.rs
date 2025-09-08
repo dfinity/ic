@@ -23,7 +23,7 @@ pub fn fetch_histogram_stats(registry: &MetricsRegistry, name: &str) -> Option<H
 
 #[test]
 fn test_fetch_histogram_stats() {
-    use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+    use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 
     let r = MetricsRegistry::new();
     let h = r.histogram(
@@ -67,7 +67,7 @@ pub fn fetch_histogram_vec_stats(
 
 #[test]
 fn test_fetch_histogram_vec_stats() {
-    use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+    use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 
     let r = MetricsRegistry::new();
     let h = r.histogram_vec(

@@ -5,16 +5,16 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::ic::{InternetComputer, NrOfVCPUs, Subnet, VmResources};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    NnsInstallationBuilder, SubnetSnapshot, TopologySnapshot,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder, SubnetSnapshot,
+    TopologySnapshot, get_dependency_path,
 };
 use ic_system_test_driver::driver::universal_vm::UniversalVm;
 use ic_system_test_driver::util::timeit;
 use ic_types::SubnetId;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::thread::{spawn, JoinHandle};
+use std::thread::{JoinHandle, spawn};
 
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 

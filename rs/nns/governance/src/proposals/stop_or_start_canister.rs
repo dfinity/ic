@@ -1,6 +1,6 @@
 use super::{invalid_proposal_error, topic_to_manage_canister};
 use crate::{
-    pb::v1::{stop_or_start_canister::CanisterAction, GovernanceError, StopOrStartCanister, Topic},
+    pb::v1::{GovernanceError, StopOrStartCanister, Topic, stop_or_start_canister::CanisterAction},
     proposals::call_canister::CallCanister,
 };
 

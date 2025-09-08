@@ -11,7 +11,7 @@ use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
 use ic_test_state_machine_client::{CanisterCall, RawCanisterId, Request, Request::*};
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use serde::Serialize;
-use std::io::{stdin, stdout, Read, Write};
+use std::io::{Read, Write, stdin, stdout};
 
 macro_rules! debug_print {
     ($opts:expr, $msg:expr $(,$args:expr)* $(,)*) => {

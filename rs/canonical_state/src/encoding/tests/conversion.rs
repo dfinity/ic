@@ -1,6 +1,6 @@
 use super::test_fixtures::*;
-use crate::encoding::types::{self, StreamFlagBits, STREAM_DEFAULT_FLAGS, STREAM_SUPPORTED_FLAGS};
-use crate::{all_supported_versions, MAX_SUPPORTED_CERTIFICATION_VERSION};
+use crate::encoding::types::{self, STREAM_DEFAULT_FLAGS, STREAM_SUPPORTED_FLAGS, StreamFlagBits};
+use crate::{MAX_SUPPORTED_CERTIFICATION_VERSION, all_supported_versions};
 use assert_matches::assert_matches;
 use ic_error_types::RejectCode;
 use ic_protobuf::proxy::ProxyDecodeError;

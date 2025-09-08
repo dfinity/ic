@@ -33,19 +33,20 @@ use ic_sns_governance::extensions::add_allowed_extension_spec;
 #[cfg(feature = "test")]
 use ic_sns_governance::pb::v1::AddAllowedExtensionRequest;
 use ic_sns_governance::{
-    governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
+    governance::{Governance, TimeWarp, ValidGovernanceProto, log_prefix},
     logs::{ERROR, INFO},
     pb::v1::{self as sns_gov_pb},
     storage::with_upgrades_memory,
     types::{Environment, HeapGrowthPotential},
     upgrade_journal::serve_journal,
 };
+#[cfg(feature = "test")]
 use ic_sns_governance_api::pb::v1::{
-    get_metrics_response,
-    get_running_sns_version_response::UpgradeInProgress,
-    governance::Version,
-    governance_error::ErrorType,
-    topics::{ListTopicsRequest, ListTopicsResponse},
+    AddMaturityRequest, AddMaturityResponse, AdvanceTargetVersionRequest,
+    AdvanceTargetVersionResponse, MintTokensRequest, MintTokensResponse,
+    RefreshCachedUpgradeStepsRequest, RefreshCachedUpgradeStepsResponse,
+};
+use ic_sns_governance_api::pb::v1::{
     ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, FailStuckUpgradeInProgressRequest,
     FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
     GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMetricsRequest,
@@ -55,13 +56,11 @@ use ic_sns_governance_api::pb::v1::{
     GetUpgradeJournalRequest, GetUpgradeJournalResponse, Governance as GovernanceApi,
     GovernanceError, ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse,
     ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse,
-    NervousSystemParameters, RewardEvent, SetMode, SetModeResponse,
-};
-#[cfg(feature = "test")]
-use ic_sns_governance_api::pb::v1::{
-    AddMaturityRequest, AddMaturityResponse, AdvanceTargetVersionRequest,
-    AdvanceTargetVersionResponse, MintTokensRequest, MintTokensResponse,
-    RefreshCachedUpgradeStepsRequest, RefreshCachedUpgradeStepsResponse,
+    NervousSystemParameters, RewardEvent, SetMode, SetModeResponse, get_metrics_response,
+    get_running_sns_version_response::UpgradeInProgress,
+    governance::Version,
+    governance_error::ErrorType,
+    topics::{ListTopicsRequest, ListTopicsResponse},
 };
 use prost::Message;
 use rand::{RngCore, SeedableRng};
@@ -536,7 +535,9 @@ fn get_latest_reward_event() -> RewardEvent {
 #[update]
 #[allow(clippy::let_unit_value)] // clippy false positive
 async fn get_root_canister_status(_: ()) -> CanisterStatusResultV2 {
-    panic!("This method is deprecated and should not be used. Please use the root canister's `get_sns_canisters_summary` method.")
+    panic!(
+        "This method is deprecated and should not be used. Please use the root canister's `get_sns_canisters_summary` method."
+    )
 }
 
 /// Gets the current SNS version, as understood by Governance.  This is useful

@@ -1,5 +1,5 @@
 use crate::utils::create_custom_neuron;
-use crate::utils::{create_neuron, NeuronDetails};
+use crate::utils::{NeuronDetails, create_neuron};
 use ic_ledger_core::Tokens;
 use ic_nns_governance_api::Neuron;
 use ic_rosetta_test_utils::EdKeypair;

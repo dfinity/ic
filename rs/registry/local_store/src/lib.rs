@@ -4,8 +4,8 @@ use ic_registry_common_proto::pb::local_store::v1::{
     MutationType,
 };
 use ic_sys::fs::{sync_path, write_protobuf_simple, write_protobuf_using_tmp_file};
-use ic_types::registry::RegistryDataProviderError;
 use ic_types::RegistryVersion;
+use ic_types::registry::RegistryDataProviderError;
 use prost::Message;
 use std::{
     io::{self},
@@ -247,7 +247,7 @@ fn key_mutation_try_from_proto(value: &PbKeyMutation) -> Result<KeyMutation, io:
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Invalid mutation type.",
-            ))
+            ));
         }
     };
     let res = match mut_type {
@@ -369,10 +369,12 @@ mod tests {
 
         store.clear().unwrap();
 
-        assert!(store
-            .get_changelog_since_version(RegistryVersion::from(0))
-            .unwrap()
-            .is_empty());
+        assert!(
+            store
+                .get_changelog_since_version(RegistryVersion::from(0))
+                .unwrap()
+                .is_empty()
+        );
 
         let changelog = get_random_changelog(1, &mut rng);
         store

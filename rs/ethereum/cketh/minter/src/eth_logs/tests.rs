@@ -1,9 +1,9 @@
 mod parser {
     use crate::eth_logs::parser::ReceivedEthOrErc20LogParser;
     use crate::eth_logs::{
-        LedgerSubaccount, LogParser, ReceivedErc20Event, ReceivedErc20LogParser, ReceivedEthEvent,
-        ReceivedEthLogParser, RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
-        RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
+        LedgerSubaccount, LogParser, RECEIVED_ERC20_EVENT_TOPIC, RECEIVED_ETH_EVENT_TOPIC,
+        RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC, ReceivedErc20Event,
+        ReceivedErc20LogParser, ReceivedEthEvent, ReceivedEthLogParser,
     };
     use crate::numeric::{BlockNumber, Erc20Value, LogIndex, Wei};
     use candid::Principal;
@@ -250,8 +250,8 @@ mod scraping {
         use crate::erc20::CkErc20Token;
         use crate::eth_logs::scraping::Scrape;
         use crate::eth_logs::{
-            LogScraping, ReceivedEthOrErc20LogScraping,
-            RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
+            LogScraping, RECEIVED_ETH_OR_ERC20_WITH_SUBACCOUNT_EVENT_TOPIC,
+            ReceivedEthOrErc20LogScraping,
         };
         use crate::eth_rpc::Topic;
         use crate::lifecycle::EthereumNetwork;
@@ -326,7 +326,12 @@ mod scraping {
                         let mut topics = scrape_without_erc20.topics;
                         let _ = std::mem::replace(
                             &mut topics[1],
-                            Topic::Multiple(vec![Hex32::from([0_u8; 32]), Hex32::from(hex!("0000000000000000000000001c7d4b196cb0c7b01d743fbc6116a902379c7238"))]),
+                            Topic::Multiple(vec![
+                                Hex32::from([0_u8; 32]),
+                                Hex32::from(hex!(
+                                    "0000000000000000000000001c7d4b196cb0c7b01d743fbc6116a902379c7238"
+                                )),
+                            ]),
                         );
                         topics
                     },

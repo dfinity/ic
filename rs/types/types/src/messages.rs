@@ -19,23 +19,23 @@ pub use self::http::{
 };
 pub use crate::methods::SystemMethod;
 use crate::time::CoarseTime;
-use crate::{user_id_into_protobuf, user_id_try_from_protobuf, Cycles, Funds, NumBytes, UserId};
+use crate::{Cycles, Funds, NumBytes, UserId, user_id_into_protobuf, user_id_try_from_protobuf};
 pub use blob::Blob;
 use ic_base_types::{CanisterId, PrincipalId};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::CanisterChangeOrigin;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
 pub use ingress_messages::{
-    extract_effective_canister_id, Ingress, ParseIngressError, SignedIngress, SignedIngressContent,
+    Ingress, ParseIngressError, SignedIngress, SignedIngressContent, extract_effective_canister_id,
 };
 pub use inter_canister::{
-    CallContextId, CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse,
-    Response, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE,
+    CallContextId, CallbackId, MAX_REJECT_MESSAGE_LEN_BYTES, NO_DEADLINE, Payload, RejectContext,
+    Request, RequestMetadata, RequestOrResponse, Response,
 };
-pub use message_id::{MessageId, MessageIdError, EXPECTED_MESSAGE_ID_LENGTH};
+pub use message_id::{EXPECTED_MESSAGE_ID_LENGTH, MessageId, MessageIdError};
 use phantom_newtype::Id;
 pub use query::{Query, QuerySource};
 pub use read_state::ReadState;
@@ -149,7 +149,11 @@ impl StopCanisterContext {
 impl From<(CanisterCall, StopCanisterCallId)> for StopCanisterContext {
     fn from(input: (CanisterCall, StopCanisterCallId)) -> Self {
         let (msg, call_id) = input;
-        assert_eq!(msg.method_name(), "stop_canister", "Converting a CanisterCall into StopCanisterContext should only happen with stop_canister calls.");
+        assert_eq!(
+            msg.method_name(),
+            "stop_canister",
+            "Converting a CanisterCall into StopCanisterContext should only happen with stop_canister calls."
+        );
         match msg {
             CanisterCall::Request(mut req) => StopCanisterContext::Canister {
                 sender: req.sender,
@@ -555,7 +559,7 @@ impl CanisterCallOrTask {
 mod tests {
     use super::*;
     use crate::exhaustive::ExhaustiveSet;
-    use crate::{time::expiry_time_from_now, Time};
+    use crate::{Time, time::expiry_time_from_now};
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use maplit::btreemap;

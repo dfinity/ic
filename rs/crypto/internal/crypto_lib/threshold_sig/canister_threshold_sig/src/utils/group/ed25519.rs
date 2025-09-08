@@ -1,5 +1,5 @@
 use curve25519_dalek::{edwards::CompressedEdwardsY, traits::MultiscalarMul};
-use group::{ff::Field, Group, GroupEncoding};
+use group::{Group, GroupEncoding, ff::Field};
 use hex_literal::hex;
 use ic_crypto_sha2::Sha512;
 use std::ops::{Add, Mul, Neg, Sub};

@@ -1,15 +1,15 @@
 use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Wasm;
-use futures::{stream, StreamExt};
+use futures::{StreamExt, stream};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_interfaces_registry::{RegistryDataProvider, ZERO_REGISTRY_VERSION};
 use ic_ledger_core::Tokens;
 use ic_management_canister_types::CanisterSettings;
 use ic_nervous_system_agent::{
+    ProgressNetwork,
     helpers::nns as nns_agent_helpers,
     pocketic_impl::{PocketIcAgent, PocketIcCallError},
     sns::Sns,
-    ProgressNetwork,
 };
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
@@ -20,19 +20,19 @@ use ic_nns_constants::{
     ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::{
-    install_code::CanisterInstallMode, CreateServiceNervousSystem, GetNeuronsFundAuditInfoResponse,
-    InstallCodeRequest, ListNeurons, ListNeuronsResponse, MakeProposalRequest,
-    ManageNeuronCommandRequest, ManageNeuronResponse, NetworkEconomics, Neuron,
-    ProposalActionRequest, ProposalInfo,
+    CreateServiceNervousSystem, GetNeuronsFundAuditInfoResponse, InstallCodeRequest, ListNeurons,
+    ListNeuronsResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronResponse,
+    NetworkEconomics, Neuron, ProposalActionRequest, ProposalInfo,
+    install_code::CanisterInstallMode,
 };
 use ic_nns_test_utils::{
     common::{
-        build_cmc_wasm, build_governance_wasm, build_index_wasm, build_ledger_wasm,
-        build_lifeline_wasm, build_mainnet_cmc_wasm, build_mainnet_governance_wasm,
-        build_mainnet_index_wasm, build_mainnet_ledger_wasm, build_mainnet_lifeline_wasm,
-        build_mainnet_registry_wasm, build_mainnet_root_wasm, build_mainnet_sns_wasms_wasm,
-        build_registry_wasm, build_root_wasm, build_sns_wasms_wasm, build_test_governance_wasm,
-        build_test_registry_wasm, NnsInitPayloadsBuilder,
+        NnsInitPayloadsBuilder, build_cmc_wasm, build_governance_wasm, build_index_wasm,
+        build_ledger_wasm, build_lifeline_wasm, build_mainnet_cmc_wasm,
+        build_mainnet_governance_wasm, build_mainnet_index_wasm, build_mainnet_ledger_wasm,
+        build_mainnet_lifeline_wasm, build_mainnet_registry_wasm, build_mainnet_root_wasm,
+        build_mainnet_sns_wasms_wasm, build_registry_wasm, build_root_wasm, build_sns_wasms_wasm,
+        build_test_governance_wasm, build_test_registry_wasm,
     },
     sns_wasm::{
         build_archive_sns_wasm, build_governance_sns_wasm, build_governance_test_sns_wasm,
@@ -44,10 +44,10 @@ use ic_nns_test_utils::{
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_transport::pb::v1::{
-    registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
+    RegistryAtomicMutateRequest, RegistryMutation, registry_mutation,
 };
 use ic_sns_governance_api::pb::v1::{
-    self as sns_pb, governance::Version, AdvanceTargetVersionResponse,
+    self as sns_pb, AdvanceTargetVersionResponse, governance::Version,
 };
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_sns_swap::pb::v1::{
@@ -64,7 +64,7 @@ use icrc_ledger_types::icrc1::{
 };
 use itertools::{EitherOrBoth, Itertools};
 use maplit::btreemap;
-use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder, RejectResponse};
+use pocket_ic::{PocketIcBuilder, RejectResponse, nonblocking::PocketIc};
 use rust_decimal::prelude::ToPrimitive;
 use std::{collections::BTreeMap, fmt::Write, path::Path, time::Duration};
 
@@ -489,7 +489,8 @@ impl NnsInstaller {
             .mainnet_nns_canister_versions
             .expect("Please explicitly request either mainnet or tip-of-the-branch NNS version.");
 
-        assert!(!(with_mainnet_canister_versions && self.with_test_governance_canister),
+        assert!(
+            !(with_mainnet_canister_versions && self.with_test_governance_canister),
             "The test version of the governance canister cannot be used with mainnet versions of the NNS canisters"
         );
 
@@ -715,14 +716,14 @@ pub mod cycles_ledger {
     use super::{install_canister, nns};
     use candid::{CandidType, Encode, Principal};
     use canister_test::Wasm;
-    use cycles_minting_canister::{NotifyMintCyclesSuccess, MEMO_MINT_CYCLES};
+    use cycles_minting_canister::{MEMO_MINT_CYCLES, NotifyMintCyclesSuccess};
     use ic_base_types::PrincipalId;
     use ic_nns_constants::{
         CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, ROOT_CANISTER_ID,
     };
     use icp_ledger::{
-        account_identifier::Subaccount, AccountIdentifier, Tokens, TransferArgs,
-        DEFAULT_TRANSFER_FEE,
+        AccountIdentifier, DEFAULT_TRANSFER_FEE, Tokens, TransferArgs,
+        account_identifier::Subaccount,
     };
     use pocket_ic::nonblocking::PocketIc;
 
@@ -1589,10 +1590,9 @@ pub mod sns {
             helpers::sns::SnsProposalError, sns::governance::GovernanceCanister,
         };
         use ic_sns_governance_api::pb::v1::{
-            get_neuron_response,
+            GetUpgradeJournalRequest, Neuron, get_neuron_response,
             neuron::DissolveState,
             upgrade_journal_entry::{self, Event},
-            GetUpgradeJournalRequest, Neuron,
         };
         use sns_pb::UpgradeSnsControlledCanister;
 
@@ -2546,7 +2546,7 @@ pub mod sns {
         ledger_canister_id: PrincipalId,
         index_canister_id: PrincipalId,
     ) {
-        use ic_icrc1::{blocks::generic_block_to_encoded_block, Block};
+        use ic_icrc1::{Block, blocks::generic_block_to_encoded_block};
         use ic_icrc1_tokens_u64::U64;
         use ic_ledger_core::block::BlockType;
         use icrc_ledger_types::icrc::generic_value::Value;

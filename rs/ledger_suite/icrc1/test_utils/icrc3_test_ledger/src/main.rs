@@ -1,4 +1,4 @@
-use candid::{candid_method, Nat};
+use candid::{Nat, candid_method};
 use ic_cdk::{query, update};
 use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc3_test_ledger::AddBlockResult;
@@ -131,7 +131,7 @@ fn main() {}
 
 #[test]
 fn check_candid_interface() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
 
     candid::export_service!();
 

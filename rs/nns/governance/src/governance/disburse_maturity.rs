@@ -1,24 +1,24 @@
 use crate::{
-    governance::{ledger_helper::MintIcpOperation, Governance},
+    governance::{Governance, ledger_helper::MintIcpOperation},
     neuron_store::NeuronStore,
     pb::v1::{
-        governance::{neuron_in_flight_command::Command, NeuronInFlightCommand},
+        Account, FinalizeDisburseMaturity, GovernanceError, MaturityDisbursement, NeuronState,
+        Subaccount,
+        governance::{NeuronInFlightCommand, neuron_in_flight_command::Command},
         governance_error::ErrorType,
         manage_neuron::DisburseMaturity,
         maturity_disbursement::Destination,
-        Account, FinalizeDisburseMaturity, GovernanceError, MaturityDisbursement, NeuronState,
-        Subaccount,
     },
 };
 
 use ic_cdk::println;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_governance::maturity_modulation::{
-    apply_maturity_modulation, MIN_MATURITY_MODULATION_PERMYRIAD,
+    MIN_MATURITY_MODULATION_PERMYRIAD, apply_maturity_modulation,
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_types::PrincipalId;
-use icp_ledger::{protobuf::AccountIdentifier as AccountIdentifierProto, AccountIdentifier};
+use icp_ledger::{AccountIdentifier, protobuf::AccountIdentifier as AccountIdentifierProto};
 use icrc_ledger_types::icrc1::account::Account as Icrc1Account;
 use std::{cell::RefCell, collections::HashMap, fmt::Display, thread::LocalKey, time::Duration};
 
@@ -26,9 +26,9 @@ use std::{cell::RefCell, collections::HashMap, fmt::Display, thread::LocalKey, t
 pub use crate::governance::{
     tla,
     tla::{
-        account_to_tla, get_tla_globals, tla_update_method, GlobalState, InstrumentationState,
-        TlaValue, ToTla, FINALIZE_MATURITY_DISBURSEMENT_DESC, TLA_INSTRUMENTATION_STATE,
-        TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
+        FINALIZE_MATURITY_DISBURSEMENT_DESC, GlobalState, InstrumentationState,
+        TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX, TlaValue, ToTla,
+        account_to_tla, get_tla_globals, tla_update_method,
     },
 };
 use crate::{tla_log_label, tla_log_locals};
@@ -171,7 +171,7 @@ impl Destination {
                 subaccount: None,
             }),
             (Some(_), Some(_)) => {
-                return Err("Cannot provide both to_account and to_account_identifier".to_string())
+                return Err("Cannot provide both to_account and to_account_identifier".to_string());
             }
         };
         // We make sure we only construct a destination that can be converted to a valid account identifier.
@@ -468,8 +468,7 @@ impl Display for FinalizeMaturityDisbursementError {
                     f,
                     "Maturity disbursement was removed from the neuron {:?}, ICP minting failed \
                     but the disbursement cannot be reversed because of {}. Neuron lock is retained.",
-                    neuron_id,
-                    reason
+                    neuron_id, reason
                 )
             }
         }

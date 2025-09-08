@@ -1,9 +1,9 @@
 use crate::state::event::{Event, EventType};
 use ic_stable_structures::{
+    DefaultMemoryImpl,
     log::Log as StableLog,
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     storable::{Bound, Storable},
-    DefaultMemoryImpl,
 };
 use std::borrow::Cow;
 use std::cell::RefCell;

@@ -4,7 +4,7 @@ mod framework;
 use crate::framework::ConsensusDriver;
 use ic_artifact_pool::{consensus_pool, dkg_pool, idkg_pool};
 use ic_consensus_certification::CertifierImpl;
-use ic_consensus_dkg::{get_dkg_summary_from_cup_contents, DkgKeyManager};
+use ic_consensus_dkg::{DkgKeyManager, get_dkg_summary_from_cup_contents};
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces_registry::RegistryClient;
@@ -20,8 +20,8 @@ use ic_test_utilities::{
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     xnet_payload_builder::FakeXNetPayloadBuilder,
 };
-use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, make_genesis, IDkgStatsNoOp};
-use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
+use ic_test_utilities_consensus::{IDkgStatsNoOp, batch::MockBatchPayloadBuilder, make_genesis};
+use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry};
 use ic_test_utilities_state::get_initial_state;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::{
@@ -29,8 +29,8 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
-    crypto::CryptoHash, malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
-    CryptoHashOfState, Height,
+    CryptoHashOfState, Height, crypto::CryptoHash, malicious_flags::MaliciousFlags,
+    replica_config::ReplicaConfig,
 };
 use std::{
     sync::{Arc, Mutex, RwLock},

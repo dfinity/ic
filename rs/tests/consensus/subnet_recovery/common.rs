@@ -51,13 +51,13 @@ use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
+    NodeMetrics, Recovery, RecoveryArgs,
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs, StepType},
     steps::Step,
     util::DataLocation,
-    NodeMetrics, Recovery, RecoveryArgs,
 };
 use ic_recovery::{file_sync_helper, get_node_metrics};
-use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::{
@@ -66,10 +66,10 @@ use ic_system_test_driver::driver::driver_setup::{
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::util::*;
-use ic_types::{consensus::CatchUpPackage, Height, ReplicaVersion, SubnetId};
+use ic_types::{Height, ReplicaVersion, SubnetId, consensus::CatchUpPackage};
 use prost::Message;
 use serde::{Deserialize, Serialize};
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::{collections::BTreeMap, convert::TryFrom};
 use std::{io::Read, time::Duration};
 use std::{io::Write, path::Path};

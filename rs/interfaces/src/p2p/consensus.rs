@@ -1,8 +1,8 @@
 //! The public interface that defines the Consensus-P2P API.
 //! Clients must implement the traits in this file in order to use the IC's P2P/Replication/Broadcast protocol.
 use ic_types::{
-    artifact::{IdentifiableArtifact, PbArtifact},
     NodeId, Time,
+    artifact::{IdentifiableArtifact, PbArtifact},
 };
 use std::time::Duration;
 

@@ -4,9 +4,9 @@
 use crate::common::{CONTENT_TYPE_PROTOBUF, CONTENT_TYPE_SVG};
 
 use axum::{
+    Router,
     extract::{Query, State},
     response::{Html, IntoResponse},
-    Router,
 };
 use http::header;
 use hyper::{self, StatusCode};

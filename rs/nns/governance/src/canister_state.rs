@@ -190,7 +190,7 @@ impl Environment for CanisterEnv {
         update: &crate::pb::v1::ExecuteNnsFunction,
     ) -> Result<(), crate::pb::v1::GovernanceError> {
         // use internal types, as this API is used in core
-        use crate::pb::v1::{governance_error::ErrorType, GovernanceError, NnsFunction};
+        use crate::pb::v1::{GovernanceError, NnsFunction, governance_error::ErrorType};
 
         let mt = NnsFunction::try_from(update.nns_function).map_err(|_|
             // No update type specified.
@@ -290,7 +290,7 @@ fn get_effective_payload(
     proposal_id: u64,
     proposal_timestamp_seconds: u64,
 ) -> Result<Vec<u8>, crate::pb::v1::GovernanceError> {
-    use crate::pb::v1::{governance_error::ErrorType, GovernanceError, NnsFunction};
+    use crate::pb::v1::{GovernanceError, NnsFunction, governance_error::ErrorType};
 
     const BITCOIN_SET_CONFIG_METHOD_NAME: &str = "set_config";
     const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";

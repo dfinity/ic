@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use candid::{Decode, Encode};
 use itertools::Itertools;
 use k256::SecretKey;
@@ -20,7 +20,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot,
-            SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF, SshSession,
         },
     },
     nns::{self, vote_execute_proposal_assert_executed},
@@ -34,21 +34,21 @@ use registry_canister::mutations::{
 };
 
 use ic_agent::{
+    Agent,
     agent::{
-        http_transport::reqwest_transport::reqwest::{redirect::Policy, Client, ClientBuilder},
-        route_provider::RouteProvider,
         ApiBoundaryNode,
+        http_transport::reqwest_transport::reqwest::{Client, ClientBuilder, redirect::Policy},
+        route_provider::RouteProvider,
     },
     export::Principal,
     identity::{AnonymousIdentity, Secp256k1Identity},
-    Agent,
 };
 use ic_boundary_nodes_system_test_utils::{
     constants::COUNTER_CANISTER_WAT,
     helpers::{
         install_canisters, read_counters_on_counter_canisters, set_counters_on_counter_canisters,
     },
-    setup::{setup_ic, TEST_PRIVATE_KEY},
+    setup::{TEST_PRIVATE_KEY, setup_ic},
 };
 
 const CANISTER_RETRY_TIMEOUT: Duration = Duration::from_secs(30);
@@ -569,7 +569,9 @@ async fn _assert_routing_via_domains(
 
         sleep(route_call_interval).await;
     }
-    panic!("Expected routes {expected_domains:?} were not observed over {route_calls} consecutive routing calls");
+    panic!(
+        "Expected routes {expected_domains:?} were not observed over {route_calls} consecutive routing calls"
+    );
 }
 
 fn main() -> Result<()> {

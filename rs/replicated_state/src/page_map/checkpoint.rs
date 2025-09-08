@@ -1,8 +1,8 @@
 use crate::page_map::{
     FileDescriptor, FileOffset, MemoryInstructions, MemoryMapOrData, PageIndex, PersistenceError,
 };
-use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
-use ic_sys::{page_bytes_from_ptr, PageBytes};
+use ic_sys::{PAGE_SIZE, mmap::ScopedMmap};
+use ic_sys::{PageBytes, page_bytes_from_ptr};
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 use std::fs::{File, OpenOptions};

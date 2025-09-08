@@ -17,11 +17,11 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
-use slog::{error, info, o, Logger};
+use slog::{Logger, error, info, o};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    backup_helper::{retrieve_replica_version_last_replayed, BackupHelper},
+    backup_helper::{BackupHelper, retrieve_replica_version_last_replayed},
     cmd::BackupArgs,
     config::{ColdStorage, Config, SubnetConfig},
     notification_client::NotificationClient,

@@ -2,7 +2,7 @@
 
 use super::ComponentModifier;
 use ic_consensus::consensus::ConsensusImpl;
-use ic_consensus_idkg::{malicious_pre_signer, IDkgImpl};
+use ic_consensus_idkg::{IDkgImpl, malicious_pre_signer};
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
     consensus_pool::{ChangeAction::*, ConsensusPool, Mutations, ValidatedConsensusArtifact},

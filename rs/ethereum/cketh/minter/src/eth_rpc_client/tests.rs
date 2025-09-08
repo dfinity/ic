@@ -56,7 +56,11 @@ mod multi_call_results {
                     fees[index_majority].oldest_block
                 );
                 let majority_fee = fees[index_majority].clone();
-                let [block_pi_fee_history, llama_nodes_fee_history, public_node_fee_history] = fees;
+                let [
+                    block_pi_fee_history,
+                    llama_nodes_fee_history,
+                    public_node_fee_history,
+                ] = fees;
                 let results: MultiRpcResult<FeeHistory> = MultiRpcResult::Inconsistent(vec![
                     (BLOCK_PI, Ok(block_pi_fee_history)),
                     (LLAMA_NODES, Ok(llama_nodes_fee_history)),

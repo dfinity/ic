@@ -7,11 +7,11 @@ use pocket_ic::common::rest::{
     SubnetSpec,
 };
 use pocket_ic::{
-    start_server, update_candid, update_candid_as, PocketIc, PocketIcBuilder, PocketIcState,
-    StartServerParams,
+    PocketIc, PocketIcBuilder, PocketIcState, StartServerParams, start_server, update_candid,
+    update_candid_as,
 };
-use reqwest::blocking::Client;
 use reqwest::StatusCode;
+use reqwest::blocking::Client;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;

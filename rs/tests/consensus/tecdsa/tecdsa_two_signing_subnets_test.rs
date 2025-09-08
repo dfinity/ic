@@ -21,29 +21,29 @@ Success::
 
 end::catalog[] */
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use canister_test::Canister;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_threshold_sig_system_test_utils::{
-    create_new_subnet_with_keys, empty_subnet_update, execute_update_subnet_proposal,
-    get_master_public_key, make_key, run_chain_key_signature_test, KEY_ID1,
+    KEY_ID1, create_new_subnet_with_keys, empty_subnet_update, execute_update_subnet_proposal,
+    get_master_public_key, make_key, run_chain_key_signature_test,
 };
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_guestos_img_version, HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot,
-    IcNodeContainer, SubnetSnapshot, TopologySnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer, READY_WAIT_TIMEOUT,
+    RETRY_BACKOFF, SubnetSnapshot, TopologySnapshot, get_guestos_img_version,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::*;
 use ic_types::{Height, SubnetId};
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 const NODES_COUNT: usize = 4;
 const DKG_INTERVAL: u64 = 9;

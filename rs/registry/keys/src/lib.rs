@@ -7,9 +7,9 @@ use candid::{CandidType, Deserialize};
 use core::fmt;
 use ic_base_types::{CanisterId, NodeId, SubnetId};
 use ic_management_canister_types_private::{EcdsaKeyId, MasterPublicKeyId};
+use ic_types::PrincipalId;
 use ic_types::crypto::KeyPurpose;
 use ic_types::registry::RegistryClientError;
-use ic_types::PrincipalId;
 use serde::Serialize;
 use std::str::FromStr;
 

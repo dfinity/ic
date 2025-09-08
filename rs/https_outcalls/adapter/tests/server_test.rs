@@ -8,7 +8,7 @@ mod test {
     use hyper_util::rt::{TokioExecutor, TokioIo};
     use ic_https_outcalls_adapter::{Config, IncomingSource};
     use ic_https_outcalls_service::{
-        https_outcalls_service_client::HttpsOutcallsServiceClient, HttpMethod, HttpsOutcallRequest,
+        HttpMethod, HttpsOutcallRequest, https_outcalls_service_client::HttpsOutcallsServiceClient,
     };
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -23,15 +23,15 @@ mod test {
     use tower::service_fn;
     use uuid::Uuid;
     use warp::{
-        filters::BoxedFilter,
-        http::{header::HeaderValue, Response, StatusCode},
         Filter,
+        filters::BoxedFilter,
+        http::{Response, StatusCode, header::HeaderValue},
     };
 
     #[cfg(feature = "http")]
     use socks5_impl::protocol::{
-        handshake, Address, AsyncStreamOperation, AuthMethod, Reply, Request as Socks5Request,
-        Response as Socks5Response,
+        Address, AsyncStreamOperation, AuthMethod, Reply, Request as Socks5Request,
+        Response as Socks5Response, handshake,
     };
     #[cfg(feature = "http")]
     use std::io;
@@ -411,10 +411,12 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             response.as_ref().unwrap_err().code(),
             tonic::Code::InvalidArgument
         );
-        assert!(response
-            .unwrap_err()
-            .message()
-            .contains(&"Url need to specify https scheme".to_string()));
+        assert!(
+            response
+                .unwrap_err()
+                .message()
+                .contains(&"Url need to specify https scheme".to_string())
+        );
     }
 
     #[cfg(feature = "http")]
@@ -525,10 +527,12 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             response.as_ref().unwrap_err().code(),
             tonic::Code::OutOfRange
         );
-        assert!(response
-            .unwrap_err()
-            .message()
-            .contains(&"Http body exceeds size limit of".to_string()));
+        assert!(
+            response
+                .unwrap_err()
+                .message()
+                .contains(&"Http body exceeds size limit of".to_string())
+        );
     }
 
     #[tokio::test]
@@ -586,10 +590,12 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             response.as_ref().unwrap_err().code(),
             tonic::Code::Cancelled
         );
-        assert!(response
-            .unwrap_err()
-            .message()
-            .contains(&"Timeout expired".to_string()));
+        assert!(
+            response
+                .unwrap_err()
+                .message()
+                .contains(&"Timeout expired".to_string())
+        );
     }
 
     #[tokio::test]

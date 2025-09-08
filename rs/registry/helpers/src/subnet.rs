@@ -12,13 +12,13 @@ use ic_protobuf::{
     types::v1::SubnetId as SubnetIdProto,
 };
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_node_record_key, make_replica_version_key,
-    make_subnet_list_record_key, make_subnet_record_key, ROOT_SUBNET_ID_KEY,
+    ROOT_SUBNET_ID_KEY, make_catch_up_package_contents_key, make_node_record_key,
+    make_replica_version_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_types::{
-    registry::RegistryClientError::DecodeError, Height, NodeId, PrincipalId,
-    PrincipalIdBlobParseError, RegistryVersion, ReplicaVersion, SubnetId,
+    Height, NodeId, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, ReplicaVersion,
+    SubnetId, registry::RegistryClientError::DecodeError,
 };
 use std::{convert::TryFrom, time::Duration};
 

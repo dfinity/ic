@@ -6,55 +6,31 @@ use crate::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
             validate_merge_neurons_before_commit,
         },
-        split_neuron::{calculate_split_neuron_effect, SplitNeuronEffect},
+        split_neuron::{SplitNeuronEffect, calculate_split_neuron_effect},
     },
     heap_governance_data::{
-        initialize_governance, reassemble_governance_proto, split_governance_proto,
-        HeapGovernanceData, XdrConversionRate,
+        HeapGovernanceData, XdrConversionRate, initialize_governance, reassemble_governance_proto,
+        split_governance_proto,
     },
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
-        approve_genesis_kyc, metrics::NeuronSubsetMetrics, prune_some_following, NeuronMetrics,
-        NeuronStore,
+        NeuronMetrics, NeuronStore, approve_genesis_kyc, metrics::NeuronSubsetMetrics,
+        prune_some_following,
     },
     neurons_fund::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
         PolynomialNeuronsFundParticipation, SwapParticipationLimits,
     },
     node_provider_rewards::{
-        latest_node_provider_rewards, list_node_provider_rewards, record_node_provider_rewards,
-        DateRangeFilter,
+        DateRangeFilter, latest_node_provider_rewards, list_node_provider_rewards,
+        record_node_provider_rewards,
     },
     pb::{
         proposal_conversions::{convert_proposal, proposal_data_to_info},
         v1::{
-            add_or_remove_node_provider::Change,
-            archived_monthly_node_provider_rewards,
-            create_service_nervous_system::LedgerParameters,
-            get_neurons_fund_audit_info_response,
-            governance::{
-                governance_cached_metrics::NeuronSubsetMetrics as NeuronSubsetMetricsPb,
-                neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
-                GovernanceCachedMetrics, NeuronInFlightCommand,
-            },
-            governance_error::ErrorType,
-            manage_neuron::{
-                self,
-                claim_or_refresh::{By, MemoAndController},
-                set_following::FolloweesForTopic,
-                ClaimOrRefresh, Command, NeuronIdOrSubaccount, SetFollowing,
-            },
-            maturity_disbursement::Destination,
-            neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
-            proposal::Action,
-            reward_node_provider::{RewardMode, RewardToAccount},
-            settle_neurons_fund_participation_request,
-            settle_neurons_fund_participation_response::{
-                self, NeuronsFundNeuron as NeuronsFundNeuronPb,
-            },
-            swap_background_information, ArchivedMonthlyNodeProviderRewards, Ballot,
-            CreateServiceNervousSystem, ExecuteNnsFunction, Followees, FulfillSubnetRentalRequest,
+            ArchivedMonthlyNodeProviderRewards, Ballot, CreateServiceNervousSystem,
+            ExecuteNnsFunction, Followees, FulfillSubnetRentalRequest,
             GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
             Governance as GovernanceProto, GovernanceError, InstallCode, KnownNeuron,
             ListKnownNeuronsResponse, ListProposalInfo, ManageNeuron, MonthlyNodeProviderRewards,
@@ -66,6 +42,30 @@ use crate::{
             SettleNeuronsFundParticipationResponse, StopOrStartCanister, Tally, Topic,
             UpdateCanisterSettings, UpdateNodeProvider, Vote, VotingPowerEconomics,
             WaitForQuietState,
+            add_or_remove_node_provider::Change,
+            archived_monthly_node_provider_rewards,
+            create_service_nervous_system::LedgerParameters,
+            get_neurons_fund_audit_info_response,
+            governance::{
+                GovernanceCachedMetrics, NeuronInFlightCommand,
+                governance_cached_metrics::NeuronSubsetMetrics as NeuronSubsetMetricsPb,
+                neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
+            },
+            governance_error::ErrorType,
+            manage_neuron::{
+                self, ClaimOrRefresh, Command, NeuronIdOrSubaccount, SetFollowing,
+                claim_or_refresh::{By, MemoAndController},
+                set_following::FolloweesForTopic,
+            },
+            maturity_disbursement::Destination,
+            neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
+            proposal::Action,
+            reward_node_provider::{RewardMode, RewardToAccount},
+            settle_neurons_fund_participation_request,
+            settle_neurons_fund_participation_response::{
+                self, NeuronsFundNeuron as NeuronsFundNeuronPb,
+            },
+            swap_background_information,
         },
     },
     proposals::{call_canister::CallCanister, sum_weighted_voting_power},
@@ -84,7 +84,7 @@ use ic_cdk::spawn;
 use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::{
-    ledger, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
+    NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS, ledger,
 };
 use ic_nervous_system_governance::maturity_modulation::apply_maturity_modulation;
 use ic_nervous_system_proto::pb::v1::{GlobalTimeOfDay, Principals};
@@ -95,12 +95,11 @@ use ic_nns_constants::{
     SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_governance_api::{
-    self as api,
+    self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
+    ListNeuronsResponse, ListProposalInfoResponse, ManageNeuronResponse, NeuronInfo, ProposalInfo,
     manage_neuron_response::{self, StakeMaturityResponse},
     proposal_validation,
     subnet_rental::SubnetRentalRequest,
-    CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons, ListNeuronsResponse,
-    ListProposalInfoResponse, ManageNeuronResponse, NeuronInfo, ProposalInfo,
 };
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
@@ -111,8 +110,8 @@ use ic_sns_swap::pb::v1::{self as sns_swap_pb, Lifecycle, NeuronsFundParticipati
 use ic_sns_wasm::pb::v1::{
     DeployNewSnsRequest, DeployNewSnsResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
 };
-use ic_stable_structures::{storable::Bound, Storable};
-use icp_ledger::{AccountIdentifier, Subaccount, Tokens, TOKEN_SUBDIVIDABLE_BY};
+use ic_stable_structures::{Storable, storable::Bound};
+use icp_ledger::{AccountIdentifier, Subaccount, TOKEN_SUBDIVIDABLE_BY, Tokens};
 use itertools::Itertools;
 use maplit::hashmap;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
@@ -121,7 +120,7 @@ use rust_decimal_macros::dec;
 use std::sync::Arc;
 use std::{
     borrow::Cow,
-    cmp::{max, Ordering},
+    cmp::{Ordering, max},
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     convert::{TryFrom, TryInto},
     fmt,
@@ -152,10 +151,10 @@ use crate::reward::distribution::RewardsDistribution;
 use crate::storage::with_voting_state_machines_mut;
 #[cfg(feature = "tla")]
 pub use tla::{
-    tla_update_method, InstrumentationState, ToTla, CLAIM_NEURON_DESC, DISBURSE_MATURITY_DESC,
-    DISBURSE_NEURON_DESC, DISBURSE_TO_NEURON_DESC, MERGE_NEURONS_DESC, REFRESH_NEURON_DESC,
-    SPAWN_NEURONS_DESC, SPAWN_NEURON_DESC, SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE,
-    TLA_TRACES_LKEY, TLA_TRACES_MUTEX,
+    CLAIM_NEURON_DESC, DISBURSE_MATURITY_DESC, DISBURSE_NEURON_DESC, DISBURSE_TO_NEURON_DESC,
+    InstrumentationState, MERGE_NEURONS_DESC, REFRESH_NEURON_DESC, SPAWN_NEURON_DESC,
+    SPAWN_NEURONS_DESC, SPLIT_NEURON_DESC, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY,
+    TLA_TRACES_MUTEX, ToTla, tla_update_method,
 };
 
 // 70 KB (for executing NNS functions that are not canister upgrades)
@@ -2835,7 +2834,8 @@ impl Governance {
         if percentage > 100 || percentage == 0 {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                "The percentage of maturity to spawn must be a value between 1 and 100 (inclusive)."));
+                "The percentage of maturity to spawn must be a value between 1 and 100 (inclusive).",
+            ));
         }
 
         let maturity_to_spawn = parent_neuron
@@ -2982,7 +2982,8 @@ impl Governance {
         if percentage_to_stake > 100 || percentage_to_stake == 0 {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                "The percentage of maturity to stake must be a value between 0 (exclusive) and 100 (inclusive)."));
+                "The percentage of maturity to stake must be a value between 0 (exclusive) and 100 (inclusive).",
+            ));
         }
 
         let mut maturity_to_stake =
@@ -2993,7 +2994,11 @@ impl Governance {
             maturity_to_stake = neuron_maturity_e8s_equivalent;
             println!(
                 "{}WARNING: a portion of maturity ({}% * {} = {}) should not be larger than its entirety {}",
-                LOG_PREFIX, percentage_to_stake, neuron_maturity_e8s_equivalent, maturity_to_stake, neuron_maturity_e8s_equivalent
+                LOG_PREFIX,
+                percentage_to_stake,
+                neuron_maturity_e8s_equivalent,
+                maturity_to_stake,
+                neuron_maturity_e8s_equivalent
             );
         }
 
@@ -3370,7 +3375,10 @@ impl Governance {
                             LOG_PREFIX,
                             pid,
                             error,
-                            proposal_data.proposal.as_ref().and_then(|proposal| proposal.title.clone())
+                            proposal_data
+                                .proposal
+                                .as_ref()
+                                .and_then(|proposal| proposal.title.clone())
                         );
                         // Only update the failure timestamp is there is
                         // not yet any report of success in executing this
@@ -4779,7 +4787,7 @@ impl Governance {
                 return Err(GovernanceError::new_with_message(
                     ErrorType::PreconditionFailed,
                     "Cannot issue a make proposal command through a proposal",
-                ))
+                ));
             }
             // DisburseMaturity contains a subaccount which can be unbounded without checking. This
             // command is not implemented yet, and before we implement it we should also validate
@@ -5195,7 +5203,10 @@ impl Governance {
         {
             Ok(payload) => payload,
             Err(e) => {
-                return Err(format!("The payload could not be decoded into a AddOrRemoveDataCentersProposalPayload: {}", e));
+                return Err(format!(
+                    "The payload could not be decoded into a AddOrRemoveDataCentersProposalPayload: {}",
+                    e
+                ));
             }
         };
 
@@ -5860,9 +5871,9 @@ impl Governance {
         // caller), can change the followees for the ManageNeuron topic.
         if follow_request.topic() == Topic::NeuronManagement && !is_neuron_controlled_by_caller {
             return Err(GovernanceError::new_with_message(
-                    ErrorType::NotAuthorized,
-                    "Caller is not authorized to manage following of neuron for the ManageNeuron topic.",
-                ));
+                ErrorType::NotAuthorized,
+                "Caller is not authorized to manage following of neuron for the ManageNeuron topic.",
+            ));
         } else {
             // Check that the caller is authorized, i.e., either the
             // controller or a registered hot key.
@@ -6517,7 +6528,11 @@ impl Governance {
         };
         println!(
             "{}Updated daily maturity modulation rate to (in basis points): {}, at: {}. Last updated: {:?}",
-            LOG_PREFIX, maturity_modulation, now_seconds, self.heap_data.maturity_modulation_last_updated_at_timestamp_seconds,
+            LOG_PREFIX,
+            maturity_modulation,
+            now_seconds,
+            self.heap_data
+                .maturity_modulation_last_updated_at_timestamp_seconds,
         );
         self.heap_data.cached_daily_maturity_modulation_basis_points = Some(maturity_modulation);
         self.heap_data
@@ -6676,7 +6691,10 @@ impl Governance {
                             // both internally to governance and externally in ledger.
                             println!(
                                 "{}Could not apply modulation to {:?} for neuron {:?} due to {:?}, skipping",
-                                LOG_PREFIX, neuron.maturity_e8s_equivalent, neuron.id(), err
+                                LOG_PREFIX,
+                                neuron.maturity_e8s_equivalent,
+                                neuron.id(),
+                                err
                             );
                             continue;
                         }
@@ -6730,9 +6748,7 @@ impl Governance {
                             println!(
                                 "{}Error spawning neuron: {:?}. Ledger update failed with err: {:?}. \
                                 Reverting state, so another attempt can be made.",
-                                LOG_PREFIX,
-                                neuron_id,
-                                error,
+                                LOG_PREFIX, neuron_id, error,
                             );
                             match self.with_neuron_mut(&neuron_id, |neuron| {
                                 neuron.maturity_e8s_equivalent = original_maturity;
@@ -6744,9 +6760,7 @@ impl Governance {
                                 Err(e) => {
                                     println!(
                                         "{} Error reverting state for neuron: {:?}. Retaining lock: {}",
-                                        LOG_PREFIX,
-                                        neuron_id,
-                                        e
+                                        LOG_PREFIX, neuron_id, e
                                     );
                                     // Retain the neuron lock, the neuron won't be able to undergo stake changing
                                     // operations until this is fixed.
@@ -6996,23 +7010,26 @@ impl Governance {
             self.process_proposal(pid.id);
 
             match self.mut_proposal_data(*pid) {
-                None =>  println!(
+                None => println!(
                     "{}Cannot find proposal {}, despite it being considered for rewards distribution.",
                     LOG_PREFIX, pid.id
                 ),
                 Some(p) => {
                     if p.status() == ProposalStatus::Open {
-                        println!("{}Proposal {} was considered for reward distribution despite \
+                        println!(
+                            "{}Proposal {} was considered for reward distribution despite \
                           being open. This code line is expected not to be reachable. We need to \
                           clear the ballots here to avoid a risk of the memory getting too large. \
-                          In doubt, reject the proposal", LOG_PREFIX, pid.id);
+                          In doubt, reject the proposal",
+                            LOG_PREFIX, pid.id
+                        );
                         p.decided_timestamp_seconds = new_reward_event.actual_timestamp_seconds;
                         p.latest_tally = Some(Tally {
                             timestamp_seconds: new_reward_event.actual_timestamp_seconds,
-                            yes:0,
-                            no:0,
-                            total:0,
-                       })
+                            yes: 0,
+                            no: 0,
+                            total: 0,
+                        })
                     };
                     p.reward_event_round = new_reward_event.day_after_genesis;
                     p.ballots.clear();
@@ -8185,12 +8202,10 @@ fn validate_account_identifier(
     account_identifier: &icp_ledger::protobuf::AccountIdentifier,
 ) -> Result<(), String> {
     if account_identifier.hash.len() != 32 {
-        return Err(
-            format!(
-                "The account identifier must be 32 bytes long (so that it includes the checksum) but, this account identifier is: {} bytes",
-                account_identifier.hash.len()
-            ),
-        );
+        return Err(format!(
+            "The account identifier must be 32 bytes long (so that it includes the checksum) but, this account identifier is: {} bytes",
+            account_identifier.hash.len()
+        ));
     }
 
     AccountIdentifier::try_from(account_identifier)

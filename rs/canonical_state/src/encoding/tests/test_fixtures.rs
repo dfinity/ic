@@ -2,12 +2,12 @@ use crate::CertificationVersion;
 use ic_error_types::RejectCode;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
+    Cycles, Time,
     messages::{
         CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
     },
     time::CoarseTime,
     xnet::{RejectReason, RejectSignal, StreamFlags, StreamHeader},
-    Cycles, Time,
 };
 
 pub fn stream_header(_certification_version: CertificationVersion) -> StreamHeader {

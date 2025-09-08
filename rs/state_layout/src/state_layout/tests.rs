@@ -3,11 +3,11 @@ use super::*;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
 };
-use ic_replicated_state::canister_state::system_state::PausedExecutionId;
 use ic_replicated_state::ExecutionTask;
+use ic_replicated_state::canister_state::system_state::PausedExecutionId;
 use ic_replicated_state::{
-    canister_state::system_state::CanisterHistory,
-    metadata_state::subnet_call_context_manager::InstallCodeCallId, page_map::Shard, NumWasmPages,
+    NumWasmPages, canister_state::system_state::CanisterHistory,
+    metadata_state::subnet_call_context_manager::InstallCodeCallId, page_map::Shard,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
@@ -77,9 +77,11 @@ fn test_state_layout_diverged_state_paths() {
             state_layout.diverged_state_heights().unwrap(),
             vec![Height::new(1)],
         );
-        assert!(state_layout
-            .diverged_state_marker_path(Height::new(1))
-            .starts_with(root_path.join("diverged_state_markers")));
+        assert!(
+            state_layout
+                .diverged_state_marker_path(Height::new(1))
+                .starts_with(root_path.join("diverged_state_markers"))
+        );
         state_layout
             .remove_diverged_state_marker(Height::new(1))
             .unwrap();
@@ -618,9 +620,11 @@ fn overlay_height_test() {
             .unwrap(),
         Height::new(4096)
     );
-    assert!(page_map_layout
-        .overlay_height(&PathBuf::from("/a/b/c/vmemory.overlay"))
-        .is_err());
+    assert!(
+        page_map_layout
+            .overlay_height(&PathBuf::from("/a/b/c/vmemory.overlay"))
+            .is_err()
+    );
     // Test that parsing is consistent with encoding.
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<WriteOnly> =
@@ -654,11 +658,13 @@ fn overlay_shard_test() {
             .unwrap(),
         Shard::new(16)
     );
-    assert!(page_map_layout
-        .overlay_shard(&PathBuf::from(
-            "/a/b/c/0000000000001000_0Q10_vmemory.overlay"
-        ))
-        .is_err());
+    assert!(
+        page_map_layout
+            .overlay_shard(&PathBuf::from(
+                "/a/b/c/0000000000001000_0Q10_vmemory.overlay"
+            ))
+            .is_err()
+    );
     // Test that parsing is consistent with encoding.
     let tmp = tmpdir("canister");
     let canister_layout: CanisterLayout<WriteOnly> =
@@ -680,10 +686,12 @@ fn test_all_existing_pagemaps() {
     let tmp = tmpdir("checkpoint");
     let checkpoint_layout: CheckpointLayout<RwPolicy<()>> =
         CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
-    assert!(checkpoint_layout
-        .all_existing_pagemaps()
-        .unwrap()
-        .is_empty());
+    assert!(
+        checkpoint_layout
+            .all_existing_pagemaps()
+            .unwrap()
+            .is_empty()
+    );
     let canister_layout = checkpoint_layout.canister(&canister_test_id(123)).unwrap();
     let canister_wasm_base = canister_layout.wasm_chunk_store().base();
     File::create(&canister_wasm_base).unwrap();
@@ -706,10 +714,12 @@ fn test_all_existing_wasm_files() {
     let tmp = tmpdir("checkpoint");
     let checkpoint_layout: CheckpointLayout<RwPolicy<()>> =
         CheckpointLayout::new_untracked(tmp.path().to_owned(), Height::new(0)).unwrap();
-    assert!(checkpoint_layout
-        .all_existing_wasm_files()
-        .unwrap()
-        .is_empty());
+    assert!(
+        checkpoint_layout
+            .all_existing_wasm_files()
+            .unwrap()
+            .is_empty()
+    );
 
     // Create directories for a canister and its corresponding snapshot, both containing wasm files.
     let wasm_path_1 = checkpoint_layout

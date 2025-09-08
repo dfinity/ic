@@ -425,7 +425,7 @@ fn parse_bip173_address(
 
 #[cfg(test)]
 mod tests {
-    use super::{hrp, BitcoinAddress, ParseAddressError};
+    use super::{BitcoinAddress, ParseAddressError, hrp};
     use crate::Network;
     use bech32::u5;
 
@@ -447,8 +447,8 @@ mod tests {
     #[test]
     fn test_check_address() {
         use crate::address::ParseAddressError::BadWitnessLength;
-        use bitcoin::util::address::Payload;
         use bitcoin::Address;
+        use bitcoin::util::address::Payload;
         use std::str::FromStr;
 
         assert_eq!(

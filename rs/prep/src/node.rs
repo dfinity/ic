@@ -29,8 +29,8 @@ use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key, make_node
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    consensus::certification::Certification, crypto::KeyPurpose, Height, NodeId, PrincipalId,
-    RegistryVersion, SubnetId,
+    Height, NodeId, PrincipalId, RegistryVersion, SubnetId,
+    consensus::certification::Certification, crypto::KeyPurpose,
 };
 use std::{net::SocketAddr, os::unix::fs::PermissionsExt};
 

@@ -1,10 +1,10 @@
 use crate::dashboard::tests::assertions::DashboardAssert;
-use crate::dashboard::{filters, DashboardTemplate, Fetched, Status, DEFAULT_TX_TABLE_PAGE_SIZE};
+use crate::dashboard::{DEFAULT_TX_TABLE_PAGE_SIZE, DashboardTemplate, Fetched, Status, filters};
 use crate::state::{Config, Timestamp, TransactionCheckData};
 use crate::{dashboard, state};
 use bitcoin::Address;
-use bitcoin::{absolute::LockTime, transaction::Version, Transaction};
-use ic_btc_checker::{blocklist::BTC_ADDRESS_BLOCKLIST, BtcNetwork, CheckMode};
+use bitcoin::{Transaction, absolute::LockTime, transaction::Version};
+use ic_btc_checker::{BtcNetwork, CheckMode, blocklist::BTC_ADDRESS_BLOCKLIST};
 use ic_btc_interface::Txid;
 use std::str::FromStr;
 

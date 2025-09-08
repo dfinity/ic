@@ -3,28 +3,28 @@ use std::{convert::TryFrom, net::SocketAddr, sync::Arc, time::Duration};
 use axum::body::Body;
 use futures::FutureExt;
 use http_body_util::{BodyExt, Full, LengthLimitError};
-use hyper::{client::conn::http1::SendRequest, Request};
+use hyper::{Request, client::conn::http1::SendRequest};
 use hyper_util::rt::TokioIo;
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::TlsConfig;
-use ic_crypto_tree_hash::{lookup_path, LabeledTree, Path};
+use ic_crypto_tree_hash::{LabeledTree, Path, lookup_path};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{fatal, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, fatal, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry, node::NodeRegistry, node_operator::ConnectionEndpoint,
     subnet::SubnetRegistry,
 };
 use ic_types::{
+    NodeId, RegistryVersion, SubnetId,
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{
         Blob, Certificate, HttpReadState, HttpReadStateContent, HttpReadStateResponse,
         HttpRequestEnvelope,
     },
     time::expiry_time_from_now,
-    NodeId, RegistryVersion, SubnetId,
 };
 use rand::Rng;
 use tokio::{
@@ -38,8 +38,8 @@ use tokio_util::sync::CancellationToken;
 use tower::BoxError;
 
 use crate::{
-    metrics::DelegationManagerMetrics, nns_delegation_reader::NNSDelegationBuilder,
-    NNSDelegationReader,
+    NNSDelegationReader, metrics::DelegationManagerMetrics,
+    nns_delegation_reader::NNSDelegationBuilder,
 };
 
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
@@ -326,32 +326,31 @@ async fn try_fetch_delegation_from_nns(
         )
     })??;
 
-    let raw_response = match timeout(
-        NNS_DELEGATION_BODY_RECEIVE_TIMEOUT,
-        http_body_util::Limited::new(
-            raw_response_res.into_body(),
-            config.max_delegation_certificate_size_bytes as usize,
-        )
-        .collect(),
-    )
-    .await
-    {
-        Ok(Ok(c)) => c.to_bytes(),
-        Ok(Err(e)) if e.is::<LengthLimitError>() => {
-            return Err(format!(
-                "Http body exceeds size limit of {} bytes.",
-                config.max_delegation_certificate_size_bytes
+    let raw_response =
+        match timeout(
+            NNS_DELEGATION_BODY_RECEIVE_TIMEOUT,
+            http_body_util::Limited::new(
+                raw_response_res.into_body(),
+                config.max_delegation_certificate_size_bytes as usize,
             )
-            .into());
-        }
-        Ok(Err(e)) => return Err(format!("Failed to read body from connection: {}", e).into()),
-        Err(_) => {
-            return Err(format!(
+            .collect(),
+        )
+        .await
+        {
+            Ok(Ok(c)) => c.to_bytes(),
+            Ok(Err(e)) if e.is::<LengthLimitError>() => {
+                return Err(format!(
+                    "Http body exceeds size limit of {} bytes.",
+                    config.max_delegation_certificate_size_bytes
+                )
+                .into());
+            }
+            Ok(Err(e)) => return Err(format!("Failed to read body from connection: {}", e).into()),
+            Err(_) => return Err(format!(
                 "Timed out while receiving http body after {NNS_DELEGATION_BODY_RECEIVE_TIMEOUT:?}"
             )
-            .into())
-        }
-    };
+            .into()),
+        };
 
     let response: HttpReadStateResponse = serde_cbor::from_slice(&raw_response).map_err(|err| {
         format!("Failed to decode the read state response: {err}. Raw response: {raw_response:?}")
@@ -546,10 +545,10 @@ mod tests {
     use hyper::Response;
     use ic_certification_test_utils::serialize_to_cbor;
     use ic_certification_test_utils::{
-        encoded_time, generate_root_of_trust, CertificateBuilder, CertificateData,
+        CertificateBuilder, CertificateData, encoded_time, generate_root_of_trust,
     };
     use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
-    use ic_crypto_tree_hash::{flatmap, lookup_path, Label, LabeledTree};
+    use ic_crypto_tree_hash::{Label, LabeledTree, flatmap, lookup_path};
     use ic_crypto_utils_threshold_sig_der::public_key_to_der;
     use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -558,21 +557,21 @@ mod tests {
     use ic_registry_keys::make_node_record_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities_registry::{
-        add_single_subnet_record, add_subnet_key_record, add_subnet_list_record,
-        SubnetRecordBuilder,
+        SubnetRecordBuilder, add_single_subnet_record, add_subnet_key_record,
+        add_subnet_list_record,
     };
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::messages::{Certificate, CertificateDelegation};
     use ic_types::{
-        messages::{Blob, HttpReadStateResponse},
         NodeId,
+        messages::{Blob, HttpReadStateResponse},
     };
     use rand::thread_rng;
-    use rcgen::{generate_simple_self_signed, CertifiedKey};
+    use rcgen::{CertifiedKey, generate_simple_self_signed};
     use rustls::{
+        ClientConfig, DigitallySignedStruct, SignatureScheme,
         client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
         pki_types::{CertificateDer, ServerName, UnixTime},
-        ClientConfig, DigitallySignedStruct, SignatureScheme,
     };
     use std::net::TcpListener;
     use std::ops::Deref;
