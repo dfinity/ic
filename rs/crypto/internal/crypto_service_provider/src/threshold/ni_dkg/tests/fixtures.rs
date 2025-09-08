@@ -28,11 +28,11 @@ pub struct MockNode {
 }
 impl MockNode {
     pub fn random(rng: &mut ChaCha20Rng) -> Self {
-        let node_id = node_test_id(rng.gen::<u64>());
+        let node_id = node_test_id(rng.r#gen::<u64>());
         Self::from_node_id(rng, node_id)
     }
     pub fn from_node_id(rng: &mut ChaCha20Rng, node_id: NodeId) -> Self {
-        let csprng = ChaCha20Rng::from_seed(rng.gen::<[u8; 32]>());
+        let csprng = ChaCha20Rng::from_seed(rng.r#gen::<[u8; 32]>());
         let csp = Csp::builder_for_test()
             .with_vault(LocalCspVault::builder_for_test().with_rng(csprng).build())
             .build();
@@ -180,7 +180,7 @@ impl MockDkgConfig {
         let algorithm_id = AlgorithmId::NiDkg_Groth20_Bls12_381;
         let max_corrupt_dealers = rng.gen_range(0..num_dealers); // Need at least one honest dealer.
         let threshold = rng.gen_range(min_threshold..=num_receivers); // threshold <= num_receivers
-        let epoch = Epoch::from(rng.gen::<u32>());
+        let epoch = Epoch::from(rng.r#gen::<u32>());
 
         let receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey> = receivers
             .iter()
