@@ -27,8 +27,8 @@ cfg_if::cfg_if! {
 pub use call::{
     call_async, call_sync, IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle,
 };
-pub use common::cors_layer;
 use common::CONTENT_TYPE_CBOR;
+pub use common::{cors_layer, make_plaintext_response};
 use ic_http_endpoints_async_utils::start_tcp_listener;
 use ic_nns_delegation_manager::NNSDelegationReader;
 pub use query::QueryServiceBuilder;
@@ -37,7 +37,7 @@ pub use read_state::subnet::SubnetReadStateServiceBuilder;
 
 use crate::{
     catch_up_package::CatchUpPackageService,
-    common::{make_plaintext_response, map_box_error_to_response},
+    common::map_box_error_to_response,
     dashboard::DashboardService,
     health_status_refresher::HealthStatusRefreshLayer,
     metrics::{

@@ -3540,7 +3540,7 @@ impl Operation for CallRequest {
             is_provisional_create_canister,
         );
         match subnet {
-            Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
+            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
             Ok(subnet) => {
                 let node = &subnet.nodes[0];
                 let (s, mut r) = mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
@@ -3683,7 +3683,7 @@ impl Operation for QueryRequest {
             false,
         );
         match subnet {
-            Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
+            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
             Ok(subnet) => {
                 let subnet_id = subnet.get_subnet_id();
                 let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
@@ -3760,7 +3760,7 @@ impl Operation for CanisterReadStateRequest {
             EffectivePrincipal::CanisterId(self.effective_canister_id),
             false,
         ) {
-            Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
+            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
             Ok(subnet) => {
                 let subnet_id = subnet.get_subnet_id();
                 let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
@@ -3832,7 +3832,7 @@ pub struct SubnetReadStateRequest {
 impl Operation for SubnetReadStateRequest {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         match route(pic, EffectivePrincipal::SubnetId(self.subnet_id), false) {
-            Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
+            Err(e) => OpOut::Error(PocketIcError::SubnetRequestRoutingError(e)),
             Ok(subnet) => {
                 let subnet_id = subnet.get_subnet_id();
                 let delegation = pic.get_nns_delegation_for_subnet(subnet_id);

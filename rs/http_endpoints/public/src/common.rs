@@ -63,7 +63,7 @@ pub(crate) fn get_root_threshold_public_key(
     }
 }
 
-pub(crate) fn make_plaintext_response(status: StatusCode, message: String) -> Response<Body> {
+pub fn make_plaintext_response(status: StatusCode, message: String) -> Response<Body> {
     let mut resp = Response::new(Body::new(message.map_err(BoxError::from)));
     *resp.status_mut() = status;
     resp.headers_mut().insert(

@@ -3463,12 +3463,13 @@ fn canister_not_found() {
         .with_http_gateway(http_gateway_config)
         .build();
 
-    let client = reqwest::blocking::Client::new();
-
     // Canister ID that cannot exist on the ICP mainnet.
     let canister_id_not_found =
         Principal::from_slice(&[0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x01]);
+    // Subnet ID that cannot exist in PocketIC (because it is not a self-authenticating principal).
+    let subnet_id_not_found = Principal::from_slice(&[42; 29]);
 
+    // API requests for canister via /instances API and proxied through HTTP gateway.
     let instances_url = format!(
         "{}instances/{}/api/v2/canister/{}/read_state",
         pic.get_server_url(),
@@ -3480,9 +3481,8 @@ fn canister_not_found() {
         pic.url().unwrap(),
         canister_id_not_found,
     );
-
-    // API requests via /instances API and proxied through HTTP gateway.
     for url in [instances_url, gateway_url] {
+        let client = reqwest::blocking::Client::new();
         let resp = client
             .post(url)
             .header(reqwest::header::CONTENT_TYPE, "application/cbor")
@@ -3496,11 +3496,92 @@ fn canister_not_found() {
         );
     }
 
-    // Frontend request via HTTP gateway.
+    // API requests for subnet via /instances API and proxied through HTTP gateway.
+    let instances_url = format!(
+        "{}instances/{}/api/v2/subnet/{}/read_state",
+        pic.get_server_url(),
+        pic.instance_id(),
+        subnet_id_not_found,
+    );
+    let gateway_url = format!(
+        "{}api/v2/subnet/{}/read_state",
+        pic.url().unwrap(),
+        subnet_id_not_found,
+    );
+    for url in [instances_url, gateway_url] {
+        let client = reqwest::blocking::Client::new();
+        let resp = client
+            .post(url)
+            .header(reqwest::header::CONTENT_TYPE, "application/cbor")
+            .send()
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+        assert!(bytes.contains("subnet_not_found\ndetails: The specified subnet cannot be found."));
+    }
+
+    // Frontend request for canister via HTTP gateway.
     let (client, url) = frontend_canister(&pic, canister_id_not_found, false, "/index.html");
     let resp = client.get(url).send().unwrap();
 
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
     assert!(bytes.contains("404 - canister not found"));
+}
+
+#[test]
+fn payload_too_large() {
+    let http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: None,
+    };
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_auto_progress(None)
+        .with_http_gateway(http_gateway_config)
+        .build();
+
+    // Valid canister ID.
+    let canister_id = pic.create_canister();
+
+    // Too large API requests via /instances API and proxied through HTTP gateway.
+    let instances_url = format!(
+        "{}instances/{}/api/v2/canister/{}/read_state",
+        pic.get_server_url(),
+        pic.instance_id(),
+        canister_id,
+    );
+    let gateway_url = format!(
+        "{}api/v2/canister/{}/read_state",
+        pic.url().unwrap(),
+        canister_id,
+    );
+    for url in [instances_url, gateway_url] {
+        let client = reqwest::blocking::Client::new();
+        let resp = client
+            .post(url)
+            .header(reqwest::header::CONTENT_TYPE, "application/cbor")
+            .body(vec![42; 5 * 1024 * 1024])
+            .send()
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+        assert!(bytes.contains("error: payload_too_large\ndetails: Payload is too large: maximum body size is 4194304 bytes."));
+    }
+
+    // Too large frontend request for canister via HTTP gateway.
+    let (client, url) = frontend_canister(&pic, canister_id, false, "/index.html");
+    let resp = client
+        .post(url)
+        .body(vec![42; 5 * 1024 * 1024])
+        .send()
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+    assert!(bytes.contains("503 - upstream error"));
 }
