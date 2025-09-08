@@ -345,11 +345,10 @@ impl CertificateBuilder {
         if let Some(subnet_id) = self.subnet_id {
             return subnet_id;
         }
-        if let Some(delegation_builder) = &self.delegation {
-            if let CertificateData::SubnetData { subnet_id, .. } = delegation_builder.data {
+        if let Some(delegation_builder) = &self.delegation
+            && let CertificateData::SubnetData { subnet_id, .. } = delegation_builder.data {
                 return subnet_id;
             }
-        }
         panic!(
             "No subnet_id present. Either set a delegation with SubnetData or set the subnet_id manually using 'with_delegation_subnet_id'"
         )

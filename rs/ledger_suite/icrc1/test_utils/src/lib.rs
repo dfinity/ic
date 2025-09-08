@@ -541,11 +541,10 @@ impl TransactionsAndBalances {
                     );
 
                     // Remove allowance entry if it's now zero
-                    if let Some(allowance) = self.allowances.get(&(from, spender_account)) {
-                        if allowance.get_e8s() == 0 {
+                    if let Some(allowance) = self.allowances.get(&(from, spender_account))
+                        && allowance.get_e8s() == 0 {
                             self.allowances.remove(&(from, spender_account));
                         }
-                    }
                 }
             }
             Operation::Approve {

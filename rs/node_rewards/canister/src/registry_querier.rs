@@ -214,8 +214,8 @@ impl RegistryQuerier {
                     }
 
                     // If the node was present at any time and we have its record, decode and return it.
-                    if !days.is_empty() {
-                        if let Some(final_value) = latest_value {
+                    if !days.is_empty()
+                        && let Some(final_value) = latest_value {
                             let principal = PrincipalId::from_str(&node_key[prefix_length..])
                                 .expect("Invalid node key");
                             let node_id = NodeId::from(principal);
@@ -231,7 +231,6 @@ impl RegistryQuerier {
                                 ),
                             ));
                         }
-                    }
                     None
                 })
                 .collect()

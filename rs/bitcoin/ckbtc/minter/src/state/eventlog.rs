@@ -1,4 +1,3 @@
-use crate::WithdrawalFee;
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::reimbursement::ReimburseWithdrawalTask;
@@ -8,6 +7,7 @@ use crate::state::{
     RetrieveBtcRequest, SubmittedBtcTransaction, SubmittedWithdrawalRequests, SuspendedReason,
 };
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit, ReimbursementReason};
+use crate::WithdrawalFee;
 use candid::Principal;
 pub use event::{EventType, ReplacedReason};
 use ic_btc_interface::{Txid, Utxo};
@@ -484,14 +484,13 @@ pub fn replay<I: CheckInvariants>(
                 amount,
                 ..
             } => {
-                if Some(kyt_provider) != kyt_principal {
-                    if let Err(Overdraft(overdraft)) =
+                if Some(kyt_provider) != kyt_principal
+                    && let Err(Overdraft(overdraft)) =
                         state.distribute_kyt_fee(kyt_provider, amount)
-                    {
-                        return Err(ReplayLogError::InconsistentLog(format!(
+                {
+                    return Err(ReplayLogError::InconsistentLog(format!(
                             "Attempted to distribute {amount} to {kyt_provider}, causing an overdraft of {overdraft}"
                         )));
-                    }
                 }
             }
             #[allow(deprecated)]

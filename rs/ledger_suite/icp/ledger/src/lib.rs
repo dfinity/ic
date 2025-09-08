@@ -16,12 +16,12 @@ use ic_ledger_core::{
 use ic_ledger_core::{block::BlockIndex, tokens::Tokens};
 use ic_ledger_hash_of::HashOf;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::{storable::Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
-use ic_stable_structures::{Storable, storable::Bound};
 use icp_ledger::{
-    AccountIdentifier, Allowance as Allowance103, Allowances, Block, DEFAULT_TRANSFER_FEE,
-    FeatureFlags, LedgerAllowances, LedgerBalances, MAX_TAKE_ALLOWANCES, Memo, Operation,
-    PaymentError, Transaction, TransferError, TransferFee, UpgradeArgs,
+    AccountIdentifier, Allowance as Allowance103, Allowances, Block, FeatureFlags,
+    LedgerAllowances, LedgerBalances, Memo, Operation, PaymentError, Transaction, TransferError,
+    TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE, MAX_TAKE_ALLOWANCES,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use intmap::IntMap;
@@ -398,9 +398,9 @@ impl Ledger {
             effective_fee,
         )
         .map_err(|e| {
+            use ic_ledger_canister_core::ledger::TransferError as CTE;
             use PaymentError::TransferError as PTE;
             use TransferError as TE;
-            use ic_ledger_canister_core::ledger::TransferError as CTE;
 
             match e {
                 CTE::BadFee { expected_fee } => PTE(TE::BadFee { expected_fee }),
@@ -612,10 +612,10 @@ pub fn get_allowances_list(
             if result.len() >= max_results as usize || from_account_id != from {
                 break;
             }
-            if let Some(expires_at) = storable_allowance.expires_at {
-                if expires_at.as_nanos_since_unix_epoch() <= now {
-                    continue;
-                }
+            if let Some(expires_at) = storable_allowance.expires_at
+                && expires_at.as_nanos_since_unix_epoch() <= now
+            {
+                continue;
             }
             result.push(Allowance103 {
                 from_account_id,

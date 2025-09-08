@@ -930,14 +930,13 @@ impl Stream {
     /// Appends the given message to the tail of the stream.
     pub fn push(&mut self, message: RequestOrResponse) {
         self.messages_size_bytes += message.count_bytes();
-        if let RequestOrResponse::Response(response) = &message {
-            if !response.is_best_effort() {
+        if let RequestOrResponse::Response(response) = &message
+            && !response.is_best_effort() {
                 *self
                     .guaranteed_response_counts
                     .entry(response.respondent)
                     .or_insert(0) += 1;
             }
-        }
         self.messages.push(message);
         debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
         debug_assert_eq!(
@@ -985,8 +984,8 @@ impl Stream {
             self.messages_size_bytes -= msg.count_bytes();
             debug_assert_eq!(Self::size_bytes(&self.messages), self.messages_size_bytes);
 
-            if let RequestOrResponse::Response(response) = &msg {
-                if !response.is_best_effort() {
+            if let RequestOrResponse::Response(response) = &msg
+                && !response.is_best_effort() {
                     match self
                         .guaranteed_response_counts
                         .get_mut(&response.respondent)
@@ -1001,7 +1000,6 @@ impl Stream {
                         Some(count) => *count -= 1,
                     }
                 }
-            }
             debug_assert_eq!(
                 Self::calculate_guaranteed_response_counts(&self.messages),
                 self.guaranteed_response_counts
@@ -1009,12 +1007,11 @@ impl Stream {
 
             // If we received a reject signal for this message, collect it in
             // `rejected_messages`.
-            if let Some(reject_signal) = reject_signals.peek() {
-                if reject_signal.index == index {
+            if let Some(reject_signal) = reject_signals.peek()
+                && reject_signal.index == index {
                     rejected_messages.push((reject_signal.reason, msg));
                     reject_signals.next();
                 }
-            }
         }
         rejected_messages
     }
@@ -1145,8 +1142,8 @@ impl IngressHistoryState {
         // Store the associated expiry time for the given message id only for a
         // "terminal" ingress status. This way we are not risking deleting any status
         // for a message that is still not in a terminal status.
-        if let IngressStatus::Known { state, .. } = &status {
-            if state.is_terminal() {
+        if let IngressStatus::Known { state, .. } = &status
+            && state.is_terminal() {
                 let timeout = time + MAX_INGRESS_TTL;
 
                 // Reset `self.next_terminal_time` in case it is after the current timeout
@@ -1159,7 +1156,6 @@ impl IngressHistoryState {
                     .or_default()
                     .insert(message_id.clone());
             }
-        }
         self.memory_usage += status.payload_bytes();
         let old_status = Arc::make_mut(&mut self.statuses).insert(message_id, Arc::new(status));
         if let Some(old) = &old_status {

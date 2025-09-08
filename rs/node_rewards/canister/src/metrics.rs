@@ -210,8 +210,8 @@ where
             .collect();
 
         let mut last_total_metrics: HashMap<_, _> = HashMap::new();
-        if let Some((timestamp_nanos, _)) = subnets_metrics_by_day.first_key_value() {
-            if timestamp_nanos < &start_day {
+        if let Some((timestamp_nanos, _)) = subnets_metrics_by_day.first_key_value()
+            && timestamp_nanos < &start_day {
                 last_total_metrics = subnets_metrics_by_day
                     .pop_first()
                     .unwrap()
@@ -229,8 +229,7 @@ where
                         })
                     })
                     .collect();
-            }
-        };
+            };
 
         for (_, subnets_metrics) in subnets_metrics_by_day {
             // current_total_metrics holds the total metrics for the current day per node per subnet.

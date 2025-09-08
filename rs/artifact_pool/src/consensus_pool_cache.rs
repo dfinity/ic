@@ -101,11 +101,10 @@ impl<'a> CachedChainIterator<'a> {
             }
         }
         // Use cached blocks if the height is finalized
-        if parent_height <= self.finalized_chain.tip().height() {
-            if let Ok(block) = self.finalized_chain.get_block_by_height(parent_height) {
+        if parent_height <= self.finalized_chain.tip().height()
+            && let Ok(block) = self.finalized_chain.get_block_by_height(parent_height) {
                 return Some(block.clone());
             }
-        }
 
         for proposal in self
             .consensus_pool

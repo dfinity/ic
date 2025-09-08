@@ -214,7 +214,9 @@ pub fn make_remove_node_registry_mutations(
     ];
 
     let latest_version = registry.latest_version();
-    let mutations = keys_to_maybe_remove
+    
+
+    keys_to_maybe_remove
         .iter()
         .flat_map(|key| {
             // It is possible, for example, that IDkgMEGaEncryption key is not present
@@ -225,9 +227,7 @@ pub fn make_remove_node_registry_mutations(
                 .get(key.as_bytes(), latest_version)
                 .map(|_| delete(key))
         })
-        .collect::<Vec<_>>();
-
-    mutations
+        .collect::<Vec<_>>()
 }
 
 /// Scan through the registry, returning a list of any nodes with the given IP.

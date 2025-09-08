@@ -5,8 +5,8 @@
 //! This file translates to and from an external library that does the
 //! mathematics.
 
-use super::ALGORITHM_ID;
 use super::types::FsEncryptionKeySetWithPop;
+use super::ALGORITHM_ID;
 use crate::api::ni_dkg_errors::{
     CspDkgVerifyDealingError, DecryptError, EncryptAndZKProveError, MalformedPublicKeyError,
     SizeError,
@@ -14,13 +14,13 @@ use crate::api::ni_dkg_errors::{
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::{
-    ni_dkg::Epoch,
     ni_dkg::ni_dkg_groth20_bls12_381::{
         FsEncryptionCiphertextBytes, FsEncryptionPublicKey, NodeIndex, ZKProofDec, ZKProofShare,
     },
+    ni_dkg::Epoch,
     public_coefficients::bls12_381::PublicCoefficientsBytes,
 };
-use ic_types::{NumberOfNodes, crypto::AlgorithmId, crypto::error::InvalidArgumentError};
+use ic_types::{crypto::error::InvalidArgumentError, crypto::AlgorithmId, NumberOfNodes};
 use rand::{CryptoRng, RngCore};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -28,14 +28,14 @@ use std::convert::TryFrom;
 mod crypto {
 
     pub use crate::ni_dkg::fs_ni_dkg::forward_secure::{
-        EncryptionWitness, FsEncryptionCiphertext, PlaintextChunks, SecretKey, SysParam,
-        dec_chunks, enc_chunks, kgen, verify_ciphertext_integrity,
+        dec_chunks, enc_chunks, kgen, verify_ciphertext_integrity, EncryptionWitness,
+        FsEncryptionCiphertext, PlaintextChunks, SecretKey, SysParam,
     };
     pub use crate::ni_dkg::fs_ni_dkg::nizk_chunking::{
-        ChunkingInstance, ChunkingWitness, ProofChunking, prove_chunking, verify_chunking,
+        prove_chunking, verify_chunking, ChunkingInstance, ChunkingWitness, ProofChunking,
     };
     pub use crate::ni_dkg::fs_ni_dkg::nizk_sharing::{
-        ProofSharing, SharingInstance, SharingWitness, prove_sharing, verify_sharing,
+        prove_sharing, verify_sharing, ProofSharing, SharingInstance, SharingWitness,
     };
 }
 
@@ -81,10 +81,10 @@ pub fn create_forward_secure_key_pair(
 /// * `seed` - Randomness used in updating the secret key to the given `epoch`.
 pub fn update_key_inplace_to_epoch(secret_key: &mut crypto::SecretKey, epoch: Epoch, seed: Seed) {
     let rng = &mut seed.into_rng();
-    if let Some(current_epoch) = secret_key.current_epoch() {
-        if current_epoch < epoch {
-            secret_key.update_to(epoch, crypto::SysParam::global(), rng);
-        }
+    if let Some(current_epoch) = secret_key.current_epoch()
+        && current_epoch < epoch
+    {
+        secret_key.update_to(epoch, crypto::SysParam::global(), rng);
     }
 }
 
@@ -233,13 +233,13 @@ pub fn decrypt(
             node_index,
         });
     }
-    if let Some(current_epoch) = secret_key.current_epoch() {
-        if epoch < current_epoch {
-            return Err(DecryptError::EpochTooOld {
-                ciphertext_epoch: epoch,
-                secret_key_epoch: current_epoch,
-            });
-        }
+    if let Some(current_epoch) = secret_key.current_epoch()
+        && epoch < current_epoch
+    {
+        return Err(DecryptError::EpochTooOld {
+            ciphertext_epoch: epoch,
+            secret_key_epoch: current_epoch,
+        });
     }
     let ciphertext = crypto::FsEncryptionCiphertext::deserialize(ciphertext)
         .map_err(DecryptError::MalformedCiphertext)?;

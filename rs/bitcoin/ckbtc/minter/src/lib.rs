@@ -14,7 +14,7 @@ use ic_cdk::api::management_canister::bitcoin;
 use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
-use scopeguard::{ScopeGuard, guard};
+use scopeguard::{guard, ScopeGuard};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 use std::cmp::max;
@@ -1677,10 +1677,10 @@ impl<Key: Ord + Clone, Value: Clone> CacheWithExpiration<Key, Value> {
     pub fn get<T: Into<Timestamp>>(&self, key: &Key, now: T) -> Option<&Value> {
         let now = now.into();
         let timestamp = *self.keys.get(key)?;
-        if let Some(expire_cutoff) = now.checked_sub(self.expiration) {
-            if timestamp < expire_cutoff {
-                return None;
-            }
+        if let Some(expire_cutoff) = now.checked_sub(self.expiration)
+            && timestamp < expire_cutoff
+        {
+            return None;
         }
         self.values.get(&Timestamped {
             timestamp,

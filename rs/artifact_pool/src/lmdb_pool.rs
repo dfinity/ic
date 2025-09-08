@@ -1378,15 +1378,14 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
 
     /// Number of artifacts in the DB.
     fn size(&self) -> u64 {
-        if let Some(tx) = log_err!(self.db_env.begin_ro_txn(), &self.log, "begin_ro_txn") {
-            if let Some(mut cursor) = log_err!(
+        if let Some(tx) = log_err!(self.db_env.begin_ro_txn(), &self.log, "begin_ro_txn")
+            && let Some(mut cursor) = log_err!(
                 tx.open_ro_cursor(self.artifacts),
                 &self.log,
                 "open_ro_cursor"
             ) {
                 return cursor.iter().count() as u64;
             }
-        }
         0
     }
 }

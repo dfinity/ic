@@ -128,19 +128,19 @@ pub fn parse_public_key(
         });
     }
 
-    if let Some(expected_pk_len) = expected_pk_len {
-        if pk_bytes.len() != expected_pk_len {
-            return Err(CryptoError::MalformedPublicKey {
+    if let Some(expected_pk_len) = expected_pk_len
+        && pk_bytes.len() != expected_pk_len
+    {
+        return Err(CryptoError::MalformedPublicKey {
+            algorithm,
+            key_bytes: Some(der.to_vec()),
+            internal_error: format!(
+                "Wrong length for {:?} expected {} got {}",
                 algorithm,
-                key_bytes: Some(der.to_vec()),
-                internal_error: format!(
-                    "Wrong length for {:?} expected {} got {}",
-                    algorithm,
-                    expected_pk_len,
-                    pk_bytes.len()
-                ),
-            });
-        }
+                expected_pk_len,
+                pk_bytes.len()
+            ),
+        });
     }
 
     Ok(pk_bytes)

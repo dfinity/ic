@@ -96,11 +96,10 @@ where
                 }
                 self.tasks_by_key.remove(key);
             }
-            if let Some(Err(e)) = &result {
-                if e.is_cancelled() {
+            if let Some(Err(e)) = &result
+                && e.is_cancelled() {
                     continue;
                 }
-            }
             break result;
         };
 

@@ -72,11 +72,10 @@ impl Registry {
             node_operator_record.ipv6 = Some(node_operator_ipv6);
         }
 
-        if let Some(set_ipv6_none) = payload.set_ipv6_to_none {
-            if set_ipv6_none {
+        if let Some(set_ipv6_none) = payload.set_ipv6_to_none
+            && set_ipv6_none {
                 node_operator_record.ipv6 = None;
             }
-        }
 
         if let Some(max_rewardable_nodes) = payload.max_rewardable_nodes {
             // It might make sense to allow setting this to None, but for now we keep the same

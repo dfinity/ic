@@ -148,14 +148,13 @@ impl Registry {
                 prefix_length: ipv4_config.prefix_length(),
             }
         });
-        if let Some(ipv4_config) = ipv4_intf_config.clone() {
-            if node_exists_with_ipv4(self, &ipv4_config.ip_addr) {
+        if let Some(ipv4_config) = ipv4_intf_config.clone()
+            && node_exists_with_ipv4(self, &ipv4_config.ip_addr) {
                 return Err(format!(
                     "{}do_add_node: There is already another node with the same IPv4 address ({}).",
                     LOG_PREFIX, ipv4_config.ip_addr,
                 ));
             }
-        }
 
         // 7. Create the Node Record
         let node_record = NodeRecord {
@@ -251,11 +250,10 @@ fn valid_keys_from_payload(
         return Err(String::from("transport_tls_cert is empty"));
     };
     // TODO(NNS1-1197): Refactor this when nodes are provisioned for threshold ECDSA subnets
-    if let Some(idkg_dealing_encryption_pk) = &payload.idkg_dealing_encryption_pk {
-        if idkg_dealing_encryption_pk.is_empty() {
+    if let Some(idkg_dealing_encryption_pk) = &payload.idkg_dealing_encryption_pk
+        && idkg_dealing_encryption_pk.is_empty() {
             return Err(String::from("idkg_dealing_encryption_pk is empty"));
         };
-    }
 
     // 2. get the keys for verification -- for that, we need to create
     // NodePublicKeys first

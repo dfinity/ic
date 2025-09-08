@@ -296,21 +296,18 @@ pub fn validate_wasm_hashes(
         archive_compressed_wasm_hash,
     ] = WasmHash::from_distinct_opt_str([ledger_hash, index_hash, archive_hash])
         .map_err(WasmHashError::Invalid)?;
-    if let Some(ledger_hash) = &ledger_compressed_wasm_hash {
-        if !wasm_store_contain::<Ledger>(wasm_store, ledger_hash) {
+    if let Some(ledger_hash) = &ledger_compressed_wasm_hash
+        && !wasm_store_contain::<Ledger>(wasm_store, ledger_hash) {
             return Err(WasmHashError::NotFound(ledger_hash.clone()));
         }
-    }
-    if let Some(index_hash) = &index_compressed_wasm_hash {
-        if !wasm_store_contain::<Index>(wasm_store, index_hash) {
+    if let Some(index_hash) = &index_compressed_wasm_hash
+        && !wasm_store_contain::<Index>(wasm_store, index_hash) {
             return Err(WasmHashError::NotFound(index_hash.clone()));
         }
-    }
-    if let Some(archive_hash) = &archive_compressed_wasm_hash {
-        if !wasm_store_contain::<Archive>(wasm_store, archive_hash) {
+    if let Some(archive_hash) = &archive_compressed_wasm_hash
+        && !wasm_store_contain::<Archive>(wasm_store, archive_hash) {
             return Err(WasmHashError::NotFound(archive_hash.clone()));
         }
-    }
     Ok([
         ledger_compressed_wasm_hash,
         index_compressed_wasm_hash,

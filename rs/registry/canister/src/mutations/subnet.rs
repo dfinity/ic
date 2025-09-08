@@ -387,15 +387,14 @@ impl Registry {
             };
 
             // Ensure the subnet being targeted is not the same as the subnet being recovered.
-            if let Some(own_subnet_id) = own_subnet_id {
-                if subnet_id == &own_subnet_id {
+            if let Some(own_subnet_id) = own_subnet_id
+                && subnet_id == &own_subnet_id {
                     return Err(format!(
                         "Attempted to recover chain key '{}' by requesting it from itself. \
                          Subnets cannot recover chain keys from themselves.",
                         key_id,
                     ));
                 }
-            }
 
             // Ensure that the targeted subnet actually holds the key.
             let subnet_id = SubnetId::new(*subnet_id);

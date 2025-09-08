@@ -472,15 +472,14 @@ fn get_leaves(dir: &Path, leaves: &mut Vec<PathBuf>) -> std::io::Result<()> {
             get_leaves(&path, leaves)?;
         }
     }
-    if !sub_directory_found {
-        if let Some(path_name) = dir.to_str() {
+    if !sub_directory_found
+        && let Some(path_name) = dir.to_str() {
             // We skip the folder lost+found, which is currently present on the backup
             // volume.
             if !path_name.contains("lost+found") {
                 leaves.push(dir.to_path_buf());
             }
         }
-    }
     Ok(())
 }
 

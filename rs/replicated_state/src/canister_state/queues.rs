@@ -444,15 +444,14 @@ impl MessageStoreImpl {
         MessageStoreImpl: MessageStore<T>,
         T: ToContext,
     {
-        if let Some(reference) = queue.peek() {
-            if self.is_stale(reference) {
+        if let Some(reference) = queue.peek()
+            && self.is_stale(reference) {
                 return Err(format!(
                     "Stale reference at the front of {:?} queue to/from {}",
                     T::context(),
                     canister_id
                 ));
             }
-        }
 
         Ok(())
     }

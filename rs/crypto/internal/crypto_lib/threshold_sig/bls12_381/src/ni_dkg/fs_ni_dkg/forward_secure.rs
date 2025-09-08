@@ -463,11 +463,10 @@ impl SecretKey {
     ///
     /// A key update can take up to 2*LAMBDA_T*LAMBDA_H G2 multiplications
     pub fn update_to<R: RngCore + CryptoRng>(&mut self, epoch: Epoch, sys: &SysParam, rng: &mut R) {
-        if let Some(current_epoch) = self.current_epoch() {
-            if current_epoch > epoch {
+        if let Some(current_epoch) = self.current_epoch()
+            && current_epoch > epoch {
                 return;
             }
-        }
 
         // Drop nodes from the end of bte_nodes until we either run out of nodes
         // (in which case return, with the key disabled) or until we arrive at a

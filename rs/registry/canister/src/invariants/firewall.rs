@@ -76,9 +76,9 @@ fn validate_firewall_rule_principals(
 
     for key in snapshot.keys() {
         let record_key = String::from_utf8(key.clone()).unwrap();
-        if let Some(principal_id) = get_firewall_rules_record_principal_id(&record_key) {
-            if let Some(firewall_rules) = get_firewall_rules(snapshot, record_key.to_string()) {
-                if !principal_ids.contains(&principal_id) && !firewall_rules.entries.is_empty() {
+        if let Some(principal_id) = get_firewall_rules_record_principal_id(&record_key)
+            && let Some(firewall_rules) = get_firewall_rules(snapshot, record_key.to_string())
+                && !principal_ids.contains(&principal_id) && !firewall_rules.entries.is_empty() {
                     return Err(InvariantCheckError {
                         msg: format!(
                             "Firewall rule entry refers to non-existing principal: {:?}",
@@ -87,8 +87,6 @@ fn validate_firewall_rule_principals(
                         source: None,
                     });
                 }
-            }
-        }
     }
 
     Ok(())
@@ -203,18 +201,17 @@ fn validate_firewall_rule(rule: &FirewallRule) -> Result<(), InvariantCheckError
     }
 
     //Check that if a user is specified, it is not empty nor too long
-    if let Some(user) = &rule.user {
-        if user.is_empty() || user.len() > USER_SIZE {
+    if let Some(user) = &rule.user
+        && (user.is_empty() || user.len() > USER_SIZE) {
             return Err(InvariantCheckError {
                 msg: format!("User name {:?} is invalid", user),
                 source: None,
             });
         }
-    }
 
     // Check that the direction is one of the existing enum values
-    if let Some(direction) = rule.direction {
-        if FirewallRuleDirection::try_from(direction).unwrap_or(FirewallRuleDirection::Unspecified)
+    if let Some(direction) = rule.direction
+        && FirewallRuleDirection::try_from(direction).unwrap_or(FirewallRuleDirection::Unspecified)
             == FirewallRuleDirection::Unspecified
         {
             return Err(InvariantCheckError {
@@ -222,7 +219,6 @@ fn validate_firewall_rule(rule: &FirewallRule) -> Result<(), InvariantCheckError
                 source: None,
             });
         }
-    }
 
     Ok(())
 }

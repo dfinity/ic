@@ -538,15 +538,14 @@ impl ConsensusPoolImpl {
             self.validated_metrics.update(self.validated.pool_section());
 
             // Update the metrics if necessary.
-            if let (Some(last_height), Some(new_height)) = (last_height, new_height) {
-                if new_height != last_height {
+            if let (Some(last_height), Some(new_height)) = (last_height, new_height)
+                && new_height != last_height {
                     self.validated_metrics.update_count_per_height(
                         self.validated.pool_section(),
                         last_height,
                         new_height,
                     );
                 }
-            }
             purged
         } else {
             Vec::new()

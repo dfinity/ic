@@ -161,17 +161,13 @@ fn parse_metrics(text: &str) -> BTreeMap<String, Metric> {
 
 fn parse_metric(line: &str) -> Option<(String, f64, i64)> {
     let mut parts = line.split_whitespace();
-    if let Some(name) = parts.next() {
-        if let Some(value) = parts.next() {
-            if let Ok(value) = value.parse::<f64>() {
-                if let Some(ts) = parts.next() {
-                    if let Ok(ts) = ts.parse::<i64>() {
+    if let Some(name) = parts.next()
+        && let Some(value) = parts.next()
+            && let Ok(value) = value.parse::<f64>()
+                && let Some(ts) = parts.next()
+                    && let Ok(ts) = ts.parse::<i64>() {
                         return Some((name.to_string(), value, ts));
                     }
-                }
-            }
-        }
-    }
     None
 }
 
