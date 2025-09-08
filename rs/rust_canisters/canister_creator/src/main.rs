@@ -1,5 +1,5 @@
 use candid::Decode;
-use dfn_core::{CanisterId, api};
+use dfn_core::{api, CanisterId};
 use dfn_macro::update;
 use futures::future::join_all;
 use ic_management_canister_types_private::{CanisterIdRecord, CanisterInstallMode, Payload};
@@ -88,16 +88,17 @@ async fn install_code(wasm_module: Vec<u8>, arg: Vec<u8>) {
         let batch = CANISTERS_PER_BATCH.min(remaining_canisters);
         let mut futures = vec![];
         for canister_id in &canister_ids {
+            let install_arg = ic_management_canister_types_private::InstallCodeArgs::new(
+                CanisterInstallMode::Install,
+                *canister_id,
+                wasm_module.clone(),
+                arg.clone(),
+            )
+            .encode();
             let result = api::call_bytes(
                 CanisterId::ic_00(),
                 "install_code",
-                &ic_management_canister_types_private::InstallCodeArgs::new(
-                    CanisterInstallMode::Install,
-                    *canister_id,
-                    wasm_module.clone(),
-                    arg.clone(),
-                )
-                .encode(),
+                &install_arg,
                 api::Funds::new(INITIAL_CYCLES_BALANCE),
             );
             futures.push(result);

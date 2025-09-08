@@ -405,7 +405,7 @@ where
 
     /// Based on the timestamp of the head log entry; earlier entries have
     /// higher priority.
-    fn priority(&self) -> impl Ord + Debug {
+    fn priority(&self) -> impl Ord + Debug + use<I> {
         Reverse(
             self.head
                 .map(|log_entry| log_entry.timestamp)

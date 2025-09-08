@@ -7,7 +7,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use itertools::{Itertools, concat};
+use itertools::{concat, Itertools};
 use reqwest::Method;
 use url::Url;
 
@@ -72,24 +72,19 @@ pub(crate) async fn entries(
 
     // Prepare request
     let mut u = u;
+    // Concatenate query params
+    let ps = concat(vec![
+        ps_other,
+        req_us
+            .into_iter()
+            .map(|u| ("_SYSTEMD_UNIT".to_string(), u))
+            .collect(),
+    ]);
 
-    u.set_query({
-        // Concatenate query params
-        let ps = concat(vec![
-            ps_other,
-            req_us
-                .into_iter()
-                .map(|u| ("_SYSTEMD_UNIT".to_string(), u))
-                .collect(),
-        ]);
+    let ps = ps.into_iter().map(|(k, v)| format!("{k}={v}")).join("&");
+    let ps = Some(ps.as_str());
 
-        Some(
-            ps.into_iter()
-                .map(|(k, v)| format!("{k}={v}"))
-                .join("&")
-                .as_str(),
-        )
-    });
+    u.set_query(ps);
 
     let (parts, body) = req.into_parts();
     let body_stream = body.into_data_stream();

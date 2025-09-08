@@ -2,24 +2,16 @@ use crate::{
     cached_upgrade_steps::render_two_versions_as_markdown_table,
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
     extensions::{
-        ValidatedExecuteExtensionOperation, ValidatedRegisterExtension, ValidatedUpgradeExtension,
         validate_execute_extension_operation, validate_register_extension,
-        validate_upgrade_extension,
+        validate_upgrade_extension, ValidatedExecuteExtensionOperation, ValidatedRegisterExtension,
+        ValidatedUpgradeExtension,
     },
     governance::{
-        NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER, TREASURY_SUBACCOUNT_NONCE, bytes_to_subaccount,
-        log_prefix,
+        bytes_to_subaccount, log_prefix, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER,
+        TREASURY_SUBACCOUNT_NONCE,
     },
     logs::{ERROR, INFO},
     pb::v1::{
-        AdvanceSnsTargetVersion, DeregisterDappCanisters, ExecuteExtensionOperation,
-        ExecuteGenericNervousSystemFunction, Governance, GovernanceError, LogVisibility,
-        ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata, MintSnsTokens,
-        Motion, NervousSystemFunction, NervousSystemParameters, Proposal, ProposalData,
-        ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
-        RegisterExtension, SetTopicsForCustomProposals, SnsVersion, Tally, Topic, Topic as TopicPb,
-        TransferSnsTreasuryFunds, UpgradeExtension, UpgradeSnsControlledCanister,
-        UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
         governance::{SnsMetadata, Version},
         governance_error::ErrorType,
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
@@ -30,8 +22,16 @@ use crate::{
             MintSnsTokensActionAuxiliary, TransferSnsTreasuryFundsActionAuxiliary,
         },
         transfer_sns_treasury_funds::TransferFrom,
+        AdvanceSnsTargetVersion, DeregisterDappCanisters, ExecuteExtensionOperation,
+        ExecuteGenericNervousSystemFunction, Governance, GovernanceError, LogVisibility,
+        ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata, MintSnsTokens,
+        Motion, NervousSystemFunction, NervousSystemParameters, Proposal, ProposalData,
+        ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
+        RegisterExtension, SetTopicsForCustomProposals, SnsVersion, Tally, Topic, Topic as TopicPb,
+        TransferSnsTreasuryFunds, UpgradeExtension, UpgradeSnsControlledCanister,
+        UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
     },
-    sns_upgrade::{UpgradeSnsParams, get_proposal_id_that_added_wasm, get_upgrade_params},
+    sns_upgrade::{get_proposal_id_that_added_wasm, get_upgrade_params, UpgradeSnsParams},
     treasury::assess_treasury_balance,
     types::{Environment, Wasm},
     validate_chars_count, validate_len, validate_required_field,
@@ -41,8 +41,8 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{
-    DEFAULT_TRANSFER_FEE, E8, ONE_DAY_SECONDS, denominations_to_tokens, i2d,
-    ledger::compute_distribution_subaccount_bytes, ledger_validation,
+    denominations_to_tokens, i2d, ledger::compute_distribution_subaccount_bytes, ledger_validation,
+    DEFAULT_TRANSFER_FEE, E8, ONE_DAY_SECONDS,
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_nervous_system_timestamp::format_timestamp_for_humans;
@@ -1072,10 +1072,10 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
     } = upgrade;
 
     // Make sure `mode` is not None, and not an invalid/unknown value.
-    if let Some(mode) = mode {
-        if let Err(err) = CanisterInstallMode::try_from(*mode) {
-            defects.push(format!("Invalid mode: {}", err));
-        }
+    if let Some(mode) = mode
+        && let Err(err) = CanisterInstallMode::try_from(*mode)
+    {
+        defects.push(format!("Invalid mode: {}", err));
     }
     // Assume mode is the default if it is not set
     let mode = upgrade.mode_or_upgrade();
@@ -1489,7 +1489,7 @@ pub async fn validate_and_render_execute_nervous_system_function(
 
 {function:#?}
 
-## Payload sha256: 
+## Payload sha256:
 
 {payload_hash}
 
@@ -1560,9 +1560,9 @@ async fn validate_and_render_register_extension(
 
 ## WARNING
 
-Some Decentralized Exchanges lack slippage protection during deposits. Consequently, 
-deposited asset ratios may deviate from those specified in the proposal. 
-This can expose liquidity pool adaptors to mispricing, making them vulnerable to front-running 
+Some Decentralized Exchanges lack slippage protection during deposits. Consequently,
+deposited asset ratios may deviate from those specified in the proposal.
+This can expose liquidity pool adaptors to mispricing, making them vulnerable to front-running
 or sandwich attacks. However, any undeposited tokens are automatically returned to the SNS treasury account.
 
 ## Extension Configuration
@@ -2831,9 +2831,9 @@ mod tests {
     use crate::{
         governance::{Governance, ValidGovernanceProto},
         pb::v1::{
+            governance::{self, Version},
             Ballot, ChunkedCanisterWasm, Empty, Governance as GovernanceProto, NeuronId, Proposal,
             ProposalId, Subaccount, Topic, WaitForQuietState,
-            governance::{self, Version},
         },
         sns_upgrade::{
             CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
@@ -3867,8 +3867,8 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
     /// }
     ///
     /// It also is set to only upgrade root.
-    fn setup_for_upgrade_sns_to_next_version_validation_tests()
-    -> (NativeEnvironment, GovernanceProto) {
+    fn setup_for_upgrade_sns_to_next_version_validation_tests(
+    ) -> (NativeEnvironment, GovernanceProto) {
         let expected_wasm_hash_requested = Sha256::hash(&[6]).to_vec();
         let root_canister_id = *SNS_ROOT_CANISTER_ID;
 
@@ -4080,8 +4080,8 @@ Version {
     }
 
     #[test]
-    fn fail_validation_for_upgrade_sns_to_next_version_when_more_than_one_canister_change_in_version()
-     {
+    fn fail_validation_for_upgrade_sns_to_next_version_when_more_than_one_canister_change_in_version(
+    ) {
         let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {});
         let (mut env, governance_proto) = setup_for_upgrade_sns_to_next_version_validation_tests();
 
@@ -5141,10 +5141,10 @@ Version {
             render,
             format!(
                 r#"# Proposal to change ledger parameters:
-# Set token transfer fee: {new_fee} token-quantums. 
-# Set token name: {new_name}. 
-# Set token symbol: {new_symbol}. 
-# Set token logo: {new_logo}. 
+# Set token transfer fee: {new_fee} token-quantums.
+# Set token name: {new_name}.
+# Set token symbol: {new_symbol}.
+# Set token logo: {new_logo}.
 "#
             )
         );
@@ -5280,7 +5280,7 @@ NervousSystemFunction {
     ),
 }
 
-## Payload sha256: 
+## Payload sha256:
 
 039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81
 

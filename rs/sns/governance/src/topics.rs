@@ -1,9 +1,9 @@
 use crate::{
     extensions,
-    extensions::{ExtensionOperationSpec, get_extension_operation_spec_from_cache},
+    extensions::{get_extension_operation_spec_from_cache, ExtensionOperationSpec},
     governance::Governance,
     logs::ERROR,
-    pb::v1::{self as pb, NervousSystemFunction, nervous_system_function::FunctionType},
+    pb::v1::{self as pb, nervous_system_function::FunctionType, NervousSystemFunction},
     storage::list_registered_extensions_from_cache,
     types::native_action_ids::{self, SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION},
 };
@@ -442,10 +442,9 @@ impl pb::Topic {
                 }),
             ..
         }) = action
+            && let Ok(extension_spec) = extensions::validate_extension_wasm(wasm_module_hash)
         {
-            if let Ok(extension_spec) = extensions::validate_extension_wasm(wasm_module_hash) {
-                return Some(extension_spec.topic);
-            }
+            return Some(extension_spec.topic);
         }
 
         let action_code = u64::from(action);
