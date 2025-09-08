@@ -31,7 +31,7 @@ pub fn incoming_from_path<P: AsRef<std::path::Path>>(
 
 /// # Safety
 /// To ensure safety caller needs to ensure that the FD exists and only consumed once.
-unsafe fn listener_from_systemd_socket(socket_fds: i32) -> tokio::net::UnixListener {
+unsafe fn listener_from_systemd_socket(socket_fds: i32) -> tokio::net::UnixListener { unsafe {
     // unsafe
     // https://doc.rust-lang.org/std/os/unix/io/trait.FromRawFd.html#tymethod.from_raw_fd
     let std_unix_listener = std::os::unix::net::UnixListener::from_raw_fd(socket_fds);
@@ -43,7 +43,7 @@ unsafe fn listener_from_systemd_socket(socket_fds: i32) -> tokio::net::UnixListe
 
     tokio::net::UnixListener::from_std(std_unix_listener)
         .expect("Failed to convert UnixListener into Tokio equivalent")
-}
+}}
 
 /// # Safety
 ///  To ensure safety caller needs to ensure that the FD for Socket(n) exists and only consumed once.
@@ -51,7 +51,7 @@ unsafe fn listener_from_systemd_socket(socket_fds: i32) -> tokio::net::UnixListe
 /// First socket would correspond to socket_num = 1, second = 2, so on.
 pub unsafe fn incoming_from_nth_systemd_socket(
     socket_num: i32,
-) -> impl Stream<Item = Result<UnixStream, std::io::Error>> {
+) -> impl Stream<Item = Result<UnixStream, std::io::Error>> { unsafe {
     let socket_fd = FIRST_SOCKET_FD + socket_num - 1;
     let uds = listener_from_systemd_socket(socket_fd);
     async_stream::stream! {
@@ -60,7 +60,7 @@ pub unsafe fn incoming_from_nth_systemd_socket(
             yield item;
         }
     }
-}
+}}
 
 #[derive(Debug)]
 pub struct UnixStream(pub tokio::net::UnixStream);

@@ -512,7 +512,7 @@ pub enum SignatureError {
     /// The batch was invalid (e.g., due to length mismatch between number of
     /// messages and number of signatures)
     #[error(
-        "The batch was invalid (e.g., due to length mismatch between number of 
+        "The batch was invalid (e.g., due to length mismatch between number of
         messages and number of signatures)"
     )]
     InvalidBatch,
@@ -748,7 +748,7 @@ impl PublicKey {
             .collect::<Vec<_>>();
 
         // Select a random Scalar for each signature.
-        let zs: Vec<Scalar> = (0..n).map(|_| Scalar::from(rng.gen::<u128>())).collect();
+        let zs: Vec<Scalar> = (0..n).map(|_| Scalar::from(rng.r#gen::<u128>())).collect();
 
         let b_coefficient: Scalar = signatures
             .iter()

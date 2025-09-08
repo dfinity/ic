@@ -32,7 +32,7 @@ pub struct Ed25519KeyPair {
 
 impl Ed25519KeyPair {
     pub fn generate<R: Rng + CryptoRng>(rng: &mut R) -> Self {
-        let mut rng = ChaCha20Rng::from_seed(rng.gen());
+        let mut rng = ChaCha20Rng::from_seed(rng.r#gen());
         let key = ic_ed25519::PrivateKey::generate_using_rng(&mut rng);
         Self {
             secret_key: key.serialize_raw(),
@@ -65,7 +65,7 @@ impl Secp256k1KeyPair {
         self.sk.sign_message_with_ecdsa(msg).to_vec()
     }
     pub fn generate<R: Rng + CryptoRng>(rng: &mut R) -> Self {
-        let mut rng = ChaCha20Rng::from_seed(rng.gen());
+        let mut rng = ChaCha20Rng::from_seed(rng.r#gen());
         let sk = ic_secp256k1::PrivateKey::generate_using_rng(&mut rng);
         let pk = sk.public_key();
         Self { sk, pk }

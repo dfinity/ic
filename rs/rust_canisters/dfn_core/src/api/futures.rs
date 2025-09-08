@@ -36,24 +36,22 @@ impl TopLevelFuture {
     }
 
     /// Decrements weak reference count.
-    pub unsafe fn release(p: *mut TopLevelFuture) {
-        unsafe {
+    pub unsafe fn release(p: *mut TopLevelFuture) { unsafe {
         (*p).ref_count -= 1;
-        }
         if (*p).ref_count == 0 {
             drop_top_level_future(p);
         }
-    }
+    }}
 
     /// Drops the top-level future if there are is exactly one pending calls
     /// that can resolve it. This should only be called from call cleanup()
     /// because the future should normally be deleted by the waker when it's
     /// ready.
-    pub unsafe fn drop_if_last_reference(p: *mut TopLevelFuture) {
+    pub unsafe fn drop_if_last_reference(p: *mut TopLevelFuture) { unsafe {
         if (*p).ref_count == 1 {
             Self::release(p)
         }
-    }
+    }}
 }
 
 /// Returns the pointer to the current top-level future.
@@ -69,11 +67,11 @@ fn set_top_level_future(ptr: *mut TopLevelFuture) {
 }
 
 /// Deletes a top level-future.
-unsafe fn drop_top_level_future(ptr: *mut TopLevelFuture) {
+unsafe fn drop_top_level_future(ptr: *mut TopLevelFuture) { unsafe {
     if !ptr.is_null() {
         let _ = Box::from_raw(ptr);
     }
-}
+}}
 
 struct TopLevelFutureGuard(*mut TopLevelFuture);
 impl TopLevelFutureGuard {
@@ -114,9 +112,9 @@ impl<T> RefCounted<T> {
         Rc::into_raw(self.0)
     }
     #[allow(clippy::missing_safety_doc)]
-    pub unsafe fn from_raw(ptr: *const RefCell<T>) -> Self {
+    pub unsafe fn from_raw(ptr: *const RefCell<T>) -> Self { unsafe {
         Self(Rc::from_raw(ptr))
-    }
+    }}
     pub fn borrow_mut(&self) -> RefMut<'_, T> {
         self.0.borrow_mut()
     }
@@ -240,7 +238,7 @@ mod waker {
     // waker inside the `kickstart` method and poll the future again. If the future
     // is pending, we leave it on the heap. If it's ready, we deallocate the
     // pointer.
-    unsafe fn wake(ptr: *const ()) {
+    unsafe fn wake(ptr: *const ()) { unsafe {
         let future_ptr = ptr as *mut TopLevelFuture;
         let _guard = TopLevelFutureGuard::new(future_ptr);
 
@@ -250,9 +248,11 @@ mod waker {
             .poll(&mut Context::from_waker(&waker::waker(ptr)))
             .is_ready()
         {
-            TopLevelFuture::release(future_ptr);
+            unsafe {
+                TopLevelFuture::release(future_ptr);
+            }
         }
-    }
+    }}
 
     fn wake_by_ref(_: *const ()) {}
 

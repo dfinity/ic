@@ -571,7 +571,7 @@ impl PrivateKey {
              * situation where k or s of zero is generated. If this occurs, simply retry
              * with a new aux_rand
              */
-            let aux_rand = rng.gen::<[u8; 32]>();
+            let aux_rand = rng.r#gen::<[u8; 32]>();
             if let Some(sig) = self.sign_bip340_with_aux_rand(message, &aux_rand) {
                 return sig;
             }
