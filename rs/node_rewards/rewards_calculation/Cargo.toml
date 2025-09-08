@@ -10,9 +10,6 @@ documentation.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
-ic-stable-structures = { workspace = true }
-ic-cdk = { workspace = true }
-ic-types = { path = "../../types/types" }
 ic-base-types = { path = "../../types/base_types" }
 itertools = { workspace = true }
 ic-protobuf = { path = "../../protobuf" }
