@@ -192,6 +192,11 @@ fn verify_sev_attestation_report_signature(
                 "ARK public key does not match expected root certificate",
             ));
         }
+    } else {
+        eprintln!(
+            "WARNING: Skipping verification of the SEV root certificate. This should only happen \
+             in tests."
+        );
     }
 
     let chain = Chain {

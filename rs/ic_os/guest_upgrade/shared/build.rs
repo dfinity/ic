@@ -11,8 +11,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 manifest.join("../../attestation/proto"),
             ],
         )?;
-    // tonic_build::compile_protos(
-    //     PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("proto/api.proto"),
-    // )?;
+
     Ok(())
 }

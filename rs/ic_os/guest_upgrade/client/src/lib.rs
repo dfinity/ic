@@ -32,8 +32,8 @@ use x509_parser::prelude::FromDer;
 
 mod tls;
 
-// TODO: Replace with hardcoded NNS public key once available.
-const NNS_PUBLIC_KEY_PATH: &str = "/var/lib/ic/data/nns_public_key.pem";
+// TODO: replace this in dev images so that system tests work
+const NNS_PUBLIC_KEY_PATH: &str = "/opt/ic/share/nns_public_key.pem";
 
 type ServiceClientType = DiskEncryptionKeyExchangeServiceClient<Channel>;
 
@@ -154,6 +154,10 @@ impl DiskEncryptionKeyExchangeClientAgent {
             get_blessed_guest_launch_measurements_from_registry(&*self.nns_registry_client)
                 .map_err(|e| anyhow!("Failed to get blessed measurements from registry: {e}"))?;
 
+        // Verify the server's attestation report. This is to ensure that the key comes from a
+        // trusted source. Without this check, an attacker could start with a malicious GuestOS,
+        // inject malicious files into the data partition then trigger an upgrade to a
+        // legit version. The malicious data would remain on the data partition.
         verify_attestation_package(
             &server_attestation_package,
             self.sev_root_certificate_verification,

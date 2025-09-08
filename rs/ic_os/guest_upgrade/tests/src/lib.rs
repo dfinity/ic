@@ -299,7 +299,7 @@ fn assert_status_contains_error(result: &anyhow::Result<()>, error: &str) {
     assert!(format!("{err:?}").contains(error), "{err:?}");
 }
 
-fn assert_statuses_contain_error(
+fn assert_statuses_contain_errors(
     (server_result, client_result): (anyhow::Result<()>, anyhow::Result<()>),
     error: &str,
 ) {
@@ -325,7 +325,7 @@ async fn test_client_measurement_not_in_registry() {
         ..Default::default()
     };
 
-    assert_statuses_contain_error(
+    assert_statuses_contain_errors(
         DiskEncryptionKeyExchangeTestFixture::new(config)
             .run_key_exchange_test()
             .await,
@@ -340,12 +340,12 @@ async fn test_server_measurement_not_in_registry() {
         ..Default::default()
     };
 
-    assert_statuses_contain_error(
-        DiskEncryptionKeyExchangeTestFixture::new(config)
-            .run_key_exchange_test()
-            .await,
-        "InvalidMeasurement",
-    );
+    let fixture = DiskEncryptionKeyExchangeTestFixture::new(config);
+    assert_statuses_contain_errors(fixture.run_key_exchange_test().await, "InvalidMeasurement");
+
+    assert!(std::fs::read(fixture.previous_key.path())
+        .unwrap()
+        .is_empty());
 }
 
 #[tokio::test]
@@ -355,7 +355,7 @@ async fn test_wrong_custom_data() {
         ..Default::default()
     };
 
-    assert_statuses_contain_error(
+    assert_statuses_contain_errors(
         DiskEncryptionKeyExchangeTestFixture::new(config)
             .run_key_exchange_test()
             .await,
@@ -410,7 +410,7 @@ async fn test_attestation_reports_not_signed() {
         .await;
 
     assert_status_contains_error(&server_result, "Debug info from Upgrade VM");
-    assert_statuses_contain_error((server_result, client_result), "InvalidSignature");
+    assert_statuses_contain_errors((server_result, client_result), "InvalidSignature");
 }
 
 #[tokio::test]
@@ -420,7 +420,7 @@ async fn test_different_chip_id() {
         ..Default::default()
     };
 
-    assert_statuses_contain_error(
+    assert_statuses_contain_errors(
         DiskEncryptionKeyExchangeTestFixture::new(config)
             .run_key_exchange_test()
             .await,

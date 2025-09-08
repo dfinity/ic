@@ -23,7 +23,7 @@ pub struct DiskEncryptionKeyExchangeServiceImpl {
     sev_firmware_factory: SevFirmwareFactory,
     trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
     my_public_key: Vec<u8>,
-    status: Sender<Result<(), String>>,
+    status_sender: Sender<Result<(), String>>,
     blessed_measurements: Vec<Vec<u8>>,
     sev_root_certificate_verification: SevRootCertificateVerification,
 }
@@ -34,14 +34,14 @@ impl DiskEncryptionKeyExchangeServiceImpl {
         sev_root_certificate_verification: SevRootCertificateVerification,
         my_public_key: Vec<u8>,
         trusted_execution_environment_config: TrustedExecutionEnvironmentConfig,
-        status: Sender<Result<(), String>>,
+        status_sender: Sender<Result<(), String>>,
         blessed_measurements: Vec<Vec<u8>>,
     ) -> Self {
         Self {
             sev_firmware_factory,
             my_public_key,
             trusted_execution_environment_config,
-            status,
+            status_sender,
             blessed_measurements,
             sev_root_certificate_verification,
         }
@@ -87,7 +87,6 @@ impl DiskEncryptionKeyExchangeService for DiskEncryptionKeyExchangeServiceImpl {
         let mut sev_firmware = self.sev_firmware_factory.deref()()
             .map_err(|e| Status::internal(format!("Failed to create SEV firmware: {e}")))?;
 
-        // Best-effort: try to read client public key; if unavailable, propagate the error.
         let client_public_key = Self::client_public_key_from_request(&request)?;
 
         let custom_data = GetDiskEncryptionKeyTokenCustomData {
@@ -152,15 +151,15 @@ impl DiskEncryptionKeyExchangeService for DiskEncryptionKeyExchangeServiceImpl {
             .unwrap_or("No debug info.");
         match request.get_ref().success {
             Some(true) => {
-                let _ = self.status.send(Ok(()));
+                let _ = self.status_sender.send(Ok(()));
             }
             Some(false) => {
-                let _ = self.status.send(Err(format!(
+                let _ = self.status_sender.send(Err(format!(
                     "Upgrade failed. Debug info from Upgrade VM: {debug_info}"
                 )));
             }
             None => {
-                let _ = self.status.send(Err(format!(
+                let _ = self.status_sender.send(Err(format!(
                     "No status in SignalStatusRequest. Debug info from Upgrade VM: {debug_info}"
                 )));
             }
