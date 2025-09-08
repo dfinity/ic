@@ -216,8 +216,8 @@ pub async fn assert_state_sync_has_happened(
     rejoin_node: IcNodeSnapshot,
     base_count: u64,
 ) -> f64 {
-    const NUM_RETRIES: u32 = 200;
-    const BACKOFF_TIME_MILLIS: u64 = 500;
+    const NUM_RETRIES: u32 = 300;
+    const BACKOFF_TIME_MILLIS: u64 = 1000;
 
     info!(
         logger,

@@ -16,7 +16,7 @@ use canister_test::Canister;
 use futures::future::join_all;
 use ic_consensus_threshold_sig_system_test_utils::execute_proposal;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance_api::{NnsFunction, ProposalStatus};
+use ic_nns_governance_api::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
@@ -30,7 +30,7 @@ use ic_system_test_driver::{
         },
     },
     systest,
-    util::{block_on, runtime_from_url, UniversalCanister},
+    util::{block_on, runtime_from_url},
 };
 use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
@@ -49,8 +49,6 @@ const LATENCY: Duration = Duration::from_millis(150); // artificial added latenc
 
 const SIZE_LEVEL: usize = 8;
 const NUM_CANISTERS: usize = 8;
-
-const LATEST_CERTIFIED_HEIGHT: &str = "state_manager_latest_certified_height";
 
 pub const SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM: &str =
     "state_sync_duration_seconds_sum{status=\"ok\"}";
@@ -127,13 +125,6 @@ fn test(env: TestEnv) {
             "Installing universal canister on a node {} ...",
             agent_node.get_public_url()
         );
-        let agent = agent_node.build_default_agent_async().await;
-        let universal_canister = UniversalCanister::new_with_retries(
-            &agent,
-            agent_node.effective_canister_id(),
-            &logger,
-        )
-        .await;
 
         let endpoint_runtime = runtime_from_url(
             agent_node.get_public_url(),
@@ -198,6 +189,7 @@ fn test(env: TestEnv) {
             .collect::<Vec<_>>();
 
         join_all(maybe_state_syncs).await
+        // TODO: Compute average state sync duration
     });
 }
 
