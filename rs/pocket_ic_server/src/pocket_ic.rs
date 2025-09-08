@@ -971,29 +971,29 @@ impl PocketIcSubnets {
                     ii,
                     nns_ui,
                 } = icp_features;
-                if let Some(IcpFeaturesConfig::DefaultConfig) = registry {
-                    self.update_registry();
+                if let Some(ref config) = registry {
+                    self.update_registry(config);
                 }
-                if let Some(IcpFeaturesConfig::DefaultConfig) = cycles_minting {
-                    self.update_cmc(&subnet_kind);
+                if let Some(ref config) = cycles_minting {
+                    self.update_cmc(config, &subnet_kind);
                 }
-                if let Some(IcpFeaturesConfig::DefaultConfig) = icp_token {
-                    self.deploy_icp_token();
+                if let Some(ref config) = icp_token {
+                    self.deploy_icp_token(config);
                 }
-                if let Some(IcpFeaturesConfig::DefaultConfig) = cycles_token {
-                    self.deploy_cycles_token();
+                if let Some(ref config) = cycles_token {
+                    self.deploy_cycles_token(config);
                 }
-                if let Some(IcpFeaturesConfig::DefaultConfig) = nns_governance {
-                    self.deploy_nns_governance();
+                if let Some(ref config) = nns_governance {
+                    self.deploy_nns_governance(config);
                 }
-                if let Some(IcpFeaturesConfig::DefaultConfig) = sns {
-                    self.deploy_sns();
+                if let Some(ref config) = sns {
+                    self.deploy_sns(config);
                 }
-                if let Some(IcpFeaturesConfig::DefaultConfig) = ii {
-                    self.deploy_ii();
+                if let Some(ref config) = ii {
+                    self.deploy_ii(config);
                 }
-                if let Some(IcpFeaturesConfig::DefaultConfig) = nns_ui {
-                    self.deploy_nns_ui();
+                if let Some(ref config) = nns_ui {
+                    self.deploy_nns_ui(config);
                 }
             }
         }
@@ -1007,7 +1007,13 @@ impl PocketIcSubnets {
             .map(|subnet| subnet.state_machine.clone())
     }
 
-    fn update_registry(&mut self) {
+    fn update_registry(&mut self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
         let nns_subnet = self.nns_subnet.clone().expect(
             "The NNS subnet is supposed to already exist if the `registry` ICP feature is specified.",
         );
@@ -1081,7 +1087,13 @@ impl PocketIcSubnets {
         self.synced_registry_version = self.registry_data_provider.latest_version();
     }
 
-    fn update_cmc(&mut self, subnet_kind: &SubnetKind) {
+    fn update_cmc(&mut self, config: &IcpFeaturesConfig, subnet_kind: &SubnetKind) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
         let nns_subnet = self
             .nns_subnet
             .clone()
@@ -1246,7 +1258,13 @@ impl PocketIcSubnets {
         }
     }
 
-    fn deploy_icp_token(&self) {
+    fn deploy_icp_token(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
         let nns_subnet = self
             .nns_subnet
             .clone()
@@ -1379,7 +1397,13 @@ impl PocketIcSubnets {
         }
     }
 
-    fn deploy_cycles_token(&self) {
+    fn deploy_cycles_token(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
         // Nothing to do if the II subnet does not exist (yet).
         let Some(ref ii_subnet) = self.ii_subnet else {
             return;
@@ -1506,7 +1530,13 @@ impl PocketIcSubnets {
         }
     }
 
-    fn deploy_nns_governance(&self) {
+    fn deploy_nns_governance(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
         let nns_subnet = self
             .nns_subnet
             .clone()
@@ -1637,7 +1667,13 @@ impl PocketIcSubnets {
         }
     }
 
-    fn deploy_sns(&self) {
+    fn deploy_sns(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
         // Nothing to do if the SNS subnet does not exist (yet).
         let Some(ref sns_subnet) = self.sns_subnet else {
             return;
@@ -1806,7 +1842,13 @@ impl PocketIcSubnets {
         }
     }
 
-    fn deploy_ii(&self) {
+    fn deploy_ii(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
         // Nothing to do if the II subnet does not exist (yet).
         let Some(ref ii_subnet) = self.ii_subnet else {
             return;
@@ -1948,7 +1990,13 @@ impl PocketIcSubnets {
         }
     }
 
-    fn deploy_nns_ui(&self) {
+    fn deploy_nns_ui(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
         let nns_subnet = self.nns_subnet.clone().expect(
             "The NNS subnet is supposed to already exist if the `nns_ui` ICP feature is specified.",
         );

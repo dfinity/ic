@@ -780,21 +780,21 @@ impl ExtendedSubnetConfigSet {
             (sns, "sns"),
             (nns_ui, "nns_ui"),
         ] {
-            if let Some(IcpFeaturesConfig::DefaultConfig) = flag {
+            if flag.is_some() {
                 check_empty_subnet(&self.nns, "NNS", icp_feature_str)?;
                 self.nns = Some(self.nns.unwrap_or_default());
             }
         }
         // canisters on the II subnet
         for (flag, icp_feature_str) in [(cycles_token, "cycles_token"), (ii, "ii")] {
-            if let Some(IcpFeaturesConfig::DefaultConfig) = flag {
+            if flag.is_some() {
                 check_empty_subnet(&self.ii, "II", icp_feature_str)?;
                 self.ii = Some(self.ii.unwrap_or_default());
             }
         }
         // canisters on the SNS subnet
         for (flag, icp_feature_str) in [(sns, "sns")] {
-            if let Some(IcpFeaturesConfig::DefaultConfig) = flag {
+            if flag.is_some() {
                 check_empty_subnet(&self.sns, "SNS", icp_feature_str)?;
                 self.sns = Some(self.sns.unwrap_or_default());
             }
