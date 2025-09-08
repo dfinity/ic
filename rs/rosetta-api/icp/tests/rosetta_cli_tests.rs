@@ -34,9 +34,9 @@ async fn rosetta_cli_data_test() {
     let num_transactions = 1000;
     let num_accounts = 100;
 
-    scribe.gen_accounts(num_accounts, 1_000_000);
+    scribe.r#gen_accounts(num_accounts, 1_000_000);
     for _i in 0..num_transactions {
-        scribe.gen_transaction();
+        scribe.r#gen_transaction();
     }
 
     let ledger = Arc::new(TestLedger::new());
@@ -100,7 +100,7 @@ async fn rosetta_cli_construction_create_account_test() {
         1_000_000_001,
     );
     for _i in 0..num_transactions {
-        scribe.gen_transaction();
+        scribe.r#gen_transaction();
     }
 
     let ledger = Arc::new(TestLedger::new());
@@ -155,7 +155,7 @@ async fn rosetta_cli_construction_test() {
     let mut scribe = Scribe::new();
     let num_accounts = 2;
 
-    scribe.gen_accounts(num_accounts, 1_000 * 100_000_000);
+    scribe.r#gen_accounts(num_accounts, 1_000 * 100_000_000);
 
     scribe.add_account(
         "35548ec29e9d85305850e87a2d2642fe7214ff4bb36334070deafc3345c3b127",

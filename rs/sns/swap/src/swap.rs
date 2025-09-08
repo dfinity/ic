@@ -1072,11 +1072,12 @@ impl Swap {
             let auto_finalization_start_seconds = now_fn(false);
 
             // Then, get the environment
-            let environment = self
+            let environment = { self
                 .init
                 .as_ref()
                 .ok_or_else(|| "couldn't get `init`".to_string())
-                .and_then(|init| init.environment());
+                .and_then(|init| init.environment())
+                };
 
             match environment {
                 Err(error) => {

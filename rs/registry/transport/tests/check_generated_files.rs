@@ -21,12 +21,12 @@ fn check_generated_files() {
         out.path(),
     );
 
-    let gen = manifest_dir.join("src/gen");
+    let gn = manifest_dir.join("src/gen");
 
-    match compare(&gen, out.path()) {
+    match compare(&gn, out.path()) {
         Ok(_) => (),
         Err(CompareError::PathsDiffer { .. }) => {
-            panic!("Directory {} is outdated, run {}", gen.display(), cmd)
+            panic!("Directory {} is outdated, run {}", gn.display(), cmd)
         }
         Err(CompareError::ContentDiffers { path }) => {
             panic!("Source file {} is outdated, run {}", path.display(), cmd)

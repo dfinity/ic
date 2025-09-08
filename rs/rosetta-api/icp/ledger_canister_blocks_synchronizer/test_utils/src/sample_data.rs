@@ -52,16 +52,16 @@ impl Scribe {
     pub fn new_with_sample_data(num_accounts: u64, num_transactions: u64) -> Self {
         let mut scribe = Scribe::new();
 
-        scribe.gen_accounts(num_accounts, 1_000_000);
+        scribe.r#gen_accounts(num_accounts, 1_000_000);
         for _i in 0..num_transactions {
-            scribe.gen_transaction();
+            scribe.r#gen_transaction();
         }
         scribe
     }
 
     fn rand_val(&mut self, val: u64, dev: f64) -> u64 {
-        let gen = rand_distr::Normal::new(val as f64, val as f64 * dev).unwrap();
-        let ret = gen.sample(&mut self.rng).max(0.0);
+        let gn = rand_distr::Normal::new(val as f64, val as f64 * dev).unwrap();
+        let ret = gn.sample(&mut self.rng).max(0.0);
         ret as u64
     }
 
@@ -246,7 +246,7 @@ impl Scribe {
     }
 
     pub fn gen_transfer(&mut self) {
-        let (acc1, acc2, amount) = self.gen_transfer_args();
+        let (acc1, acc2, amount) = self.r#gen_transfer_args();
         self.transfer(acc1, acc2, amount);
     }
 
@@ -265,16 +265,16 @@ impl Scribe {
     }
 
     pub fn gen_approve(&mut self) {
-        let (acc1, acc2, amount) = self.gen_transfer_args();
+        let (acc1, acc2, amount) = self.r#gen_transfer_args();
         self.approve(acc1, acc2, amount);
     }
 
     pub fn gen_transaction(&mut self) {
         match self.dice_num(5) {
-            0 => self.gen_buy(),
-            1 => self.gen_sell(),
-            2 => self.gen_approve(),
-            _ => self.gen_transfer(),
+            0 => self.r#gen_buy(),
+            1 => self.r#gen_sell(),
+            2 => self.r#gen_approve(),
+            _ => self.r#gen_transfer(),
         };
     }
 }

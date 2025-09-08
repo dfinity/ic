@@ -30,7 +30,7 @@ pub fn new_valid_sig_and_crypto_component<R: Rng + RngCore + CryptoRng>(
 ) -> CanisterSigTestData {
     let cert = new_random_cert(rng, with_delegation);
     let temp_crypto = TempCryptoComponent::builder()
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
         .build();
 
     let signable_msg = SignableMock {
