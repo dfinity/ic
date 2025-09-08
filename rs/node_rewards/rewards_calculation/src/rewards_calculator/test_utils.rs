@@ -1,4 +1,4 @@
-use crate::types::{DayUtc, NodeMetricsDailyRaw, Region, RewardableNode, SubnetMetricsDailyKey};
+use crate::types::{NodeMetricsDailyRaw, Region, RewardableNode};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardRates, NodeRewardsTable};
@@ -21,7 +21,6 @@ impl Default for RewardableNode {
     fn default() -> Self {
         RewardableNode {
             node_id: NodeId::from(PrincipalId::new_node_test_id(0)),
-            rewardable_days: vec![],
             region: Region::default(),
             node_reward_type: NodeRewardType::default(),
             dc_id: "default_dc".into(),
@@ -31,10 +30,8 @@ impl Default for RewardableNode {
 
 pub fn build_daily_metrics(
     subnet_id: SubnetId,
-    day: DayUtc,
     nodes_data: &[(NodeId, u64, u64)],
-) -> (SubnetMetricsDailyKey, Vec<NodeMetricsDailyRaw>) {
-    let key = SubnetMetricsDailyKey { subnet_id, day };
+) -> (SubnetId, Vec<NodeMetricsDailyRaw>) {
     let metrics = nodes_data
         .iter()
         .map(|(node_id, proposed, failed)| NodeMetricsDailyRaw {
@@ -43,17 +40,14 @@ pub fn build_daily_metrics(
             num_blocks_failed: *failed,
         })
         .collect();
-    (key, metrics)
+    (subnet_id, metrics)
 }
 
-pub fn generate_rewardable_nodes(
-    nodes_with_rewardable_days: Vec<(NodeId, Vec<DayUtc>)>,
-) -> Vec<RewardableNode> {
+pub fn generate_rewardable_nodes(nodes_with_rewardable_days: Vec<NodeId>) -> Vec<RewardableNode> {
     nodes_with_rewardable_days
         .into_iter()
-        .map(|(node_id, rewardable_days)| RewardableNode {
+        .map(|node_id| RewardableNode {
             node_id,
-            rewardable_days,
             ..Default::default()
         })
         .collect()
