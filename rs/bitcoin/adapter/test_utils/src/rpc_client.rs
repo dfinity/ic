@@ -275,14 +275,15 @@ impl<T: RpcClientType> RpcClient<T> {
                     .create_wallet("default", None, None, None, None)
                     .is_err()
                 {
-                    if let Err(RpcError::JsonRpc(jsonrpc::error::Error::Rpc(
-                        jsonrpc::error::RpcError { code, message, .. },
-                    ))) = self.load_wallet("default")
-                    {
+                    match self.load_wallet("default") {
                         // Wait a second if it says "Wallet already loading."
-                        if code == -4 && message == "Wallet already loading." {
+                        Err(RpcError::JsonRpc(jsonrpc::error::Error::Rpc(
+                            jsonrpc::error::RpcError { code, message, .. },
+                        ))) if code == -4 && message == "Wallet already loading." => {
                             std::thread::sleep(std::time::Duration::from_secs(1));
                         }
+                        Err(err) => return Err(err),
+                        Ok(_) => {}
                     }
                 }
                 break;
