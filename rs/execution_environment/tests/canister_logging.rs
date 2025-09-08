@@ -290,7 +290,6 @@ bazel test //rs/execution_environment:execution_environment_misc_integration_tes
   --test_output=streamed \
   --test_arg=--nocapture \
   --test_arg=test_fetch_canister_logs_via_inter_canister_update_call
-
 */
 #[test]
 fn test_fetch_canister_logs_via_inter_canister_update_call_enabled() {
@@ -319,7 +318,7 @@ fn test_fetch_canister_logs_via_inter_canister_update_call_enabled() {
             .update("test", wat_fn().debug_print(b"message"))
             .build_wasm(),
     );
-
+    // Record some logs in canister_b.
     env.advance_time(Duration::from_secs(1));
     let timestamp1 = env.time();
     let _ = env.execute_ingress(canister_b, "test", vec![]);
@@ -356,17 +355,23 @@ fn test_fetch_canister_logs_via_inter_canister_update_call_enabled() {
     );
 }
 
-// TODO: temporary ignore, because the reject message changed to "register canister not found in get_active_canister"
-//#[ignore]
+// TODO: debug the reject message changed to "register canister not found in get_active_canister"
 #[test]
 fn test_fetch_canister_logs_via_composite_query_call() {
     // Test that fetch_canister_logs API is not accessible via composite query call.
     // There are 3 actors with the following controller relatioship: user -> canister_a -> canister_b.
     // The user uses composite_query to canister_a to fetch logs of canister_b, which should fail.
     let user_controller = PrincipalId::new_user_test_id(42);
-    let (env, canister_a) =
-        setup_with_controller(user_controller, UNIVERSAL_CANISTER_WASM.to_vec());
-
+    let log_visibility = LogVisibilityV2::Controllers;
+    let env = setup_env_with(FlagStatus::Enabled);
+    let canister_a = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(log_visibility.clone())
+            .with_controllers(vec![user_controller])
+            .build(),
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+    );
     // Create canister_b controlled by canister_a.
     let canister_b = create_and_install_canister(
         &env,
