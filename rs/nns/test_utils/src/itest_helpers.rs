@@ -518,7 +518,9 @@ pub async fn create_and_install_mock_exchange_rate_canister(
 
     // Step 2.1: Construct init payload/argument.
     let exchange_rate = ExchangeRate {
-        rate: price_of_icp_in_xdr_cents * 10_u64.pow(7),
+        // The additional 7 zeros because `decimal` is set to 9 a little bit
+        // later, in metadata.
+        rate: 10_u64.pow(7) * price_of_icp_in_xdr_cents,
 
         base_asset: Some(Asset {
             symbol: "ICP".to_string(),
