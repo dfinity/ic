@@ -962,16 +962,16 @@ pub fn validate_manifest_internal_consistency(
                 reason: format!("absolute file path: {},", f.relative_path.display(),),
             });
         }
-        if let Some(last_path) = last_path {
-            if f.relative_path <= last_path {
-                return Err(ManifestValidationError::InconsistentManifest {
-                    reason: format!(
-                        "file paths are not sorted: {}, {}",
-                        last_path.display(),
-                        f.relative_path.display()
-                    ),
-                });
-            }
+        if let Some(last_path) = last_path
+            && f.relative_path <= last_path
+        {
+            return Err(ManifestValidationError::InconsistentManifest {
+                reason: format!(
+                    "file paths are not sorted: {}, {}",
+                    last_path.display(),
+                    f.relative_path.display()
+                ),
+            });
         }
 
         let mut hasher = file_hasher();

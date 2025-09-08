@@ -382,7 +382,7 @@ pub fn call_bytes(
     method: &str,
     data: &[u8],
     funds: Funds,
-) -> impl Future<Output = futures::FutureResult<Vec<u8>>> {
+) -> impl Future<Output = futures::FutureResult<Vec<u8>>> + use<> {
     // the callback from IC dereferences the future from a raw pointer, assigns the
     // result and calls the waker
     fn callback(future_ptr: *mut ()) {

@@ -140,7 +140,7 @@ impl Init {
             .expect("could not get canister id of icp ledger")
     }
 
-    pub fn environment(&self) -> Result<impl CanisterEnvironment, String> {
+    pub fn environment(&self) -> Result<impl CanisterEnvironment + use<>, String> {
         use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
         use ic_nervous_system_clients::ledger_client::LedgerCanister;
 

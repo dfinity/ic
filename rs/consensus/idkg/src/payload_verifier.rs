@@ -560,13 +560,13 @@ fn validate_reshare_dealings(
     use InvalidIDkgPayloadReason::*;
     let mut new_reshare_agreement = BTreeMap::new();
     for (request, dealings) in curr_payload.xnet_reshare_agreements.iter() {
-        if let idkg::CompletedReshareRequest::Unreported(dealings) = &dealings {
-            if !prev_payload.xnet_reshare_agreements.contains_key(request) {
-                if !prev_payload.ongoing_xnet_reshares.contains_key(request) {
-                    return Err(XNetReshareAgreementWithoutRequest(request.clone()).into());
-                }
-                new_reshare_agreement.insert(request.clone(), dealings);
+        if let idkg::CompletedReshareRequest::Unreported(dealings) = &dealings
+            && !prev_payload.xnet_reshare_agreements.contains_key(request)
+        {
+            if !prev_payload.ongoing_xnet_reshares.contains_key(request) {
+                return Err(XNetReshareAgreementWithoutRequest(request.clone()).into());
             }
+            new_reshare_agreement.insert(request.clone(), dealings);
         }
     }
     let mut new_dealings = BTreeMap::new();
@@ -623,42 +623,40 @@ fn validate_new_signature_agreements(
         })
         .collect::<BTreeMap<_, _>>();
     for (random_id, completed) in curr_payload.signature_agreements.iter() {
-        if let idkg::CompletedSignature::Unreported(response) = completed {
-            if let ic_types::messages::Payload::Data(data) = &response.payload {
-                if prev_payload.signature_agreements.contains_key(random_id) {
-                    return Err(InvalidIDkgPayloadReason::NewSignatureUnexpected(*random_id).into());
+        if let idkg::CompletedSignature::Unreported(response) = completed
+            && let ic_types::messages::Payload::Data(data) = &response.payload
+        {
+            if prev_payload.signature_agreements.contains_key(random_id) {
+                return Err(InvalidIDkgPayloadReason::NewSignatureUnexpected(*random_id).into());
+            }
+            let (id, context) = context_map.get(random_id).ok_or(
+                InvalidIDkgPayloadReason::NewSignatureMissingContext(*random_id),
+            )?;
+            let (_, input) = build_signature_inputs(*id, context)?;
+            match input {
+                ThresholdSigInputs::Ecdsa(input) => {
+                    let reply = SignWithECDSAReply::decode(data).map_err(|err| {
+                        InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
+                    })?;
+                    let signature = ThresholdEcdsaCombinedSignature {
+                        signature: reply.signature,
+                    };
+                    ThresholdEcdsaSigVerifier::verify_combined_sig(crypto, &input, &signature)?;
+                    new_signatures.insert(*id, CombinedSignature::Ecdsa(signature));
                 }
-                let (id, context) = context_map.get(random_id).ok_or(
-                    InvalidIDkgPayloadReason::NewSignatureMissingContext(*random_id),
-                )?;
-                let (_, input) = build_signature_inputs(*id, context)?;
-                match input {
-                    ThresholdSigInputs::Ecdsa(input) => {
-                        let reply = SignWithECDSAReply::decode(data).map_err(|err| {
-                            InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
-                        })?;
-                        let signature = ThresholdEcdsaCombinedSignature {
-                            signature: reply.signature,
-                        };
-                        ThresholdEcdsaSigVerifier::verify_combined_sig(crypto, &input, &signature)?;
-                        new_signatures.insert(*id, CombinedSignature::Ecdsa(signature));
-                    }
-                    ThresholdSigInputs::Schnorr(input) => {
-                        let reply = SignWithSchnorrReply::decode(data).map_err(|err| {
-                            InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
-                        })?;
-                        let signature = ThresholdSchnorrCombinedSignature {
-                            signature: reply.signature,
-                        };
-                        ThresholdSchnorrSigVerifier::verify_combined_sig(
-                            crypto, &input, &signature,
-                        )?;
-                        new_signatures.insert(*id, CombinedSignature::Schnorr(signature));
-                    }
-                    ThresholdSigInputs::VetKd(_) => {
-                        // We don't expect to find agreements for vet KD contexts in the IDKG payload
-                        return Err(InvalidIDkgPayloadReason::VetKdUnexpected(*id).into());
-                    }
+                ThresholdSigInputs::Schnorr(input) => {
+                    let reply = SignWithSchnorrReply::decode(data).map_err(|err| {
+                        InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
+                    })?;
+                    let signature = ThresholdSchnorrCombinedSignature {
+                        signature: reply.signature,
+                    };
+                    ThresholdSchnorrSigVerifier::verify_combined_sig(crypto, &input, &signature)?;
+                    new_signatures.insert(*id, CombinedSignature::Schnorr(signature));
+                }
+                ThresholdSigInputs::VetKd(_) => {
+                    // We don't expect to find agreements for vet KD contexts in the IDKG payload
+                    return Err(InvalidIDkgPayloadReason::VetKdUnexpected(*id).into());
                 }
             }
         }

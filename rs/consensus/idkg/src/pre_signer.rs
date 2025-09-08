@@ -1316,12 +1316,12 @@ impl<'a> Action<'a> {
         msg_height: Option<Height>,
         msg_transcript_id: &IDkgTranscriptId,
     ) -> Action<'a> {
-        if let Some(height) = msg_height {
-            if height > block_reader.tip_height() {
-                // Message is from a node ahead of us, keep it to be
-                // processed later
-                return Action::Defer;
-            }
+        if let Some(height) = msg_height
+            && height > block_reader.tip_height()
+        {
+            // Message is from a node ahead of us, keep it to be
+            // processed later
+            return Action::Defer;
         }
 
         match requested_transcripts.get(msg_transcript_id) {

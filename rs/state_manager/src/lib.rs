@@ -777,10 +777,10 @@ struct SharedState {
 
 impl SharedState {
     fn disable_state_fetch_below(&mut self, height: Height) {
-        if let Some((sync_height, _hash, _cup_interval_length)) = &self.fetch_state {
-            if *sync_height <= height {
-                self.fetch_state = None
-            }
+        if let Some((sync_height, _hash, _cup_interval_length)) = &self.fetch_state
+            && *sync_height <= height
+        {
+            self.fetch_state = None
         }
     }
 }
@@ -3044,19 +3044,14 @@ impl StateManager for StateManagerImpl {
                 // checkpoint time, when we always flush all remaining pages while blocking. As a compromise,
                 // we flush all pages `NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY` rounds before each
                 // checkpoint, giving us roughly that many seconds to write these overlay files in the background.
-                if let Some(batch_summary) = batch_summary {
-                    if batch_summary
+                if let Some(batch_summary) = batch_summary
+                    && batch_summary
                         .next_checkpoint_height
                         .get()
                         .saturating_sub(height.get())
                         == NUM_ROUNDS_BEFORE_CHECKPOINT_TO_WRITE_OVERLAY
-                    {
-                        flush_canister_snapshots_and_page_maps(
-                            &mut state,
-                            height,
-                            &self.tip_channel,
-                        );
-                    }
+                {
+                    flush_canister_snapshots_and_page_maps(&mut state, height, &self.tip_channel);
                 }
 
                 Arc::new(state)

@@ -688,15 +688,15 @@ fn init_timers() {
 fn reset_timers(_request: ResetTimersRequest) -> ResetTimersResponse {
     let reset_timers_cool_down_interval_seconds = RESET_TIMERS_COOL_DOWN_INTERVAL.as_secs();
 
-    if let Some(timers) = governance_mut().proto.timers {
-        if let Some(last_reset_timestamp_seconds) = timers.last_reset_timestamp_seconds {
-            assert!(
-                now_seconds().saturating_sub(last_reset_timestamp_seconds)
-                    >= reset_timers_cool_down_interval_seconds,
-                "Reset has already been called within the past {:?} seconds",
-                reset_timers_cool_down_interval_seconds
-            );
-        }
+    if let Some(timers) = governance_mut().proto.timers
+        && let Some(last_reset_timestamp_seconds) = timers.last_reset_timestamp_seconds
+    {
+        assert!(
+            now_seconds().saturating_sub(last_reset_timestamp_seconds)
+                >= reset_timers_cool_down_interval_seconds,
+            "Reset has already been called within the past {:?} seconds",
+            reset_timers_cool_down_interval_seconds
+        );
     }
 
     init_timers();

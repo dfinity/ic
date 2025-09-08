@@ -105,8 +105,7 @@ fn bench_create_dealing<M: Measurement, R: RngCore + CryptoRng>(
                         context.setup_params(&env, test_case.alg(), rng);
                     (context, params)
                 });
-                let random_dealer = env.nodes.random_dealer(params, rng);
-                random_dealer
+                env.nodes.random_dealer(params, rng)
             },
             |dealer| {
                 let (_, params) = bench_context.get().unwrap();

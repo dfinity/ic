@@ -2178,7 +2178,7 @@ fn decode_with_duplicate_response_callback_in_pool() {
     // Tweak the pool so both responses have the same `CallbackId`.
     for entry in &mut encoded.pool.as_mut().unwrap().messages {
         let message = entry.message.as_mut().unwrap().r.as_mut().unwrap();
-        let pb_queues::request_or_response::R::Response(ref mut response) = message else {
+        let pb_queues::request_or_response::R::Response(response) = message else {
             panic!("Expected only responses");
         };
         response.originator_reply_callback = 1;
@@ -2371,7 +2371,7 @@ fn decode_with_duplicate_inbound_response() {
     // Tweak the encoded queues so both responses have the same `CallbackId`.
     for entry in &mut encoded.pool.as_mut().unwrap().messages {
         let message = entry.message.as_mut().unwrap().r.as_mut().unwrap();
-        let pb_queues::request_or_response::R::Response(ref mut response) = message else {
+        let pb_queues::request_or_response::R::Response(response) = message else {
             panic!("Expected only responses");
         };
         response.originator_reply_callback = 1;

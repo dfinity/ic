@@ -142,67 +142,58 @@ fn update_ecdsa_quadruple_in_creation(
     let registry_version = key_transcript.registry_version();
     let receivers = key_transcript.receivers().clone();
     // Update quadruple with completed transcripts
-    if quadruple.lambda_masked.is_none() {
-        if let Some(transcript) = transcript_cache
+    if quadruple.lambda_masked.is_none()
+        && let Some(transcript) = transcript_cache
             .get_completed_transcript(quadruple.lambda_config.as_ref().transcript_id)
-        {
-            debug!(
-                log,
-                "update_ecdsa_quadruple_in_creation: {:?} lamdba_masked transcript is made",
-                pre_signature_id
-            );
-            quadruple.lambda_masked =
-                Some(idkg::MaskedTranscript::try_from((height, &transcript))?);
-            new_transcripts.push(transcript);
-        }
+    {
+        debug!(
+            log,
+            "update_ecdsa_quadruple_in_creation: {:?} lamdba_masked transcript is made",
+            pre_signature_id
+        );
+        quadruple.lambda_masked = Some(idkg::MaskedTranscript::try_from((height, &transcript))?);
+        new_transcripts.push(transcript);
     }
-    if quadruple.kappa_unmasked.is_none() {
-        if let Some(transcript) = transcript_cache
+    if quadruple.kappa_unmasked.is_none()
+        && let Some(transcript) = transcript_cache
             .get_completed_transcript(quadruple.kappa_unmasked_config.as_ref().transcript_id)
-        {
-            debug!(
-                log,
-                "update_ecdsa_quadruple_in_creation: {:?} kappa_unmasked transcript {:?} is \
+    {
+        debug!(
+            log,
+            "update_ecdsa_quadruple_in_creation: {:?} kappa_unmasked transcript {:?} is \
                         made from unmasked config",
-                pre_signature_id,
-                transcript.get_type()
-            );
-            quadruple.kappa_unmasked =
-                Some(idkg::UnmaskedTranscript::try_from((height, &transcript))?);
-            new_transcripts.push(transcript);
-        }
+            pre_signature_id,
+            transcript.get_type()
+        );
+        quadruple.kappa_unmasked = Some(idkg::UnmaskedTranscript::try_from((height, &transcript))?);
+        new_transcripts.push(transcript);
     }
-    if quadruple.key_times_lambda.is_none() {
-        if let Some(config) = &quadruple.key_times_lambda_config {
-            if let Some(transcript) =
-                transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
-            {
-                debug!(
-                    log,
-                    "update_ecdsa_quadruple_in_creation: {:?} key_times_lambda transcript is made",
-                    pre_signature_id
-                );
-                quadruple.key_times_lambda =
-                    Some(idkg::MaskedTranscript::try_from((height, &transcript))?);
-                new_transcripts.push(transcript);
-            }
-        }
+    if quadruple.key_times_lambda.is_none()
+        && let Some(config) = &quadruple.key_times_lambda_config
+        && let Some(transcript) =
+            transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
+    {
+        debug!(
+            log,
+            "update_ecdsa_quadruple_in_creation: {:?} key_times_lambda transcript is made",
+            pre_signature_id
+        );
+        quadruple.key_times_lambda = Some(idkg::MaskedTranscript::try_from((height, &transcript))?);
+        new_transcripts.push(transcript);
     }
-    if quadruple.kappa_times_lambda.is_none() {
-        if let Some(config) = &quadruple.kappa_times_lambda_config {
-            if let Some(transcript) =
-                transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
-            {
-                debug!(
-                    log,
-                    "update_ecdsa_quadruple_in_creation: {:?} kappa_times_lambda transcript is made",
-                    pre_signature_id
-                );
-                quadruple.kappa_times_lambda =
-                    Some(idkg::MaskedTranscript::try_from((height, &transcript))?);
-                new_transcripts.push(transcript);
-            }
-        }
+    if quadruple.kappa_times_lambda.is_none()
+        && let Some(config) = &quadruple.kappa_times_lambda_config
+        && let Some(transcript) =
+            transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
+    {
+        debug!(
+            log,
+            "update_ecdsa_quadruple_in_creation: {:?} kappa_times_lambda transcript is made",
+            pre_signature_id
+        );
+        quadruple.kappa_times_lambda =
+            Some(idkg::MaskedTranscript::try_from((height, &transcript))?);
+        new_transcripts.push(transcript);
     }
     // Check what to do in the next step
     if let (Some(lambda_masked), None) =
@@ -270,19 +261,18 @@ fn update_schnorr_transcript_in_creation(
 ) -> Result<(bool, Vec<IDkgTranscript>), IDkgPayloadError> {
     let mut new_transcripts = Vec::new();
     // Update pre_signature with completed transcripts
-    if pre_signature.blinder_unmasked.is_none() {
-        if let Some(transcript) = transcript_cache
+    if pre_signature.blinder_unmasked.is_none()
+        && let Some(transcript) = transcript_cache
             .get_completed_transcript(pre_signature.blinder_unmasked_config.as_ref().transcript_id)
-        {
-            debug!(
-                log,
-                "update_schnorr_transcript_in_creation: {:?} blinder_unmasked transcript is made",
-                pre_signature_id
-            );
-            pre_signature.blinder_unmasked =
-                Some(idkg::UnmaskedTranscript::try_from((height, &transcript))?);
-            new_transcripts.push(transcript);
-        }
+    {
+        debug!(
+            log,
+            "update_schnorr_transcript_in_creation: {:?} blinder_unmasked transcript is made",
+            pre_signature_id
+        );
+        pre_signature.blinder_unmasked =
+            Some(idkg::UnmaskedTranscript::try_from((height, &transcript))?);
+        new_transcripts.push(transcript);
     }
     Ok((pre_signature.blinder_unmasked.is_some(), new_transcripts))
 }

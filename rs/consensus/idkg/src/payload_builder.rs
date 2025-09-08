@@ -697,10 +697,9 @@ pub(crate) fn create_data_payload_helper_2(
             .matched_pre_signature
             .as_ref()
             .is_some_and(|(pid, _)| idkg_payload.available_pre_signatures.contains_key(pid))
+            && let Ok(key_id) = context.key_id().try_into()
         {
-            if let Ok(key_id) = context.key_id().try_into() {
-                *matched_pre_signatures_per_key_id.entry(key_id).or_insert(0) += 1;
-            }
+            *matched_pre_signatures_per_key_id.entry(key_id).or_insert(0) += 1;
         }
     }
 
