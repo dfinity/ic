@@ -253,13 +253,13 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
         let now = SystemTime::now();
         for conn in self.connections.values_mut() {
             if let AddressEntry::Seed(_) = *conn.address_entry()
-                && let ConnectionState::AwaitingAddresses { timestamp } = *conn.state() {
-                    let expires_at =
-                        timestamp + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
-                    if expires_at <= now {
-                        conn.discard();
-                    }
+                && let ConnectionState::AwaitingAddresses { timestamp } = *conn.state()
+            {
+                let expires_at = timestamp + Duration::from_secs(SEED_ADDR_RETRIEVED_TIMEOUT_SECS);
+                if expires_at <= now {
+                    conn.discard();
                 }
+            }
         }
     }
 
@@ -542,9 +542,10 @@ impl<Block: Clone> ConnectionManager<NetworkMessage<Block>> {
         }
 
         if let Ok(conn) = self.get_connection(address)
-            && let AddressEntry::Seed(_) = conn.address_entry() {
-                conn.disconnect();
-            }
+            && let AddressEntry::Seed(_) = conn.address_entry()
+        {
+            conn.disconnect();
+        }
 
         if self.address_book.has_enough_addresses() {
             if self.initial_address_discovery {

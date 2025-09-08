@@ -149,9 +149,10 @@ impl FromStr for AdapterNetwork {
                 return Ok(network.into());
             }
         } else if let Some(s) = s.strip_prefix("bitcoin:")
-            && let Ok(network) = bitcoin::Network::from_str(s) {
-                return Ok(network.into());
-            }
+            && let Ok(network) = bitcoin::Network::from_str(s)
+        {
+            return Ok(network.into());
+        }
         Err(format!("unknown network name {s}"))
     }
 }

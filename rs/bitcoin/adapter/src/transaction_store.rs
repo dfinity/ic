@@ -183,14 +183,15 @@ impl TransactionStore {
 
             for inv in inventory {
                 if let Inventory::Transaction(txid) = inv
-                    && let Some(TransactionInfo { transaction, .. }) = self.transactions.get(txid) {
-                        channel
-                            .send(Command {
-                                address: Some(addr),
-                                message: NetworkMessage::Tx(transaction.clone()),
-                            })
-                            .ok();
-                    }
+                    && let Some(TransactionInfo { transaction, .. }) = self.transactions.get(txid)
+                {
+                    channel
+                        .send(Command {
+                            address: Some(addr),
+                            message: NetworkMessage::Tx(transaction.clone()),
+                        })
+                        .ok();
+                }
             }
         }
         Ok(())

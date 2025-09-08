@@ -290,17 +290,18 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             let (_reread_key_set, reread_secret_key) =
                 specialize_key_set_and_deserialize_secret_key(key_id, maybe_reread_key_set)?;
             if let Some(reread_epoch_in_sks) = reread_secret_key.current_epoch()
-                && epoch_to_update_to > reread_epoch_in_sks {
-                    // Epoch to update to is still newer than the one of the key in the SKS
-                    // => update the key in the SKS
-                    sks_write_lock
-                        .insert_or_replace(
-                            key_id,
-                            CspSecretKey::FsEncryption(key_set),
-                            Some(NIDKG_FS_SCOPE),
-                        )
-                        .unwrap_or_else(|e| panic!("Error updating forward secure epoch: {}", e));
-                }
+                && epoch_to_update_to > reread_epoch_in_sks
+            {
+                // Epoch to update to is still newer than the one of the key in the SKS
+                // => update the key in the SKS
+                sks_write_lock
+                    .insert_or_replace(
+                        key_id,
+                        CspSecretKey::FsEncryption(key_set),
+                        Some(NIDKG_FS_SCOPE),
+                    )
+                    .unwrap_or_else(|e| panic!("Error updating forward secure epoch: {}", e));
+            }
         }
         Ok(())
     }
@@ -334,7 +335,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             None => None,
         };
         // Specialisation to this scheme:
-        
+
         match algorithm_id {
             AlgorithmId::NiDkg_Groth20_Bls12_381 => {
                 let maybe_resharing_secret_key_bytes = match maybe_resharing_secret_key {
@@ -391,7 +392,6 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         fs_key_id: KeyId,
         receiver_index: NodeIndex,
     ) -> Result<(), ni_dkg_errors::CspDkgLoadPrivateKeyError> {
-        
         match algorithm_id {
             AlgorithmId::NiDkg_Groth20_Bls12_381 => {
                 let threshold_key_id =
