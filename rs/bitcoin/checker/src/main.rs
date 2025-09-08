@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use bitcoin::{consensus::Decodable, Address, Transaction};
 use candid::Nat;
 use ic_btc_checker::{
