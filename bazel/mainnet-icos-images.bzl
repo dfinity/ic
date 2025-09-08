@@ -4,7 +4,7 @@ This module defines Bazel targets for the mainnet versions of ICOS images
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 
-def base_download_url(git_commit_id, variant, update, test):
+def icos_image_download_url(git_commit_id, variant, update, test):
     return "https://download.dfinity.systems/ic/{git_commit_id}/{variant}/{component}{test}/{component}.tar.zst".format(
         git_commit_id = git_commit_id,
         variant = variant,
@@ -12,7 +12,7 @@ def base_download_url(git_commit_id, variant, update, test):
         test = "-test" if test else "",
     )
 
-def dev_base_download_url(git_commit_id, variant, update):
+def icos_dev_image_download_url(git_commit_id, variant, update):
     return "https://download.dfinity.systems/ic/{git_commit_id}/{variant}/{component}-dev/{component}.tar.zst".format(
         git_commit_id = git_commit_id,
         variant = variant,
@@ -24,26 +24,26 @@ def get_mainnet_setupos_images(versions):
         http_file(
             name = name,
             downloaded_file_path = "disk-img.tar.zst",
-            url = base_download_url(version, "setup-os", False, False),
+            url = icos_image_download_url(version, "setup-os", False, False),
         )
 
         http_file(
             name = name + "_dev",
             downloaded_file_path = "disk-img.tar.zst",
-            url = dev_base_download_url(version, "setup-os", False),
+            url = icos_dev_image_download_url(version, "setup-os", False),
         )
 
 def get_mainnet_guestos_images(versions, extract_guestos):
     for (name, version) in versions:
         _get_mainnet_guestos_image(
             name = name,
-            setupos_url = base_download_url(version, "setup-os", False, False),
+            setupos_url = icos_image_download_url(version, "setup-os", False, False),
             extract_guestos = extract_guestos,
         )
 
         _get_mainnet_guestos_image(
             name = name + "_dev",
-            setupos_url = dev_base_download_url(version, "setup-os", False),
+            setupos_url = icos_dev_image_download_url(version, "setup-os", False),
             extract_guestos = extract_guestos,
         )
 
