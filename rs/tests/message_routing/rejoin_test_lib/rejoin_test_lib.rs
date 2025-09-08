@@ -215,7 +215,7 @@ pub async fn assert_state_sync_has_happened(
     logger: &slog::Logger,
     rejoin_node: IcNodeSnapshot,
     base_count: u64,
-) {
+) -> f64 {
     const NUM_RETRIES: u32 = 200;
     const BACKOFF_TIME_MILLIS: u64 = 500;
 
@@ -228,15 +228,15 @@ pub async fn assert_state_sync_has_happened(
     // still reads a slightly older value from the metrics, even though the
     // state sync has already happened. This is a workaround to make the test
     // more robust.
-    for i in 0..NUM_RETRIES {
-        let res = fetch_metrics::<u64>(
+    for _i in 0..NUM_RETRIES {
+        let count = fetch_metrics::<u64>(
             logger,
             rejoin_node.clone(),
             vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT],
         )
         .await;
-        if res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT][0] > base_count {
-            let res = fetch_metrics::<f64>(
+        if count[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT][0] > base_count {
+            let time = fetch_metrics::<f64>(
                 logger,
                 rejoin_node.clone(),
                 vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM],
@@ -245,10 +245,10 @@ pub async fn assert_state_sync_has_happened(
             info!(
                 logger,
                 "State sync finishes successfully in {} seconds",
-                res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM][0],
+                time[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM][0],
             );
 
-            let res = fetch_metrics::<u64>(
+            let stats = fetch_metrics::<u64>(
                 logger,
                 rejoin_node.clone(),
                 vec![
@@ -262,15 +262,15 @@ pub async fn assert_state_sync_has_happened(
             info!(
                 logger,
                 "State sync size summary, fetch: {} bytes, copy files: {} bytes, copy chunks: {} bytes",
-                res[STATE_SYNC_SIZE_BYTES_TOTAL_FETCH][0],
-                res[STATE_SYNC_SIZE_BYTES_TOTAL_COPY_FILES][0],
-                res[STATE_SYNC_SIZE_BYTES_TOTAL_COPY_CHUNKS][0],
+                stats[STATE_SYNC_SIZE_BYTES_TOTAL_FETCH][0],
+                stats[STATE_SYNC_SIZE_BYTES_TOTAL_COPY_FILES][0],
+                stats[STATE_SYNC_SIZE_BYTES_TOTAL_COPY_CHUNKS][0],
             );
 
-            return;
+            return time[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM][0];
         }
 
-        info!(logger, "No state sync detected yet, attempt {i}.");
+        //info!(logger, "No state sync detected yet, attempt {i}.");
         tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
     }
     panic!("Couldn't verify that a state sync has happened after {NUM_RETRIES} attempts.");

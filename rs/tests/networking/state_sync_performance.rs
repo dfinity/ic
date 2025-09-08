@@ -6,8 +6,9 @@ Runbook::
 . setup a testnet with a single node
 . install nns and state sync canisters
 . grow the state of the subnet by expanding states of the state sync canisters
+. add 12 additional nodes
+. fetch state sync durations of joining nodes via metrics
 
-TODO: Document the test
 end::catalog[] */
 
 use anyhow::Result;
