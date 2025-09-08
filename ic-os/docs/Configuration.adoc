@@ -26,7 +26,7 @@ When the HostOS launches the GuestOS, the bootstrap config image is attached to 
 
 When the GuestOS boots, it checks for available removable media devices (i.e. the bootstrap config image). If such a device is found, the media must contain a VFAT filesystem and a single file called `ic-bootstrap.tar`.
 
-GuestOS then reads from `ic-bootstrap.tar` (link:../components/init/init-config/init-config.sh[see init-config.sh]) and only `config.json` is unpacked and copied into `/run/config`.
+GuestOS then reads from `ic-bootstrap.tar` (link:../components/guestos/init/init-config/init-config.sh[see init-config.sh]) and only `config.json` is unpacked and copied into `/run/config`.
 
 On first boot, GuestOS then bootstraps the node by copying other config files from ic-bootstrap.tar. See
 link:../../rs/ic_os/config/README.md[rs/ic_os/config].
