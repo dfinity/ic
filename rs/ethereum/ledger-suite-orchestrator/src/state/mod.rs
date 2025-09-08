@@ -112,7 +112,7 @@ impl<const N: usize> Display for Hash<N> {
 }
 
 impl<const N: usize> Storable for Hash<N> {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::from(self.as_ref())
     }
 
@@ -488,14 +488,14 @@ impl ConfigState {
 }
 
 impl Storable for ConfigState {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         match &self {
             ConfigState::Uninitialized => Cow::Borrowed(&[]),
             ConfigState::Initialized(config) => Cow::Owned(encode(config)),
         }
     }
 
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         if bytes.is_empty() {
             return ConfigState::Uninitialized;
         }

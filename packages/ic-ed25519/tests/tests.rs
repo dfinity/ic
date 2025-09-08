@@ -9,7 +9,7 @@ fn test_rng_with_seed(seed: [u8; 32]) -> ChaCha20Rng {
 }
 
 fn test_rng() -> ChaCha20Rng {
-    let seed = rand::thread_rng().gen::<[u8; 32]>();
+    let seed = rand::thread_rng().r#gen::<[u8; 32]>();
     // If a test ever fails, reproduce it using
     // let mut rng = test_rng_with_seed(hex!("SEED"));
     println!("RNG seed: {}", hex::encode(seed));
@@ -17,7 +17,7 @@ fn test_rng() -> ChaCha20Rng {
 }
 
 fn random_key<R: rand::CryptoRng + rand::Rng>(rng: &mut R) -> PrivateKey {
-    PrivateKey::generate_from_seed(&rng.gen::<[u8; 32]>())
+    PrivateKey::generate_from_seed(&rng.r#gen::<[u8; 32]>())
 }
 
 #[test]
@@ -91,7 +91,7 @@ fn signatures_we_generate_will_verify() {
         let sk = random_key(&mut rng);
         let pk = sk.public_key();
 
-        let msg = rng.gen::<[u8; 32]>();
+        let msg = rng.r#gen::<[u8; 32]>();
 
         let sig = sk.sign_message(&msg);
         assert_eq!(sig.len(), 64);
@@ -137,10 +137,10 @@ fn batch_verification_works() {
     fn two_positions<R: Rng>(max: usize, rng: &mut R) -> (usize, usize) {
         assert!(max > 1);
 
-        let pos0 = rng.gen::<usize>() % max;
+        let pos0 = rng.r#gen::<usize>() % max;
 
         loop {
-            let pos1 = rng.gen::<usize>() % max;
+            let pos1 = rng.r#gen::<usize>() % max;
             if pos0 != pos1 {
                 return (pos0, pos1);
             }
@@ -157,7 +157,7 @@ fn batch_verification_works() {
         let mut pk = sk.iter().map(|k| k.public_key()).collect::<Vec<_>>();
 
         let mut msg = (0..batch_size)
-            .map(|_| rng.gen::<[u8; 32]>())
+            .map(|_| rng.r#gen::<[u8; 32]>())
             .collect::<Vec<_>>();
         let mut sigs = (0..batch_size)
             .map(|i| sk[i].sign_message(&msg[i]))
@@ -166,9 +166,9 @@ fn batch_verification_works() {
         assert!(batch_verifies(&msg, &sigs, &pk, rng));
 
         // Corrupt a random signature and check that the batch fails:
-        let corrupted_sig_idx = rng.gen::<usize>() % batch_size;
-        let corrupted_sig_byte = rng.gen::<usize>() % 64;
-        let corrupted_sig_mask = std::cmp::max(1, rng.gen::<u8>());
+        let corrupted_sig_idx = rng.r#gen::<usize>() % batch_size;
+        let corrupted_sig_byte = rng.r#gen::<usize>() % 64;
+        let corrupted_sig_mask = std::cmp::max(1, rng.r#gen::<u8>());
         sigs[corrupted_sig_idx][corrupted_sig_byte] ^= corrupted_sig_mask;
         assert!(!batch_verifies(&msg, &sigs, &pk, rng));
 
@@ -177,9 +177,9 @@ fn batch_verification_works() {
         // We fixed the signature so the batch should verify again:
         debug_assert!(batch_verifies(&msg, &sigs, &pk, rng));
 
-        let corrupted_msg_idx = rng.gen::<usize>() % batch_size;
-        let corrupted_msg_byte = rng.gen::<usize>() % 32;
-        let corrupted_msg_mask = std::cmp::max(1, rng.gen::<u8>());
+        let corrupted_msg_idx = rng.r#gen::<usize>() % batch_size;
+        let corrupted_msg_byte = rng.r#gen::<usize>() % 32;
+        let corrupted_msg_mask = std::cmp::max(1, rng.r#gen::<u8>());
         msg[corrupted_msg_idx][corrupted_msg_byte] ^= corrupted_msg_mask;
         assert!(!batch_verifies(&msg, &sigs, &pk, rng));
 
@@ -187,7 +187,7 @@ fn batch_verification_works() {
         msg[corrupted_msg_idx][corrupted_msg_byte] ^= corrupted_msg_mask;
 
         // Corrupt a random public key and check that the batch fails:
-        let corrupted_pk_idx = rng.gen::<usize>() % batch_size;
+        let corrupted_pk_idx = rng.r#gen::<usize>() % batch_size;
         let correct_pk = pk[corrupted_pk_idx];
         let wrong_pk = random_key(rng).public_key();
         assert_ne!(correct_pk, wrong_pk);
@@ -404,8 +404,8 @@ fn private_derivation_is_compatible_with_public_derivation() {
     let rng = &mut test_rng();
 
     fn random_path<R: Rng>(rng: &mut R) -> DerivationPath {
-        let l = 1 + rng.gen::<usize>() % 9;
-        let path = (0..l).map(|_| rng.gen::<u32>()).collect::<Vec<u32>>();
+        let l = 1 + rng.r#gen::<usize>() % 9;
+        let path = (0..l).map(|_| rng.r#gen::<u32>()).collect::<Vec<u32>>();
         DerivationPath::new_bip32(&path)
     }
 
@@ -415,7 +415,7 @@ fn private_derivation_is_compatible_with_public_derivation() {
 
         let path = random_path(rng);
 
-        let chain_code = rng.gen::<[u8; 32]>();
+        let chain_code = rng.r#gen::<[u8; 32]>();
 
         let (derived_pk, cc_pk) = master_pk.derive_subkey_with_chain_code(&path, &chain_code);
 
@@ -428,7 +428,7 @@ fn private_derivation_is_compatible_with_public_derivation() {
 
         assert_eq!(hex::encode(cc_pk), hex::encode(cc_sk));
 
-        let msg = rng.gen::<[u8; 32]>();
+        let msg = rng.r#gen::<[u8; 32]>();
         let derived_sig = derived_sk.sign_message(&msg);
 
         assert!(derived_pk.verify_signature(&msg, &derived_sig).is_ok());
@@ -442,10 +442,10 @@ fn private_derivation_also_works_for_derived_keys() {
     for _ in 0..100 {
         let master_sk = random_key(rng);
 
-        let chain_code = rng.gen::<[u8; 32]>();
-        let path_len = 2 + rng.gen::<usize>() % 32;
+        let chain_code = rng.r#gen::<[u8; 32]>();
+        let path_len = 2 + rng.r#gen::<usize>() % 32;
         let path = (0..path_len)
-            .map(|_| rng.gen::<u32>())
+            .map(|_| rng.r#gen::<u32>())
             .collect::<Vec<u32>>();
 
         // First derive directly from a normal key
@@ -454,7 +454,7 @@ fn private_derivation_also_works_for_derived_keys() {
 
         // Now derive with the path split in half
 
-        let split = rng.gen::<usize>() % (path_len - 1);
+        let split = rng.r#gen::<usize>() % (path_len - 1);
         let path1 = DerivationPath::new_bip32(&path[..split]);
         let path2 = DerivationPath::new_bip32(&path[split..]);
 
@@ -579,7 +579,7 @@ fn verification_follows_zip215() {
 
             for _ in 0..n {
                 // Note this intentionally allows repeats!
-                let idx = rng.gen::<usize>() % testcases.len();
+                let idx = rng.r#gen::<usize>() % testcases.len();
                 keys.push(testcases[idx].0);
                 sigs.push(&testcases[idx].1[..]);
             }

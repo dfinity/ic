@@ -57,11 +57,11 @@ pub struct StorableIncident {
 }
 
 impl Storable for StorableRuleId {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(to_vec(&self).expect("StorableRuleId serialization failed"))
     }
 
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         Self(from_slice(&bytes).expect("StorableRuleId deserialization failed"))
     }
 
@@ -69,11 +69,11 @@ impl Storable for StorableRuleId {
 }
 
 impl Storable for StorableIncidentId {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(to_vec(&self).expect("StorableIncidentId serialization failed"))
     }
 
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         Self(from_slice(&bytes).expect("StorableIncidentId deserialization failed"))
     }
 
@@ -81,11 +81,11 @@ impl Storable for StorableIncidentId {
 }
 
 impl Storable for StorableConfig {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(to_vec(&self).expect("StorableConfig serialization failed"))
     }
 
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         from_slice(&bytes).expect("StorableConfig deserialization failed")
     }
 
@@ -93,11 +93,11 @@ impl Storable for StorableConfig {
 }
 
 impl Storable for StorableIncident {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(to_vec(&self).expect("StorableIncident serialization failed"))
     }
 
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         from_slice(&bytes).expect("StorableIncident deserialization failed")
     }
 
@@ -105,11 +105,11 @@ impl Storable for StorableIncident {
 }
 
 impl Storable for StorableRule {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(to_vec(&self).expect("StorableRule serialization failed"))
     }
 
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         from_slice(&bytes).expect("StorableRule deserialization failed")
     }
 

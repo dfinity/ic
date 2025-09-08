@@ -313,7 +313,7 @@ impl From<Tokens> for Nat {
 }
 
 impl Storable for Tokens {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(self.e8s.to_le_bytes().to_vec())
     }
 

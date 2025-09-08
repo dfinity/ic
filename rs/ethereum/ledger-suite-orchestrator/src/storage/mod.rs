@@ -113,14 +113,14 @@ impl StorableWasm for Archive {
 }
 
 impl Storable for StoredWasm {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(&self, &mut buf)
             .expect("failed to encode a StorableWasm to bytes");
         Cow::Owned(buf)
     }
 
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         ciborium::de::from_reader(bytes.as_ref()).unwrap_or_else(|e| {
             panic!(
                 "failed to decode StorableWasm bytes {}: {e}",
@@ -133,14 +133,14 @@ impl Storable for StoredWasm {
 }
 
 impl Storable for TaskExecution {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(&self, &mut buf)
             .expect("failed to encode a TaskExecution to bytes");
         Cow::Owned(buf)
     }
 
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         ciborium::de::from_reader(bytes.as_ref()).unwrap_or_else(|e| {
             panic!(
                 "failed to decode TaskExecution bytes {}: {e}",
@@ -153,13 +153,13 @@ impl Storable for TaskExecution {
 }
 
 impl Storable for Task {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(&self, &mut buf).expect("failed to encode a Task to bytes");
         Cow::Owned(buf)
     }
 
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         ciborium::de::from_reader(bytes.as_ref())
             .unwrap_or_else(|e| panic!("failed to decode Task bytes {}: {e}", hex::encode(bytes)))
     }

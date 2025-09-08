@@ -42,13 +42,13 @@ impl KeyRange for pb::ic_node_rewards::v1::SubnetMetricsKey {
 //------------ Storable Implementations ------------//
 
 impl Storable for pb::ic_node_rewards::v1::SubnetIdKey {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+    fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         let mut buf = Vec::with_capacity(self.encoded_len());
         self.encode(&mut buf).unwrap();
         Cow::Owned(self.encode_to_vec())
     }
 
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+    fn from_bytes(bytes: std::borrow::Cow<'_, [u8]>) -> Self {
         Self::decode(bytes.as_ref()).unwrap()
     }
 
@@ -59,11 +59,11 @@ impl Storable for pb::ic_node_rewards::v1::SubnetIdKey {
 }
 
 impl Storable for pb::ic_node_rewards::v1::SubnetMetricsKey {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+    fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         Cow::Owned(self.encode_to_vec())
     }
 
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+    fn from_bytes(bytes: std::borrow::Cow<'_, [u8]>) -> Self {
         Self::decode(bytes.as_ref()).unwrap()
     }
 
@@ -74,11 +74,11 @@ impl Storable for pb::ic_node_rewards::v1::SubnetMetricsKey {
 }
 
 impl Storable for pb::ic_node_rewards::v1::SubnetMetricsValue {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+    fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         Cow::Owned(self.encode_to_vec())
     }
 
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+    fn from_bytes(bytes: std::borrow::Cow<'_, [u8]>) -> Self {
         Self::decode(bytes.as_ref()).unwrap()
     }
 
@@ -86,20 +86,20 @@ impl Storable for pb::ic_node_rewards::v1::SubnetMetricsValue {
 }
 
 impl Storable for pb::ic_node_rewards::v1::NodeMetrics {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+    fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         Cow::Owned(self.encode_to_vec())
     }
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+    fn from_bytes(bytes: std::borrow::Cow<'_, [u8]>) -> Self {
         Self::decode(bytes.as_ref()).unwrap()
     }
     const BOUND: Bound = Bound::Unbounded;
 }
 
 impl Storable for pb::rewards_calculator::v1::NodeProviderRewards {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+    fn to_bytes(&self) -> std::borrow::Cow<'_, [u8]> {
         Cow::Owned(self.encode_to_vec())
     }
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+    fn from_bytes(bytes: std::borrow::Cow<'_, [u8]>) -> Self {
         Self::decode(bytes.as_ref()).unwrap()
     }
     const BOUND: Bound = Bound::Unbounded;

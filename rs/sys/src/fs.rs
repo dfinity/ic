@@ -177,6 +177,7 @@ pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
         len: libc::size_t,
         flags: libc::c_uint,
     ) -> libc::c_long {
+        unsafe {
         libc::syscall(
             libc::SYS_copy_file_range,
             fd_in,
@@ -186,6 +187,7 @@ pub fn copy_file_sparse(from: &Path, to: &Path) -> io::Result<u64> {
             len,
             flags,
         )
+        }
     }
 
     let mut reader = std::fs::File::open(from)?;

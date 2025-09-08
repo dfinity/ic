@@ -1109,7 +1109,7 @@ impl SystemState {
     /// Returns an iterator that loops over the canister's output queues,
     /// popping one message at a time from each in a round robin fashion. The
     /// iterator consumes all popped messages.
-    pub fn output_into_iter(&mut self) -> CanisterOutputQueuesIterator {
+    pub fn output_into_iter(&mut self) -> CanisterOutputQueuesIterator<'_> {
         self.queues.output_into_iter()
     }
 

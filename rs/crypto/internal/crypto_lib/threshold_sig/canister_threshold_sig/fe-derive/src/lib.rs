@@ -167,22 +167,22 @@ pub fn derive_field_element(input: proc_macro::TokenStream) -> proc_macro::Token
         panic!("Modulus is not prime");
     }
 
-    let mut gen = proc_macro2::TokenStream::new();
-    gen.extend(define_fe_struct(&config));
+    let mut gn = proc_macro2::TokenStream::new();
+    gn.extend(define_fe_struct(&config));
 
     for param in &config.params {
-        gen.extend(custom_param(&config, param.0));
+        gn.extend(custom_param(&config, param.0));
     }
 
     if config.is_p_3_mod_4 {
-        gen.extend(p_3_mod_4_extras(&config));
+        gn.extend(p_3_mod_4_extras(&config));
     }
 
     if config.is_p_5_mod_8 && config.params.contains_key("SQRT_NEG_1") {
-        gen.extend(p_5_mod_8_extras(&config));
+        gn.extend(p_5_mod_8_extras(&config));
     }
 
-    gen.into()
+    gn.into()
 }
 
 fn define_fe_struct(config: &FieldElementConfig) -> proc_macro2::TokenStream {

@@ -402,7 +402,7 @@ mod keygen {
         x509(cert).serial.clone()
     }
 
-    fn x509(tls_cert: &TlsPublicKeyCert) -> X509Certificate {
+    fn x509(tls_cert: &TlsPublicKeyCert) -> X509Certificate<'_> {
         let (remainder, x509_cert) =
             X509Certificate::from_der(tls_cert.as_der()).expect("Error parsing DER");
         assert!(remainder.is_empty());

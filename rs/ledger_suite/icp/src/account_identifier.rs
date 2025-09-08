@@ -53,13 +53,13 @@ impl From<Account> for AccountIdentifier {
 }
 
 impl Storable for AccountIdentifier {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buffer: Vec<u8> = vec![];
         buffer.extend(self.hash.as_slice());
         Cow::Owned(buffer)
     }
 
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         AccountIdentifier {
             hash: bytes[0..28].try_into().unwrap(),
         }

@@ -148,7 +148,7 @@ impl PageDelta {
     /// Returns (lower, upper), where:
     /// - lower is the largest index/page smaller or equal to the given page index.
     /// - upper is the smallest index/page larger or equal to the given page index.
-    fn bounds(&self, page_index: PageIndex) -> Bounds<PageIndex, Page> {
+    fn bounds(&self, page_index: PageIndex) -> Bounds<'_, PageIndex, Page> {
         self.0.bounds(&page_index)
     }
 
@@ -632,7 +632,7 @@ impl PageMap {
         &self,
         min_range: Range<PageIndex>,
         max_range: Range<PageIndex>,
-    ) -> MemoryInstructions {
+    ) -> MemoryInstructions<'_> {
         debug_assert!(min_range.start >= max_range.start && min_range.end <= max_range.end);
 
         let mut delta_instructions = Vec::new();
@@ -775,7 +775,7 @@ impl PageMap {
     /// These instructions are generally cheap and are supposed to be used to initialize a memory region.
     /// The intention is that the instructions from this function are applied first and only once. The more expensive
     /// instructions from `get_memory_instructions(range)` are then applied on top.
-    pub fn get_base_memory_instructions(&self) -> MemoryInstructions {
+    pub fn get_base_memory_instructions(&self) -> MemoryInstructions<'_> {
         self.storage.get_base_memory_instructions()
     }
 

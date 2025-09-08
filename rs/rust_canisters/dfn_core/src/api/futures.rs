@@ -30,12 +30,16 @@ pub(crate) struct TopLevelFuture {
 impl TopLevelFuture {
     /// Increments weak reference count.
     pub unsafe fn acquire(p: *mut TopLevelFuture) {
+        unsafe {
         (*p).ref_count += 1;
+        }
     }
 
     /// Decrements weak reference count.
     pub unsafe fn release(p: *mut TopLevelFuture) {
+        unsafe {
         (*p).ref_count -= 1;
+        }
         if (*p).ref_count == 0 {
             drop_top_level_future(p);
         }

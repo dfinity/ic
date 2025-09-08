@@ -352,11 +352,11 @@ mod tests {
     struct TestNeuronId([u8; 32]);
 
     impl Storable for TestNeuronId {
-        fn to_bytes(&self) -> Cow<[u8]> {
+        fn to_bytes(&self) -> Cow<'_, [u8]> {
             self.0.to_bytes()
         }
 
-        fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
             TestNeuronId(<[u8; 32]>::from_bytes(bytes))
         }
 
@@ -398,11 +398,11 @@ mod tests {
     }
 
     impl Storable for Topic {
-        fn to_bytes(&self) -> Cow<[u8]> {
+        fn to_bytes(&self) -> Cow<'_, [u8]> {
             Cow::Owned((*self as i32).to_be_bytes().to_vec())
         }
 
-        fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
             i32::from_be_bytes(bytes.as_ref().try_into().unwrap()).into()
         }
 

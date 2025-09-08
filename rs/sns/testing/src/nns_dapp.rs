@@ -172,12 +172,6 @@ pub async fn bootstrap_nns(
 }
 
 #[derive(CandidType)]
-struct SnsAggregatorPayload {
-    pub update_interval_ms: u64,
-    pub fast_interval_ms: u64,
-}
-
-#[derive(CandidType)]
 struct NnsDappPayload {
     args: Vec<(String, String)>,
 }

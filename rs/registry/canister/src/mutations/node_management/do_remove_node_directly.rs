@@ -152,7 +152,7 @@ impl Registry {
         // Disabled until the direct replacement of nodes that are active in a subnet is possible.
         let replacements_of_nodes_in_subnets_enabled = false;
         if let Some(subnet_id) = is_node_in_subnet {
-            if new_node_id.is_some() && replacements_of_nodes_in_subnets_enabled {
+            if let Some(new_node_id) = new_node_id && replacements_of_nodes_in_subnets_enabled {
                 // The node is in a subnet and is being replaced with a new node.
                 // Update the subnet record with the new node membership.
                 let mut subnet_record = self.get_subnet_or_panic(subnet_id);
@@ -164,7 +164,7 @@ impl Registry {
                     .collect();
 
                 subnet_membership.retain(|&id| id != payload.node_id);
-                subnet_membership.push(new_node_id.unwrap());
+                subnet_membership.push(new_node_id);
 
                 // Update the subnet record with the new membership (and double check that the new node is not in a subnet)
                 self.replace_subnet_record_membership(

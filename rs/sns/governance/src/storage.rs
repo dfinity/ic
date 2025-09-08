@@ -58,11 +58,11 @@ pub fn list_registered_extensions_from_cache() -> Vec<(CanisterId, ExtensionSpec
 }
 
 impl Storable for ExtensionSpec {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(crate::pb::v1::ExtensionSpec::from(self.clone()).encode_to_vec())
     }
 
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         let proto = crate::pb::v1::ExtensionSpec::decode(bytes.as_ref()).unwrap();
         Self::try_from(proto).unwrap()
     }

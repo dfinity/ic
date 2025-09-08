@@ -188,7 +188,7 @@ impl ExtensionOperationSpec {
 fn validate_treasury_manager_init(
     governance: &Governance,
     init: ExtensionInit,
-) -> BoxFuture<Result<ValidatedExtensionInit, String>> {
+) -> BoxFuture<'_, Result<ValidatedExtensionInit, String>> {
     Box::pin(async move {
         let ExtensionInit { value } = init;
         validate_deposit_operation_impl(governance, value)
@@ -330,7 +330,7 @@ pub fn get_extension_operation_spec_from_cache(
 fn validate_deposit_operation(
     governance: &Governance,
     arg: ExtensionOperationArg,
-) -> BoxFuture<Result<ValidatedOperationArg, String>> {
+) -> BoxFuture<'_, Result<ValidatedOperationArg, String>> {
     Box::pin(async move {
         let ExtensionOperationArg { value } = arg;
         validate_deposit_operation_impl(governance, value)
@@ -343,7 +343,7 @@ fn validate_deposit_operation(
 fn validate_withdraw_operation(
     _governance: &Governance,
     arg: ExtensionOperationArg,
-) -> BoxFuture<Result<ValidatedOperationArg, String>> {
+) -> BoxFuture<'_, Result<ValidatedOperationArg, String>> {
     Box::pin(async move {
         let ExtensionOperationArg { value } = arg;
 

@@ -40,7 +40,7 @@ impl StorableRegistryKey {
 const MAX_REGISTRY_KEY_SIZE: u32 = 200;
 
 impl Storable for StorableRegistryKey {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut storable_key = vec![];
         let key_b = self.key.as_bytes().to_vec();
         let version_b = self.version.to_be_bytes().to_vec();
@@ -53,7 +53,7 @@ impl Storable for StorableRegistryKey {
         Cow::Owned(storable_key)
     }
 
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         let bytes = bytes.as_ref();
         let len = bytes.len();
         let (remaining_bytes, timestamp_bytes) = bytes.split_at(len - 8);

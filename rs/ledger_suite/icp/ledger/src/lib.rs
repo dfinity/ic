@@ -84,13 +84,13 @@ struct StorableAllowance {
 }
 
 impl Storable for StorableAllowance {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_,[u8]> {
         let mut buf = vec![];
         minicbor::encode(self, &mut buf).expect("StorableAllowance encoding should always succeed");
         Cow::Owned(buf)
     }
 
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+    fn from_bytes(bytes: Cow<'_,[u8]>) -> Self {
         minicbor::decode(bytes.as_ref()).unwrap_or_else(|e| {
             panic!(
                 "failed to decode StorableAllowance bytes {}: {e}",

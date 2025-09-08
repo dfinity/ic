@@ -163,7 +163,7 @@ impl Default for State {
 }
 
 impl Storable for State {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(self, &mut buf).expect("failed to encode index config");
         Cow::Owned(buf)

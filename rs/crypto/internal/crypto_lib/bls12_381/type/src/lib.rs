@@ -199,7 +199,7 @@ impl Scalar {
 
         // We can't use fill_bytes here because that results in incompatible output.
         for i in 0..64 {
-            bytes[i] = rng.gen::<u8>();
+            bytes[i] = rng.r#gen::<u8>();
         }
 
         let mut rbuf = [0u8; 64];

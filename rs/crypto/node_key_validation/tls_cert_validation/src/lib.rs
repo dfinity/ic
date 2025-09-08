@@ -88,7 +88,7 @@ fn single_subject_cn_as_str<'a>(
 
 fn parse_x509_v3_certificate(
     certificate_der: &[u8],
-) -> Result<X509Certificate, TlsCertValidationError> {
+) -> Result<X509Certificate<'_>, TlsCertValidationError> {
     let (remainder, x509_cert) = x509_parser::parse_x509_certificate(certificate_der)
         .map_err(|e| invalid_tls_certificate_error(format!("failed to parse DER: {:?}", e)))?;
     if !remainder.is_empty() {

@@ -142,7 +142,7 @@ rust_analyzer_dependencies()
 crate_universe_dependencies()
 
 rust_register_toolchains(
-    edition = "2021",
+    edition = "2024",
     strip_level = {"x86_64-unknown-linux-gnu": {
         "dbg": "none",
         "fastbuild": "none",

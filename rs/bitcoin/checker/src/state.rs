@@ -318,13 +318,13 @@ pub enum ConfigState {
 }
 
 impl Storable for ConfigState {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(self, &mut buf).expect("failed to encode ConfigState");
         Cow::Owned(buf)
     }
 
-    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         ciborium::de::from_reader(bytes.as_ref()).unwrap_or_else(|e| {
             panic!(
                 "failed to decode ConfigState bytes {:?}: {}",

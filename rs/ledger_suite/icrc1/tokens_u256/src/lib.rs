@@ -100,7 +100,7 @@ impl TryFrom<Nat> for U256 {
 }
 
 impl Storable for U256 {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(self.0.to_be_bytes().to_vec())
     }
 

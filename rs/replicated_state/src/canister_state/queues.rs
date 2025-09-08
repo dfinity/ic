@@ -692,7 +692,7 @@ impl CanisterQueues {
     /// Returns an iterator that loops over output queues, popping one message
     /// at a time from each in a round robin fashion. The iterator consumes all
     /// popped messages.
-    pub(crate) fn output_into_iter(&mut self) -> CanisterOutputQueuesIterator {
+    pub(crate) fn output_into_iter(&mut self) -> CanisterOutputQueuesIterator<'_> {
         CanisterOutputQueuesIterator::new(&mut self.canister_queues, &mut self.store)
     }
 

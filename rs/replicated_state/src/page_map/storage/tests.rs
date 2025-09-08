@@ -637,7 +637,7 @@ fn write_overlays_and_verify_with_tempdir(
                         }
                         MergeDestination::SingleShardOverlay(path) => {
                             verify_merge_to_overlay(
-                                &[path.clone()],
+                                std::slice::from_ref(path),
                                 &merged_base,
                                 &merged_overlays
                                     .iter()

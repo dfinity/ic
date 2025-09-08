@@ -337,7 +337,7 @@ async fn install_statesync_test_canisters(
     env: TestEnv,
     endpoint_runtime: &Runtime,
     num_canisters: usize,
-) -> Vec<Canister> {
+) -> Vec<Canister<'_>> {
     let logger = env.logger();
     let wasm = Wasm::from_file(get_dependency_path(
         env::var("STATESYNC_TEST_CANISTER_WASM_PATH")

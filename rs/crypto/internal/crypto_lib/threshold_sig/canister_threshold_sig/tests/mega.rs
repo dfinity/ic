@@ -419,8 +419,8 @@ mod mega_cipher_text {
                         MEGaCiphertextSingle::encrypt(
                             seed,
                             alg,
-                            &[ptext.clone()],
-                            &[a_pk.clone()],
+                            std::slice::from_ref(&ptext),
+                            std::slice::from_ref(&a_pk),
                             dealer_index,
                             associated_data,
                         )
@@ -434,8 +434,8 @@ mod mega_cipher_text {
                         MEGaCiphertextPair::encrypt(
                             seed,
                             alg,
-                            &[ptext.clone()],
-                            &[a_pk.clone()],
+                            std::slice::from_ref(&ptext),
+                            std::slice::from_ref(&a_pk),
                             dealer_index,
                             associated_data,
                         )

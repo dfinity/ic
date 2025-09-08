@@ -214,7 +214,7 @@ impl Storage {
         self.init_or_die().get_page(page_index)
     }
 
-    pub fn get_base_memory_instructions(&self) -> MemoryInstructions {
+    pub fn get_base_memory_instructions(&self) -> MemoryInstructions<'_> {
         self.init_or_die().get_base_memory_instructions()
     }
 
@@ -222,7 +222,7 @@ impl Storage {
         &self,
         range: Range<PageIndex>,
         filter: &mut BitVec,
-    ) -> MemoryInstructions {
+    ) -> MemoryInstructions<'_> {
         self.init_or_die().get_memory_instructions(range, filter)
     }
 
@@ -331,7 +331,7 @@ impl StorageImpl {
     }
 
     /// For base overlays and regular base we pre-mmap all data in constructor.
-    pub fn get_base_memory_instructions(&self) -> MemoryInstructions {
+    pub fn get_base_memory_instructions(&self) -> MemoryInstructions<'_> {
         match &self.base {
             BaseFile::Base(base) => base.get_memory_instructions(),
             BaseFile::Overlay(overlays) => MemoryInstructions {
@@ -353,7 +353,7 @@ impl StorageImpl {
         &self,
         range: Range<PageIndex>,
         filter: &mut BitVec,
-    ) -> MemoryInstructions {
+    ) -> MemoryInstructions<'_> {
         let mut result = Vec::<MemoryInstruction>::new();
 
         for overlay in self.overlays.iter().rev() {
@@ -566,7 +566,7 @@ impl OverlayFile {
     }
 
     /// For base overlays we mmap all content in constructor.
-    fn get_base_memory_instructions(&self) -> MemoryInstructions {
+    fn get_base_memory_instructions(&self) -> MemoryInstructions<'_> {
         assert_eq!(self.index_iter().count(), 1);
         let page_index_range = self.index_iter().next().unwrap();
         MemoryInstructions {
@@ -637,7 +637,7 @@ impl OverlayFile {
         &self,
         range: Range<PageIndex>,
         filter: &mut BitVec,
-    ) -> Vec<MemoryInstruction> {
+    ) -> Vec<MemoryInstruction<'_>> {
         let mut result = Vec::<MemoryInstruction>::new();
 
         for page_index_range in self.get_overlapping_page_ranges(range.clone()) {
