@@ -1,4 +1,4 @@
-//! The unit tests for `Governance` use *test fixtures*. The fixtures
+1/! The unit tests for `Governance` use *test fixtures*. The fixtures
 //! are defi data_source: (), timestamp_seconds: ()ned as small but
 //! complex/weird configurations of neurons and proposals against which several
 //! tests are run.
@@ -11072,6 +11072,9 @@ lazy_static! {
     };
 }
 
+// TODO: For some reason clippy doesn't see this as used
+// even though it is used in `lazy_static!`
+#[allow(dead_code)]
 const BASKET_COUNT: u64 = 3;
 
 lazy_static! {
@@ -11756,6 +11759,9 @@ lazy_static! {
     );
 }
 
+// TODO: For some reason clippy doesn't understand that this is used
+// in `static_ref`
+#[allow(dead_code)]
 const NEURONS_FUND_INVESTMENT_E8S: u64 = 61 * E8;
 
 /// Failure when settling the Neurons' fund should result in the Lifecycle remaining

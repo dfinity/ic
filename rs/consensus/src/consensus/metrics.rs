@@ -533,18 +533,17 @@ impl ValidatorMetrics {
 
     pub(crate) fn observe_block(&self, pool_reader: &PoolReader, proposal: &BlockProposal) {
         let rank = proposal.rank().0 as usize;
-        if rank < RANKS_TO_RECORD.len() {
-            if let Some(start_time) = pool_reader.get_round_start_time(proposal.height())
-                && let Some(timestamp) = pool_reader
-                    .pool()
-                    .unvalidated()
-                    .get_timestamp(&proposal.get_id())
-                && timestamp >= start_time
-            {
-                self.time_to_receive_block
-                    .with_label_values(&[RANKS_TO_RECORD[rank]])
-                    .observe((timestamp.saturating_duration_since(start_time)).as_secs_f64());
-            }
+        if rank < RANKS_TO_RECORD.len()
+            && let Some(start_time) = pool_reader.get_round_start_time(proposal.height())
+            && let Some(timestamp) = pool_reader
+                .pool()
+                .unvalidated()
+                .get_timestamp(&proposal.get_id())
+            && timestamp >= start_time
+        {
+            self.time_to_receive_block
+                .with_label_values(&[RANKS_TO_RECORD[rank]])
+                .observe((timestamp.saturating_duration_since(start_time)).as_secs_f64());
         }
     }
 
