@@ -12,7 +12,7 @@ use maplit::hashmap;
 use reqwest::Url;
 use serde::Serialize;
 use serde_json::json;
-use slog::{debug, info, warn, Logger};
+use slog::{Logger, debug, info, warn};
 
 use crate::driver::{
     constants::SSH_USERNAME,
@@ -47,7 +47,9 @@ const DEFAULT_PROMETHEUS_VM_IMG_SHA256: &str =
     "3af874174d48f5c9a59c9bc54dd73cbfc65b17b952fbacd7611ee07d19de369b";
 
 fn get_default_prometheus_vm_img_url() -> String {
-    format!("http://download.proxy-global.dfinity.network:8080/farm/prometheus-vm/{DEFAULT_PROMETHEUS_VM_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst")
+    format!(
+        "http://download.proxy-global.dfinity.network:8080/farm/prometheus-vm/{DEFAULT_PROMETHEUS_VM_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst"
+    )
 }
 
 const PROMETHEUS_DATA_DIR_TARBALL: &str = "prometheus-data-dir.tar.zst";
@@ -284,7 +286,10 @@ fi
                 "Failed to sync k8s dashboards to grafana. Error: {e:#}"
             )
         } else {
-            debug!(log, "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ...");
+            debug!(
+                log,
+                "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ..."
+            );
             TestEnv::shell_copy_with_deref(grafana_dashboards_src, grafana_dashboards_dst).unwrap();
         }
 

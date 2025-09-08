@@ -2,7 +2,7 @@ use crate::driver::{
     bootstrap::{init_ic, setup_and_start_vms},
     farm::{Farm, HostFeature},
     node_software_version::NodeSoftwareVersion,
-    resource::{allocate_resources, get_resource_request, AllocatedVm, ResourceGroup},
+    resource::{AllocatedVm, ResourceGroup, allocate_resources, get_resource_request},
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::{HasRegistryLocalStore, HasTopologySnapshot},
     test_setup::{GroupSetup, InfraProvider},
@@ -20,8 +20,8 @@ use ic_types::{Height, NodeId, PrincipalId};
 use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use slog::info;
-use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeMap;
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::net::{Ipv6Addr, SocketAddr};
 use std::path::Path;

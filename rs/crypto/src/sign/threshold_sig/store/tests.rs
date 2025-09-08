@@ -1,11 +1,11 @@
 use super::*;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
-use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetId, NiDkgTargetSubnet};
 use ic_types::Height;
-use ic_types_test_utils::ids::{node_test_id, SUBNET_1};
+use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTargetId, NiDkgTargetSubnet};
+use ic_types_test_utils::ids::{SUBNET_1, node_test_id};
 use sign::tests::{REG_V1, REG_V2};
 use strum::{EnumCount, IntoEnumIterator};
 
@@ -254,9 +254,11 @@ fn should_purge_data_on_inserting_transcript_data_if_capacity_exceeded() {
             store.store.len(),
             ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY
         );
-        assert!(store
-            .transcript_data(&ni_dkg_id_with_tag(tag.clone(), 1))
-            .is_none());
+        assert!(
+            store
+                .transcript_data(&ni_dkg_id_with_tag(tag.clone(), 1))
+                .is_none()
+        );
         for i in 2..=ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY + 1 {
             assert_eq!(
                 pub_coeffs_from_store(&store, ni_dkg_id_with_tag(tag.clone(), i)),
@@ -292,12 +294,14 @@ fn should_purge_data_in_insertion_order_on_inserting_transcript_data_if_capacity
                 pub_coeffs
             );
         }
-        assert!(store
-            .transcript_data(&ni_dkg_id_with_tag(
-                tag.clone(),
-                ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY + 1
-            ))
-            .is_none());
+        assert!(
+            store
+                .transcript_data(&ni_dkg_id_with_tag(
+                    tag.clone(),
+                    ThresholdSigDataStoreImpl::CAPACITY_PER_TAG_OR_KEY + 1
+                ))
+                .is_none()
+        );
     }
 }
 

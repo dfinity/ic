@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::driver::test_env::TestEnv;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use regex::Regex;
 use slog::Logger;
 use std::{

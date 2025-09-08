@@ -35,7 +35,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Parser;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -50,7 +50,7 @@ use crate::driver::{
     task::{SkipTestTask, Task},
     timeout::TimeoutTask,
 };
-use slog::{debug, error, info, trace, warn, Logger};
+use slog::{Logger, debug, error, info, trace, warn};
 use std::{
     collections::{BTreeMap, HashMap},
     iter::once,
@@ -235,9 +235,7 @@ fn timed(
 ) -> Plan<Box<dyn Task>> {
     trace!(
         ctx.logger,
-        "timed(plan={:?}, timeout={:?})",
-        &plan,
-        &timeout
+        "timed(plan={:?}, timeout={:?})", &plan, &timeout
     );
     let timeout_task = TimeoutTask::new(
         ctx.rh.clone(),
@@ -259,10 +257,7 @@ fn compose(
 ) -> Plan<Box<dyn Task>> {
     trace!(
         ctx.logger,
-        "compose(root={:?}, ordering={:?}, children={:?})",
-        &root_task,
-        &ordering,
-        &children
+        "compose(root={:?}, ordering={:?}, children={:?})", &root_task, &ordering, &children
     );
     let root_task = match root_task {
         Some(task) => task,
@@ -394,7 +389,9 @@ impl SystemTestSubGroup {
                         let env = get_or_create_env(group_ctx, task_id).unwrap();
                         // This function will only be called after setup finishes
                         if SetupResult::try_read_attribute(&env).is_err() {
-                            panic!("Failed to find SetupResult attribute after setup. Cancelling test function.");
+                            panic!(
+                                "Failed to find SetupResult attribute after setup. Cancelling test function."
+                            );
                         }
                         task_fn(env)
                     }
@@ -620,7 +617,10 @@ impl SystemTestGroup {
                                             .any(|pattern| pattern.is_match(&key));
 
                                         if key_match {
-                                            debug!(logger, "Skipping journald streaming of [uvm={key}] because it was excluded by the `--exclude-logs` pattern");
+                                            debug!(
+                                                logger,
+                                                "Skipping journald streaming of [uvm={key}] because it was excluded by the `--exclude-logs` pattern"
+                                            );
                                             skipped_uvms.insert(key);
                                             continue;
                                         }

@@ -95,7 +95,7 @@ where
             Err(_e) => {
                 return Err(EngineError::FuturesExecutionFailure(
                     "Could not await dispatcher task".into(),
-                ))
+                ));
             }
         };
         if dispatch_duration > self.dispatch_timeout {

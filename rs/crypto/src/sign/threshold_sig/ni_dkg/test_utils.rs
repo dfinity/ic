@@ -1,11 +1,11 @@
 use crate::common::test_utils::CryptoRegistryRecord;
-use crate::sign::tests::{dealing_encryption_pk_record_with, REG_V1, REG_V2};
+use crate::sign::tests::{REG_V1, REG_V2, dealing_encryption_pk_record_with};
 use ic_crypto_internal_types::curves::bls12_381::G1Bytes;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     FsEncryptionPublicKey, PublicCoefficientsBytes,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    ni_dkg_groth20_bls12_381, CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript,
+    CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, ni_dkg_groth20_bls12_381,
 };
 use ic_crypto_test_utils::set_of;
 use ic_crypto_test_utils_ni_dkg::ni_dkg_csp_dealing;

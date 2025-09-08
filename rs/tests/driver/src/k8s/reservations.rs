@@ -1,13 +1,13 @@
 use std::time::Duration;
 
-use anyhow::anyhow;
 use anyhow::Result;
+use anyhow::anyhow;
 use backon::ConstantBuilder;
 use backon::Retryable;
 use kube::api::{DeleteParams, Patch, PatchParams};
 use kube::{
-    api::{DynamicObject, GroupVersionKind},
     Api, Client,
+    api::{DynamicObject, GroupVersionKind},
 };
 use tracing::*;
 

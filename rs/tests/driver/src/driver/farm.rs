@@ -8,15 +8,15 @@ use std::{
 use crate::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy};
 use crate::driver::log_events;
 use crate::driver::test_env::{RequiredHostFeaturesFromCmdLine, TestEnvAttribute};
-use crate::driver::test_env_api::{read_dependency_to_string, HasFarmUrl};
+use crate::driver::test_env_api::{HasFarmUrl, read_dependency_to_string};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use ic_crypto_sha2::Sha256;
-use reqwest::blocking::{multipart, Client, RequestBuilder};
+use reqwest::blocking::{Client, RequestBuilder, multipart};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use slog::info;
-use slog::{error, warn, Logger};
+use slog::{Logger, error, warn};
 use std::fmt;
 use std::io::Write;
 use thiserror::Error;

@@ -8,17 +8,17 @@ use crate::driver::{
     dsl::SubprocessFn,
     event::TaskId,
     process::{KillFn, Process},
-    subprocess_ipc::{log_panic_event, LogReceiver, ReportOrFailure},
+    subprocess_ipc::{LogReceiver, ReportOrFailure, log_panic_event},
     task::{Task, TaskHandle},
     task_scheduler::TaskResult,
 };
-use slog::{debug, error, info, Logger};
+use slog::{Logger, debug, error, info};
 use std::{
     panic::catch_unwind,
     process::Command,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
     },
 };
 use tokio::{runtime::Handle as RtHandle, task::JoinHandle, time::timeout};

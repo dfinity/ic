@@ -12,19 +12,19 @@ use crate::{
 use anyhow::{anyhow, bail};
 use candid::{Decode, Encode};
 use canister_test::{Canister, RemoteTestRuntime, Runtime, Wasm};
-use dfn_protobuf::{protobuf, ProtoBuf};
+use dfn_protobuf::{ProtoBuf, protobuf};
 use futures::{
-    future::{join_all, select_all, try_join_all},
     FutureExt,
+    future::{join_all, select_all, try_join_all},
 };
 use ic_agent::{
+    Agent, AgentError, Identity, Signature,
     agent::{
-        http_transport::reqwest_transport::reqwest, CallResponse, EnvelopeContent, RejectCode,
-        RejectResponse,
+        CallResponse, EnvelopeContent, RejectCode, RejectResponse,
+        http_transport::reqwest_transport::reqwest,
     },
     export::Principal,
     identity::BasicIdentity,
-    Agent, AgentError, Identity, Signature,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_cdk::management_canister::{
@@ -37,11 +37,11 @@ use ic_message::ForwardParams;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
-    create_service_nervous_system::{
-        swap_parameters::NeuronBasketConstructionParameters as GovApiNeuronBasketConstructionParameters,
-        SwapParameters,
-    },
     CreateServiceNervousSystem,
+    create_service_nervous_system::{
+        SwapParameters,
+        swap_parameters::NeuronBasketConstructionParameters as GovApiNeuronBasketConstructionParameters,
+    },
 };
 use ic_nns_test_utils::governance::upgrade_nns_canister_with_args_by_proposal;
 use ic_registry_subnet_type::SubnetType;
@@ -50,19 +50,19 @@ use ic_signer::{GenEcdsaParams, GenSchnorrParams, GenVetkdParams};
 use ic_sns_swap::pb::v1::{NeuronBasketConstructionParameters, Params};
 use ic_test_identity::TEST_IDENTITY_KEYPAIR;
 use ic_types::{
-    messages::{HttpCallContent, HttpQueryContent},
     CanisterId, Cycles, PrincipalId,
+    messages::{HttpCallContent, HttpQueryContent},
 };
 use ic_universal_canister::{call_args, wasm as universal_canister_argument_builder};
 use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
 use icp_ledger::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens,
-    DEFAULT_TRANSFER_FEE,
+    AccountBalanceArgs, AccountIdentifier, DEFAULT_TRANSFER_FEE, Memo, SendArgs, Subaccount,
+    Tokens, tokens_from_proto,
 };
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use on_wire::FromWire;
-use slog::{debug, info, Logger};
+use slog::{Logger, debug, info};
 use std::{
     collections::BTreeMap,
     convert::{TryFrom, TryInto},
@@ -1169,7 +1169,10 @@ pub fn assert_http_submit_fails<Output>(
     match result {
         Ok(val) => panic!("Expected call to fail but it succeeded with {:?}.", val),
         Err(agent_error) => match agent_error {
-            AgentError::UncertifiedReject { reject: RejectResponse{reject_code, ..}, .. } => assert_eq!(
+            AgentError::UncertifiedReject {
+                reject: RejectResponse { reject_code, .. },
+                ..
+            } => assert_eq!(
                 expected_reject_code, reject_code,
                 "Unexpected reject_code: `{:?}`.",
                 reject_code

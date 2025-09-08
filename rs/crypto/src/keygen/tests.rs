@@ -24,8 +24,8 @@ use ic_crypto_test_utils_metrics::assertions::MetricsObservationsAssert;
 use ic_interfaces::crypto::KeyManager;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
-use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
+use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_client_fake::FakeRegistryClient;
@@ -33,10 +33,10 @@ use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
+use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_test_utilities_time::FastForwardTimeSource;
-use ic_types::{crypto::KeyPurpose, RegistryVersion};
+use ic_types::{RegistryVersion, crypto::KeyPurpose};
 use slog::Level;
 use std::sync::Arc;
 
@@ -155,8 +155,8 @@ mod check_keys_with_registry {
         }
 
         #[test]
-        fn should_collect_key_count_metrics_for_node_signing_public_key_mismatch_and_secret_key_missing(
-        ) {
+        fn should_collect_key_count_metrics_for_node_signing_public_key_mismatch_and_secret_key_missing()
+         {
             let setup = Setup::builder()
                 .with_registry_public_keys(valid_current_node_public_keys())
                 .with_csp_idkg_dealing_encryption_public_keys_count_result(Ok(1))
@@ -217,8 +217,8 @@ mod check_keys_with_registry {
         }
 
         #[test]
-        fn should_collect_key_count_metrics_for_idkg_dealing_encryption_public_key_mismatch_secret_key_missing(
-        ) {
+        fn should_collect_key_count_metrics_for_idkg_dealing_encryption_public_key_mismatch_secret_key_missing()
+         {
             let setup = Setup::builder()
                 .with_registry_public_keys(valid_current_node_public_keys())
                 .with_csp_idkg_dealing_encryption_public_keys_count_result(Ok(1))
@@ -503,8 +503,8 @@ mod check_keys_with_registry {
         }
 
         #[test]
-        fn should_observe_metrics_for_dkg_dealing_encryption_public_key_in_registry_but_missing_locally(
-        ) {
+        fn should_observe_metrics_for_dkg_dealing_encryption_public_key_in_registry_but_missing_locally()
+         {
             let setup = Setup::builder()
                 .with_registry_public_keys(valid_current_node_public_keys())
                 .with_csp_idkg_dealing_encryption_public_keys_count_result(Ok(1))
@@ -535,8 +535,8 @@ mod check_keys_with_registry {
         }
 
         #[test]
-        fn should_observe_metrics_for_idkg_dealing_encryption_public_key_in_registry_but_missing_locally(
-        ) {
+        fn should_observe_metrics_for_idkg_dealing_encryption_public_key_in_registry_but_missing_locally()
+         {
             let setup = Setup::builder()
                 .with_registry_public_keys(valid_current_node_public_keys())
                 .with_csp_idkg_dealing_encryption_public_keys_count_result(Ok(1))
@@ -885,8 +885,8 @@ mod check_keys_with_registry {
     }
 
     #[test]
-    fn should_fail_with_public_key_not_found_if_dkg_dealing_encryption_public_key_missing_from_registry(
-    ) {
+    fn should_fail_with_public_key_not_found_if_dkg_dealing_encryption_public_key_missing_from_registry()
+     {
         let registry_public_keys = CurrentNodePublicKeys {
             dkg_dealing_encryption_public_key: None,
             ..valid_current_node_public_keys()
@@ -907,8 +907,8 @@ mod check_keys_with_registry {
     }
 
     #[test]
-    fn should_fail_with_public_key_not_found_if_idkg_dealing_encryption_public_key_missing_from_registry(
-    ) {
+    fn should_fail_with_public_key_not_found_if_idkg_dealing_encryption_public_key_missing_from_registry()
+     {
         let registry_public_keys = CurrentNodePublicKeys {
             idkg_dealing_encryption_public_key: None,
             ..valid_current_node_public_keys()
@@ -934,7 +934,7 @@ mod rotate_idkg_dealing_encryption_keys {
     use ic_crypto_internal_threshold_sig_canister_threshold_sig::EccCurveType;
     use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key_2;
     use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key_3;
-    use ic_test_utilities_in_memory_logger::{assertions::LogEntriesAssert, InMemoryReplicaLogger};
+    use ic_test_utilities_in_memory_logger::{InMemoryReplicaLogger, assertions::LogEntriesAssert};
     use slog::Level;
 
     const TWO_WEEKS: Duration = Duration::from_secs(2 * 7 * 24 * 60 * 60);
@@ -1470,8 +1470,8 @@ mod rotate_idkg_dealing_encryption_keys {
         use super::*;
 
         #[test]
-        fn should_observe_metric_for_latest_local_key_exists_in_registry_if_keys_match_and_registry_key_has_no_timestamp(
-        ) {
+        fn should_observe_metric_for_latest_local_key_exists_in_registry_if_keys_match_and_registry_key_has_no_timestamp()
+         {
             let setup = crate::keygen::tests::Setup::builder()
                 .with_registry_public_keys(valid_current_node_public_keys())
                 .with_csp_current_node_public_keys_result(Ok(valid_current_node_public_keys()))
@@ -1499,8 +1499,8 @@ mod rotate_idkg_dealing_encryption_keys {
         }
 
         #[test]
-        fn should_observe_latest_key_does_not_exist_in_registry_and_return_key_needs_registration_if_keys_do_not_match(
-        ) {
+        fn should_observe_latest_key_does_not_exist_in_registry_and_return_key_needs_registration_if_keys_do_not_match()
+         {
             let mut registry_public_keys = valid_current_node_public_keys();
             if let Some(idkg_dealing_encryption_public_key) =
                 &mut registry_public_keys.idkg_dealing_encryption_public_key
@@ -1689,8 +1689,8 @@ mod rotate_idkg_dealing_encryption_keys {
         }
 
         #[test]
-        fn should_log_warning_if_rotated_local_idkg_public_key_is_too_old_but_not_in_registry_with_mocked_csp(
-        ) {
+        fn should_log_warning_if_rotated_local_idkg_public_key_is_too_old_but_not_in_registry_with_mocked_csp()
+         {
             let in_memory_logger = InMemoryReplicaLogger::new();
             let setup = Setup::builder()
                 .with_registry_public_keys(valid_current_node_public_keys_with_timestamps())

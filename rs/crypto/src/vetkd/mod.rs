@@ -1,8 +1,8 @@
 use super::get_log_id;
-use crate::sign::lazily_calculated_public_key_from_store;
 use crate::sign::BasicSigVerifierInternal;
 use crate::sign::BasicSignerInternal;
 use crate::sign::ThresholdSigDataStore;
+use crate::sign::lazily_calculated_public_key_from_store;
 use crate::{CryptoComponentImpl, LockableThresholdSigDataStore};
 use ic_crypto_internal_bls12_381_vetkd::{
     DerivationContext, EncryptedKeyCombinationError, EncryptedKeyShare,
@@ -13,14 +13,15 @@ use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::api::ThresholdSignatureCspClient;
 use ic_crypto_internal_csp::key_id::KeyIdInstantiationError;
 use ic_crypto_internal_csp::vault::api::VetKdEncryptedKeyShareCreationVaultError;
-use ic_crypto_internal_csp::{key_id::KeyId, vault::api::CspVault, CryptoServiceProvider};
+use ic_crypto_internal_csp::{CryptoServiceProvider, key_id::KeyId, vault::api::CspVault};
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::PublicCoefficients;
-use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
 use ic_interfaces::crypto::VetKdProtocol;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{debug, info, new_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, info, new_logger};
+use ic_types::NodeId;
 use ic_types::crypto::threshold_sig::errors::threshold_sig_data_not_found_error::ThresholdSigDataNotFoundError;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::vetkd::{
@@ -28,7 +29,6 @@ use ic_types::crypto::vetkd::{
     VetKdKeyShareCreationError, VetKdKeyShareVerificationError, VetKdKeyVerificationError,
 };
 use ic_types::crypto::{BasicSig, BasicSigOf};
-use ic_types::NodeId;
 use std::collections::BTreeMap;
 use std::fmt;
 

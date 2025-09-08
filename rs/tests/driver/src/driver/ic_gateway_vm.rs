@@ -1,8 +1,8 @@
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use http::{Method, StatusCode};
 use reqwest::{Client, Request};
 use serde::{Deserialize, Serialize};
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::{
     fs,
     net::{Ipv4Addr, Ipv6Addr},
@@ -19,8 +19,8 @@ use crate::{
         resource::AllocatedVm,
         test_env::{TestEnv, TestEnvAttribute},
         test_env_api::{
-            get_dependency_path, AcquirePlaynetCertificate, CreatePlaynetDnsRecords,
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot, RetrieveIpv4Addr, SshSession,
+            AcquirePlaynetCertificate, CreatePlaynetDnsRecords, HasPublicApiUrl,
+            HasTopologySnapshot, IcNodeSnapshot, RetrieveIpv4Addr, SshSession, get_dependency_path,
         },
         test_setup::InfraProvider,
         universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
@@ -430,7 +430,7 @@ impl HasIcGatewayVm for TestEnv {
 /// Checks if DNS propagation is complete by testing resolution of a random subdomain.
 /// This leverages the wildcard DNS records to verify that the domain is properly propagated.
 async fn await_dns_propagation(logger: &Logger, base_domain: &str) -> Result<()> {
-    use rand::{distributions::Alphanumeric, Rng};
+    use rand::{Rng, distributions::Alphanumeric};
 
     info!(
         logger,

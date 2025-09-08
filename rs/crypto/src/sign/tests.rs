@@ -10,10 +10,10 @@ use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::crypto::{AlgorithmId, KeyPurpose, DOMAIN_IC_REQUEST};
+use ic_types::RegistryVersion;
+use ic_types::crypto::{AlgorithmId, DOMAIN_IC_REQUEST, KeyPurpose};
 use ic_types::messages::MessageId;
 use ic_types::registry::RegistryClientError;
-use ic_types::RegistryVersion;
 use ic_types_test_utils::ids::{NODE_1, SUBNET_27};
 
 pub const KEY_ID_1: [u8; 32] = [0u8; 32];

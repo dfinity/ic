@@ -10,11 +10,11 @@ use std::net::SocketAddr;
 use std::net::{IpAddr, Ipv6Addr};
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use async_trait::async_trait;
 use config_types::DeploymentEnvironment;
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
+use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
 use macaddr::MacAddr6;
 use serde::{Deserialize, Serialize};
 use slog::info;

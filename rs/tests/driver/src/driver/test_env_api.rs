@@ -151,10 +151,10 @@ use crate::{
     retry_with_msg, retry_with_msg_async, retry_with_msg_async_quiet,
     util::{block_on, create_agent},
 };
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use async_trait::async_trait;
 use canister_test::{RemoteTestRuntime, Runtime};
-use ic_agent::{export::Principal, Agent, AgentError};
+use ic_agent::{Agent, AgentError, export::Principal};
 use ic_base_types::PrincipalId;
 use ic_canister_client::{Agent as InternalAgent, Sender};
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
@@ -182,16 +182,16 @@ use ic_registry_local_registry::LocalRegistry;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
+    NodeId, RegistryVersion, ReplicaVersion, SubnetId,
     malicious_behavior::MaliciousBehavior,
     messages::{HttpStatusResponse, ReplicaHealthStatus},
-    NodeId, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
 use itertools::Itertools;
 use prost::Message;
 use serde::{Deserialize, Serialize};
-use slog::{debug, info, warn, Logger};
+use slog::{Logger, debug, info, warn};
 use ssh2::Session;
 use std::{
     cmp::max,
@@ -1546,13 +1546,9 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
             READY_WAIT_TIMEOUT,
             RETRY_BACKOFF,
             || async {
-                self.status_is_healthy_async().await.and_then(|s| {
-                    if !s {
-                        bail!("Not ready!")
-                    } else {
-                        Ok(())
-                    }
-                })
+                self.status_is_healthy_async()
+                    .await
+                    .and_then(|s| if !s { bail!("Not ready!") } else { Ok(()) })
             }
         )
         .await

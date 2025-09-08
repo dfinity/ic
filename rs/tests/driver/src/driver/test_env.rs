@@ -1,12 +1,12 @@
 use anyhow::{Context, Result};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_registry_local_registry::LocalRegistry;
-use ic_sys::fs::{sync_path, write_atomically, Clobber};
+use ic_sys::fs::{Clobber, sync_path, write_atomically};
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
-use slog::{info, o, warn, Drain, Logger};
+use serde::de::DeserializeOwned;
+use slog::{Drain, Logger, info, o, warn};
 use slog_async::OverflowStrategy;
 use std::fs::{self, File};
 use std::os::unix::prelude::AsRawFd;

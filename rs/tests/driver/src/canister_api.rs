@@ -13,9 +13,9 @@ use ic_sns_governance::pb::v1::{
     ManageNeuronResponse as ManageSnsNeuronRes, NeuronId,
 };
 use ic_sns_root::{
-    pb::v1::ListSnsCanistersResponse as ListSnsCanistersRes,
     GetSnsCanistersSummaryRequest as GetSnsCanistersSummaryReq,
     GetSnsCanistersSummaryResponse as GetSnsCanistersSummaryRes,
+    pb::v1::ListSnsCanistersResponse as ListSnsCanistersRes,
 };
 use ic_sns_swap::pb::v1::{
     FinalizeSwapRequest as FinalizeSwapReq, FinalizeSwapResponse,
@@ -46,7 +46,7 @@ use ic_sns_wasm::pb::v1::{
 };
 
 use ic_utils::interfaces::http_request::HttpResponse;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::{
     driver::test_env::{TestEnv, TestEnvAttribute},

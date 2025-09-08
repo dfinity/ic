@@ -3,15 +3,15 @@ use crate::util::{expiry_time, sign_query, sign_update};
 use candid::{CandidType, Deserialize, Principal};
 use canister_test::PrincipalId;
 use ic_agent::identity::{BasicIdentity, Identity};
-use ic_agent::{agent::EnvelopeContent, Agent};
+use ic_agent::{Agent, agent::EnvelopeContent};
 use ic_crypto_tree_hash::Path;
+use ic_types::Time;
 use ic_types::messages::{
     Blob, Certificate, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpQueryResponse,
     HttpReadState, HttpReadStateContent, HttpReadStateResponse, HttpRequestEnvelope, HttpUserQuery,
     MessageId,
 };
-use ic_types::Time;
-use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use ic_utils::interfaces::ManagementCanister;
 use reqwest::{Client, Response};
 use serde_bytes::ByteBuf;

@@ -7,7 +7,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use slog::{info, Logger};
+use slog::{Logger, info};
 use tokio::{runtime::Handle as RtHandle, task::JoinHandle};
 
 use crate::driver::event::TaskId;

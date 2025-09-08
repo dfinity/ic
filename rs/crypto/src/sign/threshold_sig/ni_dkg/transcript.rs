@@ -216,8 +216,8 @@ mod loading {
     use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
     use ic_interfaces::crypto::LoadTranscriptResult;
     use ic_logger::info;
-    use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
     use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
+    use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 
     pub fn load_transcript<C: NiDkgCspClient>(
         self_node_id: &NodeId,
