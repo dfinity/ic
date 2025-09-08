@@ -399,6 +399,22 @@ fn test_scalar_inverse() {
 }
 
 #[test]
+fn test_scalar_batch_inverse() {
+    let rng = &mut reproducible_rng();
+
+    for cnt in 1..30 {
+        let scalars = (0..cnt).map(|_| Scalar::random(rng)).collect::<Vec<_>>();
+
+        assert_eq!(scalars.len(), cnt);
+        if let Some(inv) = Scalar::batch_inverse_vartime(&scalars) {
+            for i in 0..cnt {
+                assert_eq!(&scalars[i] * &inv[i], Scalar::one());
+            }
+        }
+    }
+}
+
+#[test]
 fn test_impl_debugs() {
     assert_eq!(
         format!("{:?}", Scalar::one().neg()),

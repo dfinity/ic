@@ -45,6 +45,22 @@ fn random_sparse_scalar<R: Rng + CryptoRng>(num_bits: u8, rng: &mut R) -> Scalar
     Scalar::random_sparse(rng, num_bits)
 }
 
+fn random_nodes<R: Rng + CryptoRng>(count: usize, rng: &mut R) -> Vec<NodeIndex> {
+    let mut r = vec![];
+
+    let mut idx = 1;
+    while r.len() != count + 3 {
+        r.push(idx);
+        idx += 1;
+    }
+
+    while r.len() != count {
+        r.remove(rng.gen::<usize>() % r.len());
+    }
+
+    r
+}
+
 fn n_random_scalar<R: Rng + CryptoRng>(size: usize, rng: &mut R) -> Vec<Scalar> {
     let mut r = Vec::with_capacity(size);
     for _ in 0..size {
@@ -210,6 +226,20 @@ fn bls12_381_scalar_ops(c: &mut Criterion) {
         b.iter_batched_ref(
             || scalar_muln_instance(32, rng),
             |(lhs, rhs)| scalar_multiexp_naive(lhs, rhs),
+            BatchSize::SmallInput,
+        )
+    });
+}
+
+fn bls12_381_interpolation_ops(c: &mut Criterion) {
+    let mut group = c.benchmark_group("crypto_bls12_381_interpolation");
+
+    let rng = &mut reproducible_rng();
+
+    group.bench_function("Interpolation setup (n=32)", |b| {
+        b.iter_batched_ref(
+            || random_nodes(32, rng),
+            |nodes| LagrangeCoefficients::at_zero(&NodeIndices::from_slice(&nodes).unwrap()),
             BatchSize::SmallInput,
         )
     });
@@ -951,6 +981,7 @@ criterion_group!(
     bls12_381_scalar_ops,
     bls12_381_g1_ops,
     bls12_381_g2_ops,
+    bls12_381_interpolation_ops,
     pairing_ops,
     bls12_381_batch_sig_verification,
     bls12_381_batch_sig_verification_multithreaded,
