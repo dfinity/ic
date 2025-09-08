@@ -546,10 +546,8 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
     }
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub enum IcpConfigFlag {
-    #[default]
-    Mainnet,
     Disabled,
     Enabled,
 }

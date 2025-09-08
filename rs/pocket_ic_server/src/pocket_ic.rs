@@ -581,31 +581,28 @@ impl PocketIcSubnets {
             function_name_length_limits,
             canister_execution_rate_limiting,
         } = icp_config;
-        let mut hypervisor_config = match beta_features.clone().unwrap_or_default() {
-            IcpConfigFlag::Mainnet | IcpConfigFlag::Disabled => {
-                execution_environment::Config::default()
-            }
+        let mut hypervisor_config = match beta_features.clone().unwrap_or(IcpConfigFlag::Disabled) {
+            IcpConfigFlag::Disabled => execution_environment::Config::default(),
             IcpConfigFlag::Enabled => crate::beta_features::hypervisor_config(),
         };
-        match canister_backtrace.clone().unwrap_or_default() {
-            IcpConfigFlag::Mainnet => (),
-            IcpConfigFlag::Enabled => {
+        match canister_backtrace {
+            None => (),
+            Some(IcpConfigFlag::Enabled) => {
                 hypervisor_config
                     .embedders_config
                     .feature_flags
                     .canister_backtrace = FlagStatus::Enabled;
             }
-            IcpConfigFlag::Disabled => {
+            Some(IcpConfigFlag::Disabled) => {
                 hypervisor_config
                     .embedders_config
                     .feature_flags
                     .canister_backtrace = FlagStatus::Disabled;
             }
         };
-        match function_name_length_limits.clone().unwrap_or_default() {
-            IcpConfigFlag::Mainnet => (),
-            IcpConfigFlag::Enabled => (),
-            IcpConfigFlag::Disabled => {
+        match function_name_length_limits {
+            None | Some(IcpConfigFlag::Enabled) => (),
+            Some(IcpConfigFlag::Disabled) => {
                 // the maximum size of a canister WASM is much less than 1GB
                 // and thus the following limits effectively disable all limits
                 hypervisor_config
@@ -616,13 +613,13 @@ impl PocketIcSubnets {
                     .max_sum_exported_function_name_lengths = 1_000_000_000;
             }
         };
-        match canister_execution_rate_limiting.clone().unwrap_or_default() {
-            IcpConfigFlag::Mainnet => (),
-            IcpConfigFlag::Enabled => {
+        match canister_execution_rate_limiting {
+            None => (),
+            Some(IcpConfigFlag::Enabled) => {
                 hypervisor_config.rate_limiting_of_heap_delta = FlagStatus::Enabled;
                 hypervisor_config.rate_limiting_of_instructions = FlagStatus::Enabled;
             }
-            IcpConfigFlag::Disabled => {
+            Some(IcpConfigFlag::Disabled) => {
                 hypervisor_config.rate_limiting_of_heap_delta = FlagStatus::Disabled;
                 hypervisor_config.rate_limiting_of_instructions = FlagStatus::Disabled;
             }
