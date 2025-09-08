@@ -1,3 +1,4 @@
+pub use crate::DefaultEffectiveCanisterIdError;
 use crate::common::rest::{
     ApiResponse, AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest,
     CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
@@ -10,17 +11,15 @@ use crate::common::rest::{
 };
 #[cfg(windows)]
 use crate::wsl_path;
-pub use crate::DefaultEffectiveCanisterIdError;
 use crate::{
-    copy_dir, start_server, IngressStatusResult, PocketIcBuilder, PocketIcState, RejectResponse,
-    StartServerParams, Time,
+    IngressStatusResult, PocketIcBuilder, PocketIcState, RejectResponse, StartServerParams, Time,
+    copy_dir, start_server,
 };
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use candid::{
-    decode_args, encode_args,
+    Principal, decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
-    Principal,
 };
 use ic_certification::{Certificate, Label, LookupResult};
 use ic_management_canister_types::{
@@ -35,10 +34,10 @@ use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::ReadState;
 use ic_transport_types::{ReadStateResponse, SubnetMetrics};
 use reqwest::{StatusCode, Url};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 use slog::Level;
-use std::fs::{read_dir, File};
+use std::fs::{File, read_dir};
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
@@ -1858,12 +1857,14 @@ fn setup_tracing(pid: u32) -> Option<WorkerGuard> {
                 tracing_subscriber::EnvFilter::try_from_env(LOG_DIR_LEVELS_ENV_NAME)
                     .unwrap_or_else(|_| "trace".parse().unwrap());
 
-            let layers = vec![tracing_subscriber::fmt::layer()
-                .with_writer(non_blocking_appender)
-                // disable color escape codes in files
-                .with_ansi(false)
-                .with_filter(log_dir_filter)
-                .boxed()];
+            let layers = vec![
+                tracing_subscriber::fmt::layer()
+                    .with_writer(non_blocking_appender)
+                    // disable color escape codes in files
+                    .with_ansi(false)
+                    .with_filter(log_dir_filter)
+                    .boxed(),
+            ];
             let _ = tracing_subscriber::registry().with(layers).try_init();
             Some(guard)
         }

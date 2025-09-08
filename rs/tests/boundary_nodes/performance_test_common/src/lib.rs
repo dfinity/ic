@@ -22,12 +22,12 @@ use ic_system_test_driver::{
     },
     util::{block_on, create_agent_mapping, spawn_round_robin_workload_engine},
 };
-use rand::rngs::StdRng;
-use rand::seq::SliceRandom;
-use rand::thread_rng;
 use rand::Rng;
 use rand::RngCore;
 use rand::SeedableRng;
+use rand::rngs::StdRng;
+use rand::seq::SliceRandom;
+use rand::thread_rng;
 use slog::info;
 use tokio::runtime::{Builder, Runtime};
 

@@ -13,7 +13,7 @@
 //! We vary the rate of unvalidated ingress coming into the unvalidated pool
 //! between 100/s and 1000/s, and each message has a 100 bytes payload.
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
@@ -26,14 +26,14 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_limits::MAX_INGRESS_TTL;
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_snapshots::CanisterSnapshots, CanisterQueues, ReplicatedState, SystemMetadata,
+    CanisterQueues, ReplicatedState, SystemMetadata, canister_snapshots::CanisterSnapshots,
 };
 use ic_test_utilities::{
     crypto::temp_crypto_component_with_fake_registry,
@@ -47,15 +47,15 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
+    Height, RegistryVersion, SubnetId, Time,
     batch::RawQueryStats,
     ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::{MessageId, SignedIngress},
     time::UNIX_EPOCH,
-    Height, RegistryVersion, SubnetId, Time,
 };
 use pprof::criterion::{Output, PProfProfiler};
-use rand::{seq::SliceRandom, Rng};
+use rand::{Rng, seq::SliceRandom};
 use std::collections::{BTreeMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};

@@ -1,10 +1,10 @@
 //! Utilities for non-interactive Distributed Key Generation (NI-DKG), and
 //! for testing distributed key generation and threshold signing.
 
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
-    ni_dkg_groth20_bls12_381, CspNiDkgDealing, CspNiDkgTranscript,
-};
 use ic_crypto_internal_types::NodeIndex;
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
+    CspNiDkgDealing, CspNiDkgTranscript, ni_dkg_groth20_bls12_381,
+};
 use ic_crypto_temp_crypto::CryptoComponentRng;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_interfaces::crypto::{KeyManager, NiDkgAlgorithm, ThresholdSigner};
@@ -33,9 +33,9 @@ use std::sync::Arc;
 mod initial_config;
 
 pub use initial_config::{
-    dummy_initial_dkg_transcript, dummy_initial_dkg_transcript_with_master_key,
-    initial_dkg_transcript, initial_dkg_transcript_and_master_key, sign_message,
-    InitialNiDkgConfig, SecretKeyBytes,
+    InitialNiDkgConfig, SecretKeyBytes, dummy_initial_dkg_transcript,
+    dummy_initial_dkg_transcript_with_master_key, initial_dkg_transcript,
+    initial_dkg_transcript_and_master_key, sign_message,
 };
 
 pub fn create_transcript<R: CryptoComponentRng>(

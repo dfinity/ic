@@ -63,9 +63,8 @@ use crate::{
     nonblocking::PocketIc as PocketIcAsync,
 };
 use candid::{
-    decode_args, encode_args,
+    Principal, decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
-    Principal,
 };
 use flate2::read::GzDecoder;
 use ic_management_canister_types::{
@@ -84,7 +83,7 @@ use std::{
     net::{IpAddr, SocketAddr},
     path::PathBuf,
     process::{Child, Command},
-    sync::{mpsc::channel, Arc},
+    sync::{Arc, mpsc::channel},
     thread,
     thread::JoinHandle,
     time::{Duration, SystemTime, UNIX_EPOCH},
