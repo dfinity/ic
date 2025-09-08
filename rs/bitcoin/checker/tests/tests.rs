@@ -20,8 +20,7 @@ use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use pocket_ic::{
     common::rest::{
         CanisterHttpHeader, CanisterHttpReject, CanisterHttpReply, CanisterHttpRequest,
-        CanisterHttpResponse, MockCanisterHttpResponse, NonmainnetFeatures,
-        NonmainnetFeaturesConfig, RawMessageId,
+        CanisterHttpResponse, IcpConfig, IcpConfigFlag, MockCanisterHttpResponse, RawMessageId,
     },
     query_candid, PocketIc, PocketIcBuilder, RejectCode, RejectResponse,
 };
@@ -62,15 +61,15 @@ fn btc_checker_wasm() -> Vec<u8> {
 impl Setup {
     fn new(btc_network: BtcNetwork) -> Setup {
         let controller = PrincipalId::new_user_test_id(1).0;
-        // Enable nonmainnet_features to avoid CanisterInstallCodeRateLimited error
+        // Disable rate-limiting to avoid CanisterInstallCodeRateLimited error
         // for canister upgrades
-        let nonmainnet_features = NonmainnetFeatures {
-            canister_execution_rate_limiting: Some(NonmainnetFeaturesConfig::Disabled),
+        let icp_config = IcpConfig {
+            canister_execution_rate_limiting: Some(IcpConfigFlag::Disabled),
             ..Default::default()
         };
         let env = PocketIcBuilder::new()
             .with_application_subnet()
-            .with_nonmainnet_features(nonmainnet_features)
+            .with_icp_config(icp_config)
             .build();
 
         let init_arg = InitArg {

@@ -547,25 +547,25 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
-pub enum NonmainnetFeaturesConfig {
+pub enum IcpConfigFlag {
     #[default]
     Mainnet,
     Disabled,
     Enabled,
 }
 
-/// Specifies nonmainnet features enabled in this instance.
+/// Specifies ICP config of this instance.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
-pub struct NonmainnetFeatures {
+pub struct IcpConfig {
     /// Beta features (disabled on the ICP mainnet).
-    pub beta_features: Option<NonmainnetFeaturesConfig>,
+    pub beta_features: Option<IcpConfigFlag>,
     /// Canister backtraces (enabled on the ICP mainnet).
-    pub canister_backtrace: Option<NonmainnetFeaturesConfig>,
+    pub canister_backtrace: Option<IcpConfigFlag>,
     /// Limits on function name length in canister WASM (enabled on the ICP mainnet).
-    pub function_name_length_limits: Option<NonmainnetFeaturesConfig>,
+    pub function_name_length_limits: Option<IcpConfigFlag>,
     /// Rate-limiting of canister execution (enabled on the ICP mainnet).
     /// Canister execution refers to instructions and memory writes here.
-    pub canister_execution_rate_limiting: Option<NonmainnetFeaturesConfig>,
+    pub canister_execution_rate_limiting: Option<IcpConfigFlag>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
@@ -614,7 +614,7 @@ pub struct InstanceConfig {
     pub subnet_config_set: ExtendedSubnetConfigSet,
     pub http_gateway_config: Option<InstanceHttpGatewayConfig>,
     pub state_dir: Option<PathBuf>,
-    pub nonmainnet_features: Option<NonmainnetFeatures>,
+    pub icp_config: Option<IcpConfig>,
     pub log_level: Option<String>,
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
     pub icp_features: Option<IcpFeatures>,

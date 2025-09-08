@@ -741,17 +741,17 @@ and a `Duration` can be added to a PocketIC time.
 ## Nonmainnet features
 
 To test a new feature that has not (yet) been rolled out to the ICP mainnet,
-use `PocketIcBuilder::with_nonmainnet_features` when creating a new PocketIC instance.
+use `PocketIcBuilder::with_icp_config` when creating a new PocketIC instance.
 
 ```rust
     // We create a PocketIC instance with beta features enabled that are not yet available on the ICP mainnet.
-    let nonmainnet_features = NonmainnetFeatures {
-        beta_features: Some(NonmainnetFeaturesConfig::Enabled),
+    let icp_config = IcpConfig {
+        beta_features: Some(IcpConfigFlag::Enabled),
         ..Default::default()
     };
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
-        .with_nonmainnet_features(nonmainnet_features)
+        .with_icp_config(icp_config)
         .build();
 ```
 

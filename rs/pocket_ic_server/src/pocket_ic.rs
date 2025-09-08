@@ -111,10 +111,10 @@ use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayloadBuilder, Subaccount
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
-    CanisterHttpResponse, ExtendedSubnetConfigSet, IcpFeatures, IcpFeaturesConfig,
-    IncompleteStateConfig, MockCanisterHttpResponse, NonmainnetFeatures, NonmainnetFeaturesConfig,
-    RawAddCycles, RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId,
-    RawSetStableMemory, SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
+    CanisterHttpResponse, ExtendedSubnetConfigSet, IcpConfig, IcpConfigFlag, IcpFeatures,
+    IcpFeaturesConfig, IncompleteStateConfig, MockCanisterHttpResponse, RawAddCycles,
+    RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
+    SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
 };
 use pocket_ic::{copy_dir, ErrorCode, RejectCode, RejectResponse};
 use registry_canister::init::RegistryCanisterInitPayload;
@@ -546,7 +546,7 @@ struct PocketIcSubnets {
     state_dir: Option<PathBuf>,
     routing_table: RoutingTable,
     chain_keys: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
-    nonmainnet_features: NonmainnetFeatures,
+    icp_config: IcpConfig,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
     icp_features: Option<IcpFeatures>,
@@ -566,36 +566,36 @@ impl PocketIcSubnets {
         instruction_config: SubnetInstructionConfig,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         create_at_registry_version: RegistryVersion,
-        nonmainnet_features: &NonmainnetFeatures,
+        icp_config: &IcpConfig,
         log_level: Option<Level>,
         bitcoin_adapter_uds_path: Option<PathBuf>,
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
         let mut subnet_config = SubnetConfig::new(subnet_type);
-        // using `let NonmainnetFeatures { }` with explicit field names
-        // to force an update after adding a new field to `NonmainnetFeatures`
-        let NonmainnetFeatures {
+        // using `let IcpConfig { }` with explicit field names
+        // to force an update after adding a new field to `IcpConfig`
+        let IcpConfig {
             beta_features,
             canister_backtrace,
             function_name_length_limits,
             canister_execution_rate_limiting,
-        } = nonmainnet_features;
+        } = icp_config;
         let mut hypervisor_config = match beta_features.clone().unwrap_or_default() {
-            NonmainnetFeaturesConfig::Mainnet | NonmainnetFeaturesConfig::Disabled => {
+            IcpConfigFlag::Mainnet | IcpConfigFlag::Disabled => {
                 execution_environment::Config::default()
             }
-            NonmainnetFeaturesConfig::Enabled => crate::beta_features::hypervisor_config(),
+            IcpConfigFlag::Enabled => crate::beta_features::hypervisor_config(),
         };
         match canister_backtrace.clone().unwrap_or_default() {
-            NonmainnetFeaturesConfig::Mainnet => (),
-            NonmainnetFeaturesConfig::Enabled => {
+            IcpConfigFlag::Mainnet => (),
+            IcpConfigFlag::Enabled => {
                 hypervisor_config
                     .embedders_config
                     .feature_flags
                     .canister_backtrace = FlagStatus::Enabled;
             }
-            NonmainnetFeaturesConfig::Disabled => {
+            IcpConfigFlag::Disabled => {
                 hypervisor_config
                     .embedders_config
                     .feature_flags
@@ -603,9 +603,9 @@ impl PocketIcSubnets {
             }
         };
         match function_name_length_limits.clone().unwrap_or_default() {
-            NonmainnetFeaturesConfig::Mainnet => (),
-            NonmainnetFeaturesConfig::Enabled => (),
-            NonmainnetFeaturesConfig::Disabled => {
+            IcpConfigFlag::Mainnet => (),
+            IcpConfigFlag::Enabled => (),
+            IcpConfigFlag::Disabled => {
                 // the maximum size of a canister WASM is much less than 1GB
                 // and thus the following limits effectively disable all limits
                 hypervisor_config
@@ -617,12 +617,12 @@ impl PocketIcSubnets {
             }
         };
         match canister_execution_rate_limiting.clone().unwrap_or_default() {
-            NonmainnetFeaturesConfig::Mainnet => (),
-            NonmainnetFeaturesConfig::Enabled => {
+            IcpConfigFlag::Mainnet => (),
+            IcpConfigFlag::Enabled => {
                 hypervisor_config.rate_limiting_of_heap_delta = FlagStatus::Enabled;
                 hypervisor_config.rate_limiting_of_instructions = FlagStatus::Enabled;
             }
-            NonmainnetFeaturesConfig::Disabled => {
+            IcpConfigFlag::Disabled => {
                 hypervisor_config.rate_limiting_of_heap_delta = FlagStatus::Disabled;
                 hypervisor_config.rate_limiting_of_instructions = FlagStatus::Disabled;
             }
@@ -668,7 +668,7 @@ impl PocketIcSubnets {
     fn new(
         runtime: Arc<Runtime>,
         state_dir: Option<PathBuf>,
-        nonmainnet_features: NonmainnetFeatures,
+        icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
@@ -696,7 +696,7 @@ impl PocketIcSubnets {
             registry_data_provider,
             routing_table,
             chain_keys,
-            nonmainnet_features,
+            icp_config,
             log_level,
             bitcoind_addr,
             icp_features,
@@ -799,7 +799,7 @@ impl PocketIcSubnets {
             instruction_config.clone(),
             self.registry_data_provider.clone(),
             create_at_registry_version,
-            &self.nonmainnet_features,
+            &self.icp_config,
             self.log_level,
             bitcoin_adapter_uds_path.clone(),
         );
@@ -2173,7 +2173,7 @@ impl PocketIc {
         seed: u64,
         mut subnet_configs: ExtendedSubnetConfigSet,
         state_dir: Option<PathBuf>,
-        nonmainnet_features: NonmainnetFeatures,
+        icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
@@ -2421,7 +2421,7 @@ impl PocketIc {
         let mut subnets = PocketIcSubnets::new(
             runtime.clone(),
             state_dir,
-            nonmainnet_features,
+            icp_config,
             log_level,
             bitcoind_addr,
             icp_features,
@@ -4416,7 +4416,7 @@ mod tests {
                     ..Default::default()
                 },
                 None,
-                NonmainnetFeatures::default(),
+                IcpConfig::default(),
                 None,
                 None,
                 None,
@@ -4434,7 +4434,7 @@ mod tests {
                     ..Default::default()
                 },
                 None,
-                NonmainnetFeatures::default(),
+                IcpConfig::default(),
                 None,
                 None,
                 None,
