@@ -308,7 +308,7 @@ impl Scalar {
         let mut indices: Vec<u8> = Vec::with_capacity(range as usize);
         indices.extend(0..range);
         for i in 0..amount {
-            let j: u8 = rng.gen_range(i..range);
+            let j: u8 = rng.r#gen_range(i..range);
             indices.swap(i as usize, j as usize);
         }
         indices.truncate(amount as usize);

@@ -98,7 +98,7 @@ fn next_call_tree_id() -> u32 {
 
 /// Generates a random `u32` by sampling `min..=max`.
 fn sample((min, max): (u32, u32)) -> u32 {
-    RNG.with_borrow_mut(|rng| rng.gen_range(min..=max))
+    RNG.with_borrow_mut(|rng| rng.r#gen_range(min..=max))
 }
 
 /// Generates a random payload size for a call.

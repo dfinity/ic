@@ -1470,13 +1470,13 @@ mod tests {
             .collect();
         // First let's insert them all to avoid having to deal with insert v. update
         let mut registry = Registry::new();
-        let gen = RandomByteVectorGenerator {
+        let gn = RandomByteVectorGenerator {
             mean_length: mean_value_length,
         };
         for k in &keys {
             apply_mutations_skip_invariant_checks(
                 &mut registry,
-                vec![insert(k.as_bytes(), gen.sample(&mut rng))],
+                vec![insert(k.as_bytes(), gn.sample(&mut rng))],
             );
         }
         // Now let's do some mutations.
@@ -1488,7 +1488,7 @@ mod tests {
                 &mut registry,
                 vec![update(
                     &keys[key_index_distr.sample(&mut rng)],
-                    gen.sample(&mut rng),
+                    gn.sample(&mut rng),
                 )],
             );
         }

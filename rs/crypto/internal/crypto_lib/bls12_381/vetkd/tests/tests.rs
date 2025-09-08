@@ -92,8 +92,8 @@ fn transport_key_gen_is_stable() {
 }
 
 fn random_derivation_context<R: RngCore + CryptoRng>(rng: &mut R) -> DerivationContext {
-    let canister_id = rng.gen::<[u8; 32]>();
-    let context = rng.gen::<[u8; 32]>();
+    let canister_id = rng.r#gen::<[u8; 32]>();
+    let context = rng.r#gen::<[u8; 32]>();
 
     DerivationContext::new(&canister_id, &context)
 }
@@ -130,7 +130,7 @@ fn encrypted_key_share_creation_is_stable() {
     let master_pk = G2Affine::from(G2Affine::generator() * master_sk);
 
     let context = random_derivation_context(&mut rng);
-    let input = rng.gen::<[u8; 28]>();
+    let input = rng.r#gen::<[u8; 28]>();
 
     const EXPECTED_EKS_VALUE: [&str; NODES] = [
         "811d9cd064cd7c6ab4a448c68b8b5fc8a5f08cd17c78d46469e810e8df3d1f8d3f1431ccf627e2198b72d850eb99b2e2b2dfe2c43ddf86e5403ba474a3a0ba596ddabecfe303eddfd70444057baaae733f92eca70509425f87633ce9d78a28040b559446e22f73d637b04c6eca6ecff71fb3d1a662d86ef22fa6c3ef8157c582e4afdc7a0047d4535c6e01e9c65eae7896dea80dc666ec27eba683e2f08148b623aa697fa6f04740eac098b1ccdbd2b17632b3132750bbd48969b2e0346e6170",
@@ -204,7 +204,7 @@ impl<'a> VetkdTestProtocolExecution<'a> {
         rng: &mut R,
         setup: &'a VetkdTestProtocolSetup,
     ) -> VetkdTestProtocolExecution<'a> {
-        let input = rng.gen::<[u8; 32]>().to_vec();
+        let input = rng.r#gen::<[u8; 32]>().to_vec();
         let context = random_derivation_context(rng);
 
         let derived_pk = DerivedPublicKey::derive_sub_key(&setup.master_pk, &context);
@@ -379,7 +379,7 @@ fn test_protocol_execution() {
 
     // Check that if we introduce incorrect shares then combine_all will fail
 
-    let other_input = rng.gen::<[u8; 24]>();
+    let other_input = rng.r#gen::<[u8; 24]>();
     assert_ne!(proto.input, other_input);
     let node_info_wrong_input = proto.create_encrypted_key_shares(rng, Some(&other_input));
 
@@ -392,7 +392,7 @@ fn test_protocol_execution() {
 
         // Avoid using a duplicate index for this test
         let random_unused_idx = loop {
-            let idx = (rng.gen::<usize>() % node_eks_wrong_input.len()) as NodeIndex;
+            let idx = (rng.r#gen::<usize>() % node_eks_wrong_input.len()) as NodeIndex;
             if !shares.contains_key(&idx) {
                 break idx;
             }

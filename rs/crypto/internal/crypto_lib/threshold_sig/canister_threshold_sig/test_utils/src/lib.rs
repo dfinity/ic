@@ -163,7 +163,7 @@ impl ProtocolSetup {
         let alg = cfg.signature_alg().to_algorithm_id();
 
         let rng = &mut seed.into_rng();
-        let ad = rng.gen::<[u8; 32]>().to_vec();
+        let ad = rng.r#gen::<[u8; 32]>().to_vec();
 
         let mut sk = Vec::with_capacity(receivers);
         let mut pk = Vec::with_capacity(receivers);

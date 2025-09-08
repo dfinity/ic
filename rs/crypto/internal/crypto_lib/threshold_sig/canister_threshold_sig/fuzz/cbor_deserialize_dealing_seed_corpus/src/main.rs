@@ -71,7 +71,7 @@ fn generate_dealing() -> Result<IDkgDealingInternal, IdkgCreateDealingInternalEr
 }
 
 fn chacha_20_rng() -> ChaCha20Rng {
-    ChaCha20Rng::from_seed(thread_rng().gen::<[u8; 32]>())
+    ChaCha20Rng::from_seed(thread_rng().r#gen::<[u8; 32]>())
 }
 
 fn unmasked_times_masked_shares(rng: &mut ChaCha20Rng, curve: EccCurveType) -> SecretShares {

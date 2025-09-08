@@ -18,11 +18,11 @@ fn fix_labels(mut t: T) -> T {
     fn relabel(t: &mut T, id: &mut u64) {
         match t {
             T::Empty | T::Leaf(_) | T::Pruned(_) => (),
-            T::Fork(ref mut lr) => {
+            T::Fork(lr) => {
                 relabel(&mut lr.0, id);
                 relabel(&mut lr.1, id);
             }
-            T::Labeled(ref mut l, ref mut t) => {
+            T::Labeled(l, t) => {
                 prepend(l, *id);
                 *id += 1;
                 relabel(t, id);

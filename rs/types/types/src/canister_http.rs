@@ -380,7 +380,7 @@ impl CanisterHttpRequestContext {
                     return Err(CanisterHttpRequestContextError::NoNodesAvailableForDelegation);
                 }
 
-                let random_index = rng.gen_range(0..node_ids.len());
+                let random_index = rng.r#gen_range(0..node_ids.len());
 
                 let delegated_node_id = node_ids
                     .iter()

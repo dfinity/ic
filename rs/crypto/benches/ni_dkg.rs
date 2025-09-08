@@ -99,7 +99,7 @@ fn bench_verify_dealing<M: Measurement, R: Rng + CryptoRng>(
         bench.iter_batched_ref(
             || {
                 let (dealer_id, dealing) = dealings
-                    .get(rng.gen_range(0..test_case.num_of_dealers))
+                    .get(rng.r#gen_range(0..test_case.num_of_dealers))
                     .unwrap();
 
                 let receiver_id = config.random_receiver_id(rng);

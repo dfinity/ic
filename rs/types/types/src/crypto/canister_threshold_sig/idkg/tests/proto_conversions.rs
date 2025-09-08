@@ -205,11 +205,11 @@ fn mock_sig<T, R: Rng + CryptoRng>(node_id: NodeId, rng: &mut R) -> BasicSignatu
 
 fn dummy_dealing_support<R: Rng + CryptoRng>(rng: &mut R) -> IDkgDealingSupport {
     let transcript_id = IDkgTranscriptId::new(
-        SubnetId::new(PrincipalId::new_subnet_test_id(rng.gen())),
-        rng.gen(),
-        Height::from(rng.gen::<u64>()),
+        SubnetId::new(PrincipalId::new_subnet_test_id(rng.r#gen())),
+        rng.r#gen(),
+        Height::from(rng.r#gen::<u64>()),
     );
-    let dealer_id = NodeId::new(PrincipalId::new_user_test_id(rng.gen()));
+    let dealer_id = NodeId::new(PrincipalId::new_user_test_id(rng.r#gen()));
     let sig_share = mock_sig(dealer_id, rng);
     IDkgDealingSupport {
         transcript_id,
@@ -220,6 +220,6 @@ fn dummy_dealing_support<R: Rng + CryptoRng>(rng: &mut R) -> IDkgDealingSupport 
 }
 
 fn random_bytes<R: Rng + CryptoRng>(range: std::ops::Range<usize>, rng: &mut R) -> Vec<u8> {
-    let len = rng.gen_range(range);
+    let len = rng.r#gen_range(range);
     rng.sample_iter(Standard).take(len).collect()
 }

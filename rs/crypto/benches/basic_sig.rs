@@ -188,7 +188,7 @@ fn temp_crypto<R: Rng + CryptoRng>(
         .with_registry(Arc::clone(&registry) as Arc<_>)
         .with_node_id(node_id)
         .with_keys(NodeKeysToGenerate::only_node_signing_key())
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()));
+        .with_rng(ChaCha20Rng::from_seed(rng.r#gen()));
     if vault_type == VaultType::Remote {
         crypto_builder = crypto_builder.with_remote_vault();
     }

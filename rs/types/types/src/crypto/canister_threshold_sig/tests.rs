@@ -830,9 +830,9 @@ fn should_fail_creating_schnorr_sig_inputs_with_invalid_transcript_origin() {
 
 // A randomized way to get non-repeating IDs.
 fn random_transcript_id<R: Rng + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
-    let id = rng.gen();
-    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
-    let height = Height::from(rng.gen::<u64>());
+    let id = rng.r#gen();
+    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.r#gen::<u64>()));
+    let height = Height::from(rng.r#gen::<u64>());
 
     IDkgTranscriptId::new(subnet, id, height)
 }
@@ -988,6 +988,6 @@ fn message_in_size_range<R: Rng + CryptoRng>(
     range: core::ops::Range<usize>,
     rng: &mut R,
 ) -> Vec<u8> {
-    let size = rng.gen_range(range);
+    let size = rng.r#gen_range(range);
     vec![123; size]
 }

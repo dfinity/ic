@@ -9,7 +9,7 @@ fn test_rng_with_seed(seed: [u8; 32]) -> ChaCha20Rng {
 }
 
 fn test_rng() -> ChaCha20Rng {
-    let seed = rand::thread_rng().gen::<[u8; 32]>();
+    let seed = rand::thread_rng().r#gen::<[u8; 32]>();
     // If a test ever fails, reproduce it using
     // let mut rng = test_rng_with_seed(hex!("SEED"));
     println!("RNG seed: {}", hex::encode(seed));
@@ -162,8 +162,8 @@ fn bitcoin_library_accepts_our_bip341_signatures() {
     for _trial in 0..1024 {
         let sk = PrivateKey::generate_using_rng(&mut rng);
 
-        let msg = rng.gen::<[u8; 32]>();
-        let ttr = rng.gen::<[u8; 32]>();
+        let msg = rng.r#gen::<[u8; 32]>();
+        let ttr = rng.r#gen::<[u8; 32]>();
 
         let sig = sk.sign_message_with_bip341(&msg, &mut rng, &ttr).unwrap();
 
@@ -513,7 +513,7 @@ fn key_derivation_matches_bip32() {
 
     // zeros the high bit to avoid requesting hardened derivation, which we do not support
     let path = (0..255)
-        .map(|_| rng.gen::<u32>() & 0x7FFFFFFF)
+        .map(|_| rng.r#gen::<u32>() & 0x7FFFFFFF)
         .collect::<Vec<u32>>();
 
     let master_key = PrivateKey::generate_using_rng(rng).public_key();
@@ -585,7 +585,7 @@ mod try_recovery_from_digest {
         let rng = &mut test_rng();
         let private_key = PrivateKey::generate_using_rng(rng);
         let public_key = private_key.public_key();
-        let digest = rng.gen::<[u8; 32]>();
+        let digest = rng.r#gen::<[u8; 32]>();
         let signature = private_key.sign_digest_with_ecdsa(&digest);
 
         let recid = public_key

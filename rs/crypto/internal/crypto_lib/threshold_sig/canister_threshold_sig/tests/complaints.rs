@@ -97,7 +97,7 @@ fn should_complaint_system_work() -> CanisterThresholdResult<()> {
                         dealer_index,
                         corruption_target,
                         &pk0,
-                        &rng.gen::<[u8; 32]>(),
+                        &rng.r#gen::<[u8; 32]>(),
                     )
                     .unwrap_err(),
                 CanisterThresholdError::InvalidProof
