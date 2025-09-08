@@ -94,66 +94,66 @@ fn maliciously_propose_blocks(
         Err(_) => None,
     };
 
-    if let Some(rank) = maybe_rank {
-        if !block_maker::already_proposed(pool, height, my_node_id) {
-            // If maliciously_propose_empty_blocks is set, propose only empty blocks.
-            let maybe_proposal = match maliciously_propose_empty_blocks {
-                true => maliciously_propose_empty_block(block_maker, pool, rank, parent),
-                false => block_maker.propose_block(pool, rank, parent),
-            };
+    if let Some(rank) = maybe_rank
+        && &&!block_maker::already_proposed(pool, height, my_node_id)
+    {
+        // If maliciously_propose_empty_blocks is set, propose only empty blocks.
+        let maybe_proposal = match maliciously_propose_empty_blocks {
+            true => maliciously_propose_empty_block(block_maker, pool, rank, parent),
+            false => block_maker.propose_block(pool, rank, parent),
+        };
 
-            if let Some(proposal) = maybe_proposal {
-                let mut proposals = vec![];
+        if let Some(proposal) = maybe_proposal {
+            let mut proposals = vec![];
 
-                match maliciously_equivocation_blockmaker {
-                    false => {}
-                    true => {
-                        let original_block = Block::from(proposal.clone());
-                        // Generate more valid proposals based on this proposal, by slightly
-                        // increasing the time in the context of
-                        // this block.
-                        for i in 1..(number_of_proposals - 1) {
-                            let mut new_block = original_block.clone();
-                            new_block.context.time += Duration::from_nanos(i);
-                            let hashed_block =
-                                hashed::Hashed::new(ic_types::crypto::crypto_hash, new_block);
-                            let metadata = BlockMetadata::from_block(
-                                &hashed_block,
-                                block_maker.replica_config.subnet_id,
-                            );
-                            if let Ok(signature) = block_maker.crypto.sign(
-                                &metadata,
-                                block_maker.replica_config.node_id,
-                                registry_version,
-                            ) {
-                                proposals.push(BlockProposal {
-                                    signature,
-                                    content: hashed_block,
-                                });
-                            }
+            match maliciously_equivocation_blockmaker {
+                false => {}
+                true => {
+                    let original_block = Block::from(proposal.clone());
+                    // Generate more valid proposals based on this proposal, by slightly
+                    // increasing the time in the context of
+                    // this block.
+                    for i in 1..(number_of_proposals - 1) {
+                        let mut new_block = original_block.clone();
+                        new_block.context.time += Duration::from_nanos(i);
+                        let hashed_block =
+                            hashed::Hashed::new(ic_types::crypto::crypto_hash, new_block);
+                        let metadata = BlockMetadata::from_block(
+                            &hashed_block,
+                            block_maker.replica_config.subnet_id,
+                        );
+                        if let Ok(signature) = block_maker.crypto.sign(
+                            &metadata,
+                            block_maker.replica_config.node_id,
+                            registry_version,
+                        ) {
+                            proposals.push(BlockProposal {
+                                signature,
+                                content: hashed_block,
+                            });
                         }
                     }
-                };
-                proposals.push(proposal);
-
-                if maliciously_propose_empty_blocks {
-                    ic_logger::info!(
-                        block_maker.log,
-                        "[MALICIOUS] proposing empty blocks";
-                        malicious_behavior => MaliciousBehaviorLogEntry { malicious_behavior: MaliciousBehavior::ProposeEmptyBlocks as i32}
-                    );
                 }
-                if maliciously_equivocation_blockmaker {
-                    ic_logger::info!(
-                        block_maker.log,
-                        "[MALICIOUS] proposing {} equivocation blocks",
-                        proposals.len();
-                        malicious_behavior => MaliciousBehaviorLogEntry { malicious_behavior: MaliciousBehavior::ProposeEquivocatingBlocks as i32}
-                    );
-                }
+            };
+            proposals.push(proposal);
 
-                return proposals;
+            if maliciously_propose_empty_blocks {
+                ic_logger::info!(
+                    block_maker.log,
+                    "[MALICIOUS] proposing empty blocks";
+                    malicious_behavior => MaliciousBehaviorLogEntry { malicious_behavior: MaliciousBehavior::ProposeEmptyBlocks as i32}
+                );
             }
+            if maliciously_equivocation_blockmaker {
+                ic_logger::info!(
+                    block_maker.log,
+                    "[MALICIOUS] proposing {} equivocation blocks",
+                    proposals.len();
+                    malicious_behavior => MaliciousBehaviorLogEntry { malicious_behavior: MaliciousBehavior::ProposeEquivocatingBlocks as i32}
+                );
+            }
+
+            return proposals;
         }
     }
     Vec::new()
@@ -213,10 +213,10 @@ fn maliciously_notarize_all(notary: &Notary, pool: &PoolReader<'_>) -> Vec<Notar
         .block_proposal()
         .get_by_height_range(range);
     for proposal in proposals {
-        if !notary.is_proposal_already_notarized_by_me(pool, &proposal) {
-            if let Some(share) = notary.notarize_block(pool, &proposal.content) {
-                notarization_shares.push(share);
-            }
+        if !notary.is_proposal_already_notarized_by_me(pool, &proposal)
+            && let Some(share) = notary.notarize_block(pool, &proposal.content)
+        {
+            notarization_shares.push(share);
         }
     }
 
@@ -268,10 +268,10 @@ fn maliciously_finalize_all(
                     && share.content.block == *proposal.content.get_hash()
             });
 
-        if !signed_this_block_before {
-            if let Some(finalization_share) = maliciously_finalize_block(finalizer, pool, block) {
-                finalization_shares.push(finalization_share);
-            }
+        if !signed_this_block_before
+            && let Some(finalization_share) = maliciously_finalize_block(finalizer, pool, block)
+        {
+            finalization_shares.push(finalization_share);
         }
     }
 

@@ -220,7 +220,7 @@ fn canister_post_upgrade() {
     registry_lifecycle::canister_post_upgrade(registry, registry_storage);
 }
 
-unsafe(ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {})
+ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
 
 #[unsafe(export_name = "canister_query get_changes_since")]
 fn get_changes_since() {

@@ -1042,19 +1042,19 @@ impl Validator {
             // validated through a notarization. We skip the block instead
             // of removing it because a higher-rank proposal might still
             // be notarized in the future.
-            if let Some(min_rank) = valid_ranks.get_lowest_rank(proposal.height()) {
-                if proposal.rank() > min_rank {
-                    let id = proposal.get_id();
-                    if self.unvalidated_for_too_long(pool_reader, &id) {
-                        warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
-                              self.log,
-                              "Due a valid proposal with a lower rank {}, /
-                              skipping validating the proposal: {:?} with rank {}",
-                              min_rank.0, id, proposal.rank().0
-                        );
-                    }
-                    continue;
+            if let Some(min_rank) = valid_ranks.get_lowest_rank(proposal.height())
+                && proposal.rank() > min_rank
+            {
+                let id = proposal.get_id();
+                if self.unvalidated_for_too_long(pool_reader, &id) {
+                    warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
+                          self.log,
+                          "Due a valid proposal with a lower rank {}, /
+                          skipping validating the proposal: {:?} with rank {}",
+                          min_rank.0, id, proposal.rank().0
+                    );
                 }
+                continue;
             }
 
             let Ok(parent) = get_notarized_parent(pool_reader, &proposal) else {

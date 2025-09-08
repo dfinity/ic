@@ -12,7 +12,7 @@ struct State {
     i: i32,
 }
 
-unsafe(ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {})
+ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
 
 /// Sets an internal integer variable.
 #[export_name = "canister_update set_integer"]

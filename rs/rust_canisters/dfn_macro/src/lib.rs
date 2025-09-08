@@ -246,7 +246,7 @@ fn dfn_macro(
     };
     let ret: TokenStream = quote_spanned! {
         proc_macro2::Span::call_site() =>
-        #[export_name = #export_name]
+        #[unsafe(export_name = #export_name)]
         fn #async_runner_fn(){
             use dfn_json::json;
             use dfn_core::over_async;

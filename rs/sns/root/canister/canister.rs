@@ -466,15 +466,15 @@ fn reset_timers(_request: ResetTimersRequest) -> ResetTimersResponse {
 
     STATE.with(|state| {
         let state = state.borrow();
-        if let Some(timers) = state.timers {
-            if let Some(last_reset_timestamp_seconds) = timers.last_reset_timestamp_seconds {
-                assert!(
-                    now_seconds().saturating_sub(last_reset_timestamp_seconds)
-                        >= reset_timers_cool_down_interval_seconds,
-                    "Reset has already been called within the past {:?} seconds",
-                    reset_timers_cool_down_interval_seconds
-                );
-            }
+        if let Some(timers) = state.timers
+            && let Some(last_reset_timestamp_seconds) = timers.last_reset_timestamp_seconds
+        {
+            assert!(
+                now_seconds().saturating_sub(last_reset_timestamp_seconds)
+                    >= reset_timers_cool_down_interval_seconds,
+                "Reset has already been called within the past {:?} seconds",
+                reset_timers_cool_down_interval_seconds
+            );
         }
     });
 

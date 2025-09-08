@@ -214,12 +214,7 @@ fn extract_common_constants(pid: &str, trace: &[ResolvedStatePair]) -> Vec<(Stri
 }
 
 fn post_process_trace(trace: &mut Vec<ResolvedStatePair>) {
-    for ResolvedStatePair {
-        ref mut start,
-        ref mut end,
-        ..
-    } in trace
-    {
+    for ResolvedStatePair { start, end, .. } in trace {
         for state in &mut [start, end] {
             state
                 .0
@@ -257,7 +252,9 @@ fn set_java_path() {
     let current_path = std::env::var("PATH").expect("PATH is not set");
     let bazel_java = std::env::var("JAVABASE")
         .expect("JAVABASE is not set; have you added the bazel tools toolchain?");
-    std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin"));
+    unsafe {
+        std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin"));
+    }
 }
 
 /// Returns the path to the TLA module (e.g. `Foo.tla` -> `/home/me/tla/Foo.tla`)

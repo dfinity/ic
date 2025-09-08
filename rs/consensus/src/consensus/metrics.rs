@@ -276,9 +276,9 @@ impl FinalizerMetrics {
                 "Total number of canister http messages delivered as divergences",
             ),
             canister_http_payload_bytes_delivered: metrics_registry.histogram(
-                "canister_http_payload_bytes_delivered", 
+                "canister_http_payload_bytes_delivered",
                 "Total number of bytes in the canister http payload",
-                // This will create 16 buckets starting from 0, 100, 200, 500, 1000  
+                // This will create 16 buckets starting from 0, 100, 200, 500, 1000
                 // up to 5 * 10^6 ~= 5MB
                 decimal_buckets_with_zero(2, 6),
             ),
@@ -534,20 +534,16 @@ impl ValidatorMetrics {
     pub(crate) fn observe_block(&self, pool_reader: &PoolReader, proposal: &BlockProposal) {
         let rank = proposal.rank().0 as usize;
         if rank < RANKS_TO_RECORD.len() {
-            if let Some(start_time) = pool_reader.get_round_start_time(proposal.height()) {
-                if let Some(timestamp) = pool_reader
+            if let Some(start_time) = pool_reader.get_round_start_time(proposal.height())
+                && let Some(timestamp) = pool_reader
                     .pool()
                     .unvalidated()
                     .get_timestamp(&proposal.get_id())
-                {
-                    if timestamp >= start_time {
-                        self.time_to_receive_block
-                            .with_label_values(&[RANKS_TO_RECORD[rank]])
-                            .observe(
-                                (timestamp.saturating_duration_since(start_time)).as_secs_f64(),
-                            );
-                    }
-                }
+                && timestamp >= start_time
+            {
+                self.time_to_receive_block
+                    .with_label_values(&[RANKS_TO_RECORD[rank]])
+                    .observe((timestamp.saturating_duration_since(start_time)).as_secs_f64());
             }
         }
     }

@@ -583,25 +583,25 @@ pub fn icrc1_rosetta_block_to_rosetta_core_operations(
         rosetta_block.get_fee_paid()?,
     )?;
 
-    if let Some(fee_collector) = rosetta_block.get_fee_collector() {
-        if let Some(_fee_payed) = rosetta_block.get_fee_paid()? {
-            operations.push(rosetta_core::objects::Operation::new(
-                operations.len().try_into().unwrap(),
-                OperationType::FeeCollector.to_string(),
-                Some(fee_collector.into()),
-                Some(rosetta_core::objects::Amount::new(
-                    BigInt::from(
-                        rosetta_block
-                            .get_fee_paid()?
-                            .context("Fee payed needs to be populated for FeeCollector operation")?
-                            .0,
-                    ),
-                    currency.clone(),
-                )),
-                None,
-                None,
-            ));
-        }
+    if let Some(fee_collector) = rosetta_block.get_fee_collector()
+        && let Some(_fee_payed) = rosetta_block.get_fee_paid()?
+    {
+        operations.push(rosetta_core::objects::Operation::new(
+            operations.len().try_into().unwrap(),
+            OperationType::FeeCollector.to_string(),
+            Some(fee_collector.into()),
+            Some(rosetta_core::objects::Amount::new(
+                BigInt::from(
+                    rosetta_block
+                        .get_fee_paid()?
+                        .context("Fee payed needs to be populated for FeeCollector operation")?
+                        .0,
+                ),
+                currency.clone(),
+            )),
+            None,
+            None,
+        ));
     }
     Ok(operations)
 }

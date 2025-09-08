@@ -48,14 +48,12 @@ pub async fn wait_for_status_healthy(addr: &SocketAddr) -> Result<(), &'static s
             let replica_status = serde_cbor::from_slice::<CBOR>(&response)
                 .expect("Status endpoint is a valid CBOR.");
 
-            if let CBOR::Map(map) = replica_status {
-                if let Some(CBOR::Text(status)) =
+            if let CBOR::Map(map) = replica_status
+                && let Some(CBOR::Text(status)) =
                     map.get(&CBOR::Text("replica_health_status".to_string()))
-                {
-                    if status == "healthy" {
-                        return;
-                    }
-                }
+                && status == "healthy"
+            {
+                return;
             }
 
             tokio::time::sleep(Duration::from_millis(250)).await;

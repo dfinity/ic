@@ -1028,15 +1028,13 @@ fn do_set_icp_xdr_conversion_rate(
     }
 
     mutate_state(safe_state, |state| {
-        if let Some(current_conversion_rate) = state.icp_xdr_conversion_rate.as_ref() {
-            if proposed_conversion_rate.timestamp_seconds
+        if let Some(current_conversion_rate) = state.icp_xdr_conversion_rate.as_ref()
+            && proposed_conversion_rate.timestamp_seconds
                 <= current_conversion_rate.timestamp_seconds
-            {
-                return Err(
-                    "Proposed conversion rate must have greater timestamp than current one"
-                        .to_string(),
-                );
-            }
+        {
+            return Err(
+                "Proposed conversion rate must have greater timestamp than current one".to_string(),
+            );
         }
 
         state.icp_xdr_conversion_rate = Some(proposed_conversion_rate.clone());
@@ -2092,11 +2090,10 @@ async fn refund_icp(
             x.checked_sub(&extra_fee)
                 .ok_or("Underflow in subtracting the extra fee from the amount")
         })
+        && to_refund > Tokens::ZERO
     {
-        if to_refund > Tokens::ZERO {
-            burned = extra_fee;
-            refunded = to_refund;
-        }
+        burned = extra_fee;
+        refunded = to_refund;
     }
 
     if refunded > Tokens::ZERO {

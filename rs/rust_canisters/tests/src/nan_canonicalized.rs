@@ -57,7 +57,7 @@ fn remainder(f1: &Floats, f2: &Floats) -> Floats {
 /// jump from one implementation to another.
 /// Additionally this checks that the NaNs the rust compiler is spitting out
 /// play nicely with the canonicalization
-unsafe(#[query])
+#[query]
 fn nans_are_canonicalized(_: ()) -> Result<(), String> {
     let nan: Floats = vec![(f32::NAN, f64::NAN)];
 

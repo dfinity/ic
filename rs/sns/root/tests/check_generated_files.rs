@@ -29,7 +29,7 @@ fn check_generated_files() {
     match compare(&r#gen, out.path()) {
         Ok(_) => (),
         Err(CompareError::PathsDiffer { .. }) => {
-            panic!("Directory {} is outdated, run `{}`", gen.display(), cmd)
+            panic!("Directory {} is outdated, run `{}`", r#gen.display(), cmd)
         }
         Err(CompareError::ContentDiffers { path }) => {
             panic!("Source file {} is outdated, run `{}`", path.display(), cmd)

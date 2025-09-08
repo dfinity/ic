@@ -156,12 +156,12 @@ impl UpdateExchangeRateGuard {
             return Err(UpdateExchangeRateError::UpdateAlreadyInProgress);
         }
 
-        if let UpdateExchangeRateState::GetRateAt(next_attempt_seconds) = current_call_state {
-            if current_minute_in_seconds < next_attempt_seconds {
-                return Err(UpdateExchangeRateError::NotReadyToGetRate(
-                    next_attempt_seconds,
-                ));
-            }
+        if let UpdateExchangeRateState::GetRateAt(next_attempt_seconds) = current_call_state
+            && current_minute_in_seconds < next_attempt_seconds
+        {
+            return Err(UpdateExchangeRateError::NotReadyToGetRate(
+                next_attempt_seconds,
+            ));
         }
 
         mutate_state(safe_state, |state| {

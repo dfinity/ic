@@ -327,12 +327,11 @@ impl ExecutionTest {
 
     pub fn canister_wasm_execution_mode(&self, canister_id: CanisterId) -> WasmExecutionMode {
         // In case of any error or missing state, default to Wasm32.
-        if let Some(state) = self.state.as_ref() {
-            if let Some(canister) = state.canister_state(&canister_id).as_ref() {
-                if let Some(execution_state) = canister.execution_state.as_ref() {
-                    return execution_state.wasm_execution_mode;
-                }
-            }
+        if let Some(state) = self.state.as_ref()
+            && let Some(canister) = state.canister_state(&canister_id).as_ref()
+            && let Some(execution_state) = canister.execution_state.as_ref()
+        {
+            return execution_state.wasm_execution_mode;
         }
         WasmExecutionMode::Wasm32
     }
@@ -1370,14 +1369,14 @@ impl ExecutionTest {
         self.subnet_available_memory = round_limits.subnet_available_memory;
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.state = Some(new_state);
-        if let Some(canister_id) = maybe_canister_id {
-            if let Some(instructions_used) = instructions_used {
-                self.update_execution_stats(
-                    canister_id,
-                    self.install_code_instruction_limits.message(),
-                    instructions_used,
-                );
-            }
+        if let Some(canister_id) = maybe_canister_id
+            && let Some(instructions_used) = instructions_used
+        {
+            self.update_execution_stats(
+                canister_id,
+                self.install_code_instruction_limits.message(),
+                instructions_used,
+            );
         }
         true
     }
