@@ -225,8 +225,9 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                         SshUser::Backup,
                         /*keep_downloaded_state=*/ false,
                         /*additional_excludes=*/
-                        vec![CUPS_DIR, IC_STATE_DIR], // exclude the state to only copy the
-                                                      // consensus pool
+                        vec![CUPS_DIR, IC_STATE_DIR, "orchestrator"], // exclude folders to
+                                                                      // download only the
+                                                                      // consensus pool
                     )))
                 } else {
                     Err(RecoveryError::StepSkipped)
