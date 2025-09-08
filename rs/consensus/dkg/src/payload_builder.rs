@@ -1,34 +1,33 @@
 use crate::{
-    MAX_REMOTE_DKG_ATTEMPTS, MAX_REMOTE_DKGS_PER_INTERVAL, REMOTE_DKG_REPEATED_FAILURE_ERROR,
     utils::{self, tags_iter, vetkd_key_ids_for_subnet},
+    MAX_REMOTE_DKGS_PER_INTERVAL, MAX_REMOTE_DKG_ATTEMPTS, REMOTE_DKG_REPEATED_FAILURE_ERROR,
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{ReplicaLogger, error, warn};
+use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::registry::subnet::v1::{
-    CatchUpPackageContents, chain_key_initialization::Initialization,
+    chain_key_initialization::Initialization, CatchUpPackageContents,
 };
 use ic_registry_client_helpers::{
     crypto::initial_ni_dkg_transcript_from_registry_record, subnet::SubnetRegistry,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    Height, NodeId, NumberOfNodes, RegistryVersion, SubnetId,
     batch::ValidationContext,
     consensus::{
-        Block,
         dkg::{DkgDataPayload, DkgPayload, DkgPayloadCreationError, DkgSummary},
-        get_faults_tolerated,
+        get_faults_tolerated, Block,
     },
     crypto::threshold_sig::ni_dkg::{
+        config::{errors::NiDkgConfigValidationError, NiDkgConfig, NiDkgConfigData},
+        errors::create_transcript_error::DkgCreateTranscriptError,
         NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         NiDkgTranscript,
-        config::{NiDkgConfig, NiDkgConfigData, errors::NiDkgConfigValidationError},
-        errors::create_transcript_error::DkgCreateTranscriptError,
     },
     messages::CallbackId,
+    Height, NodeId, NumberOfNodes, RegistryVersion, SubnetId,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -407,16 +406,16 @@ fn compute_remote_dkg_data(
         let target = config_group
             .first()
             .map(|config| config.dkg_id().target_subnet);
-        if let Some(NiDkgTargetSubnet::Remote(id)) = target {
-            if failed_target_ids.contains(&id) {
-                for config in config_group.iter() {
-                    new_transcripts.insert(
-                        config.dkg_id().clone(),
-                        Err(REMOTE_DKG_REPEATED_FAILURE_ERROR.to_string()),
-                    );
-                }
-                return false;
+        if let Some(NiDkgTargetSubnet::Remote(id)) = target
+            && failed_target_ids.contains(&id)
+        {
+            for config in config_group.iter() {
+                new_transcripts.insert(
+                    config.dkg_id().clone(),
+                    Err(REMOTE_DKG_REPEATED_FAILURE_ERROR.to_string()),
+                );
             }
+            return false;
         }
         true
     });
@@ -996,20 +995,20 @@ mod tests {
 
     use super::{super::test_utils::complement_state_manager_with_setup_initial_dkg_request, *};
     use ic_consensus_mocks::{
-        Dependencies, dependencies_with_subnet_params,
-        dependencies_with_subnet_records_with_raw_state_manager,
+        dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
+        Dependencies,
     };
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
     use ic_registry_client_helpers::subnet::SubnetRegistry;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
+    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        RegistryVersion,
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         time::UNIX_EPOCH,
+        RegistryVersion,
     };
     use std::collections::BTreeSet;
 
@@ -1432,11 +1431,9 @@ mod tests {
             assert!(summary.next_transcript(&NiDkgTag::HighThreshold).is_none());
             assert_eq!(vet_key_ids.len(), 1);
             for vet_key_id in &vet_key_ids {
-                assert!(
-                    summary
-                        .next_transcript(&NiDkgTag::HighThresholdForKey(vet_key_id.clone()))
-                        .is_none()
-                );
+                assert!(summary
+                    .next_transcript(&NiDkgTag::HighThresholdForKey(vet_key_id.clone()))
+                    .is_none());
             }
 
             for tag in tags_iter(&vet_key_ids) {

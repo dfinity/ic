@@ -9,13 +9,12 @@ use ic_interfaces::{
     validation::ValidationError,
 };
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{ReplicaLogger, error, warn};
+use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CanisterId, Height, NodeId, NumBytes, QueryStatsEpoch,
     batch::{LocalQueryStats, QueryStats, QueryStatsPayload, ValidationContext},
-    epoch_from_height,
+    epoch_from_height, CanisterId, Height, NodeId, NumBytes, QueryStatsEpoch,
 };
 use std::{
     collections::BTreeSet,
@@ -421,10 +420,10 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_state::ReplicatedStateBuilder;
     use ic_types::{
-        RegistryVersion,
         batch::{CanisterQueryStats, QueryStats, RawQueryStats},
         crypto::{CryptoHash, CryptoHashOf},
         time::UNIX_EPOCH,
+        RegistryVersion,
     };
     use ic_types_test_utils::ids::{canister_test_id, node_test_id};
     use std::{ops::Range, time::Duration};
@@ -741,7 +740,7 @@ mod tests {
                 Height::new(1),
                 &proposal_context,
                 &payload,
-                &[past_payload.clone()],
+                std::slice::from_ref(&past_payload),
             );
 
             match validation_result {
@@ -792,11 +791,9 @@ mod tests {
             proposal_context.validation_context,
         );
 
-        assert!(
-            payload_builder
-                .validate_payload_impl(height, proposal_context, &payload, past_payloads)
-                .is_ok()
-        );
+        assert!(payload_builder
+            .validate_payload_impl(height, proposal_context, &payload, past_payloads)
+            .is_ok());
 
         (
             QueryStatsPayload::deserialize(&payload).unwrap().unwrap(),
@@ -898,7 +895,7 @@ mod tests {
         past_payload.serialize_with_limit(MAX_PAYLOAD_SIZE)
     }
 
-    fn as_past_payload(payload: &[u8], height: u64) -> PastPayload {
+    fn as_past_payload(payload: &[u8], height: u64) -> PastPayload<'_> {
         PastPayload {
             height: Height::from(height),
             time: UNIX_EPOCH + Duration::from_nanos(10 * height),

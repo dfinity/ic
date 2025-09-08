@@ -1,25 +1,25 @@
 //! A pool of incoming `CertifiedStreamSlices` used by `XNetPayloadBuilderImpl`
 //! to build `XNetPayloads` without the need for I/O on the critical path.
 
-use crate::{ExpectedIndices, max_message_index};
+use crate::{max_message_index, ExpectedIndices};
 use header::Header;
 use ic_canonical_state::LabelLike;
 use ic_crypto_tree_hash::{
-    Label, LabeledTree, TreeHashError, Witness, first_sub_witness, flat_map::FlatMap,
-    prune_witness, sub_witness,
+    first_sub_witness, flat_map::FlatMap, prune_witness, sub_witness, Label, LabeledTree,
+    TreeHashError, Witness,
 };
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, DecodeStreamError};
-use ic_logger::{ReplicaLogger, info};
+use ic_logger::{info, ReplicaLogger};
 use ic_metrics::{
-    MetricsRegistry,
     buckets::{decimal_buckets, decimal_buckets_with_zero},
+    MetricsRegistry,
 };
 use ic_protobuf::messaging::xnet::v1;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_types::{
-    CountBytes, RegistryVersion, SubnetId,
     consensus::certification::Certification,
     xnet::{CertifiedStreamSlice, StreamIndex},
+    CountBytes, RegistryVersion, SubnetId,
 };
 use messages::Messages;
 use prometheus::{Histogram, IntCounterVec, IntGauge};
@@ -119,8 +119,8 @@ use InvalidSlice::*;
 mod header {
     use super::{CertifiedSliceError, InvalidSlice};
     use ic_canonical_state::encoding;
-    use ic_types::CountBytes;
     use ic_types::xnet::{StreamHeader, StreamIndex};
+    use ic_types::CountBytes;
     use std::convert::TryFrom;
 
     /// Wrapper around serialized header plus transient metadata.
@@ -539,12 +539,11 @@ impl Payload {
             }
 
             (messages, None) => {
-                if let Some(messages) = messages {
-                    if other.header.begin() > messages.begin()
-                        || other.header.end() < messages.end()
-                    {
-                        return Err(CertifiedSliceError::InvalidAppend(IndexMismatch));
-                    }
+                if let Some(messages) = messages
+                    && (other.header.begin() > messages.begin()
+                        || other.header.end() < messages.end())
+                {
+                    return Err(CertifiedSliceError::InvalidAppend(IndexMismatch));
                 }
                 // `other` has no messages: take its `header`, keep the rest.
                 self.header = other.header;
@@ -639,10 +638,10 @@ impl Payload {
                 InvalidSlice::ExtraContents,
             ));
         }
-        if let Some(messages) = messages.as_ref() {
-            if messages.is_empty() {
-                return Err(CertifiedSliceError::InvalidPayload(EmptyMessages));
-            }
+        if let Some(messages) = messages.as_ref()
+            && messages.is_empty()
+        {
+            return Err(CertifiedSliceError::InvalidPayload(EmptyMessages));
         }
 
         Ok((subnet_id, header, messages))
@@ -667,10 +666,10 @@ impl Payload {
         if let Some(header) = header {
             stream.push((Label::from(LABEL_HEADER), LabeledTree::Leaf(header)));
         }
-        if let Some(messages) = messages {
-            if !messages.is_empty() {
-                stream.push((Label::from(LABEL_MESSAGES), LabeledTree::SubTree(messages)));
-            }
+        if let Some(messages) = messages
+            && !messages.is_empty()
+        {
+            stream.push((Label::from(LABEL_MESSAGES), LabeledTree::SubTree(messages)));
         }
         let stream = FlatMap::from_key_values(stream);
         let streams = FlatMap::from_key_values(vec![(subnet_id, LabeledTree::SubTree(stream))]);
@@ -747,10 +746,10 @@ impl TryFrom<&[u8]> for Payload {
         let header = Header::try_from(header)?;
 
         let messages = messages.map(Messages::new).transpose()?;
-        if let Some(messages) = messages.as_ref() {
-            if header.begin() > messages.begin() || messages.end() > header.end() {
-                return Err(CertifiedSliceError::InvalidPayload(InvalidBounds));
-            }
+        if let Some(messages) = messages.as_ref()
+            && (header.begin() > messages.begin() || messages.end() > header.end())
+        {
+            return Err(CertifiedSliceError::InvalidPayload(InvalidBounds));
         }
 
         Ok(Self {
@@ -1202,11 +1201,11 @@ impl CertifiedSlicePool {
                 }
             };
 
-            if let Some(actual_begin) = slice.payload.messages_begin() {
-                if actual_begin != begin.message_index {
-                    // Slice's `messages.begin` is past the requested stream index, bail out.
-                    return Err(CertifiedSliceError::TakeBeforeSliceBegin);
-                }
+            if let Some(actual_begin) = slice.payload.messages_begin()
+                && actual_begin != begin.message_index
+            {
+                // Slice's `messages.begin` is past the requested stream index, bail out.
+                return Err(CertifiedSliceError::TakeBeforeSliceBegin);
             }
         }
 

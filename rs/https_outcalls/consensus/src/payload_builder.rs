@@ -23,26 +23,26 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{ReplicaLogger, warn};
+use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
     batch::{
-        CanisterHttpPayload, ConsensusResponse, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext,
+        CanisterHttpPayload, ConsensusResponse, ValidationContext, MAX_CANISTER_HTTP_PAYLOAD_SIZE,
     },
     canister_http::{
-        CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
         CanisterHttpRequestContext, CanisterHttpResponse, CanisterHttpResponseContent,
         CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseProof,
-        CanisterHttpResponseWithConsensus, Replication,
+        CanisterHttpResponseWithConsensus, Replication, CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
+        CANISTER_HTTP_TIMEOUT_INTERVAL,
     },
     consensus::Committee,
     crypto::Signed,
     messages::{CallbackId, Payload, RejectContext},
     registry::RegistryClientError,
     signature::BasicSignature,
+    CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
@@ -179,19 +179,17 @@ impl CanisterHttpPayloadBuilderImpl {
         };
 
         // Get the consensus registry version
-        let consensus_registry_version = match registry_version_at_height(
-            self.cache.as_ref(),
-            height,
-        ) {
-            Some(registry_version) => registry_version,
-            None => {
-                warn!(
+        let consensus_registry_version =
+            match registry_version_at_height(self.cache.as_ref(), height) {
+                Some(registry_version) => registry_version,
+                None => {
+                    warn!(
                     self.log,
                     "Failed to obtain consensus registry version in canister http payload builder"
                 );
-                return CanisterHttpPayload::default();
-            }
-        };
+                    return CanisterHttpPayload::default();
+                }
+            };
 
         let faults_tolerated = match self.membership.get_canister_http_committee(height) {
             Ok(members) => ic_types::consensus::get_faults_tolerated(members.len()),
@@ -387,7 +385,7 @@ impl CanisterHttpPayloadBuilderImpl {
             .set(unique_includable_responses);
 
         // Now that we have the candidates, aggregate the signatures and construct the payload
-        let payload = CanisterHttpPayload {
+        CanisterHttpPayload {
             responses: candidates
                 .drain(..)
                 .filter_map(|(metadata, shares, content)| {
@@ -396,9 +394,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 .collect(),
             timeouts,
             divergence_responses,
-        };
-
-        payload
+        }
     }
 
     fn validate_canister_http_payload_impl(
@@ -502,12 +498,11 @@ impl CanisterHttpPayloadBuilderImpl {
                 replication: Replication::NonReplicated(_),
                 ..
             }) = http_contexts.get(callback_id)
+                && !non_replicated_ids.insert(callback_id)
             {
-                if !non_replicated_ids.insert(callback_id) {
-                    return invalid_artifact(InvalidCanisterHttpPayloadReason::DuplicateResponse(
-                        *callback_id,
-                    ));
-                }
+                return invalid_artifact(InvalidCanisterHttpPayloadReason::DuplicateResponse(
+                    *callback_id,
+                ));
             }
         }
 

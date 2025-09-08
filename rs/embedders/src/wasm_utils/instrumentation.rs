@@ -116,9 +116,9 @@ use super::{InstrumentationOutput, Segments, SystemApiFunc};
 use ic_config::embedders::MeteringType;
 use ic_replicated_state::NumWasmPages;
 use ic_sys::PAGE_SIZE;
+use ic_types::methods::WasmMethod;
 use ic_types::NumBytes;
 use ic_types::NumInstructions;
-use ic_types::methods::WasmMethod;
 use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
 
 use crate::wasmtime_embedder::{
@@ -143,10 +143,10 @@ pub enum WasmMemoryType {
 
 pub(crate) fn main_memory_type(module: &Module<'_>) -> WasmMemoryType {
     let mut mem_type = WasmMemoryType::Wasm32;
-    if let Some(mem) = module.memories.first() {
-        if mem.memory64 {
-            mem_type = WasmMemoryType::Wasm64;
-        }
+    if let Some(mem) = module.memories.first()
+        && mem.memory64
+    {
+        mem_type = WasmMemoryType::Wasm64;
     }
     mem_type
 }
@@ -727,10 +727,10 @@ fn max_memory_size_in_wasm_pages(memory_size: NumBytes) -> u64 {
 
 fn add_func_type(module: &mut Module, ty: FuncType) -> u32 {
     for (idx, existing_subtype) in module.types.iter().enumerate() {
-        if let CompositeInnerType::Func(existing_ty) = &existing_subtype.composite_type.inner {
-            if *existing_ty == ty {
-                return idx as u32;
-            }
+        if let CompositeInnerType::Func(existing_ty) = &existing_subtype.composite_type.inner
+            && *existing_ty == ty
+        {
+            return idx as u32;
         }
     }
     module.types.push(SubType {

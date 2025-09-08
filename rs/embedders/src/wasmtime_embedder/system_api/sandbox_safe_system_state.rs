@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    ApiType, CERTIFIED_DATA_MAX_LENGTH, cycles_balance_change::CyclesBalanceChange, routing,
-    routing::ResolveDestinationError,
+    cycles_balance_change::CyclesBalanceChange, routing, routing::ResolveDestinationError, ApiType,
+    CERTIFIED_DATA_MAX_LENGTH,
 };
 use ic_base_types::{CanisterId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
 use ic_cycles_account_manager::{
@@ -11,28 +11,28 @@ use ic_cycles_account_manager::{
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_logger::{ReplicaLogger, info};
+use ic_logger::{info, ReplicaLogger};
 use ic_management_canister_types_private::{
-    CanisterStatusType, CreateCanisterArgs, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
+    CanisterStatusType, CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, RenameCanisterArgs, UninstallCodeArgs,
-    UpdateSettingsArgs,
+    UpdateSettingsArgs, IC_00,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::{
-    CyclesUseCase, is_low_wasm_memory_hook_condition_satisfied,
+    is_low_wasm_memory_hook_condition_satisfied, CyclesUseCase,
 };
 use ic_replicated_state::{
+    canister_state::execution_state::WasmExecutionMode, canister_state::DEFAULT_QUEUE_CAPACITY,
     CallOrigin, ExecutionTask, MessageMemoryUsage, NetworkTopology, SystemState,
-    canister_state::DEFAULT_QUEUE_CAPACITY, canister_state::execution_state::WasmExecutionMode,
 };
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
-    CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
-    messages::{CallContextId, CallbackId, NO_DEADLINE, RejectContext, Request, RequestMetadata},
+    messages::{CallContextId, CallbackId, RejectContext, Request, RequestMetadata, NO_DEADLINE},
     methods::Callback,
     time::CoarseTime,
+    CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
 };
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
@@ -347,26 +347,26 @@ impl SystemStateModifications {
 
         // Verify we don't accept more cycles than are available from call
         // context and update the call context balance.
-        if let Some((context_id, call_context_balance_taken)) = self.call_context_balance_taken {
-            if call_context_balance_taken != Cycles::zero() {
-                let own_canister_id = system_state.canister_id;
+        if let Some((context_id, call_context_balance_taken)) = self.call_context_balance_taken
+            && call_context_balance_taken != Cycles::zero()
+        {
+            let own_canister_id = system_state.canister_id;
 
-                let call_context = system_state
-                    .withdraw_cycles(context_id, call_context_balance_taken)
-                    .map_err(Self::error)?;
-                if (call_context_balance_taken).get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
-                    match call_context.call_origin() {
-                        CallOrigin::CanisterUpdate(origin_canister_id, _, _)
-                        | CallOrigin::CanisterQuery(origin_canister_id, _) => info!(
-                            logger,
-                            "Canister {} accepted {} cycles from canister {}.",
-                            own_canister_id,
-                            call_context_balance_taken,
-                            origin_canister_id
-                        ),
-                        _ => (),
-                    };
-                }
+            let call_context = system_state
+                .withdraw_cycles(context_id, call_context_balance_taken)
+                .map_err(Self::error)?;
+            if (call_context_balance_taken).get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
+                match call_context.call_origin() {
+                    CallOrigin::CanisterUpdate(origin_canister_id, _, _)
+                    | CallOrigin::CanisterQuery(origin_canister_id, _) => info!(
+                        logger,
+                        "Canister {} accepted {} cycles from canister {}.",
+                        own_canister_id,
+                        call_context_balance_taken,
+                        origin_canister_id
+                    ),
+                    _ => (),
+                };
             }
         }
 
@@ -1016,11 +1016,10 @@ impl SandboxSafeSystemState {
         // available only forApiType::{Update, ReplicatedQuery, ReplyCallback,
         // RejectCallBack} and all of them have CallContextId, hence
         // SystemStateModifications::call_context_balance_taken will never be `None`.
-        debug_assert!(
-            self.system_state_modifications
-                .call_context_balance_taken
-                .is_some()
-        );
+        debug_assert!(self
+            .system_state_modifications
+            .call_context_balance_taken
+            .is_some());
 
         let balance_taken = &mut self
             .system_state_modifications
@@ -1338,14 +1337,14 @@ impl SandboxSafeSystemState {
                     self.cost_schedule,
                 );
 
-                if let Some(limit) = self.reserved_balance_limit {
-                    if self.reserved_balance() + cycles_to_reserve > limit {
-                        return Err(HypervisorError::ReservedCyclesLimitExceededInMemoryGrow {
-                            bytes: allocated_bytes,
-                            requested: self.reserved_balance() + cycles_to_reserve,
-                            limit,
-                        });
-                    }
+                if let Some(limit) = self.reserved_balance_limit
+                    && self.reserved_balance() + cycles_to_reserve > limit
+                {
+                    return Err(HypervisorError::ReservedCyclesLimitExceededInMemoryGrow {
+                        bytes: allocated_bytes,
+                        requested: self.reserved_balance() + cycles_to_reserve,
+                        limit,
+                    });
                 }
 
                 let old_balance = self.cycles_balance();
@@ -1511,15 +1510,15 @@ mod tests {
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        NetworkTopology, SystemState, canister_state::system_state::CyclesUseCase,
+        canister_state::system_state::CyclesUseCase, NetworkTopology, SystemState,
     };
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
+        batch::CanisterCyclesCostSchedule,
+        messages::{RequestMetadata, NO_DEADLINE},
+        time::CoarseTime,
         CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
         Time,
-        batch::CanisterCyclesCostSchedule,
-        messages::{NO_DEADLINE, RequestMetadata},
-        time::CoarseTime,
     };
 
     use super::{CanisterStatusView, SandboxSafeSystemState, SystemStateModifications};

@@ -193,13 +193,13 @@ impl ThresholdSigDataStoreImpl {
                 .high_threshold_for_key_dkg_id_insertion_order
                 .get_mut(master_public_key_id),
         };
-        if let Some(insertion_order) = dkg_id_insertion_order {
-            if insertion_order.len() > self.max_num_of_dkg_ids_per_tag_or_key {
-                let oldest_dkg_id = insertion_order
-                    .pop_front()
-                    .expect("dkg store unexpectedly empty");
-                self.store.remove(&oldest_dkg_id);
-            }
+        if let Some(insertion_order) = dkg_id_insertion_order
+            && insertion_order.len() > self.max_num_of_dkg_ids_per_tag_or_key
+        {
+            let oldest_dkg_id = insertion_order
+                .pop_front()
+                .expect("dkg store unexpectedly empty");
+            self.store.remove(&oldest_dkg_id);
         }
     }
 

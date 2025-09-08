@@ -11,7 +11,7 @@ mod tests;
 mod xnet_client_tests;
 
 use crate::certified_slice_pool::{
-    CertifiedSliceError, CertifiedSlicePool, CertifiedSliceResult, certified_slice_count_bytes,
+    certified_slice_count_bytes, CertifiedSliceError, CertifiedSlicePool, CertifiedSliceResult,
 };
 use async_trait::async_trait;
 use http_body_util::BodyExt;
@@ -29,14 +29,14 @@ use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
-use ic_logger::{ReplicaLogger, error, info, log, warn};
-use ic_metrics::MetricsRegistry;
+use ic_logger::{error, info, log, warn, ReplicaLogger};
 use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
+use ic_metrics::MetricsRegistry;
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetListRegistry};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{ReplicatedState, replicated_state::ReplicatedStateMessageRouting};
+use ic_replicated_state::{replicated_state::ReplicatedStateMessageRouting, ReplicatedState};
 use ic_types::batch::{ValidationContext, XNetPayload};
 use ic_types::registry::RegistryClientError;
 use ic_types::state_manager::StateManagerError;
@@ -46,7 +46,7 @@ use ic_xnet_hyper::TlsConnector;
 use ic_xnet_uri::XNetAuthority;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 pub use proximity::{GenRangeFn, ProximityMap};
-use rand::{Rng, rngs::StdRng, thread_rng};
+use rand::{rngs::StdRng, thread_rng, Rng};
 use std::collections::{BTreeMap, VecDeque};
 use std::net::SocketAddr;
 use std::ops::DerefMut;
@@ -728,21 +728,21 @@ impl XNetPayloadBuilderImpl {
             }
 
             // Ensure the message limit (dictated e.g. by the backlog size) is respected.
-            if let Some(msg_limit) = get_msg_limit(subnet_id, state) {
-                if messages.len() > msg_limit {
-                    log!(
-                        self.log,
-                        log_level,
-                        "Stream from {}: slice length ({}) above limit ({})",
-                        subnet_id,
-                        messages.len(),
-                        msg_limit
-                    );
-                    return SliceValidationResult::Invalid(format!(
-                        "Stream from {}: slice length above limit",
-                        subnet_id
-                    ));
-                }
+            if let Some(msg_limit) = get_msg_limit(subnet_id, state)
+                && messages.len() > msg_limit
+            {
+                log!(
+                    self.log,
+                    log_level,
+                    "Stream from {}: slice length ({}) above limit ({})",
+                    subnet_id,
+                    messages.len(),
+                    msg_limit
+                );
+                return SliceValidationResult::Invalid(format!(
+                    "Stream from {}: slice length above limit",
+                    subnet_id
+                ));
             }
 
             // Ensure the signal limit is respected.
@@ -1061,18 +1061,14 @@ impl XNetEndpointResolver {
         log: ReplicaLogger,
     ) -> Self {
         let newest_registry = registry.get_latest_version();
-        let node_operator_id = get_node_operator_id(
-            &node_id,
-            registry.as_ref(),
-            &newest_registry,
-            &log,
-        )
-        .unwrap_or_else(|| {
-            panic!(
+        let node_operator_id =
+            get_node_operator_id(&node_id, registry.as_ref(), &newest_registry, &log)
+                .unwrap_or_else(|| {
+                    panic!(
                 "Could not read own node's ({:?}) node record from registry of version ({:?}).",
                 node_id, newest_registry
             )
-        });
+                });
         Self {
             registry,
             subnet_id,
@@ -1829,9 +1825,9 @@ impl XNetClientError {
 /// Internal functionality, exposed for use by integration tests.
 pub mod testing {
     pub use super::{
-        EndpointLocator, GenRangeFn, LABEL_STATUS, METRIC_BUILD_PAYLOAD_DURATION,
-        METRIC_SLICE_MESSAGES, METRIC_SLICE_PAYLOAD_SIZE, POOL_SLICE_BYTE_SIZE_MAX, PoolRefillTask,
-        ProximityMap, RefillTaskHandle, STATUS_SUCCESS, XNetClient, XNetClientError,
-        XNetEndpointResolver, XNetPayloadBuilderMetrics,
+        EndpointLocator, GenRangeFn, PoolRefillTask, ProximityMap, RefillTaskHandle, XNetClient,
+        XNetClientError, XNetEndpointResolver, XNetPayloadBuilderMetrics, LABEL_STATUS,
+        METRIC_BUILD_PAYLOAD_DURATION, METRIC_SLICE_MESSAGES, METRIC_SLICE_PAYLOAD_SIZE,
+        POOL_SLICE_BYTE_SIZE_MAX, STATUS_SUCCESS,
     };
 }
