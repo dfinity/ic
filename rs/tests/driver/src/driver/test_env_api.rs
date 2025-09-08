@@ -1759,17 +1759,7 @@ pub struct NnsCustomizations {
 
 impl NnsCustomizations {
     pub fn with_balance(mut self, account_identifier: AccountIdentifier, amount: Tokens) -> Self {
-        if self.ledger_balances.is_none() {
-            self.ledger_balances = Some(HashMap::new());
-        }
-        let ledger_balances = self
-            .ledger_balances
-            .as_mut()
-            // The previous statement ensures that this is infallible.
-            .unwrap();
-
-        ledger_balances.insert(account_identifier, amount);
-
+        self.ledger_balances.get_or_insert_default().insert(account_identifier, amount);
         self
     }
 }
