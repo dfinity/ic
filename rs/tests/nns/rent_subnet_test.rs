@@ -194,7 +194,8 @@ pub fn test(env: TestEnv) {
 
         execute_subnet_rental_request(&topology_snapshot, *SUBNET_USER_PRINCIPAL_ID).await;
 
-        let topology_snapshot = execute_fulfill_subnet_rental_request(&topology_snapshot, &env.logger()).await;
+        let topology_snapshot =
+            execute_fulfill_subnet_rental_request(&topology_snapshot, &env.logger()).await;
         let new_subnet_id = assert_new_subnet(&topology_snapshot, &original_subnets).await;
 
         assert_rented_subnet_works(new_subnet_id, &topology_snapshot).await;
@@ -246,7 +247,10 @@ async fn execute_fulfill_subnet_rental_request(
         replica_version_id,
     )
     .await;
-    info!(logger, "FulfillSubnetRentalRequest executed: {:?}", proposal_id);
+    info!(
+        logger,
+        "FulfillSubnetRentalRequest executed: {:?}", proposal_id
+    );
 
     // Wait for us to find out about the latest Registry data.
     let min_registry_version = previous_registry_version.get() + 1;
