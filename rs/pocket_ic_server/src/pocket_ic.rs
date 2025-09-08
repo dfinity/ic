@@ -197,12 +197,7 @@ fn default_timestamp(icp_features: &Option<IcpFeatures>) -> SystemTime {
     // To set the ICP/XDR conversion rate, the PocketIC time (in seconds) must be strictly larger than the default timestamp in CMC state.
     let cycles_minting_feature = icp_features
         .as_ref()
-        .map(|icp_features| {
-            matches!(
-                icp_features.cycles_minting,
-                Some(IcpFeaturesConfig::DefaultConfig)
-            )
-        })
+        .map(|icp_features| icp_features.cycles_minting.is_some())
         .unwrap_or_default();
     if cycles_minting_feature {
         UNIX_EPOCH + Duration::from_secs(DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS + 1)
@@ -1131,12 +1126,7 @@ impl PocketIcSubnets {
             let cycles_ledger_canister_id = if self
                 .icp_features
                 .as_ref()
-                .map(|icp_features| {
-                    matches!(
-                        icp_features.cycles_token,
-                        Some(IcpFeaturesConfig::DefaultConfig)
-                    )
-                })
+                .map(|icp_features| icp_features.cycles_token.is_some())
                 .unwrap_or_default()
             {
                 Some(CYCLES_LEDGER_CANISTER_ID)
