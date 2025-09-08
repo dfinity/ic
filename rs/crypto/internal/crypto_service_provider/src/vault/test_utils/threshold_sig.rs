@@ -56,16 +56,16 @@ pub fn test_threshold_signatures(
         // But:
         // * Signatures cannot be generated with an incorrect AlgorithmId:
         for algorithm_id in AlgorithmId::iter() {
-            if algorithm_id != AlgorithmId::ThresBls12_381 {
-                if let Some((csp_vault, key_id)) = signers.first() {
-                    assert!(
-                        csp_vault
-                            .threshold_sign(algorithm_id, message.to_vec(), *key_id)
-                            .is_err(),
-                        "Managed to threshold sign with algorithm ID {:?}",
-                        algorithm_id
-                    )
-                }
+            if algorithm_id != AlgorithmId::ThresBls12_381
+                && let Some((csp_vault, key_id)) = signers.first()
+            {
+                assert!(
+                    csp_vault
+                        .threshold_sign(algorithm_id, message.to_vec(), *key_id)
+                        .is_err(),
+                    "Managed to threshold sign with algorithm ID {:?}",
+                    algorithm_id
+                )
             }
         }
         //

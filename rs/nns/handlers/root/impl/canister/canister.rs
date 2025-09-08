@@ -68,7 +68,7 @@ fn new_management_canister_client() -> impl ManagementCanisterClient {
 // canister_init and canister_post_upgrade are needed here
 // to ensure that printer hook is set up, otherwise error
 // messages are quite obscure.
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn canister_init() {
     println!("{}canister_init", LOG_PREFIX);
 }

@@ -373,14 +373,14 @@ where
             })?;
 
         // Validate that coefficient_intervals starts from 0.
-        if let Some(first_interval) = intervals.first() {
-            if first_interval.from_direct_participation_icp_e8s != 0 {
-                return Err(Self::Error::LinearScalingCoefficientVecValidationError(
-                    LinearScalingCoefficientVecValidationError::IrregularLinearScalingCoefficients(
-                        first_interval.clone(),
-                    ),
-                ));
-            }
+        if let Some(first_interval) = intervals.first()
+            && first_interval.from_direct_participation_icp_e8s != 0
+        {
+            return Err(Self::Error::LinearScalingCoefficientVecValidationError(
+                LinearScalingCoefficientVecValidationError::IrregularLinearScalingCoefficients(
+                    first_interval.clone(),
+                ),
+            ));
         }
 
         let matching_function_serialized_representation = value
@@ -600,14 +600,14 @@ where
             })?;
 
         // Validate that coefficient_intervals starts from 0.
-        if let Some(first_interval) = intervals.first() {
-            if first_interval.from_direct_participation_icp_e8s != 0 {
-                return Err(Self::Error::LinearScalingCoefficientVecValidationError(
-                    LinearScalingCoefficientVecValidationError::IrregularLinearScalingCoefficients(
-                        first_interval.clone(),
-                    ),
-                ));
-            }
+        if let Some(first_interval) = intervals.first()
+            && first_interval.from_direct_participation_icp_e8s != 0
+        {
+            return Err(Self::Error::LinearScalingCoefficientVecValidationError(
+                LinearScalingCoefficientVecValidationError::IrregularLinearScalingCoefficients(
+                    first_interval.clone(),
+                ),
+            ));
         }
 
         let matching_function_serialized_representation = value

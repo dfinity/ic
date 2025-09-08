@@ -6,7 +6,7 @@ use tla_instrumentation::checker::{PredicateDescription, check_tla_code_link};
 fn set_java_path() {
     let current_path = std::env::var("PATH").unwrap();
     let bazel_java = std::env::var("JAVABASE").unwrap();
-    std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin"));
+    unsafe { std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin")) };
 }
 
 /// Returns the path to the TLA module (e.g. `Foo.tla` -> `/home/me/tla/Foo.tla`).

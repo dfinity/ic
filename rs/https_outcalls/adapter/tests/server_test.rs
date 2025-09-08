@@ -89,8 +89,10 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         // SSL_CERT_FILE is respected by OpenSSL and Rustls.
         // Rustlts: https://github.com/rustls/rustls/issues/540
         // OpenSSL: https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_set_default_verify_paths.html
-        env::set_var("SSL_CERT_FILE", dir.path().join("cert.crt"));
-        env::remove_var("NIX_SSL_CERT_FILE");
+        unsafe {
+            env::set_var("SSL_CERT_FILE", dir.path().join("cert.crt"));
+            env::remove_var("NIX_SSL_CERT_FILE");
+        }
         dir
     }
 

@@ -269,7 +269,7 @@ fn get_block(block_height: BlockIndex) -> BlockRes {
     BlockRes(block.map(Ok))
 }
 
-#[export_name = "canister_query get_block_pb"]
+#[unsafe(export_name = "canister_query get_block_pb")]
 fn get_block_() {
     in_query_executor_context(|| {
         let arg: BlockIndex =
@@ -279,7 +279,7 @@ fn get_block_() {
     })
 }
 
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn main() {
     in_executor_context(|| {
         let bytes = arg_data_raw();
@@ -290,12 +290,12 @@ fn main() {
     })
 }
 
-#[export_name = "canister_update remaining_capacity"]
+#[unsafe(export_name = "canister_update remaining_capacity")]
 fn remaining_capacity_() {
     in_executor_context(|| reply((remaining_capacity(),)))
 }
 
-#[export_name = "canister_update append_blocks"]
+#[unsafe(export_name = "canister_update append_blocks")]
 fn append_blocks_() {
     in_executor_context(|| {
         let blocks = Decode!(&arg_data_raw(), Vec<EncodedBlock>)
@@ -311,7 +311,7 @@ fn append_blocks_() {
 /// remainder of the archive. For example, if the node contains blocks with
 /// heights [100, 199] then iter_blocks(0, 1) will return the block with height
 /// 100.
-#[export_name = "canister_query iter_blocks_pb"]
+#[unsafe(export_name = "canister_query iter_blocks_pb")]
 fn iter_blocks_() {
     in_query_executor_context(|| {
         let IterBlocksArgs { start, length } =
@@ -334,7 +334,7 @@ fn iter_blocks_() {
 
 /// Get multiple Blocks by BlockIndex and length. If the query is outside the
 /// range stored in the Node the result is an error.
-#[export_name = "canister_query get_blocks_pb"]
+#[unsafe(export_name = "canister_query get_blocks_pb")]
 fn get_blocks_() {
     in_query_executor_context(|| {
         let GetBlocksArgs { start, length } =
@@ -380,7 +380,7 @@ fn get_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> GetBlocksResult
 }
 /// Get multiple Blocks by BlockIndex and length. If the query is outside the
 /// range stored in the Node the result is an error.
-#[export_name = "canister_query get_blocks"]
+#[unsafe(export_name = "canister_query get_blocks")]
 fn get_blocks_candid_() {
     in_query_executor_context(|| {
         let args =
@@ -515,7 +515,7 @@ fn read_encoded_blocks(start: u64, length: usize) -> Result<Vec<EncodedBlock>, G
 
 /// Get multiple Blocks by BlockIndex and length. If the query is outside the
 /// range stored in the Node the result is an error.
-#[export_name = "canister_query get_encoded_blocks"]
+#[unsafe(export_name = "canister_query get_encoded_blocks")]
 fn get_encoded_blocks_blocks_() {
     in_query_executor_context(|| {
         let args = Decode!(&arg_data_raw(), GetBlocksArgs)
@@ -524,7 +524,7 @@ fn get_encoded_blocks_blocks_() {
     })
 }
 
-#[export_name = "canister_query __get_candid_interface_tmp_hack"]
+#[unsafe(export_name = "canister_query __get_candid_interface_tmp_hack")]
 fn get_canidid_interface() {
     in_query_executor_context(|| {
         reply((include_str!(env!("LEDGER_ARCHIVE_DID_PATH")),));

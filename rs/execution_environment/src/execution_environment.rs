@@ -625,20 +625,20 @@ impl ExecutionEnvironment {
         let method = Ic00Method::from_str(msg.method_name());
         let payload = msg.method_payload();
 
-        if let Ok(permissions) = method.map(Ic00MethodPermissions::new) {
-            if let Err(err) = permissions.verify(&msg, &state) {
-                let refund = msg.take_cycles();
-                let state = self.finish_subnet_message_execution(
-                    state,
-                    msg,
-                    ExecuteSubnetMessageResult::Finished {
-                        response: Err(err),
-                        refund,
-                    },
-                    since,
-                );
-                return (state, Some(NumInstructions::from(0)));
-            }
+        if let Ok(permissions) = method.map(Ic00MethodPermissions::new)
+            && let Err(err) = permissions.verify(&msg, &state)
+        {
+            let refund = msg.take_cycles();
+            let state = self.finish_subnet_message_execution(
+                state,
+                msg,
+                ExecuteSubnetMessageResult::Finished {
+                    response: Err(err),
+                    refund,
+                },
+                since,
+            );
+            return (state, Some(NumInstructions::from(0)));
         }
 
         let result: ExecuteSubnetMessageResult = match method {
@@ -846,33 +846,33 @@ impl ExecutionEnvironment {
                         // high that topping up the canister is not feasible.
                         if let CanisterCall::Ingress(ingress) = &msg {
                             let cost_schedule = state.get_own_cost_schedule();
-                            if let Ok(canister) = get_canister_mut(canister_id, &mut state) {
-                                if is_delayed_ingress_induction_cost(&ingress.method_payload) {
-                                    let bytes_to_charge =
-                                        ingress.method_payload.len() + ingress.method_name.len();
-                                    let induction_cost = self
-                                        .cycles_account_manager
-                                        .ingress_induction_cost_from_bytes(
-                                            NumBytes::from(bytes_to_charge as u64),
-                                            registry_settings.subnet_size,
-                                            cost_schedule,
-                                        );
-                                    let memory_usage = canister.memory_usage();
-                                    let message_memory_usage = canister.message_memory_usage();
-                                    // This call may fail with `CanisterOutOfCyclesError`,
-                                    // which is not actionable at this point.
-                                    let _ignore_error = self.cycles_account_manager.consume_cycles(
-                                        &mut canister.system_state,
-                                        memory_usage,
-                                        message_memory_usage,
-                                        canister.scheduler_state.compute_allocation,
-                                        induction_cost,
+                            if let Ok(canister) = get_canister_mut(canister_id, &mut state)
+                                && is_delayed_ingress_induction_cost(&ingress.method_payload)
+                            {
+                                let bytes_to_charge =
+                                    ingress.method_payload.len() + ingress.method_name.len();
+                                let induction_cost = self
+                                    .cycles_account_manager
+                                    .ingress_induction_cost_from_bytes(
+                                        NumBytes::from(bytes_to_charge as u64),
                                         registry_settings.subnet_size,
                                         cost_schedule,
-                                        CyclesUseCase::IngressInduction,
-                                        false, // we ignore the error anyway => no need to reveal top up balance
                                     );
-                                }
+                                let memory_usage = canister.memory_usage();
+                                let message_memory_usage = canister.message_memory_usage();
+                                // This call may fail with `CanisterOutOfCyclesError`,
+                                // which is not actionable at this point.
+                                let _ignore_error = self.cycles_account_manager.consume_cycles(
+                                    &mut canister.system_state,
+                                    memory_usage,
+                                    message_memory_usage,
+                                    canister.scheduler_state.compute_allocation,
+                                    induction_cost,
+                                    registry_settings.subnet_size,
+                                    cost_schedule,
+                                    CyclesUseCase::IngressInduction,
+                                    false, // we ignore the error anyway => no need to reveal top up balance
+                                );
                             }
                         }
                         info!(
@@ -1857,10 +1857,10 @@ impl ExecutionEnvironment {
 
                 let res = match response {
                     Ok((res, canister_id)) => {
-                        if let Some(canister_id) = canister_id {
-                            if let Some(canister_state) = state.canister_state_mut(canister_id) {
-                                canister_state.update_on_low_wasm_memory_hook_condition();
-                            }
+                        if let Some(canister_id) = canister_id
+                            && let Some(canister_state) = state.canister_state_mut(canister_id)
+                        {
+                            canister_state.update_on_low_wasm_memory_hook_condition();
                         }
                         Ok(res)
                     }
@@ -4423,10 +4423,10 @@ pub fn execute_canister(
         },
         None => {
             let message = canister.pop_input().unwrap();
-            if let CanisterMessage::Request(req) = &message {
-                if req.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES {
-                    exec_env.metrics.oversize_intra_subnet_messages.inc();
-                }
+            if let CanisterMessage::Request(req) = &message
+                && req.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
+            {
+                exec_env.metrics.oversize_intra_subnet_messages.inc();
             }
             (CanisterMessageOrTask::Message(message), None)
         }

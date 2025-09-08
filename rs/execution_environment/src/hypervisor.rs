@@ -432,20 +432,20 @@ impl Hypervisor {
                 _ => {}
             }
         }
-        if let WasmExecutionResult::Finished(_, result, _) = &mut execution_result {
-            if let Err(err) = &mut result.wasm_result {
-                let can_view = match &system_state.log_visibility {
-                    LogVisibilityV2::Controllers => {
-                        caller.is_some_and(|c| system_state.controllers.contains(&c))
-                    }
-                    LogVisibilityV2::Public => true,
-                    LogVisibilityV2::AllowedViewers(allowed) => {
-                        caller.is_some_and(|c| allowed.get().contains(&c))
-                    }
-                };
-                if !can_view {
-                    remove_backtrace(err);
+        if let WasmExecutionResult::Finished(_, result, _) = &mut execution_result
+            && let Err(err) = &mut result.wasm_result
+        {
+            let can_view = match &system_state.log_visibility {
+                LogVisibilityV2::Controllers => {
+                    caller.is_some_and(|c| system_state.controllers.contains(&c))
                 }
+                LogVisibilityV2::Public => true,
+                LogVisibilityV2::AllowedViewers(allowed) => {
+                    caller.is_some_and(|c| allowed.get().contains(&c))
+                }
+            };
+            if !can_view {
+                remove_backtrace(err);
             }
         }
 

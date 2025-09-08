@@ -506,68 +506,68 @@ fn eval(ops_bytes: OpsBytes) {
         }
     }
 }
-#[export_name = "canister_update update"]
+#[unsafe(export_name = "canister_update update")]
 fn update() {
     setup();
     eval(&api::arg_data());
 }
 
-#[export_name = "canister_query query"]
+#[unsafe(export_name = "canister_query query")]
 fn query() {
     setup();
     eval(&api::arg_data());
 }
 
-#[export_name = "canister_composite_query composite_query"]
+#[unsafe(export_name = "canister_composite_query composite_query")]
 fn composite_query() {
     setup();
     eval(&api::arg_data());
 }
 
-#[export_name = "canister_query transform"]
+#[unsafe(export_name = "canister_query transform")]
 fn transform() {
     setup();
     eval(&get_transform());
 }
 
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn init() {
     setup();
     eval(&api::arg_data());
 }
 
-#[export_name = "canister_pre_upgrade"]
+#[unsafe(export_name = "canister_pre_upgrade")]
 fn pre_upgrade() {
     setup();
     eval(&get_pre_upgrade());
 }
 
 #[cfg(feature = "heartbeat")]
-#[export_name = "canister_heartbeat"]
+#[unsafe(export_name = "canister_heartbeat")]
 fn heartbeat() {
     setup();
     eval(&get_heartbeat());
 }
 
-#[export_name = "canister_global_timer"]
+#[unsafe(export_name = "canister_global_timer")]
 fn global_timer() {
     setup();
     eval(&get_global_timer_method());
 }
 
-#[export_name = "canister_on_low_wasm_memory"]
+#[unsafe(export_name = "canister_on_low_wasm_memory")]
 fn on_low_wasm_memory() {
     setup();
     eval(&get_on_low_wasm_memory_method());
 }
 
-#[export_name = "canister_inspect_message"]
+#[unsafe(export_name = "canister_inspect_message")]
 fn inspect_message() {
     setup();
     eval(&get_inspect_message());
 }
 
-#[export_name = "canister_post_upgrade"]
+#[unsafe(export_name = "canister_post_upgrade")]
 fn post_upgrade() {
     setup();
     eval(&api::arg_data());

@@ -374,16 +374,16 @@ impl<'a> QueryContext<'a> {
         query_kind: NonReplicatedQueryKind,
         measurement_scope: &MeasurementScope,
     ) -> (CanisterState, Result<Option<WasmResult>, UserError>) {
-        if let WasmMethod::CompositeQuery(_) = &method_name {
-            if self.composite_queries == FlagStatus::Disabled {
-                return (
-                    canister,
-                    Err(UserError::new(
-                        ErrorCode::CanisterContractViolation,
-                        "Composite queries are not enabled yet",
-                    )),
-                );
-            }
+        if let WasmMethod::CompositeQuery(_) = &method_name
+            && self.composite_queries == FlagStatus::Disabled
+        {
+            return (
+                canister,
+                Err(UserError::new(
+                    ErrorCode::CanisterContractViolation,
+                    "Composite queries are not enabled yet",
+                )),
+            );
         }
         let cost_schedule = self.get_cost_schedule();
         let subnet_size = self
@@ -504,10 +504,10 @@ impl<'a> QueryContext<'a> {
 
     /// Accumulates transient errors from payload.
     pub fn accumulate_transient_errors_from_payload(&mut self, payload: &Payload) {
-        if let Payload::Reject(context) = payload {
-            if context.code() == RejectCode::SysTransient {
-                self.transient_errors += 1;
-            }
+        if let Payload::Reject(context) = payload
+            && context.code() == RejectCode::SysTransient
+        {
+            self.transient_errors += 1;
         }
     }
 

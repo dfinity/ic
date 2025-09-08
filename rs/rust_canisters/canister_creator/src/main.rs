@@ -62,7 +62,7 @@ async fn create_canisters_in_batch(
 }
 
 /// Creates the given number of canisters.
-#[update]
+unsafe(#[update])
 async fn create_canisters(number_of_canisters: usize) {
     let mut remaining_canisters = number_of_canisters;
     while remaining_canisters > 0 {
@@ -80,7 +80,7 @@ async fn create_canisters(number_of_canisters: usize) {
 /// Installs provided wasm module with arguments on all the created canisters.
 /// This is useful for testing many management canister calls within one round,
 /// while regular universal_canister does only one management canister call per round.
-#[update]
+unsafe(#[update])
 async fn install_code(wasm_module: Vec<u8>, arg: Vec<u8>) {
     let canister_ids = read_canister_ids();
     let mut remaining_canisters = canister_ids.len();
@@ -108,5 +108,5 @@ async fn install_code(wasm_module: Vec<u8>, arg: Vec<u8>) {
     }
 }
 
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn main() {}

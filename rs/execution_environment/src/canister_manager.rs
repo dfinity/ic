@@ -315,13 +315,13 @@ impl CanisterManager {
             Some(new_memory_allocation) => {
                 // The new memory allocation cannot be lower than the current canister
                 // memory usage.
-                if let MemoryAllocation::Reserved(reserved_bytes) = new_memory_allocation {
-                    if reserved_bytes < canister_memory_usage {
-                        return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
-                            memory_allocation_given: new_memory_allocation,
-                            memory_usage_needed: canister_memory_usage,
-                        });
-                    }
+                if let MemoryAllocation::Reserved(reserved_bytes) = new_memory_allocation
+                    && reserved_bytes < canister_memory_usage
+                {
+                    return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
+                        memory_allocation_given: new_memory_allocation,
+                        memory_usage_needed: canister_memory_usage,
+                    });
                 }
                 new_memory_allocation.allocated_bytes(canister_memory_usage)
             }
@@ -363,15 +363,15 @@ impl CanisterManager {
         }
 
         let controllers = settings.controllers();
-        if let Some(controllers) = &controllers {
-            if controllers.len() > self.config.max_controllers {
-                return Err(CanisterManagerError::InvalidSettings {
-                    message: format!(
-                        "Invalid settings: 'controllers' length exceeds maximum size allowed of {}.",
-                        self.config.max_controllers
-                    ),
-                });
-            }
+        if let Some(controllers) = &controllers
+            && controllers.len() > self.config.max_controllers
+        {
+            return Err(CanisterManagerError::InvalidSettings {
+                message: format!(
+                    "Invalid settings: 'controllers' length exceeds maximum size allowed of {}.",
+                    self.config.max_controllers
+                ),
+            });
         }
 
         let new_memory_allocation = settings
@@ -561,10 +561,10 @@ impl CanisterManager {
         if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
         }
-        if let Some(environment_variables) = settings.environment_variables() {
-            if self.environment_variables_flag == FlagStatus::Enabled {
-                canister.system_state.environment_variables = environment_variables.clone();
-            }
+        if let Some(environment_variables) = settings.environment_variables()
+            && self.environment_variables_flag == FlagStatus::Enabled
+        {
+            canister.system_state.environment_variables = environment_variables.clone();
         }
     }
 
@@ -779,10 +779,10 @@ impl CanisterManager {
 
         let parser = wasmparser::Parser::new(0);
         for section in parser.parse_all(decoded_wasm_module.as_slice()).flatten() {
-            if let wasmparser::Payload::MemorySection(reader) = section {
-                if let Some(memory) = reader.into_iter().flatten().next() {
-                    return memory.memory64;
-                }
+            if let wasmparser::Payload::MemorySection(reader) = section
+                && let Some(memory) = reader.into_iter().flatten().next()
+            {
+                return memory.memory64;
             }
         }
         false
@@ -1133,11 +1133,11 @@ impl CanisterManager {
         canister_id_to_delete: CanisterId,
         state: &mut ReplicatedState,
     ) -> Result<(), CanisterManagerError> {
-        if let Ok(canister_id) = CanisterId::try_from(sender) {
-            if canister_id == canister_id_to_delete {
-                // A canister cannot delete itself.
-                return Err(CanisterManagerError::DeleteCanisterSelf(canister_id));
-            }
+        if let Ok(canister_id) = CanisterId::try_from(sender)
+            && canister_id == canister_id_to_delete
+        {
+            // A canister cannot delete itself.
+            return Err(CanisterManagerError::DeleteCanisterSelf(canister_id));
         }
 
         let canister_to_delete = self.validate_canister_exists(state, canister_id_to_delete)?;
@@ -2936,7 +2936,7 @@ pub fn uninstall_canister(
     };
 
     let canister_id = canister.canister_id();
-    let reject_responses = canister
+    canister
         .system_state
         .delete_all_call_contexts(|call_context| {
             // Generate reject responses for ingress and canister messages.
@@ -2977,9 +2977,7 @@ pub fn uninstall_canister(
                     None
                 }
             }
-        });
-
-    reject_responses
+        })
 }
 
 fn globals_match(g1: &[Global], g2: &[Global]) -> bool {
