@@ -63,8 +63,9 @@ use crate::{
     nonblocking::PocketIc as PocketIcAsync,
 };
 use candid::{
-    Principal, decode_args, encode_args,
+    decode_args, encode_args,
     utils::{ArgumentDecoder, ArgumentEncoder},
+    Principal,
 };
 use flate2::read::GzDecoder;
 use ic_management_canister_types::{
@@ -83,7 +84,7 @@ use std::{
     net::{IpAddr, SocketAddr},
     path::PathBuf,
     process::{Child, Command},
-    sync::{Arc, mpsc::channel},
+    sync::{mpsc::channel, Arc},
     thread,
     thread::JoinHandle,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -1973,10 +1974,11 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
     #[cfg(not(windows))]
     cmd.arg(port_file_path.clone());
     if let Ok(mute_server) = std::env::var("POCKET_IC_MUTE_SERVER")
-        && !mute_server.is_empty() {
-            cmd.stdout(std::process::Stdio::null());
-            cmd.stderr(std::process::Stdio::null());
-        }
+        && !mute_server.is_empty()
+    {
+        cmd.stdout(std::process::Stdio::null());
+        cmd.stderr(std::process::Stdio::null());
+    }
 
     // Start the server in the background so that it doesn't receive signals such as CTRL^C
     // from the foreground terminal.
@@ -1994,16 +1996,17 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
 
     loop {
         if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone())
-            && port_string.contains("\n") {
-                let port: u16 = port_string
-                    .trim_end()
-                    .parse()
-                    .expect("Failed to parse port to number");
-                break (
-                    child,
-                    Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap(),
-                );
-            }
+            && port_string.contains("\n")
+        {
+            let port: u16 = port_string
+                .trim_end()
+                .parse()
+                .expect("Failed to parse port to number");
+            break (
+                child,
+                Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap(),
+            );
+        }
         std::thread::sleep(Duration::from_millis(20));
     }
 }

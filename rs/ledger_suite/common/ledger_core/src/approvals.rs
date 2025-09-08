@@ -264,11 +264,12 @@ where
             match table.allowances_data.get_allowance(&key) {
                 None => {
                     if let Some(expected_allowance) = expected_allowance
-                        && !expected_allowance.is_zero() {
-                            return Err(ApproveError::AllowanceChanged {
-                                current_allowance: AD::Tokens::zero(),
-                            });
-                        }
+                        && !expected_allowance.is_zero()
+                    {
+                        return Err(ApproveError::AllowanceChanged {
+                            current_allowance: AD::Tokens::zero(),
+                        });
+                    }
                     if amount == AD::Tokens::zero() {
                         return Ok(amount);
                     }
@@ -397,10 +398,11 @@ where
                 if let Some((_, (account, spender))) = table.allowances_data.pop_first_expiry() {
                     let key = (account, spender);
                     if let Some(allowance) = table.allowances_data.get_allowance(&key)
-                        && allowance.expires_at.unwrap_or_else(remote_future) <= now {
-                            table.allowances_data.remove_allowance(&key);
-                            pruned += 1;
-                        }
+                        && allowance.expires_at.unwrap_or_else(remote_future) <= now
+                    {
+                        table.allowances_data.remove_allowance(&key);
+                        pruned += 1;
+                    }
                 }
             }
             pruned

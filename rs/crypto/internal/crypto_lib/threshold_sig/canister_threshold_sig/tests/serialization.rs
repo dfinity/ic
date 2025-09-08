@@ -205,9 +205,13 @@ fn verify_protocol_output_remains_unchanged_over_time_k256_unmasked_kappa(
         ],
     )?;
 
-    let signed_message = seed.derive("message").into_rng().gen::<[u8; 32]>().to_vec();
+    let signed_message = seed
+        .derive("message")
+        .into_rng()
+        .r#gen::<[u8; 32]>()
+        .to_vec();
     let random_beacon =
-        ic_types::Randomness::from(seed.derive("beacon").into_rng().gen::<[u8; 32]>());
+        ic_types::Randomness::from(seed.derive("beacon").into_rng().r#gen::<[u8; 32]>());
 
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
     let proto =
@@ -322,9 +326,13 @@ fn verify_protocol_output_remains_unchanged_over_time_p256() -> Result<(), Canis
         ],
     )?;
 
-    let signed_message = seed.derive("message").into_rng().gen::<[u8; 32]>().to_vec();
+    let signed_message = seed
+        .derive("message")
+        .into_rng()
+        .r#gen::<[u8; 32]>()
+        .to_vec();
     let random_beacon =
-        ic_types::Randomness::from(seed.derive("beacon").into_rng().gen::<[u8; 32]>());
+        ic_types::Randomness::from(seed.derive("beacon").into_rng().r#gen::<[u8; 32]>());
 
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
     let proto =
@@ -440,9 +448,13 @@ fn verify_protocol_output_remains_unchanged_over_time_p256_sig_with_k256_mega(
         ],
     )?;
 
-    let signed_message = seed.derive("message").into_rng().gen::<[u8; 32]>().to_vec();
+    let signed_message = seed
+        .derive("message")
+        .into_rng()
+        .r#gen::<[u8; 32]>()
+        .to_vec();
     let random_beacon =
-        ic_types::Randomness::from(seed.derive("beacon").into_rng().gen::<[u8; 32]>());
+        ic_types::Randomness::from(seed.derive("beacon").into_rng().r#gen::<[u8; 32]>());
 
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
     let proto =
@@ -516,9 +528,13 @@ fn verify_protocol_output_remains_unchanged_over_time_bip340_sig_with_k256_mega(
         ],
     )?;
 
-    let signed_message = seed.derive("message").into_rng().gen::<[u8; 32]>().to_vec();
+    let signed_message = seed
+        .derive("message")
+        .into_rng()
+        .r#gen::<[u8; 32]>()
+        .to_vec();
     let random_beacon =
-        ic_types::Randomness::from(seed.derive("beacon").into_rng().gen::<[u8; 32]>());
+        ic_types::Randomness::from(seed.derive("beacon").into_rng().r#gen::<[u8; 32]>());
 
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
     let proto = Bip340SignatureProtocolExecution::new(
@@ -596,9 +612,13 @@ fn verify_protocol_output_remains_unchanged_over_time_ed25519_sig_with_k256_mega
         ],
     )?;
 
-    let signed_message = seed.derive("message").into_rng().gen::<[u8; 32]>().to_vec();
+    let signed_message = seed
+        .derive("message")
+        .into_rng()
+        .r#gen::<[u8; 32]>()
+        .to_vec();
     let random_beacon =
-        ic_types::Randomness::from(seed.derive("beacon").into_rng().gen::<[u8; 32]>());
+        ic_types::Randomness::from(seed.derive("beacon").into_rng().r#gen::<[u8; 32]>());
 
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
     let proto = Ed25519SignatureProtocolExecution::new(
@@ -829,7 +849,7 @@ fn bip340_combined_share_serialization_roundtrip_works_correctly() {
     let threshold = 2;
     let rng = &mut reproducible_rng();
     let signed_message = random_bytes(rng);
-    let random_beacon = ic_types::Randomness::from(rng.gen::<[u8; 32]>());
+    let random_beacon = ic_types::Randomness::from(rng.r#gen::<[u8; 32]>());
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
 
     let cfg = TestConfig::new(IdkgProtocolAlgorithm::Bip340, EccCurveType::K256);
@@ -864,7 +884,7 @@ fn ed25519_combined_share_serialization_roundtrip_works_correctly() {
     let threshold = 2;
     let rng = &mut reproducible_rng();
     let signed_message = random_bytes(rng);
-    let random_beacon = ic_types::Randomness::from(rng.gen::<[u8; 32]>());
+    let random_beacon = ic_types::Randomness::from(rng.r#gen::<[u8; 32]>());
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
 
     let cfg = TestConfig::new(IdkgProtocolAlgorithm::Ed25519, EccCurveType::K256);

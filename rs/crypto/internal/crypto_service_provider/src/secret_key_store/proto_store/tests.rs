@@ -397,9 +397,9 @@ fn should_fail_to_write_to_read_only_secret_key_store_directory() {
         None,
     );
     let mut seed = ChaCha20Rng::seed_from_u64(42);
-    let key_id = KeyId::from(seed.gen::<[u8; 32]>());
+    let key_id = KeyId::from(seed.r#gen::<[u8; 32]>());
     let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-        SecretArray::new_and_dont_zeroize_argument(&seed.gen()),
+        SecretArray::new_and_dont_zeroize_argument(&seed.r#gen()),
     ));
 
     // make the crypto root directory non-writeable, causing the subsequent call to insert a
@@ -427,9 +427,9 @@ fn should_fail_to_write_to_secret_key_store_directory_without_execute_permission
         None,
     );
     let mut seed = ChaCha20Rng::seed_from_u64(42);
-    let key_id = KeyId::from(seed.gen::<[u8; 32]>());
+    let key_id = KeyId::from(seed.r#gen::<[u8; 32]>());
     let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-        SecretArray::new_and_dont_zeroize_argument(&seed.gen()),
+        SecretArray::new_and_dont_zeroize_argument(&seed.r#gen()),
     ));
 
     // make the crypto root directory non-executable, causing the subsequent call to insert a
@@ -457,9 +457,9 @@ fn should_fail_to_write_to_secret_key_store_directory_without_write_permissions(
         None,
     );
     let mut seed = ChaCha20Rng::seed_from_u64(42);
-    let key_id = KeyId::from(seed.gen::<[u8; 32]>());
+    let key_id = KeyId::from(seed.r#gen::<[u8; 32]>());
     let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-        SecretArray::new_and_dont_zeroize_argument(&seed.gen()),
+        SecretArray::new_and_dont_zeroize_argument(&seed.r#gen()),
     ));
 
     // make the crypto root directory non-writeable, causing the subsequent call to insert a
@@ -489,9 +489,9 @@ fn should_successfully_write_to_secret_key_store_directory_with_write_and_execut
     fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700))
         .expect("Could not set the permissions of the temp dir.");
     let mut seed = ChaCha20Rng::seed_from_u64(42);
-    let key_id = KeyId::from(seed.gen::<[u8; 32]>());
+    let key_id = KeyId::from(seed.r#gen::<[u8; 32]>());
     let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-        SecretArray::new_and_dont_zeroize_argument(&seed.gen()),
+        SecretArray::new_and_dont_zeroize_argument(&seed.r#gen()),
     ));
     assert_matches!(secret_key_store.insert(key_id, key, None), Ok(()));
 }
@@ -1286,7 +1286,7 @@ mod insert_or_replace {
             let replica_logger = ReplicaLogger::from(&in_memory_logger);
             let mut key_store = ProtoSecretKeyStore::open(temp_dir.path(), "sks_data.pb", Some(replica_logger), Arc::new(CryptoMetrics::none()));
             let rng = &mut ChaCha20Rng::from_seed(seed);
-            let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
+            let key_id: KeyId = KeyId::from(rng.r#gen::<[u8; 32]>());
             let secret_key = secret_key(rng);
 
             assert!(key_store.insert(key_id, secret_key.clone(), scope).is_ok()); // 1 overwrite
@@ -1300,7 +1300,7 @@ mod insert_or_replace {
 
     fn secret_key<R: Rng>(rng: &mut R) -> CspSecretKey {
         CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-            SecretArray::new_and_dont_zeroize_argument(&rng.gen()),
+            SecretArray::new_and_dont_zeroize_argument(&rng.r#gen()),
         ))
     }
 

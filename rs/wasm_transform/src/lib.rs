@@ -369,12 +369,13 @@ impl<'a> Module<'a> {
             });
         }
         if let Some(data_count) = data_section_count
-            && data_count as usize != data.len() {
-                return Err(Error::IncorrectDataCount {
-                    declared_count: data_count as usize,
-                    actual_count: data.len(),
-                });
-            }
+            && data_count as usize != data.len()
+        {
+            return Err(Error::IncorrectDataCount {
+                declared_count: data_count as usize,
+                actual_count: data.len(),
+            });
+        }
         Ok(Module {
             types,
             imports,

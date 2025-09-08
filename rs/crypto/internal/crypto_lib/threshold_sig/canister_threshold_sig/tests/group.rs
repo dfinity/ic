@@ -392,7 +392,7 @@ fn test_point_mul_by_node_index() -> CanisterThresholdResult<()> {
         node_indices.push(u32::MAX - 1);
         node_indices.push(u32::MAX);
         for _ in 0..100 {
-            node_indices.push(rng.gen());
+            node_indices.push(rng.r#gen());
         }
 
         for node_index in node_indices {
