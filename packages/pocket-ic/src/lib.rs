@@ -1972,12 +1972,11 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
     cmd.arg(wsl_path(&port_file_path, "PocketIC port file"));
     #[cfg(not(windows))]
     cmd.arg(port_file_path.clone());
-    if let Ok(mute_server) = std::env::var("POCKET_IC_MUTE_SERVER") {
-        if !mute_server.is_empty() {
+    if let Ok(mute_server) = std::env::var("POCKET_IC_MUTE_SERVER")
+        && !mute_server.is_empty() {
             cmd.stdout(std::process::Stdio::null());
             cmd.stderr(std::process::Stdio::null());
         }
-    }
 
     // Start the server in the background so that it doesn't receive signals such as CTRL^C
     // from the foreground terminal.
@@ -1994,8 +1993,8 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
         .unwrap_or_else(|_| panic!("Failed to start PocketIC binary ({})", bin_path.display()));
 
     loop {
-        if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone()) {
-            if port_string.contains("\n") {
+        if let Ok(port_string) = std::fs::read_to_string(port_file_path.clone())
+            && port_string.contains("\n") {
                 let port: u16 = port_string
                     .trim_end()
                     .parse()
@@ -2005,7 +2004,6 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
                     Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap(),
                 );
             }
-        }
         std::thread::sleep(Duration::from_millis(20));
     }
 }

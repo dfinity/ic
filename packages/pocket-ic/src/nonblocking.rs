@@ -1611,22 +1611,20 @@ impl PocketIc {
                                 }
                             }
                         }
-                        if let Some(max_request_time_ms) = self.max_request_time_ms {
-                            if start.elapsed().unwrap_or_default()
+                        if let Some(max_request_time_ms) = self.max_request_time_ms
+                            && start.elapsed().unwrap_or_default()
                                 > Duration::from_millis(max_request_time_ms)
                             {
                                 panic!("request to PocketIC server timed out.");
                             }
-                        }
                     }
                 }
             }
-            if let Some(max_request_time_ms) = self.max_request_time_ms {
-                if start.elapsed().unwrap_or_default() > Duration::from_millis(max_request_time_ms)
+            if let Some(max_request_time_ms) = self.max_request_time_ms
+                && start.elapsed().unwrap_or_default() > Duration::from_millis(max_request_time_ms)
                 {
                     panic!("request to PocketIC server timed out.");
                 }
-            }
             std::thread::sleep(Duration::from_millis(POLLING_PERIOD_MS));
         }
     }

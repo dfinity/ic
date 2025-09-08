@@ -280,11 +280,10 @@ where
         .blockchain_mut()
         .add_block(block)
         .expect("failed to add block");
-    if let Some(fee_collector) = ledger.fee_collector_mut().as_mut() {
-        if fee_collector.block_index.is_none() {
+    if let Some(fee_collector) = ledger.fee_collector_mut().as_mut()
+        && fee_collector.block_index.is_none() {
             fee_collector.block_index = Some(height);
         }
-    }
 
     if let Some((_, tx_hash)) = maybe_time_and_hash {
         // The caller requested deduplication, so we have to remember this

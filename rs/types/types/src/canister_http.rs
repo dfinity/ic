@@ -335,16 +335,15 @@ impl CanisterHttpRequestContext {
         node_ids: &BTreeSet<NodeId>,
         rng: &mut dyn RngCore,
     ) -> Result<Self, CanisterHttpRequestContextError> {
-        if let Some(transform_principal_id) = args.transform_principal() {
-            if request.sender.get() != transform_principal_id {
+        if let Some(transform_principal_id) = args.transform_principal()
+            && request.sender.get() != transform_principal_id {
                 return Err(CanisterHttpRequestContextError::TransformPrincipalId(
                     InvalidTransformPrincipalId {
                         expected_principal_id: request.sender.get(),
                         actual_principal_id: transform_principal_id,
                     },
                 ));
-            }
-        };
+            };
 
         let max_response_bytes = match args.max_response_bytes {
             Some(max_response_bytes) => {
