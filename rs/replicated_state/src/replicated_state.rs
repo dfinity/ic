@@ -637,10 +637,6 @@ impl ReplicatedState {
         canister_id: &CanisterId,
     ) -> Result<&CanisterState, UserError> {
         let canister = self.canister_state(canister_id).ok_or_else(|| {
-            // println!(
-            //     "ABC register canister not found in get_active_canister: {}",
-            //     canister_id
-            // );
             UserError::new(
                 ErrorCode::CanisterNotFound,
                 format!("Canister {} not found in get_active_canister", canister_id),
