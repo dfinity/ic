@@ -280,6 +280,7 @@ pub fn generate_responses_to_subnet_calls(
     stats: &mut BatchStats,
     log: &ReplicaLogger,
 ) -> Vec<ConsensusResponse> {
+    println!("BLOCKFINALIZED at height={}", block.height);
     let mut consensus_responses = Vec::new();
     let block_payload = &block.payload;
     if block_payload.is_summary() {

@@ -117,6 +117,14 @@ impl<T: Signable> BasicSigVerifier<T> for CryptoReturningOk {
     ) -> CryptoResult<()> {
         Ok(())
     }
+
+    fn verify_multi_sig_batch(
+            &self,
+            batch: &[(&T, &BasicSignatureBatch<T>)],
+            registry_version: RegistryVersion,
+        ) -> CryptoResult<()> {
+        Ok(())
+    }
 }
 
 impl<T: Signable> BasicSigVerifierByPublicKey<T> for CryptoReturningOk {
