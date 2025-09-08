@@ -902,6 +902,8 @@ fn induct_and_observe_until_stale(
 /// The sequence of events is therefore as follows:
 /// - After the initial situation as depicted above, the XNet canisters stop generating requests.
 /// - Bidirectional inductions are done on `old_subnets_proxy` until they stop triggering changes.
+/// - Reject responses generated for reject signals to requests still in the stream after the remote
+///   canister migrated are inducted once from the 'old remote env' to the 'new remote env'.
 /// - Bidirectional inductions are done on `new_subnets_proxy` until they stop triggering changes.
 ///
 /// If everything went in order, at this point:
