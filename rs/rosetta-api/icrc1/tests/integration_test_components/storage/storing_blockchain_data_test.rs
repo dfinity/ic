@@ -255,17 +255,6 @@ fn icrc3_test_ledger() -> Vec<u8> {
     std::fs::read(std::env::var("ICRC3_TEST_LEDGER_CANISTER_WASM_PATH").unwrap()).unwrap()
 }
 
-const TEST_USER_1: PrincipalId = PrincipalId::new_user_test_id(1);
-const TEST_USER_2: PrincipalId = PrincipalId::new_user_test_id(2);
-const TEST_ACCOUNT_1: Account = Account {
-    owner: TEST_USER_1.0,
-    subaccount: None,
-};
-const FEE_COLLECTOR: Account = Account {
-    owner: TEST_USER_2.0,
-    subaccount: None,
-};
-
 /// Adds the block to the ledger
 pub async fn add_block(agent: &Arc<Icrc1Agent>, block: &ICRC3Value) -> Result<Nat, String> {
     let result = agent
@@ -279,7 +268,7 @@ pub async fn add_block(agent: &Arc<Icrc1Agent>, block: &ICRC3Value) -> Result<Na
 }
 
 #[test]
-fn test_burn_fee() {
+fn test_burn_and_mint_fee() {
     // Create a tokio environment to conduct async calls
     let rt = Runtime::new().unwrap();
 
@@ -295,28 +284,6 @@ fn test_burn_fee() {
     let endpoint = pocket_ic.make_live(None);
     let port = endpoint.port().unwrap();
 
-    let block0 = BlockBuilder::new(0, 1000)
-        .with_fee(Tokens::from(50u64))
-        .mint(TEST_ACCOUNT_1, Tokens::from(1_000u64))
-        .build();
-    let block1 = BlockBuilder::new(1, 2000)
-        .with_parent_hash(block0.clone().hash().to_vec())
-        .with_fee(Tokens::from(50u64))
-        .burn(TEST_ACCOUNT_1, Tokens::from(50u64))
-        .build();
-    let block2 = BlockBuilder::new(2, 3000)
-        .with_parent_hash(block1.clone().hash().to_vec())
-        .with_fee(Tokens::from(50u64))
-        .with_fee_collector(FEE_COLLECTOR)
-        .mint(TEST_ACCOUNT_1, Tokens::from(50u64))
-        .build();
-    let block3 = BlockBuilder::new(3, 4000)
-        .with_parent_hash(block2.clone().hash().to_vec())
-        .with_fee_collector_block(2)
-        .with_fee(Tokens::from(50u64))
-        .burn(TEST_ACCOUNT_1, Tokens::from(50u64))
-        .build();
-
     rt.block_on(async {
         let agent = Arc::new(Icrc1Agent {
             agent: local_replica::get_testing_agent(port).await,
@@ -324,10 +291,23 @@ fn test_burn_fee() {
         });
         let storage_client = Arc::new(StorageClient::new_in_memory().unwrap());
 
-        // Add blocks to the ledger
+        const FEE_COLLECTOR: Account = Account {
+            owner: PrincipalId::new_user_test_id(2).0,
+            subaccount: None,
+        };
+
+        // Create mint and burn blocks with fees, and add them to the ledger
+        let block0 = BlockBuilder::new(0, 1000)
+            .with_fee(Tokens::from(50u64))
+            .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
+            .build();
+        let block1 = BlockBuilder::new(1, 2000)
+            .with_parent_hash(block0.clone().hash().to_vec())
+            .with_fee(Tokens::from(50u64))
+            .burn(*TEST_ACCOUNT, Tokens::from(50u64))
+            .build();
         let result0 = add_block(&agent, &block0).await.unwrap();
         assert_eq!(result0, Nat::from(0u64));
-
         let result1 = add_block(&agent, &block1).await.unwrap();
         assert_eq!(result1, Nat::from(1u64));
 
@@ -345,19 +325,31 @@ fn test_burn_fee() {
 
         assert_eq!(
             storage_client
-                .get_account_balance(&TEST_ACCOUNT_1)
+                .get_account_balance(&TEST_ACCOUNT)
                 .unwrap()
                 .unwrap(),
-            Nat::from(900u64)
+            Nat::from(900u64) // mint 1000 - burn 50 - burn fee 50
         );
         assert!(storage_client
             .get_account_balance(&FEE_COLLECTOR)
             .unwrap()
-            .is_none());
+            .is_none()); // no fee collector in the first 2 blocks
 
+        // Create mint and burn blocks with fees and fee collector, and add them to the ledger
+        let block2 = BlockBuilder::new(2, 3000)
+            .with_parent_hash(block1.clone().hash().to_vec())
+            .with_fee(Tokens::from(50u64))
+            .with_fee_collector(FEE_COLLECTOR)
+            .mint(*TEST_ACCOUNT, Tokens::from(50u64))
+            .build();
+        let block3 = BlockBuilder::new(3, 4000)
+            .with_parent_hash(block2.clone().hash().to_vec())
+            .with_fee_collector_block(2)
+            .with_fee(Tokens::from(50u64))
+            .burn(*TEST_ACCOUNT, Tokens::from(50u64))
+            .build();
         let result2 = add_block(&agent, &block2).await.unwrap();
         assert_eq!(result2, Nat::from(2u64));
-
         let result3 = add_block(&agent, &block3).await.unwrap();
         assert_eq!(result3, Nat::from(3u64));
 
@@ -375,7 +367,7 @@ fn test_burn_fee() {
 
         assert_eq!(
             storage_client
-                .get_account_balance(&TEST_ACCOUNT_1)
+                .get_account_balance(&TEST_ACCOUNT)
                 .unwrap()
                 .unwrap(),
             Nat::from(850u64) // 900 + mint 50 - burn 50 - burn fee 50
