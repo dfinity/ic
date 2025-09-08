@@ -99,14 +99,14 @@ lazy_static! {
     // This is the principal that will be able to create canisters in the
     // "rented" subnet once it gets created. This principal is required to
     // supply enough ICP to the Subnet Rental canister.
-    static ref SUBNET_USER_KEYPAIR: Ed25519KeyPair = TEST_USER1_KEYPAIR.clone();
+    static ref SUBNET_USER_KEYPAIR: Ed25519KeyPair = *TEST_USER1_KEYPAIR;
 
-    static ref SUBNET_USER_SENDER: Sender = Sender::from_keypair(&*SUBNET_USER_KEYPAIR);
+    static ref SUBNET_USER_SENDER: Sender = Sender::from_keypair(&SUBNET_USER_KEYPAIR);
 
     static ref SUBNET_USER_PRINCIPAL_ID: PrincipalId = SUBNET_USER_SENDER.get_principal_id();
 
     static ref NON_SUBNET_USER_KEYPAIR: Ed25519KeyPair = {
-        let result = TEST_USER2_KEYPAIR.clone();
+        let result = *TEST_USER2_KEYPAIR;
 
         // assert_ne is not used, because the type does not implement Debug,
         // which is required by assert_ne.
@@ -115,7 +115,7 @@ lazy_static! {
         result
     };
 
-    static ref NON_SUBNET_USER_SENDER: Sender = Sender::from_keypair(&*NON_SUBNET_USER_KEYPAIR);
+    static ref NON_SUBNET_USER_SENDER: Sender = Sender::from_keypair(&NON_SUBNET_USER_KEYPAIR);
 
     static ref NON_SUBNET_USER_PRINCIPAL_ID: PrincipalId = NON_SUBNET_USER_SENDER.get_principal_id();
 }
@@ -221,7 +221,7 @@ async fn subnet_user_sends_icp_to_the_subnet_rental_canister(topology_snapshot: 
         amount: Tokens::new(SUBNET_RENTAL_PAYMENT_AMOUNT_ICP, 0).unwrap(),
     };
 
-    let _block_index = request.execute_on(&icp_ledger, &*SUBNET_USER_SENDER).await;
+    let _block_index = request.execute_on(&icp_ledger, &SUBNET_USER_SENDER).await;
 }
 
 #[must_use]
@@ -337,7 +337,7 @@ async fn assert_rented_subnet_works(
     let nns_subnet_runtime = new_subnet_runtime(&topology_snapshot.root_subnet());
     let new_canister = cycles_minting_create_canister(
         &nns_subnet_runtime,
-        &*SUBNET_USER_SENDER,
+        &SUBNET_USER_SENDER,
         0, // amount_e8s
         |_| (),
     )
@@ -348,7 +348,7 @@ async fn assert_rented_subnet_works(
 
     // Verify 2.1: The created canister is actually IN the rented subnet, due to
     // it being created by the rented subnet's user.
-    assert_canister_belongs_to_subnet(&topology_snapshot, rented_subnet_id, new_canister_id).await;
+    assert_canister_belongs_to_subnet(topology_snapshot, rented_subnet_id, new_canister_id).await;
 
     // Verify 2.2: The created canister is of type Application.
     assert_subnet_type(&rented_subnet, SubnetType::Application);
@@ -366,7 +366,7 @@ async fn assert_rented_subnet_works(
     // Verify 7: Other principals are NOT allowed to create canisters in the
     // rented subnet.
     assert_that_non_subnet_user_gets_blocked_if_they_try_to_create_a_canister_in_the_rented_subnet(
-        &topology_snapshot,
+        topology_snapshot,
         rented_subnet_id,
     )
     .await;
@@ -389,7 +389,7 @@ async fn assert_canister_belongs_to_subnet(
                 GetSubnetForCanisterRequest {
                     principal: Some(PrincipalId::from(canister_id)),
                 },
-                &*SUBNET_USER_SENDER,
+                &SUBNET_USER_SENDER,
             )
             .await
             .unwrap();
@@ -408,7 +408,7 @@ async fn assert_subnet_type(subnet_snapshot: &SubnetSnapshot, expected_canister_
 
     assert_eq!(
         SubnetType::try_from(subnet_record.subnet_type).unwrap(),
-        SubnetType::Application,
+        expected_canister_type,
         "{:#?}",
         subnet_record,
     );
@@ -418,7 +418,7 @@ async fn install_and_call_universal_canister(agent: &Agent, new_canister_id: Can
     let new_canister_principal = Principal::from(PrincipalId::from(new_canister_id));
 
     // Install the universal canister WASM.
-    ManagementCanister::create(&agent)
+    ManagementCanister::create(agent)
         .install_code(&new_canister_principal, &UNIVERSAL_CANISTER_WASM)
         .with_raw_arg(universal_canister_argument_builder().stable_grow(1).build())
         .call_and_wait()
@@ -454,7 +454,7 @@ async fn install_and_call_universal_canister(agent: &Agent, new_canister_id: Can
 
 async fn get_cycles_balance(canister_id: CanisterId, subnet: &SubnetSnapshot) -> u128 {
     // Prepare to call the management canister...
-    let runtime = new_subnet_runtime(&subnet);
+    let runtime = new_subnet_runtime(subnet);
     let management_canister = Canister::new(
         &runtime,
         CanisterId::unchecked_from_principal(PrincipalId::from_str("aaaaa-aa").unwrap()),
@@ -467,7 +467,7 @@ async fn get_cycles_balance(canister_id: CanisterId, subnet: &SubnetSnapshot) ->
 
     // Call the canister_status method (of the Management pseudo-canister).
     let result: CanisterStatusResult = management_canister
-        .update_from_sender("canister_status", candid_one, request, &*SUBNET_USER_SENDER)
+        .update_from_sender("canister_status", candid_one, request, &SUBNET_USER_SENDER)
         .await
         .unwrap();
 
@@ -482,7 +482,7 @@ async fn assert_that_non_subnet_user_gets_blocked_if_they_try_to_create_a_canist
 ) {
     let err = cycles_minting_create_canister(
         &new_subnet_runtime(&topology_snapshot.root_subnet()),
-        &*NON_SUBNET_USER_SENDER,
+        &NON_SUBNET_USER_SENDER,
         10 * E8, // amount_e8s
         |notify_create_canister| {
             notify_create_canister.subnet_selection = Some(SubnetSelection::Subnet {
@@ -560,7 +560,7 @@ fn install_nns_canisters(env: &TestEnv) {
 
 fn create_and_install_mock_exchange_rate_canister(topology_snapshot: &TopologySnapshot) {
     let exchange_rate_canister_subnet =
-        find_subnet_that_hosts_canister_id(&topology_snapshot, EXCHANGE_RATE_CANISTER_ID);
+        find_subnet_that_hosts_canister_id(topology_snapshot, EXCHANGE_RATE_CANISTER_ID);
     assert_eq!(
         exchange_rate_canister_subnet.subnet_type(),
         SubnetType::System,
