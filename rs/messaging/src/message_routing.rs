@@ -12,10 +12,10 @@ use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
-use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
+use ic_logger::{ReplicaLogger, debug, fatal, info, warn};
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto;
 use ic_query_stats::QueryStatsAggregatorMetrics;
 use ic_registry_client_helpers::api_boundary_node::ApiBoundaryNodeRegistry;
@@ -25,7 +25,7 @@ use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::provisional_whitelist::ProvisionalWhitelistRegistry;
 use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
 use ic_registry_client_helpers::subnet::{
-    get_node_ids_from_subnet_record, SubnetListRegistry, SubnetRegistry,
+    SubnetListRegistry, SubnetRegistry, get_node_ids_from_subnet_record,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
@@ -35,7 +35,7 @@ use ic_replicated_state::{
     DroppedMessageMetrics, NetworkTopology, ReplicatedState, SubnetTopology,
 };
 use ic_types::batch::{Batch, BatchSummary, CanisterCyclesCostSchedule};
-use ic_types::crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose};
+use ic_types::crypto::{KeyPurpose, threshold_sig::ThresholdSigPublicKey};
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::registry::RegistryClientError;
 use ic_types::state_manager::StateManagerError;
@@ -53,7 +53,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{AsRef, TryFrom};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::ops::Range;
-use std::sync::mpsc::{sync_channel, TrySendError};
+use std::sync::mpsc::{TrySendError, sync_channel};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::sleep;
 use std::time::Instant;

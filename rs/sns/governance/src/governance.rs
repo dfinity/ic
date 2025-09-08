@@ -8,19 +8,19 @@ use crate::{
         validate_upgrade_extension,
     },
     follower_index::{
-        add_neuron_to_follower_index, build_follower_index,
+        FollowerIndex, add_neuron_to_follower_index, build_follower_index,
         legacy::{
             self, add_neuron_to_function_followee_index, build_function_followee_index,
             remove_neuron_from_function_followee_index,
         },
-        remove_neuron_from_follower_index, FollowerIndex,
+        remove_neuron_from_follower_index,
     },
     following::{self, ValidatedSetFollowing},
     icrc_ledger_helper::ICRCLedgerHelper,
     logs::{ERROR, INFO},
     neuron::{
-        NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
-        MAX_LIST_NEURONS_RESULTS,
+        DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER, MAX_LIST_NEURONS_RESULTS, NeuronState,
+        RemovePermissionsStatus,
     },
     pb::{
         sns_root_types::{
@@ -29,31 +29,8 @@ use crate::{
             SetDappControllersResponse,
         },
         v1::{
-            claim_swap_neurons_response::SwapNeuron,
-            get_neuron_response, get_proposal_response,
-            governance::{
-                self,
-                neuron_in_flight_command::{self, Command as InFlightCommand},
-                GovernanceCachedMetrics, MaturityModulation, NeuronInFlightCommand, PendingVersion,
-                SnsMetadata, Version,
-            },
-            governance_error::ErrorType,
-            manage_neuron::{
-                self,
-                claim_or_refresh::{By, MemoAndController},
-                AddNeuronPermissions, ClaimOrRefresh, DisburseMaturity, FinalizeDisburseMaturity,
-                RemoveNeuronPermissions, SetFollowing,
-            },
-            manage_neuron_response::{
-                DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
-            },
-            nervous_system_function::FunctionType,
-            neuron::{DissolveState, Followees, TopicFollowees},
-            proposal::Action,
-            proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
-            transfer_sns_treasury_funds::TransferFrom,
-            upgrade_journal_entry, valuation, Account as AccountProto, AddMaturityRequest,
-            AddMaturityResponse, AdvanceTargetVersionRequest, AdvanceTargetVersionResponse, Ballot,
+            Account as AccountProto, AddMaturityRequest, AddMaturityResponse,
+            AdvanceTargetVersionRequest, AdvanceTargetVersionResponse, Ballot,
             ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
             ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters,
             DisburseMaturityInProgress, Empty, ExecuteExtensionOperation,
@@ -72,21 +49,43 @@ use crate::{
             RegisterExtension, RewardEvent, SetTopicsForCustomProposals, Tally, Topic,
             TransferSnsTreasuryFunds, TreasuryMetrics, UpgradeSnsControlledCanister, Vote,
             VotingPowerMetrics, WaitForQuietState,
+            claim_swap_neurons_response::SwapNeuron,
+            get_neuron_response, get_proposal_response,
+            governance::{
+                self, GovernanceCachedMetrics, MaturityModulation, NeuronInFlightCommand,
+                PendingVersion, SnsMetadata, Version,
+                neuron_in_flight_command::{self, Command as InFlightCommand},
+            },
+            governance_error::ErrorType,
+            manage_neuron::{
+                self, AddNeuronPermissions, ClaimOrRefresh, DisburseMaturity,
+                FinalizeDisburseMaturity, RemoveNeuronPermissions, SetFollowing,
+                claim_or_refresh::{By, MemoAndController},
+            },
+            manage_neuron_response::{
+                DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
+            },
+            nervous_system_function::FunctionType,
+            neuron::{DissolveState, Followees, TopicFollowees},
+            proposal::Action,
+            proposal_data::ActionAuxiliary as ActionAuxiliaryPb,
+            transfer_sns_treasury_funds::TransferFrom,
+            upgrade_journal_entry, valuation,
         },
     },
     proposal::{
-        get_action_auxiliary,
+        MAX_LIST_PROPOSAL_RESULTS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, TreasuryAccount,
+        ValidGenericNervousSystemFunction, get_action_auxiliary,
         transfer_sns_treasury_funds_amount_is_small_enough_at_execution_time_or_err,
         validate_and_render_proposal, validate_and_render_set_topics_for_custom_proposals,
-        TreasuryAccount, ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
-        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
     },
     sns_upgrade::{
-        canister_type_and_wasm_hash_for_upgrade, get_all_sns_canisters, get_canisters_to_upgrade,
-        get_running_version, get_upgrade_params, get_wasm, SnsCanisterType, UpgradeSnsParams,
+        SnsCanisterType, UpgradeSnsParams, canister_type_and_wasm_hash_for_upgrade,
+        get_all_sns_canisters, get_canisters_to_upgrade, get_running_version, get_upgrade_params,
+        get_wasm,
     },
     treasury::{assess_treasury_balance, interpret_token_code, tokens_to_e8s},
-    types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock, Wasm},
+    types::{Environment, HeapGrowthPotential, LedgerUpdateLock, Wasm, is_registered_function_id},
 };
 
 use candid::{Decode, Encode};
@@ -103,12 +102,11 @@ use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_collections_union_multi_map::UnionMultiMap;
 use ic_nervous_system_common::{
-    i2d,
+    NervousSystemError, ONE_DAY_SECONDS, ONE_HOUR_SECONDS, i2d,
     ledger::{self, compute_distribution_subaccount_bytes},
-    NervousSystemError, ONE_DAY_SECONDS, ONE_HOUR_SECONDS,
 };
 use ic_nervous_system_governance::maturity_modulation::{
-    apply_maturity_modulation, MIN_MATURITY_MODULATION_PERMYRIAD,
+    MIN_MATURITY_MODULATION_PERMYRIAD, apply_maturity_modulation,
 };
 use ic_nervous_system_lock::acquire;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
@@ -130,9 +128,9 @@ use std::{
     cell::RefCell,
     cmp::Ordering,
     collections::{
+        HashMap, HashSet,
         btree_map::{BTreeMap, Entry},
         btree_set::BTreeSet,
-        HashMap, HashSet,
     },
     convert::{TryFrom, TryInto},
     future::Future,
@@ -4878,7 +4876,7 @@ impl Governance {
         neuron_id: &NeuronId,
         command: &manage_neuron::Command,
     ) -> Result<(), GovernanceError> {
-        use manage_neuron::{configure::Operation::*, Command::*};
+        use manage_neuron::{Command::*, configure::Operation::*};
 
         // If this is a "claim" call, the neuron doesn't exist yet, so we return (because no checks
         // can be made). A "refresh" call can be made on a vesting neuron, so in this case also
