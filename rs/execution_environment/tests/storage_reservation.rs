@@ -511,7 +511,7 @@ fn instruction_and_reserved_cycles_exceed_canister_balance() {
     assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
 }
 
-fn reserved_cycles_grow_to_full_capacity<F>(grow: F, expected_reserved_cycles: u128)
+fn reserved_cycles_memory_grow_to_full_capacity<F>(grow: F, expected_reserved_cycles: u128)
 where
     F: Fn(&StateMachine, CanisterId),
 {
@@ -584,7 +584,7 @@ where
 }
 
 #[test]
-fn reserved_cycles_stable_grow_to_full_capacity() {
+fn reserved_cycles_stable_memory_grow_to_full_capacity() {
     let stable_grow = |env: &StateMachine, canister_id: CanisterId| {
         // Reserve in pretty small steps to keep the number of reserved cycles small.
         let mut pages = 1 << 16;
@@ -621,7 +621,7 @@ fn reserved_cycles_stable_grow_to_full_capacity() {
 }
 
 #[test]
-fn reserved_cycles_mgmt_canister_grow_to_full_capacity() {
+fn reserved_cycles_memory_allocation_grow_to_full_capacity() {
     let ic00_grow = |env: &StateMachine, canister_id: CanisterId| {
         // Set memory allocation to `total` WASM pages.
         let mut total = 0;
