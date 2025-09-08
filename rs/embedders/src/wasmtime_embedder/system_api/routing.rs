@@ -188,16 +188,18 @@ pub(super) fn resolve_destination(
         }
         Ok(Ic00Method::SubnetInfo) => Ok(SubnetInfoArgs::decode(payload)?.subnet_id),
         Ok(Ic00Method::FetchCanisterLogs) => {
-            let canister_id = FetchCanisterLogsRequest::decode(payload)?.get_canister_id();
-            route_canister_id(canister_id, Ic00Method::FetchCanisterLogs, network_topology)
+            // NOTE: this fails for composite_query
+            // let canister_id = FetchCanisterLogsRequest::decode(payload)?.get_canister_id();
+            // route_canister_id(canister_id, Ic00Method::FetchCanisterLogs, network_topology)
 
-            // Err(ResolveDestinationError::UserError(UserError::new(
-            //     ic_error_types::ErrorCode::CanisterRejectedMessage,
-            //     format!(
-            //         "{} API is only accessible to end users in non-replicated mode",
-            //         Ic00Method::FetchCanisterLogs
-            //     ),
-            // )))
+            // NOTE: this fails for inter-canister update calls enabled
+            Err(ResolveDestinationError::UserError(UserError::new(
+                ic_error_types::ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "{} API is only accessible to end users in non-replicated mode",
+                    Ic00Method::FetchCanisterLogs
+                ),
+            )))
         }
         Ok(Ic00Method::ECDSAPublicKey) => {
             let key_id = ECDSAPublicKeyArgs::decode(payload)?.key_id;

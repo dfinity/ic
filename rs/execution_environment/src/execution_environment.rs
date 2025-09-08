@@ -1565,23 +1565,15 @@ impl ExecutionEnvironment {
                                     refund: msg.take_cycles(),
                                 }
                             } else {
-                                match FetchCanisterLogsRequest::decode(payload) {
-                                    Err(err) => ExecuteSubnetMessageResult::Finished {
-                                        response: Err(err),
-                                        refund: msg.take_cycles(),
-                                    },
-                                    Ok(args) => {
-                                        match fetch_canister_logs(*msg.sender(), &state, args) {
-                                            Err(err) => ExecuteSubnetMessageResult::Finished {
-                                                response: Err(err),
-                                                refund: msg.take_cycles(),
-                                            },
-                                            Ok(response) => ExecuteSubnetMessageResult::Finished {
-                                                response: Ok((Encode!(&response).unwrap(), None)),
-                                                refund: msg.take_cycles(),
-                                            },
-                                        }
-                                    }
+                                let sender = *msg.sender();
+
+                                let response = FetchCanisterLogsRequest::decode(payload)
+                                    .and_then(|args| fetch_canister_logs(sender, &state, args))
+                                    .map(|resp| (Encode!(&resp).unwrap(), None));
+
+                                ExecuteSubnetMessageResult::Finished {
+                                    response,
+                                    refund: msg.take_cycles(),
                                 }
                             }
                         }

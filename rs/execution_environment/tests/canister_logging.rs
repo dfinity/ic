@@ -419,7 +419,6 @@ bazel test //rs/execution_environment:execution_environment_misc_integration_tes
   --test_output=streamed \
   --test_arg=--nocapture \
   --test_arg=test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enabled
-
 */
 #[test]
 fn test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enabled() {
@@ -467,10 +466,6 @@ fn test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enable
             )
             .build(),
     );
-
-    println!("ABC user: {user:?}");
-    println!("ABC canister_a: {canister_a:?}");
-    println!("ABC canister_b: {canister_b:?}");
 
     // This is expected to fail, because fetch_canister_logs is not accessible via composite query.
     let error = actual_result.unwrap_err();
