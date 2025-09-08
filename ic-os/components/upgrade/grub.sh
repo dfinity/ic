@@ -69,9 +69,6 @@ write_grubenv() {
     # Atomic move: rename temporary file to target file
     if ! mv "${TMP_FILE}" "${GRUBENV_FILE}"; then
         write_log "Error: Failed to atomically move temporary file to ${GRUBENV_FILE}"
-        if [ -f "${BACKUP_FILE}" ]; then
-            mv "${BACKUP_FILE}" "${GRUBENV_FILE}" 2>/dev/null || true
-        fi
         return 1
     fi
 
