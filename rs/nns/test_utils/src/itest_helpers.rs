@@ -501,8 +501,12 @@ pub async fn create_and_install_mock_exchange_rate_canister(
     //
     //     The `specified_id` uf6dk-hyaaa-aaaaq-qaaaq-cai is invalid because it belongs to the canister allocation ranges of the test environment.
     //
-    // I don't know what that means, but this is a way around that. The
-    // "Warning" in the triple slash comments of this function is because of
+    // This is because of the way that the routing table is set up in system
+    // tests. If we wanted to get rid of this hack, we would have to change how
+    // the routing table is set up in system tests:
+    // https://github.com/dfinity/ic/pull/6053#discussion_r2329340517
+    //
+    // The "Warning" in the triple slash comments of this function is because of
     // this hack.
     let mut found = false;
     for _ in 0..100 {
