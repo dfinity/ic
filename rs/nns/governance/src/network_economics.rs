@@ -85,15 +85,15 @@ impl NetworkEconomics {
         }
 
         // Validate substructs (according to their type).
-        if let Some(neurons_fund_economics) = self.neurons_fund_economics.as_ref() {
-            if let Err(mut neurons_fund_defects) = neurons_fund_economics.validate() {
-                defects.append(&mut neurons_fund_defects)
-            }
+        if let Some(neurons_fund_economics) = self.neurons_fund_economics.as_ref()
+            && let Err(mut neurons_fund_defects) = neurons_fund_economics.validate()
+        {
+            defects.append(&mut neurons_fund_defects)
         };
-        if let Some(voting_power_economics) = self.voting_power_economics.as_ref() {
-            if let Err(mut voting_power_defects) = voting_power_economics.validate() {
-                defects.append(&mut voting_power_defects)
-            }
+        if let Some(voting_power_economics) = self.voting_power_economics.as_ref()
+            && let Err(mut voting_power_defects) = voting_power_economics.validate()
+        {
+            defects.append(&mut voting_power_defects)
         }
 
         if !defects.is_empty() {
@@ -145,25 +145,22 @@ impl NeuronsFundEconomics {
         // Validate that max >= min.
         if let (Some(maximum_icp_xdr_rate), Some(minimum_icp_xdr_rate)) =
             (maximum_icp_xdr_rate, minimum_icp_xdr_rate)
+            && maximum_icp_xdr_rate < minimum_icp_xdr_rate
         {
-            if maximum_icp_xdr_rate < minimum_icp_xdr_rate {
-                defects.push(format!(
+            defects.push(format!(
                     "maximum_icp_xdr_rate ({}) must be greater than or equal to minimum_icp_xdr_rate ({}).",
                     maximum_icp_xdr_rate, minimum_icp_xdr_rate,
                 ));
-            }
         }
 
         // Validate substruct(s) (according to their type).
         if let Some(neurons_fund_matched_funding_curve_coefficients) = self
             .neurons_fund_matched_funding_curve_coefficients
             .as_ref()
-        {
-            if let Err(mut neurons_fund_matched_funding_curve_coefficients_defects) =
+            && let Err(mut neurons_fund_matched_funding_curve_coefficients_defects) =
                 neurons_fund_matched_funding_curve_coefficients.validate()
-            {
-                defects.append(&mut neurons_fund_matched_funding_curve_coefficients_defects);
-            }
+        {
+            defects.append(&mut neurons_fund_matched_funding_curve_coefficients_defects);
         }
 
         if !defects.is_empty() {
@@ -250,14 +247,13 @@ impl NeuronsFundMatchedFundingCurveCoefficients {
         if let (Ok(one_third_participation_milestone_xdr), Ok(full_participation_milestone_xdr)) = (
             one_third_participation_milestone_xdr,
             full_participation_milestone_xdr,
-        ) {
-            if one_third_participation_milestone_xdr >= full_participation_milestone_xdr {
-                defects.push(format!(
+        ) && one_third_participation_milestone_xdr >= full_participation_milestone_xdr
+        {
+            defects.push(format!(
                     "one_third_participation_milestone_xdr ({}) must be less than full_participation_milestone_xdr ({}).",
                     one_third_participation_milestone_xdr,
                     full_participation_milestone_xdr,
                 ));
-            }
         }
 
         if !defects.is_empty() {

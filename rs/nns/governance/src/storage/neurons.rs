@@ -918,6 +918,10 @@ where
 
 // This is copied from candid/src. Seems like their definition should be public,
 // but it's not. Seems to be an oversight.
+//
+// TODO: for some reason the linter doesn't understand that this is used
+// in `lazy_static!`
+#[allow(dead_code)]
 const PRINCIPAL_MAX_LENGTH_IN_BYTES: usize = 29;
 
 // For range scanning.

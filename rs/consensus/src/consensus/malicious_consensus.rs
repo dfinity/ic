@@ -95,7 +95,7 @@ fn maliciously_propose_blocks(
     };
 
     if let Some(rank) = maybe_rank
-        && &&!block_maker::already_proposed(pool, height, my_node_id)
+        && !block_maker::already_proposed(pool, height, my_node_id)
     {
         // If maliciously_propose_empty_blocks is set, propose only empty blocks.
         let maybe_proposal = match maliciously_propose_empty_blocks {
