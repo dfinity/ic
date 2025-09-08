@@ -1,6 +1,6 @@
 //! Module that deals with ingress messages
-pub mod call_v2;
-pub mod call_v3;
+pub mod call_async;
+pub mod call_sync;
 mod ingress_watcher;
 
 pub use ingress_watcher::{IngressWatcher, IngressWatcherHandle};

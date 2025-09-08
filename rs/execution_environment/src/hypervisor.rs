@@ -11,6 +11,7 @@ use ic_embedders::{
     CompilationCache, CompilationCacheBuilder, CompilationResult, WasmExecutionInput,
     WasmtimeEmbedder,
 };
+use ic_heap_bytes::HeapBytes;
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
@@ -24,8 +25,8 @@ use ic_replicated_state::{
 };
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
-    messages::RequestMetadata, methods::FuncRef, CanisterId, MemoryDiskBytes, NumBytes,
-    NumInstructions, SubnetId, Time,
+    messages::RequestMetadata, methods::FuncRef, CanisterId, DiskBytes, NumBytes, NumInstructions,
+    SubnetId, Time,
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounter, IntGaugeVec};
@@ -166,7 +167,7 @@ impl Hypervisor {
                 if let Some(compilation_result) = compilation_result {
                     self.metrics.observe_compilation_metrics(
                         &compilation_result,
-                        self.compilation_cache.memory_bytes(),
+                        self.compilation_cache.heap_bytes(),
                         self.compilation_cache.disk_bytes(),
                     );
                 }
@@ -411,7 +412,7 @@ impl Hypervisor {
         if let Some(compilation_result) = compilation_result {
             self.metrics.observe_compilation_metrics(
                 &compilation_result,
-                self.compilation_cache.memory_bytes(),
+                self.compilation_cache.heap_bytes(),
                 self.compilation_cache.disk_bytes(),
             );
         }

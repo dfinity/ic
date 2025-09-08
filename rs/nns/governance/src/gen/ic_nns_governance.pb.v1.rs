@@ -823,6 +823,9 @@ pub mod manage_neuron {
         /// The amount to split to the child neuron.
         #[prost(uint64, tag = "1")]
         pub amount_e8s: u64,
+        /// The memo to use for the child neuron.
+        #[prost(uint64, optional, tag = "2")]
+        pub memo: ::core::option::Option<u64>,
     }
     /// Merge another neuron into this neuron.
     #[derive(
@@ -2859,8 +2862,6 @@ pub struct Governance {
     /// that it should finish before being called again.
     #[prost(bool, optional, tag = "19")]
     pub spawning_neurons: ::core::option::Option<bool>,
-    #[prost(message, optional, tag = "20")]
-    pub making_sns_proposal: ::core::option::Option<governance::MakingSnsProposal>,
     /// Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
     #[prost(message, optional, tag = "26")]
     pub xdr_conversion_rate: ::core::option::Option<XdrConversionRate>,
@@ -3103,31 +3104,6 @@ pub mod governance {
             #[prost(map = "uint64, uint64", tag = "14")]
             pub potential_voting_power_buckets: ::std::collections::HashMap<u64, u64>,
         }
-    }
-    /// Records that making an OpenSnsTokenSwap (OSTS) or CreateServiceNervousSystem (CSNS)
-    /// proposal is in progress. We only want one of these to be happening at the same time,
-    /// because otherwise, it is error prone to enforce that open OSTS or CSNS proposals are
-    /// unique. In particular, the result of checking that the proposal currently being made
-    /// would be unique is liable to becoming invalid during an .await.
-    ///
-    /// This is a temporary measure, because OSTS is part of the SNS flow that will
-    /// be replaced by 1-proposal very soon.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct MakingSnsProposal {
-        #[prost(message, optional, tag = "1")]
-        pub proposer_id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
-        #[prost(message, optional, tag = "2")]
-        pub caller: ::core::option::Option<::ic_base_types::PrincipalId>,
-        #[prost(message, optional, tag = "3")]
-        pub proposal: ::core::option::Option<super::Proposal>,
     }
 }
 #[derive(

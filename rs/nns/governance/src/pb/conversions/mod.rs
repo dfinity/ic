@@ -789,6 +789,7 @@ impl From<pb::manage_neuron::Split> for pb_api::manage_neuron::Split {
     fn from(item: pb::manage_neuron::Split) -> Self {
         Self {
             amount_e8s: item.amount_e8s,
+            memo: item.memo,
         }
     }
 }
@@ -796,6 +797,7 @@ impl From<pb_api::manage_neuron::Split> for pb::manage_neuron::Split {
     fn from(item: pb_api::manage_neuron::Split) -> Self {
         Self {
             amount_e8s: item.amount_e8s,
+            memo: item.memo,
         }
     }
 }
@@ -2913,16 +2915,6 @@ impl From<pb_api::governance::governance_cached_metrics::NeuronSubsetMetrics>
             voting_power_buckets: item.voting_power_buckets,
             deciding_voting_power_buckets: item.deciding_voting_power_buckets,
             potential_voting_power_buckets: item.potential_voting_power_buckets,
-        }
-    }
-}
-
-impl From<pb_api::governance::MakingSnsProposal> for pb::governance::MakingSnsProposal {
-    fn from(item: pb_api::governance::MakingSnsProposal) -> Self {
-        Self {
-            proposer_id: item.proposer_id,
-            caller: item.caller,
-            proposal: item.proposal.map(|x| x.into()),
         }
     }
 }

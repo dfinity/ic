@@ -1,10 +1,7 @@
 use anyhow::Result;
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_btc_adapter_test_utils::{
-    bitcoin::{hashes::Hash, Txid},
-    rpc_client::RpcApi,
-};
+use ic_btc_adapter_test_utils::bitcoin::{hashes::Hash, Txid};
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
@@ -21,11 +18,11 @@ use ic_tests_ckbtc::{
     ckbtc_setup, create_canister, install_bitcoin_canister, install_btc_checker, install_ledger,
     install_minter, subnet_app, subnet_sys,
     utils::{
-        generate_blocks, get_btc_address, get_btc_client, retrieve_btc, send_to_btc_address,
+        generate_blocks, get_btc_address, get_rpc_client, retrieve_btc, send_to_btc_address,
         wait_for_finalization_no_new_blocks, wait_for_mempool_change, wait_for_update_balance,
         BITCOIN_NETWORK_TRANSFER_FEE,
     },
-    BTC_MIN_CONFIRMATIONS, CHECK_FEE, TRANSFER_FEE,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, TRANSFER_FEE,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
@@ -50,7 +47,7 @@ pub fn test_batching(env: TestEnv) {
     let subnet_app = subnet_app(&env);
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
     let app_node = subnet_app.nodes().next().expect("No node in app subnet.");
-    let btc_rpc = get_btc_client(&env);
+    let btc_rpc = get_rpc_client::<bitcoin::Network>(&env);
 
     let default_btc_address = btc_rpc.get_address().unwrap();
     // Creating the 101 first block to reach the min confirmations to spend a coinbase utxo.
@@ -290,6 +287,8 @@ pub fn test_batching(env: TestEnv) {
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
+        .with_timeout_per_test(TIMEOUT_PER_TEST)
+        .with_overall_timeout(OVERALL_TIMEOUT)
         .with_setup(ckbtc_setup)
         .add_test(systest!(test_batching))
         .execute_from_args()?;

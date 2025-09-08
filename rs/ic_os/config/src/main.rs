@@ -120,6 +120,8 @@ pub struct GenerateTestnetConfigClapArgs {
     #[arg(long)]
     pub bitcoind_addr: Option<String>,
     #[arg(long)]
+    pub dogecoind_addr: Option<String>,
+    #[arg(long)]
     pub jaeger_addr: Option<String>,
     #[arg(long)]
     pub socks_proxy: Option<String>,
@@ -320,6 +322,7 @@ pub fn main() -> Result<()> {
                 malicious_behavior: clap_args.malicious_behavior,
                 query_stats_epoch_length: clap_args.query_stats_epoch_length,
                 bitcoind_addr: clap_args.bitcoind_addr,
+                dogecoind_addr: clap_args.dogecoind_addr,
                 jaeger_addr: clap_args.jaeger_addr,
                 socks_proxy: clap_args.socks_proxy,
                 hostname: clap_args.hostname,

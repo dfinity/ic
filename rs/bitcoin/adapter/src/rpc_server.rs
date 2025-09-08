@@ -1,11 +1,11 @@
 use crate::{
     blockchainstate::BlockchainState,
+    common::{BlockchainHeader, BlockchainNetwork},
     get_successors_handler::{GetSuccessorsRequest, GetSuccessorsResponse},
     metrics::{ServiceMetrics, LABEL_GET_SUCCESSOR, LABEL_SEND_TRANSACTION},
-    BlockchainManagerRequest, Config, GetSuccessorsHandler, IncomingSource,
-    TransactionManagerRequest,
+    BlockchainManagerRequest, GetSuccessorsHandler, IncomingSource, TransactionManagerRequest,
 };
-use bitcoin::{consensus::Encodable, hashes::Hash, BlockHash};
+use bitcoin::{hashes::Hash, BlockHash};
 use ic_btc_service::{
     btc_service_server::{BtcService, BtcServiceServer},
     BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,
@@ -21,9 +21,9 @@ use tokio::sync::mpsc;
 use tokio::sync::watch;
 use tonic::{transport::Server, Request, Response, Status};
 
-struct BtcServiceImpl {
+struct BtcServiceImpl<Network: BlockchainNetwork> {
     last_received_tx: watch::Sender<Option<Instant>>,
-    get_successors_handler: GetSuccessorsHandler,
+    get_successors_handler: GetSuccessorsHandler<Network>,
     transaction_manager_tx: mpsc::Sender<TransactionManagerRequest>,
     logger: ReplicaLogger,
     metrics: ServiceMetrics,
@@ -52,9 +52,11 @@ impl TryFrom<BtcServiceGetSuccessorsRequest> for GetSuccessorsRequest {
     }
 }
 
-impl TryFrom<GetSuccessorsResponse> for BtcServiceGetSuccessorsResponse {
+impl<Header: BlockchainHeader> TryFrom<GetSuccessorsResponse<Header>>
+    for BtcServiceGetSuccessorsResponse
+{
     type Error = Status;
-    fn try_from(response: GetSuccessorsResponse) -> Result<Self, Self::Error> {
+    fn try_from(response: GetSuccessorsResponse<Header>) -> Result<Self, Self::Error> {
         let mut blocks = vec![];
         for block in response.blocks {
             let encoded_block = Arc::unwrap_or_clone(block);
@@ -74,7 +76,11 @@ impl TryFrom<GetSuccessorsResponse> for BtcServiceGetSuccessorsResponse {
 }
 
 #[tonic::async_trait]
-impl BtcService for BtcServiceImpl {
+impl<Network> BtcService for BtcServiceImpl<Network>
+where
+    Network: BlockchainNetwork + Sync + Send + 'static,
+    Network::Header: Send,
+{
     async fn get_successors(
         &self,
         request: Request<BtcServiceGetSuccessorsRequest>,
@@ -122,17 +128,21 @@ impl BtcService for BtcServiceImpl {
 }
 
 /// Blocks until the server binds to the socket
-pub fn start_grpc_server(
-    config: Config,
+pub fn start_grpc_server<Network>(
+    network: Network,
+    incoming_source: IncomingSource,
     logger: ReplicaLogger,
     last_received_tx: watch::Sender<Option<Instant>>,
-    blockchain_state: Arc<Mutex<BlockchainState>>,
+    blockchain_state: Arc<Mutex<BlockchainState<Network>>>,
     blockchain_manager_tx: mpsc::Sender<BlockchainManagerRequest>,
     transaction_manager_tx: mpsc::Sender<TransactionManagerRequest>,
     metrics_registry: &MetricsRegistry,
-) {
+) where
+    Network: BlockchainNetwork + Sync + Send + 'static,
+    Network::Header: Send,
+{
     let get_successors_handler = GetSuccessorsHandler::new(
-        &config,
+        network,
         // The get successor handler should be low latency, and instead of not sharing state and
         // offloading the computation to an event loop here we directly access the shared state.
         blockchain_state,
@@ -148,7 +158,7 @@ pub fn start_grpc_server(
         metrics: ServiceMetrics::new(metrics_registry),
     };
 
-    match config.incoming_source {
+    match incoming_source {
         IncomingSource::Path(uds_path) => {
             let incoming = incoming_from_path(uds_path);
             let server_fut = Server::builder()

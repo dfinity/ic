@@ -139,6 +139,12 @@ pub const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";
 // TODO(EXC-1298): Uninstall this canister once the bitcoin mainnet canister is live.
 const BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID: &str = "gsvzx-syaaa-aaaan-aaabq-cai";
 
+// The ID of the staging Dogecoin mainnet and testnet canisters.
+// These canisters will be used to run the dogecoin canisters pre-launch
+// for final validation and may be used in the future to validate some canister upgrades.
+const DOGECOIN_MAINNET_STAGING_CANISTER_ID: &str = "bhuiy-ciaaa-aaaad-abwea-cai";
+const DOGECOIN_TESTNET_STAGING_CANISTER_ID: &str = "bavom-pqaaa-aaaad-abweq-cai";
+
 /// The capacity of the Wasm compilation cache.
 pub const MAX_COMPILATION_CACHE_SIZE: NumBytes = NumBytes::new(10 * GIB);
 
@@ -346,15 +352,14 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        let bitcoin_testnet_canister_id = CanisterId::from_str(BITCOIN_TESTNET_CANISTER_ID)
-            .expect("bitcoin testnet canister id must be a valid principal");
-
-        let bitcoin_mainnet_canister_id = CanisterId::from_str(BITCOIN_MAINNET_CANISTER_ID)
-            .expect("bitcoin mainnet canister id must be a valid principal");
-
-        let bitcoin_mainnet_soft_launch_canister_id =
-            CanisterId::from_str(BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID)
-                .expect("bitcoin mainnet soft-launch canister id must be a valid principal");
+        let [bitcoin_testnet_canister_id, bitcoin_mainnet_canister_id, bitcoin_mainnet_soft_launch_canister_id, dogecoin_testnet_staging_canister_id, dogecoin_mainnet_staging_canister_id] =
+            expect_canister_id([
+                BITCOIN_TESTNET_CANISTER_ID,
+                BITCOIN_MAINNET_CANISTER_ID,
+                BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID,
+                DOGECOIN_TESTNET_STAGING_CANISTER_ID,
+                DOGECOIN_MAINNET_STAGING_CANISTER_ID,
+            ]);
 
         Self {
             embedders_config: EmbeddersConfig::default(),
@@ -398,6 +403,8 @@ impl Default for Config {
                     bitcoin_testnet_canister_id,
                     bitcoin_mainnet_canister_id,
                     bitcoin_mainnet_soft_launch_canister_id,
+                    dogecoin_testnet_staging_canister_id,
+                    dogecoin_mainnet_staging_canister_id,
                 ],
                 testnet_canister_id: Some(bitcoin_testnet_canister_id),
                 mainnet_canister_id: Some(bitcoin_mainnet_canister_id),
@@ -426,6 +433,18 @@ impl Default for Config {
     }
 }
 
+fn expect_canister_id<const N: usize>(ids: [&str; N]) -> [CanisterId; N] {
+    let mut result = Vec::with_capacity(N);
+    for id in ids {
+        result.push(
+            CanisterId::from_str(id).unwrap_or_else(|e| panic!("BUG: Invalid canister id: {}", e)),
+        );
+    }
+    result
+        .try_into()
+        .unwrap_or_else(|_| unreachable!("array has size N"))
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
 pub struct BitcoinConfig {
     /// Canisters that have access to privileged bitcoin API (e.g. `bitcoin_get_successors`)
@@ -438,4 +457,35 @@ pub struct BitcoinConfig {
 
     /// The bitcoin mainnet canister to forward requests to.
     pub mainnet_canister_id: Option<CanisterId>,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::execution_environment::{
+        expect_canister_id, Config, BITCOIN_MAINNET_CANISTER_ID,
+        BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID,
+        DOGECOIN_MAINNET_STAGING_CANISTER_ID, DOGECOIN_TESTNET_STAGING_CANISTER_ID,
+    };
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn should_have_correct_canister_ids_for_bitcoin_privileged_access() {
+        let expected: BTreeSet<_> = expect_canister_id([
+            BITCOIN_TESTNET_CANISTER_ID,
+            BITCOIN_MAINNET_CANISTER_ID,
+            BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID,
+            DOGECOIN_TESTNET_STAGING_CANISTER_ID,
+            DOGECOIN_MAINNET_STAGING_CANISTER_ID,
+        ])
+        .into_iter()
+        .collect();
+
+        let actual: BTreeSet<_> = Config::default()
+            .bitcoin
+            .privileged_access
+            .into_iter()
+            .collect();
+
+        assert_eq!(actual, expected);
+    }
 }

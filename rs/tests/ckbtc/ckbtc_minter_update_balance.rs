@@ -2,7 +2,6 @@ use anyhow::Result;
 use candid::Principal;
 use ic_agent::identity::Secp256k1Identity;
 use ic_base_types::PrincipalId;
-use ic_btc_adapter_test_utils::rpc_client::RpcApi;
 use ic_btc_checker::CheckMode as NewCheckMode;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::{
@@ -27,11 +26,11 @@ use ic_tests_ckbtc::{
     install_minter, subnet_app, subnet_sys, upgrade_btc_checker,
     utils::{
         assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
-        assert_temporarily_unavailable, generate_blocks, get_btc_address, get_btc_client,
+        assert_temporarily_unavailable, generate_blocks, get_btc_address, get_rpc_client,
         start_canister, stop_canister, update_balance, upgrade_canister,
         upgrade_canister_with_args, wait_for_bitcoin_balance, BTC_BLOCK_REWARD,
     },
-    BTC_MIN_CONFIRMATIONS, CHECK_FEE,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
@@ -51,7 +50,7 @@ pub fn test_update_balance(env: TestEnv) {
     let app_node = subnet_app.nodes().next().expect("No node in app subnet.");
 
     // Get access to btc replica.
-    let btc_rpc = get_btc_client(&env);
+    let btc_rpc = get_rpc_client::<bitcoin::Network>(&env);
 
     let default_btc_address = btc_rpc.get_address().unwrap();
     // Creating the 10 first block to reach the min confirmations of the minter canister.
@@ -309,6 +308,8 @@ pub fn test_update_balance(env: TestEnv) {
 }
 fn main() -> Result<()> {
     SystemTestGroup::new()
+        .with_timeout_per_test(TIMEOUT_PER_TEST)
+        .with_overall_timeout(OVERALL_TIMEOUT)
         .with_setup(ckbtc_setup)
         .add_test(systest!(test_update_balance))
         .execute_from_args()?;

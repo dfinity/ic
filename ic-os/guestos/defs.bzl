@@ -34,7 +34,7 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:canister_sandbox": "/opt/ic/bin/canister_sandbox:0755",  # Need for the canister sandboxing to work.
             "//publish/binaries:compiler_sandbox": "/opt/ic/bin/compiler_sandbox:0755",  # Need for the Wasm compilation sandboxing to work.
             "//publish/binaries:sandbox_launcher": "/opt/ic/bin/sandbox_launcher:0755",  # Need for the canister/compilation sandboxing to work.
-            "//publish/binaries:ic-btc-adapter": "/opt/ic/bin/ic-btc-adapter:0755",  # Need for the Bitcoin integration.
+            "//publish/binaries:ic-btc-adapter": "/opt/ic/bin/ic-btc-adapter:0755",  # Need for the Bitcoin and Dogecoin integration.
             "//publish/binaries:ic-https-outcalls-adapter-https-only": "/opt/ic/bin/ic-https-outcalls-adapter:0755",  # Need for the HTTPS outcalls feature. `//publish/binaries:ic-https-outcalls-adapter` is for testing and must NOT be used here
             "//publish/binaries:ic-crypto-csp": "/opt/ic/bin/ic-crypto-csp:0755",  # Crypto operations provider, required by the IC protocol (signing, etc).
             "//publish/binaries:orchestrator": "/opt/ic/bin/orchestrator:0755",  # Replica process manager, required by the IC protocol (upgrades, node addition, etc).
@@ -113,8 +113,8 @@ def image_deps(mode, malicious = False):
             expected_recovery_hash_path: "/opt/ic/share/expected_recovery_hash",
             Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
             Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service"): "/etc/systemd/system/guestos-recovery-engine.service",
-            Label("//ic-os/components:selinux/guestos-recovery-engine/guestos-recovery-engine.fc"): "/prep/guestos-recovery-engine/guestos-recovery-engine.fc",
-            Label("//ic-os/components:selinux/guestos-recovery-engine/guestos-recovery-engine.te"): "/prep/guestos-recovery-engine/guestos-recovery-engine.te",
+            Label("//ic-os/components:guestos/selinux/guestos-recovery-engine/guestos-recovery-engine.fc"): "/prep/guestos-recovery-engine/guestos-recovery-engine.fc",
+            Label("//ic-os/components:guestos/selinux/guestos-recovery-engine/guestos-recovery-engine.te"): "/prep/guestos-recovery-engine/guestos-recovery-engine.te",
         })
 
     return deps

@@ -125,7 +125,7 @@ pub fn test(env: TestEnv) {
     let (ii_canister_id, nns_dapp_canister_id) =
         install_ii_nns_dapp_and_subnet_rental(&env, &ic_gateway_url, None);
     let ii_anchor = "<title>Internet Identity</title>";
-    let nns_dapp_anchor = "<title>NNS Dapp</title>";
+    let nns_dapp_anchor = "<title>Network Nervous System</title>";
     get_html(&env, ic_gateway_url.clone(), ii_canister_id, ii_anchor);
     get_html(&env, ic_gateway_url, nns_dapp_canister_id, nns_dapp_anchor);
 }

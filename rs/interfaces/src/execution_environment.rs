@@ -10,7 +10,10 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     batch::{CanisterCyclesCostSchedule, ChainKeyData},
     ingress::{IngressStatus, WasmResult},
-    messages::{CertificateDelegation, MessageId, Query, SignedIngressContent},
+    messages::{
+        CertificateDelegation, CertificateDelegationMetadata, MessageId, Query,
+        SignedIngressContent,
+    },
     Cycles, ExecutionRound, Height, NodeId, NumInstructions, Randomness, RegistryVersion,
     ReplicaVersion, Time,
 };
@@ -34,11 +37,15 @@ pub struct InstanceStats {
     /// Total number of (host) OS pages (4KiB) accessed (read or written) by the instance
     /// and loaded into the linear memory.
     pub wasm_accessed_pages: usize,
+    /// Non-deterministic number of accessed OS (4 KiB) pages (read + write).
+    pub wasm_accessed_os_pages_count: usize,
 
     /// Total number of (host) OS pages (4KiB) modified by the instance.
     /// By definition a page that has been dirtied has also been accessed,
     /// hence this dirtied_pages <= accessed_pages
     pub wasm_dirty_pages: usize,
+    /// Non-deterministic number of dirty OS (4 KiB) pages (write).
+    pub wasm_dirty_os_pages_count: usize,
 
     /// Number of times a write access is handled when the page has already been
     /// read.
@@ -515,9 +522,17 @@ pub enum QueryExecutionError {
 pub type QueryExecutionResponse =
     Result<(Result<WasmResult, UserError>, Time), QueryExecutionError>;
 
+/// The input type to a `call()` request in [`QueryExecutionService`].
+#[derive(Debug)]
+pub struct QueryExecutionInput {
+    pub query: Query,
+    pub certificate_delegation_with_metadata:
+        Option<(CertificateDelegation, CertificateDelegationMetadata)>,
+}
+
 /// Interface for the component to execute queries.
 pub type QueryExecutionService =
-    BoxCloneService<(Query, Option<CertificateDelegation>), QueryExecutionResponse, Infallible>;
+    BoxCloneService<QueryExecutionInput, QueryExecutionResponse, Infallible>;
 
 /// Errors that can be returned when reading/writing from/to ingress history.
 #[derive(Clone, Eq, PartialEq, Debug)]

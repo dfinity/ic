@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+
+## 10.0.0 - 2025-09-05
+
 ### Added
 - The endpoint `/instances/<instance_id>/update/await_ingress_message` (execute rounds on the PocketIc instance until the message is executed):
   to fix a performance regression when using the two endpoints `/instances/<instance_id>/update/tick` and `/instances/<instance_id>/read/ingress_status` in a loop.
@@ -20,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   if the new instance should make progress automatically, i.e., if PocketIC should periodically update the time of the instance to the real time and execute rounds on the subnets.
 - The argument of the endpoint `/instances/` takes an optional field `nonmainnet_features` specifying which features not available on the ICP mainnet should be available
   in the newly created PocketIC instance (the field `nonmainnet_features` used to be a simple Boolean before).
+- The argument of the endpoint `/instances/` takes an additional optional field `http_gateway_config` specifying that an HTTP gateway with the given configuration
+  should be created for the newly created instance.
 
 
 
