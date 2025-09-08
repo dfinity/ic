@@ -799,7 +799,7 @@ pub fn new_subnet_runtime(subnet: &SubnetSnapshot) -> Runtime {
 
     Runtime::Remote(RemoteTestRuntime {
         agent,
-        effective_canister_id: PrincipalId::from(REGISTRY_CANISTER_ID),
+        effective_canister_id: node.effective_canister_id(),
     })
 }
 
