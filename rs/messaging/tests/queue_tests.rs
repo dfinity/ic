@@ -1020,6 +1020,15 @@ fn state_machine_subnet_splitting_test() {
     )
     .expect("old_subnet_proxy induction stage");
 
+    // Induct once from the remote subnet on the `old_subnets_proxy` to the remote subnet
+    // on the `new_subnets_proxy` to induct rerouted reject responses.
+    induct_from_head_of_stream(
+        &old_subnets_proxy.remote_env,
+        &new_subnets_proxy.remote_env,
+        None,
+    )
+    .unwrap();
+
     // Do bidirectional inductions until no more changes in the state of `new_subnet_proxy`
     // are observed.
     let new_test_states = induct_and_observe_until_stale(
