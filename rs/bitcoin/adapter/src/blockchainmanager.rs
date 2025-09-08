@@ -437,8 +437,6 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
 
         match self.blockchain.lock().unwrap().add_block(block.clone()) {
             Ok(()) => {
-                // TODO: investigate why this never prints.
-                // It seems headers are inserted but not blocks.
                 warn!(self.logger, "Able to add the received block in blockchain.",);
                 Ok(())
             }
