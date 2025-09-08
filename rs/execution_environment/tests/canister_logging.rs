@@ -147,33 +147,43 @@ fn fetch_canister_logs(
 }
 
 #[test]
-fn test_fetch_canister_logs_via_submit_ingress() {
-    let env = setup_env();
-    let canister_id = create_and_install_canister(
-        &env,
-        CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibilityV2::Public)
-            .build(),
-        wat_canister().build_wasm(),
-    );
-    let result = env.submit_ingress_as(
-        PrincipalId::new_anonymous(), // Any public user.
-        CanisterId::ic_00(),
-        "fetch_canister_logs",
-        FetchCanisterLogsRequest::new(canister_id).encode(),
-    );
-    assert_eq!(
-        result,
-        Err(SubmitIngressError::UserError(UserError::new(
+fn test_fetch_canister_logs_via_replicated_ingress() {
+    // Test fetch_canister_logs call fails for replicated ingress.
+    for replicated_inter_canister_log_fetch in [FlagStatus::Disabled, FlagStatus::Enabled] {
+        let expected_error = UserError::new(
             ErrorCode::CanisterRejectedMessage,
             "ic00 method fetch_canister_logs can not be called via ingress messages",
-        )))
-    );
+        );
+
+        let env = setup_env_with(replicated_inter_canister_log_fetch);
+        let canister_id = create_and_install_canister(
+            &env,
+            CanisterSettingsArgsBuilder::new()
+                .with_log_visibility(LogVisibilityV2::Public)
+                .build(),
+            wat_canister().build_wasm(),
+        );
+        let (sender, ic00, method, payload) = (
+            PrincipalId::new_anonymous(), // Any public user.
+            CanisterId::ic_00(),
+            "fetch_canister_logs",
+            FetchCanisterLogsRequest::new(canister_id).encode(),
+        );
+
+        let result = env.submit_ingress_as(sender, ic00, method, payload.clone());
+        assert_eq!(
+            result,
+            Err(SubmitIngressError::UserError(expected_error.clone()))
+        );
+
+        let result = env.execute_ingress_as(sender, ic00, method, payload);
+        assert_eq!(result, Err(expected_error));
+    }
 }
 
 #[test]
-fn test_fetch_canister_logs_via_replicated_ingress() {
-    // Test fetch_canister_logs call fails for replicated ingress.
+fn test_fetch_canister_logs_via_query_call() {
+    // Test fetch_canister_logs API call succeeds via query call.
     for replicated_inter_canister_log_fetch in [FlagStatus::Disabled, FlagStatus::Enabled] {
         let env = setup_env_with(replicated_inter_canister_log_fetch);
         let canister_id = create_and_install_canister(
@@ -183,7 +193,7 @@ fn test_fetch_canister_logs_via_replicated_ingress() {
                 .build(),
             wat_canister().build_wasm(),
         );
-        let result = env.execute_ingress_as(
+        let result = env.query_as(
             PrincipalId::new_anonymous(), // Any public user.
             CanisterId::ic_00(),
             "fetch_canister_logs",
@@ -191,40 +201,14 @@ fn test_fetch_canister_logs_via_replicated_ingress() {
         );
         assert_eq!(
             result,
-            Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                "ic00 method fetch_canister_logs can not be called via ingress messages",
+            Ok(WasmResult::Reply(
+                FetchCanisterLogsResponse {
+                    canister_log_records: vec![],
+                }
+                .encode(),
             ))
         );
     }
-}
-
-#[test]
-fn test_fetch_canister_logs_via_query_call() {
-    // Test fetch_canister_logs API call results.
-    let env = setup_env();
-    let canister_id = create_and_install_canister(
-        &env,
-        CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibilityV2::Public)
-            .build(),
-        wat_canister().build_wasm(),
-    );
-    let result = env.query_as(
-        PrincipalId::new_anonymous(), // Any public user.
-        CanisterId::ic_00(),
-        "fetch_canister_logs",
-        FetchCanisterLogsRequest::new(canister_id).encode(),
-    );
-    assert_eq!(
-        result,
-        Ok(WasmResult::Reply(
-            FetchCanisterLogsResponse {
-                canister_log_records: vec![],
-            }
-            .encode(),
-        ))
-    );
 }
 
 #[test]
