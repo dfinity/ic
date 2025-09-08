@@ -87,6 +87,8 @@ const APP_NODES_LARGE: usize = 37;
 /// plus 4 to make checkpoint heights more predictable
 const DKG_INTERVAL_LARGE: u64 = 124;
 
+const IC_ADMIN_REMOTE_PATH: &str = "/var/lib/admin/ic-admin";
+
 pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 /// Setup an IC with the given number of unassigned nodes and
@@ -616,8 +618,8 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
     scp_send_to(
         logger.clone(),
         session,
-        &get_dependency_path("rs/tests/recovery/binaries/ic-admin"),
-        Path::new("/var/lib/admin/ic-admin"),
+        &get_dependency_path_from_env("IC_ADMIN_PATH"),
+        Path::new(IC_ADMIN_REMOTE_PATH),
         0o755,
     );
 
@@ -632,7 +634,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
     let pub_key = pub_key.trim();
 
     let command = format!(
-        r#"IC_ADMIN_BIN="/var/lib/admin/ic-admin" /opt/ic/bin/ic-recovery \
+        r#"IC_ADMIN_BIN="{IC_ADMIN_REMOTE_PATH}" /opt/ic/bin/ic-recovery \
         --nns-url {nns_url} \
         --test --skip-prompts --use-local-binaries \
         app-subnet-recovery \

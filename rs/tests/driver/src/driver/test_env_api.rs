@@ -1289,14 +1289,10 @@ pub fn get_dependency_path<P: AsRef<Path>>(p: P) -> PathBuf {
 }
 
 /// Return the (actual) path of the (runfiles-relative) artifact in environment variable `v`.
-fn get_dependency_path_from_env(v: &str) -> PathBuf {
-    let runfiles =
-        std::env::var("RUNFILES").expect("Expected environment variable RUNFILES to be defined!");
-
+pub fn get_dependency_path_from_env(v: &str) -> PathBuf {
     let path_from_env =
         std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {} not set", v));
-
-    Path::new(&runfiles).join(path_from_env)
+    get_dependency_path(path_from_env)
 }
 
 pub fn read_dependency_to_string<P: AsRef<Path>>(p: P) -> Result<String> {
