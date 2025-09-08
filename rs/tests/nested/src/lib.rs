@@ -209,7 +209,7 @@ pub fn registration(env: TestEnv) {
 pub const SUBNET_SIZE: usize = 4;
 /// nns_recovery_test uses a DKG interval of 9, which is large enough for a subnet of that size and
 /// as small as possible to keep the test runtime low
-pub const DKG_INTERVAL: u64 = 9;
+pub const DKG_INTERVAL: u64 = 49;
 /// nns_recovery_test's RECOVERY_GUESTOS_IMG_VERSION variable is a placeholder for the actual
 /// version of the recovery GuestOS image, that Node Providers would use as input to
 /// guestos-recovery-upgrader
@@ -482,7 +482,7 @@ pub fn nns_recovery_test(env: TestEnv) {
     let f = (SUBNET_SIZE - 1) / 3;
     let faulty_nodes = &nns_nodes[..(f + 1)];
     let healthy_nodes = &nns_nodes[(f + 1)..];
-    let dfinity_owned_node = healthy_nodes.first().unwrap();
+    let dfinity_owned_node = faulty_nodes.first().unwrap();
     info!(
         logger,
         "Selected faulty nodes: {:?}. Selected healthy nodes: {:?}",
