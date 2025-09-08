@@ -426,14 +426,13 @@ fn test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enable
     // Test that fetch_canister_logs API is not accessible via composite query call.
     // There are 3 actors with the following controller relatioship: user -> canister_a -> canister_b.
     // The user uses composite_query to canister_a to fetch logs of canister_b, which should fail.
-    //let (env, canister_a, user) = setup_with_controller(UNIVERSAL_CANISTER_WASM.to_vec());
-
     let user = PrincipalId::new_user_test_id(42);
+    let log_visibility = LogVisibilityV2::Controllers;
     let env = setup_env_with(FlagStatus::Enabled);
     let canister_a = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibilityV2::Controllers)
+            .with_log_visibility(log_visibility.clone())
             .with_controllers(vec![user])
             .build(),
         UNIVERSAL_CANISTER_WASM.to_vec(),
@@ -443,6 +442,7 @@ fn test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enable
     let canister_b = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(log_visibility)
             .with_controllers(vec![canister_a.get()])
             .build(),
         wat_canister()
