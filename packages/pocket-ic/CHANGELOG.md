@@ -23,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 - The field `node_ids` from `SubnetConfig`. Node ids can always be retrieved from the registry.
 
+### Changed
+- Renamed `PocketIcBuilder::with_nonmainnet_features` to `PocketIcBuilder::with_icp_config` and changed the argument type
+  from a simple Boolean to a record with separate settings for the individual configuration options.
+
 
 
 ## 9.0.2 - 2025-06-06
