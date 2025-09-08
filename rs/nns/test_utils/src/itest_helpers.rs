@@ -531,6 +531,8 @@ pub async fn create_and_install_mock_exchange_rate_canister(
             class: AssetClass::FiatCurrency,
         }),
 
+        // I believe these are realistic compared to what would be seen in
+        // production. FWIW, these same values are used in other tests.
         metadata: Some(ExchangeRateMetadata {
             decimals: 9,
             base_asset_num_queried_sources: 7,
