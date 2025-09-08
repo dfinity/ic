@@ -27,12 +27,11 @@ use ic_agent::{
     Agent, AgentError, Identity, Signature,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
-use ic_cdk::api::management_canister::{
-    ecdsa::SignWithEcdsaResponse, schnorr::SignWithSchnorrResponse,
+use ic_cdk::management_canister::{
+    SignWithEcdsaResult, SignWithSchnorrResult, VetKDDeriveKeyResult,
 };
 use ic_config::ConfigOptional;
 use ic_limits::MAX_INGRESS_TTL;
-use ic_management_canister_types::VetKDDeriveKeyResult;
 use ic_management_canister_types_private::{CanisterStatusResultV2, EmptyBlob, Payload};
 use ic_message::ForwardParams;
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
@@ -88,11 +87,9 @@ pub const AGENT_REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 pub const CANISTER_CREATE_TIMEOUT: Duration = Duration::from_secs(30);
 /// A short wasm module that is a legal canister binary.
 pub const _EMPTY_WASM: &[u8] = &[0, 97, 115, 109, 1, 0, 0, 0];
-/// The following definition is a temporary work-around. Please do not copy!
-pub const MESSAGE_CANISTER_WASM: &[u8] = include_bytes!("message.wasm");
 
 pub const CFG_TEMPLATE_BYTES: &[u8] =
-    include_bytes!("../../../../ic-os/components/ic/generate-ic-config/ic.json5.template");
+    include_bytes!("../../../../ic-os/components/guestos/generate-ic-config/ic.json5.template");
 
 // Requests are multiplexed over H2 requests.
 pub const MAX_CONCURRENT_REQUESTS: usize = 10_000;
@@ -131,6 +128,11 @@ lazy_static! {
     /// The WASM of the Universal Canister.
     pub static ref UNIVERSAL_CANISTER_WASM: &'static [u8] = {
         let vec = get_canister_wasm("UNIVERSAL_CANISTER_WASM_PATH");
+        Box::leak(vec.into_boxed_slice())
+    };
+
+    pub static ref MESSAGE_CANISTER_WASM: &'static [u8] = {
+        let vec = get_canister_wasm("MESSAGE_CANISTER_WASM_PATH");
         Box::leak(vec.into_boxed_slice())
     };
 
@@ -677,7 +679,7 @@ impl<'a> MessageCanister<'a> {
             .0;
 
         // Install the universal canister.
-        mgr.install_code(&canister_id, MESSAGE_CANISTER_WASM)
+        mgr.install_code(&canister_id, &MESSAGE_CANISTER_WASM)
             .call_and_wait()
             .await
             .map_err(|err| format!("Couldn't install message canister: {}", err))?;
@@ -838,46 +840,37 @@ impl<'a> SignerCanister<'a> {
     pub async fn gen_ecdsa_sig(
         &self,
         params: GenEcdsaParams,
-    ) -> Result<SignWithEcdsaResponse, String> {
-        let bytes = self
-            .agent
+    ) -> Result<SignWithEcdsaResult, AgentError> {
+        self.agent
             .update(&self.canister_id, "gen_ecdsa_sig")
             .with_arg(Encode!(&params).unwrap())
             .call_and_wait()
             .await
-            .map_err(|e| e.to_string())?;
-
-        Decode!(&bytes, Result<SignWithEcdsaResponse, String>).unwrap()
+            .map(|bytes| Decode!(&bytes, SignWithEcdsaResult).unwrap())
     }
 
     pub async fn gen_schnorr_sig(
         &self,
         params: GenSchnorrParams,
-    ) -> Result<SignWithSchnorrResponse, String> {
-        let bytes = self
-            .agent
+    ) -> Result<SignWithSchnorrResult, AgentError> {
+        self.agent
             .update(&self.canister_id, "gen_schnorr_sig")
             .with_arg(Encode!(&params).unwrap())
             .call_and_wait()
             .await
-            .map_err(|e| e.to_string())?;
-
-        Decode!(&bytes, Result<SignWithSchnorrResponse, String>).unwrap()
+            .map(|bytes| Decode!(&bytes, SignWithSchnorrResult).unwrap())
     }
 
     pub async fn gen_vetkd_key(
         &self,
         params: GenVetkdParams,
-    ) -> Result<VetKDDeriveKeyResult, String> {
-        let bytes = self
-            .agent
+    ) -> Result<VetKDDeriveKeyResult, AgentError> {
+        self.agent
             .update(&self.canister_id, "gen_vetkd_key")
             .with_arg(Encode!(&params).unwrap())
             .call_and_wait()
             .await
-            .map_err(|e| e.to_string())?;
-
-        Decode!(&bytes, Result<VetKDDeriveKeyResult, String>).unwrap()
+            .map(|bytes| Decode!(&bytes, VetKDDeriveKeyResult).unwrap())
     }
 }
 
@@ -1718,7 +1711,7 @@ impl MetricsFetcher {
     }
 }
 
-/// Assert that all malicious nodes in a topology produced log that signals malicious behaviour.
+/// Assert that all malicious nodes in a topology produced log that signals malicious behavior.
 /// For every node, the log is searched until any of the given substrings is found, or timeout is reached.
 /// Use this function at the end of malicious node tests, when all logs are present already.
 pub fn assert_malicious_from_topo(topology: &TopologySnapshot, malicious_signals: Vec<&str>) {
@@ -1729,7 +1722,7 @@ pub fn assert_malicious_from_topo(topology: &TopologySnapshot, malicious_signals
     assert_malicious(malicious_nodes, malicious_signals);
 }
 
-/// Assert that all nodes of the given set produced log that signals malicious behaviour.
+/// Assert that all nodes of the given set produced log that signals malicious behavior.
 /// For every node, the log is searched until any of the given substrings is found, or timeout is reached.
 /// Use this function at the end of malicious node tests, when all logs are present already.
 pub fn assert_malicious(
@@ -1772,7 +1765,7 @@ async fn assert_nodes_malicious_parallel(
     }
 }
 
-/// Assert that a node produced log that signals malicious behaviour.
+/// Assert that a node produced log that signals malicious behavior.
 pub async fn assert_node_malicious(node: IcNodeSnapshot, malicious_signals: Vec<&str>) {
     LogStream::open(vec![node].into_iter())
         .await

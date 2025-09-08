@@ -1630,10 +1630,7 @@ fn stable_access_beyond_32_bit_range() {
         )"#
     );
 
-    let mut instance = WasmtimeInstanceBuilder::new()
-        .with_wat(&wat)
-        .with_canister_memory_limit(NumBytes::from(40 * gb))
-        .build();
+    let mut instance = WasmtimeInstanceBuilder::new().with_wat(&wat).build();
     instance.run(func_ref("write_to_last_page")).unwrap();
 }
 
@@ -1825,7 +1822,6 @@ fn wasm_debug_print_instructions_charging() {
     for (rate_limiting, subnet_type, expected_instructions) in test_cases {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = rate_limiting;
-        config.feature_flags.wasm64 = FlagStatus::Enabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(subnet_type)
@@ -1880,7 +1876,6 @@ fn wasm_canister_logging_instructions_charging() {
     for (message_len, expected_instructions) in test_cases {
         let mut config = Config::default();
         config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
-        config.feature_flags.wasm64 = FlagStatus::Enabled;
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_subnet_type(SubnetType::Application)
@@ -1950,7 +1945,6 @@ fn wasm_logging_new_records_after_exceeding_log_size_limit() {
     // same for wasm64
     let mut config = Config::default();
     config.feature_flags.rate_limiting_of_debug_prints = FlagStatus::Enabled;
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
     let instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_subnet_type(SubnetType::Application)
@@ -1975,8 +1969,7 @@ fn wasm64_basic_test() {
         (memory (export "memory") i64 10)
     )"#;
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2002,8 +1995,7 @@ fn memory_copy_test() {
         (memory (export "memory") 10)
     )"#;
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2028,8 +2020,7 @@ fn wasm64_memory_copy_test() {
         (memory (export "memory") i64 10)
     )"#;
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2055,8 +2046,7 @@ fn wasm64_memory_init_test() {
             (data (;0;) "\01\02\03\04")
     )"#;
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2083,8 +2073,7 @@ fn wasm64_handles_memory_grow_failure_test() {
         (memory (export "memory") i64 10)
     )"#;
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2228,8 +2217,7 @@ fn wasm64_import_system_api_functions() {
         (memory (export "memory") i64 10)
     )"#;
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2269,8 +2257,7 @@ fn wasm64_msg_caller_copy() {
         call_context_test_id(13),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2339,8 +2326,7 @@ fn wasm64_msg_arg_data_copy() {
         call_context_test_id(13),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2400,8 +2386,7 @@ fn wasm64_msg_method_name_copy() {
     let msg_name = "test".to_string();
     let api = ApiType::inspect_message(caller, msg_name.clone(), payload, UNIX_EPOCH);
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2470,8 +2455,7 @@ fn wasm64_msg_reply_data_append() {
         caller,
         call_context_test_id(13),
     );
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2521,8 +2505,7 @@ fn wasm64_msg_reject() {
         caller,
         call_context_test_id(13),
     );
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2573,8 +2556,7 @@ fn wasm64_reject_msg_copy() {
         NumInstructions::new(700),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2640,8 +2622,7 @@ fn wasm64_root_key() {
         call_context_test_id(13),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2713,8 +2694,7 @@ fn wasm64_canister_self_copy() {
         call_context_test_id(13),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2784,8 +2764,7 @@ fn wasm64_subnet_self_size() {
         call_context_test_id(13),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2838,8 +2817,7 @@ fn wasm64_subnet_self_copy() {
         call_context_test_id(13),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2912,8 +2890,7 @@ fn wasm64_trap() {
         user_test_id(24).get(),
         call_context_test_id(13),
     );
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -2954,8 +2931,7 @@ fn wasm64_canister_cycle_balance128() {
         call_context_test_id(13),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -3020,8 +2996,7 @@ fn wasm64_canister_liquid_cycle_balance128() {
         call_context_test_id(13),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -3095,8 +3070,7 @@ fn wasm64_msg_cycles_refunded128() {
         NumInstructions::new(700),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -3158,8 +3132,7 @@ fn wasm64_cycles_burn128() {
         call_context_test_id(13),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)
@@ -3201,8 +3174,7 @@ fn large_wasm64_memory_allocation_test() {
     // This test checks if maximum memory size
     // is capped to the maximum allowed memory size in 64 bit mode.
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let max_heap_size_in_pages = config.max_wasm64_memory_size.get() / WASM_PAGE_SIZE as u64;
     let wat = format!(
         r#"
@@ -3283,10 +3255,11 @@ fn large_wasm64_stable_read_write_test() {
 
     let gb = 1024 * 1024 * 1024;
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
-    // Declare a large heap.
-    config.max_wasm64_memory_size = NumBytes::from(10 * gb);
+    let config = ic_config::embedders::Config {
+        // Declare a large heap.
+        max_wasm64_memory_size: NumBytes::from(10 * gb),
+        ..Default::default()
+    };
 
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
@@ -3298,7 +3271,6 @@ fn large_wasm64_stable_read_write_test() {
             call_context_test_id(13),
         ))
         .with_wat(wat)
-        .with_canister_memory_limit(NumBytes::from(40 * gb))
         .build();
 
     let result = instance.run(FuncRef::Method(WasmMethod::Update("test".to_string())));
@@ -3363,8 +3335,7 @@ fn wasm64_saturate_fun_index() {
         call_context_test_id(13),
     );
 
-    let mut config = ic_config::embedders::Config::default();
-    config.feature_flags.wasm64 = FlagStatus::Enabled;
+    let config = ic_config::embedders::Config::default();
     let mut instance = WasmtimeInstanceBuilder::new()
         .with_config(config)
         .with_wat(wat)

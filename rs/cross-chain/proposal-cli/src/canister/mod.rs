@@ -1,13 +1,21 @@
 #[cfg(test)]
 mod tests;
 
+use candid::Principal;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::process::Command;
 use std::str::FromStr;
-use strum_macros::EnumIter;
+use strum_macros::{EnumCount, EnumIter};
 
-#[derive(Clone, Eq, PartialEq, Debug, Ord, PartialOrd, EnumIter)]
+pub enum DownloadableFile {
+    /// For cases where the file is stored locally.
+    Local { path: PathBuf },
+    /// For cases where the file is stored remotely.
+    Remote { url: String },
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Ord, PartialOrd, EnumIter, EnumCount)]
 #[allow(clippy::enum_variant_names)]
 pub enum TargetCanister {
     BtcChecker,
@@ -28,6 +36,7 @@ pub enum TargetCanister {
     LedgerSuiteOrchestrator,
     EvmRpc,
     CyclesLedger,
+    CyclesIndex,
     ExchangeRateCanister,
     SolRpc,
 }
@@ -37,7 +46,9 @@ impl TargetCanister {
         match self {
             TargetCanister::BtcChecker => "btc_checker",
             TargetCanister::CkBtcArchive | TargetCanister::CkEthArchive => "archive",
-            TargetCanister::CkBtcIndex | TargetCanister::CkEthIndex => "index",
+            TargetCanister::CkBtcIndex
+            | TargetCanister::CkEthIndex
+            | TargetCanister::CyclesIndex => "index",
             TargetCanister::CkBtcLedger | TargetCanister::CkEthLedger => "ledger",
             TargetCanister::CkBtcMinter | TargetCanister::CkEthMinter => "minter",
             TargetCanister::IcpArchive1 => "icp-archive1",
@@ -65,6 +76,7 @@ impl TargetCanister {
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
             | TargetCanister::CkEthMinter
+            | TargetCanister::CyclesIndex
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
@@ -89,7 +101,9 @@ impl TargetCanister {
             TargetCanister::CkBtcArchive | TargetCanister::CkEthArchive => {
                 PathBuf::from("rs/ledger_suite/icrc1/archive/archive.did")
             }
-            TargetCanister::CkBtcIndex | TargetCanister::CkEthIndex => {
+            TargetCanister::CkBtcIndex
+            | TargetCanister::CkEthIndex
+            | TargetCanister::CyclesIndex => {
                 PathBuf::from("rs/ledger_suite/icrc1/index-ng/index-ng.did")
             }
             TargetCanister::CkBtcLedger | TargetCanister::CkEthLedger => {
@@ -130,6 +144,7 @@ impl TargetCanister {
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
             | TargetCanister::CkEthMinter
+            | TargetCanister::CyclesIndex
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
@@ -148,6 +163,15 @@ impl TargetCanister {
 
     pub fn git_log_dirs(&self) -> Vec<PathBuf> {
         match &self {
+            TargetCanister::CyclesIndex => {
+                vec![
+                    PathBuf::from("packages/icrc-ledger-types"),
+                    PathBuf::from("rs/ledger_suite/common/ledger_canister_core"),
+                    PathBuf::from("rs/ledger_suite/common/ledger_core"),
+                    PathBuf::from("rs/ledger_suite/icrc1/index-ng"),
+                    PathBuf::from("rs/ledger_suite/icrc1/tokens_u256"),
+                ]
+            }
             TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
@@ -208,6 +232,7 @@ impl TargetCanister {
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
             | TargetCanister::CkEthMinter
+            | TargetCanister::CyclesIndex
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
@@ -232,7 +257,9 @@ impl TargetCanister {
             TargetCanister::CkBtcLedger => "ic-icrc1-ledger.wasm.gz",
             TargetCanister::CkBtcMinter => "ic-ckbtc-minter.wasm.gz",
             TargetCanister::CkEthArchive => "ic-icrc1-archive-u256.wasm.gz",
-            TargetCanister::CkEthIndex => "ic-icrc1-index-ng-u256.wasm.gz",
+            TargetCanister::CkEthIndex | TargetCanister::CyclesIndex => {
+                "ic-icrc1-index-ng-u256.wasm.gz"
+            }
             TargetCanister::CkEthLedger => "ic-icrc1-ledger-u256.wasm.gz",
             TargetCanister::CkEthMinter => "ic-cketh-minter.wasm.gz",
             TargetCanister::IcpArchive1
@@ -262,6 +289,7 @@ impl TargetCanister {
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
             | TargetCanister::CkEthMinter
+            | TargetCanister::CyclesIndex
             | TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
@@ -288,38 +316,108 @@ impl TargetCanister {
         format!("{:?}", self.build_artifact())
     }
 
-    pub fn canister_ids_json_file(&self) -> PathBuf {
+    pub fn canister_ids_json_file(&self) -> DownloadableFile {
         match self {
             TargetCanister::BtcChecker
             | TargetCanister::CkBtcArchive
             | TargetCanister::CkBtcIndex
             | TargetCanister::CkBtcLedger
-            | TargetCanister::CkBtcMinter => {
-                PathBuf::from("rs/bitcoin/ckbtc/mainnet/canister_ids.json")
-            }
+            | TargetCanister::CkBtcMinter => DownloadableFile::Local {
+                path: PathBuf::from("rs/bitcoin/ckbtc/mainnet/canister_ids.json"),
+            },
             TargetCanister::CkEthArchive
             | TargetCanister::CkEthIndex
             | TargetCanister::CkEthLedger
             | TargetCanister::CkEthMinter
-            | TargetCanister::LedgerSuiteOrchestrator => {
-                PathBuf::from("rs/ethereum/cketh/mainnet/canister_ids.json")
-            }
+            | TargetCanister::LedgerSuiteOrchestrator => DownloadableFile::Local {
+                path: PathBuf::from("rs/ethereum/cketh/mainnet/canister_ids.json"),
+            },
             TargetCanister::IcpArchive1
             | TargetCanister::IcpArchive2
             | TargetCanister::IcpArchive3
             | TargetCanister::IcpArchive4
             | TargetCanister::IcpIndex
-            | TargetCanister::IcpLedger => PathBuf::from("rs/ledger_suite/icp/canister_ids.json"),
+            | TargetCanister::IcpLedger => DownloadableFile::Local {
+                path: PathBuf::from("rs/ledger_suite/icp/canister_ids.json"),
+            },
             TargetCanister::EvmRpc
             | TargetCanister::CyclesLedger
-            | TargetCanister::ExchangeRateCanister => PathBuf::from("canister_ids.json"),
-            TargetCanister::SolRpc => PathBuf::from("canister/prod/canister_ids.json"),
+            | TargetCanister::ExchangeRateCanister => DownloadableFile::Local {
+                path: PathBuf::from("canister_ids.json"),
+            },
+            TargetCanister::SolRpc => DownloadableFile::Local {
+                path: PathBuf::from("canister/prod/canister_ids.json"),
+            },
+            TargetCanister::CyclesIndex => DownloadableFile::Remote {
+                url: "https://raw.githubusercontent.com/dfinity/cycles-ledger/6aaf0cb2bf96fe6a9b117cc9c7aa832574c6427a/canister_ids.json".to_string()
+            },
         }
+    }
+
+    pub fn canister_id(&self) -> Principal {
+        let principal = match self {
+            TargetCanister::BtcChecker => "oltsj-fqaaa-aaaar-qal5q-cai",
+            TargetCanister::CkBtcArchive => "nbsys-saaaa-aaaar-qaaga-cai",
+            TargetCanister::CkBtcIndex => "n5wcd-faaaa-aaaar-qaaea-cai",
+            TargetCanister::CkBtcLedger => "mxzaz-hqaaa-aaaar-qaada-cai",
+            TargetCanister::CkBtcMinter => "mqygn-kiaaa-aaaar-qaadq-cai",
+            TargetCanister::CkEthArchive => "xob7s-iqaaa-aaaar-qacra-cai",
+            TargetCanister::CkEthIndex => "s3zol-vqaaa-aaaar-qacpa-cai",
+            TargetCanister::CkEthLedger => "ss2fx-dyaaa-aaaar-qacoq-cai",
+            TargetCanister::CkEthMinter => "sv3dd-oaaaa-aaaar-qacoa-cai",
+            TargetCanister::IcpArchive1 => "qjdve-lqaaa-aaaaa-aaaeq-cai",
+            TargetCanister::IcpArchive2 => "qsgjb-riaaa-aaaaa-aaaga-cai",
+            TargetCanister::IcpArchive3 => "q4eej-kyaaa-aaaaa-aaaha-cai",
+            TargetCanister::IcpArchive4 => "q3fc5-haaaa-aaaaa-aaahq-cai",
+            TargetCanister::IcpIndex => "qhbym-qaaaa-aaaaa-aaafq-cai",
+            TargetCanister::IcpLedger => "ryjl3-tyaaa-aaaaa-aaaba-cai",
+            TargetCanister::LedgerSuiteOrchestrator => "vxkom-oyaaa-aaaar-qafda-cai",
+            TargetCanister::EvmRpc => "7hfb6-caaaa-aaaar-qadga-cai",
+            TargetCanister::CyclesLedger => "um5iw-rqaaa-aaaaq-qaaba-cai",
+            TargetCanister::CyclesIndex => "ul4oc-4iaaa-aaaaq-qaabq-cai",
+            TargetCanister::ExchangeRateCanister => "uf6dk-hyaaa-aaaaq-qaaaq-cai",
+            TargetCanister::SolRpc => "tghme-zyaaa-aaaar-qarca-cai",
+        };
+        Principal::from_text(principal).unwrap()
+    }
+
+    pub fn find_by_id(canister_id: &Principal) -> Option<Self> {
+        use strum::IntoEnumIterator;
+        TargetCanister::iter().find(|c| &c.canister_id() == canister_id)
     }
 
     pub fn default_upgrade_args(&self) -> String {
         const EMPTY_UPGRADE_ARGS: &str = "()";
         EMPTY_UPGRADE_ARGS.to_string()
+    }
+
+    pub fn forum_discussion(&self) -> &str {
+        const NNS_UPDATES_AGGREGATION_THREAD_URL: &str =
+            "https://forum.dfinity.org/t/nns-updates-aggregation-thread/23551";
+
+        match self {
+            TargetCanister::BtcChecker
+            | TargetCanister::CkBtcArchive
+            | TargetCanister::CkBtcIndex
+            | TargetCanister::CkBtcLedger
+            | TargetCanister::CkBtcMinter
+            | TargetCanister::CkEthArchive
+            | TargetCanister::CkEthIndex
+            | TargetCanister::CkEthLedger
+            | TargetCanister::CkEthMinter
+            | TargetCanister::LedgerSuiteOrchestrator
+            | TargetCanister::EvmRpc
+            | TargetCanister::ExchangeRateCanister
+            | TargetCanister::SolRpc => "",
+            TargetCanister::CyclesLedger
+            | TargetCanister::CyclesIndex
+            | TargetCanister::IcpArchive1
+            | TargetCanister::IcpArchive2
+            | TargetCanister::IcpArchive3
+            | TargetCanister::IcpArchive4
+            | TargetCanister::IcpIndex
+            | TargetCanister::IcpLedger => NNS_UPDATES_AGGREGATION_THREAD_URL,
+        }
     }
 }
 
@@ -348,6 +446,7 @@ impl FromStr for TargetCanister {
             ["icp", "ledger"] => Ok(TargetCanister::IcpLedger),
             ["evm", "rpc"] => Ok(TargetCanister::EvmRpc),
             ["cycles", "ledger"] => Ok(TargetCanister::CyclesLedger),
+            ["cycles", "index"] => Ok(TargetCanister::CyclesIndex),
             ["exchange", "rate"] => Ok(TargetCanister::ExchangeRateCanister),
             ["sol", "rpc"] => Ok(TargetCanister::SolRpc),
             _ => Err(format!("Unknown canister name: {}", canister)),
@@ -376,6 +475,7 @@ impl Display for TargetCanister {
             TargetCanister::LedgerSuiteOrchestrator => write!(f, "ledger suite orchestrator"),
             TargetCanister::EvmRpc => write!(f, "EVM RPC"),
             TargetCanister::CyclesLedger => write!(f, "cycles ledger"),
+            TargetCanister::CyclesIndex => write!(f, "cycles index"),
             TargetCanister::ExchangeRateCanister => write!(f, "exchange rate canister"),
             TargetCanister::SolRpc => write!(f, "SOL RPC"),
         }

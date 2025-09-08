@@ -6,7 +6,7 @@ use dfn_core::api::{call, CanisterId};
 use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_management_canister_types_private::{
-    EcdsaKeyId, MasterPublicKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse,
+    MasterPublicKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse,
 };
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
@@ -40,7 +40,10 @@ impl Registry {
     /// parameters populated by caller into registry. It is expected that
     /// the rest of the system will take the information from the registry
     /// to actually start the subnet.
-    pub async fn do_create_subnet(&mut self, payload: CreateSubnetPayload) {
+    ///
+    /// Returns the ID of the new subnet. The subnet probably isn't ready for
+    /// immediate use shortly after this returns.
+    pub async fn do_create_subnet(&mut self, payload: CreateSubnetPayload) -> NewSubnet {
         println!("{}do_create_subnet: {:?}", LOG_PREFIX, payload);
 
         self.validate_create_subnet_payload(&payload);
@@ -170,6 +173,9 @@ impl Registry {
 
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
+
+        let new_subnet_id = Some(subnet_id);
+        NewSubnet { new_subnet_id }
     }
 
     /// Validates runtime payload values that aren't checked by invariants.
@@ -300,10 +306,16 @@ pub struct CreateSubnetPayload {
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
+pub struct NewSubnet {
+    pub new_subnet_id: Option<SubnetId>,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
 pub struct InitialChainKeyConfig {
     pub key_configs: Vec<KeyConfigRequest>,
     pub signature_request_timeout_ns: Option<u64>,
     pub idkg_key_rotation_period_ms: Option<u64>,
+    pub max_parallel_pre_signature_transcripts_in_creation: Option<u32>,
 }
 
 impl From<InitialChainKeyConfigInternal> for InitialChainKeyConfig {
@@ -312,6 +324,7 @@ impl From<InitialChainKeyConfigInternal> for InitialChainKeyConfig {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         } = src;
 
         let key_configs = key_configs
@@ -323,6 +336,7 @@ impl From<InitialChainKeyConfigInternal> for InitialChainKeyConfig {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         }
     }
 }
@@ -335,6 +349,7 @@ impl TryFrom<InitialChainKeyConfig> for InitialChainKeyConfigInternal {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         } = src;
 
         let mut key_config_validation_errors = vec![];
@@ -361,6 +376,7 @@ impl TryFrom<InitialChainKeyConfig> for InitialChainKeyConfigInternal {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         })
     }
 }
@@ -495,22 +511,6 @@ impl From<CanisterCyclesCostSchedule> for CanisterCyclesCostSchedulePb {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
-pub struct EcdsaInitialConfig {
-    pub quadruples_to_create_in_advance: u32,
-    pub keys: Vec<EcdsaKeyRequest>,
-    /// Must be optional for registry candid backwards compatibility.
-    pub max_queue_size: Option<u32>,
-    pub signature_request_timeout_ns: Option<u64>,
-    pub idkg_key_rotation_period_ms: Option<u64>,
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
-pub struct EcdsaKeyRequest {
-    pub key_id: EcdsaKeyId,
-    pub subnet_id: Option<PrincipalId>,
-}
-
 impl From<CreateSubnetPayload> for SubnetRecord {
     fn from(val: CreateSubnetPayload) -> Self {
         SubnetRecord {
@@ -564,7 +564,7 @@ mod test {
         add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
         prepare_registry_with_nodes,
     };
-    use ic_management_canister_types_private::EcdsaCurve;
+    use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId};
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
     use ic_types::ReplicaVersion;
@@ -593,6 +593,7 @@ mod test {
                 }],
                 signature_request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
+                max_parallel_pre_signature_transcripts_in_creation: None,
             }),
             ..Default::default()
         };
@@ -628,6 +629,7 @@ mod test {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         };
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(chain_key_config));
 
@@ -653,6 +655,7 @@ mod test {
                 }],
                 signature_request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
+                max_parallel_pre_signature_transcripts_in_creation: None,
             }),
             ..Default::default()
         };
@@ -690,6 +693,7 @@ mod test {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         };
         subnet_record.chain_key_config = Some(ChainKeyConfigPb::from(chain_key_config));
 
@@ -715,6 +719,7 @@ mod test {
                 }],
                 signature_request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
+                max_parallel_pre_signature_transcripts_in_creation: None,
             }),
             ..Default::default()
         };
@@ -750,6 +755,7 @@ mod test {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         };
 
         let chain_key_config_pb = ChainKeyConfigPb::from(chain_key_config);
@@ -778,6 +784,7 @@ mod test {
                 key_configs: vec![key_config_request; 2],
                 signature_request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
+                max_parallel_pre_signature_transcripts_in_creation: None,
             }),
             ..Default::default()
         };

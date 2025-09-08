@@ -72,6 +72,7 @@ DEPENDENCIES = [
     "//rs/node_rewards/canister/api",
     "//rs/protobuf",
     "//rs/registry/canister",
+    "//rs/registry/subnet_type",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/init",
     "//rs/sns/root",

@@ -2,7 +2,9 @@ name: Schedule Daily
 
 on:
   schedule:
-    - cron: "0 1 * * *"
+    # Note that we would like there to be no overlap between the system-tests-benchmarks-nightly job below
+    # and the Release Testing workflow triggered by the Schedule RC workflow.
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
 env:
@@ -14,7 +16,7 @@ env:
 
 anchors:
   image: &image
-    image: ghcr.io/dfinity/ic-build@sha256:c30de392a5104df90509a118170d07e3b797775e226adf5246c7271cb88f434b
+    image: ghcr.io/dfinity/ic-build@sha256:40399f5c94cfc35201bc26e30fa7dded1b839f13773840819fd6c314ca2cf840
 
   backup-pod-access: &backup-pod-access
     run: |
@@ -48,6 +50,7 @@ jobs:
   bazel-test-bare-metal:
     name: Bazel Test Bare Metal
     <<: *dind-large-setup
+    environment: Nightly Tests
     steps:
       - <<: *checkout
       - name: Run Bazel Launch Bare Metal
@@ -87,6 +90,7 @@ jobs:
     name: Bazel Test FI Nightly
     <<: *dind-large-setup
     timeout-minutes: 720 # 12 hours
+    environment: Nightly Tests
     steps:
       - <<: *checkout
       - name: Set up backup pod access
@@ -107,6 +111,7 @@ jobs:
     name: Bazel Test NNS Nightly
     <<: *dind-large-setup
     timeout-minutes: 30
+    environment: Nightly Tests
     steps:
       - <<: *checkout
       - name: Set up backup pod access
@@ -122,6 +127,40 @@ jobs:
               --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
               --keep_going
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Post Slack Notification
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        if: failure()
+        with:
+          channel-id: eng-nns
+          slack-message: "${{ github.job }} failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}|Run#${{github.run_id}}>"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
+
+  pocketic-tests-nightly:
+    name: Bazel Test PocketIC Nightly
+    <<: *dind-large-setup
+    timeout-minutes: 30
+    steps:
+      - <<: *checkout
+      - name: Run PocketIC Tests Nightly
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            bazel test \
+              --config=stamped \
+              --test_tag_filters=pocketic_tests_nightly \
+              //rs/pocket_ic_server/... \
+              --test_env=SSH_AUTH_SOCK \
+              --keep_going
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      - name: Post Slack Notification
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        if: failure()
+        with:
+          channel-id: pocket-ic
+          slack-message: "${{ github.job }} failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}|Run#${{github.run_id}}>"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
 
   system-tests-benchmarks-nightly:
     name: Bazel System Test Benchmarks
@@ -158,7 +197,7 @@ jobs:
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
         if: failure()
         with:
-          channel-id: eng-crypto-alerts
+          channel-id: eng-ic-benchmark-alerts
           slack-message: "${{ github.job }} failed :disappointed: - <${{github.server_url}}/${{github.repository}}/actions/runs/${{github.run_id}}|Run#${{github.run_id}}>"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}

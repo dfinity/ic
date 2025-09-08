@@ -9,16 +9,16 @@ on the process that this file is part of, see
 
 ## Added
 
-* Add a metric for the nubmer of spawning neurons.
-* Use a previous voting power snapshot to create ballots if a voting power spike id detected.
+* The neuron `Split` command accepts an optional `memo` field that can be used to derive the neuron
+  subaccount, rather than generating a random one.
 
 ## Changed
-
-* Rename a metric related to voting power spike according to convention.
 
 ## Deprecated
 
 ## Removed
+
+* The `IcpXdrConversionRate` proposal is now obsolete and cannot be submitted.
 
 ## Fixed
 

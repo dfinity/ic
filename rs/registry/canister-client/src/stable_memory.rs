@@ -3,6 +3,8 @@ use ic_stable_structures::storable::Bound;
 use ic_stable_structures::{BTreeMap as StableBTreeMap, DefaultMemoryImpl, Storable};
 use std::borrow::Cow;
 
+pub type UnixTsNanos = u64;
+
 pub struct StorableRegistryValue(pub Option<Vec<u8>>);
 
 impl Storable for StorableRegistryValue {
@@ -107,7 +109,7 @@ pub trait RegistryDataStableMemory: Send + Sync {
 macro_rules! test_registry_data_stable_memory_impl {
     ($state_struct:ident, $local_key_btree_map:expr) => {
 
-        struct $state_struct;
+        pub struct $state_struct;
 
         impl RegistryDataStableMemory for $state_struct {
             fn with_registry_map<R>(

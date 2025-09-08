@@ -7,6 +7,7 @@ rust_library(
     srcs = glob(["src/**"]),
     deps = [
         # Keep sorted.
+        "//packages/ic-heap-bytes",
         "@crate_index//:candid",
         "@crate_index//:num-traits",
         "@crate_index//:serde",

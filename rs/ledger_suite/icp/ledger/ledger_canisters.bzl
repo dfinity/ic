@@ -1,14 +1,14 @@
 """
 This Bazel file defines the configuration for building the Ledger Canister in Rust.
 
-The `rust_ledger_canister` function is a wrapper around the `rust_canister` rule that 
-sets up the necessary dependencies, environment variables, and service files required 
+The `rust_ledger_canister` function is a wrapper around the `rust_canister` rule that
+sets up the necessary dependencies, environment variables, and service files required
 to build the Ledger Canister.
 
 Usage:
-- The `rust_ledger_canister` function is used to instantiate a Rust canister with the 
-  provided `name` and optional `crate_features`. It simplifies the configuration for 
-  building the Ledger Canister by predefining common settings such as source files, 
+- The `rust_ledger_canister` function is used to instantiate a Rust canister with the
+  provided `name` and optional `crate_features`. It simplifies the configuration for
+  building the Ledger Canister by predefining common settings such as source files,
   dependencies, and environment variables.
 """
 
@@ -33,15 +33,12 @@ LEDGER_CANISTER_DEPS = [
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1",
     "//rs/rust_canisters/canister_log",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:ic-cdk",
-    "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:num-traits",

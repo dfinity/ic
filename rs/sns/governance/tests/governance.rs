@@ -57,7 +57,7 @@ use ic_sns_governance::{
     sns_upgrade::{ListUpgradeStep, ListUpgradeStepsResponse, SnsVersion},
     types::native_action_ids,
 };
-use maplit::btreemap;
+use maplit::{btreemap, btreeset};
 use pretty_assertions::assert_eq;
 use std::collections::{BTreeMap, HashSet};
 use strum::IntoEnumIterator;
@@ -312,6 +312,7 @@ fn test_disburse_maturity_succeeds_to_self() {
     env.gov_fixture
         .advance_time_by(6 * ONE_DAY_SECONDS)
         .temporarily_disable_sns_upgrades()
+        .disable_update_cached_metrics()
         .run_periodic_tasks_now();
 
     let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
@@ -422,6 +423,7 @@ fn test_disburse_maturity_succeeds_to_other() {
     // Advance time by a few days, but without triggering disbursal finalization.
     env.gov_fixture
         .advance_time_by(6 * ONE_DAY_SECONDS)
+        .disable_update_cached_metrics()
         .temporarily_disable_sns_upgrades()
         .run_periodic_tasks_now();
 
@@ -517,7 +519,8 @@ fn test_disburse_maturity_succeeds_with_multiple_operations() {
     // Advance time, to trigger disbursal finalization.
     env.gov_fixture
         .advance_time_by(7 * ONE_DAY_SECONDS + 10)
-        .temporarily_disable_sns_upgrades();
+        .temporarily_disable_sns_upgrades()
+        .disable_update_cached_metrics();
 
     let mut remaining_maturity_e8s = earned_maturity_e8s;
     for (i, (percentage, destination)) in percentage_and_destination.iter().enumerate() {
@@ -2779,6 +2782,7 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
     // This is supposed to cause Governance to poll CMC for the maturity modulation.
     canister_fixture
         .temporarily_disable_sns_upgrades()
+        .disable_update_cached_metrics()
         .run_periodic_tasks_now();
 
     // Get the Neuron and assert its maturity is set as expected
@@ -2869,6 +2873,7 @@ async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
     // This is supposed to cause Governance to poll CMC for the maturity modulation.
     canister_fixture
         .temporarily_disable_sns_upgrades()
+        .disable_update_cached_metrics()
         .run_periodic_tasks_now();
 
     let current_basis_points = canister_fixture
@@ -3498,6 +3503,7 @@ fn test_set_following() {
     // Boilerplate variables.
     let my_principal = PrincipalId::new_user_test_id(1000);
     let my_sns_neuron_id = neuron_id(my_principal, 0);
+    let my_sns_neuron_id_as_btree_set = btreeset! { my_sns_neuron_id.clone() };
 
     let another_principal = PrincipalId::new_user_test_id(1000);
     let another_neuron_id = neuron_id(another_principal, 0);
@@ -3527,6 +3533,7 @@ fn test_set_following() {
             vec![],
             None,
             btreemap! {},
+            btreemap! {},
         ),
         (
             "Smoke test (does the test harness work as expected?)",
@@ -3541,6 +3548,7 @@ fn test_set_following() {
             btreemap! {
                 1 => Followees { followees: vec![another_neuron_id.clone()] }
             },
+            btreemap! {},
         ),
         (
             "Set following for the first time.",
@@ -3560,6 +3568,34 @@ fn test_set_following() {
                 }
             }),
             btreemap! {},
+            btreemap! {
+                Topic::Governance => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                }
+            },
+        ),
+        (
+            "Set following for the first time.",
+            vec![],
+            vec![SetFollowing {
+                topic_following: vec![FolloweesForTopic {
+                    followees: vec![expected_followee.clone()],
+                    topic: Some(Topic::Governance as i32),
+                }],
+            },
+            SetFollowing {
+                topic_following: vec![FolloweesForTopic {
+                    followees: vec![],
+                    topic: Some(Topic::Governance as i32),
+                }],
+            }],
+            Some(TopicFollowees {
+                topic_id_to_followees: btreemap! {}
+            }),
+            btreemap! {},
+            btreemap! {
+                Topic::Governance => btreemap! {}
+            },
         ),
         (
             "Set following works incrementally.",
@@ -3591,6 +3627,14 @@ fn test_set_following() {
                 }
             }),
             btreemap! {},
+            btreemap! {
+                Topic::Governance => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                },
+                Topic::TreasuryAssetManagement => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                }
+            },
         ),
         (
             "Topic following clears legacy following for that topic.",
@@ -3619,6 +3663,11 @@ fn test_set_following() {
             }),
             // Legacy following is cleared.
             btreemap! {},
+            btreemap! {
+                Topic::Governance => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                }
+            },
         ),
         (
             "Topic following does not clear legacy following for other topics.",
@@ -3649,6 +3698,11 @@ fn test_set_following() {
             btreemap! {
                 1 => Followees { followees: vec![another_neuron_id.clone()] }
             },
+            btreemap! {
+                Topic::ApplicationBusinessLogic => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                }
+            },
         ),
         (
             "Specifying following for all non-critical topics in one command clears catch-all following.",
@@ -3667,6 +3721,7 @@ fn test_set_following() {
                 topic_id_to_followees: btreemap! {}
             }),
             // catch-all following is cleared.
+            btreemap! {},
             btreemap! {},
         ),
         (
@@ -3704,6 +3759,7 @@ fn test_set_following() {
             btreemap! {
                 0 => Followees { followees: vec![another_neuron_id.clone()] }
             },
+            btreemap! {},
         ),
         (
             "Setting following for all non-critical topics in two commands clears catch-all following.",
@@ -3747,6 +3803,20 @@ fn test_set_following() {
             }),
             // catch-all following is cleared.
             btreemap! {},
+            btreemap! {
+                Topic::SnsFrameworkManagement => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                },
+                Topic::DappCanisterManagement => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                },
+                Topic::ApplicationBusinessLogic => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                },
+                Topic::Governance => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                }
+            },
         ),
         (
             "Complex scenario.",
@@ -3797,6 +3867,12 @@ fn test_set_following() {
             btreemap! {
                 0 => Followees { followees: vec![another_neuron_id.clone()] }
             },
+            btreemap! {
+                Topic::CriticalDappOperations => btreemap! {
+                    another_neuron_id.to_string() => my_sns_neuron_id_as_btree_set.clone()
+                },
+                Topic::Governance => btreemap! {},
+            },
         )
     ];
 
@@ -3807,6 +3883,7 @@ fn test_set_following() {
         set_following_commands,
         expected_topic_followees,
         expected_followees,
+        expected_topic_follower_index,
     ) in test_cases
     {
         // Prepare the world.
@@ -3849,6 +3926,12 @@ fn test_set_following() {
         assert_eq!(
             followees, expected_followees,
             "unexpected followees: {}",
+            label
+        );
+
+        assert_eq!(
+            canister_fixture.governance.topic_follower_index, expected_topic_follower_index,
+            "unexpected topic_follower_index: {}",
             label
         );
     }

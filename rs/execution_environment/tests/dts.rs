@@ -1045,7 +1045,7 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                 canister_id: aborted_canister_id.into(),
                 replace_snapshot: None,
                 wasm_module_size: 1024,
-                exported_globals: vec![],
+                globals: vec![],
                 wasm_memory_size: 1 << 16,
                 stable_memory_size: 1 << 16,
                 certified_data: vec![],
@@ -1134,7 +1134,6 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             | Method::RawRand
             | Method::SetupInitialDKG
             | Method::SignWithECDSA
-            | Method::ComputeInitialIDkgDealings
             | Method::ReshareChainKey
             | Method::SchnorrPublicKey
             | Method::SignWithSchnorr

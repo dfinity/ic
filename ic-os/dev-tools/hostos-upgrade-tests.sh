@@ -24,7 +24,7 @@ for version in "${VERSIONS[@]}"; do
     echo "==================================="
 
     tmpfile=$(mktemp)
-    url="https://download.dfinity.systems/ic/${version}/host-os/update-img/update-img.tar.zst"
+    url="https://download.dfinity.systems/ic/${version}/host-os/update-img-dev/update-img.tar.zst"
 
     echo "Downloading update image from $url ..."
     if ! curl -fL -o "$tmpfile" "$url"; then
@@ -35,12 +35,12 @@ for version in "${VERSIONS[@]}"; do
     fi
 
     hash=$(sha256sum "$tmpfile" | awk '{print $1}')
-    echo "Calculated update_img_hash: $hash"
+    echo "Calculated update_img_hash_dev: $hash"
     rm -f "$tmpfile"
 
     # Update the mainnet-icos-revisions.json file with the current version and computed hash.
     if ! jq --arg ver "$version" --arg hash "$hash" \
-        '.hostos.latest_release.version = $ver | .hostos.latest_release.update_img_hash = $hash' \
+        '.hostos.latest_release.version = $ver | .hostos.latest_release.update_img_hash_dev = $hash' \
         "$REVISIONS_FILE" >"${REVISIONS_FILE}.tmp"; then
         echo "Failed to update $REVISIONS_FILE for version $version."
         results["$version"]="JSON update failed"
@@ -50,7 +50,7 @@ for version in "${VERSIONS[@]}"; do
     echo "Updated $REVISIONS_FILE for version $version."
 
     echo "Running hostos_upgrade_from_latest_release_to_current test for version $version ..."
-    if bazel test --config=systest //rs/tests/nested:hostos_upgrade_from_latest_release_to_current; then
+    if bazel test //rs/tests/nested:hostos_upgrade_from_latest_release_to_current; then
         echo "Test for version $version PASSED."
         results["$version"]="Passed"
     else

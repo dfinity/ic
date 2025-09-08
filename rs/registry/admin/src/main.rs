@@ -37,7 +37,7 @@ use ic_nervous_system_root::change_canister::{
     AddCanisterRequest, CanisterAction, ChangeCanisterRequest, StopOrStartCanisterRequest,
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
     add_or_remove_node_provider::Change,
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
@@ -69,6 +69,7 @@ use ic_nns_governance_api::{
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
 use ic_nns_test_utils::governance::{HardResetNnsRootToVersionPayload, UpgradeRootProposal};
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::{
     api_boundary_node::v1::ApiBoundaryNodeRecord,
     crypto::v1::{PublicKey, X509PublicKeyCert},
@@ -134,6 +135,7 @@ use registry_canister::mutations::{
     do_remove_node_operators::RemoveNodeOperatorsPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
     do_set_firewall_config::SetFirewallConfigPayload,
+    do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload,
     do_update_api_boundary_nodes_version::DeployGuestosToSomeApiBoundaryNodes,
     do_update_elected_hostos_versions::ReviseElectedHostosVersionsPayload,
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
@@ -191,7 +193,8 @@ const IC_DOMAINS: &[&str; 3] = &["ic0.app", "icp0.io", "icp-api.io"];
 #[derive(Parser)]
 #[clap(version = "1.0")]
 struct Opts {
-    #[clap(short = 'r', long, aliases = &["registry-url", "nns-url"], value_delimiter = ',', global = true, default_value = "https://ic0.app")]
+    #[clap(short = 'r', long, aliases = &["registry-url", "nns-url"], value_delimiter = ',', global = true, default_value = "https://ic0.app"
+    )]
     /// The URL of an NNS entry point. That is, the URL of any replica on the
     /// NNS subnet.
     nns_urls: Vec<Url>,
@@ -449,6 +452,9 @@ enum SubCommand {
     /// Submits a proposal to express the interest in renting a subnet.
     ProposeToRentSubnet(ProposeToRentSubnetCmd),
 
+    /// Propose to fulfill a subnet rental request
+    ProposeToFulfillSubnetRentalRequest(ProposeToFulfillSubnetRentalRequestCmd),
+
     /// Propose to modify the routing table. Step 2 of canister migration.
     ProposeToRerouteCanisterRanges(ProposeToRerouteCanisterRangesCmd),
 
@@ -517,6 +523,9 @@ enum SubCommand {
 
     // Submit a root proposal to the root canister to upgrade the governance canister.
     SubmitRootProposalToUpgradeGovernanceCanister(SubmitRootProposalToUpgradeGovernanceCanisterCmd),
+
+    /// Swap nodes in subnet directly, without governance.
+    SwapNodeInSubnetDirectly(SwapNodeInSubnetDirectlyCmd),
 
     /// Update local registry store by pulling from remote URL
     UpdateRegistryLocalStore(UpdateRegistryLocalStoreCmd),
@@ -946,6 +955,24 @@ struct ProposeToReviseElectedGuestsOsVersionsCmd {
     #[clap(long, num_args(1..), visible_alias = "replica-versions-to-unelect")]
     /// The GuestOS version ids to remove.
     pub guestos_versions_to_unelect: Vec<String>,
+
+    // TODO: populate this arg in clients and make it required
+    #[clap(long)]
+    /// Path to the json containing the guest launch measurements
+    /// (schema: registry.replica_version.v1.GuestLaunchMeasurements)
+    pub guest_launch_measurements_path: Option<PathBuf>,
+}
+
+impl ProposeToReviseElectedGuestsOsVersionsCmd {
+    /// Reads and returns the SEV-SNP measurements from the input file.
+    fn read_guest_launch_measurements(&self) -> Option<GuestLaunchMeasurements> {
+        self.guest_launch_measurements_path.as_ref().map(|path| {
+            let guest_launch_measurements_json =
+                std::fs::read(path).unwrap_or_else(|_| panic!("Failed to read {}", path.display()));
+            serde_json::from_slice::<GuestLaunchMeasurements>(&guest_launch_measurements_json)
+                .expect("Could not decode GuestLaunchMeasurements")
+        })
+    }
 }
 
 impl ProposalTitle for ProposeToReviseElectedGuestsOsVersionsCmd {
@@ -969,7 +996,7 @@ impl ProposalPayload<ReviseElectedGuestosVersionsPayload>
             replica_version_to_elect: self.guestos_version_to_elect.clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: self.release_package_urls.clone(),
-            guest_launch_measurement_sha256_hex: None,
+            guest_launch_measurements: self.read_guest_launch_measurements(),
             replica_versions_to_unelect: self.guestos_versions_to_unelect.clone(),
         };
         payload.validate().expect("Failed to validate payload");
@@ -1213,6 +1240,47 @@ impl ProposalPayload<SubnetRentalRequest> for ProposeToRentSubnetCmd {
             user: self.user,
             rental_condition_id: self.rental_condition_id,
         }
+    }
+}
+/// Sub-command to submit a subnet rental request proposal.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToFulfillSubnetRentalRequestCmd {
+    /// The principal ID of the user whose rental request should be fulfilled
+    #[clap(long)]
+    user: PrincipalId,
+
+    /// Node IDs that will be members of the subnet
+    #[clap(long, num_args(1..))]
+    node_ids: Vec<PrincipalId>,
+
+    /// Replica version ID (40 character hexadecimal git commit ID)
+    #[clap(long)]
+    replica_version_id: String,
+}
+
+impl ProposalTitle for ProposeToFulfillSubnetRentalRequestCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Fulfill Subnet Rental Request for {}",
+                self.user.to_string().split('-').next().unwrap_or("")
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalAction for ProposeToFulfillSubnetRentalRequestCmd {
+    async fn action(&self) -> ProposalActionRequest {
+        ProposalActionRequest::FulfillSubnetRentalRequest(
+            ic_nns_governance_api::FulfillSubnetRentalRequest {
+                user: Some(self.user),
+                node_ids: Some(self.node_ids.clone()),
+                replica_version_id: Some(self.replica_version_id.clone()),
+            },
+        )
     }
 }
 
@@ -2529,6 +2597,18 @@ struct SubmitRootProposalToUpgradeGovernanceCanisterCmd {
     wasm_module_sha256: String,
 }
 
+#[derive(Parser)]
+struct SwapNodeInSubnetDirectlyCmd {
+    /// Represents the node principal id of a node which will be removed from a subnet.
+    #[clap(long)]
+    pub old_node_id: PrincipalId,
+
+    /// Represents the node principal id of a node which will be added to a subnet in
+    /// place of the `old_node_id`.
+    #[clap(long)]
+    pub new_node_id: PrincipalId,
+}
+
 /// Sub-command to vote on a root proposal to upgrade the governance canister.
 #[derive(Parser)]
 struct VoteOnRootProposalToUpgradeGovernanceCanisterCmd {
@@ -3697,6 +3777,7 @@ async fn main() {
             SubCommand::ProposeToRemoveNodeOperators(_) => (),
             SubCommand::ProposeToRemoveNodes(_) => (),
             SubCommand::ProposeToRentSubnet(_) => (),
+            SubCommand::ProposeToFulfillSubnetRentalRequest(_) => (),
             SubCommand::ProposeToRerouteCanisterRanges(_) => (),
             SubCommand::ProposeToReviseElectedGuestosVersions(_) => (),
             SubCommand::ProposeToReviseElectedHostosVersions(_) => (),
@@ -3718,6 +3799,7 @@ async fn main() {
             SubCommand::ProposeToUpdateSubnetType(_) => (),
             SubCommand::ProposeToUpdateXdrIcpConversionRate(_) => (),
             SubCommand::SubmitRootProposalToUpgradeGovernanceCanister(_) => (),
+            SubCommand::SwapNodeInSubnetDirectly(_) => (),
             SubCommand::VoteOnRootProposalToUpgradeGovernanceCanister(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
@@ -4479,6 +4561,9 @@ async fn main() {
             )
             .await
         }
+        SubCommand::SwapNodeInSubnetDirectly(cmd) => {
+            swap_node_in_subnet_directly(registry_canister, cmd).await;
+        }
         SubCommand::GetPendingRootProposalsToUpgradeGovernanceCanister => {
             get_pending_root_proposals_to_upgrade_governance_canister(make_canister_client(
                 reachable_nns_urls,
@@ -4926,6 +5011,16 @@ async fn main() {
                 proposer,
             )
             .await;
+        }
+        SubCommand::ProposeToFulfillSubnetRentalRequest(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            let canister_client = make_canister_client(
+                reachable_nns_urls,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            propose_action_from_command(cmd, canister_client, proposer).await;
         }
         SubCommand::ProposeToUpdateCanisterSettings(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
@@ -5993,6 +6088,36 @@ fn generate_nonce() -> Vec<u8> {
         .to_vec()
 }
 
+async fn swap_node_in_subnet_directly(
+    registry_canister: RegistryCanister,
+    cmd: SwapNodeInSubnetDirectlyCmd,
+) {
+    let nonce = generate_nonce();
+    let request = SwapNodeInSubnetDirectlyPayload {
+        new_node_id: Some(cmd.new_node_id),
+        old_node_id: Some(cmd.old_node_id),
+    };
+
+    let payload = Encode!(&request).expect("Failed to serialize swap node request.");
+
+    let agent = registry_canister.choose_random_agent();
+
+    match agent
+        .execute_update(
+            &REGISTRY_CANISTER_ID,
+            &REGISTRY_CANISTER_ID,
+            "swap_node_in_subnet_directly",
+            payload,
+            nonce,
+        )
+        .await
+        .unwrap()
+    {
+        Some(_) => println!("Nodes swapped successfully."),
+        None => panic!("No response was received from swap_node_in_subnet_directly"),
+    }
+}
+
 /// A client view of an NNS canister.
 struct NnsCanisterClient {
     /// The agent to talk to the IC.
@@ -6135,12 +6260,12 @@ impl GovernanceCanisterClient {
             }))),
             id: Some((*self.0.proposal_author()).into()),
         })
-        .map_err(|e| {
-            format!(
-                "Cannot candid-serialize the submit_add_or_remove_node_provider_proposal payload: {}",
-                e
-            )
-        })?;
+            .map_err(|e| {
+                format!(
+                    "Cannot candid-serialize the submit_add_or_remove_node_provider_proposal payload: {}",
+                    e
+                )
+            })?;
         let response = self
             .0
             .execute_update("manage_neuron", serialized)

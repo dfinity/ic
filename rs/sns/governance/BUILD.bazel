@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1/ledger",
+    "//rs/nervous_system/candid_utils",
     "//rs/nervous_system/canisters",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/collections/union_multi_map",
@@ -32,6 +33,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
+    "//rs/nervous_system/temporary",
     "//rs/nervous_system/timestamp",
     "//rs/nns/constants",
     "//rs/protobuf",
@@ -41,6 +43,7 @@ DEPENDENCIES = [
     "//rs/sns/governance/proposal_criticality",
     "//rs/sns/governance/proposals_amount_total_limit",
     "//rs/sns/governance/token_valuation",
+    "//rs/sns/treasury_manager",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/utils",
@@ -54,6 +57,7 @@ DEPENDENCIES = [
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:ic-stable-structures",
     "@crate_index//:itertools",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
@@ -133,6 +137,17 @@ rust_library(
 )
 
 rust_library(
+    name = "governance--test_feature",
+    srcs = LIB_SRCS,
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "ic_sns_governance",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.9.0",
+    deps = DEPENDENCIES + [":build_script"],
+)
+
+rust_library(
     name = "governance--canbench_feature",
     srcs = LIB_SRCS,
     aliases = ALIASES,
@@ -169,7 +184,7 @@ rust_canister(
     service_file = ":canister/governance_test.did",
     deps = DEPENDENCIES + [
         ":build_script",
-        ":governance",
+        ":governance--test_feature",
     ],
 )
 
@@ -211,7 +226,7 @@ rust_test(
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [
         ":build_script",
-        ":governance",
+        ":governance--test_feature",
     ],
 )
 
@@ -279,6 +294,7 @@ rust_canbench(
     name = "governance-canbench",
     srcs = ["canbench/main.rs"],
     add_test = True,
+    opt = "s",
     results_file = "canbench/canbench_results.yml",
     deps = [
         # Keep sorted.

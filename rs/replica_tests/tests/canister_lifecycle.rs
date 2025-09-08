@@ -706,6 +706,8 @@ fn can_get_canister_information() {
             // canister that's created but has no code installed on it.
             Ok(WasmResult::Reply(res)) if CanisterStatusResultV2::decode(&res).unwrap() == CanisterStatusResultV2::new(
                 CanisterStatusType::Running,
+                false,
+                1,
                 None,
                 canister_a.get(),
                 vec![canister_a.get()],
@@ -732,6 +734,7 @@ fn can_get_canister_information() {
                 0u128,
                 Some(DEFAULT_WASM_MEMORY_LIMIT.get()),
                 0u64,
+                Default::default(),
             )
         );
 
@@ -769,6 +772,8 @@ fn can_get_canister_information() {
             Ok(WasmResult::Reply(res)) => assert_canister_status_result_equals(
                 CanisterStatusResultV2::new(
                     CanisterStatusType::Running,
+                    false,
+                    0,
                     Some(ic_crypto_sha2::Sha256::hash(&UNIVERSAL_CANISTER_WASM).to_vec()),
                     canister_a.get(),
                     vec![canister_a.get()],
@@ -797,6 +802,7 @@ fn can_get_canister_information() {
                     0u128,
                     Some(DEFAULT_WASM_MEMORY_LIMIT.get()),
                     0u64,
+                    Default::default(),
                 ),
                 CanisterStatusResultV2::decode(&res).unwrap(),
                 2 * BALANCE_EPSILON,

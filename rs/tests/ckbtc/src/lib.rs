@@ -1,9 +1,11 @@
+use bitcoin::{dogecoin::Network as DogeNetwork, Network as BtcNetwork};
 use candid::{Encode, Principal};
 use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_btc_adapter_test_utils::rpc_client::RpcClientType;
 use ic_btc_checker::{
-    BtcNetwork, CheckArg, CheckMode, InitArg as CheckerInitArg, UpgradeArg as CheckerUpgradeArg,
+    CheckArg, CheckMode, InitArg as CheckerInitArg, UpgradeArg as CheckerUpgradeArg,
 };
 use ic_btc_interface::{Config, Fees, Flag, Network};
 use ic_ckbtc_minter::{
@@ -19,7 +21,7 @@ use ic_consensus_threshold_sig_system_test_utils::{
 };
 use ic_icrc1_ledger::{InitArgsBuilder, LedgerArgument};
 use ic_management_canister_types::{CanisterIdRecord, ProvisionalCreateCanisterWithCyclesArgs};
-use ic_management_canister_types_private::{EcdsaCurve, MasterPublicKeyId};
+use ic_management_canister_types_private::{BitcoinNetwork, EcdsaCurve, MasterPublicKeyId};
 use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
 use ic_registry_subnet_features::{SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
@@ -41,12 +43,19 @@ use icp_ledger::ArchiveOptions;
 use slog::{info, Logger};
 use std::{
     env,
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv6Addr, SocketAddr},
     str::FromStr,
     time::Duration,
 };
 
+pub mod adapter;
 pub mod utils;
+
+/// For an, as of yet, unexplained reason the setup task of all the ckbtc system-tests often times out
+/// after the default 10 minutes because creating the btc-node takes a long time.
+/// So to reduce flakiness we bump the timeout to 15 minutes.
+pub const TIMEOUT_PER_TEST: Duration = Duration::from_secs(15 * 60);
+pub const OVERALL_TIMEOUT: Duration = Duration::from_secs(20 * 60);
 
 pub const TEST_KEY_LOCAL: &str = "an_arbitrary_key_id";
 
@@ -73,24 +82,109 @@ pub(crate) const BITCOIND_RPC_PASSWORD: &str = "Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ks
 
 const BITCOIND_RPC_AUTH : &str = "btc-dev-preview:8555f1162d473af8e1f744aa056fd728$afaf9cb17b8cf0e8e65994d1195e4b3a4348963b08897b4084d210e5ee588bcb";
 
-const BITCOIND_RPC_PORT: u16 = 8332;
-
-const BITCOIN_CLI_PORT: u16 = 18444;
-
 const HTTPS_PORT: u16 = 20443;
 
-pub fn btc_config(env: TestEnv) {
+pub trait IcRpcClientType: RpcClientType {
+    const IMAGE_NAME: &str;
+    const CONFIG_NAME: &str;
+    const CONFIG_MAPPING: &str;
+    const RPC_PORT: u16;
+    const P2P_PORT: u16;
+    const REGTEST_REPLICA: BitcoinNetwork;
+    fn internet_computer(socket_addr: SocketAddr) -> InternetComputer;
+}
+
+impl IcRpcClientType for BtcNetwork {
+    const IMAGE_NAME: &str = "bitcoind";
+    const CONFIG_NAME: &str = "bitcoin.conf";
+    const CONFIG_MAPPING: &str = "/tmp/bitcoin.conf:/bitcoin/.bitcoin/bitcoin.conf";
+    const RPC_PORT: u16 = 8332;
+    const P2P_PORT: u16 = 18444;
+    const REGTEST_REPLICA: BitcoinNetwork = BitcoinNetwork::BitcoinRegtest;
+    fn internet_computer(socket_addr: SocketAddr) -> InternetComputer {
+        InternetComputer::new().with_bitcoind_addr(socket_addr)
+    }
+}
+
+impl IcRpcClientType for DogeNetwork {
+    const IMAGE_NAME: &str = "dogecoind";
+    const CONFIG_NAME: &str = "dogecoin.conf";
+    const CONFIG_MAPPING: &str = "/tmp/dogecoin.conf:/node/dogecoin-core/configs/config.conf";
+    const RPC_PORT: u16 = 18332;
+    const P2P_PORT: u16 = 18444;
+    const REGTEST_REPLICA: BitcoinNetwork = BitcoinNetwork::DogecoinRegtest;
+    fn internet_computer(socket_addr: SocketAddr) -> InternetComputer {
+        InternetComputer::new().with_dogecoind_addr(socket_addr)
+    }
+}
+
+fn ckbtc_config<Network: IcRpcClientType>(env: TestEnv) {
+    let node_ipv6 = setup_bitcoind_uvm::<Network>(&env);
+    let socket_addr = SocketAddr::new(IpAddr::V6(node_ipv6), Network::P2P_PORT);
+    Network::internet_computer(socket_addr)
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_dkg_interval_length(Height::from(10))
+                .with_chain_key_config(ic_registry_subnet_features::ChainKeyConfig {
+                    key_configs: vec![ic_registry_subnet_features::KeyConfig {
+                        key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
+                            curve: EcdsaCurve::Secp256k1,
+                            name: TEST_KEY_LOCAL.to_string(),
+                        }),
+                        pre_signatures_to_create_in_advance: 10,
+                        max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+                    }],
+                    signature_request_timeout_ns: None,
+                    idkg_key_rotation_period_ms: None,
+                    max_parallel_pre_signature_transcripts_in_creation: None,
+                })
+                .add_nodes(1),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_dkg_interval_length(Height::from(10))
+                .with_features(SubnetFeatures {
+                    http_requests: true,
+                    ..SubnetFeatures::default()
+                })
+                .add_nodes(1),
+        )
+        .use_specified_ids_allocation_range()
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
+}
+
+fn adapter_test_config<Network: IcRpcClientType>(env: TestEnv) {
+    let node_ipv6 = setup_bitcoind_uvm::<Network>(&env);
+    let socket_addr = SocketAddr::new(IpAddr::V6(node_ipv6), Network::P2P_PORT);
+    Network::internet_computer(socket_addr)
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_dkg_interval_length(Height::from(10))
+                .add_nodes(1),
+        )
+        .use_specified_ids_allocation_range()
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
+}
+
+fn setup_bitcoind_uvm<Network: IcRpcClientType>(env: &TestEnv) -> Ipv6Addr {
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
         .with_config_img(get_dependency_path(
             env::var("CKBTC_UVM_CONFIG_PATH").expect("CKBTC_UVM_CONFIG_PATH not set"),
         ))
         .enable_ipv4()
-        .start(&env)
+        .start(env)
         .expect("failed to setup universal VM");
 
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     let universal_vm = deployed_universal_vm.get_vm().unwrap();
     let btc_node_ipv6 = universal_vm.ipv6;
+    let rpc_port = Network::RPC_PORT;
+    let p2p_port = Network::P2P_PORT;
+    let config_name = Network::CONFIG_NAME;
+    let image_name = Network::IMAGE_NAME;
+    let config_mapping = Network::CONFIG_MAPPING;
 
     // Regtest bitcoin node listens on 18444
     // docker bitcoind image uses 8332 for the rpc server
@@ -117,22 +211,25 @@ docker run -d --name=proxy -e ENABLE_IPV6=true -e DEFAULT_HOST=localhost -p 80:8
            -v /tmp/certs:/etc/nginx/certs -v /var/run/docker.sock:/tmp/docker.sock:ro \
            nginx-proxy:image
 
-# Setup bitcoin.conf and run bitcoind
+# Setup config file and run the image
 # The following variable assignment prevents the dollar sign in Rust's BITCOIND_RPC_AUTH string
 # from being interpreted by shell.
 BITCOIND_RPC_AUTH='{BITCOIND_RPC_AUTH}'
-cat >/tmp/bitcoin.conf <<END
+cat >/tmp/{config_name} <<END
     regtest=1
     debug=1
+    rpcallowip=0.0.0.0/0
     whitelist=::/0
     fallbackfee=0.0002
+    rpcuser={BITCOIND_RPC_USER}
+    rpcpasswd={BITCOIND_RPC_PASSWORD}
     rpcauth=$BITCOIND_RPC_AUTH
 END
-docker load -i /config/bitcoind.tar
-docker run  --name=bitcoind-node -d \
-  -e VIRTUAL_HOST=localhost -e VIRTUAL_PORT={BITCOIND_RPC_PORT} -v /tmp:/bitcoin/.bitcoin \
-  -p {BITCOIN_CLI_PORT}:{BITCOIN_CLI_PORT} -p {BITCOIND_RPC_PORT}:{BITCOIND_RPC_PORT} \
-  bitcoind:image
+docker load -i /config/{image_name}.tar
+docker run  --name={image_name}-node -d \
+  -e VIRTUAL_HOST=localhost -e VIRTUAL_PORT={rpc_port} -v {config_mapping} \
+  -p {p2p_port}:{p2p_port} -p {rpc_port}:{rpc_port} \
+  {image_name}:image
 
 # docker load -i /config/httpbin.tar
 # docker run --rm -d -p {HTTPS_PORT}:80 -v /tmp/certs:/certs --name httpbin httpbin:image \
@@ -140,45 +237,21 @@ docker run  --name=bitcoind-node -d \
 "#
         ))
         .unwrap());
-
-    InternetComputer::new()
-        .with_bitcoind_addr(SocketAddr::new(IpAddr::V6(btc_node_ipv6), BITCOIN_CLI_PORT))
-        .add_subnet(
-            Subnet::new(SubnetType::System)
-                .with_dkg_interval_length(Height::from(10))
-                .with_chain_key_config(ic_registry_subnet_features::ChainKeyConfig {
-                    key_configs: vec![ic_registry_subnet_features::KeyConfig {
-                        key_id: MasterPublicKeyId::Ecdsa(EcdsaKeyId {
-                            curve: EcdsaCurve::Secp256k1,
-                            name: TEST_KEY_LOCAL.to_string(),
-                        }),
-                        pre_signatures_to_create_in_advance: 10,
-                        max_queue_size: DEFAULT_ECDSA_MAX_QUEUE_SIZE,
-                    }],
-                    signature_request_timeout_ns: None,
-                    idkg_key_rotation_period_ms: None,
-                })
-                .add_nodes(1),
-        )
-        .add_subnet(
-            Subnet::new(SubnetType::Application)
-                .with_dkg_interval_length(Height::from(10))
-                .with_features(SubnetFeatures {
-                    http_requests: true,
-                    ..SubnetFeatures::default()
-                })
-                .add_nodes(1),
-        )
-        .use_specified_ids_allocation_range()
-        .setup_and_start(&env)
-        .expect("failed to setup IC under test");
+    btc_node_ipv6
 }
 
-pub fn setup(env: TestEnv) {
-    // Use the btc integration setup.
-    btc_config(env.clone());
+pub fn ckbtc_setup(env: TestEnv) {
+    // Use the ckbtc integration setup.
+    ckbtc_config::<BtcNetwork>(env.clone());
     check_nodes_health(&env);
+    check_ecdsa_works(&env);
     install_nns_canisters_at_ids(&env);
+}
+
+pub fn adapter_test_setup<T: IcRpcClientType>(env: TestEnv) {
+    // Use the adapter test integration setup.
+    adapter_test_config::<T>(env.clone());
+    check_nodes_health(&env);
 }
 
 pub fn install_nns_canisters_at_ids(env: &TestEnv) {
@@ -206,7 +279,9 @@ fn check_nodes_health(env: &TestEnv) {
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
     info!(&env.logger(), "All nodes are ready, IC setup succeeded.");
+}
 
+fn check_ecdsa_works(env: &TestEnv) {
     // Check that ECDSA signatures work
     let sys_node = subnet_sys(env)
         .nodes()
@@ -367,7 +442,7 @@ pub async fn install_btc_checker(
         BITCOIND_RPC_USER, BITCOIND_RPC_PASSWORD, btc_node_ipv6, HTTPS_PORT,
     );
     let init_args = CheckArg::InitArg(CheckerInitArg {
-        btc_network: BtcNetwork::Regtest { json_rpc_url },
+        btc_network: ic_btc_checker::BtcNetwork::Regtest { json_rpc_url },
         check_mode: CheckMode::Normal,
         num_subnet_nodes: 1,
     });

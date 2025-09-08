@@ -7,7 +7,7 @@ use clap::{Parser, Subcommand};
 use colored::*;
 use commands::{run_script, run_script_in_current_process};
 use commit_switcher::CommitSwitcher;
-use std::path::PathBuf;
+use std::{collections::BTreeSet, path::PathBuf};
 use url::Url;
 use utils::*;
 
@@ -207,13 +207,29 @@ fn run_determine_targets(cmd: DetermineTargets) -> Result<()> {
         }
     }
 
+    let icrc_ledger_suite: BTreeSet<String> = ["index", "ledger", "archive"]
+        .into_iter()
+        .map(String::from)
+        .collect();
+    let sns_canisters_set: BTreeSet<String> = sns_canisters.iter().map(String::from).collect();
+    let has_icrc_ledger_suite = sns_canisters_set.intersection(&icrc_ledger_suite).count() > 0;
+    let not_exactly_icrc_ledger_suite =
+        !nns_canisters.is_empty() || sns_canisters_set != icrc_ledger_suite;
+    let maybe_warning = if has_icrc_ledger_suite && not_exactly_icrc_ledger_suite {
+        "\nWARNING: You are releasing some of the ICRC ledger suite but also some other canisters at the same commit. \
+        ICRC ledger suite usually requires a specific commit, so you might want to consider releasing them separately."
+    } else {
+        ""
+    };
+
     print_step(
         2,
         "Determine Upgrade Targets",
         &format!(
-            "NNS canisters selected for release: {}\nSNS canisters selected for release: {}",
+            "NNS canisters selected for release: {}\nSNS canisters selected for release: {}{}",
             nns_canisters.join(", "),
-            sns_canisters.join(", ")
+            sns_canisters.join(", "),
+            maybe_warning
         ),
     )?;
 
@@ -236,7 +252,7 @@ fn run_run_tests(cmd: RunTests) -> Result<()> {
 
 If not, you can also run the upgrade tests manually:
     - Follow instructions in: testnet/tools/nns-tools/README.md#upgrade-testing-via-bazel
-   
+
 2. SNS Testing Note:
    - No manual testing needed for SNS
    - Covered by sns_release_qualification in CI
@@ -466,7 +482,7 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
         5,
         "Submit Proposals",
         &format!(
-            "I submitted the following proposals: 
+            "I submitted the following proposals:
             NNS: {}
             SNS: {}",
             nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
@@ -531,7 +547,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
             .append_pair("title", &title)
             .append_pair("body", body)
             .append_pair("category", "Governance/NNS proposal discussions")
-            .append_pair("tags", "nns");
+            .append_pair("tags", "nns,Protocol-canister-management");
 
         open_webpage(&url)?;
 
@@ -541,8 +557,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
             nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
                 let _ = write!(
                     acc,
-                    "\n  - https://dashboard.internetcomputer.org/proposal/{}",
-                    id
+                    "\n  - [Proposal {id}](https://dashboard.internetcomputer.org/proposal/{id})",
                 );
                 acc
             })
@@ -574,7 +589,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
             .append_pair("title", &title)
             .append_pair("body", body)
             .append_pair("category", "Governance/NNS proposal discussions")
-            .append_pair("tags", "SNS");
+            .append_pair("tags", "SNS,Service-nervous-system-mgmt");
 
         open_webpage(&url)?;
 
@@ -584,8 +599,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
             sns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
                 let _ = write!(
                     acc,
-                    "\n  - https://dashboard.internetcomputer.org/proposal/{}",
-                    id
+                    "\n  - [Proposal {id}](https://dashboard.internetcomputer.org/proposal/{id})",
                 );
                 acc
             })

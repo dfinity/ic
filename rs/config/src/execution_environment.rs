@@ -1,10 +1,7 @@
 use crate::embedders::Config as EmbeddersConfig;
 use crate::flag_status::FlagStatus;
 use ic_base_types::{CanisterId, NumSeconds};
-use ic_types::{
-    Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES,
-    MAX_WASM_MEMORY_IN_BYTES,
-};
+use ic_types::{Cycles, NumBytes, NumInstructions};
 use serde::{Deserialize, Serialize};
 use std::{str::FromStr, time::Duration};
 
@@ -15,7 +12,7 @@ const TIB: u64 = GIB * 1024;
 /// This specifies the threshold in bytes at which the subnet memory usage is
 /// considered to be high. If this value is greater or equal to the subnet
 /// capacity, then the subnet is never considered to have high usage.
-const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(450 * GIB);
+const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(750 * GIB);
 
 /// This is the upper limit on how much logical storage canisters can request to
 /// be store on a given subnet.
@@ -23,7 +20,7 @@ const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(450 * GIB);
 /// Logical storage is the amount of storage being used from the point of view
 /// of the canister. The actual storage used by the nodes can be higher as the
 /// IC protocol requires storing copies of the canister state.
-const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(TIB);
+const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * TIB);
 
 /// This is the upper limit on how much memory can be used by all guaranteed
 /// response canister messages on a given subnet.
@@ -142,6 +139,12 @@ pub const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";
 // TODO(EXC-1298): Uninstall this canister once the bitcoin mainnet canister is live.
 const BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID: &str = "gsvzx-syaaa-aaaan-aaabq-cai";
 
+// The ID of the staging Dogecoin mainnet and testnet canisters.
+// These canisters will be used to run the dogecoin canisters pre-launch
+// for final validation and may be used in the future to validate some canister upgrades.
+const DOGECOIN_MAINNET_STAGING_CANISTER_ID: &str = "bhuiy-ciaaa-aaaad-abwea-cai";
+const DOGECOIN_TESTNET_STAGING_CANISTER_ID: &str = "bavom-pqaaa-aaaad-abweq-cai";
+
 /// The capacity of the Wasm compilation cache.
 pub const MAX_COMPILATION_CACHE_SIZE: NumBytes = NumBytes::new(10 * GIB);
 
@@ -162,6 +165,16 @@ pub const MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT: usize = 3000;
 ///   - let `halfway_to_max = (memory_usage + 4GiB) / 2`
 ///   - use the maximum of `default_wasm_memory_limit` and `halfway_to_max`.
 pub const DEFAULT_WASM_MEMORY_LIMIT: NumBytes = NumBytes::new(3 * GIB);
+
+/// The maximum number of environment variables allowed per canister.
+pub const MAX_ENVIRONMENT_VARIABLES: usize = 20;
+
+/// The maximum length of an environment variable name.
+pub const MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH: usize = 128;
+
+/// The maximum length of an environment variable value.
+/// Environment variables are sized to comfortably accommodate the root key.
+pub const MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH: usize = 128;
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 #[serde(default)]
@@ -203,14 +216,6 @@ pub struct Config {
 
     /// The number of bytes reserved for response callback execution.
     pub subnet_memory_reservation: NumBytes,
-
-    /// The maximum amount of memory that can be utilized by a single canister.
-    /// running in Wasm32 mode.
-    pub max_canister_memory_size_wasm32: NumBytes,
-
-    /// The maximum amount of memory that can be utilized by a single canister.
-    /// running in Wasm64 mode.
-    pub max_canister_memory_size_wasm64: NumBytes,
 
     /// The soft limit on the subnet-wide number of callbacks. Beyond this limit,
     /// canisters are only allowed to make downstream calls up to their individual
@@ -331,19 +336,27 @@ pub struct Config {
 
     /// Whether environment variables are supported.
     pub environment_variables: FlagStatus,
+
+    /// The maximum number of environment variables allowed per canister.
+    pub max_environment_variables: usize,
+
+    /// The maximum length of an environment variable name.
+    pub max_environment_variable_name_length: usize,
+
+    /// The maximum length of an environment variable value.
+    pub max_environment_variable_value_length: usize,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        let bitcoin_testnet_canister_id = CanisterId::from_str(BITCOIN_TESTNET_CANISTER_ID)
-            .expect("bitcoin testnet canister id must be a valid principal");
-
-        let bitcoin_mainnet_canister_id = CanisterId::from_str(BITCOIN_MAINNET_CANISTER_ID)
-            .expect("bitcoin mainnet canister id must be a valid principal");
-
-        let bitcoin_mainnet_soft_launch_canister_id =
-            CanisterId::from_str(BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID)
-                .expect("bitcoin mainnet soft-launch canister id must be a valid principal");
+        let [bitcoin_testnet_canister_id, bitcoin_mainnet_canister_id, bitcoin_mainnet_soft_launch_canister_id, dogecoin_testnet_staging_canister_id, dogecoin_mainnet_staging_canister_id] =
+            expect_canister_id([
+                BITCOIN_TESTNET_CANISTER_ID,
+                BITCOIN_MAINNET_CANISTER_ID,
+                BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID,
+                DOGECOIN_TESTNET_STAGING_CANISTER_ID,
+                DOGECOIN_MAINNET_STAGING_CANISTER_ID,
+            ]);
 
         Self {
             embedders_config: EmbeddersConfig::default(),
@@ -359,12 +372,6 @@ impl Default for Config {
             subnet_wasm_custom_sections_memory_capacity:
                 SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY,
             subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
-            max_canister_memory_size_wasm32: NumBytes::new(
-                MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES,
-            ),
-            max_canister_memory_size_wasm64: NumBytes::new(
-                MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM64_MEMORY_IN_BYTES,
-            ),
             subnet_callback_soft_limit: SUBNET_CALLBACK_SOFT_LIMIT,
             canister_guaranteed_callback_quota: CANISTER_GUARANTEED_CALLBACK_QUOTA,
             default_provisional_cycles_balance: Cycles::new(100_000_000_000_000),
@@ -393,6 +400,8 @@ impl Default for Config {
                     bitcoin_testnet_canister_id,
                     bitcoin_mainnet_canister_id,
                     bitcoin_mainnet_soft_launch_canister_id,
+                    dogecoin_testnet_staging_canister_id,
+                    dogecoin_mainnet_staging_canister_id,
                 ],
                 testnet_canister_id: Some(bitcoin_testnet_canister_id),
                 mainnet_canister_id: Some(bitcoin_mainnet_canister_id),
@@ -413,8 +422,23 @@ impl Default for Config {
             canister_snapshot_download: FlagStatus::Disabled,
             canister_snapshot_upload: FlagStatus::Disabled,
             environment_variables: FlagStatus::Disabled,
+            max_environment_variables: MAX_ENVIRONMENT_VARIABLES,
+            max_environment_variable_name_length: MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH,
+            max_environment_variable_value_length: MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
         }
     }
+}
+
+fn expect_canister_id<const N: usize>(ids: [&str; N]) -> [CanisterId; N] {
+    let mut result = Vec::with_capacity(N);
+    for id in ids {
+        result.push(
+            CanisterId::from_str(id).unwrap_or_else(|e| panic!("BUG: Invalid canister id: {}", e)),
+        );
+    }
+    result
+        .try_into()
+        .unwrap_or_else(|_| unreachable!("array has size N"))
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
@@ -429,4 +453,35 @@ pub struct BitcoinConfig {
 
     /// The bitcoin mainnet canister to forward requests to.
     pub mainnet_canister_id: Option<CanisterId>,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::execution_environment::{
+        expect_canister_id, Config, BITCOIN_MAINNET_CANISTER_ID,
+        BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID,
+        DOGECOIN_MAINNET_STAGING_CANISTER_ID, DOGECOIN_TESTNET_STAGING_CANISTER_ID,
+    };
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn should_have_correct_canister_ids_for_bitcoin_privileged_access() {
+        let expected: BTreeSet<_> = expect_canister_id([
+            BITCOIN_TESTNET_CANISTER_ID,
+            BITCOIN_MAINNET_CANISTER_ID,
+            BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID,
+            DOGECOIN_TESTNET_STAGING_CANISTER_ID,
+            DOGECOIN_MAINNET_STAGING_CANISTER_ID,
+        ])
+        .into_iter()
+        .collect();
+
+        let actual: BTreeSet<_> = Config::default()
+            .bitcoin
+            .privileged_access
+            .into_iter()
+            .collect();
+
+        assert_eq!(actual, expected);
+    }
 }

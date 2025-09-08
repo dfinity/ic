@@ -652,12 +652,12 @@ pub struct RegisterDappCanisters {
     PartialEq,
     ::prost::Message,
 )]
-pub struct PreciseValue {
-    #[prost(oneof = "precise_value::PreciseValue", tags = "1, 2, 3, 4, 5, 6, 7")]
-    pub precise_value: ::core::option::Option<precise_value::PreciseValue>,
+pub struct Precise {
+    #[prost(oneof = "precise::Value", tags = "1, 2, 3, 4, 5, 6, 7")]
+    pub value: ::core::option::Option<precise::Value>,
 }
-/// Nested message and enum types in `PreciseValue`.
-pub mod precise_value {
+/// Nested message and enum types in `Precise`.
+pub mod precise {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -666,7 +666,7 @@ pub mod precise_value {
         PartialEq,
         ::prost::Oneof,
     )]
-    pub enum PreciseValue {
+    pub enum Value {
         #[prost(bool, tag = "1")]
         Bool(bool),
         #[prost(bytes, tag = "2")]
@@ -693,7 +693,7 @@ pub mod precise_value {
 )]
 pub struct PreciseArray {
     #[prost(message, repeated, tag = "1")]
-    pub array: ::prost::alloc::vec::Vec<PreciseValue>,
+    pub array: ::prost::alloc::vec::Vec<Precise>,
 }
 #[derive(
     candid::CandidType,
@@ -705,7 +705,7 @@ pub struct PreciseArray {
 )]
 pub struct PreciseMap {
     #[prost(btree_map = "string, message", tag = "1")]
-    pub map: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, PreciseValue>,
+    pub map: ::prost::alloc::collections::BTreeMap<::prost::alloc::string::String, Precise>,
 }
 #[derive(
     candid::CandidType,
@@ -717,7 +717,7 @@ pub struct PreciseMap {
 )]
 pub struct ExtensionInit {
     #[prost(message, optional, tag = "1")]
-    pub value: ::core::option::Option<PreciseValue>,
+    pub value: ::core::option::Option<Precise>,
 }
 #[derive(
     candid::CandidType,
@@ -732,6 +732,120 @@ pub struct RegisterExtension {
     pub chunked_canister_wasm: ::core::option::Option<ChunkedCanisterWasm>,
     #[prost(message, optional, tag = "2")]
     pub extension_init: ::core::option::Option<ExtensionInit>,
+}
+/// WASM specification that can be either direct bytes or chunked
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Wasm {
+    #[prost(oneof = "wasm::Wasm", tags = "1, 2")]
+    pub wasm: ::core::option::Option<wasm::Wasm>,
+}
+/// Nested message and enum types in `Wasm`.
+pub mod wasm {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Wasm {
+        /// Use this field if the WASM fits within the proposal size limit.
+        #[prost(bytes, tag = "1")]
+        Bytes(::prost::alloc::vec::Vec<u8>),
+        /// If the entire WASM does not fit into the 2 MiB ingress limit, use this instead.
+        #[prost(message, tag = "2")]
+        Chunked(super::ChunkedCanisterWasm),
+    }
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ExtensionUpgradeArg {
+    #[prost(message, optional, tag = "1")]
+    pub value: ::core::option::Option<Precise>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct UpgradeExtension {
+    /// The id of the extension canister to upgrade.
+    #[prost(message, optional, tag = "1")]
+    pub extension_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Arguments passed to the post-upgrade method of the new wasm module.
+    #[prost(message, optional, tag = "2")]
+    pub canister_upgrade_arg: ::core::option::Option<ExtensionUpgradeArg>,
+    /// The new wasm module that the extension canister is upgraded to.
+    #[prost(message, optional, tag = "3")]
+    pub wasm: ::core::option::Option<Wasm>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ExtensionOperationArg {
+    #[prost(message, optional, tag = "1")]
+    pub value: ::core::option::Option<Precise>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ExecuteExtensionOperation {
+    #[prost(message, optional, tag = "1")]
+    pub extension_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(string, optional, tag = "2")]
+    pub operation_name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "3")]
+    pub operation_arg: ::core::option::Option<ExtensionOperationArg>,
+}
+/// Specification for an SNS extension
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ExtensionSpec {
+    /// The name of the extension
+    #[prost(string, optional, tag = "1")]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
+    /// The version of the extension.
+    #[prost(uint64, optional, tag = "2")]
+    pub version: ::core::option::Option<u64>,
+    /// The topic that the extension's registration proposal will be under
+    #[prost(enumeration = "Topic", optional, tag = "3")]
+    pub topic: ::core::option::Option<i32>,
+    /// The type of the extension, which determines its standard operations.
+    #[prost(enumeration = "ExtensionType", optional, tag = "4")]
+    pub extension_type: ::core::option::Option<i32>,
 }
 /// A proposal to remove a list of dapps from the SNS and assign them to new controllers
 #[derive(
@@ -865,7 +979,7 @@ pub struct Proposal {
     /// of this mapping.
     #[prost(
         oneof = "proposal::Action",
-        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21"
+        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -985,6 +1099,16 @@ pub mod proposal {
         /// Id = 17.
         #[prost(message, tag = "21")]
         RegisterExtension(super::RegisterExtension),
+        /// Execute an SNS extension's operation.
+        ///
+        /// Id = 18.
+        #[prost(message, tag = "22")]
+        ExecuteExtensionOperation(super::ExecuteExtensionOperation),
+        /// Upgrade an SNS extension canister.
+        ///
+        /// Id = 19.
+        #[prost(message, tag = "23")]
+        UpgradeExtension(super::UpgradeExtension),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
@@ -1232,6 +1356,8 @@ pub struct ProposalData {
     /// Id 14 - ManageDappCanisterSettings proposals.
     /// Id 15 - AdvanceSnsTargetVersion proposals.
     /// Id 16 - SetTopicsForCustomProposals proposals.
+    /// Id 17 - RegisterExtension.
+    /// Id 18 - ExecuteExtensionOperation.
     #[prost(uint64, tag = "1")]
     pub action: u64,
     /// This is stored here temporarily. It is also stored on the map
@@ -2086,6 +2212,12 @@ pub mod governance {
         /// less than six months.
         #[prost(uint64, tag = "15")]
         pub neurons_with_less_than_6_months_dissolve_delay_e8s: u64,
+        /// Metrics related to the treasury assets of this SNS.
+        #[prost(message, repeated, tag = "17")]
+        pub treasury_metrics: ::prost::alloc::vec::Vec<super::TreasuryMetrics>,
+        /// Metrics related to the voting power in this SNS.
+        #[prost(message, optional, tag = "18")]
+        pub voting_power_metrics: ::core::option::Option<super::VotingPowerMetrics>,
     }
     /// Metadata about this SNS.
     #[derive(
@@ -2326,13 +2458,51 @@ pub struct GetMetricsRequest {
     #[prost(uint64, tag = "1")]
     pub time_window_seconds: u64,
 }
-/// Response message for 'get_sns_status'
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct TreasuryMetrics {
+    #[prost(enumeration = "valuation::Token", tag = "1")]
+    pub treasury: i32,
+    #[prost(string, optional, tag = "2")]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "3")]
+    pub ledger_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(message, optional, tag = "4")]
+    pub account: ::core::option::Option<Account>,
+    #[prost(uint64, tag = "5")]
+    pub amount_e8s: u64,
+    #[prost(uint64, tag = "6")]
+    pub original_amount_e8s: u64,
+    #[prost(uint64, tag = "7")]
+    pub timestamp_seconds: u64,
+}
 #[derive(
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
     Clone,
     Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct VotingPowerMetrics {
+    #[prost(uint64, tag = "1")]
+    pub governance_total_potential_voting_power: u64,
+    #[prost(uint64, tag = "2")]
+    pub timestamp_seconds: u64,
+}
+/// Response message for 'get_sns_status'
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
     PartialEq,
     ::prost::Message,
 )]
@@ -2343,6 +2513,12 @@ pub struct Metrics {
     pub last_ledger_block_timestamp: u64,
     #[prost(uint64, tag = "3")]
     pub num_recently_executed_proposals: u64,
+    #[prost(message, repeated, tag = "4")]
+    pub treasury_metrics: ::prost::alloc::vec::Vec<TreasuryMetrics>,
+    #[prost(message, optional, tag = "5")]
+    pub voting_power_metrics: ::core::option::Option<VotingPowerMetrics>,
+    #[prost(uint64, tag = "6")]
+    pub genesis_timestamp_seconds: u64,
 }
 /// Request message for 'get_sns_initialization_parameters'
 #[derive(
@@ -4053,6 +4229,20 @@ pub struct Account {
     #[prost(message, optional, tag = "2")]
     pub subaccount: ::core::option::Option<Subaccount>,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct AddAllowedExtensionRequest {
+    #[prost(bytes = "vec", tag = "1")]
+    pub wasm_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "2")]
+    pub spec: ::core::option::Option<ExtensionSpec>,
+}
 /// The different types of neuron permissions, i.e., privileges to modify a neuron,
 /// that principals can have.
 #[derive(
@@ -4187,6 +4377,47 @@ impl Vote {
             "VOTE_UNSPECIFIED" => Some(Self::Unspecified),
             "VOTE_YES" => Some(Self::Yes),
             "VOTE_NO" => Some(Self::No),
+            _ => None,
+        }
+    }
+}
+/// Types of extensions that can be registered
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    strum_macros::EnumIter,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum ExtensionType {
+    Unspecified = 0,
+    TreasuryManager = 1,
+}
+impl ExtensionType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "EXTENSION_TYPE_UNSPECIFIED",
+            Self::TreasuryManager => "EXTENSION_TYPE_TREASURY_MANAGER",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "EXTENSION_TYPE_UNSPECIFIED" => Some(Self::Unspecified),
+            "EXTENSION_TYPE_TREASURY_MANAGER" => Some(Self::TreasuryManager),
             _ => None,
         }
     }

@@ -168,10 +168,13 @@ impl StateSyncCache {
         // same height (and path)
         if let Some(ref entry) = self.entry {
             match sync.state {
-                DownloadState::Blank => {
+                // Retain the existing cache entry if the state is Blank or Prep.
+                // The cache is only populated after `initialize_state_on_disk()` is called,
+                // as it incorporates actual state data from previous checkpoints or syncs at that point.
+                DownloadState::Blank | DownloadState::Prep { .. } => {
                     // Keep what we have
                 }
-                _ => {
+                DownloadState::Loading { .. } | DownloadState::Complete => {
                     if sync.height >= entry.height {
                         self.entry = None;
                     }

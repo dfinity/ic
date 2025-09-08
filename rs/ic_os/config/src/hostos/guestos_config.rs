@@ -1,7 +1,7 @@
-use anyhow::Result;
+use anyhow::{bail, ensure, Result};
 use config_types::{
     DeterministicIpv6Config, FixedIpv6Config, GuestOSConfig, GuestOSUpgradeConfig, GuestVMType,
-    HostOSConfig, Ipv6Config,
+    HostOSConfig, Ipv6Config, TrustedExecutionEnvironmentConfig,
 };
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
@@ -9,16 +9,27 @@ use std::net::Ipv6Addr;
 use utils::to_cidr;
 
 /// Generate the GuestOS configuration based on the provided HostOS configuration.
+/// If hostos_config.icos_settings.enable_trusted_execution_environment is true,
+/// sev_certificate_chain_pem must be provided.
 pub fn generate_guestos_config(
     hostos_config: &HostOSConfig,
     guest_vm_type: GuestVMType,
+    sev_certificate_chain_pem: Option<String>,
 ) -> Result<GuestOSConfig> {
+    ensure!(
+        !hostos_config
+            .icos_settings
+            .enable_trusted_execution_environment
+            || sev_certificate_chain_pem.is_some(),
+        "If enable_trusted_execution_environment is enabled, SEV cert chain must be provided."
+    );
+
     // TODO: We won't have to modify networking between the hostos and
     // guestos config after completing the networking revamp (NODE-1327)
     let Ipv6Config::Deterministic(deterministic_ipv6_config) =
         &hostos_config.network_settings.ipv6_config
     else {
-        anyhow::bail!(
+        bail!(
             "HostOSConfig Ipv6Config should always be of type Deterministic. \
              Cannot reassign GuestOS networking."
         );
@@ -28,6 +39,9 @@ pub fn generate_guestos_config(
     let (node_type, upgrade_peer_node_type) = match guest_vm_type {
         GuestVMType::Default => (NodeType::GuestOS, NodeType::UpgradeGuestOS),
         GuestVMType::Upgrade => (NodeType::UpgradeGuestOS, NodeType::GuestOS),
+        GuestVMType::Unknown => {
+            bail!("GuestVMType::Unknown is not a valid type for generating GuestOS config");
+        }
     };
 
     let guestos_ipv6_address =
@@ -51,6 +65,11 @@ pub fn generate_guestos_config(
         peer_guest_vm_address: Some(peer_ipv6_address),
     };
 
+    let trusted_execution_environment_config =
+        sev_certificate_chain_pem.map(|certificate_chain| TrustedExecutionEnvironmentConfig {
+            sev_cert_chain_pem: certificate_chain,
+        });
+
     let guestos_config = GuestOSConfig {
         config_version: hostos_config.config_version.clone(),
         network_settings: guestos_network_settings,
@@ -58,6 +77,7 @@ pub fn generate_guestos_config(
         guestos_settings: hostos_config.guestos_settings.clone(),
         guest_vm_type,
         upgrade_config,
+        trusted_execution_environment_config,
     };
 
     Ok(guestos_config)
@@ -91,7 +111,11 @@ mod tests {
         HostOSConfig {
             config_version: "1.0.0".to_string(),
             network_settings: NetworkSettings {
-                ipv6_config: Ipv6Config::RouterAdvertisement,
+                ipv6_config: Ipv6Config::Deterministic(DeterministicIpv6Config {
+                    prefix: "2001:db8::".to_string(),
+                    prefix_length: 64,
+                    gateway: "2001:db8::1".parse().unwrap(),
+                }),
                 ipv4_config: None,
                 domain_name: None,
             },
@@ -113,15 +137,10 @@ mod tests {
     }
     #[test]
     fn test_successful_conversion() {
-        let mut hostos_config = hostos_config_for_test();
-        hostos_config.network_settings.ipv6_config =
-            Ipv6Config::Deterministic(DeterministicIpv6Config {
-                prefix: "2001:db8::".to_string(),
-                prefix_length: 64,
-                gateway: "2001:db8::1".parse().unwrap(),
-            });
+        let hostos_config = hostos_config_for_test();
 
-        let guestos_config = generate_guestos_config(&hostos_config, GuestVMType::Default).unwrap();
+        let guestos_config =
+            generate_guestos_config(&hostos_config, GuestVMType::Default, None).unwrap();
 
         assert_eq!(guestos_config.config_version, hostos_config.config_version);
         assert_eq!(
@@ -162,7 +181,8 @@ mod tests {
                 gateway: "2001:db8::1".parse().unwrap(),
             });
 
-        let guestos_config = generate_guestos_config(&hostos_config, GuestVMType::Upgrade).unwrap();
+        let guestos_config =
+            generate_guestos_config(&hostos_config, GuestVMType::Upgrade, None).unwrap();
 
         if let Ipv6Config::Fixed(fixed) = &guestos_config.network_settings.ipv6_config {
             assert_eq!(fixed.address, "2001:db8::6802:94ff:feef:2978/64");
@@ -187,8 +207,27 @@ mod tests {
             gateway: "2001:db8::1".parse().unwrap(),
         });
 
-        let result = generate_guestos_config(&hostos_config, GuestVMType::Default);
+        let result = generate_guestos_config(&hostos_config, GuestVMType::Default, None);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Deterministic"));
+    }
+
+    #[test]
+    fn test_adds_sev_certificate_chain() {
+        let hostos_config = hostos_config_for_test();
+
+        let result = generate_guestos_config(
+            &hostos_config,
+            GuestVMType::Default,
+            Some("abc".to_string()),
+        )
+        .unwrap();
+        assert_eq!(
+            result
+                .trusted_execution_environment_config
+                .expect("trusted_execution_environment_config should be populated")
+                .sev_cert_chain_pem,
+            "abc"
+        );
     }
 }
