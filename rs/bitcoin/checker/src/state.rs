@@ -4,7 +4,6 @@ use crate::{
 };
 use bitcoin::{Address, Transaction};
 use ic_btc_interface::Txid;
-use ic_cdk::api::call::RejectionCode;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{storable::Bound, Cell, DefaultMemoryImpl, Storable};
 use serde::{Deserialize, Serialize};
@@ -20,15 +19,10 @@ mod tests;
 #[derive(Debug, Clone)]
 pub enum HttpGetTxError {
     TxEncoding(String),
-    TxidMismatch {
-        expected: Txid,
-        decoded: Txid,
-    },
+    TxidMismatch { expected: Txid, decoded: Txid },
     ResponseTooLarge,
-    Rejected {
-        code: RejectionCode,
-        message: String,
-    },
+    //TODO: XC-455 rename to IcError?
+    Rejected(String),
 }
 
 impl fmt::Display for HttpGetTxError {
@@ -42,7 +36,7 @@ impl fmt::Display for HttpGetTxError {
                 expected, decoded
             ),
             ResponseTooLarge => write!(f, "ResponseTooLarge"),
-            Rejected { code, message } => write!(f, "Rejected: code {:?}, {}", code, message),
+            Rejected(msg) => write!(f, "Rejected: {msg}"),
         }
     }
 }
