@@ -10,8 +10,6 @@ pub(crate) fn fetch_canister_logs(
     state: &ReplicatedState,
     args: FetchCanisterLogsRequest,
 ) -> Result<FetchCanisterLogsResponse, UserError> {
-    // println!("ABC fetch_canister_logs called with sender: {:?}", sender);
-    // println!("ABC fetch_canister_logs called with args: {:?}", args);
     let canister_id = args.get_canister_id();
     let canister = state.canister_state(&canister_id).ok_or_else(|| {
         UserError::new(
