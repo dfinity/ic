@@ -402,30 +402,34 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     // The DFINITY-owned node is already recovered as part of the recovery tool, so we only need to
     // trigger the recovery on 2f other nodes.
     info!(logger, "Simulate node provider action on 2f nodes");
-    block_on(join_all(
-        get_host_vm_names(cfg.subnet_size)
-            .iter()
-            .filter(|vm_name| {
-                env.get_nested_vm(vm_name)
-                    .unwrap()
-                    .get_nested_network()
-                    .unwrap()
-                    .guest_ip
-                    != dfinity_owned_node.get_ip_addr()
-            })
-            .collect::<Vec<_>>()
-            .choose_multiple(&mut rand::thread_rng(), 2 * f)
-            .map(|vm_name| {
-                simulate_node_provider_action(
-                    &logger,
-                    &env,
-                    vm_name,
-                    RECOVERY_GUESTOS_IMG_VERSION,
-                    &recovery_img_hash[..6],
-                    &artifacts_hash,
-                )
-            }),
-    ));
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(join_all(
+            get_host_vm_names(cfg.subnet_size)
+                .iter()
+                .filter(|vm_name| {
+                    env.get_nested_vm(vm_name)
+                        .unwrap()
+                        .get_nested_network()
+                        .unwrap()
+                        .guest_ip
+                        != dfinity_owned_node.get_ip_addr()
+                })
+                .collect::<Vec<_>>()
+                .choose_multiple(&mut rand::thread_rng(), 2 * f)
+                .map(|vm_name| {
+                    simulate_node_provider_action(
+                        &logger,
+                        &env,
+                        vm_name,
+                        RECOVERY_GUESTOS_IMG_VERSION,
+                        &recovery_img_hash[..6],
+                        &artifacts_hash,
+                    )
+                }),
+        ));
 
     info!(logger, "Wait for state sync to complete");
     cert_state_makes_progress_with_retries(
