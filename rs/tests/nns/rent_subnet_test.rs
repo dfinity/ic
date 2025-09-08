@@ -69,7 +69,7 @@ use icp_ledger::{AccountIdentifier, Subaccount};
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use registry_canister::pb::v1::{GetSubnetForCanisterRequest, SubnetForCanister};
-use slog::info;
+use slog::{info, Logger};
 use std::{
     collections::HashSet,
     iter::FromIterator,
@@ -180,7 +180,7 @@ pub fn test(env: TestEnv) {
 
         execute_subnet_rental_request(&topology_snapshot, *SUBNET_USER_PRINCIPAL_ID).await;
 
-        let topology_snapshot = execute_fulfill_subnet_rental_request(&topology_snapshot).await;
+        let topology_snapshot = execute_fulfill_subnet_rental_request(&topology_snapshot, &env.logger()).await;
         let new_subnet_id = assert_new_subnet(&topology_snapshot, &original_subnets).await;
 
         assert_rented_subnet_works(new_subnet_id, &topology_snapshot).await;
@@ -211,6 +211,7 @@ async fn subnet_user_sends_icp_to_the_subnet_rental_canister(topology_snapshot: 
 #[must_use]
 async fn execute_fulfill_subnet_rental_request(
     topology_snapshot: &TopologySnapshot,
+    logger: &Logger,
 ) -> TopologySnapshot {
     let previous_registry_version = topology_snapshot.get_registry_version();
 
@@ -231,7 +232,7 @@ async fn execute_fulfill_subnet_rental_request(
         replica_version_id,
     )
     .await;
-    println!("FulfillSubnetRentalRequest executed: {:?}", proposal_id);
+    info!(logger, "FulfillSubnetRentalRequest executed: {:?}", proposal_id);
 
     // Wait for us to find out about the latest Registry data.
     let min_registry_version = previous_registry_version.get() + 1;
