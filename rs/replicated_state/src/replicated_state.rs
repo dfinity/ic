@@ -639,7 +639,7 @@ impl ReplicatedState {
         let canister = self.canister_state(canister_id).ok_or_else(|| {
             UserError::new(
                 ErrorCode::CanisterNotFound,
-                format!("Canister {} not found in get_active_canister", canister_id),
+                format!("Canister {} not found", canister_id),
             )
         })?;
 
