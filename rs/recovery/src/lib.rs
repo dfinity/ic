@@ -7,6 +7,7 @@
 //! execution.
 use crate::{
     cli::wait_for_confirmation, file_sync_helper::remove_dir, registry_helper::RegistryHelper,
+    util::SshUser,
 };
 use admin_helper::{AdminHelper, IcAdmin, RegistryParams};
 use command_helper::exec_cmd;
@@ -25,7 +26,7 @@ use registry_helper::RegistryPollingStrategy;
 use serde::{Deserialize, Serialize};
 use slog::{info, warn, Logger};
 use ssh_helper::SshHelper;
-use std::io::ErrorKind;
+use std::{env, io::ErrorKind};
 use std::{
     net::IpAddr,
     path::{Path, PathBuf},
@@ -73,6 +74,7 @@ pub const IC_STATE_EXCLUDES: &[&str] = &[
     // it is a new directory used for storing the files backing up the
     // page deltas. We do not need to copy page deltas when nodes are re-assigned.
     "page_deltas",
+    "node_operator_private_key.pem",
     IC_REGISTRY_LOCAL_STORE,
 ];
 pub const IC_STATE: &str = "ic_state";
@@ -80,8 +82,6 @@ pub const NEW_IC_STATE: &str = "new_ic_state";
 pub const OLD_IC_STATE: &str = "old_ic_state";
 pub const IC_REGISTRY_LOCAL_STORE: &str = "ic_registry_local_store";
 pub const CHECKPOINTS: &str = "checkpoints";
-pub const ADMIN: &str = "admin";
-pub const READONLY: &str = "readonly";
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub struct NeuronArgs {
@@ -205,7 +205,12 @@ impl Recovery {
             info!(logger, "ic-admin exists, skipping download.");
         }
 
-        let admin_helper = AdminHelper::new(binary_dir.clone(), args.nns_url, neuron_args);
+        let ic_admin = if args.use_local_binaries {
+            PathBuf::from(env::var("IC_ADMIN_BIN").unwrap_or("ic-admin".to_string()))
+        } else {
+            binary_dir.join("ic-admin")
+        };
+        let admin_helper = AdminHelper::new(ic_admin, args.nns_url, neuron_args);
 
         Ok(Self {
             recovery_dir,
@@ -219,18 +224,6 @@ impl Recovery {
             ssh_confirmation,
             logger,
         })
-    }
-
-    /// Construct a [Url] for the NNS endpoint of the given node IP
-    pub fn get_nns_endpoint(node_ip: IpAddr) -> RecoveryResult<Url> {
-        Url::parse(&format!("http://[{}]:8080", node_ip)).map_err(|e| {
-            RecoveryError::invalid_output_error(format!("Failed to parse NNS URL: {}", e))
-        })
-    }
-
-    /// Set recovery to a different NNS by creating a new [AdminHelper].
-    pub fn set_nns(&mut self, nns_url: Url, neuron_args: Option<NeuronArgs>) {
-        self.admin_helper = AdminHelper::new(self.binary_dir.clone(), nns_url, neuron_args);
     }
 
     // Create directories used to store downloaded states, binaries and results
@@ -319,7 +312,8 @@ impl Recovery {
     pub fn get_download_certs_step(
         &self,
         subnet_id: SubnetId,
-        admin: bool,
+        ssh_user: SshUser,
+        alt_key_file: Option<PathBuf>,
         auto_retry: bool,
     ) -> impl Step {
         DownloadCertificationsStep {
@@ -328,9 +322,9 @@ impl Recovery {
             registry_helper: self.registry_helper.clone(),
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
-            key_file: self.key_file.clone(),
+            key_file: alt_key_file.or(self.key_file.clone()),
             auto_retry,
-            admin,
+            ssh_user,
         }
     }
 
@@ -843,8 +837,8 @@ impl Recovery {
         })
     }
 
-    /// Return a [CreateTarsStep] to create tar files of the current registry local store and ic state
-    pub fn get_create_tars_step(&self) -> impl Step {
+    /// Return a [CreateRegistryTarStep] a tar file that contains the current registry local store
+    pub fn get_create_registry_tar_step(&self) -> impl Step {
         let mut tar = Command::new("tar");
         tar.arg("-C")
             .arg(self.work_dir.join("data").join(IC_REGISTRY_LOCAL_STORE))
@@ -856,7 +850,7 @@ impl Recovery {
             )
             .arg(".");
 
-        CreateTarsStep {
+        CreateRegistryTarStep {
             logger: self.logger.clone(),
             store_tar_cmd: tar,
         }
@@ -870,15 +864,27 @@ impl Recovery {
         }
     }
 
-    /// Return an [UploadCUPAndTar] uploading tars and extracted CUP to subnet nodes
-    pub fn get_upload_cup_and_tar_step(&self, subnet_id: SubnetId) -> impl Step {
-        UploadCUPAndTar {
+    /// Return an [UploadCUPAndTarStep] uploading CUP and registry tar to the given node IP
+    pub fn get_upload_cup_and_tar_step(&self, node_ip: IpAddr) -> impl Step {
+        UploadCUPAndTarStep {
             logger: self.logger.clone(),
             registry_helper: self.registry_helper.clone(),
-            subnet_id,
+            node_ip,
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
             key_file: self.key_file.clone(),
+        }
+    }
+
+    /// Return a [CreateNNSRecoveryTarStep] creating a tar file that contains a tar of the registry
+    /// local store and a recovery CUP
+    pub fn get_create_nns_recovery_tar_step(&self, output_dir: Option<PathBuf>) -> impl Step {
+        CreateNNSRecoveryTarStep {
+            logger: self.logger.clone(),
+            work_dir: self.work_dir.clone(),
+            // If no output directory is specified, save the files in a directory that will
+            // not be deleted by the cleanup step (i.e., not `self.work_dir`).
+            output_dir: output_dir.unwrap_or(PathBuf::from("/tmp/recovery_artifacts")),
         }
     }
 

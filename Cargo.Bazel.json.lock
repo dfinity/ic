@@ -1,5 +1,5 @@
 {
-  "checksum": "586ceae93625bd8a14800a29bdca5c14a70db08ed87cdb138acbe1acaeb6b80c",
+  "checksum": "8302df3c8391e72434a266be9750616b83092ea0c3105f2b9bc5f8309144084c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -8147,147 +8147,15 @@
       ],
       "license_file": "LICENSE"
     },
-    "bitcoin 0.30.0": {
+    "bitcoin 0.32.5-doge.0": {
       "name": "bitcoin",
-      "version": "0.30.0",
-      "package_url": "https://github.com/rust-bitcoin/rust-bitcoin/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bitcoin/0.30.0/download",
-          "sha256": "b36f4c848f6bd9ff208128f08751135846cc23ae57d66ab10a22efff1c675f3c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bitcoin",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bitcoin",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "actual-serde",
-            "default",
-            "rand-std",
-            "secp-recovery",
-            "serde",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bech32 0.9.1",
-              "target": "bech32"
-            },
-            {
-              "id": "bitcoin 0.30.0",
-              "target": "build_script_build"
-            },
-            {
-              "id": "bitcoin-private 0.1.0",
-              "target": "bitcoin_private",
-              "alias": "bitcoin_internals"
-            },
-            {
-              "id": "bitcoin_hashes 0.12.0",
-              "target": "bitcoin_hashes"
-            },
-            {
-              "id": "hex_lit 0.1.1",
-              "target": "hex_lit"
-            },
-            {
-              "id": "secp256k1 0.27.0",
-              "target": "secp256k1"
-            },
-            {
-              "id": "serde 1.0.219",
-              "target": "serde",
-              "alias": "actual_serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "rustc_flags": {
-          "common": [],
-          "selects": {
-            "@@//bazel:fuzzing_code_enabled": [
-              "-Cpasses=sancov-module",
-              "-Cllvm-args=-sanitizer-coverage-level=4",
-              "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
-              "-Cllvm-args=-sanitizer-coverage-pc-table",
-              "-Cllvm-args=-sanitizer-coverage-trace-compares",
-              "-Cllvm-args=-sanitizer-coverage-stack-depth",
-              "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
-              "-Ctarget-cpu=native",
-              "-Coverflow_checks",
-              "-Copt-level=3",
-              "-Clink-dead-code",
-              "-Cdebug-assertions",
-              "-Ccodegen-units=1",
-              "-Zextra-const-ub-checks",
-              "-Zstrict-init-checks",
-              "-Zsanitizer=address",
-              "-Zexternal-clangrt",
-              "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a"
-            ]
-          }
-        },
-        "version": "0.30.0"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": null
-    },
-    "bitcoin 0.32.99": {
-      "name": "bitcoin",
-      "version": "0.32.99",
+      "version": "0.32.5-doge.0",
       "package_url": "https://github.com/rust-dogecoin/rust-dogecoin/",
       "repository": {
         "Git": {
           "remote": "https://github.com/dfinity/rust-dogecoin",
           "commitish": {
-            "Rev": "b5125f00d9d1e6c553d83ee54ee9d6203da8e0db"
+            "Rev": "cda2b5ec270017c82abd6ef2e71b7fe583a133fd"
           },
           "strip_prefix": "bitcoin"
         }
@@ -8328,7 +8196,6 @@
             "actual-serde",
             "default",
             "rand",
-            "rand-std",
             "secp-recovery",
             "serde",
             "std"
@@ -8347,7 +8214,7 @@
               "target": "bech32"
             },
             {
-              "id": "bitcoin 0.32.99",
+              "id": "bitcoin 0.32.5-doge.0",
               "target": "build_script_build"
             },
             {
@@ -8421,7 +8288,7 @@
             ]
           }
         },
-        "version": "0.32.99"
+        "version": "0.32.5-doge.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -8568,84 +8435,6 @@
       ],
       "license_file": null
     },
-    "bitcoin-private 0.1.0": {
-      "name": "bitcoin-private",
-      "version": "0.1.0",
-      "package_url": "https://github.com/rust-bitcoin/rust-bitcoin/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bitcoin-private/0.1.0/download",
-          "sha256": "73290177011694f38ec25e165d0387ab7ea749a4b81cd4c80dae5988229f7a57"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bitcoin_private",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bitcoin_private",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "default",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bitcoin-private 0.1.0",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.1.0"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": null
-    },
     "bitcoin-units 0.1.2": {
       "name": "bitcoin-units",
       "version": "0.1.2",
@@ -8760,66 +8549,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "bitcoin_hashes 0.12.0": {
-      "name": "bitcoin_hashes",
-      "version": "0.12.0",
-      "package_url": "https://github.com/rust-bitcoin/bitcoin_hashes/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bitcoin_hashes/0.12.0/download",
-          "sha256": "5d7066118b13d4b20b23645932dfb3a81ce7e29f95726c2036fa33cd7b092501"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bitcoin_hashes",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bitcoin_hashes",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "serde",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bitcoin-private 0.1.0",
-              "target": "bitcoin_private",
-              "alias": "internals"
-            },
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.12.0"
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": null
-    },
     "bitcoin_hashes 0.14.0": {
       "name": "bitcoin_hashes",
       "version": "0.14.0",
@@ -8885,238 +8614,6 @@
         "CC0-1.0"
       ],
       "license_file": null
-    },
-    "bitcoincore-rpc 0.19.0": {
-      "name": "bitcoincore-rpc",
-      "version": "0.19.0",
-      "package_url": "https://github.com/rust-bitcoin/rust-bitcoincore-rpc/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bitcoincore-rpc/0.19.0/download",
-          "sha256": "aedd23ae0fd321affb4bbbc36126c6f49a32818dc6b979395d24da8c9d4e80ee"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bitcoincore_rpc",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bitcoincore_rpc",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "rand"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bitcoincore-rpc-json 0.19.0",
-              "target": "bitcoincore_rpc_json"
-            },
-            {
-              "id": "jsonrpc 0.18.0",
-              "target": "jsonrpc"
-            },
-            {
-              "id": "log 0.4.20",
-              "target": "log"
-            },
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.132",
-              "target": "serde_json"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.19.0"
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "bitcoincore-rpc-json 0.19.0": {
-      "name": "bitcoincore-rpc-json",
-      "version": "0.19.0",
-      "package_url": "https://github.com/rust-bitcoin/rust-bitcoincore-rpc/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bitcoincore-rpc-json/0.19.0/download",
-          "sha256": "d8909583c5fab98508e80ef73e5592a651c954993dc6b7739963257d19f0e71a"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bitcoincore_rpc_json",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bitcoincore_rpc_json",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "rand"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bitcoin 0.32.99",
-              "target": "bitcoin"
-            },
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.132",
-              "target": "serde_json"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.19.0"
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "bitcoind 0.32.0": {
-      "name": "bitcoind",
-      "version": "0.32.0",
-      "package_url": "https://github.com/RCasatta/bitcoind",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/bitcoind/0.32.0/download",
-          "sha256": "ee93e3628c679646a9f1cb2e4c55ec10fc3d477a2a8c26dcde4267dfb2e2109a"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bitcoind",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "bitcoind",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "anyhow 1.0.98",
-              "target": "anyhow"
-            },
-            {
-              "id": "bitcoind 0.32.0",
-              "target": "build_script_build"
-            },
-            {
-              "id": "core-rpc 0.17.0",
-              "target": "core_rpc",
-              "alias": "bitcoincore_rpc"
-            },
-            {
-              "id": "log 0.4.20",
-              "target": "log"
-            },
-            {
-              "id": "tempfile 3.20.0",
-              "target": "tempfile"
-            },
-            {
-              "id": "which 4.4.0",
-              "target": "which"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.32.0"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "anyhow 1.0.98",
-              "target": "anyhow"
-            }
-          ],
-          "selects": {}
-        }
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
     },
     "bitfield 0.19.1": {
       "name": "bitfield",
@@ -12072,7 +11569,7 @@
               "target": "candid"
             },
             {
-              "id": "ic-cdk 0.18.6",
+              "id": "ic-cdk 0.18.7",
               "target": "ic_cdk"
             },
             {
@@ -15975,132 +15472,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "core-rpc 0.17.0": {
-      "name": "core-rpc",
-      "version": "0.17.0",
-      "package_url": "https://github.com/RCasatta/rust-bitcoincore-rpc/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/core-rpc/0.17.0/download",
-          "sha256": "26d77079e1b71c2778d6e1daf191adadcd4ff5ec3ccad8298a79061d865b235b"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "core_rpc",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "core_rpc",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bitcoin-private 0.1.0",
-              "target": "bitcoin_private"
-            },
-            {
-              "id": "core-rpc-json 0.17.0",
-              "target": "core_rpc_json"
-            },
-            {
-              "id": "jsonrpc 0.13.0",
-              "target": "jsonrpc"
-            },
-            {
-              "id": "log 0.4.20",
-              "target": "log"
-            },
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.132",
-              "target": "serde_json"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.17.0"
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "core-rpc-json 0.17.0": {
-      "name": "core-rpc-json",
-      "version": "0.17.0",
-      "package_url": "https://github.com/RCasatta/rust-bitcoincore-rpc/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/core-rpc-json/0.17.0/download",
-          "sha256": "581898ed9a83f31c64731b1d8ca2dfffcfec14edf1635afacd5234cddbde3a41"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "core_rpc_json",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "core_rpc_json",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bitcoin 0.30.0",
-              "target": "bitcoin"
-            },
-            {
-              "id": "bitcoin-private 0.1.0",
-              "target": "bitcoin_private"
-            },
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.132",
-              "target": "serde_json"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.17.0"
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": "LICENSE"
     },
     "core2 0.4.0": {
       "name": "core2",
@@ -21273,16 +20644,8 @@
               "alias": "bitcoin_0_28"
             },
             {
-              "id": "bitcoin 0.32.99",
+              "id": "bitcoin 0.32.5-doge.0",
               "target": "bitcoin"
-            },
-            {
-              "id": "bitcoincore-rpc 0.19.0",
-              "target": "bitcoincore_rpc"
-            },
-            {
-              "id": "bitcoind 0.32.0",
-              "target": "bitcoind"
             },
             {
               "id": "bitflags 1.3.2",
@@ -21622,7 +20985,7 @@
               "target": "ic_cbor"
             },
             {
-              "id": "ic-cdk 0.18.6",
+              "id": "ic-cdk 0.18.7",
               "target": "ic_cdk"
             },
             {
@@ -21662,7 +21025,7 @@
               "target": "ic_identity_hsm"
             },
             {
-              "id": "ic-management-canister-types 0.3.2",
+              "id": "ic-management-canister-types 0.3.3",
               "target": "ic_management_canister_types"
             },
             {
@@ -21680,6 +21043,11 @@
             {
               "id": "ic-stable-structures 0.6.8",
               "target": "ic_stable_structures"
+            },
+            {
+              "id": "ic-stable-structures 0.7.0",
+              "target": "ic_stable_structures",
+              "alias": "ic_stable_structures_next"
             },
             {
               "id": "ic-test-state-machine-client 3.0.1",
@@ -21776,6 +21144,10 @@
             {
               "id": "json5 0.4.1",
               "target": "json5"
+            },
+            {
+              "id": "jsonrpc 0.18.0",
+              "target": "jsonrpc"
             },
             {
               "id": "k256 0.13.4",
@@ -21910,6 +21282,10 @@
               "target": "num_cpus"
             },
             {
+              "id": "object 0.37.3",
+              "target": "object"
+            },
+            {
               "id": "once_cell 1.21.3",
               "target": "once_cell"
             },
@@ -21936,6 +21312,10 @@
             {
               "id": "p256 0.13.2",
               "target": "p256"
+            },
+            {
+              "id": "p384 0.13.1",
+              "target": "p384"
             },
             {
               "id": "pairing 0.23.0",
@@ -22065,6 +21445,10 @@
             {
               "id": "ratelimit 0.9.1",
               "target": "ratelimit"
+            },
+            {
+              "id": "raw-cpuid 11.5.0",
+              "target": "raw_cpuid"
             },
             {
               "id": "rayon 1.10.0",
@@ -22456,7 +21840,7 @@
               "target": "tracing_slog"
             },
             {
-              "id": "tracing-subscriber 0.3.19",
+              "id": "tracing-subscriber 0.3.20",
               "target": "tracing_subscriber"
             },
             {
@@ -22486,6 +21870,10 @@
             {
               "id": "walkdir 2.5.0",
               "target": "walkdir"
+            },
+            {
+              "id": "walrus 0.23.3",
+              "target": "walrus"
             },
             {
               "id": "warp 0.3.7",
@@ -26335,7 +25723,7 @@
               "target": "ic_error_types"
             },
             {
-              "id": "ic-management-canister-types 0.3.2",
+              "id": "ic-management-canister-types 0.3.3",
               "target": "ic_management_canister_types"
             },
             {
@@ -34559,7 +33947,7 @@
               "target": "hex"
             },
             {
-              "id": "ic-cdk 0.18.6",
+              "id": "ic-cdk 0.18.7",
               "target": "ic_cdk"
             },
             {
@@ -34669,14 +34057,14 @@
       ],
       "license_file": null
     },
-    "ic-cdk 0.18.6": {
+    "ic-cdk 0.18.7": {
       "name": "ic-cdk",
-      "version": "0.18.6",
+      "version": "0.18.7",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.18.6/download",
-          "sha256": "3694c302426834b1300c095b43dee60aaf07264ca07c8f6456fc6b898c99c72f"
+          "url": "https://static.crates.io/crates/ic-cdk/0.18.7/download",
+          "sha256": "4efb278f5d3ef033b3eed7f01f1096eaf67701896aa5ef69f5eddf5a84833dc0"
         }
       },
       "targets": [
@@ -34713,7 +34101,7 @@
               "target": "ic_error_types"
             },
             {
-              "id": "ic-management-canister-types 0.3.2",
+              "id": "ic-management-canister-types 0.3.3",
               "target": "ic_management_canister_types"
             },
             {
@@ -34743,13 +34131,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "ic-cdk-macros 0.18.6",
+              "id": "ic-cdk-macros 0.18.7",
               "target": "ic_cdk_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.18.6"
+        "version": "0.18.7"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -34836,14 +34224,14 @@
       ],
       "license_file": null
     },
-    "ic-cdk-macros 0.18.6": {
+    "ic-cdk-macros 0.18.7": {
       "name": "ic-cdk-macros",
-      "version": "0.18.6",
+      "version": "0.18.7",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-macros/0.18.6/download",
-          "sha256": "b2cd13805284d5f422012c392a132757c74bd1bb2f7baeda2f3fca5cbe3d8ce7"
+          "url": "https://static.crates.io/crates/ic-cdk-macros/0.18.7/download",
+          "sha256": "7eb14c5d691cc9d72bb95459b4761e3a4b3444b85a63d17555d5ddd782969a1e"
         }
       },
       "targets": [
@@ -34891,7 +34279,7 @@
           "selects": {}
         },
         "edition": "2024",
-        "version": "0.18.6"
+        "version": "0.18.7"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -34939,7 +34327,7 @@
               "target": "futures"
             },
             {
-              "id": "ic-cdk 0.18.6",
+              "id": "ic-cdk 0.18.7",
               "target": "ic_cdk"
             },
             {
@@ -35468,7 +34856,7 @@
               "target": "tracing_serde"
             },
             {
-              "id": "tracing-subscriber 0.3.19",
+              "id": "tracing-subscriber 0.3.20",
               "target": "tracing_subscriber"
             },
             {
@@ -35743,14 +35131,14 @@
       ],
       "license_file": null
     },
-    "ic-management-canister-types 0.3.2": {
+    "ic-management-canister-types 0.3.3": {
       "name": "ic-management-canister-types",
-      "version": "0.3.2",
+      "version": "0.3.3",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-management-canister-types/0.3.2/download",
-          "sha256": "95f3af3543f6d0cbdecd2dcdfd4737ada2bd42d935cc787eec22090c96492c76"
+          "url": "https://static.crates.io/crates/ic-management-canister-types/0.3.3/download",
+          "sha256": "ea7e5b8a0f7c3b320d9450ac950547db4f24a31601b5d398f9680b64427455d2"
         }
       },
       "targets": [
@@ -35789,8 +35177,8 @@
           ],
           "selects": {}
         },
-        "edition": "2021",
-        "version": "0.3.2"
+        "edition": "2024",
+        "version": "0.3.3"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -36731,7 +36119,7 @@
               "target": "hkdf"
             },
             {
-              "id": "ic-cdk 0.18.6",
+              "id": "ic-cdk 0.18.7",
               "target": "ic_cdk"
             },
             {
@@ -36797,7 +36185,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "ic-cdk-macros 0.18.6",
+              "id": "ic-cdk-macros 0.18.7",
               "target": "ic_cdk_macros"
             },
             {
@@ -40619,70 +40007,6 @@
       },
       "license": null,
       "license_ids": [],
-      "license_file": "LICENSE"
-    },
-    "jsonrpc 0.13.0": {
-      "name": "jsonrpc",
-      "version": "0.13.0",
-      "package_url": "https://github.com/apoelstra/rust-jsonrpc/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/jsonrpc/0.13.0/download",
-          "sha256": "fd8d6b3f301ba426b30feca834a2a18d48d5b54e5065496b5c1b05537bee3639"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "jsonrpc",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "jsonrpc",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "base64",
-            "default",
-            "simple_http",
-            "simple_tcp"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "base64 0.13.1",
-              "target": "base64"
-            },
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.132",
-              "target": "serde_json"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.13.0"
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
       "license_file": "LICENSE"
     },
     "jsonrpc 0.18.0": {
@@ -46186,14 +45510,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "matchers 0.1.0": {
+    "matchers 0.2.0": {
       "name": "matchers",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "package_url": "https://github.com/hawkw/matchers",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/matchers/0.1.0/download",
-          "sha256": "8263075bb86c5a1b1427b5ae862e8889656f126e9f77c484496e8b47cf5c5558"
+          "url": "https://static.crates.io/crates/matchers/0.2.0/download",
+          "sha256": "d1525a2a28c7f4fa0fc98bb91ae755d1e2d1505079e05539e35bc876b5d65ae9"
         }
       },
       "targets": [
@@ -46218,14 +45542,14 @@
         "deps": {
           "common": [
             {
-              "id": "regex-automata 0.1.10",
+              "id": "regex-automata 0.4.8",
               "target": "regex_automata"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.1.0"
+        "version": "0.2.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -49448,14 +48772,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "nu-ansi-term 0.46.0": {
+    "nu-ansi-term 0.50.1": {
       "name": "nu-ansi-term",
-      "version": "0.46.0",
+      "version": "0.50.1",
       "package_url": "https://github.com/nushell/nu-ansi-term",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/nu-ansi-term/0.46.0/download",
-          "sha256": "77a8165726e8236064dbb45459242600304b42a5ea24ee2948e18e023bf7ba84"
+          "url": "https://static.crates.io/crates/nu-ansi-term/0.50.1/download",
+          "sha256": "d4a28e057d01f97e61255210fcff094d74ed0466038633e95017f5beb68e4399"
         }
       },
       "targets": [
@@ -49478,29 +48802,25 @@
           "**"
         ],
         "deps": {
-          "common": [
-            {
-              "id": "overload 0.1.1",
-              "target": "overload"
-            }
-          ],
+          "common": [],
           "selects": {
-            "cfg(target_os = \"windows\")": [
+            "cfg(windows)": [
               {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
+                "id": "windows-sys 0.52.0",
+                "target": "windows_sys",
+                "alias": "windows"
               }
             ]
           }
         },
-        "edition": "2018",
-        "version": "0.46.0"
+        "edition": "2021",
+        "version": "0.50.1"
       },
       "license": "MIT",
       "license_ids": [
         "MIT"
       ],
-      "license_file": null
+      "license_file": "LICENSE"
     },
     "num 0.4.3": {
       "name": "num",
@@ -50803,6 +50123,106 @@
         },
         "edition": "2018",
         "version": "0.36.7"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "Apache-2.0 OR MIT",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "object 0.37.3": {
+      "name": "object",
+      "version": "0.37.3",
+      "package_url": "https://github.com/gimli-rs/object",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/object/0.37.3/download",
+          "sha256": "ff76201f031d8863c38aa7f905eca4f53abbfa15f609db4277d44cd8938f33fe"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "object",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "object",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "archive",
+            "coff",
+            "compression",
+            "default",
+            "elf",
+            "macho",
+            "pe",
+            "read",
+            "read_core",
+            "std",
+            "unaligned",
+            "xcoff"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "flate2 1.1.2",
+              "target": "flate2"
+            },
+            {
+              "id": "memchr 2.7.4",
+              "target": "memchr"
+            },
+            {
+              "id": "object 0.37.3",
+              "target": "build_script_build"
+            },
+            {
+              "id": "ruzstd 0.8.1",
+              "target": "ruzstd"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.37.3"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -53356,44 +52776,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "overload 0.1.1": {
-      "name": "overload",
-      "version": "0.1.1",
-      "package_url": "https://github.com/danaugrs/overload",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/overload/0.1.1/download",
-          "sha256": "b15813163c1d831bf4a13c3610c05c0d03b39feb07f7e09fa234dac9b15aaf39"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "overload",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "overload",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "version": "0.1.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
     },
     "p256 0.13.2": {
       "name": "p256",
@@ -56621,7 +56003,7 @@
               "target": "ic_certification"
             },
             {
-              "id": "ic-management-canister-types 0.3.2",
+              "id": "ic-management-canister-types 0.3.3",
               "target": "ic_management_canister_types"
             },
             {
@@ -56685,7 +56067,7 @@
               "target": "tracing_appender"
             },
             {
-              "id": "tracing-subscriber 0.3.19",
+              "id": "tracing-subscriber 0.3.20",
               "target": "tracing_subscriber"
             }
           ],
@@ -60622,13 +60004,13 @@
             ],
             "cfg(target_arch = \"x86\")": [
               {
-                "id": "raw-cpuid 11.1.0",
+                "id": "raw-cpuid 11.5.0",
                 "target": "raw_cpuid"
               }
             ],
             "cfg(target_arch = \"x86_64\")": [
               {
-                "id": "raw-cpuid 11.1.0",
+                "id": "raw-cpuid 11.5.0",
                 "target": "raw_cpuid"
               }
             ],
@@ -62843,14 +62225,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "raw-cpuid 11.1.0": {
+    "raw-cpuid 11.5.0": {
       "name": "raw-cpuid",
-      "version": "11.1.0",
+      "version": "11.5.0",
       "package_url": "https://github.com/gz/rust-cpuid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/raw-cpuid/11.1.0/download",
-          "sha256": "cb9ee317cfe3fbd54b36a511efc1edd42e216903c9cd575e686dd68a2ba90d8d"
+          "url": "https://static.crates.io/crates/raw-cpuid/11.5.0/download",
+          "sha256": "c6df7ab838ed27997ba19a4664507e6f82b41fe6e20be42929332156e5e85146"
         }
       },
       "targets": [
@@ -62882,7 +62264,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "11.1.0"
+        "version": "11.5.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -63608,23 +62990,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": {
-          "common": [
-            "default",
-            "regex-syntax",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "regex-syntax 0.6.29",
-              "target": "regex_syntax"
-            }
-          ],
-          "selects": {}
-        },
         "edition": "2015",
         "version": "0.1.10"
       },
@@ -63712,7 +63077,9 @@
         "crate_features": {
           "common": [
             "alloc",
+            "dfa-build",
             "dfa-onepass",
+            "dfa-search",
             "hybrid",
             "meta",
             "nfa-backtrack",
@@ -65877,6 +65244,7 @@
         "crate_features": {
           "common": [
             "default",
+            "getrandom",
             "pem",
             "sha2",
             "std",
@@ -68461,6 +67829,61 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "ruzstd 0.8.1": {
+      "name": "ruzstd",
+      "version": "0.8.1",
+      "package_url": "https://github.com/KillingSpark/zstd-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ruzstd/0.8.1/download",
+          "sha256": "3640bec8aad418d7d03c72ea2de10d5c646a598f9883c7babc160d91e3c1b26c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ruzstd",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ruzstd",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "hash",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "twox-hash 2.1.1",
+              "target": "twox_hash"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.8.1"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "ryu 1.0.15": {
       "name": "ryu",
       "version": "1.0.15",
@@ -69532,77 +68955,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "secp256k1 0.27.0": {
-      "name": "secp256k1",
-      "version": "0.27.0",
-      "package_url": "https://github.com/rust-bitcoin/rust-secp256k1/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/secp256k1/0.27.0/download",
-          "sha256": "25996b82292a7a57ed3508f052cfff8640d38d32018784acd714758b43da9c8f"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "secp256k1",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "secp256k1",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "bitcoin_hashes",
-            "rand",
-            "rand-std",
-            "recovery",
-            "serde",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bitcoin_hashes 0.12.0",
-              "target": "bitcoin_hashes"
-            },
-            {
-              "id": "rand 0.8.5",
-              "target": "rand"
-            },
-            {
-              "id": "secp256k1-sys 0.8.1",
-              "target": "secp256k1_sys"
-            },
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.27.0"
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": "LICENSE"
-    },
     "secp256k1 0.29.0": {
       "name": "secp256k1",
       "version": "0.29.0",
@@ -69637,7 +68989,6 @@
             "alloc",
             "hashes",
             "rand",
-            "rand-std",
             "recovery",
             "serde",
             "std"
@@ -69755,94 +69106,6 @@
           "selects": {}
         },
         "links": "rustsecp256k1_v0_5_0"
-      },
-      "license": "CC0-1.0",
-      "license_ids": [
-        "CC0-1.0"
-      ],
-      "license_file": "LICENSE"
-    },
-    "secp256k1-sys 0.8.1": {
-      "name": "secp256k1-sys",
-      "version": "0.8.1",
-      "package_url": "https://github.com/rust-bitcoin/rust-secp256k1/",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/secp256k1-sys/0.8.1/download",
-          "sha256": "70a129b9e9efbfb223753b9163c4ab3b13cff7fd9c7f010fbac25ab4099fa07e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "secp256k1_sys",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "secp256k1_sys",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc",
-            "recovery",
-            "std"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "secp256k1-sys 0.8.1",
-              "target": "build_script_build"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.8.1"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "cc 1.2.22",
-              "target": "cc"
-            }
-          ],
-          "selects": {}
-        },
-        "links": "rustsecp256k1_v0_8_1"
       },
       "license": "CC0-1.0",
       "license_ids": [
@@ -82284,7 +81547,7 @@
               "target": "time"
             },
             {
-              "id": "tracing-subscriber 0.3.19",
+              "id": "tracing-subscriber 0.3.20",
               "target": "tracing_subscriber"
             }
           ],
@@ -82456,7 +81719,7 @@
               "target": "tracing"
             },
             {
-              "id": "tracing-subscriber 0.3.19",
+              "id": "tracing-subscriber 0.3.20",
               "target": "tracing_subscriber"
             }
           ],
@@ -82581,7 +81844,7 @@
               "target": "tracing_core"
             },
             {
-              "id": "tracing-subscriber 0.3.19",
+              "id": "tracing-subscriber 0.3.20",
               "target": "tracing_subscriber"
             }
           ],
@@ -82665,7 +81928,7 @@
               "target": "tracing_log"
             },
             {
-              "id": "tracing-subscriber 0.3.19",
+              "id": "tracing-subscriber 0.3.20",
               "target": "tracing_subscriber"
             }
           ],
@@ -82855,14 +82118,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tracing-subscriber 0.3.19": {
+    "tracing-subscriber 0.3.20": {
       "name": "tracing-subscriber",
-      "version": "0.3.19",
+      "version": "0.3.20",
       "package_url": "https://github.com/tokio-rs/tracing",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tracing-subscriber/0.3.19/download",
-          "sha256": "e8189decb5ac0fa7bc8b96b7cb9b2701d60d48805aca84a238004d665fcc4008"
+          "url": "https://static.crates.io/crates/tracing-subscriber/0.3.20/download",
+          "sha256": "2054a14f5307d601f88daf0553e1cbf472acc4f2c51afab632431cdcd72124d5"
         }
       },
       "targets": [
@@ -82895,7 +82158,6 @@
             "matchers",
             "nu-ansi-term",
             "once_cell",
-            "regex",
             "registry",
             "serde",
             "serde_json",
@@ -82913,11 +82175,11 @@
         "deps": {
           "common": [
             {
-              "id": "matchers 0.1.0",
+              "id": "matchers 0.2.0",
               "target": "matchers"
             },
             {
-              "id": "nu-ansi-term 0.46.0",
+              "id": "nu-ansi-term 0.50.1",
               "target": "nu_ansi_term"
             },
             {
@@ -82925,8 +82187,8 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.11.1",
-              "target": "regex"
+              "id": "regex-automata 0.4.8",
+              "target": "regex_automata"
             },
             {
               "id": "serde 1.0.219",
@@ -82972,7 +82234,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.19"
+        "version": "0.3.20"
       },
       "license": "MIT",
       "license_ids": [
@@ -83606,7 +82868,7 @@
               "target": "tracing"
             },
             {
-              "id": "tracing-subscriber 0.3.19",
+              "id": "tracing-subscriber 0.3.20",
               "target": "tracing_subscriber"
             }
           ],
@@ -83665,6 +82927,50 @@
         },
         "edition": "2018",
         "version": "1.6.3"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE.txt"
+    },
+    "twox-hash 2.1.1": {
+      "name": "twox-hash",
+      "version": "2.1.1",
+      "package_url": "https://github.com/shepmaster/twox-hash",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/twox-hash/2.1.1/download",
+          "sha256": "8b907da542cbced5261bd3256de1b3a1bf340a3d37f93425a07362a1d687de56"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "twox_hash",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "twox_hash",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "xxhash64"
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "2.1.1"
       },
       "license": "MIT",
       "license_ids": [
@@ -95560,9 +94866,7 @@
     "bip32 0.5.1",
     "bit-vec 0.6.3",
     "bitcoin 0.28.2",
-    "bitcoin 0.32.99",
-    "bitcoincore-rpc 0.19.0",
-    "bitcoind 0.32.0",
+    "bitcoin 0.32.5-doge.0",
     "bitflags 1.3.2",
     "bs58 0.5.0",
     "build-info 0.0.27",
@@ -95650,7 +94954,7 @@
     "ic-canister-log 0.2.0",
     "ic-canister-sig-creation 1.3.0",
     "ic-cbor 3.0.3",
-    "ic-cdk 0.18.6",
+    "ic-cdk 0.18.7",
     "ic-cdk-executor 1.0.2",
     "ic-cdk-timers 0.12.2",
     "ic-certificate-verification 3.0.3",
@@ -95660,11 +94964,12 @@
     "ic-http-certification 3.0.3",
     "ic-http-gateway 0.3.0",
     "ic-identity-hsm 0.40.1",
-    "ic-management-canister-types 0.3.2",
+    "ic-management-canister-types 0.3.3",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.0.3",
     "ic-sha3 1.0.0",
     "ic-stable-structures 0.6.8",
+    "ic-stable-structures 0.7.0",
     "ic-test-state-machine-client 3.0.1",
     "ic-transport-types 0.40.1",
     "ic-utils 0.40.1",
@@ -95690,6 +94995,7 @@
     "itertools 0.12.0",
     "json-patch 0.2.7",
     "json5 0.4.1",
+    "jsonrpc 0.18.0",
     "k256 0.13.4",
     "k8s-openapi 0.22.0",
     "kube 0.94.2",
@@ -95724,6 +95030,7 @@
     "num-rational 0.2.4",
     "num-traits 0.2.19",
     "num_cpus 1.16.0",
+    "object 0.37.3",
     "once_cell 1.21.3",
     "openssh-keys 0.5.0",
     "opentelemetry 0.27.0",
@@ -95731,6 +95038,7 @@
     "opentelemetry-prometheus 0.13.0",
     "opentelemetry_sdk 0.27.1",
     "p256 0.13.2",
+    "p384 0.13.1",
     "pairing 0.23.0",
     "parking_lot 0.12.1",
     "paste 1.0.15",
@@ -95765,6 +95073,7 @@
     "rand_distr 0.4.3",
     "rand_pcg 0.3.1",
     "ratelimit 0.9.1",
+    "raw-cpuid 11.5.0",
     "rayon 1.10.0",
     "rcgen 0.13.1",
     "regex 1.11.1",
@@ -95866,7 +95175,7 @@
     "tracing-opentelemetry 0.28.0",
     "tracing-serde 0.1.3",
     "tracing-slog 0.2.0",
-    "tracing-subscriber 0.3.19",
+    "tracing-subscriber 0.3.20",
     "trust-dns-resolver 0.22.0",
     "turmoil 0.6.4",
     "url 2.5.4",
@@ -95874,6 +95183,7 @@
     "virt 0.4.2",
     "vsock 0.4.0",
     "walkdir 2.5.0",
+    "walrus 0.23.3",
     "warp 0.3.7",
     "wasm-bindgen 0.2.100",
     "wasm-encoder 0.228.0",

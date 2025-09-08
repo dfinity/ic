@@ -14,8 +14,7 @@ use ic_registry_keys::{
 };
 use ic_types::registry::RegistryClientError;
 use itertools::Itertools;
-use rewards_calculation::rewards_calculator_results::DayUtc;
-use rewards_calculation::types::{Region, RewardableNode, UnixTsNanos};
+use rewards_calculation::types::{DayUtc, Region, RewardableNode, UnixTsNanos};
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -90,6 +89,7 @@ impl RegistryQuerier {
         registry_client: &dyn CanisterRegistryClient,
         start_day: DayUtc,
         end_day: DayUtc,
+        provider_filter: Option<PrincipalId>,
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, RegistryClientError> {
         let mut rewardable_nodes_per_provider: BTreeMap<_, Vec<RewardableNode>> = BTreeMap::new();
         let nodes_in_range = Self::nodes_in_registry_between::<S>(start_day, end_day);
@@ -110,6 +110,11 @@ impl RegistryQuerier {
                 ic_cdk::println!("Node {} has no NodeOperatorData: skipping", node_id);
                 continue;
             };
+            if let Some(provider_filter) = provider_filter {
+                if node_provider_id != provider_filter {
+                    continue;
+                }
+            }
             let Some(some_reward_type) = node_record.node_reward_type else {
                 ic_cdk::println!("Node {} has no node_reward_type: skipping", node_id);
                 // If the node does not have a node_reward_type, we skip it.

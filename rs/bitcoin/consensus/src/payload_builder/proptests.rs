@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use crate::{
     payload_builder::tests::{
-        mock_registry_client, mock_state_manager, MockBitcoinAdapterClient, CERTIFIED_HEIGHT,
+        mock_registry_client, mock_state_manager, MockAdapterClient, CERTIFIED_HEIGHT,
         REGISTRY_VERSION,
     },
     BitcoinPayloadBuilder,
@@ -42,7 +42,7 @@ fn proptest_round(
     max_size: NumBytes,
     bitcoin_payload: BitcoinAdapterResponseWrapper,
 ) {
-    let mut adapter_client = MockBitcoinAdapterClient::new();
+    let mut adapter_client = MockAdapterClient::new();
     adapter_client
         .expect_send_blocking()
         .times(1)
@@ -53,17 +53,17 @@ fn proptest_round(
             GetSuccessorsRequestInitial {
                 processed_block_hashes: vec![vec![10; 32]],
                 anchor: vec![10; 32],
-                network: Network::Testnet,
+                network: Network::BitcoinTestnet,
             },
         )]);
 
     let bitcoin_payload_builder = BitcoinPayloadBuilder::new(
         Arc::new(state_manager),
         &MetricsRegistry::new(),
-        Box::new(MockBitcoinAdapterClient::new()),
+        Box::new(MockAdapterClient::new()),
         Box::new(adapter_client),
-        Box::new(MockBitcoinAdapterClient::new()),
-        Box::new(MockBitcoinAdapterClient::new()),
+        Box::new(MockAdapterClient::new()),
+        Box::new(MockAdapterClient::new()),
         subnet_test_id(0),
         Arc::new(mock_registry_client(NumBytes::new(
             MAX_BTC_BLOCK_SIZE as u64,

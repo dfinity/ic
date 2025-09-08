@@ -35,7 +35,9 @@ use ic_interfaces::{
     certification::{Verifier, VerifierError},
     consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
     consensus_pool::ConsensusTime,
-    execution_environment::{IngressFilterService, IngressHistoryReader, QueryExecutionService},
+    execution_environment::{
+        IngressFilterService, IngressHistoryReader, QueryExecutionInput, QueryExecutionService,
+    },
     ingress_pool::{
         IngressPool, IngressPoolObject, PoolSection, UnvalidatedIngressArtifact,
         ValidatedIngressArtifact,
@@ -65,6 +67,7 @@ use ic_management_canister_types_private::{
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use ic_protobuf::{
     registry::{
         crypto::v1::{ChainKeyEnabledSubnetList, PublicKey as PublicKeyProto, X509PublicKeyCert},
@@ -91,7 +94,7 @@ use ic_registry_keys::{
     make_canister_ranges_key, make_catch_up_package_contents_key,
     make_chain_key_enabled_subnet_list_key, make_crypto_node_key, make_crypto_tls_cert_key,
     make_node_record_key, make_provisional_whitelist_record_key, make_replica_version_key,
-    make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
+    NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, INITIAL_REGISTRY_VERSION};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -144,9 +147,10 @@ use ic_types::{
     },
     malicious_flags::MaliciousFlags,
     messages::{
-        extract_effective_canister_id, Blob, Certificate, CertificateDelegation, HttpCallContent,
-        HttpCanisterUpdate, HttpRequestContent, HttpRequestEnvelope, Payload as MsgPayload, Query,
-        QuerySource, RejectContext, SignedIngress, EXPECTED_MESSAGE_ID_LENGTH,
+        extract_effective_canister_id, Blob, Certificate, CertificateDelegation,
+        CertificateDelegationMetadata, HttpCallContent, HttpCanisterUpdate, HttpRequestContent,
+        HttpRequestEnvelope, Payload as MsgPayload, Query, QuerySource, RejectContext,
+        SignedIngress, EXPECTED_MESSAGE_ID_LENGTH,
     },
     signature::ThresholdSignature,
     time::GENESIS,
@@ -264,14 +268,6 @@ pub fn add_global_registry_records(
             Some(pb_routing_table.clone()),
         )
         .unwrap();
-    // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
-    registry_data_provider
-        .add(
-            &make_routing_table_record_key(),
-            registry_version,
-            Some(pb_routing_table),
-        )
-        .unwrap();
 
     // subnet list record
     add_subnet_list_record(&registry_data_provider, registry_version.get(), subnet_list);
@@ -294,6 +290,17 @@ pub fn add_global_registry_records(
             )
             .unwrap();
     }
+
+    // node rewards table
+    registry_data_provider
+        .add(
+            NODE_REWARDS_TABLE_KEY,
+            registry_version,
+            Some(NodeRewardsTable {
+                table: BTreeMap::new(),
+            }),
+        )
+        .unwrap();
 }
 
 /// Adds initial registry records to the registry managed by the registry data provider:
@@ -2152,6 +2159,7 @@ impl StateMachine {
                 return Err("No certified state available.".to_string());
             }
         };
+        // TODO(CON-1487): return the `canister_ranges/{subnet_id}` path as well
         let paths = vec![
             LabeledTreePath::new(vec![
                 b"subnet".into(),
@@ -3132,7 +3140,7 @@ impl StateMachine {
         self.create_canister_with_cycles(None, Cycles::new(0), settings)
     }
 
-    /// Creates a new canister with a cycles balance and returns the canister principal.
+    /// Creates a new canister and returns the canister principal.
     pub fn create_canister_with_cycles(
         &self,
         specified_id: Option<PrincipalId>,
@@ -3140,17 +3148,7 @@ impl StateMachine {
         settings: Option<CanisterSettingsArgs>,
     ) -> CanisterId {
         let wasm_result = self
-            .execute_ingress(
-                ic00::IC_00,
-                ic00::Method::ProvisionalCreateCanisterWithCycles,
-                ic00::ProvisionalCreateCanisterWithCyclesArgs {
-                    amount: Some(candid::Nat::from(cycles.get())),
-                    settings,
-                    specified_id,
-                    sender_canister_version: None,
-                }
-                .encode(),
-            )
+            .create_canister_with_cycles_impl(specified_id, cycles, settings)
             .expect("failed to create canister");
         match wasm_result {
             WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
@@ -3158,6 +3156,26 @@ impl StateMachine {
                 .get_canister_id(),
             WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
         }
+    }
+
+    /// Creates a new canister.
+    pub fn create_canister_with_cycles_impl(
+        &self,
+        specified_id: Option<PrincipalId>,
+        cycles: Cycles,
+        settings: Option<CanisterSettingsArgs>,
+    ) -> Result<WasmResult, UserError> {
+        self.execute_ingress(
+            ic00::IC_00,
+            ic00::Method::ProvisionalCreateCanisterWithCycles,
+            ic00::ProvisionalCreateCanisterWithCyclesArgs {
+                amount: Some(candid::Nat::from(cycles.get())),
+                settings,
+                specified_id,
+                sender_canister_version: None,
+            }
+            .encode(),
+        )
     }
 
     /// Creates a new canister and installs its code.
@@ -3413,7 +3431,7 @@ impl StateMachine {
         self.get_snapshot_blob(
             args,
             |md: &ReadCanisterSnapshotMetadataResponse| md.wasm_memory_size,
-            |offset, size| CanisterSnapshotDataKind::MainMemory { offset, size },
+            |offset, size| CanisterSnapshotDataKind::WasmMemory { offset, size },
         )
     }
 
@@ -3539,7 +3557,7 @@ impl StateMachine {
             data,
             start_chunk,
             end_chunk,
-            |x| CanisterSnapshotDataOffset::MainMemory { offset: x },
+            |x| CanisterSnapshotDataOffset::WasmMemory { offset: x },
         )
     }
 
@@ -3724,7 +3742,7 @@ impl StateMachine {
         receiver: CanisterId,
         method: impl ToString,
         method_payload: Vec<u8>,
-        delegation: Option<CertificateDelegation>,
+        delegation: Option<(CertificateDelegation, CertificateDelegationMetadata)>,
     ) -> Result<WasmResult, UserError> {
         self.certify_latest_state();
         let user_query = Query {
@@ -3738,11 +3756,11 @@ impl StateMachine {
             method_payload,
         };
         let query_svc = self.query_handler.lock().unwrap().clone();
-        if let Ok((result, _)) = self
-            .runtime
-            .block_on(query_svc.oneshot((user_query, delegation)))
-            .unwrap()
-        {
+        let input = QueryExecutionInput {
+            query: user_query,
+            certificate_delegation_with_metadata: delegation,
+        };
+        if let Ok((result, _)) = self.runtime.block_on(query_svc.oneshot(input)).unwrap() {
             result
         } else {
             unreachable!()
@@ -4036,14 +4054,6 @@ impl StateMachine {
                 &make_canister_ranges_key(CanisterId::from_u64(0)),
                 next_version,
                 Some(pb_routing_table.clone()),
-            )
-            .unwrap();
-        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
-        self.registry_data_provider
-            .add(
-                &make_routing_table_record_key(),
-                next_version,
-                Some(pb_routing_table),
             )
             .unwrap();
         self.registry_client.update_to_latest_version();

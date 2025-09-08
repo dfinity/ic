@@ -1,5 +1,4 @@
 use crate::registry_querier::RegistryQuerier;
-use chrono::{DateTime, NaiveDateTime, Utc};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
@@ -18,8 +17,7 @@ use ic_registry_keys::{
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use maplit::btreemap;
-use rewards_calculation::rewards_calculator_results::DayUtc;
-use rewards_calculation::types::{RewardPeriod, RewardableNode};
+use rewards_calculation::types::{DayUtc, RewardPeriod, RewardableNode};
 use std::cell::RefCell;
 use std::sync::Arc;
 
@@ -40,21 +38,14 @@ thread_local! {
 
 test_registry_data_stable_memory_impl!(DummyState, STATE);
 
-fn ts(datetime_str: &str) -> u64 {
-    let dt = format!("{} 00:00:00", datetime_str);
-    let naive =
-        NaiveDateTime::parse_from_str(&dt, "%Y-%m-%d %H:%M:%S").expect("Invalid date format");
-    let datetime: DateTime<Utc> = DateTime::from_naive_utc_and_offset(naive, Utc);
-    datetime.timestamp_nanos_opt().unwrap() as u64
-}
-
 fn add_record_helper(
     key: &str,
     version: u64,
     value: Option<impl ::prost::Message>,
     datetime_str: &str,
 ) {
-    add_record_helper_ts(key, version, value, ts(datetime_str));
+    let ts = DayUtc::try_from(datetime_str).unwrap();
+    add_record_helper_ts(key, version, value, ts.unix_ts_at_day_end());
 }
 
 fn add_record_helper_ts(key: &str, version: u64, value: Option<impl ::prost::Message>, ts: u64) {
@@ -119,32 +110,44 @@ fn add_dummy_data() {
     let node_1_id = 1;
     let node_2_id = 2;
     let node_3_id = 3;
+    let node_4_id = 4;
     let no_1_id = 10;
     let np_1_id = 20;
     let no_2_id = 30;
+    let no_3_id = 40;
+    let np_2_id = 50;
 
     let (no_1_k, no_1_v) = generate_node_operator_key_value(no_1_id, np_1_id, dc_1_id.clone());
+    let (no_3_k, no_3_v) = generate_node_operator_key_value(no_3_id, np_2_id, dc_1_id.clone());
     let (dc_2_k, dc_2_v) = generate_dc_key_value(dc_2_id.clone());
     let (no_2_k, no_2_v) = generate_node_operator_key_value(no_2_id, np_1_id, dc_2_id);
     let (dc_1_k, dc_1_v) = generate_dc_key_value(dc_1_id);
     let (node_1_k, node_1_v) = generate_node_key_value(node_1_id, NodeRewardType::Type0, no_1_id);
     let (node_2_k, node_2_v) = generate_node_key_value(node_2_id, NodeRewardType::Type1, no_1_id);
     let (node_3_k, node_3_v) = generate_node_key_value(node_3_id, NodeRewardType::Type2, no_2_id);
+    let (node_4_k, node_4_v) = generate_node_key_value(node_4_id, NodeRewardType::Type2, no_3_id);
 
     add_record_helper(&dc_2_k, 39651, Some(dc_2_v), "2025-07-01");
     add_record_helper(&dc_1_k, 39652, Some(dc_1_v), "2025-07-02");
     add_record_helper(&no_1_k, 39653, Some(no_1_v), "2025-07-02");
     add_record_helper(&no_2_k, 39654, Some(no_2_v), "2025-07-02");
+    add_record_helper(&no_3_k, 39655, Some(no_3_v), "2025-07-02");
     add_record_helper(&node_1_k, 39662, Some(node_1_v), "2025-07-03");
     add_record_helper(&node_2_k, 39664, Some(node_2_v), "2025-07-04");
     add_record_helper(&node_1_k, 39666, None::<NodeRecord>, "2025-07-08");
     add_record_helper(&node_3_k, 39667, Some(node_3_v.clone()), "2025-07-11");
     add_record_helper(&node_3_k, 39670, None::<NodeRecord>, "2025-07-13");
     add_record_helper(&node_3_k, 39675, Some(node_3_v.clone()), "2025-07-15");
+    add_record_helper(&node_4_k, 39676, Some(node_4_v.clone()), "2025-07-16");
 
     // Removed and re-added node_3 same day
-    add_record_helper_ts(&node_3_k, 39676, None::<NodeRecord>, ts("2025-07-16") + 1);
-    add_record_helper_ts(&node_3_k, 39677, Some(node_3_v), ts("2025-07-16") + 2);
+    let ts_removed = DayUtc::try_from("2025-07-16")
+        .unwrap()
+        .unix_ts_at_day_start()
+        + 1;
+    add_record_helper_ts(&node_3_k, 39676, None::<NodeRecord>, ts_removed);
+    let ts_readded = ts_removed + 1;
+    add_record_helper_ts(&node_3_k, 39677, Some(node_3_v), ts_readded);
 }
 
 fn client_for_tests() -> RegistryQuerier {
@@ -238,8 +241,8 @@ fn test_nodes_in_registry_returns_expected_days() {
     // - node_1 exists until 2025-07-07
     // - node_2 is always present
     // - node_3 appears on 2025-07-11
-    let from = ts("2025-07-03").into();
-    let to = ts("2025-07-16").into();
+    let from = DayUtc::try_from("2025-07-03").unwrap();
+    let to = DayUtc::try_from("2025-07-16").unwrap();
     let nodes_map = RegistryQuerier::nodes_in_registry_between::<DummyState>(from, to);
 
     let node_1_id = NodeId::from(PrincipalId::new_node_test_id(1));
@@ -248,39 +251,39 @@ fn test_nodes_in_registry_returns_expected_days() {
 
     let (_, _, node_1_days) = &nodes_map[&node_1_id];
     let expected_node_1_days: Vec<DayUtc> = vec![
-        ts("2025-07-03").into(),
-        ts("2025-07-04").into(),
-        ts("2025-07-05").into(),
-        ts("2025-07-06").into(),
-        ts("2025-07-07").into(),
+        DayUtc::try_from("2025-07-03").unwrap(),
+        DayUtc::try_from("2025-07-04").unwrap(),
+        DayUtc::try_from("2025-07-05").unwrap(),
+        DayUtc::try_from("2025-07-06").unwrap(),
+        DayUtc::try_from("2025-07-07").unwrap(),
     ];
     assert_eq!(node_1_days, &expected_node_1_days);
 
     let (_, _, node_2_days) = &nodes_map[&node_2_id];
     let expected_node_2_days: Vec<DayUtc> = vec![
-        ts("2025-07-04").into(),
-        ts("2025-07-05").into(),
-        ts("2025-07-06").into(),
-        ts("2025-07-07").into(),
-        ts("2025-07-08").into(),
-        ts("2025-07-09").into(),
-        ts("2025-07-10").into(),
-        ts("2025-07-11").into(),
-        ts("2025-07-12").into(),
-        ts("2025-07-13").into(),
-        ts("2025-07-14").into(),
-        ts("2025-07-15").into(),
-        ts("2025-07-16").into(),
+        DayUtc::try_from("2025-07-04").unwrap(),
+        DayUtc::try_from("2025-07-05").unwrap(),
+        DayUtc::try_from("2025-07-06").unwrap(),
+        DayUtc::try_from("2025-07-07").unwrap(),
+        DayUtc::try_from("2025-07-08").unwrap(),
+        DayUtc::try_from("2025-07-09").unwrap(),
+        DayUtc::try_from("2025-07-10").unwrap(),
+        DayUtc::try_from("2025-07-11").unwrap(),
+        DayUtc::try_from("2025-07-12").unwrap(),
+        DayUtc::try_from("2025-07-13").unwrap(),
+        DayUtc::try_from("2025-07-14").unwrap(),
+        DayUtc::try_from("2025-07-15").unwrap(),
+        DayUtc::try_from("2025-07-16").unwrap(),
     ];
     assert_eq!(node_2_days, &expected_node_2_days);
 
     let (_, _, node_3_days) = &nodes_map[&node_3_id];
     let expected_node_3_days: Vec<DayUtc> = vec![
-        ts("2025-07-11").into(),
-        ts("2025-07-12").into(),
+        DayUtc::try_from("2025-07-11").unwrap(),
+        DayUtc::try_from("2025-07-12").unwrap(),
         // node_3 was deleted on 2025-07-13, so it should not be present on 2025-07-14
-        ts("2025-07-15").into(),
-        ts("2025-07-16").into(),
+        DayUtc::try_from("2025-07-15").unwrap(),
+        DayUtc::try_from("2025-07-16").unwrap(),
     ];
     assert_eq!(node_3_days, &expected_node_3_days);
 }
@@ -290,14 +293,15 @@ fn test_rewardable_nodes_deleted_nodes() {
     let _client = client_for_tests();
     // Define the range for which we want to check rewardable nodes.
     // This is *after* node_1 was deleted.
-    let from = ts("2025-07-12");
-    let to = ts("2025-07-13");
-    let reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
+    let from = DayUtc::try_from("2025-07-12").unwrap();
+    let to = DayUtc::try_from("2025-07-13").unwrap();
+    let _reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
 
     let mut rewardables = RegistryQuerier::get_rewardable_nodes_per_provider::<DummyState>(
         &*REGISTRY_STORE.with(|store| store.clone()),
-        reward_period.from,
-        reward_period.to,
+        from,
+        to,
+        None,
     )
     .expect("Failed to fetch rewardable nodes");
 
@@ -317,16 +321,16 @@ fn test_rewardable_nodes_deleted_nodes() {
     // Node 2 should be rewardable in this period.
     let node_2_rewardable_days = node_rewardable_days(&np_1_rewardables, 2);
 
-    assert_eq!(node_2_rewardable_days.first(), Some(&from.into()));
-    assert_eq!(node_2_rewardable_days.last(), Some(&to.into()));
+    assert_eq!(node_2_rewardable_days.first(), Some(&from));
+    assert_eq!(node_2_rewardable_days.last(), Some(&to));
 
     let node_3_rewardable_days = node_rewardable_days(&np_1_rewardables, 3);
 
     // Node 3 should be rewardable until 2025-07-12 because on 2025-07-13 got deleted.
-    assert_eq!(node_3_rewardable_days.first(), Some(&from.into()));
+    assert_eq!(node_3_rewardable_days.first(), Some(&from));
     assert_eq!(
         node_3_rewardable_days.last(),
-        Some(&ts("2025-07-12").into())
+        Some(&DayUtc::try_from("2025-07-12").unwrap())
     );
 }
 
@@ -338,14 +342,15 @@ fn test_rewardable_nodes_rewardables_till_deleted() {
     // - The active time of node_1 (until deletion on 2025-07-08),
     // - Node_2's full active range,
     // - Node_3's creation (on 2025-07-11).
-    let from = ts("2025-07-03");
-    let to = ts("2025-07-12");
-    let reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
+    let from = DayUtc::try_from("2025-07-03").unwrap();
+    let to = DayUtc::try_from("2025-07-12").unwrap();
+    let _reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
 
     let mut rewardables = RegistryQuerier::get_rewardable_nodes_per_provider::<DummyState>(
         &*REGISTRY_STORE.with(|store| store.clone()),
-        reward_period.from,
-        reward_period.to,
+        from,
+        to,
+        None,
     )
     .expect("Failed to fetch rewardable nodes");
 
@@ -357,10 +362,10 @@ fn test_rewardable_nodes_rewardables_till_deleted() {
     // Node 1 was deleted on 2025-07-08, so its rewardable period ends there.
     let node_1_rewardable_days = node_rewardable_days(&np_1_rewardables, 1);
 
-    assert_eq!(node_1_rewardable_days.first(), Some(&from.into()));
+    assert_eq!(node_1_rewardable_days.first(), Some(&from));
     assert_eq!(
         node_1_rewardable_days.last(),
-        Some(&ts("2025-07-07").into())
+        Some(&DayUtc::try_from("2025-07-07").unwrap())
     );
 
     // Node 2 is active throughout the whole range.
@@ -368,18 +373,18 @@ fn test_rewardable_nodes_rewardables_till_deleted() {
 
     assert_eq!(
         node_2_rewardable_days.first(),
-        Some(&ts("2025-07-04").into())
+        Some(&DayUtc::try_from("2025-07-04").unwrap())
     );
-    assert_eq!(node_2_rewardable_days.last(), Some(&to.into()));
+    assert_eq!(node_2_rewardable_days.last(), Some(&to));
 
     // Node 3 became active on 2025-07-11.
     let node_3_rewardable_days = node_rewardable_days(&np_1_rewardables, 3);
 
     assert_eq!(
         node_3_rewardable_days.first(),
-        Some(&ts("2025-07-11").into())
+        Some(&DayUtc::try_from("2025-07-11").unwrap())
     );
-    assert_eq!(node_3_rewardable_days.last(), Some(&to.into()));
+    assert_eq!(node_3_rewardable_days.last(), Some(&to));
 }
 
 #[test]
@@ -401,14 +406,15 @@ fn test_node_re_registered_after_deletion() {
     let _client = client_for_tests();
 
     // Range that includes both the deletion and re-registration periods
-    let from = ts("2025-07-07");
-    let to = ts("2025-07-12");
-    let reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
+    let from = DayUtc::try_from("2025-07-07").unwrap();
+    let to = DayUtc::try_from("2025-07-12").unwrap();
+    let _reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
 
     let mut rewardables = RegistryQuerier::get_rewardable_nodes_per_provider::<DummyState>(
         &*REGISTRY_STORE.with(|store| store.clone()),
-        reward_period.from,
-        reward_period.to,
+        from,
+        to,
+        None,
     )
     .expect("Failed to fetch rewardables");
 
@@ -420,13 +426,36 @@ fn test_node_re_registered_after_deletion() {
     let node_1_rewardable_days = node_rewardable_days(&np_1_rewardables, node_1_id);
 
     let expected_days: Vec<DayUtc> = vec![
-        ts("2025-07-07").into(),
+        DayUtc::try_from("2025-07-07").unwrap(),
         // On 2025-07-08, node_1 was deleted, so it should not be rewardable until the 2025-07-11.
-        ts("2025-07-11").into(),
-        ts("2025-07-12").into(),
+        DayUtc::try_from("2025-07-11").unwrap(),
+        DayUtc::try_from("2025-07-12").unwrap(),
     ];
 
     assert_eq!(node_1_rewardable_days, expected_days);
+}
+
+#[test]
+fn test_rewardables_nodes_provider_filtered() {
+    let _client = client_for_tests();
+    let from = DayUtc::try_from("2025-07-12").unwrap();
+    let to = DayUtc::try_from("2025-07-17").unwrap();
+    let _reward_period = RewardPeriod::new(from, to).expect("Failed to create reward period");
+    let np_2_id = PrincipalId::new_user_test_id(50);
+
+    let rewardables = RegistryQuerier::get_rewardable_nodes_per_provider::<DummyState>(
+        &*REGISTRY_STORE.with(|store| store.clone()),
+        from,
+        to,
+        Some(np_2_id),
+    )
+    .expect("Failed to fetch rewardable nodes");
+
+    assert_eq!(rewardables.len(), 1);
+    let np_2_rewardables = rewardables.get(&np_2_id).unwrap();
+    assert_eq!(np_2_rewardables.len(), 1);
+    let expected_node_4 = NodeId::from(PrincipalId::new_node_test_id(4));
+    assert_eq!(np_2_rewardables[0].node_id, expected_node_4);
 }
 
 #[test]

@@ -64,6 +64,7 @@ use ic_system_test_driver::driver::driver_setup::{
     SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
 };
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
+use ic_system_test_driver::driver::test_env_api::scp_send_to;
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::util::*;
 use ic_types::{consensus::CatchUpPackage, Height, ReplicaVersion, SubnetId};
@@ -85,6 +86,8 @@ const APP_NODES_LARGE: usize = 37;
 /// 40 dealings * 3 transcripts being reshared (high/local, high/remote, low/remote)
 /// plus 4 to make checkpoint heights more predictable
 const DKG_INTERVAL_LARGE: u64 = 124;
+
+const IC_ADMIN_REMOTE_PATH: &str = "/var/lib/admin/ic-admin";
 
 pub const CHAIN_KEY_SUBNET_RECOVERY_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
@@ -301,7 +304,7 @@ pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
 fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
-    let initial_version = get_guestos_img_version().unwrap();
+    let initial_version = get_guestos_img_version();
     info!(logger, "IC_VERSION_ID: {initial_version:?}");
     let topology_snapshot = env.topology_snapshot();
 
@@ -443,7 +446,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     let version_is_broken = cfg.upgrade && unassigned_nodes_ids.is_empty();
     let working_version = if version_is_broken {
-        get_guestos_update_img_version().unwrap()
+        get_guestos_update_img_version()
     } else {
         initial_version
     };
@@ -452,8 +455,8 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         keep_downloaded_state: Some(cfg.chain_key),
         subnet_id,
         upgrade_version: version_is_broken.then(|| working_version.clone()),
-        upgrade_image_url: get_guestos_update_img_url().ok(),
-        upgrade_image_hash: get_guestos_update_img_sha256().ok(),
+        upgrade_image_url: Some(get_guestos_update_img_url()),
+        upgrade_image_hash: Some(get_guestos_update_img_sha256()),
         replacement_nodes: Some(unassigned_nodes_ids.clone()),
         replay_until_height: None, // We will set this after breaking/halting the subnet, see below
         // If the latest CUP is corrupted we can't deploy read-only access
@@ -605,6 +608,21 @@ fn remote_recovery(cfg: &TestConfig, subnet_recovery: AppSubnetRecovery, logger:
 }
 
 fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, logger: &Logger) {
+    let session = &node.block_on_ssh_session().unwrap();
+    let node_id = node.node_id;
+    let node_ip = node.get_ip_addr();
+    info!(
+        logger,
+        "Copying ic-admin to node {node_id} with IP {node_ip} such that ic-recovery can execute it ..."
+    );
+    scp_send_to(
+        logger.clone(),
+        session,
+        &get_dependency_path_from_env("IC_ADMIN_PATH"),
+        Path::new(IC_ADMIN_REMOTE_PATH),
+        0o755,
+    );
+
     let nns_url = subnet_recovery.recovery_args.nns_url;
     let subnet_id = subnet_recovery.params.subnet_id;
     let maybe_replay_until_height = subnet_recovery
@@ -614,10 +632,9 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
         .unwrap_or_default();
     let pub_key = subnet_recovery.params.pub_key.unwrap();
     let pub_key = pub_key.trim();
-    let node_ip = node.get_ip_addr();
 
     let command = format!(
-        r#"/opt/ic/bin/ic-recovery \
+        r#"IC_ADMIN_BIN="{IC_ADMIN_REMOTE_PATH}" /opt/ic/bin/ic-recovery \
         --nns-url {nns_url} \
         --test --skip-prompts --use-local-binaries \
         app-subnet-recovery \
@@ -633,7 +650,7 @@ fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: AppSubnetRecovery, log
     );
 
     info!(logger, "Executing local recovery command: \n{command}");
-    match node.block_on_bash_script(&command) {
+    match node.block_on_bash_script_from_session(session, &command) {
         Ok(ret) => info!(logger, "Finished local recovery: \n{ret}"),
         Err(err) => panic!("Local recovery failed: \n{err}"),
     }

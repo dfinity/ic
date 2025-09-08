@@ -1,5 +1,6 @@
 use crate::fixtures::environment_fixture::{EnvironmentFixture, EnvironmentFixtureState};
 use async_trait::async_trait;
+use candid::Nat;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
@@ -143,6 +144,20 @@ impl ICRC1Ledger for LedgerFixture {
             .try_lock()
             .unwrap()
             .target_canister_id
+    }
+
+    async fn icrc2_approve(
+        &self,
+        _spender: Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 
     async fn icrc3_get_blocks(

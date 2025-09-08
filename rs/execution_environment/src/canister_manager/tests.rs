@@ -88,7 +88,7 @@ use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, SubnetId, UserId,
 };
-use ic_universal_canister::PayloadBuilder;
+use ic_universal_canister::{CallArgs, PayloadBuilder};
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
@@ -135,11 +135,12 @@ fn test_slice() {
 }
 
 lazy_static! {
-    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory = SubnetAvailableMemory::new(
-        SUBNET_MEMORY_CAPACITY,
-        SUBNET_MEMORY_CAPACITY,
-        SUBNET_MEMORY_CAPACITY
-    );
+    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
+        SubnetAvailableMemory::new_for_testing(
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY
+        );
     static ref INITIAL_CYCLES: Cycles =
         CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
     static ref EXECUTION_PARAMETERS: ExecutionParameters = ExecutionParameters {
@@ -1308,6 +1309,8 @@ fn get_canister_status_of_self() {
     let reply = get_reply(result);
     let status = Decode!(&reply, CanisterStatusResultV2).unwrap();
     assert_eq!(status.status(), CanisterStatusType::Running);
+    assert!(status.cycles() <= INITIAL_CYCLES.get());
+    assert!(status.cycles() >= INITIAL_CYCLES.get() - 100_000_000_000);
     assert!(!status.ready_for_migration());
 }
 
@@ -1531,6 +1534,45 @@ fn delete_stopped_canister_succeeds() {
 }
 
 #[test]
+fn delete_canister_via_inter_canister_call() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_u128 << 62)
+        .build();
+
+    let canister_1 = test.universal_canister().unwrap();
+    let canister_2 = test.universal_canister().unwrap();
+
+    let _ = test.stop_canister(canister_2);
+    test.process_stopping_canisters();
+    assert_eq!(
+        test.canister_state(canister_2).status(),
+        CanisterStatusType::Stopped
+    );
+
+    test.set_controller(canister_2, canister_1.get()).unwrap();
+    let delete_canister_args = CanisterIdRecord::from(canister_2).encode();
+    let call_args = CallArgs::default().other_side(delete_canister_args);
+    test.ingress(
+        canister_1,
+        "update",
+        wasm()
+            .call_with_cycles(
+                IC_00,
+                Method::DeleteCanister,
+                call_args,
+                Cycles::from(1_u128 << 61),
+            )
+            .build(),
+    )
+    .unwrap();
+
+    // cycles attached to mgmt canister call are refunded, but cycles from the deleted canister are not refunded
+    let canister_1_balance = test.canister_state(canister_1).system_state.balance().get();
+    assert!(canister_1_balance <= 1_u128 << 62);
+    assert!(canister_1_balance >= (1_u128 << 62) - 100_000_000_000);
+}
+
+#[test]
 fn delete_canister_consumed_cycles_observed() {
     let mut test = ExecutionTestBuilder::new().build();
 
@@ -1563,14 +1605,16 @@ fn delete_canister_consumed_cycles_observed() {
 
 #[test]
 fn deposit_cycles_succeeds_with_enough_cycles() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_u128 << 62)
+        .build();
 
-    let canister_id = test.create_canister(*INITIAL_CYCLES);
+    let canister_id = test.universal_canister().unwrap();
     let deposit_canister = test.universal_canister().unwrap();
 
     let cycles_balance_before = test.canister_state(canister_id).system_state.balance();
 
-    let cycles_to_deposit = Cycles::new(100);
+    let cycles_to_deposit = Cycles::new(1_u128 << 61);
     let deposit_cycles_args = CanisterIdRecord::from(canister_id).encode();
     let payload = wasm()
         .call_with_cycles(
@@ -1589,6 +1633,13 @@ fn deposit_cycles_succeeds_with_enough_cycles() {
         test.canister_state(canister_id).system_state.balance(),
         cycles_balance_before + cycles_to_deposit
     );
+    let depositer_balance = test
+        .canister_state(deposit_canister)
+        .system_state
+        .balance()
+        .get();
+    assert!(depositer_balance <= 1_u128 << 61);
+    assert!(depositer_balance >= (1_u128 << 61) - 100_000_000_000);
 }
 
 #[test]
@@ -6116,15 +6167,27 @@ fn chunk_store_methods_succeed_from_canister_itself() {
     }
 }
 
+const EMPTY_CANISTER_MEMORY_USAGE: NumBytes = NumBytes::new(190);
+
+#[test]
+fn empty_canister_memory_usage() {
+    let env = StateMachine::new();
+    let canister_id = env.create_canister_with_cycles(None, Cycles::new(1 << 64), None);
+
+    let status = env.canister_status(canister_id).unwrap().unwrap();
+    assert_eq!(EMPTY_CANISTER_MEMORY_USAGE, status.memory_size());
+}
+
 /// Subnet available memory is recalculated at the beginning of each round.
 /// This test checks that the wasm chunk store is accounted for then.
 #[test]
 fn chunk_store_counts_against_subnet_memory_in_initial_round_computation() {
     let subnet_config = ic_config::subnet_config::SubnetConfig::new(SubnetType::Application);
-    // Initialize subnet with enough memory for one chunk but not two (the
-    // canister history will take up some memory).
+    // Initialize subnet with enough memory for one chunk but not two.
+    assert!(EMPTY_CANISTER_MEMORY_USAGE < wasm_chunk_store::chunk_size());
     let hypervisor_config = Config {
-        subnet_memory_capacity: wasm_chunk_store::chunk_size() * 2,
+        subnet_memory_capacity: (wasm_chunk_store::chunk_size() + EMPTY_CANISTER_MEMORY_USAGE)
+            * subnet_config.scheduler_config.scheduler_cores as u64,
         subnet_memory_threshold: NumBytes::from(0),
         subnet_memory_reservation: NumBytes::from(0),
         ..Config::default()
@@ -6181,7 +6244,7 @@ fn run_canister_in_wasm_mode(is_wasm64_mode: bool, execute_ingress: bool) -> (Cy
     "#
     );
 
-    let mut test = ExecutionTestBuilder::new().with_wasm64().build();
+    let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test
         .canister_from_cycles_and_wat(DEFAULT_PROVISIONAL_BALANCE, canister_wat)
         .unwrap();

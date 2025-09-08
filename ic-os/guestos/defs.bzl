@@ -34,7 +34,7 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:canister_sandbox": "/opt/ic/bin/canister_sandbox:0755",  # Need for the canister sandboxing to work.
             "//publish/binaries:compiler_sandbox": "/opt/ic/bin/compiler_sandbox:0755",  # Need for the Wasm compilation sandboxing to work.
             "//publish/binaries:sandbox_launcher": "/opt/ic/bin/sandbox_launcher:0755",  # Need for the canister/compilation sandboxing to work.
-            "//publish/binaries:ic-btc-adapter": "/opt/ic/bin/ic-btc-adapter:0755",  # Need for the Bitcoin integration.
+            "//publish/binaries:ic-btc-adapter": "/opt/ic/bin/ic-btc-adapter:0755",  # Need for the Bitcoin and Dogecoin integration.
             "//publish/binaries:ic-https-outcalls-adapter-https-only": "/opt/ic/bin/ic-https-outcalls-adapter:0755",  # Need for the HTTPS outcalls feature. `//publish/binaries:ic-https-outcalls-adapter` is for testing and must NOT be used here
             "//publish/binaries:ic-crypto-csp": "/opt/ic/bin/ic-crypto-csp:0755",  # Crypto operations provider, required by the IC protocol (signing, etc).
             "//publish/binaries:orchestrator": "/opt/ic/bin/orchestrator:0755",  # Replica process manager, required by the IC protocol (upgrades, node addition, etc).
@@ -42,7 +42,6 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:ic-boundary-tls": "/opt/ic/bin/ic-boundary:0755",  # API boundary node binary, required by the IC protocol. The same GuestOS is used both for the replica and API boundary nodes.
             "//publish/binaries:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",  # May be used during recoveries to export/import consensus pool artifacts.
             "//publish/binaries:ic-recovery": "/opt/ic/bin/ic-recovery:0755",  # Required for performing subnet recoveries on the node directly.
-            "//publish/binaries:ic-admin": "/opt/ic/bin/ic-admin:0755",  # Required for issuing recovery proposals directly from the node (primarily used for system tests).
             "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",  # May be used during recoveries for calculating the state hash and inspecting the state more generally.
             "//publish/binaries:ic-regedit": "/opt/ic/bin/ic-regedit:0755",  # May be used for inspecting and recovering the registry.
             # Required by the GuestOS
@@ -54,6 +53,7 @@ def image_deps(mode, malicious = False):
             "//cpp:infogetty": "/opt/ic/bin/infogetty:0755",  # Terminal manager that replaces the login shell.
             "//rs/ic_os/release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",  # Proxies, filters, and serves public node metrics.
             "//rs/ic_os/release:metrics_tool": "/opt/ic/bin/metrics_tool:0755",  # Collects and reports custom metrics.
+            "//rs/ic_os/sev:sev_active": "/opt/ic/bin/sev_active:0755",  # Tool for querying the SEV activation status
 
             # additional libraries to install
             "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",  # Allows referring to the guest IPv6 by name guestos from host, and host as hostos from guest.
@@ -106,13 +106,14 @@ def image_deps(mode, malicious = False):
     # Update recovery component_files
     # Service files and SELinux policies must be added to components instead of rootfs so that they are processed by the Dockerfile
     if mode in ["recovery", "recovery-dev"]:
-        recovery_engine_path = "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh" if mode == "recovery" else "//ic-os/guestos/envs/recovery-dev:guestos-recovery-engine.sh"
+        expected_recovery_hash_path = "//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/expected_recovery_hash" if mode == "recovery" else "//ic-os/guestos/envs/recovery-dev:recovery.tar.zst.sha256"
 
         deps["component_files"].update({
-            recovery_engine_path: "/opt/ic/bin/guestos-recovery-engine.sh",
+            expected_recovery_hash_path: "/opt/ic/share/expected_recovery_hash",
+            Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh"): "/opt/ic/bin/guestos-recovery-engine.sh",
             Label("//ic-os/components:misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service"): "/etc/systemd/system/guestos-recovery-engine.service",
-            Label("//ic-os/components:selinux/guestos-recovery-engine/guestos-recovery-engine.fc"): "/prep/guestos-recovery-engine/guestos-recovery-engine.fc",
-            Label("//ic-os/components:selinux/guestos-recovery-engine/guestos-recovery-engine.te"): "/prep/guestos-recovery-engine/guestos-recovery-engine.te",
+            Label("//ic-os/components:guestos/selinux/guestos-recovery-engine/guestos-recovery-engine.fc"): "/prep/guestos-recovery-engine/guestos-recovery-engine.fc",
+            Label("//ic-os/components:guestos/selinux/guestos-recovery-engine/guestos-recovery-engine.te"): "/prep/guestos-recovery-engine/guestos-recovery-engine.te",
         })
 
     return deps

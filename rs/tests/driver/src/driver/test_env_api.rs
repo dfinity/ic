@@ -219,6 +219,8 @@ const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
 // It usually takes below 60 secs to install nns canisters.
 const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(160);
+const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
+const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 // Be mindful when modifying this constant, as the event can be consumed by other parties.
 const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
@@ -1130,12 +1132,11 @@ impl<T: HasTestEnv> HasFarmUrl for T {
     }
 }
 
-pub fn get_current_branch_version() -> Result<ReplicaVersion> {
-    let replica_version = ReplicaVersion::try_from(read_dependency_from_env_to_string(
-        "ENV_DEPS__IC_VERSION_FILE",
-    )?)?;
-
-    Ok(replica_version)
+pub fn get_current_branch_version() -> ReplicaVersion {
+    ReplicaVersion::try_from(
+        read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE").unwrap(),
+    )
+    .expect("Invalid ReplicaVersion")
 }
 
 pub fn get_mainnet_nns_revision() -> Result<ReplicaVersion> {
@@ -1288,14 +1289,10 @@ pub fn get_dependency_path<P: AsRef<Path>>(p: P) -> PathBuf {
 }
 
 /// Return the (actual) path of the (runfiles-relative) artifact in environment variable `v`.
-fn get_dependency_path_from_env(v: &str) -> PathBuf {
-    let runfiles =
-        std::env::var("RUNFILES").expect("Expected environment variable RUNFILES to be defined!");
-
+pub fn get_dependency_path_from_env(v: &str) -> PathBuf {
     let path_from_env =
         std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {} not set", v));
-
-    Path::new(&runfiles).join(path_from_env)
+    get_dependency_path(path_from_env)
 }
 
 pub fn read_dependency_to_string<P: AsRef<Path>>(p: P) -> Result<String> {
@@ -1345,6 +1342,7 @@ pub fn load_wasm<P: AsRef<Path>>(p: P) -> Vec<u8> {
     wasm_bytes
 }
 
+#[async_trait]
 pub trait SshSession: HasTestEnv {
     /// Return the address of the SSH server to connect to.
     fn get_host_ip(&self) -> Result<IpAddr>;
@@ -1367,8 +1365,27 @@ pub trait SshSession: HasTestEnv {
         )
     }
 
+    /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
+    /// This is the async version of `block_on_ssh_session`.
+    async fn block_on_ssh_session_async(&self) -> Result<Session> {
+        let ip = self.get_host_ip()?;
+        retry_with_msg_async!(
+            format!("get_ssh_session to {ip}"),
+            &self.test_env().logger(),
+            SSH_RETRY_TIMEOUT,
+            RETRY_BACKOFF,
+            || async { self.get_ssh_session() }
+        )
+        .await
+    }
+
     fn block_on_bash_script(&self, script: &str) -> Result<String> {
         let session = self.block_on_ssh_session()?;
+        self.block_on_bash_script_from_session(&session, script)
+    }
+
+    async fn block_on_bash_script_async(&self, script: &str) -> Result<String> {
+        let session = self.block_on_ssh_session_async().await?;
         self.block_on_bash_script_from_session(&session, script)
     }
 
@@ -2379,4 +2396,63 @@ pub fn emit_group_event(log: &slog::Logger, group: &str) {
         },
     );
     event.emit_log(log);
+}
+
+/// Copy a local file via SSH to a remote host.
+pub fn scp_send_to(
+    log: Logger,
+    session: &Session,
+    from_local: &std::path::Path,
+    to_remote: &std::path::Path,
+    mode: i32,
+) {
+    let size = fs::metadata(from_local).unwrap().len();
+    retry_with_msg!(
+        format!("scp-ing local {from_local:?} of {size:?} B to remote {to_remote:?}"),
+        log.clone(),
+        SCP_RETRY_TIMEOUT,
+        SCP_RETRY_BACKOFF,
+        || {
+            let mut remote_file = session.scp_send(to_remote, mode, size, None)?;
+            let mut from_file = std::fs::File::open(from_local)?;
+            std::io::copy(&mut from_file, &mut remote_file)?;
+            info!(
+                log,
+                "scp-ed local {from_local:?} of {size:?} B to remote {to_remote:?} ."
+            );
+            Ok(())
+        }
+    )
+    .unwrap_or_else(|e| {
+        panic!("Failed to scp local {from_local:?} to remote {to_remote:?} because: {e}")
+    });
+}
+
+/// Copy a file from a remote host to a local file.
+pub fn scp_recv_from(
+    log: Logger,
+    session: &Session,
+    from_remote: &std::path::Path,
+    to_local: &std::path::Path,
+) {
+    retry_with_msg!(
+        format!("scp-ing remote {from_remote:?} to local {to_local:?}"),
+        log.clone(),
+        SCP_RETRY_TIMEOUT,
+        SCP_RETRY_BACKOFF,
+        || {
+            let (mut remote_file, scp_file_stat) = session.scp_recv(from_remote)?;
+            let size = scp_file_stat.size();
+            let mut to_file = std::fs::File::create(to_local)?;
+            std::io::copy(&mut remote_file, &mut to_file)?;
+            info!(
+                log,
+                "scp-ed remote {from_remote:?} of {size:?} B to local {to_local:?}."
+            );
+            Ok(())
+        }
+    )
+    .unwrap_or_else(|e| {
+        panic!("Failed to scp remote {from_remote:?} to local {to_local:?} because: {e}")
+    });
 }

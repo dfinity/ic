@@ -1,7 +1,5 @@
-#![allow(deprecated)]
 use candid::CandidType;
-use ic_cdk::api::management_canister::{ecdsa::EcdsaKeyId, schnorr::SchnorrKeyId};
-use ic_management_canister_types::VetKDKeyId;
+use ic_cdk::management_canister::{EcdsaKeyId, SchnorrAux, SchnorrKeyId, VetKDKeyId};
 use serde::Deserialize;
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
@@ -17,6 +15,7 @@ pub struct GenSchnorrParams {
     pub derivation_path_length: usize,
     pub derivation_path_element_size: usize,
     pub key_id: SchnorrKeyId,
+    pub aux: Option<SchnorrAux>,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]

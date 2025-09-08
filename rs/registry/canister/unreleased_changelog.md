@@ -8,14 +8,14 @@ on the process that this file is part of, see
 # Next Upgrade Proposal
 
 ## Added
+* New update method that will be used for node swapping feature.
+* `migrate_canisters` returns the new registry version. 
 
 ## Changed
 
 ## Deprecated
 
 ## Removed
-
-* The single entry routing table is no longer updated when there are changes to the routing table.
 
 ## Fixed
 

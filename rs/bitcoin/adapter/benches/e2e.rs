@@ -1,6 +1,6 @@
 use bitcoin::{block::Header as BlockHeader, BlockHash, Network};
 use criterion::{criterion_group, criterion_main, Criterion};
-use ic_btc_adapter::{start_server, Config, IncomingSource};
+use ic_btc_adapter::{start_server, BlockchainNetwork, Config, IncomingSource};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::generate_headers;
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
@@ -60,13 +60,11 @@ fn prepare(
 }
 
 fn e2e(criterion: &mut Criterion) {
-    let mut config = Config {
-        network: Network::Regtest.into(),
-        ..Default::default()
-    };
+    let network = Network::Regtest;
+    let mut config = Config::default_with(network.into());
 
     let mut processed_block_hashes = vec![];
-    let genesis = config.network.genesis_block_header();
+    let genesis = network.genesis_block_header();
 
     prepare(&mut processed_block_hashes, genesis, 4, 2000, 1975);
 
@@ -96,7 +94,7 @@ fn e2e(criterion: &mut Criterion) {
             .iter()
             .map(|h| h[..].to_vec())
             .collect::<Vec<Vec<u8>>>(),
-        network: ic_btc_replica_types::Network::Regtest,
+        network: ic_btc_replica_types::Network::BitcoinRegtest,
     };
 
     let wrapped = BitcoinAdapterRequestWrapper::GetSuccessorsRequest(get_successors_request);

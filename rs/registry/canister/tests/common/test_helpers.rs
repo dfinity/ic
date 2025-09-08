@@ -9,6 +9,9 @@ use ic_management_canister_types_private::{
     DerivationPath, ECDSAPublicKeyArgs, EcdsaKeyId, MasterPublicKeyId, Method as Ic00Method,
     SchnorrKeyId, SchnorrPublicKeyArgs, VetKdKeyId, VetKdPublicKeyArgs,
 };
+use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister;
+use ic_nns_constants::{REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_test_utils::common::build_registry_wasm;
 use ic_nns_test_utils::itest_helpers::{
     set_up_registry_canister, set_up_universal_canister, try_call_via_universal_canister,
 };
@@ -25,6 +28,7 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_types::ReplicaVersion;
+use pocket_ic::nonblocking::PocketIc;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use registry_canister::mutations::do_create_subnet::CreateSubnetPayload;
 use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
@@ -407,4 +411,29 @@ pub async fn check_subnet_for_canisters(
             actual_subnet_id
         );
     }
+}
+
+pub async fn install_registry_canister(pocket_ic: &PocketIc) {
+    install_registry_canister_with_mutations(pocket_ic, vec![]).await;
+}
+
+pub async fn install_registry_canister_with_mutations(
+    pocket_ic: &PocketIc,
+    requests: Vec<RegistryAtomicMutateRequest>,
+) {
+    let mut payload = RegistryCanisterInitPayloadBuilder::new();
+    for request in requests {
+        payload.push_init_mutate_request(request);
+    }
+
+    let payload = payload.build();
+    install_canister(
+        pocket_ic,
+        "Registry",
+        REGISTRY_CANISTER_ID,
+        Encode!(&payload).unwrap(),
+        build_registry_wasm(),
+        Some(ROOT_CANISTER_ID.get()),
+    )
+    .await;
 }

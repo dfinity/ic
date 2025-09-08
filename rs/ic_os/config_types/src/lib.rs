@@ -13,7 +13,7 @@
 //!
 //! - **Adding Enum Variants (Forward Compatibility)**: When adding new variants to an enum, ensure older versions can handle unknown variants gracefully by using `#[serde(other)]` on a fallback variant.
 //!
-//! - **Removing Fields**: To prevent backwards-compatibility deserialization errors, required fields must not be removed directly: In a first step, they have to be made optional and code that reads the value must be removed/handle missing values. In a second step, after the first step has rolled out to all OSes and there is no risk of a rollback, the field can be removed. Additionally, to avoid reintroducing a previously removed field, add your removed field to the RESERVED_FIELD_NAMES list.
+//! - **Removing Fields**: To prevent backwards compatibility deserialization errors, required fields must not be removed directly: In a first step, they have to be given a default attribute and all IC-OS references to them have to be removed. In a second step, after the first step has rolled out to all OSes (HostOS and GuestOS) and there is no risk of a rollback, the field can be removed. Additionally, to avoid reintroducing a previously removed field, add your removed field to the RESERVED_FIELD_NAMES list.
 //!
 //! - **Renaming Fields**: Avoid renaming fields unless absolutely necessary. If you must rename a field, use `#[serde(rename = "old_name")]`.
 //!
@@ -31,7 +31,7 @@ use std::str::FromStr;
 use strum::EnumString;
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.5.0";
+pub const CONFIG_VERSION: &str = "1.6.0";
 
 /// List of field names that have been removed and should not be reused.
 pub static RESERVED_FIELD_NAMES: &[&str] = &[];
@@ -113,6 +113,7 @@ pub struct ICOSSettings {
     pub mgmt_mac: MacAddr6,
     #[serde_as(as = "DisplayFromStr")]
     pub deployment_environment: DeploymentEnvironment,
+    #[serde(default)]
     pub logging: Logging,
     pub use_nns_public_key: bool,
     /// The URL (HTTP) of the NNS node(s).
@@ -122,6 +123,10 @@ pub struct ICOSSettings {
     /// If the value is enabled, we check during deployment that SEV-SNP is supported
     /// by the hardware. Once deployment is successful, we rely on the hardware supporting
     /// SEV-SNP.
+    ///
+    /// IMPORTANT: This field only controls whether TEE is enabled in config.
+    /// In GuestOS code, to check if SEV is actually active, use `is_sev_active()` from the `ic_sev` crate,
+    /// which queries the CPU and cannot be faked by a malicious HostOS.
     #[serde(default)]
     pub enable_trusted_execution_environment: bool,
     /// This ssh keys directory contains individual files named `admin`, `backup`, `readonly`.
@@ -201,6 +206,7 @@ pub struct GuestOSDevSettings {
     pub malicious_behavior: Option<MaliciousBehavior>,
     pub query_stats_epoch_length: Option<u64>,
     pub bitcoind_addr: Option<String>,
+    pub dogecoind_addr: Option<String>,
     pub jaeger_addr: Option<String>,
     pub socks_proxy: Option<String>,
     // An optional hostname to override the deterministically generated hostname

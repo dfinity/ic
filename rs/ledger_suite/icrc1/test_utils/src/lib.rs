@@ -35,6 +35,8 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use strum::EnumCount;
 
+pub mod icrc3;
+
 pub const E8: u64 = 100_000_000;
 pub const DEFAULT_TRANSFER_FEE: u64 = 10_000;
 
@@ -188,7 +190,6 @@ pub fn blocks_strategy<Tokens: TokensType>(
 ) -> impl Strategy<Value = Block<Tokens>> {
     let transaction_strategy = transaction_strategy(amount_strategy);
     let fee_collector_strategy = prop::option::of(account_strategy());
-    let fee_collector_block_index_strategy = prop::option::of(prop::num::u64::ANY);
     let effective_fee_strategy = arb_small_amount::<Tokens>();
     let timestamp_strategy = Just({
         let end = SystemTime::now();
@@ -205,37 +206,34 @@ pub fn blocks_strategy<Tokens: TokensType>(
         effective_fee_strategy,
         timestamp_strategy,
         fee_collector_strategy,
-        fee_collector_block_index_strategy,
     )
-        .prop_map(
-            |(transaction, arb_fee, timestamp, fee_collector, fee_collector_block_index)| {
-                let effective_fee = match transaction.operation {
-                    Operation::Transfer { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
-                    Operation::Approve { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
-                    Operation::Burn { .. } => None,
-                    Operation::Mint { .. } => None,
-                };
+        .prop_map(|(transaction, arb_fee, timestamp, fee_collector)| {
+            let effective_fee = match transaction.operation {
+                Operation::Transfer { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
+                Operation::Approve { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
+                Operation::Burn { .. } => None,
+                Operation::Mint { .. } => None,
+            };
 
-                Block {
-                    parent_hash: Some(Block::<Tokens>::block_hash(
-                        &Block {
-                            parent_hash: None,
-                            transaction: transaction.clone(),
-                            effective_fee: effective_fee.clone(),
-                            timestamp,
-                            fee_collector,
-                            fee_collector_block_index,
-                        }
-                        .encode(),
-                    )),
-                    transaction,
-                    effective_fee,
-                    timestamp,
-                    fee_collector,
-                    fee_collector_block_index,
-                }
-            },
-        )
+            Block {
+                parent_hash: Some(Block::<Tokens>::block_hash(
+                    &Block {
+                        parent_hash: None,
+                        transaction: transaction.clone(),
+                        effective_fee: effective_fee.clone(),
+                        timestamp,
+                        fee_collector,
+                        fee_collector_block_index: None,
+                    }
+                    .encode(),
+                )),
+                transaction,
+                effective_fee,
+                timestamp,
+                fee_collector,
+                fee_collector_block_index: None,
+            }
+        })
 }
 
 // Construct a valid blockchain strategy
@@ -245,8 +243,14 @@ pub fn valid_blockchain_strategy<Tokens: TokensType>(
     let blocks = prop::collection::vec(blocks_strategy(arb_amount()), 0..size);
     blocks.prop_map(|mut blocks| {
         let mut parent_hash = None;
-        for block in blocks.iter_mut() {
+        let mut fee_collector_block_index = None;
+        for (block_index, block) in blocks.iter_mut().enumerate() {
             block.parent_hash = parent_hash;
+            if block.fee_collector.is_some() {
+                fee_collector_block_index = Some(block_index as u64);
+            } else {
+                block.fee_collector_block_index = fee_collector_block_index;
+            }
             parent_hash = Some(Block::<Tokens>::block_hash(&(block.clone().encode())));
         }
         blocks

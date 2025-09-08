@@ -61,7 +61,8 @@
 # XNet compatibility test for changes to certifications
 *canonical_state/* //rs/tests/message_routing/xnet:xnet_compatibility
 
-*nns_delegation* //rs/tests/networking:nns_delegation_test
+*nns_delegation* //rs/tests/networking:nns_delegation_mainnet_nns_version_test
+                 //rs/tests/networking:nns_delegation_branch_nns_version_test
 
 rs/backup/*.rs //rs/tests/consensus/backup/...
 
@@ -70,3 +71,9 @@ rs/recovery/src/*.rs //rs/tests/consensus/subnet_recovery/...
                      //rs/tests/nested:nns_recovery_test
 
 rs/recovery/subnet_splitting/*.rs //rs/tests/consensus:subnet_splitting_test_colocate
+
+rs/bitcoin/* //rs/tests/ckbtc:btc_adapter_basics_test
+             //rs/tests/ckbtc:doge_adapter_basics_test
+             //rs/tests/execution:btc_get_balance_test_colocate
+
+rs/boundary_node/rate_limits/* //rs/tests/boundary_nodes:rate_limit_canister_test

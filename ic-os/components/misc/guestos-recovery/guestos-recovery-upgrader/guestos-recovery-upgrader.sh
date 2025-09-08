@@ -13,6 +13,9 @@ BOOT_PARTITION_B=7
 ROOT_PARTITION_B=8
 VAR_PARTITION_B=9
 
+MAX_ATTEMPTS=10
+RETRY_DELAY=5
+
 GUESTOS_DEVICE="/dev/hostlvm/guestos"
 
 source /opt/ic/bin/grub.sh
@@ -64,16 +67,16 @@ download_and_verify_upgrade() {
     local tmpdir="$3"
 
     local base_urls=(
-        "https://download.dfinity.systems/ic"
-        "https://download.dfinity.network/ic"
+        "https://download.dfinity.systems"
+        "https://download.dfinity.network"
     )
 
     local download_successful=false
     for base_url in "${base_urls[@]}"; do
-        local url="${base_url}/${version}/guest-os/update-img/update-img.tar.zst"
+        local url="${base_url}/ic/${version}/guest-os/update-img/update-img.tar.zst"
         echo "Attempting to download upgrade from $url..."
 
-        if curl -L -o "$tmpdir/upgrade.tar.zst" "$url"; then
+        if curl -L --fail -o "$tmpdir/upgrade.tar.zst" "$url"; then
             echo "Download from $base_url completed successfully"
             download_successful=true
             break
@@ -86,7 +89,7 @@ download_and_verify_upgrade() {
 
     if [ "$download_successful" = false ]; then
         echo "ERROR: Failed to download upgrade file from all available URLs"
-        exit 1
+        return 1
     fi
 
     echo "Verifying upgrade image hash..."
@@ -97,9 +100,10 @@ download_and_verify_upgrade() {
         echo "Expected short 6-character hash: $short_hash"
         echo "Got short 6-character hash: $actual_short_hash"
         echo "Full hash: $actual_hash"
-        exit 1
+        return 1
     fi
     echo "Hash verification successful"
+    return 0
 }
 
 extract_upgrade() {
@@ -191,7 +195,33 @@ main() {
     trap 'guestos_upgrade_cleanup; rm -rf "$TMPDIR"' EXIT
 
     prepare_guestos_upgrade
-    download_and_verify_upgrade "$VERSION" "$SHORT_HASH" "$TMPDIR"
+
+    echo "Starting download and verification with retry logic (max attempts: $MAX_ATTEMPTS, delay: ${RETRY_DELAY}s)..."
+
+    attempt=1
+    while [ $attempt -le $MAX_ATTEMPTS ]; do
+        echo "=== Download attempt $attempt/$MAX_ATTEMPTS ==="
+
+        if download_and_verify_upgrade "$VERSION" "$SHORT_HASH" "$TMPDIR"; then
+            echo "✓ Download and verification completed successfully on attempt $attempt"
+            break
+        else
+            echo "✗ Download and verification failed on attempt $attempt"
+
+            if [ $attempt -lt $MAX_ATTEMPTS ]; then
+                echo "Waiting ${RETRY_DELAY} seconds before retry..."
+                sleep $RETRY_DELAY
+            fi
+        fi
+
+        ((attempt++))
+    done
+
+    if [ $attempt -gt $MAX_ATTEMPTS ]; then
+        echo "ERROR: Failed to download and verify upgrade file after $MAX_ATTEMPTS attempts"
+        exit 1
+    fi
+
     extract_upgrade "$TMPDIR"
     install_upgrade "$TMPDIR"
 

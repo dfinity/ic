@@ -24,22 +24,16 @@ const EXCLUDED: &[&str] = &[
 fn subnet_config(
     subnet_id: Principal,
     subnet_type: SubnetType,
-    node_ids: Vec<Principal>,
     canister_ranges: Vec<CanisterIdRange>,
 ) -> String {
     format!(
-        "(\"{}\",{},[{}],[{}],[])",
+        "(\"{}\",{},[],[{}],[])",
         subnet_id,
         match subnet_type {
             SubnetType::VerifiedApplication => "verified_application",
             SubnetType::Application => "application",
             SubnetType::System => "system",
         },
-        node_ids
-            .into_iter()
-            .map(|n| format!("\"{}\"", n))
-            .collect::<Vec<String>>()
-            .join(","),
         canister_ranges
             .iter()
             .map(|r| format!(
@@ -118,18 +112,8 @@ fn setup_and_run_ic_ref_test(
     let topo = pic.topology();
     let app_subnet_id = topo.get_app_subnets()[0];
     let app_config = topo.subnet_configs.get(&app_subnet_id).unwrap();
-    let app_node_ids = app_config
-        .node_ids
-        .iter()
-        .map(|n| Principal::from_slice(&n.node_id))
-        .collect();
     let nns_subnet_id = topo.get_nns().unwrap();
     let nns_config = topo.subnet_configs.get(&nns_subnet_id).unwrap();
-    let nns_node_ids = nns_config
-        .node_ids
-        .iter()
-        .map(|n| Principal::from_slice(&n.node_id))
-        .collect();
 
     let ic_ref_test_path = std::env::var_os("IC_REF_TEST_BIN")
         .expect("Missing ic-ref-test")
@@ -152,12 +136,7 @@ fn setup_and_run_ic_ref_test(
         .iter()
         .map(raw_canister_id_range_into)
         .collect();
-    let nns_subnet_config = subnet_config(
-        nns_subnet_id,
-        SubnetType::System,
-        nns_node_ids,
-        nns_canister_ranges,
-    );
+    let nns_subnet_config = subnet_config(nns_subnet_id, SubnetType::System, nns_canister_ranges);
 
     // app subnet config
     let app_canister_ranges = app_config
@@ -165,12 +144,8 @@ fn setup_and_run_ic_ref_test(
         .iter()
         .map(raw_canister_id_range_into)
         .collect();
-    let app_subnet_config = subnet_config(
-        app_subnet_id,
-        SubnetType::Application,
-        app_node_ids,
-        app_canister_ranges,
-    );
+    let app_subnet_config =
+        subnet_config(app_subnet_id, SubnetType::Application, app_canister_ranges);
 
     // decide on which subnet to test
     let test_subnet_config = if test_nns {

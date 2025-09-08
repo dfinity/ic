@@ -38,8 +38,8 @@ const SCHNORR_MSG_SIZE_BYTES: usize = 32;
 const DKG_INTERVAL: u64 = 9;
 const ALLOWED_FAILURES: usize = 1;
 const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
-const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(25 * 60);
-const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(20 * 60);
+const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(35 * 60);
+const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 
 fn setup(env: TestEnv) {
@@ -122,7 +122,7 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         None,
         /*assert_graceful_orchestrator_tasks_exits=*/ false,
     );
-    let initial_version = get_guestos_img_version().expect("target IC version");
+    let initial_version = get_guestos_img_version();
     info!(logger, "Upgrading to initial version: {}", initial_version);
     upgrade(
         &env,
@@ -132,7 +132,10 @@ fn upgrade_downgrade_app_subnet(env: TestEnv) {
         None,
         /*assert_graceful_orchestrator_tasks_exits=*/ true,
     );
-    // Make sure we can still read the message stored before the first upgrade
+    info!(
+        logger,
+        "Make sure we can still read the message stored before the first upgrade ..."
+    );
     assert!(can_read_msg_with_retries(
         &env.logger(),
         &faulty_node.get_public_url(),

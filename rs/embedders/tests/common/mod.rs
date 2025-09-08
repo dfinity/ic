@@ -225,7 +225,7 @@ pub fn get_system_api(
         CANISTER_CURRENT_MEMORY_USAGE,
         CANISTER_CURRENT_MESSAGE_MEMORY_USAGE,
         execution_parameters,
-        SubnetAvailableMemory::new(
+        SubnetAvailableMemory::new_for_testing(
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,
             SUBNET_MEMORY_CAPACITY,

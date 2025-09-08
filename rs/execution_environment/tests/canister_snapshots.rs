@@ -30,19 +30,12 @@ fn assert_snapshot_eq(
         .read_canister_snapshot_metadata(&download_args_1)
         .unwrap();
     let download_args_2 = ReadCanisterSnapshotMetadataArgs::new(canister_2, snapshot_2);
-    let mut metadata_2 = env
+    let metadata_2 = env
         .read_canister_snapshot_metadata(&download_args_2)
         .unwrap();
     metadata_1.source = metadata_2.source;
     metadata_1.taken_at_timestamp = metadata_2.taken_at_timestamp;
     metadata_1.canister_version = metadata_2.canister_version;
-    // Also ignore the last two globals that are appended by the IC.
-    metadata_1
-        .exported_globals
-        .truncate(metadata_1.exported_globals.len().checked_sub(2).unwrap());
-    metadata_2
-        .exported_globals
-        .truncate(metadata_2.exported_globals.len().checked_sub(2).unwrap());
     assert_eq!(metadata_1, metadata_2);
 
     // Download and compare snapshot (binary) data.
@@ -86,7 +79,7 @@ fn download_upload_snapshot(
         target_canister_id,
         None, /* replace_snapshot */
         module_download.len() as u64,
-        metadata.exported_globals.clone(),
+        metadata.globals.clone(),
         heap_download.len() as u64,
         stable_memory_download.len() as u64,
         metadata.certified_data.clone(),
@@ -147,6 +140,145 @@ fn get_current_metadata(
         .snapshot_id();
     let download_args = ReadCanisterSnapshotMetadataArgs::new(canister_id, inspect_snapshot_id);
     env.read_canister_snapshot_metadata(&download_args).unwrap()
+}
+
+// This function performs the following test scenario:
+// - install a canister provided in WAT;
+// - take a snapshot of the canister;
+// - ensure that the globals in the snapshot match `expected_globals`;
+// - if `download_upload`, then download the snapshot, upload the snapshot,
+//   and check that the uploaded snapshot matches the original snapshot;
+// - load the snapshot onto the canister;
+// - execute an update call to verify the canister can execute successfully after loading the snapshot;
+// - take another snapshot to check the canister state after loading the snapshot.
+fn take_download_upload_load_snapshot_roundtrip(
+    canister_wat: &str,
+    expected_globals: Vec<Global>,
+    download_upload: bool,
+) {
+    let env = StateMachineBuilder::new()
+        .with_snapshot_download_enabled(true)
+        .with_snapshot_upload_enabled(true)
+        .build();
+
+    let canister_wasm = wat::parse_str(canister_wat).unwrap();
+    let canister_id = env.install_canister(canister_wasm, vec![], None).unwrap();
+
+    let snapshot_id = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .unwrap()
+        .snapshot_id();
+    let download_args = ReadCanisterSnapshotMetadataArgs::new(canister_id, snapshot_id);
+    let metadata = env.read_canister_snapshot_metadata(&download_args).unwrap();
+    assert_eq!(metadata.globals, expected_globals);
+
+    let load_snapshot_id = if download_upload {
+        let uploaded_snapshot_id =
+            download_upload_snapshot(&env, canister_id, snapshot_id, canister_id);
+        assert_snapshot_eq(
+            &env,
+            canister_id,
+            snapshot_id,
+            canister_id,
+            uploaded_snapshot_id,
+        );
+
+        uploaded_snapshot_id
+    } else {
+        snapshot_id
+    };
+
+    let load_snapshot_args = LoadCanisterSnapshotArgs::new(canister_id, load_snapshot_id, None);
+    env.load_canister_snapshot(load_snapshot_args).unwrap();
+
+    // Ensure that the canister can successfully execute a message after loading a snapshot.
+    env.execute_ingress(canister_id, "run", vec![]).unwrap();
+
+    // We take one more snapshot to inspect the canister state after loading the snapshot in a previous step.
+    let inspect_snapshot_id = env
+        .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
+        .unwrap()
+        .snapshot_id();
+    assert_snapshot_eq(
+        &env,
+        canister_id,
+        load_snapshot_id,
+        canister_id,
+        inspect_snapshot_id,
+    );
+}
+
+// Performs the test scenario from `take_download_upload_load_snapshot_roundtrip`
+// with `download_upload` set to both `false` and `true`
+// on a matrix of (WAT) canisters with no global:
+// - memory is 32-bit or 64-bit.
+#[test]
+fn take_download_upload_load_snapshot_roundtrip_no_globals() {
+    for memory in ["", "i64"] {
+        let wat = format!(
+            r#"
+(module
+  (import "ic0" "msg_reply" (func $msg_reply))
+  (func $run
+    (call $msg_reply)
+  )
+  (export "canister_update run" (func $run))
+  (memory {} 1)
+)"#,
+            memory
+        );
+        for download_upload in [false, true] {
+            take_download_upload_load_snapshot_roundtrip(&wat, vec![], download_upload);
+        }
+    }
+}
+
+// Performs the test scenario from `take_download_upload_load_snapshot_roundtrip`
+// with `download_upload` set to both `false` and `true`
+// on a matrix of (WAT) canisters with a single global:
+// - the global is exported or not,
+// - the global is mutable or not,
+// - memory is 32-bit or 64-bit.
+#[test]
+fn take_download_upload_load_snapshot_roundtrip_one_global() {
+    for is_exported in [false, true] {
+        for is_mutable in [false, true] {
+            for memory in ["", "i64"] {
+                let exported = if is_exported {
+                    "(export \"my_global\")"
+                } else {
+                    ""
+                };
+                let mutable = if is_mutable { "(mut i32)" } else { "i32" };
+                let wat = format!(
+                    r#"
+(module
+  (import "ic0" "msg_reply" (func $msg_reply))
+  (func $run
+    (call $msg_reply)
+  )
+  (export "canister_update run" (func $run))
+  (global {} {} (i32.const 42))
+  (memory {} 1)
+)"#,
+                    exported, mutable, memory
+                );
+                // The current implementation includes all globals that are exported or mutable.
+                let expected_globals = if is_exported || is_mutable {
+                    vec![Global::I32(42)]
+                } else {
+                    vec![]
+                };
+                for download_upload in [false, true] {
+                    take_download_upload_load_snapshot_roundtrip(
+                        &wat,
+                        expected_globals.clone(),
+                        download_upload,
+                    );
+                }
+            }
+        }
+    }
 }
 
 fn test_env_for_global_timer_on_low_wasm_memory(
@@ -325,6 +457,39 @@ fn take_load_snapshot_global_timer_on_low_wasm_memory() {
 }
 
 #[test]
+fn upload_and_load_snapshot_with_invalid_wasm() {
+    let env = StateMachineBuilder::new()
+        .with_snapshot_download_enabled(true)
+        .with_snapshot_upload_enabled(true)
+        .build();
+
+    let canister_id = env.create_canister(None);
+
+    // Upload snapshot metadata.
+    // A wasm module consisting of 42 zeros is invalid.
+    let upload_args = UploadCanisterSnapshotMetadataArgs::new(
+        canister_id,
+        None,   /* replace_snapshot */
+        42,     /* wasm_module_size */
+        vec![], /* globals */
+        0,      /* wasm_memory_size */
+        0,      /* stable_memory_size */
+        vec![], /* certified_data */
+        None,   /* global_timer */
+        None,   /* on_low_wasm_memory_hook_status */
+    );
+    let uploaded_snapshot_id = env
+        .upload_canister_snapshot_metadata(&upload_args)
+        .unwrap()
+        .snapshot_id;
+
+    let load_snapshot_args = LoadCanisterSnapshotArgs::new(canister_id, uploaded_snapshot_id, None);
+    let err = env.load_canister_snapshot(load_snapshot_args).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterInvalidWasm);
+    assert!(err.description().contains("Canister's Wasm module is not valid: Failed to decode wasm module: unsupported canister module format."));
+}
+
+#[test]
 fn upload_snapshot_module_with_checkpoint() {
     let env = StateMachineBuilder::new()
         .with_snapshot_download_enabled(true)
@@ -424,7 +589,7 @@ fn upload_snapshot_with_checkpoint() {
         canister_id,
         None,
         module_dl.len() as u64,
-        md.exported_globals.clone(),
+        md.globals.clone(),
         heap_dl.len() as u64,
         stable_memory_dl.len() as u64,
         md.certified_data.clone(),
@@ -516,7 +681,7 @@ fn load_snapshot_inconsistent_metadata_hook_status_fails() {
         canister_id,
         None,
         module_dl.len() as u64,
-        md.exported_globals.clone(),
+        md.globals.clone(),
         heap_dl.len() as u64,
         stable_memory_dl.len() as u64,
         md.certified_data.clone(),
@@ -557,7 +722,7 @@ fn load_snapshot_inconsistent_metadata_hook_status_fails() {
         &env,
         || {
             let mut args = original_args.clone();
-            args.exported_globals = vec![Global::I32(1), Global::I64(1999996623), Global::I32(2)];
+            args.globals = vec![Global::I32(1), Global::I64(1999996623), Global::I32(2)];
             args
         },
         "Wasm exported globals of canister module and snapshot metadata do not match",

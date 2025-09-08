@@ -15,11 +15,12 @@ use http::Request;
 use hyper::StatusCode;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_interfaces_state_manager::StateReader;
+use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     messages::{
-        Blob, Certificate, CertificateDelegation, HttpReadStateContent, HttpReadStateResponse,
-        HttpRequest, HttpRequestEnvelope, ReadState,
+        Blob, Certificate, HttpReadStateContent, HttpReadStateResponse, HttpRequest,
+        HttpRequestEnvelope, ReadState,
     },
     CanisterId, PrincipalId,
 };
@@ -27,37 +28,51 @@ use std::{
     convert::{Infallible, TryFrom},
     sync::Arc,
 };
-use tokio::sync::watch;
 use tower::util::BoxCloneService;
+
+#[derive(Copy, Clone, Debug)]
+pub enum Version {
+    // Endpoint with the NNS delegation using the flat format of the canister ranges.
+    V2,
+    // Endpoint with the NNS delegation will all canister ranges pruned out.
+    V3,
+}
 
 #[derive(Clone)]
 pub(crate) struct SubnetReadStateService {
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    version: Version,
 }
 
 pub struct SubnetReadStateServiceBuilder {
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    version: Version,
 }
 
 impl SubnetReadStateService {
-    pub(crate) fn route() -> &'static str {
-        "/api/v2/subnet/{effective_canister_id}/read_state"
+    pub(crate) fn route(version: Version) -> &'static str {
+        match version {
+            Version::V2 => "/api/v2/subnet/{effective_canister_id}/read_state",
+            Version::V3 => "/api/v3/subnet/{effective_canister_id}/read_state",
+        }
     }
 }
 
 impl SubnetReadStateServiceBuilder {
     pub fn builder(
-        delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+        nns_delegation_reader: NNSDelegationReader,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+        version: Version,
     ) -> Self {
         Self {
             health_status: None,
-            delegation_from_nns,
+            nns_delegation_reader,
             state_reader,
+            version,
         }
     }
 
@@ -74,11 +89,12 @@ impl SubnetReadStateServiceBuilder {
             health_status: self
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
-            delegation_from_nns: self.delegation_from_nns,
+            nns_delegation_reader: self.nns_delegation_reader,
             state_reader: self.state_reader,
+            version: self.version,
         };
         Router::new().route_service(
-            SubnetReadStateService::route(),
+            SubnetReadStateService::route(self.version),
             axum::routing::post(read_state_subnet).with_state(state),
         )
     }
@@ -93,8 +109,9 @@ pub(crate) async fn read_state_subnet(
     axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
     State(SubnetReadStateService {
         health_status,
-        delegation_from_nns,
+        nns_delegation_reader,
         state_reader,
+        version,
     }): State<SubnetReadStateService>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpReadStateContent>>>,
 ) -> impl IntoResponse {
@@ -107,7 +124,6 @@ pub(crate) async fn read_state_subnet(
         return (status, text).into_response();
     }
 
-    let delegation_from_nns = delegation_from_nns.borrow().clone();
     let make_service_unavailable_response = || {
         let status = StatusCode::SERVICE_UNAVAILABLE;
         let text = "Certified state is not available yet. Please try again...".to_string();
@@ -159,6 +175,10 @@ pub(crate) async fn read_state_subnet(
         };
 
         let signature = certification.signed.signature.signature.get().0;
+        let delegation_from_nns = match version {
+            Version::V2 => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
+            Version::V3 => nns_delegation_reader.get_delegation(CanisterRangesFilter::None),
+        };
         Cbor(HttpReadStateResponse {
             certificate: Blob(into_cbor(&Certificate {
                 tree,

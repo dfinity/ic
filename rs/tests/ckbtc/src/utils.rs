@@ -19,15 +19,14 @@ Runbook::
 
 end::catalog[] */
 
-use crate::ADDRESS_LENGTH;
+use crate::{IcRpcClientType, ADDRESS_LENGTH};
 use assert_matches::assert_matches;
-use bitcoincore_rpc::{
-    bitcoin::{Address, Amount, Txid},
-    bitcoincore_rpc_json::{self, LoadWalletResult},
-    Auth, Client, RpcApi,
-};
 use candid::{Decode, Encode, Nat};
 use canister_test::Canister;
+use ic_btc_adapter_test_utils::{
+    bitcoin::{Address, Amount, Txid},
+    rpc_client::{Auth, RpcClient, RpcClientType},
+};
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError};
@@ -58,6 +57,9 @@ pub const LONG_TIMEOUT: Duration = Duration::from_secs(600);
 /// The initial amount of Satoshi per blocks (before halving).
 pub const BTC_BLOCK_REWARD: u64 = 50_0000_0000;
 
+/// The bitcoin transfer fee per transaction
+pub const BITCOIN_NETWORK_TRANSFER_FEE: u64 = 1410;
+
 pub async fn stop_canister(canister: &Canister<'_>) {
     let stop_result = canister.stop().await;
     assert!(
@@ -72,8 +74,13 @@ pub async fn start_canister(canister: &Canister<'_>) {
 }
 
 /// Mint some blocks to the given address.
-pub fn generate_blocks(btc_client: &Client, logger: &Logger, nb_blocks: u64, address: &Address) {
-    let generated_blocks = btc_client.generate_to_address(nb_blocks, address).unwrap();
+pub fn generate_blocks<T: RpcClientType>(
+    rpc_client: &RpcClient<T>,
+    logger: &Logger,
+    nb_blocks: u64,
+    address: &T::Address,
+) {
+    let generated_blocks = rpc_client.generate_to_address(nb_blocks, address).unwrap();
     info!(&logger, "Generated {} btc blocks.", generated_blocks.len());
     assert_eq!(
         generated_blocks.len() as u64,
@@ -134,7 +141,10 @@ pub async fn wait_for_ledger_balance(
 
 /// Wait until we have a tx in btc mempool
 /// Timeout after SHORT_TIMEOUT if the minter doesn't successfully find a new tx in the timeframe.
-pub async fn wait_for_mempool_change(btc_rpc: &Client, logger: &Logger) -> Vec<Txid> {
+pub async fn wait_for_mempool_change<T: RpcClientType>(
+    btc_rpc: &RpcClient<T>,
+    logger: &Logger,
+) -> Vec<Txid> {
     let start = Instant::now();
     loop {
         if start.elapsed() >= SHORT_TIMEOUT {
@@ -150,7 +160,7 @@ pub async fn wait_for_mempool_change(btc_rpc: &Client, logger: &Logger) -> Vec<T
                 }
             }
             Err(e) => {
-                info!(&logger, "Error {}", e.to_string());
+                info!(&logger, "Error {:?}", e);
             }
         };
     }
@@ -233,12 +243,12 @@ pub async fn wait_for_signed_tx(
 /// This function panics if:
 /// * The transfer didn't finalize after `LONG_TIMEOUT`.
 /// * The minter rejected the retrieval because the amount was too low to cover the fees.
-pub async fn wait_for_finalization(
-    btc_client: &Client,
+pub async fn wait_for_finalization<T: RpcClientType>(
+    rpc_client: &RpcClient<T>,
     ckbtc_minter_agent: &CkBtcMinterAgent,
     logger: &Logger,
     block_index: u64,
-    default_btc_address: &Address,
+    default_btc_address: &T::Address,
 ) -> ic_btc_interface::Txid {
     let start = Instant::now();
     loop {
@@ -277,7 +287,7 @@ pub async fn wait_for_finalization(
         tokio::time::sleep(Duration::from_secs(5)).await;
 
         // We continue to generate blocks if the status is yet updated
-        generate_blocks(btc_client, logger, 1, default_btc_address);
+        generate_blocks::<T>(rpc_client, logger, 1, default_btc_address);
     }
 }
 
@@ -385,40 +395,43 @@ pub async fn get_btc_address(
     address.parse::<Address<_>>().unwrap().assume_checked()
 }
 
-pub async fn send_to_btc_address(btc_rpc: &Client, logger: &Logger, dst: &Address, amount: u64) {
-    match btc_rpc.send_to_address(
+pub async fn send_to_btc_address<T: RpcClientType>(
+    btc_rpc: &RpcClient<T>,
+    logger: &Logger,
+    dst: &T::Address,
+    amount: u64,
+) {
+    match btc_rpc.send_to(
         dst,
         Amount::from_sat(amount),
-        None,
-        None,
-        Some(true),
-        Some(true),
-        None,
-        Some(bitcoincore_rpc_json::EstimateMode::Unset),
+        Amount::from_sat(BITCOIN_NETWORK_TRANSFER_FEE),
     ) {
         Ok(txid) => {
             debug!(&logger, "txid: {:?}", txid);
         }
         Err(e) => {
-            panic!("bug: could not send btc to btc client : {}", e);
+            panic!("bug: could not send btc to btc client : {:?}", e);
         }
     }
 }
 
-/// Create a client for bitcoind.
-pub fn get_btc_client(env: &TestEnv) -> Client {
+/// Create a client for bitcoind or dogecoind.
+pub fn get_rpc_client<T: IcRpcClientType>(env: &TestEnv) -> RpcClient<T> {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
-    Client::new(
+    RpcClient::new(
+        T::REGTEST,
         &format!(
             "http://[{}]:{}",
             deployed_universal_vm.get_vm().unwrap().ipv6,
-            crate::BITCOIND_RPC_PORT
+            T::RPC_PORT
         ),
         Auth::UserPass(
             crate::BITCOIND_RPC_USER.to_string(),
             crate::BITCOIND_RPC_PASSWORD.to_string(),
         ),
     )
+    .unwrap()
+    .ensure_wallet()
     .unwrap()
 }
 
@@ -622,50 +635,6 @@ pub async fn assert_temporarily_unavailable(agent: &CkBtcMinterAgent, subaccount
         }
         Err(error) => {
             assert_matches!(error, UpdateBalanceError::TemporarilyUnavailable(..));
-        }
-    }
-}
-
-/// Ensure wallet existence by creating one if required.
-pub fn ensure_wallet(btc_rpc: &Client, logger: &Logger) {
-    let mut wallets: Vec<String> = vec![];
-    let start = Instant::now();
-    while wallets.is_empty() {
-        if start.elapsed() >= SHORT_TIMEOUT {
-            panic!("list_wallets timeout");
-        };
-        match btc_rpc.list_wallets() {
-            Ok(wallet) => {
-                wallets = wallet;
-                break;
-            }
-            Err(e) => {
-                info!(&logger, "Error while retrieving wallets : {}", e);
-            }
-        }
-    }
-    if wallets.is_empty() {
-        // Create wallet if not existing yet.
-        let mut res = LoadWalletResult {
-            name: Default::default(),
-            warning: None,
-        };
-        while res.name.is_empty() {
-            if start.elapsed() >= SHORT_TIMEOUT {
-                panic!("create_wallet timeout");
-            };
-            match btc_rpc.create_wallet("mywallet", None, None, None, None) {
-                Ok(r) => res = r,
-                Err(e) => {
-                    info!(&logger, "Error while creating wallet : {:?}", e)
-                }
-            }
-        }
-        info!(&logger, "Created wallet: {}", res.name);
-    } else {
-        info!(&logger, "Existing wallets:");
-        for w in wallets {
-            info!(&logger, "- wallet: {}", w);
         }
     }
 }
