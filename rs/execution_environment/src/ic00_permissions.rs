@@ -101,9 +101,9 @@ impl Ic00MethodPermissions {
             },
             Ic00Method::FetchCanisterLogs => Self {
                 method,
-                // TODO: update comment.
-                // `FetchCanisterLogs` method is only allowed for messages sent by users,
-                // all inter-canister call permissions are irrelevant and therefore set to false.
+                // `FetchCanisterLogs` disallows inter-canister calls by default.
+                // A feature flag can enable them, so permissions are preset here,
+                // while the actual handling is done elsewhere.
                 allow_remote_subnet_sender: true,
                 allow_only_nns_subnet_sender: false,
                 counts_toward_round_limit: true,
