@@ -76,7 +76,7 @@ download_and_verify_upgrade() {
         local url="${base_url}/ic/${version}/guest-os/update-img/update-img.tar.zst"
         echo "Attempting to download upgrade from $url..."
 
-        if curl -L -o "$tmpdir/upgrade.tar.zst" "$url"; then
+        if curl -L --fail -o "$tmpdir/upgrade.tar.zst" "$url"; then
             echo "Download from $base_url completed successfully"
             download_successful=true
             break
