@@ -353,7 +353,7 @@ impl RandomNiDkgConfigBuilder {
     pub fn build<R: Rng + CryptoRng>(self, rng: &mut R) -> RandomNiDkgConfig {
         let subnet_size = self.subnet_size.expect("must specify a subnet size");
 
-        let dkg_tag = self.dkg_tag.unwrap_or_else(|| match rng.gen::<bool>() {
+        let dkg_tag = self.dkg_tag.unwrap_or_else(|| match rng.r#gen::<bool>() {
             true => NiDkgTag::LowThreshold,
             false => NiDkgTag::HighThreshold,
         });
@@ -437,11 +437,11 @@ impl RandomNiDkgConfig {
 
         let config_data = NiDkgConfigData {
             dkg_id: NiDkgId {
-                start_block_height: Height::new(rng.gen()),
-                dealer_subnet: SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen())),
+                start_block_height: Height::new(rng.r#gen()),
+                dealer_subnet: SubnetId::from(PrincipalId::new_subnet_test_id(rng.r#gen())),
                 dkg_tag,
                 // The first DKG is always done by NNS for another (remote) subnet
-                target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new(rng.gen())),
+                target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new(rng.r#gen())),
             },
             max_corrupt_dealers: Self::number_of_nodes_from_usize(max_corrupt_dealers),
             dealers,
@@ -661,7 +661,7 @@ impl RandomNiDkgConfig {
     fn random_node_ids<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> BTreeSet<NodeId> {
         let mut node_ids = BTreeSet::new();
         while node_ids.len() < n {
-            node_ids.insert(Self::node_id(rng.gen()));
+            node_ids.insert(Self::node_id(rng.r#gen()));
         }
         node_ids
     }
@@ -673,7 +673,7 @@ impl RandomNiDkgConfig {
     ) -> BTreeSet<NodeId> {
         let mut node_ids = BTreeSet::new();
         while node_ids.len() < n {
-            let candidate = Self::node_id(rng.gen());
+            let candidate = Self::node_id(rng.r#gen());
             if !exclusions.contains(&candidate) {
                 node_ids.insert(candidate);
             }
@@ -843,7 +843,7 @@ impl NiDkgTestEnvironment {
                 .with_temp_dir_source(crypto_root)
                 .with_registry(Arc::clone(&ret.registry) as Arc<_>)
                 .with_node_id(node_id)
-                .with_rng(ChaCha20Rng::from_seed(rng.gen()));
+                .with_rng(ChaCha20Rng::from_seed(rng.r#gen()));
             let crypto_component_builder = if use_remote_vault {
                 crypto_component_builder.with_remote_vault()
             } else {
@@ -883,7 +883,7 @@ impl NiDkgTestEnvironment {
                 generate_dkg_dealing_encryption_keys: true,
                 ..NodeKeysToGenerate::none()
             })
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()));
+            .with_rng(ChaCha20Rng::from_seed(rng.r#gen()));
         let temp_crypto_builder = if use_remote_vault {
             temp_crypto_builder.with_remote_vault()
         } else {

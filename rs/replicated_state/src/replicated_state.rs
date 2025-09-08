@@ -546,12 +546,12 @@ impl ReplicatedState {
         &CanisterSnapshots,
     ) {
         let ReplicatedState {
-            ref canister_states,
-            ref metadata,
-            ref subnet_queues,
-            ref consensus_queue,
-            ref epoch_query_stats,
-            ref canister_snapshots,
+            canister_states,
+            metadata,
+            subnet_queues,
+            consensus_queue,
+            epoch_query_stats,
+            canister_snapshots,
         } = self;
         (
             canister_states,
@@ -1453,9 +1453,9 @@ impl ReplicatedState {
         //
         // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
         let Self {
-            ref mut canister_states,
-            ref mut metadata,
-            ref mut subnet_queues,
+            canister_states,
+            metadata,
+            subnet_queues,
             consensus_queue: _,
             epoch_query_stats: _,
             canister_snapshots: _,

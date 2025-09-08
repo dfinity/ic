@@ -100,7 +100,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 let key_ids: Vec<KeyId> = secret_keys
                     .iter()
                     .map(|secret_key| loop {
-                        let key_id = KeyId::from(self.rng_write_lock().gen::<[u8; 32]>());
+                        let key_id = KeyId::from(self.rng_write_lock().r#gen::<[u8; 32]>());
                         let csp_secret_key = CspSecretKey::ThresBls12_381(secret_key.clone());
                         let result = self.sks_write_lock().insert(key_id, csp_secret_key, None);
                         if result.is_ok() {

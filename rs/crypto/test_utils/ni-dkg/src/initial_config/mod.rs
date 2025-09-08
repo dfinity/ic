@@ -119,7 +119,7 @@ pub fn initial_dkg_transcript<R: rand::Rng + rand::CryptoRng>(
     let dealer_crypto = TempCryptoComponent::builder()
         .with_registry(Arc::new(registry))
         .with_node_id(dealer_id)
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
         .build();
 
     transcript_with_single_dealing(dkg_config, dealer_crypto, dealer_id)

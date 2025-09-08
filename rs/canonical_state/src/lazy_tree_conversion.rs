@@ -873,7 +873,7 @@ fn canister_ranges_as_tree(
     subnets: &BTreeMap<SubnetId, SubnetTopology>,
     split_routing_table: Arc<SplitRoutingTable>,
     certification_version: CertificationVersion,
-) -> LazyTree {
+) -> LazyTree<'_> {
     let split_routing_table = Arc::clone(&split_routing_table);
     fork(MapTransformFork {
         map: subnets,

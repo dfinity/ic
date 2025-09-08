@@ -1156,7 +1156,7 @@ impl SystemState {
             CanisterStatus::Stopped => Some(stop_context),
 
             CanisterStatus::Stopping {
-                ref mut stop_contexts,
+                stop_contexts,
                 ..
             } => {
                 // Add the message so we can respond to it once the canister has fully stopped.

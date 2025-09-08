@@ -1338,7 +1338,7 @@ impl SystemApiImpl {
             | ApiType::CompositeRejectCallback {
                 response_status, ..
             } => match response_status {
-                ResponseStatus::JustRepliedWith(ref mut result) => Ok(result.take()),
+                ResponseStatus::JustRepliedWith(result) => Ok(result.take()),
                 _ => Ok(None),
             },
         }
