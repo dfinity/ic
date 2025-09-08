@@ -294,9 +294,10 @@ fn ensure_certificates_equal(
     node_cert_from_registry: &Vec<u8>,
 ) -> Result<(), TLSError> {
     if node_cert_from_registry != end_entity_cert {
-        return Err(TLSError::General(
-            format!("The peer certificate is not trusted since it differs from the registry certificate. NodeId of presented cert: {}", node_id),
-        ));
+        return Err(TLSError::General(format!(
+           "The peer certificate is not trusted since it differs from the registry certificate. NodeId of presented cert: {}",
+            node_id
+        )));
     }
     Ok(())
 }
