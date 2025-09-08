@@ -351,7 +351,7 @@ async fn assert_rented_subnet_works(
     assert_canister_belongs_to_subnet(topology_snapshot, rented_subnet_id, new_canister_id).await;
 
     // Verify 2.2: The created canister is of type Application.
-    assert_subnet_type(&rented_subnet, SubnetType::Application);
+    assert_subnet_type(&rented_subnet, SubnetType::Application).await;
 
     // This will be used later to verify 6: the canister does not charged cycles.
     let original_cycles_balance = get_cycles_balance(new_canister_id, &rented_subnet).await;
