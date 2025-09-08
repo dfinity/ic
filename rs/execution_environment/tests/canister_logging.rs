@@ -363,7 +363,7 @@ fn test_fetch_canister_logs_via_composite_query_call() {
     // The user uses composite_query to canister_a to fetch logs of canister_b, which should fail.
     let user_controller = PrincipalId::new_user_test_id(42);
     let log_visibility = LogVisibilityV2::Controllers;
-    let env = setup_env_with(FlagStatus::Enabled);
+    let env = setup_env_with(FlagStatus::Disabled);
     let canister_a = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
