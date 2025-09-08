@@ -54,13 +54,13 @@ pub async fn cycles_minting_create_canister<'a>(
             .await
             .unwrap();
 
-    // Step 2: Tell CMC about the ICP that was just sent by caller.
+    // Step 2: Tell CMC about the ICP that was just sent to it by caller.
     let mut request = NotifyCreateCanister {
         // Interesting pieces.
         block_index: u64::try_from(icrc1_transfer_result.unwrap().0).unwrap(),
         controller: caller.get_principal_id(),
 
-        // Optional pieces (probably boring).
+        // Optional pieces. These can be set via customize_notify_create_canister.
         subnet_selection: None,
         settings: None,
 
