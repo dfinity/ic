@@ -694,8 +694,14 @@ struct OriginalContext {
     log_dirty_pages: FlagStatus,
 }
 
-fn is_composite_query(call_origin: &CallOrigin) -> bool {
-    matches!(call_origin, CallOrigin::CanisterQuery { .. })
+fn is_composite_query(origin: &CallOrigin) -> bool {
+    match origin {
+        CallOrigin::CanisterQuery { .. } => true,
+        CallOrigin::CanisterUpdate { .. }
+        | CallOrigin::Ingress { .. }
+        | CallOrigin::Query { .. }
+        | CallOrigin::SystemTask => false,
+    }
 }
 
 /// Struct used to hold necessary information for the
