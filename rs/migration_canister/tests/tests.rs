@@ -1,4 +1,5 @@
 use candid::{Encode, Principal};
+use canister_test::Project;
 use ic_base_types::CanisterId;
 use ic_management_canister_types::CanisterSettings;
 use ic_nns_test_utils::common::build_registry_wasm;
@@ -7,6 +8,7 @@ use registry_canister::init::RegistryCanisterInitPayload;
 use tempfile::TempDir;
 
 pub const REGISTRY_CANISTER_ID: CanisterId = CanisterId::from_u64(0);
+pub const MIGRATION_CANISTER_ID: CanisterId = CanisterId::from_u64(99);
 
 #[tokio::test]
 async fn test() {
@@ -37,6 +39,26 @@ async fn test() {
     pic.install_canister(
         REGISTRY_CANISTER_ID.into(),
         registry_wasm.bytes(),
+        Encode!(&RegistryCanisterInitPayload::default()).unwrap(),
+        Some(controller),
+    )
+    .await;
+
+    let migration_canister_wasm = Project::cargo_bin_maybe_from_env("migration-canister", &[]);
+
+    pic.create_canister_with_id(
+        Some(controller),
+        Some(CanisterSettings {
+            controllers: Some(vec![controller]),
+            ..Default::default()
+        }),
+        MIGRATION_CANISTER_ID.into(),
+    )
+    .await
+    .unwrap();
+    pic.install_canister(
+        MIGRATION_CANISTER_ID.into(),
+        migration_canister_wasm.bytes(),
         Encode!(&RegistryCanisterInitPayload::default()).unwrap(),
         Some(controller),
     )

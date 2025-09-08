@@ -27,6 +27,6 @@ ic-base-types = { path = "../types/base_types" }
 ic-management-canister-types = { workspace = true }
 ic-nns-test-utils = { path = "../nns/test_utils" }
 registry-canister = { path = "../registry/canister" }
-
+canister-test = { path = "../rust_canisters/canister_test" }
 
 
