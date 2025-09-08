@@ -328,14 +328,13 @@ impl BitcoinAdapterParts {
         runtime: Arc<Runtime>,
     ) -> Self {
         let bitcoin_adapter_config = BitcoinAdapterConfig {
-            network: Network::Regtest.into(),
             nodes: bitcoind_addr,
             socks_proxy: None,
             ipv6_only: false,
             logger: logger_config_from_level(log_level),
             incoming_source: BtcIncomingSource::Path(uds_path.clone()),
             address_limits: (1, 1),
-            ..Default::default()
+            ..BitcoinAdapterConfig::default_with(Network::Regtest.into())
         };
         let adapter = tokio::spawn(async move {
             start_btc_server(

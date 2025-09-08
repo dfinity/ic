@@ -40,9 +40,9 @@ pub enum ValidateHeaderError {
     PrevHeaderNotFound,
 }
 
-pub trait HeaderStore {
+pub trait HeaderStore<Header> {
     /// Returns the header with the given block hash.
-    fn get_header(&self, hash: &BlockHash) -> Option<(BlockHeader, BlockHeight)>;
+    fn get_header(&self, hash: &BlockHash) -> Option<(Header, BlockHeight)>;
 
     /// Returns the initial hash the store starts from.
     fn get_initial_hash(&self) -> BlockHash;
@@ -54,7 +54,7 @@ pub trait HeaderStore {
 /// [ValidateHeaderError](ValidateHeaderError) will be returned.
 pub fn validate_header(
     network: &Network,
-    store: &impl HeaderStore,
+    store: &impl HeaderStore<BlockHeader>,
     header: &BlockHeader,
 ) -> Result<(), ValidateHeaderError> {
     let chain_height = store.get_height();
@@ -139,7 +139,7 @@ fn is_header_within_one_year_of_tip(prev_height: BlockHeight, chain_height: Bloc
 /// Validates if a header's timestamp is valid.
 /// Bitcoin Protocol Rules wiki https://en.bitcoin.it/wiki/Protocol_rules says,
 /// "Reject if timestamp is the median time of the last 11 blocks or before"
-fn is_timestamp_valid(store: &impl HeaderStore, header: &BlockHeader) -> bool {
+fn is_timestamp_valid(store: &impl HeaderStore<BlockHeader>, header: &BlockHeader) -> bool {
     let mut times = vec![];
     let mut current_header = *header;
     let initial_hash = store.get_initial_hash();
@@ -162,7 +162,7 @@ fn is_timestamp_valid(store: &impl HeaderStore, header: &BlockHeader) -> bool {
 // The target is the number that a block hash must be below for it to be accepted.
 fn get_next_compact_target(
     network: &Network,
-    store: &impl HeaderStore,
+    store: &impl HeaderStore<BlockHeader>,
     prev_header: &BlockHeader,
     prev_height: BlockHeight,
     timestamp: u32,
@@ -204,7 +204,7 @@ fn get_next_compact_target(
 /// minutes.
 fn find_next_difficulty_in_chain(
     network: &Network,
-    store: &impl HeaderStore,
+    store: &impl HeaderStore<BlockHeader>,
     prev_header: &BlockHeader,
     prev_height: BlockHeight,
 ) -> CompactTarget {
@@ -253,7 +253,7 @@ fn find_next_difficulty_in_chain(
 /// header given the previous header
 fn compute_next_difficulty(
     network: &Network,
-    store: &impl HeaderStore,
+    store: &impl HeaderStore<BlockHeader>,
     prev_header: &BlockHeader,
     prev_height: BlockHeight,
 ) -> CompactTarget {
@@ -371,7 +371,7 @@ mod test {
         }
     }
 
-    impl HeaderStore for SimpleHeaderStore {
+    impl HeaderStore<BlockHeader> for SimpleHeaderStore {
         fn get_header(&self, hash: &BlockHash) -> Option<(BlockHeader, BlockHeight)> {
             self.headers
                 .get(hash)
