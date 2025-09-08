@@ -25,8 +25,8 @@ use ic_recovery::{
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryPollingStrategy,
     steps::{AdminStep, Step, UploadAndRestartStep},
-    util::DataLocation,
-    NeuronArgs, Recovery, RecoveryArgs, IC_REGISTRY_LOCAL_STORE,
+    util::{DataLocation, SshUser},
+    NeuronArgs, Recovery, RecoveryArgs, IC_CONSENSUS_POOL_PATH, IC_REGISTRY_LOCAL_STORE,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -586,10 +586,18 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 self.recovery
                     .get_download_state_step(
                         node_ip,
-                        self.params.pub_key.is_some(),
+                        if self.params.pub_key.is_some() {
+                            SshUser::Readonly
+                        } else {
+                            SshUser::Admin
+                        },
                         self.params.keep_downloaded_state == Some(true),
                         /*additional_excludes=*/
-                        vec!["orchestrator", "ic_consensus_pool", IC_REGISTRY_LOCAL_STORE],
+                        vec![
+                            "orchestrator",
+                            IC_CONSENSUS_POOL_PATH,
+                            IC_REGISTRY_LOCAL_STORE,
+                        ],
                     )
                     .into()
             }

@@ -257,7 +257,7 @@ impl Step for MergeCertificationPoolsStep {
 
 pub struct DownloadIcStateStep {
     pub logger: Logger,
-    pub try_readonly: bool,
+    pub ssh_user: SshUser,
     pub node_ip: IpAddr,
     pub target: String,
     pub working_dir: String,
@@ -285,14 +285,9 @@ impl Step for DownloadIcStateStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let account = if self.try_readonly {
-            SshUser::Readonly.to_string()
-        } else {
-            SshUser::Admin.to_string()
-        };
         let mut ssh_helper = SshHelper::new(
             self.logger.clone(),
-            account,
+            self.ssh_user.to_string(),
             self.node_ip,
             self.require_confirmation,
             self.key_file.clone(),
@@ -340,6 +335,15 @@ impl Step for DownloadIcStateStep {
             info!(self.logger, "Excluding certifications from download");
             excludes.push("certification");
             excludes.push("certifications");
+        }
+
+        // If we already have the consensus pool, we do not download it again.
+        if PathBuf::from(self.working_dir.clone())
+            .join("data/ic_consensus_pool/consensus")
+            .exists()
+        {
+            info!(self.logger, "Excluding consensus pool from download");
+            excludes.push("ic_consensus_pool");
         }
 
         let target = if self.keep_downloaded_state {

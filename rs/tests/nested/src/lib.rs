@@ -477,16 +477,23 @@ pub fn nns_recovery_test(env: TestEnv) {
     let output_dir = env.get_path("recovery_output");
     set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
 
-    // Choose f+1 faulty nodes to break
+    // Choose f+1 faulty nodes to break, choose one healthy node owned by DFINITY
     let nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
     let f = (SUBNET_SIZE - 1) / 3;
     let faulty_nodes = &nns_nodes[..(f + 1)];
     let healthy_nodes = &nns_nodes[(f + 1)..];
+    let dfinity_owned_node = healthy_nodes.first().unwrap();
     info!(
         logger,
         "Selected faulty nodes: {:?}. Selected healthy nodes: {:?}",
         faulty_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>(),
         healthy_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>(),
+    );
+    info!(
+        logger,
+        "Selected DFINITY-owned NNS node: {} ({:?})",
+        dfinity_owned_node.node_id,
+        dfinity_owned_node.get_ip_addr()
     );
     // Break faulty nodes by SSHing into them and breaking the replica binary.
     info!(
@@ -537,8 +544,8 @@ pub fn nns_recovery_test(env: TestEnv) {
         "Success: Subnet is broken - cannot store new messages"
     );
 
-    // Choose the DFINITY-owned node to be the one with the highest certification share height
-    let (dfinity_owned_node, highest_certification_share_height) = nns_subnet
+    // Download pool from the node with the highest certification share height
+    let (download_pool_node, highest_certification_share_height) = nns_subnet
         .nodes()
         .filter_map(|n| {
             block_on(get_node_metrics(&logger, &n.get_ip_addr()))
@@ -546,13 +553,6 @@ pub fn nns_recovery_test(env: TestEnv) {
         })
         .max_by_key(|&(_, cert_share_height)| cert_share_height)
         .expect("No download node found");
-
-    info!(
-        logger,
-        "Selected DFINITY-owned NNS node: {} ({:?})",
-        dfinity_owned_node.node_id,
-        dfinity_owned_node.get_ip_addr()
-    );
 
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
@@ -572,7 +572,8 @@ pub fn nns_recovery_test(env: TestEnv) {
         replay_until_height: Some(highest_certification_share_height),
         upgrade_image_url: Some(get_guestos_update_img_url()),
         upgrade_image_hash: Some(get_guestos_update_img_sha256()),
-        download_node: Some(dfinity_owned_node.get_ip_addr()),
+        download_pool_node: Some(download_pool_node.get_ip_addr()),
+        download_state_node: Some(dfinity_owned_node.get_ip_addr()),
         upload_method: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
         backup_key_file: Some(ssh_priv_key_path),
         output_dir: Some(output_dir.clone()),

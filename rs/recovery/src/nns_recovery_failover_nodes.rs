@@ -274,7 +274,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 if let Some(node_ip) = self.params.download_node {
                     Ok(Box::new(self.recovery.get_download_state_step(
                         node_ip,
-                        /*try_readonly=*/ false,
+                        SshUser::Admin,
                         /*keep_downloaded_state=*/ false,
                         /*additional_excludes=*/ vec![CUPS_DIR],
                     )))
