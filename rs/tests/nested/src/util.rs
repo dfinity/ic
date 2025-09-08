@@ -36,7 +36,7 @@ use ic_system_test_driver::{
         submit_update_unassigned_node_version_proposal, vote_execute_proposal_assert_executed,
     },
     retry_with_msg_async_quiet,
-    util::runtime_from_url,
+    util::{block_on, runtime_from_url},
 };
 use ic_types::Height;
 use ic_types::{hostos_version::HostosVersion, NodeId, ReplicaVersion};
@@ -467,7 +467,13 @@ pub async fn wait_for_expected_guest_version(
 
 /// Get the current boot ID from a HostOS node.
 pub fn get_host_boot_id(node: &NestedVm) -> String {
-    node.block_on_bash_script("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
+    block_on(get_host_boot_id_async(node))
+}
+
+/// Get the current boot ID from a HostOS node. Asynchronous version
+pub async fn get_host_boot_id_async(node: &NestedVm) -> String {
+    node.block_on_bash_script_async("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
+        .await
         .expect("Failed to retrieve boot ID")
         .trim()
         .to_string()

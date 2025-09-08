@@ -34,9 +34,9 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use nested::util::{
-    assert_version_compatibility, get_host_boot_id, setup_ic_infrastructure, setup_nested_vm_group,
-    setup_vector_targets_for_vm, start_nested_vm_group, NODE_REGISTRATION_BACKOFF,
-    NODE_REGISTRATION_TIMEOUT,
+    assert_version_compatibility, get_host_boot_id_async, setup_ic_infrastructure,
+    setup_nested_vm_group, setup_vector_targets_for_vm, start_nested_vm_group,
+    NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT,
 };
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
@@ -502,7 +502,7 @@ async fn simulate_node_provider_action(
     artifacts_hash: &str,
 ) {
     let host = env.get_nested_vm(vm_name).unwrap();
-    let host_boot_id_pre_reboot = get_host_boot_id(&host);
+    let host_boot_id_pre_reboot = get_host_boot_id_async(&host).await;
 
     // Trigger HostOS reboot and run guestos-recovery-upgrader
     info!(
@@ -527,7 +527,7 @@ async fn simulate_node_provider_action(
         Duration::from_secs(5 * 60),
         Duration::from_secs(5),
         || async {
-            let host_boot_id = get_host_boot_id(&host);
+            let host_boot_id = get_host_boot_id_async(&host).await;
             if host_boot_id != host_boot_id_pre_reboot {
                 info!(
                     logger,
