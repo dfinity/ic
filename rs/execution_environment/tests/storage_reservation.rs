@@ -617,7 +617,7 @@ fn reserved_cycles_stable_memory_grow_to_full_capacity() {
 
     // The total amount of reserved cycles to claim the full subnet memory capacity.
     const EXPECTED_RESERVED_CYCLES: u128 = 24_954 * T;
-    reserved_cycles_grow_to_full_capacity(stable_grow, EXPECTED_RESERVED_CYCLES);
+    reserved_cycles_memory_grow_to_full_capacity(stable_grow, EXPECTED_RESERVED_CYCLES);
 }
 
 #[test]
@@ -651,5 +651,5 @@ fn reserved_cycles_memory_allocation_grow_to_full_capacity() {
     // The total amount of reserved cycles to claim the full subnet memory capacity
     // while reserving a lot of memory at once.
     const EXPECTED_RESERVED_CYCLES: u128 = 41_449 * T;
-    reserved_cycles_grow_to_full_capacity(ic00_grow, EXPECTED_RESERVED_CYCLES);
+    reserved_cycles_memory_grow_to_full_capacity(ic00_grow, EXPECTED_RESERVED_CYCLES);
 }
