@@ -3530,6 +3530,8 @@ fn canister_not_found() {
     assert!(bytes.contains("404 - canister not found"));
 }
 
+// This test times out on Windows.
+#[cfg(not(windows))]
 #[test]
 fn payload_too_large() {
     let http_gateway_config = InstanceHttpGatewayConfig {
