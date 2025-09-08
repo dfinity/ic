@@ -8,13 +8,6 @@ use std::process::Command;
 use std::str::FromStr;
 use strum_macros::{EnumCount, EnumIter};
 
-pub enum DownloadableFile {
-    /// For cases where the file is stored locally.
-    Local { path: PathBuf },
-    /// For cases where the file is stored remotely.
-    Remote { url: String },
-}
-
 #[derive(Clone, Eq, PartialEq, Debug, Ord, PartialOrd, EnumIter, EnumCount)]
 #[allow(clippy::enum_variant_names)]
 pub enum TargetCanister {
@@ -44,31 +37,6 @@ pub enum TargetCanister {
 }
 
 impl TargetCanister {
-    pub fn canister_name(&self) -> &str {
-        match self {
-            TargetCanister::BtcChecker => "btc_checker",
-            TargetCanister::CkBtcArchive | TargetCanister::CkEthArchive => "archive",
-            TargetCanister::CkBtcIndex
-            | TargetCanister::CkEthIndex
-            | TargetCanister::CyclesIndex => "index",
-            TargetCanister::CkBtcLedger | TargetCanister::CkEthLedger => "ledger",
-            TargetCanister::CkBtcMinter | TargetCanister::CkEthMinter => "minter",
-            TargetCanister::IcpArchive1 => "icp-archive1",
-            TargetCanister::IcpArchive2 => "icp-archive2",
-            TargetCanister::IcpArchive3 => "icp-archive3",
-            TargetCanister::IcpArchive4 => "icp-archive4",
-            TargetCanister::IcpIndex => "icp-index",
-            TargetCanister::IcpLedger => "icp-ledger",
-            TargetCanister::LedgerSuiteOrchestrator => "orchestrator",
-            TargetCanister::EvmRpc => "evm_rpc",
-            TargetCanister::CyclesLedger => "cycles-ledger",
-            TargetCanister::ExchangeRateCanister => "xrc",
-            TargetCanister::SolRpc => "sol_rpc",
-            TargetCanister::Bitcoin => "ic_btc_canister",
-            TargetCanister::BtcWatchdog => "watchdog",
-        }
-    }
-
     pub fn git_repository_url(&self) -> &str {
         match &self {
             TargetCanister::BtcChecker
@@ -341,47 +309,6 @@ impl TargetCanister {
 
     pub fn build_artifact_as_str(&self) -> String {
         format!("{:?}", self.build_artifact())
-    }
-
-    pub fn canister_ids_json_file(&self) -> DownloadableFile {
-        match self {
-            TargetCanister::BtcChecker
-            | TargetCanister::CkBtcArchive
-            | TargetCanister::CkBtcIndex
-            | TargetCanister::CkBtcLedger
-            | TargetCanister::CkBtcMinter => DownloadableFile::Local {
-                path: PathBuf::from("rs/bitcoin/ckbtc/mainnet/canister_ids.json"),
-            },
-            TargetCanister::CkEthArchive
-            | TargetCanister::CkEthIndex
-            | TargetCanister::CkEthLedger
-            | TargetCanister::CkEthMinter
-            | TargetCanister::LedgerSuiteOrchestrator => DownloadableFile::Local {
-                path: PathBuf::from("rs/ethereum/cketh/mainnet/canister_ids.json"),
-            },
-            TargetCanister::IcpArchive1
-            | TargetCanister::IcpArchive2
-            | TargetCanister::IcpArchive3
-            | TargetCanister::IcpArchive4
-            | TargetCanister::IcpIndex
-            | TargetCanister::IcpLedger => DownloadableFile::Local {
-                path: PathBuf::from("rs/ledger_suite/icp/canister_ids.json"),
-            },
-            TargetCanister::EvmRpc
-            | TargetCanister::CyclesLedger
-            | TargetCanister::ExchangeRateCanister => DownloadableFile::Local {
-                path: PathBuf::from("canister_ids.json"),
-            },
-            TargetCanister::SolRpc => DownloadableFile::Local {
-                path: PathBuf::from("canister/prod/canister_ids.json"),
-            },
-            TargetCanister::CyclesIndex => DownloadableFile::Remote {
-                url: "https://raw.githubusercontent.com/dfinity/cycles-ledger/6aaf0cb2bf96fe6a9b117cc9c7aa832574c6427a/canister_ids.json".to_string()
-            },
-            TargetCanister::Bitcoin | TargetCanister::BtcWatchdog => DownloadableFile::Local {
-                path: PathBuf::from("deployment/mainnet/canister_ids.json")
-            }
-        }
     }
 
     pub fn canister_id(&self) -> Principal {
