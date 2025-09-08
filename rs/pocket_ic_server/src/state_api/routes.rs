@@ -33,6 +33,7 @@ use axum_extra::headers::HeaderMapExt;
 use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use hyper::header;
+use ic_boundary::ErrorClientFacing;
 use ic_http_endpoints_public::{cors_layer, query, read_state};
 use ic_types::{CanisterId, SubnetId};
 use pocket_ic::common::rest::{
@@ -556,8 +557,19 @@ impl FromOpOut for PocketHttpResponse {
                     ApiResponse::Success((headers, bytes)),
                 )
             }
-            OpOut::Error(PocketIcError::RequestRoutingError(e)) => {
-                (StatusCode::BAD_REQUEST, ApiResponse::Error { message: e })
+            OpOut::Error(PocketIcError::RequestRoutingError(_)) => {
+                let resp = ErrorClientFacing::CanisterNotFound.into_response();
+                let status = resp.status();
+                let headers = resp
+                    .headers()
+                    .iter()
+                    .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
+                    .collect();
+                let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+                    .await
+                    .unwrap()
+                    .to_vec();
+                (status, ApiResponse::Success((headers, bytes)))
             }
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -912,7 +924,7 @@ async fn handle_raw<T: Operation + Send + Sync + 'static>(
         }
         ApiResponse::Error { message } => make_plaintext_response(code, message),
         ApiResponse::Busy { .. } | ApiResponse::Started { .. } => {
-            make_plaintext_response(code, format!("{:?}", res))
+            unreachable!("/api endpoints should always produce a full response")
         }
     };
     (code, NoApi(response))
