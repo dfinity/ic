@@ -78,8 +78,21 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-const PRICE_OF_ICP_IN_XDR_CENTS: u64 = 314;
-const SUBNET_RENTAL_PAYMENT_AMOUNT_ICP: u64 = 49_000;
+// These are similar to values used in production.
+const PRICE_OF_ICP_IN_XDR_CENTS: u64 = 359;  // From today.
+// The App13CH  rental condition requires 820 teracycles / day for 180 days:
+//
+//     https://github.com/dfinity/subnet-rental-canister/blob/a90f49aa9423b96cb6a4c308e6e63f6eb364f1d3/src/subnet_rental_canister/src/canister.rs#L52-L53C41
+//
+// This gives a total of 147_600 teracycles that the user needs to supply.
+//
+// Notice that
+//
+//     3.59 XDR / ICP * 42_000 ICP * 1 terracycle / XDR = 150_000 teracycles + pocket change
+//
+// Therefore, this amount should be (slightly more than) enough to cover the
+// rental condition.
+const SUBNET_RENTAL_PAYMENT_AMOUNT_ICP: u64 = 42_000;
 
 lazy_static! {
     // This is the principal that will be able to create canisters in the
