@@ -17716,7 +17716,7 @@ dependencies = [
  "ic-tests-ckbtc",
  "ic-types",
  "ic-universal-canister",
- "ic-utils 0.9.0",
+ "ic-utils 0.40.1",
  "ic_consensus_system_test_utils",
  "icp-ledger",
  "icrc-ledger-types",
