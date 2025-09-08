@@ -748,7 +748,6 @@ pub fn find_subnet_that_hosts_canister_id(
             .collect::<Vec<_>>(),
         topology_snapshot
             .subnets()
-            .into_iter()
             .map(|subnet| (subnet.subnet_id, subnet.subnet_canister_ranges()))
             .collect::<Vec<_>>(),
     );
