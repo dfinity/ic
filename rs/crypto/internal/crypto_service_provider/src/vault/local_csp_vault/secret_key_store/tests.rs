@@ -1,9 +1,9 @@
 //! Verifies the implementation of SecretKeyStoreCspVault for LocalCspVault.
+use crate::KeyId;
+use crate::LocalCspVault;
 use crate::vault::api::BasicSignatureCspVault;
 use crate::vault::api::SecretKeyStoreCspVault;
 use crate::vault::api::TlsHandshakeCspVault;
-use crate::KeyId;
-use crate::LocalCspVault;
 use ic_types_test_utils::ids::node_test_id;
 
 const NODE_1: u64 = 4241;

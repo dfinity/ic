@@ -119,8 +119,8 @@ fn should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_two_keys() 
 }
 
 #[test]
-fn should_correctly_return_idkg_dealing_encryption_pubkeys_count_when_all_other_keys_exist_except_idkg_key(
-) {
+fn should_correctly_return_idkg_dealing_encryption_pubkeys_count_when_all_other_keys_exist_except_idkg_key()
+ {
     let csp_vault = LocalCspVault::builder_for_test().build();
     let _node_signing_pk = csp_vault
         .gen_node_signing_key_pair()
@@ -144,8 +144,8 @@ fn should_correctly_return_idkg_dealing_encryption_pubkeys_count_when_all_other_
 
 mod current_node_public_keys_with_timestamps {
     use super::*;
-    use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
     use crate::public_key_store::PublicKeyGenerationTimestamps;
+    use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
     use crate::vault::api::PublicKeyStoreCspVault;
     use assert_matches::assert_matches;
     use ic_protobuf::registry::crypto::v1::PublicKey;
@@ -185,8 +185,10 @@ mod current_node_public_keys_with_timestamps {
             .idkg_dealing_encryption_public_key
             .expect("missing IDKG dealing encryption public key");
 
-        assert!(retrieved_idkg_pk_with_timestamp
-            .equal_ignoring_timestamp(&idkg_dealing_encryption_pk_to_proto(generated_idkg_pk)));
+        assert!(
+            retrieved_idkg_pk_with_timestamp
+                .equal_ignoring_timestamp(&idkg_dealing_encryption_pk_to_proto(generated_idkg_pk))
+        );
         assert_matches!(
             retrieved_idkg_pk_with_timestamp.timestamp,
             Some(time) if time == GENESIS.as_millis_since_unix_epoch()

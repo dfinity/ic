@@ -1,5 +1,5 @@
-use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::PublicKeyAddError;
+use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
 use assert_matches::assert_matches;
 use ic_config::crypto::CryptoConfig;
@@ -11,12 +11,12 @@ use ic_crypto_test_utils_keys::public_keys::{
     valid_tls_certificate_and_validation_time,
 };
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
-use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
+use ic_logger::replica_logger::no_op_logger;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
-use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
+use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeId, PrincipalId};
 use slog::Level;
@@ -189,35 +189,43 @@ fn should_persist_pubkeys_to_disk_when_setting_them() {
     let mut store = public_key_store(&temp_dir);
     let (generated_keys, _temp_dir) = generate_node_keys_in_temp_dir();
 
-    assert!(store
-        .set_once_node_signing_pubkey(generated_keys.node_signing_pk.clone().unwrap())
-        .is_ok());
+    assert!(
+        store
+            .set_once_node_signing_pubkey(generated_keys.node_signing_pk.clone().unwrap())
+            .is_ok()
+    );
     assert_eq!(
         public_key_store(&temp_dir).node_signing_pubkey(),
         generated_keys.node_signing_pk
     );
 
-    assert!(store
-        .set_once_committee_signing_pubkey(generated_keys.committee_signing_pk.clone().unwrap())
-        .is_ok());
+    assert!(
+        store
+            .set_once_committee_signing_pubkey(generated_keys.committee_signing_pk.clone().unwrap())
+            .is_ok()
+    );
     assert_eq!(
         public_key_store(&temp_dir).committee_signing_pubkey(),
         generated_keys.committee_signing_pk
     );
 
-    assert!(store
-        .set_once_ni_dkg_dealing_encryption_pubkey(
-            generated_keys.dkg_dealing_encryption_pk.clone().unwrap()
-        )
-        .is_ok());
+    assert!(
+        store
+            .set_once_ni_dkg_dealing_encryption_pubkey(
+                generated_keys.dkg_dealing_encryption_pk.clone().unwrap()
+            )
+            .is_ok()
+    );
     assert_eq!(
         public_key_store(&temp_dir).ni_dkg_dealing_encryption_pubkey(),
         generated_keys.dkg_dealing_encryption_pk
     );
 
-    assert!(store
-        .set_once_tls_certificate(generated_keys.tls_certificate.clone().unwrap())
-        .is_ok());
+    assert!(
+        store
+            .set_once_tls_certificate(generated_keys.tls_certificate.clone().unwrap())
+            .is_ok()
+    );
     assert_eq!(
         public_key_store(&temp_dir).tls_certificate(),
         generated_keys.tls_certificate
@@ -228,9 +236,11 @@ fn should_persist_pubkeys_to_disk_when_setting_them() {
         .last()
         .expect("missing IDKG public key")
         .clone();
-    assert!(store
-        .add_idkg_dealing_encryption_pubkey(generated_idkg_pk)
-        .is_ok());
+    assert!(
+        store
+            .add_idkg_dealing_encryption_pubkey(generated_idkg_pk)
+            .is_ok()
+    );
     assert!(equal_ignoring_timestamp(
         &public_key_store(&temp_dir).idkg_dealing_encryption_pubkeys(),
         &generated_keys.idkg_dealing_encryption_pks
@@ -353,8 +363,8 @@ fn equal_ignoring_timestamp(left: &[PublicKey], right: &[PublicKey]) -> bool {
 mod timestamps {
     use super::*;
     use crate::public_key_store::PublicKeyGenerationTimestamps;
-    use ic_types::time::GENESIS;
     use ic_types::Time;
+    use ic_types::time::GENESIS;
     use std::time::Duration;
 
     #[test]
@@ -906,8 +916,8 @@ mod idkg_dealing_encryption_pubkeys_count {
     }
 
     #[test]
-    fn should_correctly_return_count_of_idkg_dealing_encryption_public_keys_when_all_keys_except_idkg_dealing_encryption_key_present(
-    ) {
+    fn should_correctly_return_count_of_idkg_dealing_encryption_public_keys_when_all_keys_except_idkg_dealing_encryption_key_present()
+     {
         let temp_dir = temp_dir();
         let mut store = public_key_store(&temp_dir);
         assert_matches!(
@@ -933,8 +943,8 @@ mod idkg_dealing_encryption_pubkeys_count {
     }
 
     #[test]
-    fn should_correctly_return_count_of_idkg_dealing_encryption_public_keys_when_multiple_idkg_keys_present(
-    ) {
+    fn should_correctly_return_count_of_idkg_dealing_encryption_public_keys_when_multiple_idkg_keys_present()
+     {
         let temp_dir = temp_dir();
         let mut store = public_key_store(&temp_dir);
         add_idkg_dealing_encryption_public_keys(

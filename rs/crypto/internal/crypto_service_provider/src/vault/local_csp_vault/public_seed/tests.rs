@@ -1,5 +1,5 @@
-use crate::vault::api::PublicRandomSeedGenerator;
 use crate::LocalCspVault;
+use crate::vault::api::PublicRandomSeedGenerator;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::{Rng, RngCore, SeedableRng};

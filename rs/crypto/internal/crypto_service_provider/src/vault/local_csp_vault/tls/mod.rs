@@ -6,7 +6,7 @@ use crate::types::{CspSecretKey, CspSignature};
 use crate::vault::api::{CspTlsKeygenError, CspTlsSignError, TlsHandshakeCspVault};
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
-use ic_crypto_internal_tls::{generate_tls_key_pair_der, TlsKeyPairAndCertGenerationError};
+use ic_crypto_internal_tls::{TlsKeyPairAndCertGenerationError, generate_tls_key_pair_der};
 use ic_crypto_node_key_validation::ValidTlsCertificate;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
