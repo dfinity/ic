@@ -56,7 +56,7 @@ use ic_system_test_driver::{
     },
     nns::{
         execute_subnet_rental_request, get_software_version_from_snapshot,
-        get_subnet_list_from_registry,
+        get_subnet_from_registry, get_subnet_list_from_registry,
     },
     systest,
     types::{CanisterIdRecord, CanisterStatusResult},
@@ -79,8 +79,9 @@ use std::{
 };
 
 // These are similar to values used in production.
-const PRICE_OF_ICP_IN_XDR_CENTS: u64 = 359;  // From today.
-// The App13CH  rental condition requires 820 teracycles / day for 180 days:
+const PRICE_OF_ICP_IN_XDR_CENTS: u64 = 359; // From today.
+
+// The App13CH rental condition requires 820 teracycles / day for 180 days:
 //
 //     https://github.com/dfinity/subnet-rental-canister/blob/a90f49aa9423b96cb6a4c308e6e63f6eb364f1d3/src/subnet_rental_canister/src/canister.rs#L52-L53C41
 //
@@ -344,6 +345,9 @@ async fn assert_rented_subnet_works(
     // it being created by the rented subnet's user.
     assert_canister_belongs_to_subnet(&topology_snapshot, rented_subnet_id, new_canister_id).await;
 
+    // Verify 2.2: The created canister is of type Application.
+    assert_subnet_type(&rented_subnet, SubnetType::Application);
+
     // This will be used later to verify 6: the canister does not charged cycles.
     let original_cycles_balance = get_cycles_balance(new_canister_id, &rented_subnet).await;
 
@@ -388,6 +392,21 @@ async fn assert_canister_belongs_to_subnet(
     // Compare result from get_subnet_for_canister with the required subnet ID.
     let new_canister_subnet_id = get_subnet_for_canister_result.unwrap().subnet_id.unwrap();
     assert_eq!(new_canister_subnet_id, expected_subnet_id.get(),);
+}
+
+async fn assert_subnet_type(subnet_snapshot: &SubnetSnapshot, expected_canister_type: SubnetType) {
+    let registry_client = RegistryCanister::new_with_query_timeout(
+        vec![subnet_snapshot.nodes().next().unwrap().get_public_url()],
+        Duration::from_secs(10),
+    );
+    let subnet_record = get_subnet_from_registry(&registry_client, subnet_snapshot.subnet_id).await;
+
+    assert_eq!(
+        SubnetType::try_from(subnet_record.subnet_type).unwrap(),
+        SubnetType::Application,
+        "{:#?}",
+        subnet_record,
+    );
 }
 
 async fn install_and_call_universal_canister(agent: &Agent, new_canister_id: CanisterId) {

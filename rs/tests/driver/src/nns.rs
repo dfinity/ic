@@ -34,10 +34,12 @@ use ic_nns_test_utils::governance::{
     submit_external_update_proposal_allowing_error, wait_for_final_state,
 };
 use ic_prep_lib::subnet_configuration::{self, duration_to_millis};
-use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
-use ic_protobuf::registry::subnet::v1::SubnetListRecord;
+use ic_protobuf::registry::{
+    replica_version::v1::GuestLaunchMeasurements,
+    subnet::v1::{SubnetListRecord, SubnetRecord},
+};
 use ic_registry_client_helpers::deserialize_registry_value;
-use ic_registry_keys::make_subnet_list_record_key;
+use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, PrincipalId, ReplicaVersion, SubnetId};
@@ -784,6 +786,21 @@ pub async fn get_subnet_list_from_registry(client: &RegistryCanister) -> Vec<Sub
         .iter()
         .map(|s| SubnetId::from(PrincipalId::try_from(s.clone().as_slice()).unwrap()))
         .collect::<Vec<SubnetId>>()
+}
+
+// Fetches the SubnetRecord from the Registry canister (by ID).
+pub async fn get_subnet_from_registry(
+    client: &RegistryCanister,
+    subnet_id: SubnetId,
+) -> SubnetRecord {
+    // Fetch blob.
+    let key = make_subnet_record_key(subnet_id).as_bytes().to_vec();
+    let (blob, _) = client.get_value(key, None).await.unwrap();
+
+    // Interpret it.
+    deserialize_registry_value::<SubnetRecord>(Ok(Some(blob)))
+        .expect("could not decode subnet list record")
+        .unwrap()
 }
 
 /// Submits a proposal for updating replica software version of unassigned
