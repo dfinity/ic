@@ -1759,7 +1759,9 @@ pub struct NnsCustomizations {
 
 impl NnsCustomizations {
     pub fn with_balance(mut self, account_identifier: AccountIdentifier, amount: Tokens) -> Self {
-        self.ledger_balances.get_or_insert_default().insert(account_identifier, amount);
+        self.ledger_balances
+            .get_or_insert_default()
+            .insert(account_identifier, amount);
         self
     }
 }
