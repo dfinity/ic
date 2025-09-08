@@ -59,6 +59,11 @@ pub trait HasCommittee {
     fn committee() -> Committee;
 }
 
+/// Abstract messages with threshold committee attribute
+pub trait HasThresholdCommittee {
+    fn threshold_committee() -> ThresholdCommittee;
+}
+
 /// Abstract messages with version attribute
 pub trait HasVersion {
     fn version(&self) -> &ReplicaVersion;
@@ -96,6 +101,12 @@ impl<T: HasRank, S> HasRank for Signed<T, S> {
 impl<T: HasCommittee, S> HasCommittee for Signed<T, S> {
     fn committee() -> Committee {
         T::committee()
+    }
+}
+
+impl<T: HasThresholdCommittee, S> HasThresholdCommittee for Signed<T, S> {
+    fn threshold_committee() -> ThresholdCommittee {
+        T::threshold_committee()
     }
 }
 
@@ -209,7 +220,13 @@ impl HasHeight for RandomBeaconContent {
 
 impl HasCommittee for RandomBeaconContent {
     fn committee() -> Committee {
-        Committee::LowThreshold
+        Committee::Threshold(Self::threshold_committee())
+    }
+}
+
+impl HasThresholdCommittee for RandomBeaconContent {
+    fn threshold_committee() -> ThresholdCommittee {
+        ThresholdCommittee::Low
     }
 }
 
@@ -227,7 +244,13 @@ impl HasHeight for RandomTapeContent {
 
 impl HasCommittee for RandomTapeContent {
     fn committee() -> Committee {
-        Committee::LowThreshold
+        Committee::Threshold(Self::threshold_committee())
+    }
+}
+
+impl HasThresholdCommittee for RandomTapeContent {
+    fn threshold_committee() -> ThresholdCommittee {
+        ThresholdCommittee::Low
     }
 }
 
@@ -1252,18 +1275,25 @@ impl ConsensusMessageHash {
     }
 }
 
+#[derive(Eq, PartialEq, Debug)]
+pub enum ThresholdCommittee {
+    /// LowThreshold indicates the committee that creates threshold signatures
+    /// with a low threshold. That is, f+1 out the 3f+1 committee members can
+    /// collaboratively create a threshold signature.
+    Low,
+    /// HighThreshold indicates the committee that creates threshold signatures
+    /// with a high threshold. That is, 2f+1 out the 3f+1 committee members can
+    /// collaboratively create a threshold signature.
+    High,
+}
+
 /// Indicates one of the consensus committees that are responsible for creating
 /// signature shares on various types of artifacts
 #[derive(Eq, PartialEq, Debug)]
 pub enum Committee {
-    /// LowThreshold indicates the committee that creates threshold signatures
-    /// with a low threshold. That is, f+1 out the 3f+1 committee members can
-    /// collaboratively create a threshold signature.
-    LowThreshold,
-    /// HighThreshold indicates the committee that creates threshold signatures
-    /// with a high threshold. That is, 2f+1 out the 3f+1 committee members can
-    /// collaboratively create a threshold signature.
-    HighThreshold,
+    /// Threshold committee indicates the committee that creates threshold signatures
+    /// with a low or high threshold.
+    Threshold(ThresholdCommittee),
     /// Notarization indicates the committee that creates notarization and
     /// finalization artifacts by using multi-signatures.
     Notarization,

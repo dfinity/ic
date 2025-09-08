@@ -1,14 +1,17 @@
 //! Random beacon maker is responsible for creating random beacon share
 //! for the node if the node is a beacon maker and no such share exists.
 use ic_consensus_utils::{
-    active_low_threshold_nidkg_id,
+    active_threshold_nidkg_id,
     crypto::ConsensusCrypto,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
 };
 use ic_logger::{error, trace, ReplicaLogger};
 use ic_types::{
-    consensus::{HasCommittee, RandomBeacon, RandomBeaconContent, RandomBeaconShare},
+    consensus::{
+        HasThresholdCommittee, RandomBeacon, RandomBeaconContent, RandomBeaconShare,
+        ThresholdCommittee,
+    },
     replica_config::ReplicaConfig,
 };
 use std::sync::Arc;
@@ -48,7 +51,7 @@ impl RandomBeaconMaker {
         match self.membership.node_belongs_to_threshold_committee(
             my_node_id,
             next_height,
-            RandomBeacon::committee(),
+            RandomBeacon::threshold_committee(),
         ) {
             Err(MembershipError::RegistryClientError(_)) => None,
             Err(MembershipError::NodeNotFound(_)) => {
@@ -80,7 +83,9 @@ impl RandomBeaconMaker {
                 // beacon at height h only after there exists a block at
                 // height h, and we only use the random beacon at height
                 // h-1 in the validation of blocks at height h.
-                if let Some(dkg_id) = active_low_threshold_nidkg_id(pool.as_cache(), next_height) {
+                if let Some(dkg_id) =
+                    active_threshold_nidkg_id(pool.as_cache(), next_height, ThresholdCommittee::Low)
+                {
                     match self.crypto.sign(&content, my_node_id, dkg_id) {
                         Ok(signature) => Some(RandomBeaconShare { content, signature }),
                         Err(err) => {

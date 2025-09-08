@@ -1,7 +1,7 @@
 use crate::{CertificationCrypto, VerifierImpl};
 use ic_consensus_utils::{
-    active_high_threshold_nidkg_id, aggregate, bouncer_metrics::BouncerMetrics,
-    membership::Membership, registry_version_at_height, MINIMUM_CHAIN_LENGTH,
+    active_threshold_nidkg_id, aggregate, bouncer_metrics::BouncerMetrics, membership::Membership,
+    registry_version_at_height, MINIMUM_CHAIN_LENGTH,
 };
 use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, Mutations, Verifier, VerifierError},
@@ -20,7 +20,7 @@ use ic_types::{
         certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
         },
-        Committee, HasCommittee, HasHeight,
+        Committee, HasCommittee, HasHeight, HasThresholdCommittee, ThresholdCommittee,
     },
     crypto::Signed,
     replica_config::ReplicaConfig,
@@ -320,7 +320,7 @@ impl CertifierImpl {
                     .node_belongs_to_threshold_committee(
                         self.replica_config.node_id,
                         *height,
-                        Certification::committee(),
+                        Certification::threshold_committee(),
                     )
                     .unwrap_or_else(|err| {
                         debug!(
@@ -340,8 +340,11 @@ impl CertifierImpl {
             .cloned()
             .filter_map(|(height, hash)| {
                 let content = CertificationContent::new(hash);
-                let dkg_id =
-                    active_high_threshold_nidkg_id(self.consensus_pool_cache.as_ref(), height)?;
+                let dkg_id = active_threshold_nidkg_id(
+                    self.consensus_pool_cache.as_ref(),
+                    height,
+                    ThresholdCommittee::High,
+                )?;
                 match self
                     .crypto
                     .sign(&content, self.replica_config.node_id, dkg_id)
@@ -393,7 +396,11 @@ impl CertifierImpl {
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
             Box::new(|cert: &CertificationTuple| {
-                active_high_threshold_nidkg_id(self.consensus_pool_cache.as_ref(), cert.height())
+                active_threshold_nidkg_id(
+                    self.consensus_pool_cache.as_ref(),
+                    cert.height(),
+                    ThresholdCommittee::High,
+                )
             }),
             shares,
         )
@@ -535,7 +542,7 @@ impl CertifierImpl {
         match self.membership.node_belongs_to_threshold_committee(
             signer,
             share.height,
-            Certification::committee(),
+            Certification::threshold_committee(),
         ) {
             // In case of an error, we simply skip this artifact.
             Err(err) => {
@@ -566,9 +573,10 @@ impl CertifierImpl {
                         .crypto
                         .verify(
                             &share.signed,
-                            active_high_threshold_nidkg_id(
+                            active_threshold_nidkg_id(
                                 self.consensus_pool_cache.as_ref(),
                                 share.height,
+                                ThresholdCommittee::High,
                             )?,
                         )
                         .map_err(VerifierError::from)

@@ -14,8 +14,8 @@
 //! block is considered finalized.
 
 use ic_consensus_utils::{
-    active_high_threshold_nidkg_id, crypto::ConsensusCrypto,
-    get_oldest_idkg_state_registry_version, membership::Membership, pool_reader::PoolReader,
+    active_threshold_nidkg_id, crypto::ConsensusCrypto, get_oldest_idkg_state_registry_version,
+    membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_interfaces_state_manager::{
@@ -25,8 +25,8 @@ use ic_logger::{debug, error, trace, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     consensus::{
-        Block, CatchUpContent, CatchUpPackage, CatchUpPackageShare, CatchUpShareContent,
-        HasCommittee, HasHeight, HashedBlock, HashedRandomBeacon,
+        Block, CatchUpContent, CatchUpPackage, CatchUpPackageShare, CatchUpShareContent, HasHeight,
+        HasThresholdCommittee, HashedBlock, HashedRandomBeacon, ThresholdCommittee,
     },
     replica_config::ReplicaConfig,
 };
@@ -155,7 +155,7 @@ impl CatchUpPackageMaker {
         if self.membership.node_belongs_to_threshold_committee(
             my_node_id,
             height,
-            CatchUpPackage::committee(),
+            CatchUpPackage::threshold_committee(),
         ) != Ok(true)
         {
             return None;
@@ -235,7 +235,9 @@ impl CatchUpPackageMaker {
                     registry_version,
                 );
                 let share_content = CatchUpShareContent::from(&content);
-                if let Some(dkg_id) = active_high_threshold_nidkg_id(pool.as_cache(), height) {
+                if let Some(dkg_id) =
+                    active_threshold_nidkg_id(pool.as_cache(), height, ThresholdCommittee::High)
+                {
                     match self.crypto.sign(&content, my_node_id, dkg_id) {
                         Ok(signature) => {
                             // Caution: The log string below is checked in replica_determinism_test.

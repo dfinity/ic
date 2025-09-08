@@ -18,6 +18,8 @@ use serde::{Deserialize, Serialize};
 use std::cmp::{Ordering, PartialOrd};
 use std::convert::TryFrom;
 
+use super::{HasThresholdCommittee, ThresholdCommittee};
+
 /// [`CatchUpContent`] contains all necessary data to bootstrap a subnet's participant.
 pub type CatchUpContent = CatchUpContentT<HashedBlock>;
 
@@ -160,7 +162,13 @@ impl<T> HasHeight for CatchUpContentT<T> {
 
 impl<T> HasCommittee for CatchUpContentT<T> {
     fn committee() -> Committee {
-        Committee::HighThreshold
+        Committee::Threshold(Self::threshold_committee())
+    }
+}
+
+impl<T> HasThresholdCommittee for CatchUpContentT<T> {
+    fn threshold_committee() -> ThresholdCommittee {
+        ThresholdCommittee::High
     }
 }
 

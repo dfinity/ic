@@ -21,7 +21,7 @@
 //!    random tape is delivered.
 
 use ic_consensus_utils::{
-    active_low_threshold_nidkg_id,
+    active_threshold_nidkg_id,
     crypto::ConsensusCrypto,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
@@ -29,7 +29,9 @@ use ic_consensus_utils::{
 use ic_interfaces::messaging::MessageRouting;
 use ic_logger::{error, trace, ReplicaLogger};
 use ic_types::{
-    consensus::{HasCommittee, RandomTape, RandomTapeContent, RandomTapeShare},
+    consensus::{
+        HasThresholdCommittee, RandomTape, RandomTapeContent, RandomTapeShare, ThresholdCommittee,
+    },
     replica_config::ReplicaConfig,
     Height,
 };
@@ -77,7 +79,7 @@ impl RandomTapeMaker {
         match self.membership.node_belongs_to_threshold_committee(
             self.replica_config.node_id,
             height,
-            RandomTape::committee(),
+            RandomTape::threshold_committee(),
         ) {
             Err(MembershipError::RegistryClientError(_)) => return false,
             Err(MembershipError::NodeNotFound(_)) => panic!(
@@ -132,7 +134,9 @@ impl RandomTapeMaker {
     ) -> Option<RandomTapeShare> {
         let content = RandomTapeContent::new(height);
 
-        if let Some(dkg_id) = active_low_threshold_nidkg_id(pool.as_cache(), height) {
+        if let Some(dkg_id) =
+            active_threshold_nidkg_id(pool.as_cache(), height, ThresholdCommittee::Low)
+        {
             match self
                 .crypto
                 .sign(&content, self.replica_config.node_id, dkg_id)
