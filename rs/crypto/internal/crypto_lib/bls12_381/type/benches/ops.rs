@@ -239,7 +239,7 @@ fn bls12_381_interpolation_ops(c: &mut Criterion) {
     group.bench_function("Interpolation setup (n=32)", |b| {
         b.iter_batched_ref(
             || random_nodes(32, rng),
-            |nodes| LagrangeCoefficients::at_zero(&NodeIndices::from_slice(&nodes).unwrap()),
+            |nodes| LagrangeCoefficients::at_zero(&NodeIndices::from_slice(nodes).unwrap()),
             BatchSize::SmallInput,
         )
     });
