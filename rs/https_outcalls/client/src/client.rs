@@ -123,6 +123,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             .nns_delegation_reader
             .get_delegation_with_metadata(CanisterRangesFilter::Flat);
         let log = self.log.clone();
+        let error_log = log.clone();
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
         // After receiving the response from the adapter an optional transform is applied by doing an upcall to execution.
@@ -180,6 +181,10 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     socks_proxy_addrs,
                 })
                 .map_err(|grpc_status| {
+                    info!(error_log, "debuggg grpc failed with code: {:?}, message: {}",
+                        grpc_status.code(),
+                        grpc_status.message()
+                    );
                     (
                         grpc_status_code_to_reject(grpc_status.code()),
                         grpc_status.message().to_string(),
