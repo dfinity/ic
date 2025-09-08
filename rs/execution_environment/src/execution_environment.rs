@@ -1552,29 +1552,28 @@ impl ExecutionEnvironment {
                     FlagStatus::Enabled => match &msg {
                         CanisterCall::Request(request) => {
                             let fetch_canister_logs_fee = Cycles::new(1_000_000);
-                            if request.payment < fetch_canister_logs_fee {
-                                ExecuteSubnetMessageResult::Finished {
-                                    response: Err(UserError::new(
-                                        ErrorCode::CanisterRejectedMessage,
-                                        format!(
+
+                            let response = if request.payment < fetch_canister_logs_fee {
+                                Err(UserError::new(
+                                    ErrorCode::CanisterRejectedMessage,
+                                    format!(
                                         "{} request sent with {} cycles, but {} cycles are required.",
                                         Ic00Method::FetchCanisterLogs,
-                                        request.payment, fetch_canister_logs_fee
-                                        ),
-                                    )),
-                                    refund: msg.take_cycles(),
-                                }
+                                        request.payment,
+                                        fetch_canister_logs_fee
+                                    ),
+                                ))
                             } else {
-                                let sender = *msg.sender();
+                                FetchCanisterLogsRequest::decode(payload)
+                                    .and_then(|args| {
+                                        fetch_canister_logs(*msg.sender(), &state, args)
+                                    })
+                                    .map(|resp| (Encode!(&resp).unwrap(), None))
+                            };
 
-                                let response = FetchCanisterLogsRequest::decode(payload)
-                                    .and_then(|args| fetch_canister_logs(sender, &state, args))
-                                    .map(|resp| (Encode!(&resp).unwrap(), None));
-
-                                ExecuteSubnetMessageResult::Finished {
-                                    response,
-                                    refund: msg.take_cycles(),
-                                }
+                            ExecuteSubnetMessageResult::Finished {
+                                response,
+                                refund: msg.take_cycles(),
                             }
                         }
                         CanisterCall::Ingress(_) => {
