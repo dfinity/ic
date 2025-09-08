@@ -15,6 +15,7 @@ use ic_test_utilities_execution_environment::{
     check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::MessageId;
 use ic_types::{
@@ -91,6 +92,7 @@ fn dts_resume_works_in_install_code() {
                 - test.cycles_account_manager().execution_cost(
                     NumInstructions::from(INSTRUCTION_LIMIT),
                     test.subnet_size(),
+                    CanisterCyclesCostSchedule::Normal,
                     WASM_EXECUTION_MODE,
                 ),
         );
@@ -140,6 +142,7 @@ fn dts_abort_works_in_install_code() {
                 - test.cycles_account_manager().execution_cost(
                     NumInstructions::from(INSTRUCTION_LIMIT),
                     test.subnet_size(),
+                    CanisterCyclesCostSchedule::Normal,
                     WASM_EXECUTION_MODE
                 ),
         );
@@ -163,6 +166,7 @@ fn dts_abort_works_in_install_code() {
                 - test.cycles_account_manager().execution_cost(
                     NumInstructions::from(INSTRUCTION_LIMIT),
                     test.subnet_size(),
+                    CanisterCyclesCostSchedule::Normal,
                     WASM_EXECUTION_MODE
                 ),
         );
@@ -332,7 +336,7 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
 
     // This value might need adjustment if something changes in the canister's
     // wasm that gets installed in the test.
-    let total_memory_taken_per_canister_in_bytes = 364249;
+    let total_memory_taken_per_canister_in_bytes = 364441;
 
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000_000)
@@ -425,6 +429,7 @@ fn execute_install_code_message_dts_helper(
                 - test.cycles_account_manager().execution_cost(
                     NumInstructions::from(1_000_000),
                     test.subnet_size(),
+                    CanisterCyclesCostSchedule::Normal,
                     WASM_EXECUTION_MODE
                 ),
         );
@@ -627,6 +632,7 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         Cycles::zero(),
     );
     let canister_id = test.create_canister(Cycles::new(900_000) + freezing_threshold_cycles);
@@ -2122,6 +2128,7 @@ fn failed_install_chunked_charges_for_wasm_assembly() {
     let expected_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(wasm_chunk_store::chunk_size().get()),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         WASM_EXECUTION_MODE,
     );
 
@@ -2200,11 +2207,13 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
     let fixed_execution_overhead = test.cycles_account_manager().execution_cost(
         NumInstructions::from(0),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         WASM_EXECUTION_MODE,
     );
     let expected_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(wasm_chunk_store::chunk_size().get()),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         WASM_EXECUTION_MODE,
     ) - fixed_execution_overhead
         + charge_for_regular_install;

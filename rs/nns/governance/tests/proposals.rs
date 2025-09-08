@@ -176,7 +176,7 @@ fn test_sum_weighted_voting_power() {
     // Step 1: Prepare the world.
 
     // Step 2: Call code under test.
-    let result = sum_weighted_voting_power(PROPOSALS.iter().map(|(_id, proposal)| proposal));
+    let result = sum_weighted_voting_power(PROPOSALS.values());
 
     // Step 3: Inspect result(s).
     #[rustfmt::skip]

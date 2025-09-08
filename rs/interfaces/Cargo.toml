@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 ic-base-types = { path = "../types/base_types" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
+ic-heap-bytes = { path = "../../packages/ic-heap-bytes" }
 ic-error-types = { path = "../../packages/ic-error-types" }
 ic-interfaces-state-manager = { path = "./state_manager" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }

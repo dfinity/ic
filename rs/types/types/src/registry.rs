@@ -35,6 +35,9 @@ pub enum RegistryClientError {
     #[error("the requested version is not available locally: {version}")]
     VersionNotAvailable { version: RegistryVersion },
 
+    #[error("no versions before the requested timestamp: {timestamp_nanoseconds}")]
+    NoVersionsBefore { timestamp_nanoseconds: u64 },
+
     #[error("failed to query data provider: {source}")]
     DataProviderQueryFailed {
         #[from]

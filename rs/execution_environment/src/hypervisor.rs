@@ -11,6 +11,7 @@ use ic_embedders::{
     CompilationCache, CompilationCacheBuilder, CompilationResult, WasmExecutionInput,
     WasmtimeEmbedder,
 };
+use ic_heap_bytes::HeapBytes;
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
@@ -22,9 +23,10 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
     ExecutionState, MessageMemoryUsage, NetworkTopology, ReplicatedState, SystemState,
 };
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
-    messages::RequestMetadata, methods::FuncRef, CanisterId, MemoryDiskBytes, NumBytes,
-    NumInstructions, SubnetId, Time,
+    messages::RequestMetadata, methods::FuncRef, CanisterId, DiskBytes, NumBytes, NumInstructions,
+    SubnetId, Time,
 };
 use ic_wasm_types::CanisterModule;
 use prometheus::{Histogram, IntCounter, IntGaugeVec};
@@ -165,7 +167,7 @@ impl Hypervisor {
                 if let Some(compilation_result) = compilation_result {
                     self.metrics.observe_compilation_metrics(
                         &compilation_result,
-                        self.compilation_cache.memory_bytes(),
+                        self.compilation_cache.heap_bytes(),
                         self.compilation_cache.disk_bytes(),
                     );
                 }
@@ -294,6 +296,7 @@ impl Hypervisor {
         state_changes_error: &IntCounter,
         call_tree_metrics: &dyn CallTreeMetrics,
         call_context_creation_time: Time,
+        cost_schedule: CanisterCyclesCostSchedule,
     ) -> (WasmExecutionOutput, ExecutionState, SystemState) {
         assert_eq!(
             execution_parameters.instruction_limits.message(),
@@ -310,6 +313,7 @@ impl Hypervisor {
             RequestMetadata::for_new_call_tree(time),
             round_limits,
             network_topology,
+            cost_schedule,
         );
         let (slice, mut output, canister_state_changes) = match execution_result {
             WasmExecutionResult::Finished(slice, output, system_state_modifications) => {
@@ -352,6 +356,7 @@ impl Hypervisor {
         request_metadata: RequestMetadata,
         round_limits: &mut RoundLimits,
         network_topology: &NetworkTopology,
+        cost_schedule: CanisterCyclesCostSchedule,
     ) -> WasmExecutionResult {
         match self.deterministic_time_slicing {
             FlagStatus::Enabled => assert!(
@@ -387,6 +392,7 @@ impl Hypervisor {
             api_type.caller(),
             api_type.call_context_id(),
             execution_state.wasm_execution_mode.is_wasm64(),
+            cost_schedule,
         );
         let (compilation_result, mut execution_result) = Arc::clone(&self.wasm_executor).execute(
             WasmExecutionInput {
@@ -404,7 +410,7 @@ impl Hypervisor {
         if let Some(compilation_result) = compilation_result {
             self.metrics.observe_compilation_metrics(
                 &compilation_result,
-                self.compilation_cache.memory_bytes(),
+                self.compilation_cache.heap_bytes(),
                 self.compilation_cache.disk_bytes(),
             );
         }

@@ -8,6 +8,7 @@ package(default_visibility = [
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/interfaces",
+    "//rs/limits",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/p2p/quic_transport",
@@ -32,7 +33,6 @@ DEV_DEPENDENCIES = [
     "//rs/p2p/test_utils",
     "//rs/test_utilities/logger",
     "//rs/types/types_test_utils",
-    "@crate_index//:anyhow",
     "@crate_index//:futures",
     "@crate_index//:mockall",
     "@crate_index//:tower",

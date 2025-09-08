@@ -6,9 +6,10 @@ use crate::state::State;
 use candid::Nat;
 use evm_rpc_client::{
     Block, BlockTag, ConsensusStrategy, EthSepoliaService, EvmRpcClient, FeeHistory,
-    FeeHistoryArgs, GetLogsArgs, GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20,
-    HttpOutcallError, IcRuntime, LogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256,
-    OverrideRpcConfig, RpcConfig as EvmRpcConfig, RpcError, RpcService as EvmRpcService,
+    FeeHistoryArgs, GetLogsArgs, GetLogsRpcConfig as EvmGetLogsRpcConfig,
+    GetTransactionCountArgs as EvmGetTransactionCountArgs, Hex20, HttpOutcallError, IcRuntime,
+    LogEntry, MultiRpcResult as EvmMultiRpcResult, Nat256, OverrideRpcConfig,
+    RpcConfig as EvmRpcConfig, RpcError, RpcService as EvmRpcService,
     RpcServices as EvmRpcServices, SendRawTransactionStatus, TransactionReceipt, ValidationError,
 };
 use ic_canister_log::log;
@@ -39,6 +40,13 @@ pub struct EthRpcClient {
 
 impl EthRpcClient {
     pub fn from_state(state: &State) -> Self {
+        fn rpc_config(strategy: ConsensusStrategy) -> EvmRpcConfig {
+            EvmRpcConfig {
+                response_consensus: Some(strategy),
+                ..EvmRpcConfig::default()
+            }
+        }
+
         let chain = state.ethereum_network();
         let evm_rpc_id = state.evm_rpc_id();
         const MIN_ATTACHED_CYCLES: u128 = 500_000_000_000;
@@ -60,29 +68,27 @@ impl EthRpcClient {
             min_threshold <= TOTAL_NUMBER_OF_PROVIDERS,
             "BUG: min_threshold too high"
         );
-        let threshold_strategy = EvmRpcConfig {
-            response_consensus: Some(ConsensusStrategy::Threshold {
-                total: Some(TOTAL_NUMBER_OF_PROVIDERS),
-                min: min_threshold,
-            }),
-            ..EvmRpcConfig::default()
+        let response_consensus = ConsensusStrategy::Threshold {
+            total: Some(TOTAL_NUMBER_OF_PROVIDERS),
+            min: min_threshold,
         };
         let evm_rpc_client = EvmRpcClient::builder_for_ic(TRACE_HTTP)
             .with_providers(providers)
             .with_evm_canister_id(evm_rpc_id)
             .with_min_attached_cycles(MIN_ATTACHED_CYCLES)
             .with_override_rpc_config(OverrideRpcConfig {
-                eth_get_block_by_number: Some(threshold_strategy.clone()),
-                eth_get_logs: Some(EvmRpcConfig {
+                eth_get_block_by_number: Some(rpc_config(response_consensus.clone())),
+                eth_get_logs: Some(EvmGetLogsRpcConfig {
                     response_size_estimate: Some(
                         ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE + HEADER_SIZE_LIMIT,
                     ),
-                    ..threshold_strategy.clone()
+                    response_consensus: Some(response_consensus.clone()),
+                    ..Default::default()
                 }),
-                eth_fee_history: Some(threshold_strategy.clone()),
-                eth_get_transaction_receipt: Some(threshold_strategy.clone()),
-                eth_get_transaction_count: Some(threshold_strategy.clone()),
-                eth_send_raw_transaction: Some(threshold_strategy),
+                eth_fee_history: Some(rpc_config(response_consensus.clone())),
+                eth_get_transaction_receipt: Some(rpc_config(response_consensus.clone())),
+                eth_get_transaction_count: Some(rpc_config(response_consensus.clone())),
+                eth_send_raw_transaction: Some(rpc_config(response_consensus)),
             })
             .build();
 

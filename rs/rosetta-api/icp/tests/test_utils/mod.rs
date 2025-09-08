@@ -125,6 +125,10 @@ impl LedgerAccess for TestLedger {
         Err(ApiError::InternalError(false, Default::default()))
     }
 
+    async fn minimum_dissolve_delay(&self) -> Result<Option<u64>, ApiError> {
+        Err(ApiError::InternalError(false, Default::default()))
+    }
+
     async fn cleanup(&self) {}
 
     fn token_symbol(&self) -> &str {

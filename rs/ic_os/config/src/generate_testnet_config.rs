@@ -23,8 +23,6 @@ pub struct GenerateTestnetConfigArgs {
     pub node_reward_type: Option<String>,
     pub mgmt_mac: Option<MacAddr6>,
     pub deployment_environment: Option<DeploymentEnvironment>,
-    pub elasticsearch_hosts: Option<String>,
-    pub elasticsearch_tags: Option<String>,
     pub use_nns_public_key: Option<bool>,
     pub nns_urls: Option<Vec<String>>,
     pub enable_trusted_execution_environment: Option<bool>,
@@ -42,6 +40,7 @@ pub struct GenerateTestnetConfigArgs {
     pub malicious_behavior: Option<String>,
     pub query_stats_epoch_length: Option<u64>,
     pub bitcoind_addr: Option<String>,
+    pub dogecoind_addr: Option<String>,
     pub jaeger_addr: Option<String>,
     pub socks_proxy: Option<String>,
     pub hostname: Option<String>,
@@ -72,8 +71,6 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         node_reward_type,
         mgmt_mac,
         deployment_environment,
-        elasticsearch_hosts,
-        elasticsearch_tags,
         use_nns_public_key,
         nns_urls,
         enable_trusted_execution_environment,
@@ -87,6 +84,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         malicious_behavior,
         query_stats_epoch_length,
         bitcoind_addr,
+        dogecoind_addr,
         jaeger_addr,
         socks_proxy,
         hostname,
@@ -169,11 +167,6 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
 
     let deployment_environment = deployment_environment.unwrap_or(DeploymentEnvironment::Testnet);
 
-    let logging = Logging {
-        elasticsearch_hosts,
-        elasticsearch_tags,
-    };
-
     let use_nns_public_key = use_nns_public_key.unwrap_or(true);
 
     let nns_urls = match nns_urls {
@@ -195,7 +188,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         node_reward_type,
         mgmt_mac,
         deployment_environment,
-        logging,
+        logging: Logging {},
         use_nns_public_key,
         nns_urls,
         use_node_operator_private_key,
@@ -226,6 +219,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         malicious_behavior,
         query_stats_epoch_length,
         bitcoind_addr,
+        dogecoind_addr,
         jaeger_addr,
         socks_proxy,
         hostname,
@@ -248,6 +242,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         guestos_settings,
         guest_vm_type: GuestVMType::Default,
         upgrade_config: GuestOSUpgradeConfig::default(),
+        trusted_execution_environment_config: None,
     };
 
     Ok(guestos_config)

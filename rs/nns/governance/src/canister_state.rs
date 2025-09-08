@@ -5,7 +5,6 @@ use crate::governance::{
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use ic_base_types::CanisterId;
-use ic_cdk::spawn;
 use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 use ic_nervous_system_runtime::CdkRuntime;
@@ -243,7 +242,7 @@ impl Environment for CanisterEnv {
             proposal_timestamp_seconds,
         )?;
 
-        spawn(async move {
+        ic_cdk::futures::spawn_017_compat(async move {
             match CdkRuntime::call_bytes_with_cleanup(canister_id, &method, &effective_payload)
                 .await
             {

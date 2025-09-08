@@ -21,6 +21,7 @@ Success::
 2. The results are written to a json file (in benchmark/benchmark.json).
 
 end::catalog[] */
+#![allow(deprecated)]
 
 use std::time::Duration;
 

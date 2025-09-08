@@ -23,7 +23,9 @@ use ic_error_types::UserError;
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::{
     certification::CertificationPool,
-    execution_environment::{IngressHistoryReader, QueryExecutionError, QueryExecutionService},
+    execution_environment::{
+        IngressHistoryReader, QueryExecutionError, QueryExecutionInput, QueryExecutionService,
+    },
     messaging::{MessageRouting, MessageRoutingError},
     time_source::SysTimeSource,
 };
@@ -77,7 +79,7 @@ use mockall::automock;
 use serde::{Deserialize, Serialize};
 use slog_async::AsyncGuard;
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     convert::Infallible,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -781,9 +783,7 @@ impl Player {
             messages: BatchMessages::default(),
             // Use a fake randomness here since we don't have random tape for extra messages
             randomness,
-            chain_key_subnet_public_keys: BTreeMap::new(),
-            idkg_pre_signature_ids: BTreeMap::new(),
-            ni_dkg_ids: BTreeMap::new(),
+            chain_key_data: Default::default(),
             registry_version,
             time,
             consensus_responses: Vec::new(),
@@ -911,9 +911,13 @@ impl Player {
             method_payload: Vec::new(),
         };
         self.certify_state_with_dummy_certification();
+        let input = QueryExecutionInput {
+            query,
+            certificate_delegation_with_metadata: None,
+        };
         match self
             .runtime
-            .block_on(self.query_handler.clone().oneshot((query, None)))
+            .block_on(self.query_handler.clone().oneshot(input))
             .unwrap()
         {
             Ok((Ok(wasm_result), _)) => match wasm_result {
@@ -1218,8 +1222,11 @@ impl PerformQuery for Arc<Mutex<QueryExecutionService>> {
             // In case of Mutex poisoning (as per usual).
             .unwrap()
             .clone();
-
-        query_execution_service.oneshot((query, None)).await
+        let input = QueryExecutionInput {
+            query,
+            certificate_delegation_with_metadata: None,
+        };
+        query_execution_service.oneshot(input).await
     }
 }
 

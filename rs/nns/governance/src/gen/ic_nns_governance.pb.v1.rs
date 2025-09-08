@@ -427,7 +427,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27, 28"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -527,6 +527,9 @@ pub mod proposal {
         /// Update the settings of a canister that is controlled by the NNS.
         #[prost(message, tag = "27")]
         UpdateCanisterSettings(super::UpdateCanisterSettings),
+        /// Create a rented subnet.
+        #[prost(message, tag = "28")]
+        FulfillSubnetRentalRequest(super::FulfillSubnetRentalRequest),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -820,6 +823,9 @@ pub mod manage_neuron {
         /// The amount to split to the child neuron.
         #[prost(uint64, tag = "1")]
         pub amount_e8s: u64,
+        /// The memo to use for the child neuron.
+        #[prost(uint64, optional, tag = "2")]
+        pub memo: ::core::option::Option<u64>,
     }
     /// Merge another neuron into this neuron.
     #[derive(
@@ -2733,6 +2739,23 @@ pub mod update_canister_settings {
         }
     }
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct FulfillSubnetRentalRequest {
+    #[prost(message, optional, tag = "1")]
+    pub user: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(message, repeated, tag = "3")]
+    pub node_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    #[prost(string, tag = "2")]
+    pub replica_version_id: ::prost::alloc::string::String,
+}
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
 /// across upgrades of the NNS governance system.
@@ -4112,7 +4135,8 @@ pub struct FinalizeDisburseMaturity {
 pub enum Topic {
     /// The `Unspecified` topic is used as a fallback when
     /// following. That is, if no followees are specified for a given
-    /// topic, the followees for this topic are used instead.
+    /// topic (other than the "Governance" and "SNS & Neurons' Fund" topics),
+    /// the followees for this topic are used instead.
     Unspecified = 0,
     /// A special topic by means of which a neuron can be managed by the
     /// followees for this topic (in this case, there is no fallback to

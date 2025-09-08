@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use by_address::ByAddress;
 use ic_canister_log::{GlobalBuffer, LogBuffer, LogEntry};
 use ic_cdk::api::management_canister::http_request::{

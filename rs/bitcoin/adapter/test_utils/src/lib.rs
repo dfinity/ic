@@ -10,6 +10,11 @@ use hex::FromHex;
 use rand::{prelude::StdRng, Rng, SeedableRng};
 
 pub mod bitcoind;
+pub mod rpc_client;
+pub mod rpc_json;
+
+// Re-export bitcoin
+pub use bitcoin;
 
 type BlockHeight = u32;
 

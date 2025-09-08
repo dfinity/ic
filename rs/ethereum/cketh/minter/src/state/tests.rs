@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::endpoints::CandidBlockTag;
 use crate::eth_logs::{EventSource, ReceivedErc20Event, ReceivedEthEvent, ReceivedEvent};
 use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};

@@ -37,11 +37,16 @@ pub fn setup_ic(env: TestEnv, num_api_bns: usize) {
     NnsInstallationBuilder::new()
         .install(&nns_node, &env)
         .expect("could not install NNS canisters");
-    info!(&log, "Checking readiness of all replica nodes ...");
+    info!(&log, "Checking health of all replica nodes ...");
     for subnet in env.topology_snapshot().subnets() {
         for node in subnet.nodes() {
             node.await_status_is_healthy()
                 .expect("Replica did not come up healthy.");
         }
+    }
+    info!(&log, "Checking health of unassigned nodes ...");
+    for node in env.topology_snapshot().unassigned_nodes() {
+        node.await_can_login_as_admin_via_ssh()
+            .expect("Unassigned node didn't come up healthy");
     }
 }

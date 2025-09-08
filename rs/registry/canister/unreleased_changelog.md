@@ -8,12 +8,8 @@ on the process that this file is part of, see
 # Next Upgrade Proposal
 
 ## Added
-
-* There is now a `canister_cycles_cost_schedule` field in `CreateSubnetPayload`
-  and `SubnetRecord`. This isn't used yet, but it will be in the not too distant
-  future, for [subnet rental].
-
-[subnet rental]: https://dashboard.internetcomputer.org/proposal/128820
+* New update method that will be used for node swapping feature.
+* `migrate_canisters` returns the new registry version. 
 
 ## Changed
 

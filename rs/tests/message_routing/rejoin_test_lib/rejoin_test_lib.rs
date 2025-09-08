@@ -19,6 +19,12 @@ pub const SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM: &str =
 pub const SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT: &str =
     "state_sync_duration_seconds_count{status=\"ok\"}";
 
+pub const STATE_SYNC_SIZE_BYTES_TOTAL_FETCH: &str = "state_sync_size_bytes_total{op=\"fetch\"}";
+pub const STATE_SYNC_SIZE_BYTES_TOTAL_COPY_FILES: &str =
+    "state_sync_size_bytes_total{op=\"copy_files\"}";
+pub const STATE_SYNC_SIZE_BYTES_TOTAL_COPY_CHUNKS: &str =
+    "state_sync_size_bytes_total{op=\"copy_chunks\"}";
+
 const LATEST_CERTIFIED_HEIGHT: &str = "state_manager_latest_certified_height";
 const LAST_MANIFEST_HEIGHT: &str = "state_manager_last_computed_manifest_height";
 const REPLICATED_STATE_PURGE_HEIGHT_DISK: &str = "replicated_state_purge_height_disk";
@@ -241,6 +247,25 @@ async fn assert_state_sync_has_happened(
                 res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM][0],
             );
 
+            let res = fetch_metrics::<u64>(
+                logger,
+                rejoin_node.clone(),
+                vec![
+                    STATE_SYNC_SIZE_BYTES_TOTAL_FETCH,
+                    STATE_SYNC_SIZE_BYTES_TOTAL_COPY_FILES,
+                    STATE_SYNC_SIZE_BYTES_TOTAL_COPY_CHUNKS,
+                ],
+            )
+            .await;
+
+            info!(
+                logger,
+                "State sync size summary, fetch: {} bytes, copy files: {} bytes, copy chunks: {} bytes",
+                res[STATE_SYNC_SIZE_BYTES_TOTAL_FETCH][0],
+                res[STATE_SYNC_SIZE_BYTES_TOTAL_COPY_FILES][0],
+                res[STATE_SYNC_SIZE_BYTES_TOTAL_COPY_CHUNKS][0],
+            );
+
             return;
         }
 
@@ -354,39 +379,38 @@ async fn modify_canister_heap(
     skip_odd_indexed_canister: bool,
     seed: usize,
 ) {
-    for x in 1..=size_level {
-        info!(
-            logger,
-            "Start modifying canisters {} times, it is now {}",
-            x,
-            Utc::now()
-        );
-        for (i, canister) in canisters.iter().enumerate() {
-            if skip_odd_indexed_canister && i % 2 == 1 {
-                continue;
+    let expansions = canisters
+        .iter()
+        .enumerate()
+        .filter(|(idx, _)| !(skip_odd_indexed_canister && idx % 2 == 1))
+        .map(|(idx, canister)| {
+            let logger_clone = logger.clone();
+            async move {
+                for x in 1..=size_level {
+                    let seed_for_canister = idx + (x - 1) * num_canisters + seed;
+                    let payload = (x as u32, seed_for_canister as u32);
+                    let _res: Result<u64, String> = canister
+                        .update_("expand_state", dfn_candid::candid, payload)
+                        .await
+                        .unwrap_or_else(|err| {
+                            panic!(
+                                "Calling expand_state() on canister {:?} failed: {}",
+                                canister, err
+                            )
+                        });
+                    info!(
+                        logger_clone,
+                        "Expanded canister {:?} {} times, it is now {}",
+                        canister,
+                        x,
+                        Utc::now()
+                    );
+                }
             }
-            let seed_for_canister = i + (x - 1) * num_canisters + seed;
-            let payload = (x as u32, seed_for_canister as u32);
-            // Each call will expand the memory by writing a chunk of 128 MiB.
-            // There are 8 chunks in the canister, so the memory will grow by 1 GiB after 8 calls.
-            let _res: Result<u64, String> = canister
-                .update_("expand_state", dfn_candid::candid, payload)
-                .await
-                .unwrap_or_else(|e| {
-                    panic!(
-                        "Calling expand_state() on canister {} failed: {}",
-                        canister.canister_id_vec8()[0],
-                        e
-                    )
-                });
-        }
-        info!(
-            logger,
-            "Expanded canisters {} times, it is now {}",
-            x,
-            Utc::now()
-        );
-    }
+        })
+        .collect::<Vec<_>>();
+
+    join_all(expansions).await;
 }
 
 // The function waits for the manifest reaching or surpassing the given height and returns the manifest height.

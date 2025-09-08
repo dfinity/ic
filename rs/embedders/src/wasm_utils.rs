@@ -4,6 +4,7 @@ use std::{
 };
 
 use ic_config::embedders::Config as EmbeddersConfig;
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_replicated_state::{
     canister_state::{execution_state::WasmMetadata, WASM_PAGE_SIZE_IN_BYTES},
@@ -26,7 +27,9 @@ pub mod instrumentation;
 mod system_api_replacements;
 pub mod validation;
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
+#[derive(
+    Copy, Clone, DeterministicHeapBytes, Eq, PartialEq, Debug, Default, Deserialize, Serialize,
+)]
 pub struct WasmImportsDetails {
     // True if the module imports these IC0 methods.
     pub imports_call_cycles_add: bool,
@@ -217,7 +220,6 @@ fn validate_and_instrument(
     let instrumentation_output = instrument(
         module,
         config.cost_to_compile_wasm_instruction,
-        config.feature_flags.write_barrier,
         config.metering_type,
         config.dirty_page_overhead,
         max_wasm_memory_size,

@@ -9,12 +9,14 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 assert_matches = { workspace = true }
-bitcoincore-rpc = { workspace = true }
+bitcoin = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
+ic-btc-adapter-test-utils = { path = "../../bitcoin/adapter/test_utils" }
 ic-btc-interface = { workspace = true }
 ic-btc-checker = { path = "../../bitcoin/checker" }
 ic-canister-client = { path = "../../canister_client" }
@@ -35,6 +37,7 @@ ic-system-test-driver = { path = "../../tests/driver" }
 ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
+ic-utils = { workspace = true }
 ic_consensus_threshold_sig_system_test_utils = { path = "../../tests/consensus/tecdsa/utils" }
 icp-ledger = { path = "../../ledger_suite/icp" }
 icrc-ledger-agent = { path = "../../../packages/icrc-ledger-agent" }
@@ -71,3 +74,7 @@ path = "ckbtc_minter_checker.rs"
 [[bin]]
 name = "ic-systest-ckbtc-update-balance"
 path = "ckbtc_minter_update_balance.rs"
+
+[[bin]]
+name = "ic-systest-adapter-basics-test"
+path = "adapter_basics_test.rs"

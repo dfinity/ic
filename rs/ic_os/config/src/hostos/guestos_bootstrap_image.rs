@@ -258,6 +258,7 @@ mod tests {
             upgrade_config: GuestOSUpgradeConfig {
                 peer_guest_vm_address: Some(Ipv6Addr::from_str("2001:db8::1")?),
             },
+            trusted_execution_environment_config: None,
         };
 
         let nns_key_path = test_files_dir.join("nns.pem");
