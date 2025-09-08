@@ -1209,6 +1209,7 @@ fn certified_data_set() {
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -1383,6 +1384,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -1534,6 +1536,7 @@ fn helper_test_on_low_wasm_memory(
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -1800,6 +1803,7 @@ fn push_output_request_respects_memory_limits() {
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -1916,6 +1920,7 @@ fn push_output_request_oversized_request_memory_limits() {
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -1952,6 +1957,7 @@ fn ic0_global_timer_set_is_propagated_from_sandbox() {
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -2200,6 +2206,7 @@ fn ic0_call_with_best_effort_response() {
                 &mut system_state,
                 &default_network_topology(),
                 own_subnet_id,
+                false,
                 &no_op_logger(),
             )
             .unwrap();

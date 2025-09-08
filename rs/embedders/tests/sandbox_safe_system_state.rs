@@ -295,6 +295,7 @@ fn correct_charging_source_canister_for_a_request() {
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -511,6 +512,7 @@ fn call_increases_cycles_consumed_metric() {
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -601,6 +603,7 @@ fn test_inter_canister_call(
             &mut system_state,
             topo,
             subnet_id,
+            false,
             &no_op_logger(),
         )
         .unwrap();
