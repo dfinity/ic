@@ -148,34 +148,37 @@ fn fetch_canister_logs(
 
 #[test]
 fn test_fetch_canister_logs_via_replicated_ingress() {
-    // Test fetch_canister_logs call fails for replicated ingress.
+    // Test fetch_canister_logs call fails for non-canister replicated ingress call.
     for replicated_inter_canister_log_fetch in [FlagStatus::Disabled, FlagStatus::Enabled] {
+        let (log_visibility, user) = (LogVisibilityV2::Public, PrincipalId::new_anonymous());
         let expected_error = UserError::new(
             ErrorCode::CanisterRejectedMessage,
             "ic00 method fetch_canister_logs can not be called via ingress messages",
         );
 
         let env = setup_env_with(replicated_inter_canister_log_fetch);
-        let canister_id = create_and_install_canister(
+        let canister_a = create_and_install_canister(
             &env,
             CanisterSettingsArgsBuilder::new()
-                .with_log_visibility(LogVisibilityV2::Public)
+                .with_log_visibility(log_visibility)
                 .build(),
             wat_canister().build_wasm(),
         );
         let (sender, ic00, method, payload) = (
-            PrincipalId::new_anonymous(), // Any public user.
+            user,
             CanisterId::ic_00(),
             "fetch_canister_logs",
-            FetchCanisterLogsRequest::new(canister_id).encode(),
+            FetchCanisterLogsRequest::new(canister_a).encode(),
         );
 
+        // Assert submitting ingress fails.
         let result = env.submit_ingress_as(sender, ic00, method, payload.clone());
         assert_eq!(
             result,
             Err(SubmitIngressError::UserError(expected_error.clone()))
         );
 
+        // Assert executing ingress fails.
         let result = env.execute_ingress_as(sender, ic00, method, payload);
         assert_eq!(result, Err(expected_error));
     }
@@ -183,21 +186,22 @@ fn test_fetch_canister_logs_via_replicated_ingress() {
 
 #[test]
 fn test_fetch_canister_logs_via_query_call() {
-    // Test fetch_canister_logs API call succeeds via query call.
+    // Test fetch_canister_logs API call succeeds via non-canister query call.
     for replicated_inter_canister_log_fetch in [FlagStatus::Disabled, FlagStatus::Enabled] {
+        let (log_visibility, user) = (LogVisibilityV2::Public, PrincipalId::new_anonymous());
         let env = setup_env_with(replicated_inter_canister_log_fetch);
-        let canister_id = create_and_install_canister(
+        let canister_a = create_and_install_canister(
             &env,
             CanisterSettingsArgsBuilder::new()
-                .with_log_visibility(LogVisibilityV2::Public)
+                .with_log_visibility(log_visibility)
                 .build(),
             wat_canister().build_wasm(),
         );
         let result = env.query_as(
-            PrincipalId::new_anonymous(), // Any public user.
+            user,
             CanisterId::ic_00(),
             "fetch_canister_logs",
-            FetchCanisterLogsRequest::new(canister_id).encode(),
+            FetchCanisterLogsRequest::new(canister_a).encode(),
         );
         assert_eq!(
             result,
@@ -234,16 +238,18 @@ fn test_metrics_for_fetch_canister_logs_via_query_call() {
 
 #[test]
 fn test_fetch_canister_logs_via_inter_canister_update_call() {
-    let env = setup_env();
-    let canister_a = create_and_install_canister(
-        &env,
-        CanisterSettingsArgsBuilder::new().build(),
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-    );
+    // Test fetch_canister_logs call fails for inter-canister update call.
+    // There are 3 actors with the following controller relatioship: user -> canister_a -> canister_b.
+    // The user uses update call to canister_a to fetch logs of canister_b, which should fail.
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let (env, canister_a) =
+        setup_with_controller(user_controller, UNIVERSAL_CANISTER_WASM.to_vec());
+    // Create canister_b controlled by canister_a.
     let canister_b = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibilityV2::Public)
+            .with_log_visibility(LogVisibilityV2::Controllers)
+            .with_controllers(vec![canister_a.get()])
             .build(),
         wat_canister()
             .update("test", wat_fn().debug_print(b"message"))
@@ -286,19 +292,28 @@ bazel test //rs/execution_environment:execution_environment_misc_integration_tes
   --test_arg=test_fetch_canister_logs_via_inter_canister_update_call
 
 */
-//#[ignore]
 #[test]
 fn test_fetch_canister_logs_via_inter_canister_update_call_enabled() {
+    // Test fetch_canister_logs call succeeds for inter-canister update call.
+    // There are 3 actors with the following controller relatioship: user -> canister_a -> canister_b.
+    // The user uses update call to canister_a to fetch logs of canister_b, which should succeed.
+    let user_controller = PrincipalId::new_user_test_id(42);
+    let log_visibility = LogVisibilityV2::Controllers;
     let env = setup_env_with(FlagStatus::Enabled);
     let canister_a = create_and_install_canister(
         &env,
-        CanisterSettingsArgsBuilder::new().build(),
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(log_visibility.clone())
+            .with_controllers(vec![user_controller])
+            .build(),
         UNIVERSAL_CANISTER_WASM.to_vec(),
     );
+    // Create canister_b controlled by canister_a.
     let canister_b = create_and_install_canister(
         &env,
         CanisterSettingsArgsBuilder::new()
-            .with_log_visibility(LogVisibilityV2::Public)
+            .with_log_visibility(log_visibility)
+            .with_controllers(vec![canister_a.get()])
             .build(),
         wat_canister()
             .update("test", wat_fn().debug_print(b"message"))
