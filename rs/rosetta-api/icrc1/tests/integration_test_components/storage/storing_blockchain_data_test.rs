@@ -328,7 +328,7 @@ fn test_burn_and_mint_fee() {
                 .get_account_balance(&TEST_ACCOUNT)
                 .unwrap()
                 .unwrap(),
-            Nat::from(900u64) // mint 1000 - burn 50 - burn fee 50
+            Nat::from(850u64) // mint 1000 - mint fee 50 - burn 50 - burn fee 50
         );
         assert!(storage_client
             .get_account_balance(&FEE_COLLECTOR)
@@ -340,7 +340,7 @@ fn test_burn_and_mint_fee() {
             .with_parent_hash(block1.clone().hash().to_vec())
             .with_fee(Tokens::from(50u64))
             .with_fee_collector(FEE_COLLECTOR)
-            .mint(*TEST_ACCOUNT, Tokens::from(50u64))
+            .mint(*TEST_ACCOUNT, Tokens::from(100u64))
             .build();
         let block3 = BlockBuilder::new(3, 4000)
             .with_parent_hash(block2.clone().hash().to_vec())
@@ -370,7 +370,7 @@ fn test_burn_and_mint_fee() {
                 .get_account_balance(&TEST_ACCOUNT)
                 .unwrap()
                 .unwrap(),
-            Nat::from(850u64) // 900 + mint 50 - burn 50 - burn fee 50
+            Nat::from(800u64) // 850 + mint 100 - mint fee 50 - burn 50 - burn fee 50
         );
         assert_eq!(
             storage_client

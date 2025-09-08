@@ -293,16 +293,20 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                     }
                 }
                 crate::common::storage::types::IcrcOperation::Mint { to, amount } => {
+                    let fee = rosetta_block
+                        .get_fee_paid()?
+                        .unwrap_or(Nat(BigUint::zero()));
+                    let credit_amount = Nat(amount.0.checked_sub(&fee.0)
+                        .with_context(|| format!("Underflow while subtracting the fee {} from the amount {} for block at index {}",
+                            fee, amount, rosetta_block.index
+                    ))?);
                     credit(
                         to,
-                        amount,
+                        credit_amount,
                         rosetta_block.index,
                         connection,
                         &mut account_balances_cache,
                     )?;
-                    let fee = rosetta_block
-                        .get_fee_paid()?
-                        .unwrap_or(Nat(BigUint::zero()));
                     if let Some(collector) =
                         get_fee_collector_from_block(&rosetta_block, connection)?
                     {
