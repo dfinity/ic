@@ -1,7 +1,7 @@
 #![allow(deprecated)]
 use crate::{
-    ONE_MINUTE_SECONDS, State, do_set_icp_xdr_conversion_rate, environment::Environment,
-    mutate_state, read_state,
+    do_set_icp_xdr_conversion_rate, environment::Environment, mutate_state, read_state, State,
+    ONE_MINUTE_SECONDS,
 };
 use async_trait::async_trait;
 use candid::CandidType;
@@ -426,7 +426,7 @@ pub fn set_update_exchange_rate_state(
     maybe_reason: &Option<UpdateIcpXdrConversionRatePayloadReason>,
     rate_timestamp_seconds: u64,
 ) {
-    if let Some(ref reason) = maybe_reason {
+    if let Some(reason) = maybe_reason {
         mutate_state(safe_state, |state| {
             let current_update_exchange_rate_state = state
                 .update_exchange_rate_canister_state
@@ -910,8 +910,8 @@ mod test {
     }
 
     #[test]
-    fn test_periodic_calls_the_xrc_and_rejects_the_rates_timestamp_then_sets_the_next_attempt_a_minute_in_future()
-     {
+    fn test_periodic_calls_the_xrc_and_rejects_the_rates_timestamp_then_sets_the_next_attempt_a_minute_in_future(
+    ) {
         thread_local! {
             static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
         }
