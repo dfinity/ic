@@ -419,6 +419,7 @@ fn try_apply_canister_state_changes(
     time: Time,
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
+    is_composite_query: bool,
     log: &ReplicaLogger,
 ) -> HypervisorResult<RequestMetadataStats> {
     subnet_available_memory
@@ -429,7 +430,14 @@ fn try_apply_canister_state_changes(
         )
         .map_err(|_| HypervisorError::OutOfMemory)?;
 
-    system_state_modifications.apply_changes(time, system_state, network_topology, subnet_id, log)
+    system_state_modifications.apply_changes(
+        time,
+        system_state,
+        network_topology,
+        subnet_id,
+        is_composite_query,
+        log,
+    )
 }
 
 /// Applies canister state change after Wasm execution if possible.
@@ -455,6 +463,7 @@ pub fn apply_canister_state_changes(
     state_changes_error: &IntCounter,
     call_tree_metrics: &dyn CallTreeMetrics,
     call_context_creation_time: Time,
+    is_composite_query: bool,
     deallocate: &dyn Fn(SystemState),
 ) {
     let CanisterStateChanges {
@@ -475,6 +484,7 @@ pub fn apply_canister_state_changes(
         time,
         network_topology,
         subnet_id,
+        is_composite_query,
         log,
     ) {
         Ok(request_stats) => {

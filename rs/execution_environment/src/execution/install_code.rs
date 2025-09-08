@@ -647,6 +647,7 @@ impl InstallCodeHelper {
                 &mut self.canister.system_state,
                 round.network_topology,
                 round.hypervisor.subnet_id(),
+                false, // Install cannot happen in composite_query.
                 round.log,
             );
 

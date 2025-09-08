@@ -418,6 +418,7 @@ impl ResponseHelper {
             round.counters.state_changes_error,
             call_tree_metrics,
             original.call_context_creation_time,
+            is_composite_query(&original.call_origin),
             &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
 
@@ -491,6 +492,7 @@ impl ResponseHelper {
             round.counters.state_changes_error,
             call_tree_metrics,
             original.call_context_creation_time,
+            is_composite_query(&original.call_origin),
             &|system_state| self.deallocation_sender.send(Box::new(system_state)),
         );
 
@@ -690,6 +692,16 @@ struct OriginalContext {
     subnet_memory_reservation: NumBytes,
     instructions_executed: NumInstructions,
     log_dirty_pages: FlagStatus,
+}
+
+fn is_composite_query(call_origin: &CallOrigin) -> bool {
+    match call_origin {
+        CallOrigin::Ingress { .. } => false,
+        CallOrigin::Query { .. } => false,
+        CallOrigin::CanisterUpdate { .. } => false,
+        CallOrigin::CanisterQuery { .. } => true,
+        CallOrigin::SystemTask { .. } => false,
+    }
 }
 
 /// Struct used to hold necessary information for the

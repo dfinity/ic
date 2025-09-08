@@ -322,6 +322,7 @@ impl SystemStateModifications {
         system_state: &mut SystemState,
         network_topology: &NetworkTopology,
         own_subnet_id: SubnetId,
+        is_composite_query: bool,
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
         // Verify total cycle change is not positive and update cycles balance.
@@ -401,6 +402,7 @@ impl SystemStateModifications {
                             msg.method_payload.as_slice(),
                             own_subnet_id,
                             system_state.canister_id,
+                            is_composite_query,
                             logger,
                         )
                         .map(CanisterId::unchecked_from_principal)

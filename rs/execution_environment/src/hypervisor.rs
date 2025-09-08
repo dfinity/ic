@@ -301,6 +301,7 @@ impl Hypervisor {
             execution_parameters.instruction_limits.message(),
             execution_parameters.instruction_limits.slice()
         );
+        let is_composite_query = matches!(api_type, ApiType::CompositeQuery { .. });
         let execution_result = self.execute_dts(
             api_type,
             &execution_state,
@@ -336,6 +337,7 @@ impl Hypervisor {
             state_changes_error,
             call_tree_metrics,
             call_context_creation_time,
+            is_composite_query,
             &|system_state| std::mem::drop(system_state),
         );
         (output, execution_state, system_state)

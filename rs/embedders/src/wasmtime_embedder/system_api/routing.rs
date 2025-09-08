@@ -58,6 +58,7 @@ pub(super) fn resolve_destination(
     payload: &[u8],
     own_subnet: SubnetId,
     caller: CanisterId,
+    is_composite_query: bool,
     logger: &ReplicaLogger,
 ) -> Result<PrincipalId, ResolveDestinationError> {
     // Figure out the destination subnet based on the method and the payload.
@@ -188,18 +189,18 @@ pub(super) fn resolve_destination(
         }
         Ok(Ic00Method::SubnetInfo) => Ok(SubnetInfoArgs::decode(payload)?.subnet_id),
         Ok(Ic00Method::FetchCanisterLogs) => {
-            // NOTE: this fails for composite_query
-            // let canister_id = FetchCanisterLogsRequest::decode(payload)?.get_canister_id();
-            // route_canister_id(canister_id, Ic00Method::FetchCanisterLogs, network_topology)
-
-            // NOTE: this fails for inter-canister update calls enabled
-            Err(ResolveDestinationError::UserError(UserError::new(
-                ic_error_types::ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "{} API is only accessible to end users in non-replicated mode",
-                    Ic00Method::FetchCanisterLogs
-                ),
-            )))
+            if is_composite_query {
+                Err(ResolveDestinationError::UserError(UserError::new(
+                    ic_error_types::ErrorCode::CanisterRejectedMessage,
+                    format!(
+                        "{} API is no accessible when called from a composite query",
+                        Ic00Method::FetchCanisterLogs
+                    ),
+                )))
+            } else {
+                let canister_id = FetchCanisterLogsRequest::decode(payload)?.get_canister_id();
+                route_canister_id(canister_id, Ic00Method::FetchCanisterLogs, network_topology)
+            }
         }
         Ok(Ic00Method::ECDSAPublicKey) => {
             let key_id = ECDSAPublicKeyArgs::decode(payload)?.key_id;
@@ -658,6 +659,7 @@ mod tests {
                     &reshare_chain_key_request(key_id.clone(), subnet_test_id(1)),
                     subnet_test_id(2),
                     canister_test_id(1),
+                    false,
                     &logger,
                 )
                 .unwrap(),
@@ -681,6 +683,7 @@ mod tests {
                     &reshare_chain_key_request(key_id.clone(), subnet_test_id(2)),
                     subnet_test_id(2),
                     canister_test_id(1),
+                    false,
                     &logger,
                 )
                 .unwrap_err(),
@@ -711,6 +714,7 @@ mod tests {
                     &reshare_chain_key_request(key_id.clone(), subnet_test_id(3)),
                     subnet_test_id(2),
                     canister_test_id(1),
+                    false,
                     &logger,
                 )
                 .unwrap_err(),
@@ -742,6 +746,7 @@ mod tests {
                         &reshare_chain_key_request(key_id.clone(), subnet_test_id(2)),
                         subnet_test_id(2),
                         canister_test_id(1),
+                        false,
                         &logger,
                     )
                     .unwrap_err(),
@@ -773,6 +778,7 @@ mod tests {
                     &reshare_chain_key_request(key_id.clone(), subnet_test_id(3)),
                     subnet_test_id(2),
                     canister_test_id(1),
+                    false,
                     &logger,
                 )
                 .unwrap_err(),
@@ -815,6 +821,7 @@ mod tests {
                     &payload,
                     subnet_test_id(1),
                     canister_test_id(1),
+                    false,
                     &logger,
                 )
                 .unwrap(),
@@ -849,6 +856,7 @@ mod tests {
                 &payload,
                 subnet_test_id(1),
                 canister_test_id(1),
+                false,
                 &logger,
             )
             .unwrap_err(),
@@ -890,6 +898,7 @@ mod tests {
                     &payload,
                     subnet_test_id(1),
                     canister_test_id(1),
+                    false,
                     &logger,
                 )
                 .unwrap(),
@@ -913,6 +922,7 @@ mod tests {
                     &reshare_chain_key_request(key_id, subnet_test_id(0)),
                     subnet_test_id(1),
                     canister_test_id(1),
+                    false,
                     &logger,
                 )
                 .unwrap(),
