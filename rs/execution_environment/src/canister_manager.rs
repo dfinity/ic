@@ -226,18 +226,6 @@ impl CanisterManager {
                         Ic00Method::FetchCanisterLogs
                     ),
                 ))
-                // match self.replicated_inter_canister_log_fetch {
-                //     FlagStatus::Disabled => Err(UserError::new(
-                //         ErrorCode::CanisterRejectedMessage,
-                //         format!(
-                //             "Ingress {} API is only accessible in BLA1 non-replicated mode",
-                //             Ic00Method::FetchCanisterLogs
-                //         ),
-                //     )),
-                //     FlagStatus::Enabled => {
-                //         todo!("add implementation");
-                //     }
-                // }
             },
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles)

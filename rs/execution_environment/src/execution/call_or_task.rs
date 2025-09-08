@@ -558,7 +558,6 @@ impl CallOrTaskHelper {
             }
             // Query methods only persist certain changes to the canister's state.
             CanisterCallOrTask::Query(_) => {
-                let is_composite_query = matches!(original.method, WasmMethod::CompositeQuery(_));
                 if let Err(err) = canister_state_changes
                     .system_state_modifications
                     .apply_changes(

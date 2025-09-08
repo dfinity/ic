@@ -695,13 +695,7 @@ struct OriginalContext {
 }
 
 fn is_composite_query(call_origin: &CallOrigin) -> bool {
-    match call_origin {
-        CallOrigin::Ingress { .. } => false,
-        CallOrigin::Query { .. } => false,
-        CallOrigin::CanisterUpdate { .. } => false,
-        CallOrigin::CanisterQuery { .. } => true,
-        CallOrigin::SystemTask { .. } => false,
-    }
+    matches!(call_origin, CallOrigin::CanisterQuery { .. })
 }
 
 /// Struct used to hold necessary information for the
