@@ -145,7 +145,6 @@ impl NodeRewardsCanister {
             daily_metrics_by_subnet,
             provider_rewardable_nodes,
         };
-        
 
         rewards_calculation::rewards_calculator::calculate_rewards(input)
             .map_err(|e| format!("Could not calculate rewards: {e:?}"))

@@ -25,8 +25,8 @@ use crate::reimbursement::{
 use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use crate::updates::update_balance::SuspendedUtxo;
 use crate::{
-    address::BitcoinAddress, compute_min_withdrawal_amount, ECDSAPublicKey, GetUtxosCache, Network,
-    Timestamp, WithdrawalFee,
+    ECDSAPublicKey, GetUtxosCache, Network, Timestamp, WithdrawalFee, address::BitcoinAddress,
+    compute_min_withdrawal_amount,
 };
 use candid::{CandidType, Deserialize, Principal};
 use ic_base_types::CanisterId;

@@ -3,11 +3,11 @@ pub mod proto;
 mod task_queue;
 pub mod wasm_chunk_store;
 
-pub use self::task_queue::{is_low_wasm_memory_hook_condition_satisfied, TaskQueue};
+pub use self::task_queue::{TaskQueue, is_low_wasm_memory_hook_condition_satisfied};
 
 use self::wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata};
-use super::queues::{can_push, CanisterInput};
-pub use super::queues::{memory_usage_of_request, CanisterOutputQueuesIterator};
+use super::queues::{CanisterInput, can_push};
+pub use super::queues::{CanisterOutputQueuesIterator, memory_usage_of_request};
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use crate::page_map::PageAllocatorFileDescriptor;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
@@ -19,7 +19,7 @@ pub use call_context_manager::{CallContext, CallContextAction, CallContextManage
 use ic_base_types::{EnvironmentVariables, NumSeconds};
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::HypervisorError;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType,
     LogVisibilityV2,
@@ -28,8 +28,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
     CallContextId, CallbackId, CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask,
-    Ingress, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
-    StopCanisterContext, NO_DEADLINE,
+    Ingress, NO_DEADLINE, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse,
+    Response, StopCanisterContext,
 };
 use ic_types::methods::Callback;
 use ic_types::nominal_cycles::NominalCycles;

@@ -6,8 +6,8 @@ use ic_interfaces::consensus_pool::{
 };
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
-    consensus::{Block, CatchUpPackage, ConsensusMessage, Finalization, HasHeight, HashedBlock},
     Height, Time,
+    consensus::{Block, CatchUpPackage, ConsensusMessage, Finalization, HasHeight, HashedBlock},
 };
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -509,11 +509,11 @@ impl ConsensusBlockChain for ConsensusBlockChainImpl {
 mod test {
     use super::*;
     use crate::test_utils::fake_block_proposal;
-    use ic_interfaces::consensus_pool::{ValidatedConsensusArtifact, HEIGHT_CONSIDERED_BEHIND};
+    use ic_interfaces::consensus_pool::{HEIGHT_CONSIDERED_BEHIND, ValidatedConsensusArtifact};
     use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};
     use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::FakeStateManager};
     use ic_test_utilities_consensus::fake::*;
-    use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
+    use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::consensus::*;

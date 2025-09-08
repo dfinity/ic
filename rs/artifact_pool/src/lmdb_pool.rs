@@ -1383,9 +1383,10 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
                 tx.open_ro_cursor(self.artifacts),
                 &self.log,
                 "open_ro_cursor"
-            ) {
-                return cursor.iter().count() as u64;
-            }
+            )
+        {
+            return cursor.iter().count() as u64;
+        }
         0
     }
 }

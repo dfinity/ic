@@ -182,8 +182,8 @@ impl TransactionStore {
             }
 
             for inv in inventory {
-                if let Inventory::Transaction(txid) = inv {
-                    if let Some(TransactionInfo { transaction, .. }) = self.transactions.get(txid) {
+                if let Inventory::Transaction(txid) = inv
+                    && let Some(TransactionInfo { transaction, .. }) = self.transactions.get(txid) {
                         channel
                             .send(Command {
                                 address: Some(addr),
@@ -191,7 +191,6 @@ impl TransactionStore {
                             })
                             .ok();
                     }
-                }
             }
         }
         Ok(())

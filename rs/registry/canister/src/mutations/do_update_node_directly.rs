@@ -14,7 +14,7 @@ use ic_protobuf::registry::{crypto::v1::PublicKey, subnet::v1::SubnetRecord};
 use ic_registry_canister_api::UpdateNodeDirectlyPayload;
 use ic_registry_keys::{make_crypto_node_key, make_node_record_key};
 use ic_registry_transport::update;
-use ic_types::{crypto::KeyPurpose, PrincipalId};
+use ic_types::{PrincipalId, crypto::KeyPurpose};
 
 // Since nodes update their keys in turn, every potential update delay will carry over to all
 // subsequent slots. At some point we might end up in a situation where many nodes race for an update,
@@ -206,7 +206,7 @@ mod test {
     use ic_crypto_node_key_validation::ValidNodePublicKeys;
     use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, MasterPublicKeyId};
     use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, SubnetRecord};
-    use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+    use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig};
     use ic_test_utilities_types::ids::subnet_test_id;
     use std::ops::Add;
 

@@ -1,3 +1,4 @@
+use crate::WithdrawalFee;
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::reimbursement::ReimburseWithdrawalTask;
@@ -7,7 +8,6 @@ use crate::state::{
     RetrieveBtcRequest, SubmittedBtcTransaction, SubmittedWithdrawalRequests, SuspendedReason,
 };
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit, ReimbursementReason};
-use crate::WithdrawalFee;
 use candid::Principal;
 pub use event::{EventType, ReplacedReason};
 use ic_btc_interface::{Txid, Utxo};

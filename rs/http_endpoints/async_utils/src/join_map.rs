@@ -3,8 +3,8 @@ use std::{
     future::Future,
     hash::Hash,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
 };
 

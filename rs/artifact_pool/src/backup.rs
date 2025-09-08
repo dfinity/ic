@@ -19,16 +19,16 @@ use ic_interfaces::{
     consensus_pool::{ConsensusPool, HeightRange},
     time_source::TimeSource,
 };
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
+    Height,
     consensus::{
         BlockProposal, ConsensusMessage, Finalization, HasHeight, Notarization, RandomBeacon,
         RandomTape,
     },
     time::{Time, UNIX_EPOCH},
-    Height,
 };
 use prometheus::IntCounter;
 use prost::Message;
@@ -37,8 +37,8 @@ use std::{
     io::{self, Write},
     path::{Path, PathBuf},
     sync::{
-        mpsc::{sync_channel, Receiver, SyncSender},
         Arc, RwLock,
+        mpsc::{Receiver, SyncSender, sync_channel},
     },
     thread::{self, JoinHandle},
     time::Duration,
@@ -634,10 +634,10 @@ mod tests {
     use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
+        RegistryVersion,
         batch::*,
         consensus::*,
         crypto::{CryptoHash, CryptoHashOf},
-        RegistryVersion,
     };
     use std::convert::TryFrom;
 

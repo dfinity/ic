@@ -340,7 +340,8 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         key_id: &KeyId,
         transcript: &IDkgTranscriptInternal,
     ) -> Result<BTreeMap<NodeIndex, IDkgComplaintInternal>, IDkgLoadTranscriptError> {
-        let result = if self
+        
+        if self
             .commitment_opening_from_sks(transcript.combined_commitment.commitment())
             .is_ok()
         {
@@ -405,8 +406,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                     })
                 }
             }
-        };
-        result
+        }
     }
 
     fn idkg_load_transcript_with_openings_internal(

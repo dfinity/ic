@@ -289,8 +289,8 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             let maybe_reread_key_set = sks_write_lock.get(&key_id);
             let (_reread_key_set, reread_secret_key) =
                 specialize_key_set_and_deserialize_secret_key(key_id, maybe_reread_key_set)?;
-            if let Some(reread_epoch_in_sks) = reread_secret_key.current_epoch() {
-                if epoch_to_update_to > reread_epoch_in_sks {
+            if let Some(reread_epoch_in_sks) = reread_secret_key.current_epoch()
+                && epoch_to_update_to > reread_epoch_in_sks {
                     // Epoch to update to is still newer than the one of the key in the SKS
                     // => update the key in the SKS
                     sks_write_lock
@@ -301,7 +301,6 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                         )
                         .unwrap_or_else(|e| panic!("Error updating forward secure epoch: {}", e));
                 }
-            }
         }
         Ok(())
     }
@@ -335,7 +334,8 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             None => None,
         };
         // Specialisation to this scheme:
-        let result = match algorithm_id {
+        
+        match algorithm_id {
             AlgorithmId::NiDkg_Groth20_Bls12_381 => {
                 let maybe_resharing_secret_key_bytes = match maybe_resharing_secret_key {
                     Some(secret_key) => {
@@ -380,8 +380,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             other => {
                 Err(ni_dkg_errors::CspDkgCreateReshareDealingError::UnsupportedAlgorithmId(other))
             }
-        };
-        result
+        }
     }
 
     fn load_threshold_signing_key_internal(
@@ -392,7 +391,8 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         fs_key_id: KeyId,
         receiver_index: NodeIndex,
     ) -> Result<(), ni_dkg_errors::CspDkgLoadPrivateKeyError> {
-        let result = match algorithm_id {
+        
+        match algorithm_id {
             AlgorithmId::NiDkg_Groth20_Bls12_381 => {
                 let threshold_key_id =
                     KeyId::try_from(&CspPublicCoefficients::from(&csp_transcript)).map_err(
@@ -477,8 +477,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 }
             }
             other => Err(ni_dkg_errors::CspDkgLoadPrivateKeyError::UnsupportedAlgorithmId(other)),
-        };
-        result
+        }
     }
 }
 

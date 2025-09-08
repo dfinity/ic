@@ -1,7 +1,7 @@
 #![allow(deprecated)]
 use crate::{
-    do_set_icp_xdr_conversion_rate, environment::Environment, mutate_state, read_state, State,
-    ONE_MINUTE_SECONDS,
+    ONE_MINUTE_SECONDS, State, do_set_icp_xdr_conversion_rate, environment::Environment,
+    mutate_state, read_state,
 };
 use async_trait::async_trait;
 use candid::CandidType;
@@ -910,8 +910,8 @@ mod test {
     }
 
     #[test]
-    fn test_periodic_calls_the_xrc_and_rejects_the_rates_timestamp_then_sets_the_next_attempt_a_minute_in_future(
-    ) {
+    fn test_periodic_calls_the_xrc_and_rejects_the_rates_timestamp_then_sets_the_next_attempt_a_minute_in_future()
+     {
         thread_local! {
             static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
         }

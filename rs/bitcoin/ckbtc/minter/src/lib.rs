@@ -14,7 +14,7 @@ use ic_cdk::api::management_canister::bitcoin;
 use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
-use scopeguard::{guard, ScopeGuard};
+use scopeguard::{ScopeGuard, guard};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 use std::cmp::max;
