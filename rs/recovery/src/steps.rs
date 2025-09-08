@@ -415,6 +415,14 @@ impl Step for CopyLocalIcStateStep {
             excludes.push("certification");
             excludes.push("certifications");
         }
+        // If we already have the consensus pool, we do not download it again.
+        if PathBuf::from(self.working_dir.clone())
+            .join("data/ic_consensus_pool/consensus")
+            .exists()
+        {
+            info!(self.logger, "Excluding consensus pool from download");
+            excludes.push("ic_consensus_pool");
+        }
 
         rsync(
             &self.logger,
