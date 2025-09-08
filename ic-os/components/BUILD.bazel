@@ -51,8 +51,8 @@ ignored_repo_components = [
     "misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.sh",
     "misc/guestos-recovery/guestos-recovery-engine/guestos-recovery-engine.service",
     "misc/guestos-recovery/guestos-recovery-engine/expected_recovery_hash",
-    "selinux/guestos-recovery-engine/guestos-recovery-engine.fc",
-    "selinux/guestos-recovery-engine/guestos-recovery-engine.te",
+    "guestos/selinux/guestos-recovery-engine/guestos-recovery-engine.fc",
+    "guestos/selinux/guestos-recovery-engine/guestos-recovery-engine.te",
 ]
 
 check_unused_components_test(
