@@ -527,9 +527,9 @@ pub async fn execute_fulfill_subnet_rental_request(
                   created, and the user of the subnet (the 'tenant', \
                   if you will) is able to create canisters in it. \
                   (And nobody else is allowed to do that.) Secondarily, \
-                  this also means that all of the remain the ICP is \
+                  this also means that all of the remaining ICP is \
                   converted into cycles, and those cycles slowly get \
-                  burned down over time"
+                  burned down over time."
             .to_string(),
         url: "https://forum.dfinity.org/wer-subnet".to_string(),
         action: Some(ProposalActionRequest::FulfillSubnetRentalRequest(
