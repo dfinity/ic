@@ -304,6 +304,13 @@ pub fn test_no_upgrade_without_chain_keys_local(env: TestEnv) {
 fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
+    if cfg.local_recovery {
+        std::env::set_var(
+            "IC_ADMIN_BIN",
+            get_dependency_path_from_env("IC_ADMIN_PATH"),
+        );
+    }
+
     let initial_version = get_guestos_img_version();
     info!(logger, "IC_VERSION_ID: {initial_version:?}");
     let topology_snapshot = env.topology_snapshot();
@@ -425,7 +432,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
         test_mode: true,
         skip_prompts: true,
-        use_local_binaries: false,
+        use_local_binaries: cfg.local_recovery,
     };
 
     let mut unassigned_nodes = env.topology_snapshot().unassigned_nodes();
