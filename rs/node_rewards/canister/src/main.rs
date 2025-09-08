@@ -63,6 +63,8 @@ const MAX_SYNC_DURATION_SECONDS: u64 = 10 * 60;
 const MAX_REWARDABLE_NODES_CACHE_BACKFILL_DAYS: usize = 40;
 
 fn schedule_timers() {
+    ic_cdk_timers::set_timer(Duration::from_secs(0), || sync_all());
+
     let now_secs = current_time().as_secs_since_unix_epoch();
     let since_midnight = now_secs % DAY_IN_SECONDS;
     let mut next_sync_target = now_secs - since_midnight + SYNC_AT_SECONDS_AFTER_MIDNIGHT;
@@ -70,7 +72,6 @@ fn schedule_timers() {
         // already past today's SYNC_AT_SECONDS_AFTER_MIDNIGHT → use tomorrow
         next_sync_target = next_sync_target + DAY_IN_SECONDS;
     };
-
     ic_cdk_timers::set_timer(Duration::from_secs(next_sync_target), || {
         ic_cdk_timers::set_timer_interval(Duration::from_secs(DAY_IN_SECONDS), || sync_all());
     });
