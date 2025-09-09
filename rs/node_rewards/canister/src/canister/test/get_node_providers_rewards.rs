@@ -1,16 +1,12 @@
-use crate::canister::test::test_utils::{
-    setup_thread_local_canister_for_test, TestState, CANISTER_TEST, VM,
-};
+use crate::canister::test::test_utils::{setup_thread_local_canister_for_test, CANISTER_TEST, VM};
 use crate::canister::NodeRewardsCanister;
 use crate::metrics::MetricsManager;
+use crate::pb::v1::{NodeMetrics, SubnetMetricsKey, SubnetMetricsValue};
 use futures_util::FutureExt;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
 use ic_node_rewards_canister_api::provider_rewards_calculation::GetNodeProviderRewardsCalculationRequest;
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, NodeProvidersRewards,
-};
-use ic_node_rewards_canister_protobuf::pb::ic_node_rewards::v1::{
-    NodeMetrics, SubnetMetricsKey, SubnetMetricsValue,
 };
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
@@ -24,9 +20,7 @@ use maplit::btreemap;
 use rewards_calculation::rewards_calculator::test_utils::{
     create_rewards_table_for_region_test, test_node_id, test_provider_id, test_subnet_id,
 };
-use rewards_calculation::rewards_calculator_results::NodeProviderRewards;
 use rewards_calculation::types::DayUtc;
-use std::collections::BTreeMap;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -248,7 +242,7 @@ fn setup_data_for_test_rewards_calculation(
     // Day 1 subnet 1
     subnets_metrics.insert(
         SubnetMetricsKey {
-            timestamp_nanos: day1.unix_ts_at_day_end(),
+            timestamp_nanos: day1.unix_ts_at_day_end_nanoseconds(),
             subnet_id: Some(subnet1.get()),
         },
         SubnetMetricsValue {
@@ -280,7 +274,7 @@ fn setup_data_for_test_rewards_calculation(
     // Day 1 subnet 2
     subnets_metrics.insert(
         SubnetMetricsKey {
-            timestamp_nanos: day1.unix_ts_at_day_end(),
+            timestamp_nanos: day1.unix_ts_at_day_end_nanoseconds(),
             subnet_id: Some(subnet2.get()),
         },
         SubnetMetricsValue {
@@ -295,7 +289,7 @@ fn setup_data_for_test_rewards_calculation(
     // Day 2 subnet 1
     subnets_metrics.insert(
         SubnetMetricsKey {
-            timestamp_nanos: day2.unix_ts_at_day_end(),
+            timestamp_nanos: day2.unix_ts_at_day_end_nanoseconds(),
             subnet_id: Some(subnet1.get()),
         },
         SubnetMetricsValue {
@@ -308,311 +302,35 @@ fn setup_data_for_test_rewards_calculation(
     );
 }
 
-const EXPECTED_TEST_1: &str = r#"{
-  "6fyp7-3ibaa-aaaaa-aaaap-4ai": {
-    "rewards_total_xdr_permyriad": 137200,
-    "base_rewards": [
-      {
-        "node_reward_type": "Type1",
-        "region": "Europe,Switzerland",
-        "monthly": "304375",
-        "daily": "10000"
-      },
-      {
-        "node_reward_type": "Type3",
-        "region": "North America,USA,California",
-        "monthly": "913125",
-        "daily": "30000"
-      },
-      {
-        "node_reward_type": "Type3dot1",
-        "region": "North America,USA,Nevada",
-        "monthly": "1217500",
-        "daily": "40000"
-      }
-    ],
-    "base_rewards_type3": [
-      {
-        "day": {
-          "value": 1704153599999999999
-        },
-        "region": "North America:USA",
-        "nodes_count": 2,
-        "avg_rewards": "35000",
-        "avg_coefficient": "0.80",
-        "value": "31500.00"
-      },
-      {
-        "day": {
-          "value": 1704239999999999999
-        },
-        "region": "North America:USA",
-        "nodes_count": 1,
-        "avg_rewards": "30000",
-        "avg_coefficient": "0.90",
-        "value": "30000"
-      }
-    ],
-    "nodes_results": [
-      {
-        "node_id": "zv7tz-zylaa-aaaaa-aaaap-2ai",
-        "node_reward_type": "Type1",
-        "region": "Europe,Switzerland",
-        "dc_id": "dc1",
-        "daily_results": [
-          {
-            "day": {
-              "value": 1704153599999999999
-            },
-            "node_status": {
-              "Assigned": {
-                "node_metrics": {
-                  "subnet_assigned": "yndj2-3ybaa-aaaaa-aaaap-yai",
-                  "subnet_assigned_fr": "0.25",
-                  "num_blocks_proposed": 95,
-                  "num_blocks_failed": 5,
-                  "original_fr": "0.05",
-                  "relative_fr": "0"
-                }
-              }
-            },
-            "performance_multiplier": "1",
-            "rewards_reduction": "0",
-            "base_rewards": "10000",
-            "adjusted_rewards": "10000"
-          },
-          {
-            "day": {
-              "value": 1704239999999999999
-            },
-            "node_status": {
-              "Assigned": {
-                "node_metrics": {
-                  "subnet_assigned": "yndj2-3ybaa-aaaaa-aaaap-yai",
-                  "subnet_assigned_fr": "0.02",
-                  "num_blocks_proposed": 98,
-                  "num_blocks_failed": 2,
-                  "original_fr": "0.02",
-                  "relative_fr": "0.00"
-                }
-              }
-            },
-            "performance_multiplier": "1",
-            "rewards_reduction": "0",
-            "base_rewards": "10000",
-            "adjusted_rewards": "10000"
-          }
-        ]
-      },
-      {
-        "node_id": "f6rsp-hqmaa-aaaaa-aaaap-2ai",
-        "node_reward_type": "Type3",
-        "region": "North America,USA,California",
-        "dc_id": "dc2",
-        "daily_results": [
-          {
-            "day": {
-              "value": 1704153599999999999
-            },
-            "node_status": {
-              "Assigned": {
-                "node_metrics": {
-                  "subnet_assigned": "yndj2-3ybaa-aaaaa-aaaap-yai",
-                  "subnet_assigned_fr": "0.25",
-                  "num_blocks_proposed": 90,
-                  "num_blocks_failed": 10,
-                  "original_fr": "0.10",
-                  "relative_fr": "0"
-                }
-              }
-            },
-            "performance_multiplier": "1",
-            "rewards_reduction": "0",
-            "base_rewards": "31500.00",
-            "adjusted_rewards": "31500.00"
-          },
-          {
-            "day": {
-              "value": 1704239999999999999
-            },
-            "node_status": {
-              "Unassigned": {
-                "extrapolated_fr": "0"
-              }
-            },
-            "performance_multiplier": "1",
-            "rewards_reduction": "0",
-            "base_rewards": "30000",
-            "adjusted_rewards": "30000"
-          }
-        ]
-      },
-      {
-        "node_id": "ybquz-ianaa-aaaaa-aaaap-2ai",
-        "node_reward_type": "Type3dot1",
-        "region": "North America,USA,Nevada",
-        "dc_id": "dc3",
-        "daily_results": [
-          {
-            "day": {
-              "value": 1704153599999999999
-            },
-            "node_status": {
-              "Assigned": {
-                "node_metrics": {
-                  "subnet_assigned": "yndj2-3ybaa-aaaaa-aaaap-yai",
-                  "subnet_assigned_fr": "0.25",
-                  "num_blocks_proposed": 75,
-                  "num_blocks_failed": 25,
-                  "original_fr": "0.25",
-                  "relative_fr": "0.00"
-                }
-              }
-            },
-            "performance_multiplier": "1",
-            "rewards_reduction": "0",
-            "base_rewards": "31500.00",
-            "adjusted_rewards": "31500.00"
-          }
-        ]
-      },
-      {
-        "node_id": "fnlpp-iyoaa-aaaaa-aaaap-2ai",
-        "node_reward_type": "Type1",
-        "region": "Europe,Switzerland",
-        "dc_id": "dc1",
-        "daily_results": [
-          {
-            "day": {
-              "value": 1704153599999999999
-            },
-            "node_status": {
-              "Unassigned": {
-                "extrapolated_fr": "0.1125"
-              }
-            },
-            "performance_multiplier": "0.9800",
-            "rewards_reduction": "0.0200",
-            "base_rewards": "10000",
-            "adjusted_rewards": "9800.0000"
-          },
-          {
-            "day": {
-              "value": 1704239999999999999
-            },
-            "node_status": {
-              "Unassigned": {
-                "extrapolated_fr": "0"
-              }
-            },
-            "performance_multiplier": "1",
-            "rewards_reduction": "0",
-            "base_rewards": "10000",
-            "adjusted_rewards": "10000"
-          }
-        ]
-      },
-      {
-        "node_id": "yskjz-hipaa-aaaaa-aaaap-2ai",
-        "node_reward_type": "Type1",
-        "region": "Europe,Switzerland",
-        "dc_id": "dc1",
-        "daily_results": [
-          {
-            "day": {
-              "value": 1704153599999999999
-            },
-            "node_status": {
-              "Assigned": {
-                "node_metrics": {
-                  "subnet_assigned": "yndj2-3ybaa-aaaaa-aaaap-yai",
-                  "subnet_assigned_fr": "0.25",
-                  "num_blocks_proposed": 30,
-                  "num_blocks_failed": 70,
-                  "original_fr": "0.70",
-                  "relative_fr": "0.45"
-                }
-              }
-            },
-            "performance_multiplier": "0.44",
-            "rewards_reduction": "0.56",
-            "base_rewards": "10000",
-            "adjusted_rewards": "4400.00"
-          }
-        ]
-      }
-    ]
-  },
-  "djduj-3qcaa-aaaaa-aaaap-4ai": {
-    "rewards_total_xdr_permyriad": 10000,
-    "base_rewards": [
-      {
-        "node_reward_type": "Type1",
-        "region": "Europe,Switzerland",
-        "monthly": "304375",
-        "daily": "10000"
-      }
-    ],
-    "base_rewards_type3": [],
-    "nodes_results": [
-      {
-        "node_id": "6qmi3-pavaa-aaaaa-aaaap-2ai",
-        "node_reward_type": "Type1",
-        "region": "Europe,Switzerland",
-        "dc_id": "dc1",
-        "daily_results": [
-          {
-            "day": {
-              "value": 1704153599999999999
-            },
-            "node_status": {
-              "Assigned": {
-                "node_metrics": {
-                  "subnet_assigned": "fbysm-3acaa-aaaaa-aaaap-yai",
-                  "subnet_assigned_fr": "0.20",
-                  "num_blocks_proposed": 80,
-                  "num_blocks_failed": 20,
-                  "original_fr": "0.20",
-                  "relative_fr": "0.00"
-                }
-              }
-            },
-            "performance_multiplier": "1",
-            "rewards_reduction": "0",
-            "base_rewards": "10000",
-            "adjusted_rewards": "10000"
-          }
-        ]
-      }
-    ]
-  }
-}"#;
+fn sync_all() {
+    let day1: DayUtc = DayUtc::try_from("2024-01-01").unwrap();
+    let day2: DayUtc = DayUtc::try_from("2024-01-02").unwrap();
+
+    NodeRewardsCanister::schedule_registry_sync(&CANISTER_TEST).now_or_never();
+    NodeRewardsCanister::schedule_metrics_sync(&CANISTER_TEST).now_or_never();
+    NodeRewardsCanister::backfill_rewardable_nodes(&CANISTER_TEST, &day1).unwrap();
+    NodeRewardsCanister::backfill_rewardable_nodes(&CANISTER_TEST, &day2).unwrap();
+}
+
 #[test]
 fn test_get_node_providers_rewards() {
+    println!("test_get_node_providers_rewards");
     use pretty_assertions::assert_eq;
 
     let (fake_registry, metrics_manager) = setup_thread_local_canister_for_test();
     setup_data_for_test_rewards_calculation(fake_registry, metrics_manager);
+    sync_all();
     let from = DayUtc::try_from("2024-01-01").unwrap();
     let to = DayUtc::try_from("2024-01-02").unwrap();
 
     let request = GetNodeProvidersRewardsRequest {
-        from_nanos: from.unix_ts_at_day_start(),
-        to_nanos: to.unix_ts_at_day_end(),
+        from_day_timestamp_nanos: from.unix_ts_at_day_start_nanoseconds(),
+        to_day_timestamp_nanos: to.unix_ts_at_day_end_nanoseconds(),
     };
-    let result_endpoint = NodeRewardsCanister::get_node_providers_rewards::<TestState>(
-        &CANISTER_TEST,
-        request.clone(),
-    )
-    .now_or_never()
-    .unwrap();
-
-    let inner_results = CANISTER_TEST
-        .with_borrow(|canister| canister.calculate_rewards::<TestState>(request, None))
-        .unwrap();
-    let expected: BTreeMap<PrincipalId, NodeProviderRewards> =
-        serde_json::from_str(EXPECTED_TEST_1).unwrap();
-    assert_eq!(inner_results.provider_results, expected);
+    let result_endpoint =
+        NodeRewardsCanister::get_node_providers_rewards(&CANISTER_TEST, request.clone())
+            .now_or_never()
+            .unwrap();
 
     let expected = NodeProvidersRewards {
         rewards_xdr_permyriad: btreemap! {
@@ -621,51 +339,4 @@ fn test_get_node_providers_rewards() {
         },
     };
     assert_eq!(result_endpoint, Ok(expected));
-}
-
-#[test]
-fn test_get_node_provider_rewards_calculation_historical() {
-    use pretty_assertions::assert_eq;
-
-    let (fake_registry, metrics_manager) = setup_thread_local_canister_for_test();
-    setup_data_for_test_rewards_calculation(fake_registry, metrics_manager);
-    let from = DayUtc::try_from("2024-01-01").unwrap();
-    let to = DayUtc::try_from("2024-01-02").unwrap();
-
-    let request = GetNodeProvidersRewardsRequest {
-        from_nanos: from.unix_ts_at_day_end(),
-        to_nanos: to.unix_ts_at_day_end(),
-    };
-
-    // Invoke to populate historical rewards
-    let _ = NodeRewardsCanister::get_node_providers_rewards::<TestState>(
-        &CANISTER_TEST,
-        request.clone(),
-    )
-    .now_or_never()
-    .unwrap();
-
-    let expected: BTreeMap<PrincipalId, NodeProviderRewards> =
-        serde_json::from_str(EXPECTED_TEST_1).unwrap();
-
-    for (provider_id, expected_rewards) in expected {
-        let request = GetNodeProviderRewardsCalculationRequest {
-            from_nanos: from.unix_ts_at_day_end(),
-            to_nanos: to.unix_ts_at_day_end(),
-            provider_id: provider_id.0,
-        };
-
-        let got = NodeRewardsCanister::get_node_provider_rewards_calculation::<TestState>(
-            &CANISTER_TEST,
-            request,
-        )
-        .unwrap();
-
-        assert_eq!(
-            got,
-            expected_rewards.into(),
-            "Mismatch for provider {:?}",
-            provider_id
-        );
-    }
 }

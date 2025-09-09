@@ -2,7 +2,7 @@ use ic_cdk::api::in_replicated_execution;
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_node_rewards_canister::canister::NodeRewardsCanister;
+use ic_node_rewards_canister::canister::{current_time, NodeRewardsCanister};
 use ic_node_rewards_canister::storage::{RegistryStoreStableMemoryBorrower, METRICS_MANAGER};
 use ic_node_rewards_canister::telemetry;
 use ic_node_rewards_canister_api::monthly_rewards::{
@@ -15,6 +15,7 @@ use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse,
 };
 use ic_registry_canister_client::StableCanisterRegistryClient;
+use rewards_calculation::types::DayUtc;
 use std::cell::RefCell;
 use std::sync::Arc;
 use std::time::Duration;
@@ -54,36 +55,59 @@ fn post_upgrade() {
 // making too many requests.  Before meaningful calculations are made, however, the
 // registry data should be updated.
 const SYNC_INTERVAL_SECONDS: Duration = Duration::from_secs(60 * 60); // 1 hour
+const DAY_IN_SECONDS: u64 = 60 * 60 * 24;
+const SYNC_AT_SECONDS_AFTER_MIDNIGHT: u64 = 10;
+const MAX_SYNC_DURATION_SECONDS: u64 = 10 * 60;
+const MAX_REWARDABLE_NODES_BACKFILL_DAYS: usize = 35;
 
 fn schedule_timers() {
-    ic_cdk_timers::set_timer_interval(SYNC_INTERVAL_SECONDS, move || {
-        ic_cdk::futures::spawn_017_compat(async move {
-            telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_start());
-            let mut instruction_counter = telemetry::InstructionCounter::default();
-            instruction_counter.lap();
-            let registry_sync_result = NodeRewardsCanister::schedule_registry_sync(&CANISTER).await;
-            let registry_sync_instructions = instruction_counter.lap();
+    let now_secs = current_time().as_secs_since_unix_epoch();
+    let since_midnight = now_secs % DAY_IN_SECONDS;
+    let mut next_sync_target = now_secs - since_midnight + SYNC_AT_SECONDS_AFTER_MIDNIGHT;
+    if since_midnight > SYNC_AT_SECONDS_AFTER_MIDNIGHT {
+        // already past today's SYNC_AT_SECONDS_AFTER_MIDNIGHT → use tomorrow
+        next_sync_target = next_sync_target + DAY_IN_SECONDS;
+    };
+    ic_cdk_timers::set_timer(Duration::from_secs(next_sync_target), || {
+        ic_cdk_timers::set_timer_interval(Duration::from_secs(DAY_IN_SECONDS), || {
+            schedule_daily_sync()
+        });
+    });
+}
 
-            let mut metrics_sync_instructions: u64 = 0;
-            match registry_sync_result {
-                Ok(_) => {
-                    instruction_counter.lap();
-                    NodeRewardsCanister::schedule_metrics_sync(&CANISTER).await;
-                    metrics_sync_instructions = instruction_counter.lap();
-                    ic_cdk::println!("Successfully synced subnets metrics and local registry");
-                }
-                Err(e) => {
-                    ic_cdk::println!("Failed to sync local registry: {:?}", e)
+fn schedule_daily_sync() {
+    ic_cdk::futures::spawn_017_compat(async move {
+        telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_start());
+        let mut instruction_counter = telemetry::InstructionCounter::default();
+        instruction_counter.lap();
+        let registry_sync_result = NodeRewardsCanister::schedule_registry_sync(&CANISTER).await;
+        let registry_sync_instructions = instruction_counter.lap();
+
+        let mut metrics_sync_instructions: u64 = 0;
+        match registry_sync_result {
+            Ok(_) => {
+                instruction_counter.lap();
+                NodeRewardsCanister::schedule_metrics_sync(&CANISTER).await;
+                metrics_sync_instructions = instruction_counter.lap();
+                let today: DayUtc = current_time().as_nanos_since_unix_epoch().into();
+                let mut current_day = today.previous_day();
+                for _ in 0..MAX_REWARDABLE_NODES_BACKFILL_DAYS {
+                    NodeRewardsCanister::backfill_rewardable_nodes(&CANISTER, &current_day)
+                        .unwrap_or_else(|e| ic_cdk::println!("Failed to backfill cache: {:?}", e));
+                    current_day = current_day.previous_day();
                 }
             }
+            Err(e) => {
+                ic_cdk::println!("Failed to sync local registry: {:?}", e)
+            }
+        }
 
-            telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| {
-                m.record_last_sync_instructions(
-                    instruction_counter.sum(),
-                    registry_sync_instructions,
-                    metrics_sync_instructions,
-                )
-            });
+        telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| {
+            m.record_last_sync_instructions(
+                instruction_counter.sum(),
+                registry_sync_instructions,
+                metrics_sync_instructions,
+            )
         });
     });
 }
@@ -113,10 +137,7 @@ async fn get_node_providers_rewards(
     request: GetNodeProvidersRewardsRequest,
 ) -> GetNodeProvidersRewardsResponse {
     panic_if_caller_not_governance();
-    NodeRewardsCanister::get_node_providers_rewards::<RegistryStoreStableMemoryBorrower>(
-        &CANISTER, request,
-    )
-    .await
+    NodeRewardsCanister::get_node_providers_rewards(&CANISTER, request).await
 }
 
 #[query]
@@ -130,9 +151,7 @@ fn get_node_provider_rewards_calculation(
         );
     }
 
-    NodeRewardsCanister::get_node_provider_rewards_calculation::<RegistryStoreStableMemoryBorrower>(
-        &CANISTER, request,
-    )
+    NodeRewardsCanister::get_node_provider_rewards_calculation(&CANISTER, request)
 }
 
 #[cfg(test)]
