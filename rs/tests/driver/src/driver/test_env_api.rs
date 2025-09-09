@@ -1781,7 +1781,9 @@ pub fn set_var_to_path<K: AsRef<OsStr>>(env_name: K, file_path: PathBuf) {
     } else {
         file_path
     };
-    std::env::set_var(env_name, path);
+    unsafe {
+        std::env::set_var(env_name, path);
+    }
 }
 
 pub trait HasRegistryVersion {

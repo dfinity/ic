@@ -15,7 +15,7 @@ pub trait RecoveryIterator<
 >
 {
     fn get_step_iterator(&mut self) -> &mut Peekable<I>;
-    fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step>>;
+    fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step + '_>>;
     fn store_next_step(&mut self, step_type: Option<StepType>);
 
     fn interactive(&self) -> bool;

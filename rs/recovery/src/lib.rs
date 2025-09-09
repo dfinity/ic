@@ -265,7 +265,12 @@ impl Recovery {
     }
 
     /// Return a recovery [AdminStep] to halt or unhalt the given subnet
-    pub fn halt_subnet(&self, subnet_id: SubnetId, is_halted: bool, keys: &[String]) -> impl Step {
+    pub fn halt_subnet(
+        &self,
+        subnet_id: SubnetId,
+        is_halted: bool,
+        keys: &[String],
+    ) -> impl Step + use<> {
         AdminStep {
             logger: self.logger.clone(),
             ic_admin_cmd: self
@@ -640,7 +645,7 @@ impl Recovery {
         replacement_nodes: &[NodeId],
         registry_params: Option<RegistryParams>,
         chain_key_subnet_id: Option<SubnetId>,
-    ) -> RecoveryResult<impl Step> {
+    ) -> RecoveryResult<impl Step + use<>> {
         let chain_key_config = chain_key_subnet_id
             .map(|id| match self.registry_helper.get_chain_key_config(id) {
                 Ok((_registry_version, Some(config))) => Some((config, id)),

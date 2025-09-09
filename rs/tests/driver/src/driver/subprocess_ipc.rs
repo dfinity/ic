@@ -217,8 +217,8 @@ pub enum ReportOrFailure {
 impl ReportOrFailure {
     pub fn msg(&self) -> &str {
         match self {
-            Self::Report(ref x) => x,
-            Self::Failure(ref x) => x,
+            Self::Report(x) => x,
+            Self::Failure(x) => x,
         }
     }
 }

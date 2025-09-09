@@ -5765,15 +5765,13 @@ fn get_api_boundary_node_ids(nns_url: Vec<Url>) -> Vec<String> {
             registry_client.get_latest_version(),
         )
         .unwrap();
-    let records = keys
-        .iter()
+    keys.iter()
         .map(|k| {
             k.strip_prefix(API_BOUNDARY_NODE_RECORD_KEY_PREFIX)
                 .unwrap()
                 .to_string()
         })
-        .collect::<Vec<_>>();
-    records
+        .collect::<Vec<_>>()
 }
 
 fn print_routing_table(nns_urls: Vec<Url>) -> Vec<(SubnetId, CanisterIdRange)> {

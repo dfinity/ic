@@ -251,10 +251,10 @@ where
         });
         self.decrease_balance(from, amount);
         self.decrease_total_supply(amount);
-        if let Some(spender) = spender {
-            if from != spender {
-                self.decrease_allowance(from, spender, amount, None);
-            }
+        if let Some(spender) = spender
+            && from != spender
+        {
+            self.decrease_allowance(from, spender, amount, None);
         }
         self.transactions += 1;
     }
@@ -275,12 +275,11 @@ where
     ) {
         self.decrease_balance(from, amount);
         self.collect_fee(from, fee);
-        if let Some(fee) = fee {
-            if let Some(spender) = spender {
-                if from != spender {
-                    self.decrease_allowance(from, spender, amount, Some(fee));
-                }
-            }
+        if let Some(fee) = fee
+            && let Some(spender) = spender
+            && from != spender
+        {
+            self.decrease_allowance(from, spender, amount, Some(fee));
         }
         self.increase_balance(to, amount);
         self.transactions += 1;
@@ -479,10 +478,10 @@ where
             .allowances
             .iter()
             .filter_map(|(key, allowance)| {
-                if let Some(expires_at) = allowance.expires_at {
-                    if now >= expires_at {
-                        return Some(key.clone());
-                    }
+                if let Some(expires_at) = allowance.expires_at
+                    && now >= expires_at
+                {
+                    return Some(key.clone());
                 }
                 None
             })
@@ -772,23 +771,24 @@ where
                 &spender
             );
             let actual_allowance = AccountId::get_allowance(env, ledger_id, from, spender);
-            if let Some(in_memory_expires_at) = allowance.expires_at {
-                if in_memory_expires_at.as_nanos_since_unix_epoch() < current_ledger_timestamp {
-                    assert_eq!(
-                        Tokens::zero(),
-                        Tokens::try_from(actual_allowance.allowance.clone()).unwrap(),
-                        "Expected amount of expired actual allowance to be zero, but it is not: {:?}",
-                        &actual_allowance
-                    );
-                    assert!(
-                        actual_allowance.expires_at.is_none(),
-                        "Expected expired actual allowance to have no expires_at, but it has one: {:?}",
-                        &actual_allowance
-                    );
-                    allowances_checked += 1;
-                    continue;
-                }
+            if let Some(in_memory_expires_at) = allowance.expires_at
+                && in_memory_expires_at.as_nanos_since_unix_epoch() < current_ledger_timestamp
+            {
+                assert_eq!(
+                    Tokens::zero(),
+                    Tokens::try_from(actual_allowance.allowance.clone()).unwrap(),
+                    "Expected amount of expired actual allowance to be zero, but it is not: {:?}",
+                    &actual_allowance
+                );
+                assert!(
+                    actual_allowance.expires_at.is_none(),
+                    "Expected expired actual allowance to have no expires_at, but it has one: {:?}",
+                    &actual_allowance
+                );
+                allowances_checked += 1;
+                continue;
             }
+
             match actual_allowance.expires_at {
                 None => {
                     no_expiration_count += 1;
