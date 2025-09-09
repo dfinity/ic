@@ -54,10 +54,8 @@ fn post_upgrade() {
 // The frequency of regular registry syncs.  This is set to 1 hour to avoid
 // making too many requests.  Before meaningful calculations are made, however, the
 // registry data should be updated.
-const SYNC_INTERVAL_SECONDS: Duration = Duration::from_secs(60 * 60); // 1 hour
 const DAY_IN_SECONDS: u64 = 60 * 60 * 24;
 const SYNC_AT_SECONDS_AFTER_MIDNIGHT: u64 = 10;
-const MAX_SYNC_DURATION_SECONDS: u64 = 10 * 60;
 const MAX_REWARDABLE_NODES_BACKFILL_DAYS: u64 = 100;
 const REWARDABLE_NODES_BACKFILL_DAYS_STEP: usize = 10;
 

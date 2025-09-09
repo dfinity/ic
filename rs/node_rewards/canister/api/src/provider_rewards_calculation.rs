@@ -11,18 +11,20 @@ pub struct GetNodeProviderRewardsCalculationRequest {
 
 pub type GetNodeProviderRewardsCalculationResponse = Result<Vec<NodeProviderRewardsDaily>, String>;
 
-#[derive(CandidType, candid::Deserialize, Clone)]
+#[derive(CandidType, candid::Deserialize, Clone, Debug)]
 pub struct NodeProviderRewardsDaily {
     pub node_provider_rewards: NodeProviderRewards,
     pub day_utc: DayUtc,
 }
 
-#[derive(PartialOrd, Ord, Eq, candid::CandidType, candid::Deserialize, Clone, Copy, PartialEq)]
+#[derive(
+    PartialOrd, Ord, Eq, candid::CandidType, candid::Deserialize, Clone, Copy, PartialEq, Debug,
+)]
 pub struct DayUtc {
     pub value: Option<u64>,
 }
 
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq)]
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
 pub struct NodeMetricsDaily {
     pub subnet_assigned: Option<PrincipalId>,
     pub subnet_assigned_fr_percent: Option<Decimal>,
@@ -31,7 +33,7 @@ pub struct NodeMetricsDaily {
     pub original_fr_percent: Option<Decimal>,
     pub relative_fr_percent: Option<Decimal>,
 }
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq)]
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
 pub enum NodeStatus {
     Assigned {
         node_metrics: Option<NodeMetricsDaily>,
@@ -40,7 +42,7 @@ pub enum NodeStatus {
         extrapolated_fr_percent: Option<Decimal>,
     },
 }
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq)]
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
 pub struct NodeResults {
     pub node_id: Option<PrincipalId>,
     pub node_reward_type: Option<String>,
@@ -52,14 +54,14 @@ pub struct NodeResults {
     pub base_rewards_xdr_permyriad: Option<Decimal>,
     pub adjusted_rewards_xdr_permyriad: Option<Decimal>,
 }
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq)]
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
 pub struct BaseRewards {
     pub monthly_xdr_permyriad: Option<Decimal>,
     pub daily_xdr_permyriad: Option<Decimal>,
     pub node_reward_type: Option<String>,
     pub region: Option<String>,
 }
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq)]
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
 pub struct BaseRewardsType3 {
     pub region: Option<String>,
     pub nodes_count: Option<u64>,
@@ -67,7 +69,7 @@ pub struct BaseRewardsType3 {
     pub avg_coefficient_percent: Option<Decimal>,
     pub value_xdr_permyriad: Option<Decimal>,
 }
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq)]
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
 pub struct NodeProviderRewards {
     pub rewards_total_xdr_permyriad: Option<u64>,
     pub base_rewards: Vec<BaseRewards>,

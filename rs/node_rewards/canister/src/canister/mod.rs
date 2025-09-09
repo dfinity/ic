@@ -377,6 +377,13 @@ impl NodeRewardsCanister {
             }
             current_day = current_day.next_day();
         }
+
+        if results.is_empty() {
+            Err(format!(
+                "No rewards found for node provider {}",
+                provider_id
+            ))?;
+        }
         Ok(results)
     }
 }

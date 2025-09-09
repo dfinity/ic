@@ -331,7 +331,7 @@ async fn _daily_metrics_correct_different_update_size(size: usize) {
     assert_eq!(daily_metrics[0][1].num_blocks_failed, 21);
 
     let daily_metrics: Vec<Vec<NodeMetricsDailyRaw>> = mm
-        .metrics_by_subnet((1 * ONE_DAY_NANOS).into())
+        .metrics_by_subnet(ONE_DAY_NANOS.into())
         .into_values()
         .collect();
 

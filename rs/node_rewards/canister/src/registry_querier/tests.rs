@@ -284,7 +284,7 @@ fn test_node_re_registered_after_deletion() {
     let from = DayUtc::try_from("2025-07-07").unwrap();
     let to = DayUtc::try_from("2025-07-12").unwrap();
     let mut current_day = from;
-    let expected_absent = vec![
+    let expected_absent = [
         DayUtc::try_from("2025-07-08").unwrap(),
         DayUtc::try_from("2025-07-09").unwrap(),
         DayUtc::try_from("2025-07-10").unwrap(),
