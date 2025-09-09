@@ -193,8 +193,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             }
         }
     });
-    let ret = result.borrow().clone();
-    ret
+    result.borrow().clone()
 }
 
 /// Prints a question to the user and returns `true`

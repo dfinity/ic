@@ -58,7 +58,7 @@ pub struct ProposeArgs {
 
     /// An optional flag to save the ProposalId of a successfully submitted
     /// CreateServiceNervousSystem proposal to the filesystem. The file must
-    /// be writeable, and will be created if it does not exist.    
+    /// be writeable, and will be created if it does not exist.
     /// The ProposalId will be saved in JSON format. For example:
     ///
     ///  {
@@ -147,11 +147,11 @@ pub fn exec(args: ProposeArgs) -> Result<()> {
                 println!("Proposal ID: {}", proposal_id.id);
             }
 
-            if let Some(save_to) = &save_to {
-                if let Err(err) = save_proposal_id_to_file(save_to.as_path(), &proposal_id) {
-                    bail!("{}", err);
-                };
-            }
+            if let Some(save_to) = &save_to
+                && let Err(err) = save_proposal_id_to_file(save_to.as_path(), &proposal_id)
+            {
+                bail!("{}", err);
+            };
         }
         err => {
             bail!(

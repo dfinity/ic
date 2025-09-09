@@ -266,12 +266,12 @@ pub(crate) fn deserialize_consensus_artifacts(
         if height > Height::from(0) && height_artifacts.contains_cup {
             last_cup_height = Some(height);
             let file = &path.join("catch_up_package.bin");
-            if let Some(cup) = read_cup_file(file) {
-                if cup.height() != height {
-                    println!("A CUP with an unexpected height detected: {:?}", file);
-                    rename_file(file);
-                    return Ok(());
-                }
+            if let Some(cup) = read_cup_file(file)
+                && cup.height() != height
+            {
+                println!("A CUP with an unexpected height detected: {:?}", file);
+                rename_file(file);
+                return Ok(());
             }
         }
 
@@ -459,14 +459,15 @@ pub(crate) fn deserialize_consensus_artifacts(
 
         // If we just inserted a height_artifacts, which finalizes the last seen CUP
         // height, we need to deliver all batches before we insert the cup.
-        if let Some(cup_height) = last_cup_height {
-            if height >= cup_height && !height_artifacts.finalizations.is_empty() {
-                println!(
-                    "Found a CUP at height {:?}, finalized at height {:?}",
-                    cup_height, height
-                );
-                return Err(ExitPoint::CUPHeightWasFinalized(cup_height));
-            }
+        if let Some(cup_height) = last_cup_height
+            && height >= cup_height
+            && !height_artifacts.finalizations.is_empty()
+        {
+            println!(
+                "Found a CUP at height {:?}, finalized at height {:?}",
+                cup_height, height
+            );
+            return Err(ExitPoint::CUPHeightWasFinalized(cup_height));
         }
     }
 }

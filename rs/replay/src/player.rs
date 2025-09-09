@@ -1025,11 +1025,11 @@ impl Player {
                 replay_target_height,
             );
             self.wait_for_state(last_batch_height);
-            if let Some(height) = target_height {
-                if last_batch_height >= height {
-                    println!("Target height {} reached.", height);
-                    return Ok(self.get_latest_state_params(None, invalid_artifacts));
-                }
+            if let Some(height) = target_height
+                && last_batch_height >= height
+            {
+                println!("Target height {} reached.", height);
+                return Ok(self.get_latest_state_params(None, invalid_artifacts));
             }
 
             match result {

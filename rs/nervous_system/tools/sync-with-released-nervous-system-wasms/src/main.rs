@@ -192,10 +192,10 @@ impl Tag {
             {
                 return Ok(Some(release));
             }
-        } else if let Some(prod_canister) = release.asset(&canister_filename) {
-            if prod_canister.sha256().await? == expected_module_hash_str {
-                return Ok(Some(release));
-            }
+        } else if let Some(prod_canister) = release.asset(&canister_filename)
+            && prod_canister.sha256().await? == expected_module_hash_str
+        {
+            return Ok(Some(release));
         }
 
         Ok(None)

@@ -220,14 +220,14 @@ fn split_manifest_3_canisters() {
         non_empty_file_and_chunk_infos(INGRESS_HISTORY_FILE);
     builder.append(
         &ingress_history_file_info,
-        &[ingress_history_chunk_info.clone()],
+        std::slice::from_ref(&ingress_history_chunk_info),
     );
     builder.append(&empty_file_info(&snapshot_pbuf_path(snapshot_1)), &[]);
     let (subnet_queues_file_info, subnet_queues_chunk_info) =
         non_empty_file_and_chunk_infos(SUBNET_QUEUES_FILE);
     builder.append(
         &subnet_queues_file_info,
-        &[subnet_queues_chunk_info.clone()],
+        std::slice::from_ref(&subnet_queues_chunk_info),
     );
     builder.append(&empty_file_info(SYSTEM_METADATA_FILE), &[]);
     let manifest = builder.build().unwrap();
@@ -269,10 +269,13 @@ fn split_manifest_3_canisters() {
     builder_0.append(&empty_file_info(&canister_pbuf_path(CANISTER_1)), &[]);
     builder_0.append(
         &ingress_history_file_info,
-        &[ingress_history_chunk_info.clone()],
+        std::slice::from_ref(&ingress_history_chunk_info),
     );
     builder_0.append(&empty_file_info(&snapshot_pbuf_path(snapshot_1)), &[]);
-    builder_0.append(&split_marker_file_info, &[split_marker_chunk_info.clone()]);
+    builder_0.append(
+        &split_marker_file_info,
+        std::slice::from_ref(&split_marker_chunk_info),
+    );
     builder_0.append(&subnet_queues_file_info, &[subnet_queues_chunk_info]);
     builder_0.append(&empty_file_info(SYSTEM_METADATA_FILE), &[]);
     let expected_manifest_0 = builder_0.build().unwrap();

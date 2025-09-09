@@ -62,13 +62,13 @@ pub async fn start_rosetta(
         |state_dir| (state_dir, None),
     );
     let port_file = state_directory.join("port");
-    if port_file.exists() {
-        if let Err(e) = std::fs::remove_file(port_file.clone())
-            && e.kind() != std::io::ErrorKind::NotFound
-        {
-            panic!("Unable to remove port file: {:?}", e);
-        }
+    if port_file.exists()
+        && let Err(e) = std::fs::remove_file(port_file.clone())
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        panic!("Unable to remove port file: {:?}", e);
     }
+
     let mut cmd = Command::new(rosetta_bin);
     cmd.arg("--ic-url")
         .arg(ic_url.to_string())

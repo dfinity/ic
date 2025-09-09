@@ -1993,7 +1993,7 @@ mod assertions {
             self
         }
 
-        fn select_only_one(&self, selector: &str) -> ElementRef {
+        fn select_only_one(&self, selector: &str) -> ElementRef<'_> {
             let css_selector = Selector::parse(selector).unwrap();
             let mut iter = self.actual.select(&css_selector);
             let value = iter.next().unwrap_or_else(|| {
