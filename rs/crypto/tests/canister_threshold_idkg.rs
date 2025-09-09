@@ -731,7 +731,7 @@ mod create_transcript {
                 rng,
             );
             // invalidate the encoding of transcript
-            masked_transcript.internal_transcript_raw = vec![0xFF; 100];
+            masked_transcript.internal_transcript_raw = Arc::new(vec![0xFF; 100]);
             let invalid_unmasked_params = build_params_from_previous(
                 masked_params,
                 IDkgTranscriptOperation::ReshareOfMasked(masked_transcript.clone()),
@@ -1496,12 +1496,10 @@ mod verify_transcript {
                 .nodes
                 .support_dealing_from_all_receivers(dealing_resigned, &params);
 
-            assert!(transcript
-                .verified_dealings
-                .as_ref()
-                .clone()
-                .insert(dealer1_idx, dealing)
-                .is_some());
+            let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings)
+                .expect("We have unique access to the transcript");
+
+            assert!(verified_dealings.insert(dealer1_idx, dealing).is_some());
 
             let r = env
                 .nodes
@@ -1584,7 +1582,7 @@ mod verify_transcript {
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
 
             // invalidate the internal transcript
-            masked_key_transcript.internal_transcript_raw = vec![0xF; 100];
+            masked_key_transcript.internal_transcript_raw = Arc::new(vec![0xF; 100]);
 
             let invalid_params = IDkgTranscriptParams::new(
                 params.transcript_id(),
@@ -1710,8 +1708,9 @@ mod verify_transcript {
             let (env, params, mut transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
 
             let verification_threshold = params.verification_threshold().get() as usize;
-            let random_batchsigneddealing_signature_batch = &mut transcript
-                .verified_dealings
+            let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings)
+                .expect("We have unique access to the transcript");
+            let random_batchsigneddealing_signature_batch = &mut verified_dealings
                 .values_mut()
                 .choose(rng)
                 .expect("empty verified dealings")
@@ -1745,8 +1744,9 @@ mod verify_transcript {
         for alg in all_canister_threshold_algorithms() {
             let (env, params, mut transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
 
-            let some_sig_in_some_dealing = transcript
-                .verified_dealings
+            let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings)
+                .expect("We have unique access to the transcript");
+            let some_sig_in_some_dealing = verified_dealings
                 .values_mut()
                 .choose(rng)
                 .expect("empty verified dealings")
@@ -3232,11 +3232,12 @@ mod open_transcript {
             let (complainer, complaint) =
                 corrupt_random_dealing_and_generate_complaint(&mut transcript, &params, &env, rng);
             // Remove the corrupted dealing from the transcript.
-            transcript.verified_dealings.remove(
-                &transcript
-                    .index_for_dealer_id(complaint.dealer_id)
-                    .expect("Missing dealer of corrupted dealing"),
-            );
+            let corrupted_dealer_index = transcript
+                .index_for_dealer_id(complaint.dealer_id)
+                .expect("Missing dealer of corrupted dealing");
+            let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings)
+                .expect("transcript.verified_dealings should be unique");
+            verified_dealings.remove(&corrupted_dealer_index);
 
             let opener = env.nodes.random_filtered_by_receivers_excluding(
                 complainer,
@@ -3501,14 +3502,18 @@ mod verify_opening {
             let verifier = env
                 .nodes
                 .random_filtered_by_receivers(&transcript.receivers, rng);
-            let dealings = transcript.verified_dealings.clone();
-            let (dealer_index, _signed_dealing) = dealings
+
+            let dealer_index = transcript
+                .verified_dealings
                 .iter()
-                .find(|(_index, batch_signed_dealing)| {
-                    batch_signed_dealing.dealer_id() == complaint.dealer_id
+                .find_map(|(index, batch_signed_dealing)| {
+                    (batch_signed_dealing.dealer_id() == complaint.dealer_id).then_some(*index)
                 })
                 .expect("Inconsistent transcript");
-            transcript.verified_dealings.remove(dealer_index);
+            let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings).expect(
+                "transcript.verified_dealings has no other Arc pointers, so we can get a mutable reference",
+            );
+            verified_dealings.remove(&dealer_index);
             let result = verifier.verify_opening(&transcript, opener.id(), &opening, &complaint);
             assert_matches!(
                 result,

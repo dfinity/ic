@@ -16,6 +16,7 @@ mod get_master_public_key_from_transcript {
     use ic_types::PrincipalId;
     use ic_types_test_utils::ids::NODE_1;
     use std::collections::BTreeMap;
+    use std::sync::Arc;
     use strum::IntoEnumIterator;
 
     #[test]
@@ -199,7 +200,7 @@ mod get_master_public_key_from_transcript {
             registry_version: REG_V1,
             transcript_type,
             algorithm_id,
-            internal_transcript_raw,
+            internal_transcript_raw: Arc::new(internal_transcript_raw),
         }
     }
 

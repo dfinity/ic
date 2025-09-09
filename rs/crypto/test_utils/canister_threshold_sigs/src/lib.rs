@@ -140,18 +140,12 @@ pub fn swap_two_dealings_in_transcript(
         .nodes
         .support_dealing_from_all_receivers(dealing_ba, params);
 
-    assert!(transcript
-        .verified_dealings
-        .as_ref()
-        .clone()
-        .insert(a_idx, dealing_ba_signed)
-        .is_some());
-    assert!(transcript
-        .verified_dealings
-        .as_ref()
-        .clone()
-        .insert(b_idx, dealing_ab_signed)
-        .is_some());
+    let mut transcript = transcript;
+    let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings)
+        .expect("No other refs to verified_dealings");
+
+    assert!(verified_dealings.insert(a_idx, dealing_ba_signed).is_some());
+    assert!(verified_dealings.insert(b_idx, dealing_ab_signed).is_some());
 
     transcript
 }
@@ -186,10 +180,11 @@ pub fn copy_dealing_in_transcript(
         .nodes
         .support_dealing_from_all_receivers(dealing_to, params);
 
-    assert!(transcript
-        .verified_dealings
-        .as_ref()
-        .clone()
+    let mut transcript = transcript;
+    let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings)
+        .expect("No other refs to verified_dealings");
+
+    assert!(verified_dealings
         .insert(to_idx, dealing_to_signed)
         .is_some());
 
@@ -2760,7 +2755,8 @@ pub fn corrupt_dealings_and_generate_complaints<R: RngCore + CryptoRng>(
         .for_each(|index_to_corrupt| {
             corrupt_signed_dealing_for_one_receiver(
                 *index_to_corrupt,
-                &mut transcript.verified_dealings.as_ref().clone(),
+                Arc::get_mut(&mut transcript.verified_dealings)
+                    .expect("expected to get mutable access to dealings"),
                 complainer_index,
                 rng,
             )

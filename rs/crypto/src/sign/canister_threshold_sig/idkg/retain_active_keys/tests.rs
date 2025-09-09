@@ -194,7 +194,7 @@ mod retain_keys_for_transcripts {
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
             // from rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/tests/data/transcript_random.hex:
-            internal_transcript_raw: hex_to_byte_vec("a173636f6d62696e65645f636f6d6d69746d656e74a16b427953756d6d6174696f6ea168506564657273656ea166706f696e747383582201024be7c27cb1efce8378bc1d8385c409bfc620ddc702aac1664e6c71680a1b0e2858220102ec466b3c1ae94746014ff54624efb1773689b1f615752164208e77dd13b8308158220102d4c87220329fe8165d678c5556d29f067e1694af40585cb70e1b565c0895a5ed"),
+            internal_transcript_raw: Arc::new(hex_to_byte_vec("a173636f6d62696e65645f636f6d6d69746d656e74a16b427953756d6d6174696f6ea168506564657273656ea166706f696e747383582201024be7c27cb1efce8378bc1d8385c409bfc620ddc702aac1664e6c71680a1b0e2858220102ec466b3c1ae94746014ff54624efb1773689b1f615752164208e77dd13b8308158220102d4c87220329fe8165d678c5556d29f067e1694af40585cb70e1b565c0895a5ed")),
         }
     }
 }

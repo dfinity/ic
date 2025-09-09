@@ -1044,7 +1044,7 @@ mod idkg_create_dealing {
             verified_dealings: Default::default(),
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: AlgorithmId::Placeholder,
-            internal_transcript_raw: invalid_internal_transcript_raw,
+            internal_transcript_raw: Arc::new(invalid_internal_transcript_raw),
         }
     }
 
@@ -1066,7 +1066,7 @@ mod idkg_create_dealing {
             verified_dealings: Default::default(),
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: AlgorithmId::Placeholder,
-            internal_transcript_raw,
+            internal_transcript_raw: Arc::new(internal_transcript_raw),
         }
     }
 

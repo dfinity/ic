@@ -20,6 +20,7 @@ mod index_and_dealing_of_dealer {
     use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use maplit::btreemap;
     use std::collections::BTreeMap;
+    use std::sync::Arc;
 
     #[test]
     fn should_return_error_for_transcript_without_dealings() {
@@ -107,7 +108,7 @@ mod index_and_dealing_of_dealer {
         verified_dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
     ) -> IDkgTranscript {
         IDkgTranscript {
-            verified_dealings,
+            verified_dealings: Arc::new(verified_dealings),
             transcript_id: IDkgTranscriptId::new(
                 SubnetId::from(PrincipalId::new_subnet_test_id(42)),
                 0,

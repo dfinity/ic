@@ -370,7 +370,7 @@ mod ensure_matching_transcript_ids_and_dealer_ids {
                 receivers: IDkgReceivers::new(node_set(&[NODE_1, NODE_2, NODE_3, NODE_4]))
                     .expect("creation of receivers should succeed"),
                 registry_version: REG_V1,
-                verified_dealings,
+                verified_dealings: Arc::new(verified_dealings),
                 transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
                 algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
                 internal_transcript_raw: Arc::new(vec![]),
