@@ -34,7 +34,6 @@ rust_library(
         "//rs/tests/nested",
         "//rs/types/types",
         "@crate_index//:anyhow",
-        "@crate_index//:futures",
         "@crate_index//:rand",
         "@crate_index//:sha2",
         "@crate_index//:slog",

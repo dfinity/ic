@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use anyhow::{bail, Result};
-use futures::future::join_all;
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
     node::await_subnet_earliest_topology_version,
@@ -41,6 +40,7 @@ use nested::util::{
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
 use slog::{info, Logger};
+use tokio::task::JoinSet;
 
 /// 4 nodes is the minimum subnet size that satisfies 3f+1 for f=1
 pub const SUBNET_SIZE: usize = 4;
@@ -399,8 +399,10 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         .enable_all()
         .build()
         .unwrap()
-        .block_on(join_all(
-            get_host_vm_names(cfg.subnet_size)
+        .block_on(async {
+            let mut handles = JoinSet::new();
+
+            for vm_name in get_host_vm_names(cfg.subnet_size)
                 .iter()
                 .filter(|&vm_name| {
                     env.get_nested_vm(vm_name)
@@ -413,26 +415,28 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                 .cloned()
                 .collect::<Vec<_>>()
                 .choose_multiple(&mut rand::thread_rng(), 2 * f)
-                .cloned()
-                .map(|vm_name| {
-                    let logger = logger.clone();
-                    let env = env.clone();
-                    let recovery_img_hash = recovery_img_hash.clone();
-                    let artifacts_hash = artifacts_hash.clone();
+            {
+                let logger = logger.clone();
+                let env = env.clone();
+                let vm_name = vm_name.clone();
+                let recovery_img_hash = recovery_img_hash.clone();
+                let artifacts_hash = artifacts_hash.clone();
 
-                    tokio::task::spawn(async move {
-                        simulate_node_provider_action(
-                            &logger,
-                            &env,
-                            &vm_name,
-                            RECOVERY_GUESTOS_IMG_VERSION,
-                            &recovery_img_hash[..6],
-                            &artifacts_hash,
-                        )
-                        .await
-                    })
-                }),
-        ));
+                handles.spawn(async move {
+                    simulate_node_provider_action(
+                        &logger,
+                        &env,
+                        &vm_name,
+                        RECOVERY_GUESTOS_IMG_VERSION,
+                        &recovery_img_hash[..6],
+                        &artifacts_hash,
+                    )
+                    .await
+                });
+            }
+
+            handles.join_all().await;
+        });
 
     info!(logger, "Wait for state sync to complete");
     cert_state_makes_progress_with_retries(

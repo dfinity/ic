@@ -17531,7 +17531,6 @@ name = "nested-nns-recovery"
 version = "0.9.0"
 dependencies = [
  "anyhow",
- "futures",
  "ic-recovery",
  "ic-system-test-driver",
  "ic-types",
