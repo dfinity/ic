@@ -643,7 +643,10 @@ mod test {
                             // We only push Mint blocks since `update_account_balances` will
                             // complain if we e.g., transfer from an account with no balance.
                             if let ic_icrc1::Operation::Mint{..} = block.transaction.operation {
-                                rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.encode()), added_index as u64).unwrap());
+                                // Since we skip some blocks, the fee collector block index is not correct anymore.
+                                let mut block_no_fc = block;
+                                block_no_fc.fee_collector_block_index = None;
+                                rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block_no_fc.encode()), added_index as u64).unwrap());
                                 added_index += 1;
                             }
                         }

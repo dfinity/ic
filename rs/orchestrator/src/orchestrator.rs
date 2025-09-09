@@ -385,13 +385,17 @@ impl Orchestrator {
             // in case it gets stuck in an unexpected situation for longer than 15 minutes.
             const UPGRADE_TIMEOUT: Duration = Duration::from_secs(60 * 15);
 
+            // Since the orchestrator is just starting, the last flow must have been a `Stop`
+            let mut last_flow = OrchestratorControlFlow::Stop;
+
             loop {
                 match tokio::time::timeout(UPGRADE_TIMEOUT, upgrade.check_for_upgrade()).await {
                     Ok(Ok(control_flow)) => {
                         upgrade.metrics.failed_consecutive_upgrade_checks.reset();
 
                         match control_flow {
-                            OrchestratorControlFlow::Assigned(subnet_id) => {
+                            OrchestratorControlFlow::Assigned(subnet_id)
+                            | OrchestratorControlFlow::Leaving(subnet_id) => {
                                 *maybe_subnet_id.write().unwrap() = Some(subnet_id);
                             }
                             OrchestratorControlFlow::Unassigned => {
@@ -403,6 +407,28 @@ impl Orchestrator {
                                 break;
                             }
                         }
+
+                        let node_id = upgrade.node_id();
+                        match (&last_flow, &control_flow) {
+                            (
+                                OrchestratorControlFlow::Assigned(subnet_id),
+                                OrchestratorControlFlow::Leaving(_),
+                            ) => {
+                                UtilityCommand::notify_host(&format!("The node {node_id} has been unassigned from the subnet {subnet_id}\
+                                     in the registry. Please do not turn off the machine while it completes its graceful removal from the subnet.\
+                                      This process can take up to 15 minutes. A new message will be displayed here when the node has been \
+                                      successfully removed."), 1);
+                            }
+                            (
+                                OrchestratorControlFlow::Leaving(subnet_id),
+                                OrchestratorControlFlow::Unassigned,
+                            ) => {
+                                UtilityCommand::notify_host(&format!("The node {node_id} has gracefully left subnet {subnet_id}. The node can be turned off now."), 1);
+                            }
+                            // Other transitions are not important at the moment.
+                            _ => {}
+                        }
+                        last_flow = control_flow;
                     }
                     Ok(Err(err)) => {
                         warn!(log, "Check for upgrade failed: {err}");

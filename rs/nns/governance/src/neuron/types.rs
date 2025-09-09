@@ -1622,7 +1622,7 @@ pub struct NeuronBuilder {
     transfer: Option<NeuronStakeTransfer>,
     #[cfg(any(test, feature = "canbench-rs"))]
     staked_maturity_e8s_equivalent: Option<u64>,
-    #[cfg(test)]
+    #[cfg(any(test, feature = "canbench-rs"))]
     known_neuron_data: Option<KnownNeuronData>,
     #[cfg(test)]
     maturity_disbursements_in_progress: Vec<MaturityDisbursement>,
@@ -1666,7 +1666,7 @@ impl NeuronBuilder {
             transfer: None,
             #[cfg(any(test, feature = "canbench-rs"))]
             staked_maturity_e8s_equivalent: None,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "canbench-rs"))]
             known_neuron_data: None,
             #[cfg(test)]
             maturity_disbursements_in_progress: Vec::new(),
@@ -1803,7 +1803,7 @@ impl NeuronBuilder {
         self
     }
 
-    #[cfg(test)]
+    #[cfg(any(test, feature = "canbench-rs"))]
     pub fn with_known_neuron_data(mut self, known_neuron_data: Option<KnownNeuronData>) -> Self {
         self.known_neuron_data = known_neuron_data;
         self.visibility = Visibility::Public;
@@ -1861,7 +1861,7 @@ impl NeuronBuilder {
             transfer,
             #[cfg(any(test, feature = "canbench-rs"))]
             staked_maturity_e8s_equivalent,
-            #[cfg(test)]
+            #[cfg(any(test, feature = "canbench-rs"))]
             known_neuron_data,
             visibility,
             voting_power_refreshed_timestamp_seconds,
@@ -1894,7 +1894,7 @@ impl NeuronBuilder {
         let transfer = None;
         #[cfg(not(any(test, feature = "canbench-rs")))]
         let staked_maturity_e8s_equivalent = None;
-        #[cfg(not(test))]
+        #[cfg(not(any(test, feature = "canbench-rs")))]
         let known_neuron_data = None;
         #[cfg(not(test))]
         let maturity_disbursements_in_progress = Vec::new();

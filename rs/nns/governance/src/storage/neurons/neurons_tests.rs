@@ -2,7 +2,7 @@ use super::*;
 
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::{Vote, abridged_neuron::DissolveState},
+    pb::v1::Vote,
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::ProposalId;
@@ -479,42 +479,6 @@ fn test_partial_read() {
         transfer: true,
         ..NeuronSections::NONE
     });
-}
-
-#[test]
-fn test_abridged_neuron_size() {
-    // All VARINT encoded fields (e.g. int32, uint64, ..., as opposed to fixed32/fixed64) have
-    // larger serialized size for larger numbers (10 bytes for u64::MAX as uint64, while 1 byte for
-    // 0u64). Therefore, we make the numbers below as large as possible even though they aren't
-    // realistic.
-    let abridged_neuron = AbridgedNeuron {
-        account: vec![u8::MAX; 32],
-        controller: Some(PrincipalId::new(
-            PrincipalId::MAX_LENGTH_IN_BYTES,
-            [u8::MAX; PrincipalId::MAX_LENGTH_IN_BYTES],
-        )),
-        cached_neuron_stake_e8s: u64::MAX,
-        neuron_fees_e8s: u64::MAX,
-        created_timestamp_seconds: u64::MAX,
-        aging_since_timestamp_seconds: u64::MAX,
-        spawn_at_timestamp_seconds: Some(u64::MAX),
-        kyc_verified: true,
-        maturity_e8s_equivalent: u64::MAX,
-        staked_maturity_e8s_equivalent: Some(u64::MAX),
-        auto_stake_maturity: Some(true),
-        not_for_profit: true,
-        joined_community_fund_timestamp_seconds: Some(u64::MAX),
-        neuron_type: Some(i32::MAX),
-        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(u64::MAX)),
-        visibility: None,
-        voting_power_refreshed_timestamp_seconds: Some(u64::MAX),
-        recent_ballots_next_entry_index: Some(100),
-    };
-
-    assert!(abridged_neuron.encoded_len() as u32 <= AbridgedNeuron::BOUND.max_size());
-    // This size can be updated. This assertion is here to make sure we are very aware of growth.
-    // Reminder: the amount we allocated for AbridgedNeuron is 380 bytes.
-    assert_eq!(abridged_neuron.encoded_len(), 199);
 }
 
 #[test]

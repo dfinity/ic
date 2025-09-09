@@ -382,16 +382,16 @@ pub fn decode_meta_manifest(bytes: Chunk) -> Result<MetaManifest, String> {
     })
 }
 
-type P2PChunkId = u32;
-type ManifestChunkTableIndex = u32;
+pub(crate) type P2PChunkId = u32;
+pub(crate) type ManifestChunkIndex = u32;
 
 /// A chunk id from the P2P level is mapped to a group of indices from the manifest chunk table.
 /// `FileGroupChunks` stores the mapping and can be used to assemble or split the file group chunk.
 #[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
-pub struct FileGroupChunks(BTreeMap<P2PChunkId, Vec<ManifestChunkTableIndex>>);
+pub struct FileGroupChunks(BTreeMap<P2PChunkId, Vec<ManifestChunkIndex>>);
 
 impl FileGroupChunks {
-    pub fn new(value: BTreeMap<P2PChunkId, Vec<ManifestChunkTableIndex>>) -> Self {
+    pub fn new(value: BTreeMap<P2PChunkId, Vec<ManifestChunkIndex>>) -> Self {
         FileGroupChunks(value)
     }
 
@@ -399,17 +399,15 @@ impl FileGroupChunks {
         self.0.len()
     }
 
-    pub fn keys(&self) -> impl Iterator<Item = &ManifestChunkTableIndex> {
+    pub fn keys(&self) -> impl Iterator<Item = &P2PChunkId> {
         self.0.keys()
     }
 
-    pub fn iter(
-        &self,
-    ) -> impl Iterator<Item = (&ManifestChunkTableIndex, &Vec<ManifestChunkTableIndex>)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&P2PChunkId, &Vec<ManifestChunkIndex>)> {
         self.0.iter()
     }
 
-    pub fn get(&self, chunk_id: &P2PChunkId) -> Option<&Vec<ManifestChunkTableIndex>> {
+    pub fn get(&self, chunk_id: &P2PChunkId) -> Option<&Vec<ManifestChunkIndex>> {
         self.0.get(chunk_id)
     }
 

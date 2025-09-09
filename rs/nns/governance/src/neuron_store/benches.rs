@@ -2,14 +2,17 @@ use super::*;
 use crate::{
     benches_util::check_projected_instructions,
     governance::{
-        MAX_FOLLOWEES_PER_TOPIC, MAX_NEURON_RECENT_BALLOTS, MAX_NEURONS_FUND_PARTICIPANTS,
-        MAX_NUM_HOT_KEYS_PER_NEURON, MAX_NUMBER_OF_NEURONS,
+        KNOWN_NEURON_DESCRIPTION_MAX_LEN, KNOWN_NEURON_NAME_MAX_LEN, MAX_FOLLOWEES_PER_TOPIC,
+        MAX_NEURON_RECENT_BALLOTS, MAX_NEURONS_FUND_PARTICIPANTS, MAX_NUM_HOT_KEYS_PER_NEURON,
+        MAX_NUMBER_OF_NEURONS,
     },
     neuron::{DissolveStateAndAge, NeuronBuilder},
     neuron_data_validation::NeuronDataValidator,
     neurons_fund::{NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot},
     now_seconds,
     pb::v1::{BallotInfo, Followees, KnownNeuronData, Vote},
+    temporarily_disable_known_neuron_voting_history,
+    temporarily_enable_known_neuron_voting_history,
 };
 use canbench_rs::{BenchResult, bench, bench_fn};
 use ic_nervous_system_common::E8;
@@ -252,8 +255,7 @@ fn with_neuron_mut_main_section_maximum_stable() -> BenchResult {
     with_neuron_mut_benchmark(NeuronSize::Maximum, modify_neuron_main_section)
 }
 
-#[bench(raw)]
-fn update_recent_ballots_stable_memory() -> BenchResult {
+fn record_neuron_vote() -> BenchResult {
     let mut rng = new_rng();
     let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
     let neuron =
@@ -267,7 +269,47 @@ fn update_recent_ballots_stable_memory() -> BenchResult {
 
     bench_fn(|| {
         neuron_store
-            .register_recent_neuron_ballot(
+            .record_neuron_vote(
+                id,
+                Topic::NetworkEconomics,
+                ProposalId { id: rng.next_u64() },
+                Vote::Yes,
+            )
+            .unwrap();
+    })
+}
+
+#[bench(raw)]
+fn record_neuron_vote_known_neuron_voting_history_disabled() -> BenchResult {
+    let _t = temporarily_disable_known_neuron_voting_history();
+    record_neuron_vote()
+}
+
+#[bench(raw)]
+fn record_neuron_vote_known_neuron_voting_history_enabled() -> BenchResult {
+    let _t = temporarily_enable_known_neuron_voting_history();
+    record_neuron_vote()
+}
+
+#[bench(raw)]
+fn record_known_neuron_vote() -> BenchResult {
+    let _t = temporarily_enable_known_neuron_voting_history();
+    let mut rng = new_rng();
+    let mut neuron_store = set_up_neuron_store(&mut rng, 100, 200);
+    let neuron = new_neuron_builder(&mut rng, NeuronActiveness::Active, NeuronSize::Maximum)
+        .with_known_neuron_data(Some(KnownNeuronData {
+            name: "a".repeat(KNOWN_NEURON_NAME_MAX_LEN),
+            description: Some("b".repeat(KNOWN_NEURON_DESCRIPTION_MAX_LEN)),
+        }))
+        .build();
+
+    let id = neuron.id();
+
+    neuron_store.add_neuron(neuron).unwrap();
+
+    bench_fn(|| {
+        neuron_store
+            .record_neuron_vote(
                 id,
                 Topic::NetworkEconomics,
                 ProposalId { id: rng.next_u64() },

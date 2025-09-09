@@ -255,7 +255,8 @@ mod test {
         sync::mpsc::{UnboundedReceiver, unbounded_channel},
     };
 
-    type NetworkMessage = bitcoin::p2p::message::NetworkMessage<bitcoin::Block>;
+    type NetworkMessage =
+        bitcoin::p2p::message::NetworkMessage<bitcoin::block::Header, bitcoin::Block>;
 
     impl Connection<NetworkMessage> {
         /// This function creates a new connection that will be used to manage a

@@ -41,6 +41,23 @@ impl Storable for NeuronId {
     };
 }
 
+impl LowerBounded for NeuronId {
+    fn min_value() -> Self {
+        Self::MIN
+    }
+}
+
+impl UpperBounded for NeuronId {
+    fn max_value() -> Self {
+        Self::MAX
+    }
+}
+
+impl ProposalId {
+    pub const MIN: Self = Self { id: u64::MIN };
+    pub const MAX: Self = Self { id: u64::MAX };
+}
+
 impl Storable for ProposalId {
     fn to_bytes(&self) -> Cow<'_, [u8]> {
         self.id.to_bytes()
@@ -56,16 +73,4 @@ impl Storable for ProposalId {
         max_size: std::mem::size_of::<u64>() as u32,
         is_fixed_size: true,
     };
-}
-
-impl LowerBounded for NeuronId {
-    fn min_value() -> Self {
-        Self::MIN
-    }
-}
-
-impl UpperBounded for NeuronId {
-    fn max_value() -> Self {
-        Self::MAX
-    }
 }

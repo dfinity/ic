@@ -255,7 +255,7 @@ mod tests {
                 "/tmp/src",
                 "/tmp/target",
                 "-e",
-                "ssh -o StrictHostKeyChecking=no -o NumberOfPasswordPrompts=0 -o ConnectionAttempts=4 -o ConnectTimeout=15 -A -i /tmp/key_file"
+                "ssh -o StrictHostKeyChecking=no -o NumberOfPasswordPrompts=0 -o ConnectionAttempts=4 -o ConnectTimeout=15 -A -i \"/tmp/key_file\""
             ]
         );
     }

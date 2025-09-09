@@ -12,8 +12,6 @@ use std::{
 use bitcoin::p2p::{Magic, ServiceFlags};
 
 use bitcoin::{
-    BlockHash,
-    block::Header as BlockHeader,
     consensus::{deserialize_partial, encode, serialize},
     p2p::{
         message::{NetworkMessage, RawNetworkMessage},
@@ -21,7 +19,7 @@ use bitcoin::{
         message_network::VersionMessage,
     },
 };
-use ic_btc_adapter::BlockLike;
+use ic_btc_adapter::{BlockchainBlock, BlockchainHeader, BlockchainNetwork};
 
 use bitcoin::io as bitcoin_io;
 
@@ -37,10 +35,10 @@ use crate::rpc_client::{Auth, RpcClient, RpcClientType, RpcError};
 // TODO(XC-471): Fix this for Dogecoin.
 const MINIMUM_PROTOCOL_VERSION: u32 = 70001;
 
-async fn write_network_message<Block: BlockLike>(
+async fn write_network_message<Network: BlockchainNetwork>(
     socket: &mut TcpStream,
     magic: Magic,
-    payload: NetworkMessage<Block>,
+    payload: NetworkMessage<Network::Header, Network::Block>,
 ) -> io::Result<()> {
     let res = RawNetworkMessage::new(magic, payload);
     let serialized = serialize(&res);
@@ -49,11 +47,11 @@ async fn write_network_message<Block: BlockLike>(
     Ok(())
 }
 
-async fn handle_getdata<Block: BlockLike>(
+async fn handle_getdata<Network: BlockchainNetwork>(
     socket: &mut TcpStream,
     msg: &[Inventory],
     magic: Magic,
-    blocks: Arc<HashMap<BlockHash, Block>>,
+    blocks: Arc<HashMap<BlockHash, Network::Block>>,
 ) -> io::Result<()> {
     for inv in msg.iter() {
         match inv {
@@ -62,7 +60,12 @@ async fn handle_getdata<Block: BlockLike>(
                     continue;
                 }
                 let block = blocks.get(hash).unwrap();
-                write_network_message(socket, magic, NetworkMessage::Block(block.clone())).await?;
+                write_network_message::<Network>(
+                    socket,
+                    magic,
+                    NetworkMessage::Block(block.clone()),
+                )
+                .await?;
             }
             _ => {
                 unimplemented!();
@@ -72,15 +75,15 @@ async fn handle_getdata<Block: BlockLike>(
     Ok(())
 }
 
-async fn handle_ping<Block: BlockLike>(
+async fn handle_ping<Network: BlockchainNetwork>(
     socket: &mut TcpStream,
     val: u64,
     magic: Magic,
 ) -> io::Result<()> {
-    write_network_message(socket, magic, <NetworkMessage<Block>>::Pong(val)).await
+    write_network_message::<Network>(socket, magic, NetworkMessage::Pong(val)).await
 }
 
-async fn handle_version<Block: BlockLike>(
+async fn handle_version<Network: BlockchainNetwork>(
     socket: &mut TcpStream,
     v: &VersionMessage,
     magic: Magic,
@@ -91,23 +94,26 @@ async fn handle_version<Block: BlockLike>(
     }
     let mut version = v.clone();
     version.services.add(ServiceFlags::NETWORK);
-    write_network_message(socket, magic, <NetworkMessage<Block>>::Version(version)).await?;
-    write_network_message(socket, magic, <NetworkMessage<Block>>::Verack).await?;
+    write_network_message::<Network>(socket, magic, NetworkMessage::Version(version)).await?;
+    write_network_message::<Network>(socket, magic, NetworkMessage::Verack).await?;
     Ok(())
 }
 
-async fn handle_getaddr<Block: BlockLike>(socket: &mut TcpStream, magic: Magic) -> io::Result<()> {
-    write_network_message(socket, magic, <NetworkMessage<Block>>::Addr(vec![])).await
+async fn handle_getaddr<Network: BlockchainNetwork>(
+    socket: &mut TcpStream,
+    magic: Magic,
+) -> io::Result<()> {
+    write_network_message::<Network>(socket, magic, NetworkMessage::Addr(vec![])).await
 }
 
-async fn handle_getheaders<Block: BlockLike>(
+async fn handle_getheaders<Network: BlockchainNetwork>(
     socket: &mut TcpStream,
     msg: &GetHeadersMessage,
     magic: Magic,
-    cached_headers: Arc<HashMap<BlockHash, BlockHeader>>,
+    cached_headers: Arc<HashMap<BlockHash, Network::Header>>,
     children: Arc<HashMap<BlockHash, Vec<BlockHash>>>,
 ) -> io::Result<()> {
-    let mut block_headers: Vec<BlockHeader> = vec![];
+    let mut block_headers: Vec<Network::Header> = vec![];
 
     let locator = {
         let mut found = None;
@@ -133,15 +139,10 @@ async fn handle_getheaders<Block: BlockLike>(
         if block_headers.len() >= 2000 {
             break;
         }
-        block_headers.push(cached_headers[&next]);
+        block_headers.push(cached_headers[&next].clone());
         queue.extend(children.get(&next).unwrap_or(&vec![]));
     }
-    write_network_message(
-        socket,
-        magic,
-        <NetworkMessage<Block>>::Headers(block_headers),
-    )
-    .await
+    write_network_message::<Network>(socket, magic, NetworkMessage::Headers(block_headers)).await
 }
 
 fn decompress(location: String) -> Vec<u8> {
@@ -154,28 +155,29 @@ fn decompress(location: String) -> Vec<u8> {
 }
 
 #[derive(Clone)]
-struct FakeBitcoind<Block> {
-    cached_headers: Arc<HashMap<BlockHash, BlockHeader>>,
-    blocks: Arc<HashMap<BlockHash, Block>>,
+struct FakeBitcoind<Network: BlockchainNetwork> {
+    cached_headers: Arc<HashMap<BlockHash, Network::Header>>,
+    blocks: Arc<HashMap<BlockHash, Network::Block>>,
     children: Arc<HashMap<BlockHash, Vec<BlockHash>>>,
 }
 
-impl<Block> FakeBitcoind<Block>
+impl<Network: BlockchainNetwork + 'static> FakeBitcoind<Network>
 where
-    Block: BlockLike + for<'de> serde::Deserialize<'de> + Clone + Debug + Send + Sync + 'static,
+    Network::Header: for<'de> serde::Deserialize<'de> + Debug + Send + Sync,
+    Network::Block: for<'de> serde::Deserialize<'de> + Debug + Send + Sync,
 {
     pub fn new(headers_location: String, blocks_location: String) -> Self {
         let decompressed_headers = decompress(headers_location);
-        let headers: Vec<BlockHeader> = serde_json::from_slice(&decompressed_headers).unwrap();
+        let headers: Vec<Network::Header> = serde_json::from_slice(&decompressed_headers).unwrap();
         let cached_headers = Arc::new(
             headers
                 .iter()
-                .map(|header| (header.block_hash(), *header))
+                .map(|header| (header.block_hash(), header.clone()))
                 .collect(),
         );
         let decompressed_blocks = decompress(blocks_location);
-        let blocks: Vec<Block> = serde_json::from_slice(&decompressed_blocks).unwrap();
-        let blocks: Arc<HashMap<BlockHash, Block>> = Arc::new(
+        let blocks: Vec<Network::Block> = serde_json::from_slice(&decompressed_blocks).unwrap();
+        let blocks: Arc<HashMap<BlockHash, Network::Block>> = Arc::new(
             blocks
                 .iter()
                 .map(|block| (block.block_hash(), block.clone()))
@@ -183,7 +185,7 @@ where
         );
         let mut children: HashMap<BlockHash, Vec<BlockHash>> = HashMap::new();
         headers.iter().for_each(|header| {
-            let entry = children.entry(header.prev_blockhash);
+            let entry = children.entry(header.prev_block_hash());
             entry
                 .and_modify(|children_vec| children_vec.push(header.block_hash()))
                 .or_insert(vec![header.block_hash()]);
@@ -212,25 +214,25 @@ where
                     unparsed.extend(buf.iter());
 
                     while !unparsed.is_empty() {
-                        match deserialize_partial::<RawNetworkMessage<Block>>(&unparsed) {
+                        match deserialize_partial::<RawNetworkMessage<Network::Header, Network::Block>>(&unparsed) {
                             Ok((raw, cnt)) => {
                                 let handler_result =
                                 match raw.payload() {
                                     NetworkMessage::Version(v) => {
-                                        handle_version::<Block>(&mut socket, v, *raw.magic()).await
+                                        handle_version::<Network>(&mut socket, v, *raw.magic()).await
                                     }
                                     NetworkMessage::Verack => Ok(()),
                                     NetworkMessage::GetAddr => {
-                                        handle_getaddr::<Block>(&mut socket, *raw.magic()).await
+                                        handle_getaddr::<Network>(&mut socket, *raw.magic()).await
                                     }
                                     NetworkMessage::GetHeaders(msg) => {
-                                        handle_getheaders::<Block>(&mut socket, msg, *raw.magic(), cached_headers.clone(), children.clone()).await
+                                        handle_getheaders::<Network>(&mut socket, msg, *raw.magic(), cached_headers.clone(), children.clone()).await
                                     }
                                     NetworkMessage::GetData(msg) => {
-                                        handle_getdata(&mut socket, msg, *raw.magic(), blocks.clone()).await
+                                        handle_getdata::<Network>(&mut socket, msg, *raw.magic(), blocks.clone()).await
                                     }
                                     NetworkMessage::Ping(val) => {
-                                        handle_ping::<Block>(&mut socket, *val, *raw.magic()).await
+                                        handle_ping::<Network>(&mut socket, *val, *raw.magic()).await
                                     }
                                     smth => panic!("Unexpected NetworkMessage: {:?}", smth),
                                 };
@@ -253,18 +255,20 @@ where
     }
 }
 
-pub fn mock_bitcoin<Block>(
+pub fn mock_bitcoin<Network>(
     rt: &tokio::runtime::Handle,
     test_data_path: String,
     block_data_path: String,
 ) -> net::SocketAddr
 where
-    Block: BlockLike + for<'de> serde::Deserialize<'de> + Clone + Debug + Send + Sync + 'static,
+    Network: BlockchainNetwork + Clone + 'static,
+    Network::Header: for<'de> serde::Deserialize<'de> + Debug + Send + Sync,
+    Network::Block: for<'de> serde::Deserialize<'de> + Debug + Send + Sync,
 {
     let listener = rt.block_on(async { TcpListener::bind("127.0.0.1:0").await.unwrap() });
     let addr = listener.local_addr().unwrap();
     rt.spawn(async {
-        let p2p_mock = <FakeBitcoind<Block>>::new(test_data_path, block_data_path);
+        let p2p_mock = <FakeBitcoind<Network>>::new(test_data_path, block_data_path);
         p2p_mock.start_mock(listener).await;
     });
     addr

@@ -149,8 +149,7 @@ jobs:
   dependencies-check:
     name: Dependency Scan for PR
     <<: *dind-small-setup
-    # <<: *skip-merge-group disabled because it sets "if: ${{ github.event_name != 'merge_group' }}" but we want to temporarily disable it entirely
-    if: false
+    <<: *skip-merge-group
     timeout-minutes: 60
     permissions:
       contents: read

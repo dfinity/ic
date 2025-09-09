@@ -1395,8 +1395,8 @@ dependencies = [
 
 [[package]]
 name = "bitcoin"
-version = "0.32.99"
-source = "git+https://github.com/dfinity/rust-dogecoin?rev=b5125f00d9d1e6c553d83ee54ee9d6203da8e0db#b5125f00d9d1e6c553d83ee54ee9d6203da8e0db"
+version = "0.32.5-doge.0"
+source = "git+https://github.com/dfinity/rust-dogecoin?rev=cda2b5ec270017c82abd6ef2e71b7fe583a133fd#cda2b5ec270017c82abd6ef2e71b7fe583a133fd"
 dependencies = [
  "base58ck",
  "bech32 0.11.0",
@@ -6488,7 +6488,7 @@ name = "ic-bitcoin-canister-mock"
 version = "0.9.0"
 dependencies = [
  "bech32 0.9.1",
- "bitcoin 0.32.99",
+ "bitcoin 0.32.5-doge.0",
  "candid",
  "candid_parser",
  "hex",
@@ -6725,7 +6725,7 @@ dependencies = [
 name = "ic-btc-adapter"
 version = "0.9.0"
 dependencies = [
- "bitcoin 0.32.99",
+ "bitcoin 0.32.5-doge.0",
  "clap 4.5.27",
  "criterion",
  "futures",
@@ -6790,7 +6790,7 @@ dependencies = [
 name = "ic-btc-adapter-test-utils"
 version = "0.9.0"
 dependencies = [
- "bitcoin 0.32.99",
+ "bitcoin 0.32.5-doge.0",
  "flate2",
  "hex",
  "ic-btc-adapter",
@@ -6809,7 +6809,7 @@ version = "0.9.0"
 dependencies = [
  "askama",
  "base64 0.13.1",
- "bitcoin 0.32.99",
+ "bitcoin 0.32.5-doge.0",
  "candid",
  "candid_parser",
  "ciborium",
@@ -6903,7 +6903,7 @@ dependencies = [
 name = "ic-btc-validation"
 version = "0.9.0"
 dependencies = [
- "bitcoin 0.32.99",
+ "bitcoin 0.32.5-doge.0",
  "csv",
  "rstest",
 ]
@@ -10104,8 +10104,11 @@ version = "0.9.0"
 dependencies = [
  "candid",
  "candid_parser",
+ "ciborium",
  "ic-base-types",
+ "ic-cbor",
  "ic-cdk",
+ "ic-certification 3.0.3",
  "ic-icrc1",
  "ic-icrc1-ledger",
  "ic-icrc1-test-utils",
@@ -10113,6 +10116,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "icrc-ledger-types",
+ "leb128",
  "num-traits",
  "serde_bytes",
 ]
@@ -11797,6 +11801,7 @@ dependencies = [
  "ic-crypto-utils-ni-dkg",
  "ic-icp-index",
  "ic-icrc1",
+ "ic-ledger-core",
  "ic-management-canister-types-private",
  "ic-nervous-system-clients",
  "ic-nervous-system-common",
@@ -11827,6 +11832,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-utils 0.9.0",
+ "ic-xrc-types",
  "icp-ledger",
  "icrc-ledger-types",
  "lifeline",
@@ -11839,6 +11845,7 @@ dependencies = [
  "registry-canister",
  "serde",
  "tokio",
+ "xrc-mock",
 ]
 
 [[package]]
@@ -14496,7 +14503,7 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "assert_matches",
- "bitcoin 0.32.99",
+ "bitcoin 0.32.5-doge.0",
  "candid",
  "canister-test",
  "dfn_candid",
@@ -17502,13 +17509,10 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "canister-test",
- "futures",
  "ic-canister-client",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
- "ic-nns-test-utils",
  "ic-protobuf",
- "ic-recovery",
  "ic-registry-keys",
  "ic-registry-nns-data-provider",
  "ic-registry-subnet-type",
@@ -17516,12 +17520,26 @@ dependencies = [
  "ic-types",
  "ic_consensus_system_test_utils",
  "prost 0.13.4",
- "rand 0.8.5",
  "regex",
  "reqwest 0.12.15",
- "sha2 0.10.9",
  "slog",
  "url",
+]
+
+[[package]]
+name = "nested-nns-recovery"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "ic-recovery",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "nested",
+ "rand 0.8.5",
+ "sha2 0.10.9",
+ "slog",
 ]
 
 [[package]]
@@ -17695,19 +17713,25 @@ dependencies = [
  "ic-limits",
  "ic-management-canister-types-private",
  "ic-nervous-system-clients",
+ "ic-nervous-system-common",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-nns-test-utils",
  "ic-registry-nns-data-provider",
+ "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-system-test-driver",
  "ic-tests-ckbtc",
  "ic-types",
+ "ic-universal-canister",
+ "ic-utils 0.40.1",
  "ic_consensus_system_test_utils",
  "icp-ledger",
+ "icrc-ledger-types",
+ "lazy_static",
  "libflate",
  "nns_dapp",
  "num-traits",
@@ -19051,7 +19075,7 @@ dependencies = [
  "axum-server",
  "backoff",
  "base64 0.13.1",
- "bitcoin 0.32.99",
+ "bitcoin 0.32.5-doge.0",
  "bytes",
  "candid",
  "candid_parser",

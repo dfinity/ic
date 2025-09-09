@@ -60,13 +60,11 @@ fn prepare(
 }
 
 fn e2e(criterion: &mut Criterion) {
-    let mut config = Config {
-        network: Network::Regtest.into(),
-        ..Default::default()
-    };
+    let network = Network::Regtest;
+    let mut config = Config::default_with(network.into());
 
     let mut processed_block_hashes = vec![];
-    let genesis = config.network.genesis_block_header();
+    let genesis = network.genesis_block_header();
 
     prepare(&mut processed_block_hashes, genesis, 4, 2000, 1975);
 

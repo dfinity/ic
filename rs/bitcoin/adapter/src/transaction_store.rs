@@ -125,7 +125,7 @@ impl TransactionStore {
     /// This method is used to broadcast known transaction IDs to connected peers.
     /// If the timeout period has passed for a transaction ID, it is broadcasted again.
     /// If the transaction has not been broadcasted, the transaction ID is broadcasted.
-    pub fn advertise_txids<Block>(&mut self, channel: &mut impl Channel<Block>) {
+    pub fn advertise_txids<Header, Block>(&mut self, channel: &mut impl Channel<Header, Block>) {
         self.remove_old_txns();
         for address in channel.available_connections() {
             let mut inventory = vec![];
@@ -170,11 +170,11 @@ impl TransactionStore {
     /// This function processes a `getdata` message from a BTC node.
     /// If there are messages for transactions, the transaction is sent to the
     /// requesting node. Transactions sent are then removed from the cache.
-    pub fn process_bitcoin_network_message<Block>(
+    pub fn process_bitcoin_network_message<Header, Block>(
         &self,
-        channel: &mut impl Channel<Block>,
+        channel: &mut impl Channel<Header, Block>,
         addr: SocketAddr,
-        message: &NetworkMessage<Block>,
+        message: &NetworkMessage<Header, Block>,
     ) -> Result<(), ProcessNetworkMessageError> {
         if let NetworkMessage::GetData(inventory) = message {
             if inventory.len() > MAXIMUM_TRANSACTION_PER_INV {
@@ -202,15 +202,15 @@ impl TransactionStore {
 mod test {
     use super::*;
     use bitcoin::{
-        Block, Network, Transaction,
         absolute::{LOCK_TIME_THRESHOLD, LockTime},
+        block::Header,
         blockdata::constants::genesis_block,
         consensus::serialize,
     };
     use ic_logger::replica_logger::no_op_logger;
     use std::str::FromStr;
 
-    type TestChannel = crate::common::test_common::TestChannel<Block>;
+    type TestChannel = crate::common::test_common::TestChannel<Header, Block>;
 
     /// This function creates a new transaction manager with a test logger.
     fn make_transaction_manager() -> TransactionStore {

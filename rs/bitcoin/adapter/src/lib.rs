@@ -5,7 +5,7 @@
 //! component to provide blocks and collect outgoing transactions.
 
 use bitcoin::p2p::message::NetworkMessage;
-use bitcoin::{BlockHash, block::Header as BlockHeader};
+use bitcoin::{BlockHash, block::Header as PureHeader};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use std::{
@@ -51,7 +51,7 @@ mod transaction_store;
 // malicious fork can be prioritized by a DFS, thus potentially ignoring honest forks).
 mod get_successors_handler;
 
-pub use common::{AdapterNetwork, BlockLike};
+pub use common::{AdapterNetwork, BlockchainBlock, BlockchainHeader, BlockchainNetwork};
 pub use config::{Config, IncomingSource, address_limits};
 
 use crate::{
@@ -62,12 +62,12 @@ use crate::{
 /// This struct is used to represent commands given to the adapter in order to interact
 /// with BTC nodes.
 #[derive(Clone, Eq, PartialEq, Debug)]
-struct Command<Block> {
+struct Command<Header, Block> {
     /// This is the address of the Bitcoin node to which the message is supposed to be sent.
     /// If the address is None, then the message will be sent to all the peers.
     address: Option<SocketAddr>,
     /// This the network message to be sent to the above peer.
-    message: NetworkMessage<Block>,
+    message: NetworkMessage<Header, Block>,
 }
 
 /// This enum is used to represent errors that could occur while dispatching an
@@ -79,15 +79,15 @@ enum ProcessNetworkMessageError {
     InvalidMessage,
 }
 
-/// This enum is used to represent errors that  
+/// This enum is used to represent errors that
 #[derive(Debug)]
 enum ChannelError {}
 
 /// This trait is to provide an interface so that managers can communicate to BTC nodes.
-trait Channel<Block> {
+trait Channel<Header, Block> {
     /// This method is used to send a message to a specific connection
     /// or to all connections based on the [Command](Command)'s fields.
-    fn send(&mut self, command: Command<Block>) -> Result<(), ChannelError>;
+    fn send(&mut self, command: Command<Header, Block>) -> Result<(), ChannelError>;
 
     /// This method is used to retrieve a list of available connections
     /// that have completed the version handshake.
@@ -108,13 +108,13 @@ trait ProcessEvent {
 /// This trait provides an interface for processing messages coming from
 /// bitcoin peers.
 /// [StreamEvent](crate::stream::StreamEvent).
-trait ProcessNetworkMessage<Block> {
+trait ProcessNetworkMessage<Network: BlockchainNetwork> {
     /// This method is used to route an event in a component's internals and
     /// perform state updates.
     fn process_bitcoin_network_message(
         &mut self,
         addr: SocketAddr,
-        message: &NetworkMessage<Block>,
+        message: &NetworkMessage<Network::Header, Network::Block>,
     ) -> Result<(), ProcessNetworkMessageError>;
 }
 
@@ -122,7 +122,7 @@ trait ProcessNetworkMessage<Block> {
 #[derive(Debug)]
 pub(crate) enum BlockchainManagerRequest {
     /// Inform the adapter to enqueue the next block headers into the syncing queue.
-    EnqueueNewBlocksToDownload(Vec<BlockHeader>),
+    EnqueueNewBlocksToDownload(Vec<PureHeader>),
     /// Inform the adapter to prune the following block hashes from the cache.
     PruneBlocks(BlockHash, Vec<BlockHash>),
 }
@@ -195,23 +195,27 @@ impl AdapterState {
     }
 }
 
-/// Starts the gRPC server and the router for handling incoming requests.
-pub fn start_server(
+fn start_server_helper<Network>(
     log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
     rt_handle: &tokio::runtime::Handle,
-    config: config::Config,
-) {
+    config: config::Config<Network>,
+) where
+    Network: BlockchainNetwork + Sync + Send + 'static,
+    Network::Header: Send,
+    Network::Block: Send,
+{
     let _enter = rt_handle.enter();
-
     let (adapter_state, tx) = AdapterState::new(config.idle_seconds);
-
     let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
-    let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(&config, metrics_registry)));
+    let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(
+        config.network,
+        metrics_registry,
+    )));
     let (transaction_manager_tx, transaction_manager_rx) = channel(100);
-
     start_grpc_server(
-        config.clone(),
+        config.network,
+        config.incoming_source.clone(),
         log.clone(),
         tx,
         blockchain_state.clone(),
@@ -219,25 +223,32 @@ pub fn start_server(
         transaction_manager_tx,
         metrics_registry,
     );
+    start_main_event_loop(
+        &config,
+        log.clone(),
+        blockchain_state,
+        transaction_manager_rx,
+        adapter_state,
+        blockchain_manager_rx,
+        metrics_registry,
+    )
+}
 
+/// Starts the gRPC server and the router for handling incoming requests.
+pub fn start_server(
+    log: &ReplicaLogger,
+    metrics_registry: &MetricsRegistry,
+    rt_handle: &tokio::runtime::Handle,
+    config: config::Config<AdapterNetwork>,
+) {
     match config.network {
-        AdapterNetwork::Bitcoin(_) => start_main_event_loop::<bitcoin::Block>(
-            &config,
-            log.clone(),
-            blockchain_state,
-            transaction_manager_rx,
-            adapter_state,
-            blockchain_manager_rx,
-            metrics_registry,
-        ),
-        AdapterNetwork::Dogecoin(_) => start_main_event_loop::<bitcoin::dogecoin::Block>(
-            &config,
-            log.clone(),
-            blockchain_state,
-            transaction_manager_rx,
-            adapter_state,
-            blockchain_manager_rx,
-            metrics_registry,
-        ),
+        AdapterNetwork::Bitcoin(network) => {
+            let btc_config = config.with_network(network);
+            start_server_helper(log, metrics_registry, rt_handle, btc_config)
+        }
+        AdapterNetwork::Dogecoin(network) => {
+            let doge_config = config.with_network(network);
+            start_server_helper(log, metrics_registry, rt_handle, doge_config)
+        }
     }
 }

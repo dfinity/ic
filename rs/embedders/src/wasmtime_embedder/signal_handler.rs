@@ -78,11 +78,7 @@ pub(crate) fn sigsegv_memory_tracker_handler(
         let memory_tracker = memory_tracker.lock().unwrap();
         // Spawn a guard to report the total time spent in the handler.
         let _guard = scopeguard::guard(timer, |timer| {
-            let elapsed_nanos = timer.elapsed().as_nanos() as u64;
-            memory_tracker
-                .metrics
-                .sigsegv_handler_duration_nanos
-                .fetch_add(elapsed_nanos, Ordering::Relaxed);
+            memory_tracker.add_sigsegv_handler_duration(timer.elapsed());
         });
 
         // We handle SIGSEGV from the Wasm module heap ourselves.

@@ -69,7 +69,6 @@ jobs:
   dependency-scan-release-cut:
     name: Dependency Scan for Release
     <<: *dind-large-setup
-    if: false
     timeout-minutes: 60
     env:
       SHELL_WRAPPER: "/usr/bin/time"

@@ -190,6 +190,7 @@ impl StateSyncCache {
                 manifest,
                 state_sync_file_group,
                 fetch_chunks,
+                copied_chunks_from_file_group: _,
             } => {
                 if self.entry.is_some() {
                     // The current cache is newer
