@@ -112,7 +112,7 @@ fn nns_ui_requires_other_icp_features() {
     };
     let _pic = PocketIcBuilder::new()
         .with_icp_features(icp_features)
-        .with_auto_progress(None)
+        .with_auto_progress()
         .with_http_gateway(instance_http_gateway_config)
         .build();
 }
@@ -126,7 +126,7 @@ fn frontend_smoke_test(frontend_canister_id: Principal, expected_str: &str) {
     };
     let pic = PocketIcBuilder::new()
         .with_icp_features(all_icp_features())
-        .with_auto_progress(None)
+        .with_auto_progress()
         .with_http_gateway(instance_http_gateway_config)
         .build();
 

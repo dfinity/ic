@@ -2,8 +2,6 @@
 
 This module contains tests to ensure backwards compatibility of the config_types library. This is critical because we need to ensure that after updates, newer versions can always deserialize configurations written by older versions.
 
-Currently, only HostOS config objects are checked for backwards compatibility, as GuestOS config objects are a subset of HostOS config and are fully contained within the HostOS config structure.
-
 ## Components
 
 ### 1. Fixture Generation System (`fixture.rs`)
@@ -14,3 +12,15 @@ Currently, only HostOS config objects are checked for backwards compatibility, a
 ### 2. Compatibility Tests (`compatibility_tests.rs`)
 - Verifies that current code can deserialize all historical configs
 - Validates that previously removed fields are not reused
+
+## Fixture Management
+
+**Important:** Fixture files should never be manually edited. They must maintain their exact format for compatibility testing. Only new config fixtures should ever be added.
+
+### Generating New Fixtures
+
+After updating config_types (and the CONFIG_VERSION const), to generate new fixtures, use the following command:
+
+```bash
+bazel run //rs/ic_os/config_types/compatibility_tests:generate_config_types_fixture
+```
