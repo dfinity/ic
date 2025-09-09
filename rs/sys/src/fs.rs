@@ -754,7 +754,7 @@ fn clone_file_impl(src: &Path, dst: &Path) -> Result<(), FileCloneError> {
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
 
-    extern "C" {
+    unsafe extern "C" {
         fn clonefile(src: *const c_char, dst: *const c_char, flags: c_int) -> c_int;
     }
 

@@ -83,7 +83,7 @@ fn current_binary_path() -> Option<PathBuf> {
 }
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-extern "C" {
+unsafe extern "C" {
     fn install_backtrace_handler();
 }
 
@@ -174,7 +174,9 @@ async fn start(runtime: Arc<Runtime>) {
 
     // Set RUST_MIN_STACK if not yet set:
     // the value of 8192000 is set according to `ic-os/components/ic/ic-replica.service`.
-    std::env::set_var("RUST_MIN_STACK", "8192000");
+    unsafe {
+        std::env::set_var("RUST_MIN_STACK", "8192000");
+    }
 
     // Set the maximum number of open files:
     // the limit of 16777216 is set according to `ic-os/components/ic/ic-replica.service`.
