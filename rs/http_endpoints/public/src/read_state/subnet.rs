@@ -30,11 +30,13 @@ use std::{
 };
 use tower::util::BoxCloneService;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Version {
-    // Endpoint with the NNS delegation using the flat format of the canister ranges.
+    /// Endpoint with the NNS delegation using the flat format of the canister ranges.
+    /// /subnet/<subnet_id>/canister_ranges path is allowed
     V2,
-    // Endpoint with the NNS delegation will all canister ranges pruned out.
+    /// Endpoint with the NNS delegation will all canister ranges pruned out.
+    /// /subnet/<subnet_id>/canister_ranges path is NOT allowed
     V3,
 }
 
@@ -148,7 +150,7 @@ pub(crate) async fn read_state_subnet(
 
         // Verify authorization for requested paths.
         if let Err(HttpError { status, message }) =
-            verify_paths(&read_state.paths, effective_canister_id.into())
+            verify_paths(version, &read_state.paths, effective_canister_id.into())
         {
             return (status, message).into_response();
         }
@@ -195,7 +197,11 @@ pub(crate) async fn read_state_subnet(
     }
 }
 
-fn verify_paths(paths: &[Path], effective_principal_id: PrincipalId) -> Result<(), HttpError> {
+fn verify_paths(
+    version: Version,
+    paths: &[Path],
+    effective_principal_id: PrincipalId,
+) -> Result<(), HttpError> {
     // Convert the paths to slices to make it easier to match below.
     let paths: Vec<Vec<&[u8]>> = paths
         .iter()
@@ -209,8 +215,9 @@ fn verify_paths(paths: &[Path], effective_principal_id: PrincipalId) -> Result<(
             [b"api_boundary_nodes", _node_id]
             | [b"api_boundary_nodes", _node_id, b"domain" | b"ipv4_address" | b"ipv6_address"] => {}
             [b"subnet"] => {}
-            [b"subnet", _subnet_id]
-            | [b"subnet", _subnet_id, b"public_key" | b"canister_ranges" | b"node"] => {}
+            [b"subnet", _subnet_id] | [b"subnet", _subnet_id, b"public_key" | b"node"] => {}
+            // /subnet/<subnet_id>/canister_ranges is only allowed on the /api/v2 endpoint.
+            [b"subnet", _subnet_id, b"canister_ranges"] if version == Version::V2 => {}
             [b"subnet", _subnet_id, b"node", _node_id]
             | [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {}
             [b"canister_ranges", _subnet_id] => {}
@@ -236,16 +243,22 @@ mod test {
     use super::*;
     use ic_crypto_tree_hash::{Label, Path};
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
+    use rstest::rstest;
     use serde_bytes::ByteBuf;
 
-    #[test]
-    fn test_verify_path() {
+    #[rstest]
+    fn test_verify_path(#[values(Version::V2, Version::V3)] version: Version) {
         assert_eq!(
-            verify_paths(&[Path::from(Label::from("time"))], subnet_test_id(1).get(),),
+            verify_paths(
+                version,
+                &[Path::from(Label::from("time"))],
+                subnet_test_id(1).get(),
+            ),
             Ok(())
         );
         assert_eq!(
             verify_paths(
+                version,
                 &[Path::from(Label::from("subnet"))],
                 subnet_test_id(1).get(),
             ),
@@ -254,16 +267,12 @@ mod test {
 
         assert_eq!(
             verify_paths(
+                version,
                 &[
                     Path::new(vec![
                         Label::from("subnet"),
                         ByteBuf::from(subnet_test_id(1).get().to_vec()).into(),
                         Label::from("public_key")
-                    ]),
-                    Path::new(vec![
-                        Label::from("subnet"),
-                        ByteBuf::from(subnet_test_id(1).get().to_vec()).into(),
-                        Label::from("canister_ranges")
                     ]),
                     Path::new(vec![
                         Label::from("subnet"),
@@ -281,6 +290,7 @@ mod test {
         );
 
         assert!(verify_paths(
+            version,
             &[
                 Path::new(vec![
                     Label::from("request_status"),
@@ -298,6 +308,7 @@ mod test {
         .is_err());
 
         assert!(verify_paths(
+            version,
             &[
                 Path::new(vec![
                     Label::from("canister"),
@@ -315,9 +326,38 @@ mod test {
         .is_err());
 
         assert!(verify_paths(
+            version,
             &[Path::new(vec![Label::from("canister_ranges"),]),],
             subnet_test_id(1).get(),
         )
         .is_err());
+    }
+
+    #[test]
+    fn deprecated_canister_ranges_path_is_not_allowed_on_the_v3_endpoint() {
+        assert!(verify_paths(
+            Version::V3,
+            &[Path::new(vec![
+                Label::from("subnet"),
+                subnet_test_id(1).get().to_vec().into(),
+                Label::from("canister_ranges"),
+            ])],
+            subnet_test_id(1).get(),
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn deprecated_canister_ranges_path_is_allowed_on_the_v2_endpoint() {
+        assert!(verify_paths(
+            Version::V2,
+            &[Path::new(vec![
+                Label::from("subnet"),
+                ByteBuf::from(subnet_test_id(1).get().to_vec()).into(),
+                Label::from("canister_ranges"),
+            ])],
+            subnet_test_id(1).get(),
+        )
+        .is_ok());
     }
 }

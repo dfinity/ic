@@ -37,11 +37,13 @@ use std::{
 };
 use tower::{util::BoxCloneService, ServiceBuilder};
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Version {
-    // Endpoint with the NNS delegation using the flat format of the canister ranges.
+    /// Endpoint with the NNS delegation using the flat format of the canister ranges.
+    /// /subnet/<subnet_id>/canister_ranges path is allowed
     V2,
-    // Endpoint with the NNS delegation using the tree format of the canister ranges.
+    /// Endpoint with the NNS delegation using the tree format of the canister ranges.
+    /// /subnet/<subnet_id>/canister_ranges path is NOT allowed
     V3,
 }
 
@@ -209,6 +211,7 @@ pub(crate) async fn canister_read_state(
 
         // Verify authorization for requested paths.
         if let Err(HttpError { status, message }) = verify_paths(
+            version,
             certified_state_reader.get_state(),
             &read_state.source,
             &read_state.paths,
@@ -263,6 +266,7 @@ pub(crate) async fn canister_read_state(
 
 // Verifies that the `user` is authorized to retrieve the `paths` requested.
 fn verify_paths(
+    version: Version,
     state: &ReplicatedState,
     user: &UserId,
     paths: &[Path],
@@ -305,8 +309,8 @@ fn verify_paths(
             [b"api_boundary_nodes", _node_id]
             | [b"api_boundary_nodes", _node_id, b"domain" | b"ipv4_address" | b"ipv6_address"] => {}
             [b"subnet"] => {}
-            [b"subnet", _subnet_id]
-            | [b"subnet", _subnet_id, b"public_key" | b"canister_ranges" | b"node"] => {}
+            [b"subnet", _subnet_id] | [b"subnet", _subnet_id, b"public_key" | b"node"] => {}
+            [b"subnet", _subnet_id, b"canister_ranges"] if version == Version::V2 => {}
             [b"subnet", _subnet_id, b"node", _node_id]
             | [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {}
             [b"request_status", request_id]
@@ -422,6 +426,7 @@ mod test {
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{batch::RawQueryStats, time::UNIX_EPOCH};
     use ic_validator::CanisterIdSet;
+    use rstest::rstest;
     use std::collections::BTreeMap;
 
     #[test]
@@ -532,17 +537,25 @@ mod test {
         );
     }
 
-    #[test]
-    fn test_canister_ranges_are_not_allowed() {
-        let state = ReplicatedState::new_from_checkpoint(
+    fn fake_replicated_state() -> ReplicatedState {
+        let subnet_id = subnet_test_id(1);
+        let mut metadata = SystemMetadata::new(subnet_id, SubnetType::Application);
+        metadata.batch_time = UNIX_EPOCH;
+        ReplicatedState::new_from_checkpoint(
             BTreeMap::new(),
-            SystemMetadata::new(subnet_test_id(1), SubnetType::Application),
+            metadata,
             CanisterQueues::default(),
             RawQueryStats::default(),
             CanisterSnapshots::default(),
-        );
+        )
+    }
+
+    #[rstest]
+    fn test_canister_ranges_are_not_allowed(#[values(Version::V2, Version::V3)] version: Version) {
+        let state = fake_replicated_state();
 
         let error = verify_paths(
+            version,
             &state,
             &user_test_id(1),
             &[Path::new(vec![
@@ -557,20 +570,12 @@ mod test {
         assert_eq!(error.status, StatusCode::NOT_FOUND)
     }
 
-    #[test]
-    fn test_verify_path() {
-        let subnet_id = subnet_test_id(1);
-        let mut metadata = SystemMetadata::new(subnet_id, SubnetType::Application);
-        metadata.batch_time = UNIX_EPOCH;
-        let state = ReplicatedState::new_from_checkpoint(
-            BTreeMap::new(),
-            metadata,
-            CanisterQueues::default(),
-            RawQueryStats::default(),
-            CanisterSnapshots::default(),
-        );
+    #[rstest]
+    fn test_verify_path(#[values(Version::V2, Version::V3)] version: Version) {
+        let state = fake_replicated_state();
         assert_eq!(
             verify_paths(
+                version,
                 &state,
                 &user_test_id(1),
                 &[Path::from(Label::from("time"))],
@@ -581,6 +586,7 @@ mod test {
         );
         assert_eq!(
             verify_paths(
+                version,
                 &state,
                 &user_test_id(1),
                 &[
@@ -601,6 +607,7 @@ mod test {
             Ok(())
         );
         assert!(verify_paths(
+            version,
             &state,
             &user_test_id(1),
             &[
@@ -611,5 +618,41 @@ mod test {
             canister_test_id(1).get(),
         )
         .is_err());
+    }
+
+    #[test]
+    fn deprecated_canister_ranges_path_is_not_allowed_on_the_v3_endpoint() {
+        let state = fake_replicated_state();
+        assert!(verify_paths(
+            Version::V3,
+            &state,
+            &user_test_id(1),
+            &[Path::new(vec![
+                Label::from("subnet"),
+                subnet_test_id(1).get().to_vec().into(),
+                Label::from("canister_ranges"),
+            ])],
+            &CanisterIdSet::all(),
+            canister_test_id(1).get(),
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn deprecated_canister_ranges_path_is_allowed_on_the_v2_endpoint() {
+        let state = fake_replicated_state();
+        assert!(verify_paths(
+            Version::V2,
+            &state,
+            &user_test_id(1),
+            &[Path::new(vec![
+                Label::from("subnet"),
+                subnet_test_id(1).get().to_vec().into(),
+                Label::from("canister_ranges"),
+            ])],
+            &CanisterIdSet::all(),
+            canister_test_id(1).get(),
+        )
+        .is_ok());
     }
 }
