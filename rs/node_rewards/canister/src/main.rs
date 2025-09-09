@@ -155,7 +155,7 @@ async fn get_node_providers_rewards(
     request: GetNodeProvidersRewardsRequest,
 ) -> GetNodeProvidersRewardsResponse {
     panic_if_caller_not_governance();
-    NodeRewardsCanister::get_node_providers_rewards(&CANISTER, request).await
+    NodeRewardsCanister::get_node_providers_rewards(&CANISTER, request)
 }
 
 #[query]
