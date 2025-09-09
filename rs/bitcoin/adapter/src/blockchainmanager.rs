@@ -1,8 +1,9 @@
 use crate::{
-    blockchainstate::{AddHeaderError, BlockchainState},
+    blockchainstate::BlockchainState,
     common::{
         BlockHeight, BlockchainBlock, BlockchainHeader, BlockchainNetwork, MINIMUM_VERSION_NUMBER,
     },
+    header_cache::AddHeaderError,
     metrics::RouterMetrics,
     Channel, Command, ProcessNetworkMessageError,
 };
@@ -358,7 +359,7 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
                 None => blockchain_state.get_cached_header(&last_block_hash),
             };
 
-            if let Some(last) = maybe_last_header {
+            if let Some(last) = &maybe_last_header {
                 if last.height > peer.height {
                     peer.tip = last.header.block_hash();
                     peer.height = last.height;
