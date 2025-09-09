@@ -58,7 +58,8 @@ const SYNC_INTERVAL_SECONDS: Duration = Duration::from_secs(60 * 60); // 1 hour
 const DAY_IN_SECONDS: u64 = 60 * 60 * 24;
 const SYNC_AT_SECONDS_AFTER_MIDNIGHT: u64 = 10;
 const MAX_SYNC_DURATION_SECONDS: u64 = 10 * 60;
-const MAX_REWARDABLE_NODES_BACKFILL_DAYS: usize = 35;
+const MAX_REWARDABLE_NODES_BACKFILL_DAYS: u64 = 100;
+const REWARDABLE_NODES_BACKFILL_DAYS_STEP: usize = 10;
 
 fn schedule_timers() {
     let now_secs = current_time().as_secs_since_unix_epoch();
@@ -89,13 +90,8 @@ fn schedule_daily_sync() {
                 instruction_counter.lap();
                 NodeRewardsCanister::schedule_metrics_sync(&CANISTER).await;
                 metrics_sync_instructions = instruction_counter.lap();
-                let today: DayUtc = current_time().as_nanos_since_unix_epoch().into();
-                let mut current_day = today.previous_day();
-                for _ in 0..MAX_REWARDABLE_NODES_BACKFILL_DAYS {
-                    NodeRewardsCanister::backfill_rewardable_nodes(&CANISTER, &current_day)
-                        .unwrap_or_else(|e| ic_cdk::println!("Failed to backfill cache: {:?}", e));
-                    current_day = current_day.previous_day();
-                }
+
+                backfill_rewardable_nodes_in_batches();
             }
             Err(e) => {
                 ic_cdk::println!("Failed to sync local registry: {:?}", e)
@@ -110,6 +106,28 @@ fn schedule_daily_sync() {
             )
         });
     });
+}
+
+fn backfill_rewardable_nodes_in_batches() {
+    let now = current_time();
+    let start_backfill = now.saturating_sub(Duration::from_secs(
+        MAX_REWARDABLE_NODES_BACKFILL_DAYS * DAY_IN_SECONDS,
+    ));
+    let today: DayUtc = now.as_nanos_since_unix_epoch().into();
+    let yesterday = today.previous_day();
+    let start_backfill_day: DayUtc = start_backfill.as_nanos_since_unix_epoch().into();
+
+    let backfill_days: Vec<DayUtc> = start_backfill_day.days_until(&yesterday).unwrap();
+
+    for batch in backfill_days.chunks(REWARDABLE_NODES_BACKFILL_DAYS_STEP) {
+        let batch = batch.to_vec();
+        ic_cdk_timers::set_timer(Duration::from_secs(0), move || {
+            for day in batch {
+                NodeRewardsCanister::backfill_rewardable_nodes(&CANISTER, &day)
+                    .unwrap_or_else(|e| ic_cdk::println!("Failed to backfill: {:?}", e));
+            }
+        });
+    }
 }
 
 fn panic_if_caller_not_governance() {
