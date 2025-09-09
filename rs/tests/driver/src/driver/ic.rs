@@ -46,6 +46,7 @@ pub struct InternetComputer {
     pub jaeger_addr: Option<SocketAddr>,
     pub socks_proxy: Option<String>,
     use_specified_ids_allocation_range: bool,
+    pub skip_unassigned_record: bool,
     pub api_boundary_nodes: Vec<Node>,
 }
 
@@ -214,6 +215,11 @@ impl InternetComputer {
 
     pub fn with_socks_proxy(mut self, socks_proxy: String) -> Self {
         self.socks_proxy = Some(socks_proxy);
+        self
+    }
+
+    pub fn without_unassigned_config(mut self) -> Self {
+        self.skip_unassigned_record = true;
         self
     }
 
