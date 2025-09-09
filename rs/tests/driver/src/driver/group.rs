@@ -372,14 +372,13 @@ impl SystemTestSubGroup {
             SystemTestSubGroup::Singleton { task_fn, task_id } => {
                 let logger = ctx.logger.clone();
                 let group_ctx = ctx.group_ctx.clone();
-                if let Some(ref filter) = group_ctx.filter_tests {
-                    if let TaskId::Test(ref name) = task_id {
-                        if !name.contains(filter) {
-                            return Plan::Leaf {
-                                task: Box::from(SkipTestTask::new(task_id.clone())),
-                            };
-                        }
-                    }
+                if let Some(ref filter) = group_ctx.filter_tests
+                    && let TaskId::Test(ref name) = task_id
+                    && !name.contains(filter)
+                {
+                    return Plan::Leaf {
+                        task: Box::from(SkipTestTask::new(task_id.clone())),
+                    };
                 }
                 let closure = {
                     let task_id = task_id.clone();
@@ -1104,10 +1103,10 @@ struct JournalRecord {
 
 impl std::fmt::Display for JournalRecord {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        if let Some(ref container) = self.container_name {
-            if container == COLOCATE_CONTAINER_NAME {
-                return write!(f, "TEST_LOG: {}", self.message);
-            }
+        if let Some(ref container) = self.container_name
+            && container == COLOCATE_CONTAINER_NAME
+        {
+            return write!(f, "TEST_LOG: {}", self.message);
         }
         let mut display = format!("message: \"{}\"", self.message);
         if let Some(x) = &self.system_unit {

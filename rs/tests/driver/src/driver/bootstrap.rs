@@ -687,10 +687,10 @@ fn create_setupos_config_image(
         .arg("--admin-keys")
         .arg(ssh_authorized_pub_keys_dir.join("admin"));
 
-    if let Ok(node_key) = std::env::var("NODE_OPERATOR_PRIV_KEY_PATH") {
-        if !node_key.trim().is_empty() {
-            cmd.arg("--node-operator-private-key").arg(node_key);
-        }
+    if let Ok(node_key) = std::env::var("NODE_OPERATOR_PRIV_KEY_PATH")
+        && !node_key.trim().is_empty()
+    {
+        cmd.arg("--node-operator-private-key").arg(node_key);
     }
 
     if !cmd.status()?.success() {

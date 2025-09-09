@@ -50,15 +50,13 @@ fn add_block(
     canister_id: CanisterId,
     block: &ICRC3Value,
 ) -> Result<Nat, String> {
-    let result = Decode!(
+    Decode!(
         &env.execute_ingress(canister_id, "add_block", Encode!(block).unwrap())
             .expect("failed to add block")
             .bytes(),
         AddBlockResult
     )
-    .expect("failed to decode add_block response");
-
-    result
+    .expect("failed to decode add_block response")
 }
 
 fn icrc3_get_blocks(

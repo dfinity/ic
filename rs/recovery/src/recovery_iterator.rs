@@ -42,7 +42,7 @@ pub trait RecoveryIterator<
         vec![]
     }
 
-    fn next_step(&mut self) -> Option<(StepType, Box<dyn Step>)> {
+    fn next_step(&mut self) -> Option<(StepType, Box<dyn Step + '_>)> {
         let skipped_steps = self.get_skipped_steps();
         let result = if let Some(current_step) = self.get_step_iterator().next() {
             if skipped_steps.contains(&current_step) {

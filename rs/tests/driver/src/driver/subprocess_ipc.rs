@@ -181,10 +181,9 @@ impl LogReceiver {
                         report_or_failure = Some(ReportOrFailure::Report(report));
                     } else if let Some(Level::Warning) =
                         Level::from_usize(log_event.log_record.level)
+                        && let Some(msg) = Self::extract_message(PANIC_LOG_PREFIX, &log_event)
                     {
-                        if let Some(msg) = Self::extract_message(PANIC_LOG_PREFIX, &log_event) {
-                            report_or_failure = Some(ReportOrFailure::Failure(msg));
-                        }
+                        report_or_failure = Some(ReportOrFailure::Failure(msg));
                     }
 
                     let mut box_records = self.box_records.lock().unwrap();

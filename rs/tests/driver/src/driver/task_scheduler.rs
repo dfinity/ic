@@ -70,18 +70,18 @@ impl TaskScheduler {
                         }
                     }
                     Node::Running { .. } => {
-                        if let Some(task_id) = maybe_task_id {
-                            if !self.running_tasks.contains_key(&task_id) {
-                                // debug!(log, "ag: Starting node: {:?}, task: {}", &node, &task_id);
-                                let task = self.scheduled_tasks.get(&task_id).unwrap();
-                                let tx = event_tx.clone();
-                                let cb = move |result: TaskResult| {
-                                    tx.send(result).expect("Failed to send message.")
-                                };
-                                let th = task.spawn(Box::new(cb));
-                                Self::record_time(&mut self.start_times, &task_id);
-                                self.running_tasks.insert(task_id, (th, node_index));
-                            }
+                        if let Some(task_id) = maybe_task_id
+                            && !self.running_tasks.contains_key(&task_id)
+                        {
+                            // debug!(log, "ag: Starting node: {:?}, task: {}", &node, &task_id);
+                            let task = self.scheduled_tasks.get(&task_id).unwrap();
+                            let tx = event_tx.clone();
+                            let cb = move |result: TaskResult| {
+                                tx.send(result).expect("Failed to send message.")
+                            };
+                            let th = task.spawn(Box::new(cb));
+                            Self::record_time(&mut self.start_times, &task_id);
+                            self.running_tasks.insert(task_id, (th, node_index));
                         }
                     }
                     Node::Failed { .. } => {
