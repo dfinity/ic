@@ -2,7 +2,6 @@ use crate::metrics::MetricsManager;
 use crate::pb::v1::{RewardableNodesKey, RewardableNodesValue};
 use crate::registry_querier::RegistryQuerier;
 use crate::storage::{REWARDABLE_NODES_CACHE, VM};
-use crate::KeyRange;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_node_rewards_canister_api::monthly_rewards::{
