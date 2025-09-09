@@ -3,6 +3,7 @@ syntax = "proto3";
 package ic_node_rewards.pb.v1;
 
 import "ic_base_types/pb/v1/types.proto";
+import "def/registry/node/v1/node.proto";
 
 message SubnetIdKey {
   ic_base_types.pb.v1.PrincipalId subnet_id = 1;
@@ -23,4 +24,20 @@ message NodeMetrics {
   ic_base_types.pb.v1.PrincipalId node_id = 1;
   uint64 num_blocks_proposed_total = 2;
   uint64 num_blocks_failed_total = 3;
+}
+
+message RewardableNodesKey {
+  uint64 registry_version = 1;
+  ic_base_types.pb.v1.PrincipalId provider_id = 2;
+}
+
+message RewardableNodesValue {
+  repeated RewardableNode rewardable_nodes = 1;
+}
+
+message RewardableNode {
+  ic_base_types.pb.v1.PrincipalId node_id = 1;
+  optional string region = 2;
+  optional string dc_id = 3;
+  optional registry.node.v1.NodeRewardType node_reward_type = 4;
 }
