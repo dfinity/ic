@@ -952,7 +952,7 @@ mod random_ops {
         }
     }
 
-    extern "C" fn sigsegv_handler(
+    unsafe extern "C" fn sigsegv_handler(
         signum: libc::c_int,
         siginfo_ptr: *mut libc::siginfo_t,
         ucontext_ptr: *mut libc::c_void,
@@ -973,7 +973,11 @@ mod random_ops {
                     if previous.sa_flags & libc::SA_SIGINFO != 0 {
                         mem::transmute::<
                             usize,
-                            extern "C" fn(libc::c_int, *mut libc::siginfo_t, *mut libc::c_void),
+                            unsafe extern "C" fn(
+                                libc::c_int,
+                                *mut libc::siginfo_t,
+                                *mut libc::c_void,
+                            ),
                         >(previous.sa_sigaction)(
                             signum, siginfo_ptr, ucontext_ptr
                         )
@@ -982,9 +986,9 @@ mod random_ops {
                     {
                         libc::sigaction(signum, &previous, std::ptr::null_mut());
                     } else {
-                        mem::transmute::<usize, extern "C" fn(libc::c_int)>(previous.sa_sigaction)(
-                            signum,
-                        )
+                        mem::transmute::<usize, unsafe extern "C" fn(libc::c_int)>(
+                            previous.sa_sigaction,
+                        )(signum)
                     }
                 }
             }
