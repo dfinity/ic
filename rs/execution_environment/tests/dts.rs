@@ -1195,8 +1195,8 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
                 let args = UpdateSettingsArgs::new(aborted_canister_id, settings).encode();
                 (method, call_args().other_side(args))
             }),
-            // TODO(EXC-2112): fix this.
-            // API is only accessible in non-replicated mode
+            // TODO(EXC-2112): fix this test.
+            // API is accessible both in replicated (only for canisters) and non-replicated (only for non-canisters) mode.
             Method::FetchCanisterLogs => {}
             Method::UploadChunk => test_supported(|aborted_canister_id| {
                 let args = UploadChunkArgs {
