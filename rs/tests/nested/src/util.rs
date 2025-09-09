@@ -15,8 +15,8 @@ use ic_registry_keys::{
     make_blessed_replica_versions_key, make_unassigned_nodes_config_record_key,
 };
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_registry_transport::Error as RegistryTransportError;
 use ic_registry_subnet_type::SubnetType;
+use ic_registry_transport::Error as RegistryTransportError;
 use ic_system_test_driver::{
     driver::{
         bootstrap::{setup_nested_vms, start_nested_vms},
