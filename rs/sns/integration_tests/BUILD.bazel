@@ -132,6 +132,7 @@ rust_canister(
         "//rs/rust_canisters/dfn_core",
         "//rs/sns/governance",
         "//rs/types/base_types",
+        "@crate_index//:ic-stable-structures",
         "@crate_index//:pretty-bytes",
         "@crate_index//:prost",
         "@crate_index//:rand",
