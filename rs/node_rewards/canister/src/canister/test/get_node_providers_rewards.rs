@@ -307,12 +307,13 @@ fn sync_all() {
 
     NodeRewardsCanister::schedule_registry_sync(&CANISTER_TEST).now_or_never();
     NodeRewardsCanister::schedule_metrics_sync(&CANISTER_TEST).now_or_never();
-    NodeRewardsCanister::backfill_rewardable_nodes_cache(&CANISTER_TEST, &day1).unwrap();
-    NodeRewardsCanister::backfill_rewardable_nodes_cache(&CANISTER_TEST, &day2).unwrap();
+    NodeRewardsCanister::backfill_rewardable_nodes(&CANISTER_TEST, &day1).unwrap();
+    NodeRewardsCanister::backfill_rewardable_nodes(&CANISTER_TEST, &day2).unwrap();
 }
 
 #[test]
 fn test_get_node_providers_rewards() {
+    println!("test_get_node_providers_rewards");
     use pretty_assertions::assert_eq;
 
     let (fake_registry, metrics_manager) = setup_thread_local_canister_for_test();

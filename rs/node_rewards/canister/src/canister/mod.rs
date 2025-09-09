@@ -130,7 +130,7 @@ impl NodeRewardsCanister {
         });
     }
 
-    pub fn backfill_rewardable_nodes_cache(
+    pub fn backfill_rewardable_nodes(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         day_utc: &DayUtc,
     ) -> Result<(), RegistryClientError> {
@@ -161,6 +161,9 @@ impl NodeRewardsCanister {
                     rewardable_nodes_cache.insert(key, value);
                 });
             }
+            ic_cdk::println!("Backfilled rewardable nodes for day {}", day_utc);
+        } else {
+            ic_cdk::println!("Rewardable nodes already backfilled for day {}", day_utc);
         }
         Ok(())
     }

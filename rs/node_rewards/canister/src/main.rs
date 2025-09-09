@@ -49,7 +49,6 @@ fn pre_upgrade() {}
 
 #[post_upgrade]
 fn post_upgrade() {
-    sync_all();
     schedule_timers();
 }
 
@@ -60,11 +59,9 @@ const SYNC_INTERVAL_SECONDS: Duration = Duration::from_secs(60 * 60); // 1 hour
 const DAY_IN_SECONDS: u64 = 60 * 60 * 24;
 const SYNC_AT_SECONDS_AFTER_MIDNIGHT: u64 = 10;
 const MAX_SYNC_DURATION_SECONDS: u64 = 10 * 60;
-const MAX_REWARDABLE_NODES_CACHE_BACKFILL_DAYS: usize = 40;
+const MAX_REWARDABLE_NODES_BACKFILL_DAYS: usize = 35;
 
 fn schedule_timers() {
-    ic_cdk_timers::set_timer(Duration::from_secs(0), || sync_all());
-
     let now_secs = current_time().as_secs_since_unix_epoch();
     let since_midnight = now_secs % DAY_IN_SECONDS;
     let mut next_sync_target = now_secs - since_midnight + SYNC_AT_SECONDS_AFTER_MIDNIGHT;
@@ -73,11 +70,13 @@ fn schedule_timers() {
         next_sync_target = next_sync_target + DAY_IN_SECONDS;
     };
     ic_cdk_timers::set_timer(Duration::from_secs(next_sync_target), || {
-        ic_cdk_timers::set_timer_interval(Duration::from_secs(DAY_IN_SECONDS), || sync_all());
+        ic_cdk_timers::set_timer_interval(Duration::from_secs(DAY_IN_SECONDS), || {
+            schedule_daily_sync()
+        });
     });
 }
 
-fn sync_all() {
+fn schedule_daily_sync() {
     ic_cdk::futures::spawn_017_compat(async move {
         telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.mark_last_sync_start());
         let mut instruction_counter = telemetry::InstructionCounter::default();
@@ -91,18 +90,12 @@ fn sync_all() {
                 instruction_counter.lap();
                 NodeRewardsCanister::schedule_metrics_sync(&CANISTER).await;
                 metrics_sync_instructions = instruction_counter.lap();
-                ic_cdk::println!("Successfully synced subnets metrics and local registry");
-
                 let today: DayUtc = current_time().as_nanos_since_unix_epoch().into();
-                let mut day_utc = today.previous_day();
-                for _ in ..MAX_REWARDABLE_NODES_CACHE_BACKFILL_DAYS {
-                    ic_cdk_timers::set_timer(Duration::from_secs(0), move || {
-                        NodeRewardsCanister::backfill_rewardable_nodes_cache(&CANISTER, &day_utc)
-                            .unwrap_or_else(|e| {
-                                ic_cdk::println!("Failed to backfill cache: {:?}", e)
-                            });
-                    });
-                    day_utc = day_utc.previous_day();
+                let mut current_day = today.previous_day();
+                for _ in 0..MAX_REWARDABLE_NODES_BACKFILL_DAYS {
+                    NodeRewardsCanister::backfill_rewardable_nodes(&CANISTER, &current_day)
+                        .unwrap_or_else(|e| ic_cdk::println!("Failed to backfill cache: {:?}", e));
+                    current_day = current_day.previous_day();
                 }
             }
             Err(e) => {
