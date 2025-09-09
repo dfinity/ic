@@ -15,7 +15,6 @@ rust_library(
         "//rs/canister_client",
         "//rs/nervous_system/common/test_keys",
         "//rs/nns/common",
-        "//rs/nns/test_utils",
         "//rs/protobuf",
         "//rs/registry/keys",
         "//rs/registry/nns_data_provider",
