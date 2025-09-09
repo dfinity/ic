@@ -11801,6 +11801,7 @@ dependencies = [
  "ic-crypto-utils-ni-dkg",
  "ic-icp-index",
  "ic-icrc1",
+ "ic-ledger-core",
  "ic-management-canister-types-private",
  "ic-nervous-system-clients",
  "ic-nervous-system-common",
@@ -11831,6 +11832,7 @@ dependencies = [
  "ic-test-utilities-types",
  "ic-types",
  "ic-utils 0.9.0",
+ "ic-xrc-types",
  "icp-ledger",
  "icrc-ledger-types",
  "lifeline",
@@ -11843,6 +11845,7 @@ dependencies = [
  "registry-canister",
  "serde",
  "tokio",
+ "xrc-mock",
 ]
 
 [[package]]
@@ -17506,13 +17509,10 @@ version = "0.9.0"
 dependencies = [
  "anyhow",
  "canister-test",
- "futures",
  "ic-canister-client",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
- "ic-nns-test-utils",
  "ic-protobuf",
- "ic-recovery",
  "ic-registry-keys",
  "ic-registry-nns-data-provider",
  "ic-registry-subnet-type",
@@ -17520,12 +17520,26 @@ dependencies = [
  "ic-types",
  "ic_consensus_system_test_utils",
  "prost 0.13.4",
- "rand 0.8.5",
  "regex",
  "reqwest 0.12.15",
- "sha2 0.10.9",
  "slog",
  "url",
+]
+
+[[package]]
+name = "nested-nns-recovery"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "ic-recovery",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "nested",
+ "rand 0.8.5",
+ "sha2 0.10.9",
+ "slog",
 ]
 
 [[package]]
@@ -17699,19 +17713,25 @@ dependencies = [
  "ic-limits",
  "ic-management-canister-types-private",
  "ic-nervous-system-clients",
+ "ic-nervous-system-common",
  "ic-nervous-system-common-test-keys",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-api",
  "ic-nns-test-utils",
  "ic-registry-nns-data-provider",
+ "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-registry-transport",
  "ic-system-test-driver",
  "ic-tests-ckbtc",
  "ic-types",
+ "ic-universal-canister",
+ "ic-utils 0.40.1",
  "ic_consensus_system_test_utils",
  "icp-ledger",
+ "icrc-ledger-types",
+ "lazy_static",
  "libflate",
  "nns_dapp",
  "num-traits",

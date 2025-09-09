@@ -181,6 +181,18 @@ impl SubnetPairProxy {
             .query(self.remote_canister_id, method, method_payload)
     }
 
+    /// Queries the metrics on the local canister.
+    fn query_local_metrics(&self) -> Result<Metrics, UserError> {
+        self.query_local_canister("metrics", Encode!().unwrap())
+            .map(|reply| Decode!(&reply.bytes(), Metrics).unwrap())
+    }
+
+    /// Queries the metrics on the remote canister.
+    fn query_remote_metrics(&self) -> Result<Metrics, UserError> {
+        self.query_remote_canister("metrics", Encode!().unwrap())
+            .map(|reply| Decode!(&reply.bytes(), Metrics).unwrap())
+    }
+
     /// Generates a snapshot of the output queue on the local canister and
     /// returns it as a vector of messages; or 'None' if no output queue exists.
     fn local_output_queue_snapshot(&self) -> Option<Vec<RequestOrResponse>> {
@@ -470,10 +482,7 @@ fn test_response_in_output_queue_causes_backpressure() {
     // reporting call errors, indicating back pressure.
     do_until_or_panic(MAX_TICKS, |_| {
         execute_round_with_timeout(&subnets.local_env);
-        let reply = subnets
-            .query_local_canister("metrics", Encode!().unwrap())
-            .unwrap();
-        Ok(Decode!(&reply.bytes(), Metrics).unwrap().call_errors > 0)
+        Ok(subnets.query_local_metrics().unwrap().call_errors > 0)
     })
     .unwrap();
 
@@ -515,10 +524,7 @@ fn test_reservations_do_not_inhibit_xnet_induction_of_requests() {
         .unwrap();
     do_until_or_panic(MAX_TICKS, |_| {
         subnets.local_env.tick();
-        let reply = subnets
-            .query_local_canister("metrics", Encode!().unwrap())
-            .unwrap();
-        Ok(Decode!(&reply.bytes(), Metrics).unwrap().call_errors > 0)
+        Ok(subnets.query_local_metrics().unwrap().call_errors > 0)
     })
     .unwrap();
 
@@ -527,19 +533,13 @@ fn test_reservations_do_not_inhibit_xnet_induction_of_requests() {
         .unwrap();
     do_until_or_panic(MAX_TICKS, |_| {
         subnets.remote_env.tick();
-        let reply = subnets
-            .query_remote_canister("metrics", Encode!().unwrap())
-            .unwrap();
-        Ok(Decode!(&reply.bytes(), Metrics).unwrap().call_errors > 0)
+        Ok(subnets.query_remote_metrics().unwrap().call_errors > 0)
     })
     .unwrap();
 
     // Try inducting all the requests successfully sent by the remote canister into
     // the local canister.
-    let reply = subnets
-        .query_remote_canister("metrics", Encode!().unwrap())
-        .unwrap();
-    let metrics = Decode!(&reply.bytes(), Metrics).unwrap();
+    let metrics = subnets.query_remote_metrics().unwrap();
     induct_from_head_of_stream(
         &subnets.remote_env,
         &subnets.local_env,
@@ -902,6 +902,8 @@ fn induct_and_observe_until_stale(
 /// The sequence of events is therefore as follows:
 /// - After the initial situation as depicted above, the XNet canisters stop generating requests.
 /// - Bidirectional inductions are done on `old_subnets_proxy` until they stop triggering changes.
+/// - Reject responses generated for reject signals to requests still in the stream after the remote
+///   canister migrated are inducted once from the 'old remote env' to the 'new remote env'.
 /// - Bidirectional inductions are done on `new_subnets_proxy` until they stop triggering changes.
 ///
 /// If everything went in order, at this point:
@@ -1020,6 +1022,15 @@ fn state_machine_subnet_splitting_test() {
     )
     .expect("old_subnet_proxy induction stage");
 
+    // Induct once from the remote subnet on the `old_subnets_proxy` to the remote subnet
+    // on the `new_subnets_proxy` to induct rerouted reject responses.
+    induct_from_head_of_stream(
+        &old_subnets_proxy.remote_env,
+        &new_subnets_proxy.remote_env,
+        None,
+    )
+    .unwrap();
+
     // Do bidirectional inductions until no more changes in the state of `new_subnet_proxy`
     // are observed.
     let new_test_states = induct_and_observe_until_stale(
@@ -1060,6 +1071,16 @@ fn state_machine_subnet_splitting_test() {
         remote_callback_id_tracker.is_empty(),
         "{}",
         print_test_states()
+    );
+
+    // Check for sequence errors.
+    assert_eq!(
+        0,
+        new_subnets_proxy.query_local_metrics().unwrap().seq_errors
+    );
+    assert_eq!(
+        0,
+        new_subnets_proxy.query_remote_metrics().unwrap().seq_errors
     );
 
     // Attempt to stop canisters; This will panic if there are any lingering call contexts.
