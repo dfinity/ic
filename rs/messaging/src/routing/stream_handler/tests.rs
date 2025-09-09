@@ -291,17 +291,9 @@ fn induct_loopback_stream_reroute_response() {
 
             metrics.assert_inducted_xnet_messages_eq(&[
                 (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SUCCESS, 1),
-                (
-                    LABEL_VALUE_TYPE_REQUEST,
-                    LABEL_VALUE_RECEIVING_CANISTER_MIGRATED,
-                    1,
-                ),
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_RECEIVER_MIGRATED, 1),
                 (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 2),
-                (
-                    LABEL_VALUE_TYPE_RESPONSE,
-                    LABEL_VALUE_RECEIVING_CANISTER_MIGRATED,
-                    1,
-                ),
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_RECEIVER_MIGRATED, 1),
             ]);
             assert_eq!(3, metrics.fetch_inducted_payload_sizes_stats().count);
             // No critical errors raised.
@@ -1417,7 +1409,7 @@ fn garbage_collect_local_state_with_reject_signals_for_request_from_migrating_ca
             // 1 reject response failed to induct.
             metrics.assert_inducted_xnet_messages_eq(&[(
                 LABEL_VALUE_TYPE_RESPONSE,
-                LABEL_VALUE_RECEIVING_CANISTER_MIGRATED,
+                LABEL_VALUE_RECEIVER_MIGRATED,
                 1,
             )]);
 
@@ -2213,7 +2205,7 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
             metrics.assert_inducted_xnet_messages_eq(&[
                 (
                     LABEL_VALUE_TYPE_REQUEST,
-                    LABEL_VALUE_RECEIVING_CANISTER_LIKELY_MIGRATED,
+                    LABEL_VALUE_RECEIVER_LIKELY_MIGRATED,
                     2,
                 ),
                 (
@@ -2309,16 +2301,8 @@ fn induct_stream_slices_with_messages_to_migrating_canister() {
             );
 
             metrics.assert_inducted_xnet_messages_eq(&[
-                (
-                    LABEL_VALUE_TYPE_REQUEST,
-                    LABEL_VALUE_RECEIVING_CANISTER_MIGRATED,
-                    1,
-                ),
-                (
-                    LABEL_VALUE_TYPE_RESPONSE,
-                    LABEL_VALUE_RECEIVING_CANISTER_MIGRATED,
-                    1,
-                ),
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_RECEIVER_MIGRATED, 1),
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_RECEIVER_MIGRATED, 1),
             ]);
             assert_eq!(0, metrics.fetch_inducted_payload_sizes_stats().count);
             // No critical errors raised.
@@ -2400,16 +2384,8 @@ fn induct_stream_slices_with_messages_to_migrated_canister() {
             );
 
             metrics.assert_inducted_xnet_messages_eq(&[
-                (
-                    LABEL_VALUE_TYPE_REQUEST,
-                    LABEL_VALUE_RECEIVING_CANISTER_MIGRATED,
-                    1,
-                ),
-                (
-                    LABEL_VALUE_TYPE_RESPONSE,
-                    LABEL_VALUE_RECEIVING_CANISTER_MIGRATED,
-                    1,
-                ),
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_RECEIVER_MIGRATED, 1),
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_RECEIVER_MIGRATED, 1),
             ]);
             assert_eq!(0, metrics.fetch_inducted_payload_sizes_stats().count);
             // No critical errors raised.
@@ -2495,11 +2471,7 @@ fn induct_stream_slices_with_messages_from_migrating_canister() {
             );
 
             metrics.assert_inducted_xnet_messages_eq(&[
-                (
-                    LABEL_VALUE_TYPE_REQUEST,
-                    LABEL_VALUE_SENDING_CANISTER_MIGRATED,
-                    1,
-                ),
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SENDER_MIGRATED, 1),
                 (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 1),
             ]);
             assert_eq!(1, metrics.fetch_inducted_payload_sizes_stats().count);
@@ -2726,11 +2698,7 @@ fn process_stream_slices_with_reject_signals_partial_success() {
             assert_eq!(expected_state, inducted_state);
             metrics.assert_inducted_xnet_messages_eq(&[
                 // The request from a migrating canister @153...
-                (
-                    LABEL_VALUE_TYPE_REQUEST,
-                    LABEL_VALUE_SENDING_CANISTER_MIGRATED,
-                    1,
-                ),
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SENDER_MIGRATED, 1),
                 // ...and from and unknown canister @154 are rejected.
                 (
                     LABEL_VALUE_TYPE_REQUEST,
@@ -2949,21 +2917,9 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
 
             // 2 incoming messages discarded and 2 loopback +1 incoming inducted.
             metrics.assert_inducted_xnet_messages_eq(&[
-                (
-                    LABEL_VALUE_TYPE_REQUEST,
-                    LABEL_VALUE_RECEIVING_CANISTER_MIGRATED,
-                    2,
-                ),
-                (
-                    LABEL_VALUE_TYPE_RESPONSE,
-                    LABEL_VALUE_RECEIVING_CANISTER_MIGRATED,
-                    4,
-                ),
-                (
-                    LABEL_VALUE_TYPE_REQUEST,
-                    LABEL_VALUE_SENDING_CANISTER_MIGRATED,
-                    3,
-                ),
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_RECEIVER_MIGRATED, 2),
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_RECEIVER_MIGRATED, 4),
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SENDER_MIGRATED, 3),
                 (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SUCCESS, 3),
                 (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 2),
             ]);

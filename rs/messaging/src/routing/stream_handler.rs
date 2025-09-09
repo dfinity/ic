@@ -81,9 +81,9 @@ const LABEL_VALUE_SENDER_SUBNET_MISMATCH: &str = "SenderSubnetMismatch";
 const LABEL_VALUE_SENDER_SUBNET_MISMATCH_MIGRATING: &str = "SenderSubnetMismatchMigrating";
 const LABEL_VALUE_RECEIVER_SUBNET_MISMATCH: &str = "ReceiverSubnetMismatch";
 const LABEL_VALUE_REQUEST_MISROUTED: &str = "RequestMisrouted";
-const LABEL_VALUE_SENDING_CANISTER_MIGRATED: &str = "SendingCanisterMigrated";
-const LABEL_VALUE_RECEIVING_CANISTER_MIGRATED: &str = "ReceivingCanisterMigrated";
-const LABEL_VALUE_RECEIVING_CANISTER_LIKELY_MIGRATED: &str = "ReceivingCanisterLikelyMigrated";
+const LABEL_VALUE_SENDER_MIGRATED: &str = "SenderMigrated";
+const LABEL_VALUE_RECEIVER_MIGRATED: &str = "ReceiverMigrated";
+const LABEL_VALUE_RECEIVER_LIKELY_MIGRATED: &str = "ReceiverLikelyMigrated";
 const LABEL_TYPE: &str = "type";
 const LABEL_VALUE_TYPE_REQUEST: &str = "request";
 const LABEL_VALUE_TYPE_RESPONSE: &str = "response";
@@ -156,9 +156,9 @@ impl StreamHandlerMetrics {
                 LABEL_VALUE_SENDER_SUBNET_MISMATCH,
                 LABEL_VALUE_REQUEST_MISROUTED,
                 LABEL_VALUE_RECEIVER_SUBNET_MISMATCH,
-                LABEL_VALUE_SENDING_CANISTER_MIGRATED,
-                LABEL_VALUE_RECEIVING_CANISTER_MIGRATED,
-                LABEL_VALUE_RECEIVING_CANISTER_LIKELY_MIGRATED,
+                LABEL_VALUE_SENDER_MIGRATED,
+                LABEL_VALUE_RECEIVER_MIGRATED,
+                LABEL_VALUE_RECEIVER_LIKELY_MIGRATED,
                 LABEL_VALUE_CANISTER_METHOD_NOT_FOUND,
                 LABEL_VALUE_INVALID_MANAGEMENT_PAYLOAD,
             ] {
@@ -796,10 +796,7 @@ impl StreamHandlerImpl {
             // from the sender's known host subnet. This is to ensure request
             // ordering guarantees.
             (SenderSubnet::CanisterMigrating, RequestOrResponse::Request(_)) => {
-                self.observe_inducted_message_status(
-                    msg_type,
-                    LABEL_VALUE_SENDING_CANISTER_MIGRATED,
-                );
+                self.observe_inducted_message_status(msg_type, LABEL_VALUE_SENDER_MIGRATED);
                 stream.push_reject_signal(RejectReason::CanisterMigrating);
                 Cycles::zero()
             }
@@ -927,10 +924,7 @@ impl StreamHandlerImpl {
 
             // Receiver canister is migrating to/from this subnet.
             Some(host_subnet) if self.is_receiver_canister_migrating(&msg, host_subnet, state) => {
-                self.observe_inducted_message_status(
-                    msg_type,
-                    LABEL_VALUE_RECEIVING_CANISTER_MIGRATED,
-                );
+                self.observe_inducted_message_status(msg_type, LABEL_VALUE_RECEIVER_MIGRATED);
 
                 match &msg {
                     RequestOrResponse::Request(request) => {
@@ -968,7 +962,7 @@ impl StreamHandlerImpl {
             _ if matches!(msg, RequestOrResponse::Request(_)) => {
                 self.observe_inducted_message_status(
                     msg_type,
-                    LABEL_VALUE_RECEIVING_CANISTER_LIKELY_MIGRATED,
+                    LABEL_VALUE_RECEIVER_LIKELY_MIGRATED,
                 );
                 Reject(RejectReason::CanisterMigrating, msg)
             }
