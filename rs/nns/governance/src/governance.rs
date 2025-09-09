@@ -618,12 +618,27 @@ impl Proposal {
                                 println!("{}ERROR: NnsFunction::Unspecified", LOG_PREFIX);
                                 Topic::Unspecified
                             }
+                            NnsFunction::BlessReplicaVersion
+                            | NnsFunction::RetireReplicaVersion
+                            | NnsFunction::UpdateElectedHostosVersions
+                            | NnsFunction::UpdateApiBoundaryNodesVersion
+                            | NnsFunction::UpdateNodesHostosVersion
+                            | NnsFunction::UpdateUnassignedNodesConfig
+                            | NnsFunction::NnsCanisterUpgrade
+                            | NnsFunction::NnsRootUpgrade
+                            | NnsFunction::UpdateAllowedPrincipals
+                            | NnsFunction::IcpXdrConversionRate => match mt.check_obsolete() {
+                                Ok(_) => unreachable!("Obsolete NnsFunction not handled"),
+                                Err(error_message) => {
+                                    println!("{}ERROR: {}", LOG_PREFIX, error_message);
+                                    Topic::Unspecified
+                                }
+                            },
 
                             NnsFunction::AssignNoid
                             | NnsFunction::UpdateNodeOperatorConfig
                             | NnsFunction::RemoveNodeOperators
                             | NnsFunction::RemoveNodes
-                            | NnsFunction::UpdateUnassignedNodesConfig
                             | NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes => {
                                 Topic::NodeAdmin
                             }
@@ -643,12 +658,9 @@ impl Proposal {
                             | NnsFunction::DeployGuestosToAllUnassignedNodes => {
                                 Topic::IcOsVersionDeployment
                             }
-                            NnsFunction::NnsCanisterUpgrade
-                            | NnsFunction::NnsRootUpgrade
-                            | NnsFunction::StopOrStartNnsCanister => {
-                                Topic::NetworkCanisterManagement
+                            NnsFunction::StopOrStartNnsCanister => {
+                                Topic::ApplicationCanisterManagement
                             }
-                            NnsFunction::IcpXdrConversionRate => Topic::ExchangeRate,
                             NnsFunction::ClearProvisionalWhitelist => Topic::NetworkEconomics,
                             NnsFunction::SetAuthorizedSubnetworks => Topic::SubnetManagement,
                             NnsFunction::SetFirewallConfig => Topic::SubnetManagement,
@@ -664,15 +676,8 @@ impl Proposal {
                             NnsFunction::UpdateSubnetType => Topic::SubnetManagement,
                             NnsFunction::ChangeSubnetTypeAssignment => Topic::SubnetManagement,
                             NnsFunction::UpdateSnsWasmSnsSubnetIds => Topic::SubnetManagement,
-                            // Retired NnsFunctions
-                            NnsFunction::UpdateAllowedPrincipals => Topic::SnsAndCommunityFund,
-                            NnsFunction::UpdateNodesHostosVersion
-                            | NnsFunction::UpdateElectedHostosVersions => Topic::NodeAdmin,
-                            NnsFunction::BlessReplicaVersion
-                            | NnsFunction::RetireReplicaVersion => Topic::IcOsVersionElection,
                             NnsFunction::AddApiBoundaryNodes
-                            | NnsFunction::RemoveApiBoundaryNodes
-                            | NnsFunction::UpdateApiBoundaryNodesVersion => {
+                            | NnsFunction::RemoveApiBoundaryNodes => {
                                 Topic::ApiBoundaryNodeManagement
                             }
                             NnsFunction::SubnetRentalRequest => Topic::SubnetRental,
@@ -4944,7 +4949,7 @@ impl Governance {
             .map_or(1, |(k, _)| k + 1)
     }
 
-    fn validate_proposal(&self, proposal: &Proposal) -> Result<Action, GovernanceError> {
+    fn validate_proposal(&self, proposal: &Proposal) -> Result<(Action, Topic), GovernanceError> {
         // TODO: Jira ticket NNS1-3555
         #[allow(non_local_definitions)]
         impl From<String> for GovernanceError {
@@ -4953,7 +4958,8 @@ impl Governance {
             }
         }
 
-        if proposal.compute_topic_at_creation() == Topic::Unspecified {
+        let topic = proposal.compute_topic_at_creation();
+        if topic == Topic::Unspecified {
             Err(format!("Topic not specified. proposal: {:#?}", proposal))?;
         }
 
@@ -5015,7 +5021,7 @@ impl Governance {
             }
         }?;
 
-        Ok(action.clone())
+        Ok((action.clone(), topic))
     }
 
     fn validate_execute_nns_function(
@@ -5317,11 +5323,10 @@ impl Governance {
         caller: &PrincipalId,
         proposal: &Proposal,
     ) -> Result<ProposalId, GovernanceError> {
-        let topic = proposal.compute_topic_at_creation();
         let now_seconds = self.env.now();
 
         // Validate proposal
-        let action = self.validate_proposal(proposal)?;
+        let (action, topic) = self.validate_proposal(proposal)?;
 
         // Before actually modifying anything, we first make sure that
         // the neuron is allowed to make this proposal and create the
