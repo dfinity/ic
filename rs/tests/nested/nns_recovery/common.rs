@@ -410,6 +410,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                         .guest_ip
                         != dfinity_owned_node.get_ip_addr()
                 })
+                .cloned()
                 .collect::<Vec<_>>()
                 .choose_multiple(&mut rand::thread_rng(), 2 * f)
                 .cloned()
