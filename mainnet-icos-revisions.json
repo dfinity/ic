@@ -13,9 +13,9 @@
       }
     },
     "latest_release": {
-      "version": "ab62c6ec1c3b5f492df53c05bb0bf5f2eb6298ba",
-      "update_img_hash": "9bfc113ff958cef78420dfbcaea29d5eba27685658909ff59c1ae39f67ca500a",
-      "update_img_hash_dev": "145213841c8de14668dd59ca50f1af348f842be044c66addf12996f956f400c9"
+      "version": "9152ba15ab6cc3c12eb407e13f8ee483a1d5723c",
+      "update_img_hash": "2890407c42e50f201140c011e0bfd615964af0e7380bf424ab1058449831516e",
+      "update_img_hash_dev": "2338d54b205940f0b3b94535087c1efa70e908f82cbbb4c592432c46d20a6a0d"
     }
   },
   "hostos": {

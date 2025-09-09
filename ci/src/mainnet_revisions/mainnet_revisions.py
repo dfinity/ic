@@ -158,7 +158,7 @@ def get_latest_replica_version_info() -> (str, str):
 
     # Hunt for the latest ReviseElectedGuestosVersions proposal that added a version
     proposals = response["data"]
-    filtered_proposals = filter(lambda x: "-base" in x["summary"], proposals)
+    filtered_proposals = filter(lambda x: "-base" in x["summary"].partition("\n")[0], proposals)
     sorted_proposals = sorted(filtered_proposals, key=lambda x: x["executed_timestamp_seconds"], reverse=True)
     latest_elect_proposal = next(v for v in sorted_proposals if v["payload"]["replica_version_to_elect"])
 
@@ -183,7 +183,7 @@ def get_latest_hostos_version_info() -> (str, str):
 
     # Hunt for the latest ReviseElectedHostosVersions proposal that added a version
     proposals = response["data"]
-    filtered_proposals = filter(lambda x: "-base" in x["summary"], proposals)
+    filtered_proposals = filter(lambda x: "-base" in x["summary"].partition("\n")[0], proposals)
     sorted_proposals = sorted(filtered_proposals, key=lambda x: x["executed_timestamp_seconds"], reverse=True)
     latest_elect_proposal = next(v for v in sorted_proposals if v["payload"]["hostos_version_to_elect"])
 
