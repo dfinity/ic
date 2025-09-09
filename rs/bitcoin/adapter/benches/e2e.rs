@@ -117,23 +117,20 @@ fn e2e(criterion: &mut Criterion) {
     });
 }
 
-fn scrypt_header(criterion: &mut Criterion) {
+fn hash_block_header(criterion: &mut Criterion) {
     let rng = &mut ic_crypto_test_utils_reproducible_rng::reproducible_rng();
     let params = scrypt::Params::new(10, 1, 1, 32).expect("invalid scrypt params");
     let header = random_header(rng);
+    let mut bench = criterion.benchmark_group("hash_block_header");
 
-    {
-        let mut scrypt_bench = criterion.benchmark_group("scrypt_header");
-        scrypt_bench.bench_function("scrypt", |bench| {
-            bench.iter(|| {
-                let mut hash = [0u8; 32];
-                scrypt::scrypt(&header, &header, &params, &mut hash).unwrap()
-            })
-        });
-    }
+    bench.bench_function("scrypt", |bench| {
+        bench.iter(|| {
+            let mut hash = [0u8; 32];
+            scrypt::scrypt(&header, &header, &params, &mut hash).unwrap()
+        })
+    });
 
-    let mut sha256_bench = criterion.benchmark_group("sha256_header");
-    sha256_bench.bench_function("sha2-256", |bench| {
+    bench.bench_function("SHA2-256", |bench| {
         bench.iter(|| {
             let _hash = sha2::Sha256::digest(&header);
         })
@@ -151,7 +148,7 @@ fn random_header<R: Rng + CryptoRng>(rng: &mut R) -> [u8; 80] {
 // the request as being processed, with the aim to receive the last 25 blocks of each fork.
 // Performance metrics are captured from the sending of the deserialised request through
 // to receiving the response and its deserialisation.
-criterion_group!(benches, e2e, scrypt_header);
+criterion_group!(benches, e2e, hash_block_header);
 
 // The benchmark can be run using:
 // bazel run //rs/bitcoin/adapter:e2e_bench
