@@ -1,12 +1,13 @@
 use crate::{
     governance::{TimeWarp, LOG_PREFIX},
+    is_known_neuron_voting_history_enabled,
     neuron::types::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
     pb::v1::{governance_error::ErrorType, GovernanceError, Topic, VotingPowerEconomics},
     storage::{
         neuron_indexes::CorruptedNeuronIndexes, neurons::NeuronSections,
         with_stable_neuron_indexes, with_stable_neuron_indexes_mut, with_stable_neuron_store,
-        with_stable_neuron_store_mut,
+        with_stable_neuron_store_mut, with_voting_history_store_mut,
     },
     Clock, IcClock, CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS,
 };
@@ -707,16 +708,36 @@ impl NeuronStore {
         })
     }
 
-    pub fn register_recent_neuron_ballot(
+    /// Records a vote for a neuron.
+    pub fn record_neuron_vote(
         &mut self,
         neuron_id: NeuronId,
         topic: Topic,
         proposal_id: ProposalId,
         vote: Vote,
     ) -> Result<(), NeuronStoreError> {
-        with_stable_neuron_store_mut(|stable_neuron_store| {
-            stable_neuron_store.register_recent_neuron_ballot(neuron_id, topic, proposal_id, vote)
-        })
+        let should_record_voting_history = with_stable_neuron_store_mut(
+            |stable_neuron_store| -> Result<bool, NeuronStoreError> {
+                stable_neuron_store.register_recent_neuron_ballot(
+                    neuron_id,
+                    topic,
+                    proposal_id,
+                    vote,
+                )?;
+                let should_record_voting_history = if is_known_neuron_voting_history_enabled() {
+                    stable_neuron_store.is_known_neuron(neuron_id)
+                } else {
+                    false
+                };
+                Ok(should_record_voting_history)
+            },
+        )?;
+        if should_record_voting_history {
+            with_voting_history_store_mut(|voting_history_store| {
+                voting_history_store.record_vote(neuron_id, proposal_id, vote);
+            });
+        }
+        Ok(())
     }
 
     /// Modifies the maturity of the neuron.

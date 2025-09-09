@@ -106,24 +106,17 @@ pub fn assign_unassigned_nodes_to_nns(
         new_node_ids.len(),
         num_nns_nodes
     );
+
+    // Readiness wait: ensure the NNS subnet is healthy and making progress
     for node in nns_subnet.nodes() {
         node.await_status_is_healthy().unwrap();
     }
+    await_subnet_earliest_topology_version(
+        &nns_subnet,
+        new_topology.get_registry_version(),
+        &logger,
+    );
     info!(logger, "Success: New nodes have taken over the NNS subnet");
-
-    // Readiness wait: ensure the NNS subnet is healthy and making progress
-    let nns_node = nns_subnet.nodes().next().unwrap();
-    info!(
-        logger,
-        "Waiting for NNS subnet to become healthy and make progress after membership changes..."
-    );
-    cert_state_makes_progress_with_retries(
-        &nns_node.get_public_url(),
-        nns_node.effective_canister_id(),
-        logger,
-        Duration::from_secs(300),
-        Duration::from_secs(10),
-    );
 
     new_topology
 }

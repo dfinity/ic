@@ -52,7 +52,12 @@ system_test_nns(
     uses_guestos_test_update = True,
     uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS,
-    deps = RUNNER_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":common",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test_nns(

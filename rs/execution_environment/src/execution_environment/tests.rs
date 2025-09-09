@@ -40,7 +40,7 @@ use ic_types::{
     CanisterId, CountBytes, Cycles, PrincipalId, RegistryVersion,
 };
 use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{call_args, wasm, CallArgs, UNIVERSAL_CANISTER_WASM};
 use maplit::btreemap;
 use more_asserts::assert_gt;
 use std::mem::size_of;
@@ -1074,7 +1074,9 @@ fn get_canister_status_memory_metrics_snapshots_size() {
 
 #[test]
 fn deposit_cycles_to_non_existing_canister_fails() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_u128 << 62)
+        .build();
     let controller = test.universal_canister().unwrap();
     let canister = canister_test_id(10);
     let args = Encode!(&CanisterIdRecord::from(canister)).unwrap();
@@ -1085,7 +1087,7 @@ fn deposit_cycles_to_non_existing_canister_fails() {
             call_args()
                 .other_side(args)
                 .on_reject(wasm().reject_message().reject()),
-            Cycles::from(1u128),
+            Cycles::from((1_u128 << 61) + (1_u128 << 60)),
         )
         .build();
     let result = test.ingress(controller, "update", deposit).unwrap();
@@ -1093,6 +1095,9 @@ fn deposit_cycles_to_non_existing_canister_fails() {
         WasmResult::Reject(format!("Canister {} not found.", canister)),
         result
     );
+    let controller_balance = test.canister_state(controller).system_state.balance().get();
+    assert!(controller_balance <= 1_u128 << 62);
+    assert!(controller_balance >= (1_u128 << 62) - 100_000_000_000);
 }
 
 #[test]
@@ -2173,6 +2178,174 @@ fn can_reject_an_ingress_when_canister_is_out_of_cycles() {
 }
 
 #[test]
+fn message_to_empty_canister_is_rejected() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.create_canister(Cycles::new(1_000_000_000_000));
+    let err = test
+        .should_accept_ingress_message(canister, "", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterWasmModuleNotFound, err.code());
+}
+
+#[test]
+fn can_reject_all_ingress_messages() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.universal_canister().unwrap();
+    test.ingress(
+        canister,
+        "update",
+        wasm().set_inspect_message(wasm().build()).reply().build(),
+    )
+    .unwrap();
+    let err = test
+        .should_accept_ingress_message(canister, "", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterRejectedMessage, err.code());
+
+    // Inter-canister calls still work.
+    let caller = test.universal_canister().unwrap();
+    let res = test
+        .ingress(
+            caller,
+            "update",
+            wasm().inter_update(canister, CallArgs::default()).build(),
+        )
+        .unwrap();
+    let expected_reply = [
+        b"Hello ",
+        caller.get().as_slice(),
+        b" this is ",
+        canister.get().as_slice(),
+    ]
+    .concat();
+    match res {
+        WasmResult::Reply(data) => assert_eq!(data, expected_reply),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+    };
+}
+
+#[test]
+fn trap_instead_of_accepting_message() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.universal_canister().unwrap();
+    test.ingress(
+        canister,
+        "update",
+        wasm()
+            .set_inspect_message(wasm().trap().build())
+            .reply()
+            .build(),
+    )
+    .unwrap();
+    let err = test
+        .should_accept_ingress_message(canister, "", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
+}
+
+#[test]
+fn inspect_method_name() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.universal_canister().unwrap();
+    test.ingress(
+        canister,
+        "update",
+        wasm()
+            .set_inspect_message(
+                wasm()
+                    .msg_method_name()
+                    .trap_if_eq("update", "no no no")
+                    .accept_message()
+                    .build(),
+            )
+            .reply()
+            .build(),
+    )
+    .unwrap();
+    let err = test
+        .should_accept_ingress_message(canister, "update", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
+    test.should_accept_ingress_message(canister, "", vec![])
+        .unwrap();
+}
+
+#[test]
+fn inspect_caller() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.universal_canister().unwrap();
+    test.ingress(
+        canister,
+        "update",
+        wasm()
+            .set_inspect_message(
+                wasm()
+                    .caller()
+                    .trap_if_eq(user_test_id(0).get(), "no no no")
+                    .accept_message()
+                    .build(),
+            )
+            .reply()
+            .build(),
+    )
+    .unwrap();
+    test.set_user_id(user_test_id(0));
+    let err = test
+        .should_accept_ingress_message(canister, "update", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
+    test.set_user_id(user_test_id(1));
+    test.should_accept_ingress_message(canister, "", vec![])
+        .unwrap();
+}
+
+#[test]
+fn inspect_arg_data() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.universal_canister().unwrap();
+    test.ingress(
+        canister,
+        "update",
+        wasm()
+            .set_inspect_message(
+                wasm()
+                    .msg_arg_data_copy(0, 3)
+                    .trap_if_eq(b"arg", "no no no")
+                    .accept_message()
+                    .build(),
+            )
+            .reply()
+            .build(),
+    )
+    .unwrap();
+    let err = test
+        .should_accept_ingress_message(canister, "update", b"arg".to_vec())
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
+    test.should_accept_ingress_message(canister, "update", b"foo".to_vec())
+        .unwrap();
+}
+
+#[test]
+fn cannot_accept_message_twice() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.universal_canister().unwrap();
+    test.ingress(
+        canister,
+        "update",
+        wasm()
+            .set_inspect_message(wasm().accept_message().accept_message().build())
+            .reply()
+            .build(),
+    )
+    .unwrap();
+    let err = test
+        .should_accept_ingress_message(canister, "", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
+}
+
+#[test]
 fn message_to_canister_with_not_enough_balance_is_rejected() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister = test.universal_canister().unwrap();
@@ -2287,6 +2460,37 @@ fn management_message_with_invalid_method_is_not_accepted() {
         .should_accept_ingress_message(IC_00, "invalid_method", vec![])
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterMethodNotFound, err.code());
+}
+
+#[test]
+fn management_message_with_forbidden_method_is_not_accepted() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    for forbidden_method in [
+        "raw_rand",
+        "http_request",
+        "ecdsa_public_key",
+        "sign_with_ecdsa",
+        "deposit_cycles",
+    ] {
+        let err = test
+            .should_accept_ingress_message(IC_00, forbidden_method, vec![])
+            .unwrap_err();
+        assert_eq!(ErrorCode::CanisterRejectedMessage, err.code());
+    }
+}
+
+#[test]
+fn management_message_with_invalid_sender_is_not_accepted() {
+    let mut test = ExecutionTestBuilder::new().build();
+    test.set_user_id(user_test_id(0));
+    let canister = test.universal_canister().unwrap();
+    test.set_user_id(user_test_id(1));
+    let arg: CanisterIdRecord = canister.into();
+    let err = test
+        .should_accept_ingress_message(IC_00, "canister_status", Encode!(&arg).unwrap())
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterInvalidController, err.code());
 }
 
 // A Wasm module that allocates 10 wasm pages of heap memory and 10 wasm
