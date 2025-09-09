@@ -1,3 +1,4 @@
+/*
 use super::*;
 use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto;
 use ic_protobuf::state::system_metadata::v1::ThresholdSignatureAgreementsEntry;
@@ -707,3 +708,4 @@ impl
         Ok(time_series)
     }
 }
+*/

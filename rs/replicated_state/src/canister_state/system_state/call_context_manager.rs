@@ -767,6 +767,11 @@ impl CallContextManager {
         self.next_callback_id
     }
 
+    /// Checks if the call context manager does not hold and callbacks or call contexts.
+    pub fn is_empty(&self) -> bool {
+        self.callbacks().is_empty() && self.call_contexts().is_empty()
+    }
+
     /// Returns a collection of all call contexts older than the provided age.
     pub fn call_contexts_older_than(
         &self,
