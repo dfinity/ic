@@ -692,7 +692,7 @@ fn local_recovery(
             logger,
             "Copying output directory from node {node_id} with IP {node_ip} ..."
         );
-        std::fs::create_dir_all(local_output_dir);
+        std::fs::create_dir_all(local_output_dir).unwrap();
         scp_recv_from(
             logger.clone(),
             session,
