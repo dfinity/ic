@@ -17,6 +17,7 @@ nested = { path = "../../nested" }
 rand = { workspace = true }
 sha2 = { workspace = true }
 slog = { workspace = true }
+tokio = { workspace = true }
 
 [lib]
 name = "ic_nested_nns_recovery_common"
