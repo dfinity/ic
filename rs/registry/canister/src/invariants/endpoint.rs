@@ -424,16 +424,19 @@ mod tests {
             .encode_to_vec(),
         );
 
-        if let Err(err) = check_endpoint_invariants(&snapshot, true) {
-            assert_eq!(
-                err.msg,
-                "Invariant violation detected among 2 node records (checking failed for node \
+        match check_endpoint_invariants(&snapshot, true) {
+            Err(err) => {
+                assert_eq!(
+                    err.msg,
+                    "Invariant violation detected among 2 node records (checking failed for node \
                  gfvbo-licaa-aaaaa-aaaap-2ai): Duplicate endpoints detected across nodes; \
                  new_valid_endpoints = (200.1.1.1, 9001) (new), (200.1.1.3, 9000) (duplicate)"
-                    .to_string()
-            );
-        } else {
-            panic!("Expected Err result from registry invariant check, got Ok.");
+                        .to_string()
+                );
+            }
+            _ => {
+                panic!("Expected Err result from registry invariant check, got Ok.");
+            }
         }
 
         snapshot.remove(&key);

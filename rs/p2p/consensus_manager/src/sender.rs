@@ -157,12 +157,15 @@ impl<
     }
 
     fn handle_abort_transmit(&mut self, id: &Artifact::Id) {
-        if let Some((cancellation_token, free_slot)) = self.active_slots.remove(id) {
-            self.metrics.send_view_consensus_purge_active_total.inc();
-            cancellation_token.cancel();
-            self.slot_manager.push(free_slot);
-        } else {
-            self.metrics.send_view_consensus_dup_purge_total.inc();
+        match self.active_slots.remove(id) {
+            Some((cancellation_token, free_slot)) => {
+                self.metrics.send_view_consensus_purge_active_total.inc();
+                cancellation_token.cancel();
+                self.slot_manager.push(free_slot);
+            }
+            _ => {
+                self.metrics.send_view_consensus_dup_purge_total.inc();
+            }
         }
     }
 

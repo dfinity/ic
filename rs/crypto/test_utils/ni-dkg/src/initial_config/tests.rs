@@ -205,7 +205,7 @@ fn should_get_master_key_associated_with_transcript_public_key() {
         let temp_crypto = TempCryptoComponent::builder()
             .with_node_id(node_id)
             .with_keys(ic_crypto_temp_crypto::NodeKeysToGenerate::only_dkg_dealing_encryption_key())
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
             .build();
         let dkg_dealing_encryption_pubkey = temp_crypto
             .current_node_public_keys()
@@ -221,7 +221,7 @@ fn should_get_master_key_associated_with_transcript_public_key() {
     let pk = ThresholdSigPublicKey::try_from(&transcript)
         .expect("should extract public key from high threshold transcript");
 
-    let test_message = rng.gen::<[u8; 32]>();
+    let test_message = rng.r#gen::<[u8; 32]>();
 
     let signature = sign_message(&test_message, &secret);
 

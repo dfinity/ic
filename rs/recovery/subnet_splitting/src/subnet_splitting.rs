@@ -317,7 +317,7 @@ impl SubnetSplitting {
         }
     }
 
-    fn unhalt(&self, target_subnet: TargetSubnet) -> impl Step {
+    fn unhalt(&self, target_subnet: TargetSubnet) -> impl Step + use<> {
         self.recovery.halt_subnet(
             self.subnet_id(target_subnet),
             /*is_halted=*/ false,
@@ -325,7 +325,7 @@ impl SubnetSplitting {
         )
     }
 
-    fn propose_cup(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step> {
+    fn propose_cup(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step + use<>> {
         let checkpoints_dir = self.layout.checkpoints_dir(target_subnet);
 
         let (max_name, max_height) =
@@ -344,7 +344,10 @@ impl SubnetSplitting {
         )
     }
 
-    fn upload_and_restart_step(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step> {
+    fn upload_and_restart_step(
+        &self,
+        target_subnet: TargetSubnet,
+    ) -> RecoveryResult<impl Step + use<>> {
         match self.upload_node(target_subnet) {
             Some(node_ip) => Ok(UploadAndRestartStep {
                 logger: self.recovery.logger.clone(),
@@ -359,7 +362,7 @@ impl SubnetSplitting {
         }
     }
 
-    fn wait_for_cup_step(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step> {
+    fn wait_for_cup_step(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step + use<>> {
         match self.upload_node(target_subnet) {
             Some(node_ip) => Ok(WaitForCUPStep {
                 logger: self.recovery.logger.clone(),

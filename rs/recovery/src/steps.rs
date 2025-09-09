@@ -1118,16 +1118,17 @@ impl Step for CreateNNSRecoveryTarStep {
             info!(self.logger, "{}", res);
         }
 
-        if let Some(sha256) =
-            exec_cmd(Command::new("cat").arg(self.output_dir.join(self.get_sha_name())))?
-        {
-            info!(self.logger, "{}", self.get_next_steps(sha256.trim()));
-        } else {
-            return Err(RecoveryError::invalid_output_error(format!(
-                "Could not read {}/{}",
-                self.output_dir.display(),
-                self.get_sha_name()
-            )));
+        match exec_cmd(Command::new("cat").arg(self.output_dir.join(self.get_sha_name())))? {
+            Some(sha256) => {
+                info!(self.logger, "{}", self.get_next_steps(sha256.trim()));
+            }
+            _ => {
+                return Err(RecoveryError::invalid_output_error(format!(
+                    "Could not read {}/{}",
+                    self.output_dir.display(),
+                    self.get_sha_name()
+                )));
+            }
         }
 
         Ok(())
@@ -1171,14 +1172,14 @@ impl Step for DownloadRegistryStoreStep {
         let backoff = 10;
         let mut child_subnet_found = false;
         for i in 0..tries {
-            if let Err(e) = ssh_helper.ssh(format!(r#"/opt/ic/bin/ic-regedit snapshot /var/lib/ic/data/ic_registry_local_store/ |grep -q "subnet_record_{}""#, self.original_nns_id))
-            {
+            match ssh_helper.ssh(format!(r#"/opt/ic/bin/ic-regedit snapshot /var/lib/ic/data/ic_registry_local_store/ |grep -q "subnet_record_{}""#, self.original_nns_id))
+            { Err(e) => {
                 info!(self.logger, "Try {}: {}", i, e);
-            } else {
+            } _ => {
                 info!(self.logger, "Found subnet with original NNS id!");
                 child_subnet_found = true;
                 break;
-            }
+            }}
             thread::sleep(time::Duration::from_secs(backoff));
         }
 

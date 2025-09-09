@@ -503,16 +503,19 @@ impl ConnectionManager {
         let connection_handle = ConnectionHandle::new(connection, self.metrics.clone());
 
         // dropping the old connection will result in closing it
-        if let Some(old_conn) = peer_map_mut.insert(peer_id, connection_handle.clone()) {
-            old_conn
-                .conn()
-                .close(VarInt::from_u32(0), b"using newer connection");
-            info!(
-                self.log,
-                "Replacing old connection to {:?} with newer", peer_id
-            );
-        } else {
-            self.metrics.peer_map_size.inc();
+        match peer_map_mut.insert(peer_id, connection_handle.clone()) {
+            Some(old_conn) => {
+                old_conn
+                    .conn()
+                    .close(VarInt::from_u32(0), b"using newer connection");
+                info!(
+                    self.log,
+                    "Replacing old connection to {:?} with newer", peer_id
+                );
+            }
+            _ => {
+                self.metrics.peer_map_size.inc();
+            }
         }
 
         info!(

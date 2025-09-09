@@ -947,7 +947,7 @@ VmFlags: rd wr sh mr mw me ms sd
     #[test]
     fn test_parse_available_memory() {
         macro_rules! check {
-            ($meminfo: expr, $kib: expr) => {
+            ($meminfo: expr_2021, $kib: expr_2021) => {
                 assert_eq!(
                     parse_available_memory($meminfo),
                     $kib.map(|kib: u64| (kib * 1024).into())

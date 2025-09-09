@@ -191,7 +191,7 @@ mod eth_transactions {
                     create_and_record_pending_transaction(
                         &mut transactions,
                         withdrawal_request.clone(),
-                        rng.gen(),
+                        rng.r#gen(),
                     )
                 });
 
@@ -203,7 +203,7 @@ mod eth_transactions {
             create_and_record_pending_transaction(
                 &mut transactions,
                 withdrawal_requests[997].clone(),
-                rng.gen(),
+                rng.r#gen(),
             );
             assert_eq!(
                 transactions.withdrawal_requests_batch(3).as_slice(),
@@ -213,7 +213,7 @@ mod eth_transactions {
             create_and_record_pending_transaction(
                 &mut transactions,
                 withdrawal_requests[998].clone(),
-                rng.gen(),
+                rng.r#gen(),
             );
             assert_eq!(
                 transactions.withdrawal_requests_batch(3).as_slice(),
@@ -223,7 +223,7 @@ mod eth_transactions {
             create_and_record_pending_transaction(
                 &mut transactions,
                 withdrawal_requests[999].clone(),
-                rng.gen(),
+                rng.r#gen(),
             );
             assert_eq!(transactions.withdrawal_requests_batch(3), vec![]);
         }

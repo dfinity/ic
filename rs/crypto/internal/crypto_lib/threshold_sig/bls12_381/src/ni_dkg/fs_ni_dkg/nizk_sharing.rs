@@ -100,16 +100,15 @@ impl ProofSharing {
         let z_r = Scalar::deserialize(proof.response_z_r.as_bytes());
         let z_alpha = Scalar::deserialize(proof.response_z_a.as_bytes());
 
-        if let (Ok(ff), Ok(aa), Ok(yy), Ok(z_r), Ok(z_alpha)) = (ff, aa, yy, z_r, z_alpha) {
-            Some(Self {
+        match (ff, aa, yy, z_r, z_alpha) {
+            (Ok(ff), Ok(aa), Ok(yy), Ok(z_r), Ok(z_alpha)) => Some(Self {
                 ff,
                 aa,
                 yy,
                 z_r,
                 z_alpha,
-            })
-        } else {
-            None
+            }),
+            _ => None,
         }
     }
 }

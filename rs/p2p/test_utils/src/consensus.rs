@@ -217,7 +217,7 @@ impl TestConsensus<U64Artifact> {
         inner
             .peer_pool
             .iter()
-            .filter(|(&n, _)| n != self.node_id)
+            .filter(|&(&n, _)| n != self.node_id)
             .map(|(_, x)| x.num_inserts(id))
             .sum::<usize>()
             == 1
@@ -228,7 +228,7 @@ impl TestConsensus<U64Artifact> {
         inner
             .peer_pool
             .iter()
-            .filter(|(&n, _)| n != self.node_id)
+            .filter(|&(&n, _)| n != self.node_id)
             .map(|(_, x)| x.num_inserts(id))
             .sum()
     }
@@ -238,7 +238,7 @@ impl TestConsensus<U64Artifact> {
         inner
             .peer_pool
             .iter()
-            .filter(|(&n, _)| n != self.node_id)
+            .filter(|&(&n, _)| n != self.node_id)
             .map(|(_, x)| x.num_removes(id))
             .sum()
     }
@@ -248,7 +248,7 @@ impl TestConsensus<U64Artifact> {
         inner
             .peer_pool
             .iter()
-            .filter(|(&n, _)| n != self.node_id)
+            .filter(|&(&n, _)| n != self.node_id)
             .map(|(_, x)| x.num_removes(id))
             .sum::<usize>()
             == 1

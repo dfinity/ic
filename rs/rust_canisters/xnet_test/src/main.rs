@@ -300,5 +300,5 @@ fn metrics() -> Metrics {
     METRICS.with(|m| m.borrow().clone())
 }
 
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn main() {}

@@ -577,7 +577,7 @@ impl CanisterState {
         //
         // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
         let CanisterState {
-            ref mut system_state,
+            system_state,
             execution_state: _,
             scheduler_state: _,
         } = self;

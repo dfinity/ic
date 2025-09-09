@@ -217,8 +217,8 @@ pub enum ReportOrFailure {
 impl ReportOrFailure {
     pub fn msg(&self) -> &str {
         match self {
-            Self::Report(ref x) => x,
-            Self::Failure(ref x) => x,
+            Self::Report(x) => x,
+            Self::Failure(x) => x,
         }
     }
 }
@@ -312,7 +312,7 @@ mod tests {
 
     fn get_unique_sock_path() -> PathBuf {
         let mut rng = rand::thread_rng();
-        let random_n: u64 = rng.gen();
+        let random_n: u64 = rng.r#gen();
         let pid = std::process::id();
         let tmpdir = std::env::temp_dir();
 

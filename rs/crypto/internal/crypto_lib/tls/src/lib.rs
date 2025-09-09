@@ -72,7 +72,7 @@ pub fn generate_tls_key_pair_der<R: Rng + CryptoRng>(
     (TlsEd25519CertificateDerBytes, TlsEd25519SecretKeyDerBytes),
     TlsKeyPairAndCertGenerationError,
 > {
-    let serial: [u8; 19] = csprng.gen();
+    let serial: [u8; 19] = csprng.r#gen();
     let (secret_key, public_key) = ic_crypto_internal_basic_sig_ed25519::keypair_from_rng(csprng);
     let x509_cert = x509_v3_certificate(
         &public_key,

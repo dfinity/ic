@@ -344,10 +344,13 @@ impl BackupManager {
                     let mut cmd = Command::new("rsync");
                     cmd.arg("-a").arg(old_state_dir).arg(data_dir);
                     info!(log, "Will execute: {:?}", cmd);
-                    if let Err(e) = exec_cmd(&mut cmd) {
-                        println!("Error: {}", e);
-                    } else {
-                        break;
+                    match exec_cmd(&mut cmd) {
+                        Err(e) => {
+                            println!("Error: {}", e);
+                        }
+                        _ => {
+                            break;
+                        }
                     }
                 }
             }

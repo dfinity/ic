@@ -107,5 +107,5 @@ async fn install_code(wasm_module: Vec<u8>, arg: Vec<u8>) {
     }
 }
 
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn main() {}

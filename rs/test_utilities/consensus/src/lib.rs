@@ -30,7 +30,7 @@ use std::{sync::RwLock, time::Duration};
 
 #[macro_export]
 macro_rules! assert_changeset_matches_pattern {
-    ($v:expr, $p:pat) => {
+    ($v:expr_2021, $p:pat) => {
         assert_eq!($v.len(), 1);
         assert!(matches_pattern!($v[0], $p));
     };
@@ -38,7 +38,7 @@ macro_rules! assert_changeset_matches_pattern {
 
 #[macro_export]
 macro_rules! matches_pattern {
-    ($v:expr, $p:pat) => {
+    ($v:expr_2021, $p:pat) => {
         if let $p = $v {
             true
         } else {

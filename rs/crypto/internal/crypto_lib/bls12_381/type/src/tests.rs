@@ -3,7 +3,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
 macro_rules! window_extraction_works_correctly_init {
-    ( $( $window_size:expr ),* ) => {
+    ( $( $window_size:expr_2021 ),* ) => {
         #[test]
         /// Tests the window extraction, i.e., extraciton of a bit substring, from a scalar.
         /// Exhaustively tests all possible values for 2 bytes.

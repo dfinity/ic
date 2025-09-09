@@ -140,7 +140,7 @@ impl Init {
             .expect("could not get canister id of icp ledger")
     }
 
-    pub fn environment(&self) -> Result<impl CanisterEnvironment, String> {
+    pub fn environment(&self) -> Result<impl CanisterEnvironment + use<>, String> {
         use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
         use ic_nervous_system_clients::ledger_client::LedgerCanister;
 
@@ -566,7 +566,7 @@ impl BuyerState {
     }
 
     pub fn set_amount_icp_e8s(&mut self, val: u64) {
-        if let Some(ref mut icp) = &mut self.icp {
+        if let Some(icp) = &mut self.icp {
             icp.amount_e8s = val;
         } else {
             self.icp = Some(TransferableAmount {

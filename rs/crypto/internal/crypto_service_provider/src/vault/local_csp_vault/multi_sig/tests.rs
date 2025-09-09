@@ -183,7 +183,7 @@ fn should_multi_sign_and_verify_with_generated_key() {
     let key_id = KeyId::from(&csp_pub_key);
 
     let msg_len: usize = rng.gen_range(0..1024);
-    let msg: Vec<u8> = (0..msg_len).map(|_| rng.gen::<u8>()).collect();
+    let msg: Vec<u8> = (0..msg_len).map(|_| rng.r#gen::<u8>()).collect();
 
     let verifier = Csp::builder_for_test()
         .with_vault(

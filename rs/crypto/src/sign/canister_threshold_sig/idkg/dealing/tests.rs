@@ -72,7 +72,7 @@ mod verify_dealing_public {
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
             let registry_client_error = RegistryClientError::VersionNotAvailable {
-                version: RegistryVersion::from(rng.gen::<u32>() as u64),
+                version: RegistryVersion::from(rng.r#gen::<u32>() as u64),
             };
 
             let setup = Setup::new_with_registry_client_get_value_error(

@@ -549,12 +549,8 @@ pub enum RequestOrResponse {
 impl ValidateEq for RequestOrResponse {
     fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
         match (self, rhs) {
-            (RequestOrResponse::Request(ref l), RequestOrResponse::Request(ref r)) => {
-                l.validate_eq(r)
-            }
-            (RequestOrResponse::Response(ref l), RequestOrResponse::Response(ref r)) => {
-                l.validate_eq(r)
-            }
+            (RequestOrResponse::Request(l), RequestOrResponse::Request(r)) => l.validate_eq(r),
+            (RequestOrResponse::Response(l), RequestOrResponse::Response(r)) => l.validate_eq(r),
             _ => Err("RequestOrResponse enum mismatch".to_string()),
         }
     }

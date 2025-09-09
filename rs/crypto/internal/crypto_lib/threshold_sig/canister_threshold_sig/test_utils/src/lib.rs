@@ -37,10 +37,9 @@ pub fn verify_bip340_signature_using_third_party(sec1_pk: &[u8], sig: &[u8], msg
     };
 
     // from_bytes takes just the x coordinate encoding:
-    if let Ok(bip340) = k256::schnorr::VerifyingKey::from_bytes(&sec1_pk[1..]) {
-        bip340.verify_raw(msg, &signature).is_ok()
-    } else {
-        false
+    match k256::schnorr::VerifyingKey::from_bytes(&sec1_pk[1..]) {
+        Ok(bip340) => bip340.verify_raw(msg, &signature).is_ok(),
+        _ => false,
     }
 }
 
@@ -163,7 +162,7 @@ impl ProtocolSetup {
         let alg = cfg.signature_alg().to_algorithm_id();
 
         let rng = &mut seed.into_rng();
-        let ad = rng.gen::<[u8; 32]>().to_vec();
+        let ad = rng.r#gen::<[u8; 32]>().to_vec();
 
         let mut sk = Vec::with_capacity(receivers);
         let mut pk = Vec::with_capacity(receivers);

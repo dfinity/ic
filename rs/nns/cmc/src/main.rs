@@ -2337,7 +2337,7 @@ fn ensure_balance(
     Ok(())
 }
 
-#[export_name = "canister_query total_cycles_minted"]
+#[unsafe(export_name = "canister_query total_cycles_minted")]
 fn total_cycles_minted() {
     let value: u64 = with_state(|state| state.total_cycles_minted.get().try_into().unwrap());
     let response = ProtoBuf::new(value).into_bytes().unwrap();

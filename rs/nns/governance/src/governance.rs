@@ -4705,7 +4705,7 @@ impl Governance {
         // Step 3: React to response from deploy_new_sns (Ok or Err).
 
         // Step 3.1: If the call was not successful, issue refunds (and then, return).
-        if let Err(ref mut err) = &mut deploy_new_sns_response {
+        if let Err(err) = &mut deploy_new_sns_response {
             let refund_result = self.refund_maturity_to_neurons_fund(
                 &proposal_id,
                 initial_neurons_fund_participation_snapshot,
@@ -7045,7 +7045,7 @@ impl Governance {
     ///
     /// This function is "curried" to alleviate lifetime issues on the
     /// `self` parameter.
-    pub fn voting_period_seconds(&self) -> impl Fn(Topic) -> u64 {
+    pub fn voting_period_seconds(&self) -> impl Fn(Topic) -> u64 + use<> {
         let short = self.heap_data.short_voting_period_seconds;
         let private = self.heap_data.neuron_management_voting_period_seconds;
         let normal = self.heap_data.wait_for_quiet_threshold_seconds;

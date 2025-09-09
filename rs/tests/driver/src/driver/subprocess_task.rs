@@ -60,7 +60,7 @@ impl Task for SubprocessTask {
 
         // select a random socket id used for this child process
         use rand::Rng;
-        let sock_id: u64 = rand::thread_rng().gen();
+        let sock_id: u64 = rand::thread_rng().r#gen();
         let sock_path = GroupContext::log_socket_path(sock_id);
 
         let mut child_cmd = Command::new(self.group_ctx.exec_path.clone());
@@ -218,12 +218,11 @@ impl ChildTaskHandle {
             let mut task_state = self.task_state.lock().unwrap();
 
             if task_state.is_running() {
-                if let TaskState::Running(kill) =
-                    std::mem::replace(&mut *task_state, requested_state)
-                {
-                    (kill)()
-                } else {
-                    unreachable!();
+                match std::mem::replace(&mut *task_state, requested_state) {
+                    TaskState::Running(kill) => (kill)(),
+                    _ => {
+                        unreachable!();
+                    }
                 }
             } else {
                 debug!(self.log, "Task '{}' already terminated!", self.task_id);

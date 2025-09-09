@@ -78,7 +78,7 @@ fn heap_size_num_pages() -> usize {
     0
 }
 
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn canister_init() {
     dfn_core::printer::hook();
     println!("{}Executing canister_init...", LOG_PREFIX);
@@ -86,7 +86,7 @@ fn canister_init() {
     println!("{}Completed execution of canister_init", LOG_PREFIX);
 }
 
-#[export_name = "canister_pre_upgrade"]
+#[unsafe(export_name = "canister_pre_upgrade")]
 fn canister_pre_upgrade() {
     println!("{}Executing canister_pre_upgrade...", LOG_PREFIX);
     let mut writer = BufferedStableMemWriter::new(BUFFER_SIZE);
@@ -102,7 +102,7 @@ fn canister_pre_upgrade() {
 }
 
 /// Canister post_upgrade should never run
-#[export_name = "canister_post_upgrade"]
+#[unsafe(export_name = "canister_post_upgrade")]
 fn canister_post_upgrade() {
     unimplemented!()
 }

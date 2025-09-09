@@ -308,7 +308,7 @@ fn random_node_indexes(count: usize) -> Vec<NodeIndex> {
     let mut set = std::collections::BTreeSet::new();
 
     while set.len() != count {
-        let r = rng.gen::<NodeIndex>();
+        let r = rng.r#gen::<NodeIndex>();
         set.insert(r);
     }
 
@@ -418,7 +418,7 @@ fn poly_point_interpolation_at_zero_rejects_duplicates() -> CanisterThresholdRes
             let mut x = random_node_indexes(num_coefficients);
             let mut y = Vec::with_capacity(num_coefficients + 1);
 
-            x.push(x[rng.gen::<usize>() % x.len()]);
+            x.push(x[rng.r#gen::<usize>() % x.len()]);
 
             for r in &x {
                 let mut g_p_r =

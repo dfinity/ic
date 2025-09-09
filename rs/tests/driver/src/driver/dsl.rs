@@ -13,7 +13,7 @@ macro_rules! systest {
         ic_system_test_driver::driver::dsl::TestFunction::new(std::stringify!($a), $a)
     };
 
-    ($function:path; $($args:expr),+) => {
+    ($function:path; $($args:expr_2021),+) => {
         ic_system_test_driver::driver::dsl::TestFunction::new(
             std::stringify!($function($($args),+)),
             |env| ($function(env, $($args),+)),

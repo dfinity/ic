@@ -185,7 +185,7 @@ fn bench_multi_sig_verify_combined<M: Measurement, R: Rng + CryptoRng>(
 }
 
 fn signable_with_random_32_bytes<R: Rng + CryptoRng>(rng: &mut R) -> SignableMock {
-    SignableMock::new((0..32).map(|_| rng.gen::<u8>()).collect())
+    SignableMock::new((0..32).map(|_| rng.r#gen::<u8>()).collect())
 }
 
 fn as_u64(usize: usize) -> u64 {

@@ -551,9 +551,9 @@ fn idkg_transcript_with_registry_version<R: Rng + CryptoRng>(
 }
 
 fn random_transcript_id<R: Rng + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
-    let id = rng.gen();
-    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
-    let height = Height::from(rng.gen::<u64>());
+    let id = rng.r#gen();
+    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.r#gen::<u64>()));
+    let height = Height::from(rng.r#gen::<u64>());
 
     IDkgTranscriptId::new(subnet, id, height)
 }

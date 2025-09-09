@@ -159,7 +159,10 @@ pub fn set_up_env_vars_for_all_canisters<P: AsRef<Path>>(wasm_dir: P) {
             if path.is_file() {
                 // Sets up the env var following the pattern expected by
                 // WASM::from_location_specified_by_env_var
-                std::env::set_var(Wasm::env_var_name(canister, &[]), path.to_str().unwrap());
+                // TODO: Audit that the environment access only happens in single-threaded code.
+                unsafe {
+                    std::env::set_var(Wasm::env_var_name(canister, &[]), path.to_str().unwrap())
+                };
                 continue 'outer;
             }
         }

@@ -569,7 +569,7 @@ mod tests {
 
     /// Shorthand for asserting equality with the empty vector.
     macro_rules! assert_empty {
-        ($v:expr) => {
+        ($v:expr_2021) => {
             assert_eq!($v, vec![])
         };
     }
@@ -1062,8 +1062,8 @@ mod tests {
         {
             let mut val = Vec::<u8>::new();
             let p = 1.0 / (self.mean_length + 1.0);
-            while rng.gen::<f32>() > p {
-                val.push(rng.gen());
+            while rng.r#gen::<f32>() > p {
+                val.push(rng.r#gen());
             }
             val
         }
@@ -1100,9 +1100,9 @@ mod tests {
         let mut serializable_form = registry.serializable_form();
         // Remove half of the entries, but retain the first and the last entry.
         let initial_len = registry.changelog().iter().count();
-        serializable_form
-            .changelog
-            .retain(|entry| entry.version == 1 || rng.gen() || entry.version == initial_len as u64);
+        serializable_form.changelog.retain(|entry| {
+            entry.version == 1 || rng.r#gen() || entry.version == initial_len as u64
+        });
         let len_after_random_trim = serializable_form.changelog.len();
         assert!(len_after_random_trim < initial_len);
 
@@ -1470,13 +1470,13 @@ mod tests {
             .collect();
         // First let's insert them all to avoid having to deal with insert v. update
         let mut registry = Registry::new();
-        let gen = RandomByteVectorGenerator {
+        let r#gen = RandomByteVectorGenerator {
             mean_length: mean_value_length,
         };
         for k in &keys {
             apply_mutations_skip_invariant_checks(
                 &mut registry,
-                vec![insert(k.as_bytes(), gen.sample(&mut rng))],
+                vec![insert(k.as_bytes(), r#gen.sample(&mut rng))],
             );
         }
         // Now let's do some mutations.
@@ -1488,7 +1488,7 @@ mod tests {
                 &mut registry,
                 vec![update(
                     &keys[key_index_distr.sample(&mut rng)],
-                    gen.sample(&mut rng),
+                    r#gen.sample(&mut rng),
                 )],
             );
         }

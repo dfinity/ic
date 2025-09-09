@@ -3824,7 +3824,7 @@ pub fn test_allowance_listing_sequences<T>(
     };
 
     let mut prev_from = None;
-    for (idx, (&from, &spender)) in approve_pairs.iter().enumerate() {
+    for (idx, &(&from, &spender)) in approve_pairs.iter().enumerate() {
         let mut args = GetAllowancesArgs {
             from_account: Some(from),
             prev_spender: None,

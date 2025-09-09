@@ -368,18 +368,15 @@ impl<T: TryFrom<OpOut>> FromOpOut for T {
                     message: format!("{:?}", e),
                 },
             ),
-            val => {
-                if let Ok(t) = T::try_from(val) {
-                    (StatusCode::OK, ApiResponse::Success(t))
-                } else {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        ApiResponse::Error {
-                            message: "operation returned invalid type".into(),
-                        },
-                    )
-                }
-            }
+            val => match T::try_from(val) {
+                Ok(t) => (StatusCode::OK, ApiResponse::Success(t)),
+                _ => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    ApiResponse::Error {
+                        message: "operation returned invalid type".into(),
+                    },
+                ),
+            },
         }
     }
 }
@@ -1034,10 +1031,9 @@ pub async fn handler_read_graph(
     if let Ok(state_label) = StateLabel::try_from(vec) {
         let op_id = OpId(op_id_str.clone());
         // TODO: use new_state_label and return it to library
-        if let Some((_new_state_label, op_out)) = api_state.read_graph(&state_label, &op_id) {
-            op_out_to_response(op_out).await
-        } else {
-            (
+        match api_state.read_graph(&state_label, &op_id) {
+            Some((_new_state_label, op_out)) => op_out_to_response(op_out).await,
+            _ => (
                 StatusCode::NOT_FOUND,
                 Json(ApiResponse::<()>::Error {
                     message: format!(
@@ -1048,7 +1044,7 @@ pub async fn handler_read_graph(
                     ),
                 }),
             )
-                .into_response()
+                .into_response(),
         }
     } else {
         (

@@ -405,7 +405,7 @@ fn generate_invalid_operation(
         StableOperationType::Grow => {
             let max_pages_to_grow = (MAX_STABLE_MEMORY_IN_BYTES - state.contents.len() as u64)
                 / WASM_PAGE_SIZE_IN_BYTES as u64;
-            StableOperation::Grow(max_pages_to_grow.saturating_add(rng.gen::<u64>()))
+            StableOperation::Grow(max_pages_to_grow.saturating_add(rng.r#gen::<u64>()))
         }
         StableOperationType::Read => {
             let length = rng.gen_range(0..4 * KB);

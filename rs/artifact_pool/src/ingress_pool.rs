@@ -605,7 +605,7 @@ mod tests {
                 let mut non_expired_count = 0;
                 for i in 0..initial_count {
                     let expiry = Duration::from_millis(
-                        rng.gen::<u64>() % (3 * (MAX_INGRESS_TTL.as_millis() as u64)),
+                        rng.r#gen::<u64>() % (3 * (MAX_INGRESS_TTL.as_millis() as u64)),
                     );
                     if now + expiry >= cutoff_time {
                         non_expired_count += 1;

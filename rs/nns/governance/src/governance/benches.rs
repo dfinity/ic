@@ -744,14 +744,14 @@ fn list_proposals() -> BenchResult {
 
 /// Used for benchmarking compilation/instrumentation/execution changes in the
 /// embedders crate.
-#[export_name = "canister_update update_empty"]
+#[unsafe(export_name = "canister_update update_empty")]
 fn update_empty() {
     ic_cdk::api::msg_reply([]);
 }
 
 /// Used for benchmarking compilation/instrumentation/execution changes in the
 /// embedders crate.
-#[export_name = "canister_query go"]
+#[unsafe(export_name = "canister_query go")]
 fn go() {
     let _ = list_neurons_stable();
     ic_cdk::api::msg_reply([]);

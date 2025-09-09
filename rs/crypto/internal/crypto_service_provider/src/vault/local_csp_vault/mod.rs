@@ -192,7 +192,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     }
 
     fn generate_seed(&self) -> Seed {
-        let intermediate_seed: [u8; 32] = self.csprng.write().gen(); // lock is released after this line
+        let intermediate_seed: [u8; 32] = self.csprng.write().r#gen(); // lock is released after this line
         Seed::from_bytes(&intermediate_seed) // use of intermediate seed minimizes locking time
     }
 

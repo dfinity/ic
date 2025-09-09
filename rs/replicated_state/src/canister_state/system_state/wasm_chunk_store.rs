@@ -110,7 +110,7 @@ impl WasmChunkStore {
     pub fn get_chunk_data(
         &self,
         chunk_hash: &WasmChunkHash,
-    ) -> Option<impl Iterator<Item = &[u8]>> {
+    ) -> Option<impl Iterator<Item = &[u8]> + use<'_>> {
         self.metadata
             .chunks
             .get(chunk_hash)

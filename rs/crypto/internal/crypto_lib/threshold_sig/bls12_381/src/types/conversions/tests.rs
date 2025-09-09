@@ -23,12 +23,12 @@ proptest! {
     /// Note: The default arbitrary strategy produces both valid and invalid bytes so we have to filter out the invalid.
     #[test]
     fn proptest_secret_key_parsing_and_serialising_should_be_inverse(secret_key_bytes: SecretKeyBytes) {
-        if let Ok(parsed) = SecretKey::try_from(&secret_key_bytes) {
+        match SecretKey::try_from(&secret_key_bytes) { Ok(parsed) => {
           let serialised = SecretKeyBytes::from(parsed); // Consuming exercises both serialisation methods.
           assert_eq!(secret_key_bytes, serialised, "Parsing followed by serailizing produced a value different from the starting value.");
-        } else {
+        } _ => {
           prop_assume!(false);
-        }
+        }}
     }
 
     /// Verifies that parsing and serializing IndividualSignatureBytes returns the initial value.

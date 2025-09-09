@@ -58,7 +58,7 @@ fn get_orchestrator_info() -> OrchestratorInfo {
     })
 }
 
-#[export_name = "canister_global_timer"]
+#[unsafe(export_name = "canister_global_timer")]
 fn timer() {
     // ic_ledger_suite_orchestrator::scheduler::timer invokes ic_cdk::futures::spawn_017_compat
     // which must be wrapped in in_executor_context as required by the new ic-cdk-executor.

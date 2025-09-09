@@ -261,7 +261,7 @@ impl LogsRequest {
     fn skip_old_log_entries<'a>(
         &self,
         log_buffer: &'a LogBuffer,
-    ) -> impl Iterator<Item = &'a LogEntry> {
+    ) -> impl Iterator<Item = &'a LogEntry> + use<'a> {
         let max_skip_timestamp = self.time;
         log_buffer
             .entries_partition_point(move |log_entry| log_entry.timestamp <= max_skip_timestamp)
@@ -405,7 +405,7 @@ where
 
     /// Based on the timestamp of the head log entry; earlier entries have
     /// higher priority.
-    fn priority(&self) -> impl Ord + Debug {
+    fn priority(&self) -> impl Ord + Debug + use<I> {
         Reverse(
             self.head
                 .map(|log_entry| log_entry.timestamp)

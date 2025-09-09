@@ -330,11 +330,11 @@ mod create_dealing {
         }
 
         macro_rules! setup_with_vault_error_and_assert_matches {
-            ( $rng:expr, $alg:expr; $vault_error:expr => $expected_result_pattern:pat if $cond:expr) => {
+            ( $rng:expr_2021, $alg:expr_2021; $vault_error:expr_2021 => $expected_result_pattern:pat if $cond:expr_2021) => {
                 let (_env, params, dealer) = setup($alg, $vault_error, $rng);
                 assert_matches!(dealer.create_dealing(&params), $expected_result_pattern if $cond);
             };
-            ( $rng:expr, $alg:expr; $vault_error:expr => $expected_result_pattern:pat ) => {
+            ( $rng:expr_2021, $alg:expr_2021; $vault_error:expr_2021 => $expected_result_pattern:pat ) => {
                 setup_with_vault_error_and_assert_matches!($rng, $alg; $vault_error => $expected_result_pattern if true);
             };
         }
@@ -1971,7 +1971,7 @@ mod load_transcript_with_openings {
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
             // the loader with the id that is not in the receivers
             let node_id_not_in_receivers = loop {
-                let node_id = NodeId::from(PrincipalId::new_node_test_id(rng.gen()));
+                let node_id = NodeId::from(PrincipalId::new_node_test_id(rng.r#gen()));
                 if !params.receivers().contains(node_id) {
                     break node_id;
                 }
@@ -2105,8 +2105,8 @@ mod load_transcript_with_openings {
                     derivation_path: vec![],
                 };
 
-                let hashed_message = rng.gen::<[u8; 32]>();
-                let seed = Randomness::from(rng.gen::<[u8; 32]>());
+                let hashed_message = rng.r#gen::<[u8; 32]>();
+                let seed = Randomness::from(rng.r#gen::<[u8; 32]>());
 
                 ThresholdEcdsaSigInputs::new(
                     &derivation_path,
@@ -2189,18 +2189,18 @@ mod load_transcript_with_openings {
                 caller: PrincipalId::new_user_test_id(1),
                 derivation_path: vec![],
             };
-            let message = rng.gen::<[u8; 32]>();
-            let seed = Randomness::from(rng.gen::<[u8; 32]>());
+            let message = rng.r#gen::<[u8; 32]>();
+            let seed = Randomness::from(rng.r#gen::<[u8; 32]>());
 
             let taproot_tree_root = {
                 if alg == AlgorithmId::ThresholdSchnorrBip340 {
-                    let choose = rng.gen::<u8>();
+                    let choose = rng.r#gen::<u8>();
                     if choose <= 128 {
                         None
                     } else if choose <= 192 {
                         Some(vec![])
                     } else {
-                        Some(rng.gen::<[u8; 32]>().to_vec())
+                        Some(rng.r#gen::<[u8; 32]>().to_vec())
                     }
                 } else {
                     None

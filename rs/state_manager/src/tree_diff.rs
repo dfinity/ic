@@ -285,10 +285,7 @@ mod tests {
     fn rehash(t: &mut RoseHashTree) {
         match t {
             RoseHashTree::Leaf(_) => (),
-            RoseHashTree::Fork {
-                children,
-                ref mut digest,
-            } => {
+            RoseHashTree::Fork { children, digest } => {
                 let mut hasher = Sha256::new();
                 for (label, child) in children.iter_mut() {
                     rehash(child);
@@ -331,7 +328,7 @@ mod tests {
             path: &mut Path,
         ) -> Result<(Path, Digest), usize> {
             match t {
-                RoseHashTree::Leaf(ref mut hash) if idx == 0 => {
+                RoseHashTree::Leaf(hash) if idx == 0 => {
                     let old_hash = std::mem::replace(hash, new_hash);
                     Ok((path.clone(), old_hash))
                 }

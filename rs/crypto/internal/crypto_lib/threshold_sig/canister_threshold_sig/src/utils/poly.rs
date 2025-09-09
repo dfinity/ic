@@ -244,7 +244,7 @@ impl Polynomial {
 
         // We update `base` so that it is always zero on all previous samples, and
         // `poly` so that it has the correct values on the previous samples.
-        for (ref x, ref y) in &samples[1..] {
+        for (x, y) in &samples[1..] {
             if x.curve_type() != curve || y.curve_type() != curve {
                 return Err(CanisterThresholdError::CurveMismatch);
             }

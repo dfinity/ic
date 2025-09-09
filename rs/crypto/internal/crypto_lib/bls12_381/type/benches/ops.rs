@@ -6,7 +6,7 @@ use rand::{CryptoRng, Rng};
 use std::sync::Arc;
 
 fn random_g1<R: Rng + CryptoRng>(rng: &mut R) -> G1Projective {
-    G1Projective::hash(b"domain_sep", &rng.gen::<[u8; 32]>())
+    G1Projective::hash(b"domain_sep", &rng.r#gen::<[u8; 32]>())
 }
 
 fn n_random_g1<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G1Projective> {
@@ -18,7 +18,7 @@ fn n_random_g1<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G1Projective> {
 }
 
 fn random_g2<R: Rng + CryptoRng>(rng: &mut R) -> G2Projective {
-    G2Projective::hash(b"domain_sep", &rng.gen::<[u8; 32]>())
+    G2Projective::hash(b"domain_sep", &rng.r#gen::<[u8; 32]>())
 }
 
 fn n_random_g2<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> Vec<G2Projective> {
@@ -246,7 +246,7 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
 
     group.bench_function("hash_32_B", |b| {
         b.iter_batched_ref(
-            || rng.gen::<[u8; 32]>(),
+            || rng.r#gen::<[u8; 32]>(),
             |bytes| G1Projective::hash(b"dst", bytes.as_slice()),
             BatchSize::SmallInput,
         )
@@ -413,7 +413,7 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
 
     group.bench_function("hash_32_B", |b| {
         b.iter_batched_ref(
-            || rng.gen::<[u8; 32]>(),
+            || rng.r#gen::<[u8; 32]>(),
             |bytes| G2Projective::hash(b"dst", bytes.as_slice()),
             BatchSize::SmallInput,
         )
@@ -585,7 +585,7 @@ fn pairing_ops(c: &mut Criterion) {
 
     group.bench_function("multiply_u16", |b| {
         b.iter_batched_ref(
-            || rng.gen::<u16>(),
+            || rng.r#gen::<u16>(),
             |s| Gt::g_mul_u16(*s),
             BatchSize::SmallInput,
         )

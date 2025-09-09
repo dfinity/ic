@@ -731,7 +731,10 @@ impl CallContextManager {
     /// best-effort callbacks whose deadlines are `< now`.
     ///
     /// Note: A given callback ID will be returned at most once by this function.
-    pub(super) fn expire_callbacks(&mut self, now: CoarseTime) -> impl Iterator<Item = CallbackId> {
+    pub(super) fn expire_callbacks(
+        &mut self,
+        now: CoarseTime,
+    ) -> impl Iterator<Item = CallbackId> + use<> {
         const MIN_CALLBACK_ID: CallbackId = CallbackId::new(0);
 
         // Unfortunate two-step splitting off of the expired callbacks.

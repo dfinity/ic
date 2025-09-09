@@ -302,11 +302,12 @@ impl StorageImpl {
             }
         }
 
-        let base = if let Some(base) = base_path.as_deref().map(Checkpoint::open).transpose()? {
-            assert!(base_overlays.is_empty());
-            BaseFile::Base(base)
-        } else {
-            BaseFile::Overlay(base_overlays)
+        let base = match base_path.as_deref().map(Checkpoint::open).transpose()? {
+            Some(base) => {
+                assert!(base_overlays.is_empty());
+                BaseFile::Base(base)
+            }
+            _ => BaseFile::Overlay(base_overlays),
         };
 
         Ok(Self { base, overlays })

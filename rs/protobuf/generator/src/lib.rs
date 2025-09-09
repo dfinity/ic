@@ -20,7 +20,7 @@ fn base_config(out: &Path, prefix: &str) -> Config {
 
 /// Derives fields for protobuf log messages and optional fields
 macro_rules! add_log_proto_derives {
-    ($prost_build:expr, $message_type:ident, $package:expr, $log_entry_field:ident $(,$message_field:ident)*) => {{
+    ($prost_build:expr_2021, $message_type:ident, $package:expr_2021, $log_entry_field:ident $(,$message_field:ident)*) => {{
         $prost_build.type_attribute(
             std::concat!($package, ".", std::stringify!($message_type)),
             "#[derive(serde::Serialize, serde::Deserialize)]"

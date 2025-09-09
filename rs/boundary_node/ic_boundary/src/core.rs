@@ -626,10 +626,9 @@ async fn create_agent(
     registry_client: Option<Arc<RegistryClientImpl>>,
     port: u16,
 ) -> Result<Agent, Error> {
-    let identity = if let (Some(v), Some(r)) = (crypto_config, registry_client) {
-        create_identity(v, r).await?
-    } else {
-        Box::new(AnonymousIdentity)
+    let identity = match (crypto_config, registry_client) {
+        (Some(v), Some(r)) => create_identity(v, r).await?,
+        _ => Box::new(AnonymousIdentity),
     };
 
     let agent = Agent::builder()

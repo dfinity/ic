@@ -47,7 +47,7 @@
 /// "http_request" endpoints, resp.
 #[macro_export]
 macro_rules! canister_requests {
-    ( $i:ident $(, $l:literal * $a:expr => $r:expr )+ $(,)? ) => {
+    ( $i:ident $(, $l:literal * $a:expr_2021 => $r:expr_2021 )+ $(,)? ) => {
         {
             let _num_requests: usize = canister_requests!(@count_requests $($l),+ );
             let mut _res: Option<RequestOutcome<(), anyhow::Error>> = None;

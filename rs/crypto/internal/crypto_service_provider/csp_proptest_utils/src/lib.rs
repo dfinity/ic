@@ -54,7 +54,7 @@ macro_rules! proptest_strategy_for_enum_variant {
     };
     // Match enum variant struct with fields,
     // like CspThresholdSignError::SecretKeyNotFound{ algorithm, key_id }
-    ($enum_name:ty, $variant:ident => {$($field:pat in $strategy:expr),+ $(,)?}) => {
+    ($enum_name:ty, $variant:ident => {$($field:pat in $strategy:expr_2021),+ $(,)?}) => {
         paste! {
             proptest::prop_compose! {
                 pub(super) fn [<arb_ $variant:snake _variant>]()($($field in $strategy),+) -> $enum_name {
@@ -65,7 +65,7 @@ macro_rules! proptest_strategy_for_enum_variant {
     };
     // Match enum variant tuple structs,
     // like CspSignature::RsaSha256(Vec<u8>)
-    ($enum_name:ty, $variant:ident => ($($field:pat in $strategy:expr),+ $(,)?)) => {
+    ($enum_name:ty, $variant:ident => ($($field:pat in $strategy:expr_2021),+ $(,)?)) => {
         paste! {
             proptest::prop_compose! {
                 pub(super) fn [<arb_ $variant:snake _variant>]()($($field in $strategy),+) -> $enum_name {
@@ -76,7 +76,7 @@ macro_rules! proptest_strategy_for_enum_variant {
     };
     // Match enum variant tuple structs wrapping a type,
     // like CspSignature::EcdsaP256(ecdsa_secp256r1_types::SignatureBytes)
-    ($enum_name:ty, $variant:ident => ($tuple_type:ty: $($field:pat in $strategy:expr),+ $(,)?)) => {
+    ($enum_name:ty, $variant:ident => ($tuple_type:ty: $($field:pat in $strategy:expr_2021),+ $(,)?)) => {
         paste! {
             proptest::prop_compose! {
                 pub(super) fn [<arb_ $variant:snake _variant>]()($($field in $strategy),+) -> $enum_name {

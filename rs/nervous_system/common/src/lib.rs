@@ -91,7 +91,7 @@ const MAX_LOGS_RESPONSE_SIZE: usize = 1 << 20;
 
 #[macro_export]
 macro_rules! assert_is_ok {
-    ($result: expr) => {
+    ($result: expr_2021) => {
         let r = $result;
         assert!(
             r.is_ok(),
@@ -104,7 +104,7 @@ macro_rules! assert_is_ok {
 
 #[macro_export]
 macro_rules! assert_is_err {
-    ($result: expr) => {
+    ($result: expr_2021) => {
         let r = $result;
         assert!(
             r.is_err(),
@@ -400,7 +400,7 @@ where
 
     /// Based on the timestamp of the head log entry; earlier entries have
     /// higher priority.
-    fn priority(&self) -> impl Ord + Debug {
+    fn priority(&self) -> impl Ord + Debug + use<I> {
         Reverse(
             self.head
                 .map(|log_entry| log_entry.timestamp)
@@ -571,7 +571,7 @@ impl LogsRequest {
     fn skip_old_log_entries<'a>(
         &self,
         log_buffer: &'a LogBuffer,
-    ) -> impl Iterator<Item = &'a LogEntry> {
+    ) -> impl Iterator<Item = &'a LogEntry> + use<'a> {
         let max_skip_timestamp = self.time;
         log_buffer
             .entries_partition_point(move |log_entry| log_entry.timestamp <= max_skip_timestamp)

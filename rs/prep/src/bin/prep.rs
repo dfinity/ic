@@ -425,20 +425,23 @@ impl CliArgs {
 
 fn read_keys_from_pub_file(filename: PathBuf) -> Vec<String> {
     let mut keys = Vec::<String>::new();
-    if let Ok(file) = fs::File::open(filename.clone()) {
-        for line in io::BufReader::new(file).lines() {
-            match line {
-                Ok(key) => keys.push(key),
-                Err(e) => eprintln!(
-                    "Error while reading a key from {}: {}",
-                    filename.as_path().display(),
-                    e
-                ),
+    match fs::File::open(filename.clone()) {
+        Ok(file) => {
+            for line in io::BufReader::new(file).lines() {
+                match line {
+                    Ok(key) => keys.push(key),
+                    Err(e) => eprintln!(
+                        "Error while reading a key from {}: {}",
+                        filename.as_path().display(),
+                        e
+                    ),
+                }
             }
+            keys
         }
-        keys
-    } else {
-        vec![]
+        _ => {
+            vec![]
+        }
     }
 }
 

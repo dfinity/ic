@@ -305,7 +305,7 @@ impl Transport for PeerTransport {
             .read()
             .unwrap()
             .iter()
-            .filter(|(&n, _)| n != self.node_id)
+            .filter(|&(&n, _)| n != self.node_id)
             .map(|(k, _)| (*k, ConnId::from(u64::MAX)))
             .collect()
     }

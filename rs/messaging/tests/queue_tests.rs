@@ -284,7 +284,7 @@ fn get_output_queue_iter<'a>(
     state: &'a ReplicatedState,
     local_canister_id: &CanisterId,
     remote_canister_id: &'a CanisterId,
-) -> Option<impl Iterator<Item = &'a RequestOrResponse>> {
+) -> Option<impl Iterator<Item = &'a RequestOrResponse> + use<'a>> {
     state
         .canister_states
         .get(local_canister_id)

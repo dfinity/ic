@@ -1806,15 +1806,16 @@ fn open_wasm(
     if let Some(cache) = embedder_cache.as_ref() {
         if let Some(opened_wasm) = cache.downcast::<HypervisorResult<OpenedWasm>>() {
             match opened_wasm {
-                Ok(opened_wasm) => {
-                    if let Some(cached_sandbox_process) = opened_wasm.sandbox_process.upgrade() {
+                Ok(opened_wasm) => match opened_wasm.sandbox_process.upgrade() {
+                    Some(cached_sandbox_process) => {
                         metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_SUCCESS);
                         assert!(Arc::ptr_eq(&cached_sandbox_process, sandbox_process));
                         return Ok((opened_wasm.wasm_id, None));
-                    } else {
+                    }
+                    _ => {
                         metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_SANDBOX_EVICTED);
                     }
-                }
+                },
                 Err(err) => {
                     metrics.inc_cache_lookup(EMBEDDER_CACHE_HIT_COMPILATION_ERROR);
                     return Err(err.clone());

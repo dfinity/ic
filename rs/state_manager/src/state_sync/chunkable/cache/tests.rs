@@ -136,7 +136,7 @@ fn incomplete_state_for_tests(
     // contained in manifest
     if let DownloadState::Loading {
         meta_manifest: _,
-        ref manifest,
+        manifest,
         state_sync_file_group: _,
         fetch_chunks: _,
         copied_chunks_from_file_group: _,

@@ -308,7 +308,7 @@ pub fn log_label(state: &mut MessageHandlerState, label: &str) {
 /// in scope (typically providing a way to mutate some global canister variable).
 #[macro_export]
 macro_rules! tla_log_locals {
-    ($($name:ident : $value:expr),*) => {
+    ($($name:ident : $value:expr_2021),*) => {
         {
             let mut locals = Vec::new();
             $(
@@ -338,7 +338,7 @@ macro_rules! tla_log_locals {
 /// in scope (typically providing a way to mutate some global canister variable).
 #[macro_export]
 macro_rules! tla_log_globals {
-    (($($name:ident : $value:expr),*)) => {
+    (($($name:ident : $value:expr_2021),*)) => {
         {
             let mut globals = GlobalState::new();
             $(
@@ -353,7 +353,7 @@ macro_rules! tla_log_globals {
 
 #[macro_export]
 macro_rules! tla_log_all_globals {
-    ($self:expr) => {{
+    ($self:expr_2021) => {{
         let mut globals = tla_get_globals!($self);
         let state_with_pairs = TLA_INSTRUMENTATION_STATE.get();
         let mut state = state_with_pairs
@@ -372,7 +372,7 @@ macro_rules! tla_log_all_globals {
 /// 3. `with_tla_state_pairs<F>(f: F) where F: FnOnce(&mut Vec<StatePair>) -> ()
 #[macro_export]
 macro_rules! tla_log_request {
-    ($label:expr, $to:expr, $method:expr, $message:expr) => {{
+    ($label:expr_2021, $to:expr_2021, $method:expr_2021, $message:expr_2021) => {{
         let message = $message.to_tla_value();
         let res = TLA_INSTRUMENTATION_STATE.try_with(|state| {
             let mut handler_state = state.handler_state.lock().expect("Failed to lock handler state in log_request");
@@ -398,7 +398,7 @@ macro_rules! tla_log_request {
 /// 2. with_tla_state<F>(f: F) where F: FnOnce(&mut InstrumentationState) -> ()
 #[macro_export]
 macro_rules! tla_log_response {
-    ($from:expr, $message:expr) => {{
+    ($from:expr_2021, $message:expr_2021) => {{
         let message = $message.to_tla_value();
         let location = $crate::SourceLocation { file: file!().to_string(), line: line!().to_string() };
         let res = TLA_INSTRUMENTATION_STATE.try_with(|state| {
@@ -424,14 +424,14 @@ macro_rules! tla_log_response {
 /// is used instead.
 #[macro_export]
 macro_rules! tla_log_method_call {
-    ($update:expr, $global:expr) => {{
+    ($update:expr_2021, $global:expr_2021) => {{
         $crate::log_method_call($update, $global)
     }};
 }
 
 #[macro_export]
 macro_rules! tla_log_label {
-    ($label:expr) => {{
+    ($label:expr_2021) => {{
         let res = TLA_INSTRUMENTATION_STATE.try_with(|state| {
             let mut handler_state = state
                 .handler_state

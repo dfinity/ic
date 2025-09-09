@@ -673,28 +673,31 @@ impl SystemTestGroup {
                                     setup_dir,
                                     logger.clone(),
                                 );
-                                if let Ok(group_setup) = GroupSetup::try_read_attribute(&env) {
-                                    let farm_url = env.get_farm_url().unwrap();
-                                    let farm = Farm::new(farm_url.clone(), env.logger());
-                                    let group_name = group_setup.infra_group_name;
-                                    if let Err(e) = farm.set_group_ttl(&group_name, GROUP_TTL) {
-                                        panic!(
+                                match GroupSetup::try_read_attribute(&env) {
+                                    Ok(group_setup) => {
+                                        let farm_url = env.get_farm_url().unwrap();
+                                        let farm = Farm::new(farm_url.clone(), env.logger());
+                                        let group_name = group_setup.infra_group_name;
+                                        if let Err(e) = farm.set_group_ttl(&group_name, GROUP_TTL) {
+                                            panic!(
                                             "{}",
                                             format!(
                                                 "Failed to keep group {} alive via endpoint {:?}: {:?}",
                                                 group_name, farm_url, e
                                             )
                                         )
-                                    };
-                                    debug!(
+                                        };
+                                        debug!(
                                         logger,
                                         "Group {} TTL set to +{:?} from now (Farm endpoint: {:?})",
                                         group_name,
                                         GROUP_TTL,
                                         farm_url
                                     );
-                                } else {
-                                    info!(logger, "Farm group not created yet.");
+                                    }
+                                    _ => {
+                                        info!(logger, "Farm group not created yet.");
+                                    }
                                 }
                             } else {
                                 info!(logger, "Setup directory not created yet.");
@@ -1189,7 +1192,7 @@ impl std::fmt::Display for Cursor {
 }
 
 macro_rules! unwrap_or_return {
-    ( $val1:expr, $val2:expr ) => {
+    ( $val1:expr_2021, $val2:expr_2021 ) => {
         match $val2 {
             Ok(x) => x,
             Err(x) => return ($val1, Err(x.into())),

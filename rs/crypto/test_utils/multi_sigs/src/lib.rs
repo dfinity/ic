@@ -87,7 +87,7 @@ impl MultiSigTestEnvironment {
     fn n_random_node_ids<R: Rng + CryptoRng>(n: usize, rng: &mut R) -> BTreeSet<NodeId> {
         let mut node_ids = BTreeSet::new();
         while node_ids.len() < n {
-            node_ids.insert(NodeId::from(PrincipalId::new_node_test_id(rng.gen())));
+            node_ids.insert(NodeId::from(PrincipalId::new_node_test_id(rng.r#gen())));
         }
         node_ids
     }
@@ -101,7 +101,7 @@ impl MultiSigTestEnvironment {
             .with_registry(Arc::clone(&self.registry) as Arc<_>)
             .with_node_id(node_id)
             .with_keys(NodeKeysToGenerate::only_committee_signing_key())
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
             .build();
         let node_keys = temp_crypto
             .current_node_public_keys()

@@ -205,7 +205,8 @@ pub fn mock_env_variables(config: &IcConfig) {
 
 fn update_env_variables(pairs: Vec<(String, &str)>) {
     for (value, env_variable) in pairs {
-        std::env::set_var(env_variable, &value);
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var(env_variable, &value) };
         eprintln!(
             "Overriden env variable `{}` to value: {}",
             env_variable, value

@@ -56,8 +56,8 @@ mod sign_share {
                     derivation_path: vec![],
                 };
 
-                let hashed_message = rng.gen::<[u8; 32]>();
-                let seed = Randomness::from(rng.gen::<[u8; 32]>());
+                let hashed_message = rng.r#gen::<[u8; 32]>();
+                let seed = Randomness::from(rng.r#gen::<[u8; 32]>());
 
                 ThresholdEcdsaSigInputs::new(
                     &derivation_path,
@@ -104,8 +104,8 @@ mod sign_share {
                     derivation_path: vec![],
                 };
 
-                let hashed_message = rng.gen::<[u8; 32]>();
-                let seed = Randomness::from(rng.gen::<[u8; 32]>());
+                let hashed_message = rng.r#gen::<[u8; 32]>();
+                let seed = Randomness::from(rng.r#gen::<[u8; 32]>());
 
                 ThresholdEcdsaSigInputs::new(
                     &derivation_path,
@@ -155,8 +155,8 @@ mod sign_share {
                     derivation_path: vec![],
                 };
 
-                let hashed_message = rng.gen::<[u8; 32]>();
-                let seed = Randomness::from(rng.gen::<[u8; 32]>());
+                let hashed_message = rng.r#gen::<[u8; 32]>();
+                let seed = Randomness::from(rng.r#gen::<[u8; 32]>());
 
                 ThresholdEcdsaSigInputs::new(
                     &derivation_path,
@@ -278,13 +278,13 @@ mod sign_share {
         };
 
         for alg in AlgorithmId::all_threshold_ecdsa_algorithms() {
-            let hashed_message = rng.gen::<[u8; 32]>();
-            let seed = Randomness::from(rng.gen::<[u8; 32]>());
+            let hashed_message = rng.r#gen::<[u8; 32]>();
+            let seed = Randomness::from(rng.r#gen::<[u8; 32]>());
 
             const CHACHA_SEED_LEN: usize = 32;
             let mut runner = TestRunner::new_with_rng(
                 Config::with_cases(10),
-                TestRng::from_seed(RngAlgorithm::ChaCha, &rng.gen::<[u8; CHACHA_SEED_LEN]>()),
+                TestRng::from_seed(RngAlgorithm::ChaCha, &rng.r#gen::<[u8; CHACHA_SEED_LEN]>()),
             );
             // retain_active_transcripts is a no-op when the parameter active_transcripts is empty
             let result = runner.run(

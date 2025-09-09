@@ -636,7 +636,7 @@ mod tests {
             // It should be possible to create a dealing
             let result = dkg_impl.on_state_change(&dkg_pool);
             let first = result.first().unwrap();
-            let ChangeAction::AddToValidated(ref dealing) = first else {
+            let ChangeAction::AddToValidated(dealing) = first else {
                 panic!("Unexpected change action: {first:?}")
             };
 
@@ -648,7 +648,7 @@ mod tests {
                 vec![dealing],
             );
             let first = result.first().unwrap();
-            let ChangeAction::MoveToValidated(ref dealing_validated) = first else {
+            let ChangeAction::MoveToValidated(dealing_validated) = first else {
                 panic!("Unexpected change action: {first:?}")
             };
             assert_eq!(dealing, dealing_validated);

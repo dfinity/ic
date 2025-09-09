@@ -575,7 +575,7 @@ fn canister_init(arg: LedgerCanisterPayload) {
 }
 
 #[cfg(not(feature = "canbench-rs"))]
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn main() {
     in_executor_context(|| {
         let bytes = arg_data_raw();
@@ -730,7 +730,7 @@ impl LedgerAccess for Access {
 }
 
 /// Canister endpoints
-#[export_name = "canister_update send_pb"]
+#[unsafe(export_name = "canister_update send_pb")]
 fn send_() {
     in_executor_context(|| {
         ic_cdk::futures::spawn_017_compat(async {
@@ -766,7 +766,7 @@ async fn send_dfx(arg: SendArgs) -> BlockIndex {
 }
 
 #[cfg(feature = "notify-method")]
-#[export_name = "canister_update notify_pb"]
+#[unsafe(export_name = "canister_update notify_pb")]
 fn notify_() {
     trap_since_notify_is_no_longer_supported();
 }
@@ -866,12 +866,12 @@ async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromE
 
 /// See caveats of use on send_dfx
 #[cfg(feature = "notify-method")]
-#[export_name = "canister_update notify_dfx"]
+#[unsafe(export_name = "canister_update notify_dfx")]
 fn notify_dfx_() {
     trap_since_notify_is_no_longer_supported();
 }
 
-#[export_name = "canister_query block_pb"]
+#[unsafe(export_name = "canister_query block_pb")]
 fn block_() {
     in_query_executor_context(|| {
         let arg: BlockArg =
@@ -882,7 +882,7 @@ fn block_() {
     })
 }
 
-#[export_name = "canister_query tip_of_chain_pb"]
+#[unsafe(export_name = "canister_query tip_of_chain_pb")]
 fn tip_of_chain_() {
     in_query_executor_context(|| {
         let _: protobuf::TipOfChainRequest =
@@ -898,7 +898,7 @@ fn tip_of_chain_candid() -> TipOfChainRes {
     tip_of_chain()
 }
 
-#[export_name = "canister_query get_archive_index_pb"]
+#[unsafe(export_name = "canister_query get_archive_index_pb")]
 fn get_archive_index_() {
     in_query_executor_context(|| {
         let state = LEDGER.read().unwrap();
@@ -928,7 +928,7 @@ fn get_archive_index_() {
     })
 }
 
-#[export_name = "canister_query account_balance_pb"]
+#[unsafe(export_name = "canister_query account_balance_pb")]
 fn account_balance_() {
     in_query_executor_context(|| {
         let args: AccountBalanceArgs =
@@ -963,7 +963,7 @@ fn compute_account_identifier(arg: Account) -> AccountIdBlob {
     AccountIdentifier::from(arg).to_address()
 }
 
-#[export_name = "canister_query transfer_fee_pb"]
+#[unsafe(export_name = "canister_query transfer_fee_pb")]
 fn transfer_fee_() {
     in_query_executor_context(|| {
         let args: TransferFeeArgs =
@@ -974,7 +974,7 @@ fn transfer_fee_() {
     })
 }
 
-#[export_name = "canister_query total_supply_pb"]
+#[unsafe(export_name = "canister_query total_supply_pb")]
 fn total_supply_() {
     in_query_executor_context(|| {
         let _: TotalSupplyArgs =
@@ -990,7 +990,7 @@ fn total_supply_() {
 /// without taking into account the archive. For example, if the ledger contains
 /// blocks with heights [100, 199] then iter_blocks(0, 1) will return the block
 /// with height 100.
-#[export_name = "canister_query iter_blocks_pb"]
+#[unsafe(export_name = "canister_query iter_blocks_pb")]
 fn iter_blocks_() {
     in_query_executor_context(|| {
         let args: IterBlocksArgs =
@@ -1012,7 +1012,7 @@ fn iter_blocks_() {
 
 /// Get multiple blocks by BlockIndex and length. If the query is outside the
 /// range stored in the Node the result is an error.
-#[export_name = "canister_query get_blocks_pb"]
+#[unsafe(export_name = "canister_query get_blocks_pb")]
 fn get_blocks_() {
     in_query_executor_context(|| {
         let args: GetBlocksArgs =
@@ -1095,7 +1095,7 @@ fn archives() -> Archives {
     Archives { archives }
 }
 
-#[export_name = "canister_query get_nodes"]
+#[unsafe(export_name = "canister_query get_nodes")]
 fn get_nodes_() {
     in_query_executor_context(|| {
         let result = archives()

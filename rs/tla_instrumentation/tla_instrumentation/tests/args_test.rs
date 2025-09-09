@@ -51,7 +51,7 @@ mod tla_stuff {
     }
 
     macro_rules! snapshotter {
-        ($first_arg:expr $(, $_rest:tt)* ) => {{
+        ($first_arg:expr_2021 $(, $_rest:tt)* ) => {{
             // Use a block to potentially shadow variables and contain the logic
             let raw_ptr = ::tla_instrumentation::UnsafeSendPtr($first_arg as *const _);
             ::std::sync::Arc::new(::std::sync::Mutex::new(move || my_get_globals(&raw_ptr)))

@@ -564,7 +564,7 @@ fn next_maturity_disbursement_to_finalize(
 
 #[cfg(feature = "tla")]
 macro_rules! tla_snapshotter {
-    ($first_arg:expr $(, $_rest:tt)* ) => {{
+    ($first_arg:expr_2021 $(, $_rest:tt)* ) => {{
         let raw_ptr = ::tla_instrumentation::UnsafeSendPtr($first_arg.with(|g| g.as_ptr()));
         ::std::sync::Arc::new(::std::sync::Mutex::new(move || {
             $crate::governance::tla::get_tla_globals(&raw_ptr)

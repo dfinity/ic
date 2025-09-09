@@ -7,7 +7,7 @@ fn zk_proofs(c: &mut Criterion) {
     let alg = IdkgProtocolAlgorithm::EcdsaSecp256k1;
     let curve = EccCurveType::K256;
     let rng = &mut reproducible_rng();
-    let ad = rng.gen::<[u8; 32]>();
+    let ad = rng.r#gen::<[u8; 32]>();
 
     let seed = Seed::from_rng(rng);
 
@@ -73,8 +73,8 @@ fn zk_proofs(c: &mut Criterion) {
     });
 
     let secret = EccScalar::random(curve, rng);
-    let base1 = EccPoint::hash_to_point(curve, &rng.gen::<[u8; 32]>(), b"domain").unwrap();
-    let base2 = EccPoint::hash_to_point(curve, &rng.gen::<[u8; 32]>(), b"domain").unwrap();
+    let base1 = EccPoint::hash_to_point(curve, &rng.r#gen::<[u8; 32]>(), b"domain").unwrap();
+    let base2 = EccPoint::hash_to_point(curve, &rng.r#gen::<[u8; 32]>(), b"domain").unwrap();
 
     c.bench_function("ProofOfDLogEquivalence::create", |b| {
         b.iter(|| {

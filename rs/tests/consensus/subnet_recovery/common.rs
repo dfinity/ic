@@ -305,10 +305,13 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
     if cfg.local_recovery {
-        std::env::set_var(
-            "IC_ADMIN_BIN",
-            get_dependency_path_from_env("IC_ADMIN_PATH"),
-        );
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe {
+            std::env::set_var(
+                "IC_ADMIN_BIN",
+                get_dependency_path_from_env("IC_ADMIN_PATH"),
+            )
+        };
     }
 
     let initial_version = get_guestos_img_version();
@@ -437,10 +440,9 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
 
     let mut unassigned_nodes = env.topology_snapshot().unassigned_nodes();
 
-    let upload_node = if let Some(node) = unassigned_nodes.next() {
-        node
-    } else {
-        app_nodes.next().unwrap()
+    let upload_node = match unassigned_nodes.next() {
+        Some(node) => node,
+        _ => app_nodes.next().unwrap(),
     };
 
     print_source_and_app_and_unassigned_nodes(&env, &logger, source_subnet_id);
