@@ -47,7 +47,7 @@ system_test_nns(
     enable_head_nns_variant = False,
     env = ENV,
     flaky = True,
-    tags = ["long_test"],
+    tags = ["system_test_large"],
     test_timeout = "eternal",
     uses_guestos_test_update = True,
     uses_setupos_img = True,
