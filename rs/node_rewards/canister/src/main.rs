@@ -65,7 +65,7 @@ fn schedule_timers() {
     let mut next_sync_target = now_secs - since_midnight + SYNC_AT_SECONDS_AFTER_MIDNIGHT;
     if since_midnight > SYNC_AT_SECONDS_AFTER_MIDNIGHT {
         // already past today's SYNC_AT_SECONDS_AFTER_MIDNIGHT → use tomorrow
-        next_sync_target = next_sync_target + DAY_IN_SECONDS;
+        next_sync_target += DAY_IN_SECONDS;
     };
     ic_cdk_timers::set_timer(Duration::from_secs(next_sync_target), || {
         ic_cdk_timers::set_timer_interval(Duration::from_secs(DAY_IN_SECONDS), || {
