@@ -110,7 +110,7 @@ pub fn assign_unassigned_nodes_to_nns(
     cert_state_makes_progress_with_retries(
         &nns_node.get_public_url(),
         nns_node.effective_canister_id(),
-        &logger,
+        logger,
         Duration::from_secs(300),
         Duration::from_secs(10),
     );
