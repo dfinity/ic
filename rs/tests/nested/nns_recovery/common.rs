@@ -114,7 +114,7 @@ pub fn assign_unassigned_nodes_to_nns(
     await_subnet_earliest_topology_version(
         &nns_subnet,
         new_topology.get_registry_version(),
-        &logger,
+        logger,
     );
     info!(logger, "Success: New nodes have taken over the NNS subnet");
 
@@ -402,8 +402,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         .block_on(join_all(
             get_host_vm_names(cfg.subnet_size)
                 .iter()
-                .cloned()
-                .filter(|vm_name| {
+                .filter(|&vm_name| {
                     env.get_nested_vm(vm_name)
                         .unwrap()
                         .get_nested_network()
