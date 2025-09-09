@@ -17525,6 +17525,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "nested-nns-recovery"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "ic-recovery",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "nested",
+ "rand 0.8.5",
+ "sha2 0.10.9",
+ "slog",
+]
+
+[[package]]
 name = "network"
 version = "1.0.0"
 dependencies = [

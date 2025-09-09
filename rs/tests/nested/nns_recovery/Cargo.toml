@@ -11,9 +11,9 @@ anyhow = { workspace = true }
 futures = { workspace = true }
 ic_consensus_system_test_utils = { path = "../../consensus/utils" }
 ic-recovery = { path = "../../../recovery" }
-ic-system-test-driver = { path = "../../../driver" }
+ic-system-test-driver = { path = "../../driver" }
 ic-types = { path = "../../../types/types" }
-nested = { path = "../nested" }
+nested = { path = "../../nested" }
 rand = { workspace = true }
 sha2 = { workspace = true }
 slog = { workspace = true }
