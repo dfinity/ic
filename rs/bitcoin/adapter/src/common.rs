@@ -230,7 +230,7 @@ impl BlockchainNetwork for bitcoin::dogecoin::Network {
         header: &Self::Header,
     ) -> Result<(), ValidateHeaderError> {
         let validator = DogecoinHeaderValidator::new(*self);
-        validator.validate_auxpow_header(store, &header)
+        validator.validate_auxpow_header(store, header)
     }
     fn are_multiple_blocks_allowed(&self, anchor_height: BlockHeight) -> bool {
         use bitcoin::dogecoin::Network::*;
