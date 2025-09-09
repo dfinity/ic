@@ -4,7 +4,6 @@ use crate::metrics::MetricsManager;
 use crate::pb::v1::{NodeMetrics, SubnetMetricsKey, SubnetMetricsValue};
 use futures_util::FutureExt;
 use ic_nervous_system_canisters::registry::fake::FakeRegistry;
-use ic_node_rewards_canister_api::provider_rewards_calculation::GetNodeProviderRewardsCalculationRequest;
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, NodeProvidersRewards,
 };
@@ -328,9 +327,7 @@ fn test_get_node_providers_rewards() {
         to_day_timestamp_nanos: to.unix_ts_at_day_end_nanoseconds(),
     };
     let result_endpoint =
-        NodeRewardsCanister::get_node_providers_rewards(&CANISTER_TEST, request.clone())
-            .now_or_never()
-            .unwrap();
+        NodeRewardsCanister::get_node_providers_rewards(&CANISTER_TEST, request.clone()).unwrap();
 
     let expected = NodeProvidersRewards {
         rewards_xdr_permyriad: btreemap! {
@@ -338,5 +335,5 @@ fn test_get_node_providers_rewards() {
             test_provider_id(2).0 => 10000,
         },
     };
-    assert_eq!(result_endpoint, Ok(expected));
+    assert_eq!(result_endpoint, expected);
 }

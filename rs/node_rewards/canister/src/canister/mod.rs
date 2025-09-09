@@ -2,7 +2,7 @@ use crate::metrics::MetricsManager;
 use crate::pb::v1::{RewardableNodesKey, RewardableNodesValue};
 use crate::registry_querier::RegistryQuerier;
 use crate::storage::{REWARDABLE_NODES_CACHE, VM};
-use crate::{telemetry, KeyRange};
+use crate::KeyRange;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_node_rewards_canister_api::monthly_rewards::{
@@ -27,9 +27,8 @@ use ic_registry_keys::{
 use ic_registry_node_provider_rewards::{calculate_rewards_v0, RewardsPerNodeProvider};
 use ic_types::registry::RegistryClientError;
 use ic_types::{RegistryVersion, Time};
-use itertools::Itertools;
+use rewards_calculation::rewards_calculator;
 use rewards_calculation::rewards_calculator::RewardsCalculatorInput;
-use rewards_calculation::rewards_calculator_results::RewardsCalculatorResults;
 use rewards_calculation::types::{DayUtc, RewardableNode};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashSet};
@@ -205,11 +204,7 @@ impl NodeRewardsCanister {
         })
     }
 
-    fn calculate_rewards(
-        &self,
-        start_day: DayUtc,
-        end_day: DayUtc,
-    ) -> Result<BTreeMap<DayUtc, RewardsCalculatorResults>, String> {
+    fn validate_reward_period(&self, start_day: DayUtc, end_day: DayUtc) -> Result<(), String> {
         let today: DayUtc = current_time().as_nanos_since_unix_epoch().into();
         if start_day > end_day {
             return Err(
@@ -219,45 +214,36 @@ impl NodeRewardsCanister {
         if end_day >= today {
             return Err("to_day_timestamp_nanos must be earlier than today".to_string());
         }
-        let mut results = BTreeMap::new();
-        let mut current_day = start_day;
-        while current_day <= end_day {
-            let mut instruction_counter = telemetry::InstructionCounter::default();
-            let registry_querier = RegistryQuerier::new(self.registry_client.clone());
-            let version = registry_querier
-                .version_for_timestamp(current_day.unix_ts_at_day_end_nanoseconds())
-                .ok_or_else(|| "Could not find registry version for timestamp".to_string())?;
-            let rewards_table = registry_querier.get_rewards_table(version);
+        Ok(())
+    }
 
-            let metrics_by_subnet = self.metrics_manager.metrics_by_subnet(current_day);
+    fn get_rewards_calculation_input(
+        &self,
+        day_utc: DayUtc,
+    ) -> Result<RewardsCalculatorInput, String> {
+        let registry_querier = RegistryQuerier::new(self.registry_client.clone());
+        let version = registry_querier
+            .version_for_timestamp(day_utc.unix_ts_at_day_end_nanoseconds())
+            .ok_or_else(|| "Could not find registry version for timestamp".to_string())?;
+        let rewards_table = registry_querier.get_rewards_table(version);
 
-            let provider_rewardable_nodes = self.get_cached_rewardable_nodes_per_provider(version);
+        let metrics_by_subnet = self.metrics_manager.metrics_by_subnet(day_utc);
 
-            if metrics_by_subnet.is_empty() || provider_rewardable_nodes.is_empty() {
-                return Err(format!(
-                    "Metrics or Rewardable Nodes not yet synced for {}",
-                    current_day
-                ));
-            }
+        let provider_rewardable_nodes = self.get_cached_rewardable_nodes_per_provider(version);
 
-            let input = RewardsCalculatorInput {
-                rewards_table,
-                metrics_by_subnet,
-                provider_rewardable_nodes,
-            };
-            let daily_rewards =
-                rewards_calculation::rewards_calculator::calculate_daily_rewards(input);
-            results.insert(current_day, daily_rewards);
-            current_day = current_day.next_day();
-
-            ic_cdk::println!(
-                "Calculating rewards for {} total {} instructions",
-                current_day,
-                instruction_counter.sum()
-            );
+        if metrics_by_subnet.is_empty() || provider_rewardable_nodes.is_empty() {
+            return Err(format!(
+                "Metrics or Rewardable Nodes not yet synced for {}",
+                day_utc
+            ));
         }
 
-        Ok(results)
+        let input = RewardsCalculatorInput {
+            rewards_table,
+            metrics_by_subnet,
+            provider_rewardable_nodes,
+        };
+        Ok(input)
     }
 }
 
@@ -332,27 +318,31 @@ impl NodeRewardsCanister {
         }
     }
 
-    pub async fn get_node_providers_rewards(
+    pub fn get_node_providers_rewards(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersRewardsRequest,
     ) -> GetNodeProvidersRewardsResponse {
         let start_day: DayUtc = request.from_day_timestamp_nanos.into();
         let end_day: DayUtc = request.to_day_timestamp_nanos.into();
-        let mut rewards_xdr_permyriad = BTreeMap::new();
 
-        let daily_rewards =
-            canister.with_borrow(|canister| canister.calculate_rewards(start_day, end_day))?;
-
-        for (_, rewards) in daily_rewards {
-            for (provider_id, rewards) in rewards.provider_results {
-                rewards_xdr_permyriad
+        let mut rewards = BTreeMap::new();
+        canister.with_borrow(|canister| canister.validate_reward_period(start_day, end_day))?;
+        let mut current_day = start_day;
+        while current_day <= end_day {
+            let input = canister
+                .with_borrow(|canister| canister.get_rewards_calculation_input(current_day))?;
+            let daily_rewards = rewards_calculator::calculate_daily_rewards(input);
+            for (provider_id, daily_rewards) in daily_rewards.provider_results {
+                rewards
                     .entry(provider_id.0)
-                    .and_modify(|v| *v += rewards.rewards_total_xdr_permyriad)
-                    .or_insert(rewards.rewards_total_xdr_permyriad);
+                    .and_modify(|v| *v += daily_rewards.rewards_total_xdr_permyriad)
+                    .or_insert(daily_rewards.rewards_total_xdr_permyriad);
             }
+            current_day = current_day.next_day();
         }
+
         Ok(NodeProvidersRewards {
-            rewards_xdr_permyriad,
+            rewards_xdr_permyriad: rewards,
         })
     }
 
@@ -363,23 +353,31 @@ impl NodeRewardsCanister {
         let start_day: DayUtc = request.from_day_timestamp_nanos.into();
         let end_day: DayUtc = request.to_day_timestamp_nanos.into();
         let provider_id = PrincipalId::from(request.provider_id);
-        let result =
-            canister.with_borrow(|canister| canister.calculate_rewards(start_day, end_day))?;
 
-        let node_provider_rewards = result
-            .into_iter()
-            .filter_map(|(day_utc, mut rewards)| {
-                rewards
-                    .provider_results
-                    .remove(&provider_id)
-                    .map(|rewards| NodeProviderRewardsDaily {
-                        day_utc: day_utc.into(),
-                        node_provider_rewards: rewards.into(),
-                    })
-            })
-            .collect_vec();
+        let mut results = Vec::new();
+        canister.with_borrow(|canister| canister.validate_reward_period(start_day, end_day))?;
 
-        Ok(node_provider_rewards)
+        let mut current_day = start_day;
+        while current_day <= end_day {
+            let mut input = canister
+                .with_borrow(|canister| canister.get_rewards_calculation_input(current_day))?;
+            input
+                .provider_rewardable_nodes
+                .retain(|provider, _| provider == &provider_id);
+            let provider_daily_rewards = rewards_calculator::calculate_daily_rewards(input)
+                .provider_results
+                .remove(&provider_id);
+
+            if let Some(rewards) = provider_daily_rewards {
+                let daily_rewards = NodeProviderRewardsDaily {
+                    day_utc: current_day.into(),
+                    node_provider_rewards: rewards.into(),
+                };
+                results.push(daily_rewards);
+            }
+            current_day = current_day.next_day();
+        }
+        Ok(results)
     }
 }
 

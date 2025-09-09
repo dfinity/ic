@@ -1,7 +1,6 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_base_types::PrincipalId;
 use ic_nervous_system_proto::pb::v1::Decimal;
-use std::collections::BTreeMap;
 
 #[derive(CandidType, Clone, Deserialize)]
 pub struct GetNodeProviderRewardsCalculationRequest {
