@@ -6746,6 +6746,7 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "ic-test-utilities-logger",
+ "mockall",
  "parking_lot",
  "primitive-types",
  "prometheus 0.13.4",

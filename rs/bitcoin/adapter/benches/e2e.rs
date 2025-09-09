@@ -1,7 +1,11 @@
+use bitcoin::p2p::message::NetworkMessage;
 use bitcoin::{block::Header as BlockHeader, BlockHash, Network};
 use criterion::measurement::Measurement;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
-use ic_btc_adapter::{start_server, BlockchainNetwork, Config, IncomingSource};
+use ic_btc_adapter::{
+    start_server, BlockchainManager, BlockchainNetwork, BlockchainState, Config, ConnectionManager,
+    IncomingSource, RouterMetrics,
+};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::generate_headers;
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
@@ -15,7 +19,10 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use rand::{CryptoRng, Rng};
 use sha2::Digest;
+use std::net::SocketAddr;
 use std::path::Path;
+use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 use tempfile::Builder;
 
 type BitcoinAdapterClient = Box<
@@ -147,6 +154,34 @@ fn hash_block_header(criterion: &mut Criterion) {
     }
 }
 
+fn ingest_block_header(criterion: &mut Criterion) {
+    let mut bench = criterion.benchmark_group("received_headers_message");
+    let message = NetworkMessage::Headers(vec![]);
+    let (genesis, mut blockchain_manager) = create_blockchain_manager(Network::Bitcoin);
+
+    let addr1 = SocketAddr::from_str("127.0.0.1:8333").expect("bad address format");
+    let sockets = vec![addr1];
+
+    let mut channel = mock::MockMockChannel::<bitcoin::Network>::new();
+    let _result = blockchain_manager
+        .process_bitcoin_network_message(&mut channel, addr1, &message)
+        .unwrap();
+}
+
+fn create_blockchain_manager<Network: BlockchainNetwork>(
+    network: Network,
+) -> (BlockHeader, BlockchainManager<Network>) {
+    let blockchain_state = BlockchainState::new(network, &MetricsRegistry::default());
+    (
+        blockchain_state.genesis(),
+        BlockchainManager::new(
+            Arc::new(Mutex::new(blockchain_state)),
+            no_op_logger(),
+            RouterMetrics::new(&MetricsRegistry::default()),
+        ),
+    )
+}
+
 fn scrypt_vs_sha256<M: Measurement>(
     group: &mut BenchmarkGroup<'_, M>,
     scrypt_params: &scrypt::Params,
@@ -177,8 +212,25 @@ fn random_header<const N: usize, R: Rng + CryptoRng>(rng: &mut R) -> [u8; N] {
 // the request as being processed, with the aim to receive the last 25 blocks of each fork.
 // Performance metrics are captured from the sending of the deserialised request through
 // to receiving the response and its deserialisation.
-criterion_group!(benches, e2e, hash_block_header);
+criterion_group!(benches, e2e, hash_block_header, ingest_block_header);
 
 // The benchmark can be run using:
 // bazel run //rs/bitcoin/adapter:e2e_bench
 criterion_main!(benches);
+
+mod mock {
+    use ic_btc_adapter::{BlockchainNetwork, Channel, ChannelError, Command};
+    use mockall::mock;
+    use std::net::SocketAddr;
+
+    mock! {
+        pub MockChannel<Network> {}
+
+        impl Channel<bitcoin::block::Header, bitcoin::Block> for MockChannel<bitcoin::Network>
+        {
+            fn send(&mut self, command: Command<bitcoin::block::Header, bitcoin::Block>) -> Result<(), ChannelError>;
+            fn available_connections(&self) -> Vec<std::net::SocketAddr>;
+            fn discard(&mut self, addr: &SocketAddr);
+        }
+    }
+}
