@@ -233,12 +233,6 @@ impl NodeRewardsCanister {
 
             let provider_rewardable_nodes = self.get_cached_rewardable_nodes_per_provider(version);
 
-            ic_cdk::println!(
-                "Calculating rewards for {} total {} instructions",
-                current_day,
-                instruction_counter.sum()
-            );
-
             if metrics_by_subnet.is_empty() || provider_rewardable_nodes.is_empty() {
                 return Err(format!(
                     "Metrics or Rewardable Nodes not yet synced for {}",
@@ -255,6 +249,12 @@ impl NodeRewardsCanister {
                 rewards_calculation::rewards_calculator::calculate_daily_rewards(input);
             results.insert(current_day, daily_rewards);
             current_day = current_day.next_day();
+
+            ic_cdk::println!(
+                "Calculating rewards for {} total {} instructions",
+                current_day,
+                instruction_counter.sum()
+            );
         }
 
         Ok(results)
