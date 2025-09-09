@@ -48,14 +48,14 @@ pub async fn get_subnet_for_canister(
             },
             Ok(Err(e)) => {
                 println!(
-                    "Decoding `GetSubnetForCanisterResponse` for {:?} failed: {:?}",
+                    "Call `GetSubnetForCanisterResponse` for {:?} failed: {:?}",
                     canister_id, e
                 );
                 ProcessingResult::NoProgress
             }
             Err(e) => {
                 println!(
-                    "Decoding `GetSubnetForCanisterResponse` for {:?} failed: {:?}",
+                    "Decoding `get_subnet_for_canister` for {:?} failed: {:?}",
                     canister_id, e
                 );
                 ProcessingResult::NoProgress
