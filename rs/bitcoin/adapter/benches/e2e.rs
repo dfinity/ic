@@ -12,6 +12,7 @@ use ic_interfaces_adapter_client::Options;
 use ic_interfaces_adapter_client::RpcAdapterClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
+use rand::{CryptoRng, Rng};
 use std::path::Path;
 use tempfile::Builder;
 
@@ -115,12 +116,32 @@ fn e2e(criterion: &mut Criterion) {
     });
 }
 
+fn scrypt_header(criterion: &mut Criterion) {
+    let rng = &mut ic_crypto_test_utils_reproducible_rng::reproducible_rng();
+    let params = scrypt::Params::new(10, 1, 1, 32).expect("invalid scrypt params");
+    let mut group = criterion.benchmark_group("scrypt_header");
+
+    let header = random_header(rng);
+    group.bench_function("scrypt", |bench| {
+        bench.iter(|| {
+            let mut hash = [0u8; 32];
+            scrypt::scrypt(&header, &header, &params, &mut hash).unwrap()
+        })
+    });
+}
+
+fn random_header<R: Rng + CryptoRng>(rng: &mut R) -> [u8; 80] {
+    let mut header = [0u8; 80];
+    rng.fill_bytes(&mut header);
+    header
+}
+
 // This simulation constructs a blockchain comprising four forks, each of 2000 blocks.
 // For an extended BFS execution, the initial 1975 blocks of every branch are marked in
 // the request as being processed, with the aim to receive the last 25 blocks of each fork.
 // Performance metrics are captured from the sending of the deserialised request through
 // to receiving the response and its deserialisation.
-criterion_group!(benches, e2e);
+criterion_group!(benches, e2e, scrypt_header);
 
 // The benchmark can be run using:
 // bazel run //rs/bitcoin/adapter:e2e_bench
