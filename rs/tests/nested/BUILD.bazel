@@ -19,6 +19,7 @@ rust_library(
         "//rs/registry/keys",
         "//rs/registry/nns_data_provider",
         "//rs/registry/subnet_type",
+        "//rs/registry/transport",
         "//rs/rust_canisters/canister_test",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
