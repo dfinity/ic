@@ -360,10 +360,10 @@ impl NodeRewardsCanister {
 
         let node_provider_rewards = result
             .into_iter()
-            .filter_map(|(day_utc, rewards)| {
+            .filter_map(|(day_utc, mut rewards)| {
                 rewards
                     .provider_results
-                    .get(&provider_id)
+                    .remove(&provider_id)
                     .map(|rewards| NodeProviderRewardsDaily {
                         day_utc: day_utc.into(),
                         node_provider_rewards: rewards.into(),
