@@ -39,13 +39,20 @@ pub async fn get_subnet_for_canister(
             );
             ProcessingResult::NoProgress
         }
-        Ok(response) => match response.candid::<GetSubnetForCanisterResponse>() {
-            Ok(GetSubnetForCanisterResponse { subnet_id }) => match subnet_id {
+        Ok(response) => match response.candid::<Result<GetSubnetForCanisterResponse, String>>() {
+            Ok(Ok(GetSubnetForCanisterResponse { subnet_id })) => match subnet_id {
                 None => ProcessingResult::FatalFailure(ValidationError::CanisterNotFound {
                     canister: canister_id,
                 }),
                 Some(subnet_id) => ProcessingResult::Success(subnet_id),
             },
+            Ok(Err(e)) => {
+                println!(
+                    "Decoding `GetSubnetForCanisterResponse` for {:?} failed: {:?}",
+                    canister_id, e
+                );
+                ProcessingResult::NoProgress
+            }
             Err(e) => {
                 println!(
                     "Decoding `GetSubnetForCanisterResponse` for {:?} failed: {:?}",
