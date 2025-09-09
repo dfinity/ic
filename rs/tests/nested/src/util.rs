@@ -90,11 +90,9 @@ pub fn assert_version_compatibility() {
     let guestos_version = get_guestos_img_version();
 
     if setupos_version != guestos_version {
-        // TODO: Revert change after extending image version support
-
-        // panic!(
-        //     "Version mismatch detected: SetupOS version '{setupos_version}' does not match GuestOS version '{guestos_version}'. If you want to create a test with different versions, add a field to override this check."
-        // );
+        panic!(
+            "Version mismatch detected: SetupOS version '{setupos_version}' does not match GuestOS version '{guestos_version}'. If you want to create a test with different versions, add a field to override this check."
+        );
     }
 }
 
