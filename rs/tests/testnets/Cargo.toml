@@ -22,7 +22,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
 url = { workspace = true }
-xrc-mock = { path = "../../rosetta-api/tvl/xrc_mock" }
+xrc-mock = { path = "../../rust_canisters/xrc_mock" }
 
 [[bin]]
 name = "large"

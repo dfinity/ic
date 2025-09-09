@@ -58,7 +58,7 @@ canister_bazel_label() {
             echo "//rs/nns/sns-wasm:sns-wasm-canister"
             ;;
         "xrc-mock-canister")
-            echo "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister"
+            echo "//rs/rust_canisters/xrc_mock:xrc_mock_canister"
             ;;
         "genesis-token")
             echo "//rs/nns/gtc:genesis-token-canister"
