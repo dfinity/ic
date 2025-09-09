@@ -514,9 +514,7 @@ mod test {
             let result = validate_header(&Network::Bitcoin, &store, header);
             assert!(
                 result.is_ok(),
-                "Failed to validate header on line {}: {:?}",
-                i,
-                result
+                "Failed to validate header on line {i}: {result:?}",
             );
             store.add(*header);
         }

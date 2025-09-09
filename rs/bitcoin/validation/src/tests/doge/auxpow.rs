@@ -176,7 +176,7 @@ fn test_without_auxpow_data() {
         .into();
     assert_eq!(
         validator.validate_auxpow_header(&legacy_store, &dogecoin_header),
-        Err(ValidateHeaderError::InvalidPoWForComputedTarget.into())
+        Err(ValidateHeaderError::InvalidPoWForComputedTarget)
     );
 
     // AuxPow flag set but no AuxPow data - should fail

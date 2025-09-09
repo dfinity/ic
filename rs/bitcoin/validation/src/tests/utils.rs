@@ -58,7 +58,7 @@ impl SimpleHeaderStore {
         let prev = self
             .headers
             .get(&header.prev_blockhash)
-            .unwrap_or_else(|| panic!("Previous hash missing for header: {:?}", header));
+            .unwrap_or_else(|| panic!("Previous hash missing for header: {header:?}"));
         let stored_header = StoredHeader {
             header,
             height: prev.height + 1,
