@@ -1,5 +1,6 @@
 use bitcoin::{block::Header as BlockHeader, BlockHash, Network};
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::measurement::Measurement;
+use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
 use ic_btc_adapter::{start_server, BlockchainNetwork, Config, IncomingSource};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::generate_headers;
@@ -120,25 +121,46 @@ fn e2e(criterion: &mut Criterion) {
 fn hash_block_header(criterion: &mut Criterion) {
     let rng = &mut ic_crypto_test_utils_reproducible_rng::reproducible_rng();
     let params = scrypt::Params::new(10, 1, 1, 32).expect("invalid scrypt params");
-    let header = random_header(rng);
-    let mut bench = criterion.benchmark_group("hash_block_header");
+    {
+        let mut bench = criterion.benchmark_group("hash_block_header_80");
+        let header: [u8; 80] = random_header(rng);
+        scrypt_vs_sha256(&mut bench, &params, &header);
+    }
 
-    bench.bench_function("scrypt", |bench| {
+    {
+        let mut bench = criterion.benchmark_group("hash_block_header_500");
+        let header: [u8; 500] = random_header(rng);
+        scrypt_vs_sha256(&mut bench, &params, &header);
+    }
+
+    {
+        let mut bench = criterion.benchmark_group("hash_block_header_1000");
+        let header: [u8; 1_000] = random_header(rng);
+        scrypt_vs_sha256(&mut bench, &params, &header);
+    }
+}
+
+fn scrypt_vs_sha256<M: Measurement>(
+    group: &mut BenchmarkGroup<'_, M>,
+    scrypt_params: &scrypt::Params,
+    header: &[u8],
+) {
+    group.bench_function("scrypt", |bench| {
         bench.iter(|| {
             let mut hash = [0u8; 32];
-            scrypt::scrypt(&header, &header, &params, &mut hash).unwrap()
+            let _hash = scrypt::scrypt(&header, &header, scrypt_params, &mut hash).unwrap();
         })
     });
 
-    bench.bench_function("SHA2-256", |bench| {
+    group.bench_function("SHA2-256", |bench| {
         bench.iter(|| {
             let _hash = sha2::Sha256::digest(&header);
         })
     });
 }
 
-fn random_header<R: Rng + CryptoRng>(rng: &mut R) -> [u8; 80] {
-    let mut header = [0u8; 80];
+fn random_header<const N: usize, R: Rng + CryptoRng>(rng: &mut R) -> [u8; N] {
+    let mut header = [0u8; N];
     rng.fill_bytes(&mut header);
     header
 }
