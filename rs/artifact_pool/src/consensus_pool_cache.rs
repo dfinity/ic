@@ -106,10 +106,7 @@ impl<'a> CachedChainIterator<'a> {
                 return Some(block.clone());
             }
         }
-<<<<<<< HEAD
 
-=======
->>>>>>> 7838b52422 (avoid cloning)
         for proposal in self
             .consensus_pool
             .validated()

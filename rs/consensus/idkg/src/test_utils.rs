@@ -698,7 +698,10 @@ pub(crate) fn create_corrupted_transcript<R: CryptoRng + Rng>(
     let (node_id, params, mut transcript) = create_valid_transcript(env, rng, algorithm);
     let to_corrupt = *transcript.verified_dealings.keys().next().unwrap();
     let complainer_index = params.receiver_index(node_id).unwrap();
-    let signed_dealing = transcript.verified_dealings.get_mut(&to_corrupt).unwrap();
+    let signed_dealing = Arc::get_mut(&mut transcript.verified_dealings)
+        .unwrap()
+        .get_mut(&to_corrupt)
+        .unwrap();
     let mut rng = rand::thread_rng();
     let builder = signed_dealing.content.clone().into_builder();
     signed_dealing.content = builder
