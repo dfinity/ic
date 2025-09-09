@@ -222,31 +222,20 @@ impl NodeRewardsCanister {
         let mut results = BTreeMap::new();
         let mut current_day = start_day;
         while current_day <= end_day {
-            ic_cdk::println!("Calculating rewards for day {}", current_day);
             let mut instruction_counter = telemetry::InstructionCounter::default();
             let registry_querier = RegistryQuerier::new(self.registry_client.clone());
             let version = registry_querier
                 .version_for_timestamp(current_day.unix_ts_at_day_end_nanoseconds())
                 .ok_or_else(|| "Could not find registry version for timestamp".to_string())?;
-            ic_cdk::println!(
-                "Version from ts: {} instructions",
-                instruction_counter.lap()
-            );
-
             let rewards_table = registry_querier.get_rewards_table(version);
-            ic_cdk::println!("rewards table: {} instructions", instruction_counter.lap());
 
             let metrics_by_subnet = self.metrics_manager.metrics_by_subnet(current_day);
-            ic_cdk::println!(
-                "metrics by subnet: {} instructions",
-                instruction_counter.lap()
-            );
 
             let provider_rewardable_nodes = self.get_cached_rewardable_nodes_per_provider(version);
-            ic_cdk::println!("cached nodes: {} instructions", instruction_counter.lap());
 
             ic_cdk::println!(
-                "Calculating rewards for day total {} instructions",
+                "Calculating rewards for {} total {} instructions",
+                current_day,
                 instruction_counter.sum()
             );
 
