@@ -245,7 +245,7 @@ fn test_adjust_nodes_rewards() {
 
     for node in &[node1, node2, node3, node4, node5] {
         assert_eq!(
-            adjusted_rewards.get(&node),
+            adjusted_rewards.get(node),
             Some(&expected),
             "Unexpected reward for node {:?}",
             node
