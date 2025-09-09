@@ -31,7 +31,6 @@ use ic_bn_lib::{
     pubsub::BrokerBuilder,
     tasks::TaskManager,
     tls::verify::NoopServerCertVerifier,
-    types::RequestType,
 };
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
@@ -74,9 +73,9 @@ use crate::{
             retry::{retry_request, RetryParams},
             validate::{self, UUID_REGEX},
         },
-        PATH_CALL_V2, PATH_CALL_V3, PATH_CALL_V4, PATH_HEALTH, PATH_QUERY_V2, PATH_QUERY_V3,
-        PATH_READ_STATE_V2, PATH_READ_STATE_V3, PATH_STATUS, PATH_SUBNET_READ_STATE_V2,
-        PATH_SUBNET_READ_STATE_V3,
+        RequestType, PATH_CALL_V2, PATH_CALL_V3, PATH_CALL_V4, PATH_HEALTH, PATH_QUERY_V2,
+        PATH_QUERY_V3, PATH_READ_STATE_V2, PATH_READ_STATE_V3, PATH_STATUS,
+        PATH_SUBNET_READ_STATE_V2, PATH_SUBNET_READ_STATE_V3,
     },
     metrics::{
         self, HttpMetricParams, HttpMetricParamsStatus, MetricParamsCheck, MetricParamsPersist,
