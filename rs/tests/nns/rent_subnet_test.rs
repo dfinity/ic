@@ -77,6 +77,7 @@ use std::{
     thread::sleep,
     time::{Duration, SystemTime},
 };
+use url::Url;
 
 // These are similar to values used in production.
 const PRICE_OF_ICP_IN_XDR_CENTS: u64 = 359; // From today.
@@ -351,7 +352,12 @@ async fn assert_rented_subnet_works(
     assert_canister_belongs_to_subnet(topology_snapshot, rented_subnet_id, new_canister_id).await;
 
     // Verify 2.2: The created canister is of type Application.
-    assert_subnet_type(&rented_subnet, SubnetType::Application).await;
+    assert_subnet_type(
+        topology_snapshot.root_subnet().nodes().next().unwrap().get_public_url(),
+        rented_subnet_id,
+        SubnetType::Application,
+    )
+    .await;
 
     // This will be used later to verify 6: the canister does not charged cycles.
     let original_cycles_balance = get_cycles_balance(new_canister_id, &rented_subnet).await;
@@ -399,12 +405,12 @@ async fn assert_canister_belongs_to_subnet(
     assert_eq!(new_canister_subnet_id, expected_subnet_id.get(),);
 }
 
-async fn assert_subnet_type(subnet_snapshot: &SubnetSnapshot, expected_canister_type: SubnetType) {
+async fn assert_subnet_type(nns_subnet_node_public_url: Url, subnet_id: SubnetId, expected_canister_type: SubnetType) {
     let registry_client = RegistryCanister::new_with_query_timeout(
-        vec![subnet_snapshot.nodes().next().unwrap().get_public_url()],
+        vec![nns_subnet_node_public_url],
         Duration::from_secs(10),
     );
-    let subnet_record = get_subnet_from_registry(&registry_client, subnet_snapshot.subnet_id).await;
+    let subnet_record = get_subnet_from_registry(&registry_client, subnet_id).await;
 
     assert_eq!(
         SubnetType::try_from(subnet_record.subnet_type).unwrap(),
