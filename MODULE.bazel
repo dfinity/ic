@@ -624,8 +624,8 @@ http_file(
 http_file(
     name = "subnet_rental_canister",
     downloaded_file_path = "subnet_rental_canister.wasm.gz",
-    sha256 = "d3d703b649bf32d60100e49f02b070a0b9c52022b556b30102139b1eb57bbb8b",
-    url = "https://github.com/dfinity/subnet-rental-canister/releases/download/0.2.0/subnet_rental_canister.wasm.gz",
+    sha256 = "860d30bc74facd4287b7af766004344e4cea4989ae0bf5408b4fb70ff337bc42",
+    url = "https://github.com/dfinity/subnet-rental-canister/releases/download/0.3.0/subnet_rental_canister.wasm.gz",
 )
 
 # Financial Integration artifacts for upgrade testing

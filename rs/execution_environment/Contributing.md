@@ -36,10 +36,14 @@ The public API of the Management Canister is defined in Candid. Candid is design
    - no changes are performed before that point (only `&self` access to the state);
    - no failure can happen after that point (the execution is guaranteed to succeed and return a reply).
 
+   If a feature cannot be implemented on one PR or the API should be experimental for a time, define a feature flag in `rs/config/src/execution_environment.rs` and gate the API behind the flag. This way, the feature can be rolled out to a few select subnets via a feature release. Typically, there are tests that set the flags either way and ensure the proper behaviour in each case. 
+
 8. Write tests to cover the new or updated functionality:
    - Use the `ExecutionTest` framework by default.
    - Use the `StateMachine` framework if the feature involves inter-canister calls, canister HTTPS outcalls, threshold signatures, or checkpointing. These require mocked Consensus layer outputs or a full state manager.
 
 9. Once the *Interface Specification* change has been agreed on, the public Management Canister [types](https://crates.io/crates/ic-management-canister-types), [Motoko](https://github.com/dfinity/motoko), and [Rust CDK](https://github.com/dfinity/cdk-rs) can be updated to use the new API on a feature branch. Coordinate with *@eng-sdk* and *@eng-motoko* as needed. The new functionality is enabled for testing in PocketIC (on a PocketIC instance created with `enable_beta_features` set) by enabling the corresponding feature flags in `rs/pocket_ic_server/src/beta_features.rs`.
 
-10. Once the implementation is rolled out fully on mainnet, the Interface Specification, public Management Canister types, Rust CDK, and Motoko changes can be merged to master.
+10. To do a feature release on a set of subnets, prepare an unmerged commit which toggles the flag and contact *@eng-release*. After it is rolled out and tested, a feature release can be made to all subnets. When all is fine, the commit that enables the flag by default can be merged to master (and the tests relying on the flag's default have to be adjusted). Finally, the flag and associated setters can be removed. 
+
+11. Once the implementation is rolled out fully on mainnet, the Interface Specification, public Management Canister types, Rust CDK, and Motoko changes can be merged to master.
