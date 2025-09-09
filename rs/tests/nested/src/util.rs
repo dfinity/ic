@@ -80,22 +80,6 @@ pub fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>) {
         .expect("failed to setup ic-gateway");
 }
 
-/// Asserts that SetupOS and initial NNS GuestOS image versions match.
-/// Only checks if both functions return ReplicaVersion successfully.
-/// NOTE: If you want to create a new test with conflicting versions, add a
-/// field to override this check and, in your test, account for the fact that
-/// after registration, the deployed node will upgrade to the NNS GuestOS version.
-pub fn assert_version_compatibility() {
-    let setupos_version = get_setupos_img_version();
-    let guestos_version = get_guestos_img_version();
-
-    if setupos_version != guestos_version {
-        panic!(
-            "Version mismatch detected: SetupOS version '{setupos_version}' does not match GuestOS version '{guestos_version}'. If you want to create a test with different versions, add a field to override this check."
-        );
-    }
-}
-
 /// Use an SSH channel to check the version on the running HostOS.
 pub(crate) fn check_hostos_version(node: &NestedVm) -> String {
     let session = node

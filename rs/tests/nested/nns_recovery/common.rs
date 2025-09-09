@@ -33,9 +33,8 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use nested::util::{
-    assert_version_compatibility, get_host_boot_id, setup_ic_infrastructure, setup_nested_vm_group,
-    setup_vector_targets_for_vm, start_nested_vm_group, NODE_REGISTRATION_BACKOFF,
-    NODE_REGISTRATION_TIMEOUT,
+    get_host_boot_id, setup_ic_infrastructure, setup_nested_vm_group, setup_vector_targets_for_vm,
+    start_nested_vm_group, NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT,
 };
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
@@ -120,8 +119,6 @@ pub fn assign_unassigned_nodes_to_nns(
 }
 
 pub fn setup(env: TestEnv, cfg: SetupConfig) {
-    assert_version_compatibility();
-
     if cfg.impersonate_upstreams {
         impersonate_upstreams::setup_upstreams_uvm(&env);
     }

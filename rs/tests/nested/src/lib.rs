@@ -11,12 +11,12 @@ use slog::info;
 
 pub mod util;
 use util::{
-    assert_version_compatibility, check_hostos_version, elect_guestos_version,
-    elect_hostos_version, get_blessed_guestos_versions, get_host_boot_id,
-    get_unassigned_nodes_config, setup_ic_infrastructure, setup_nested_vm_group,
-    setup_vector_targets_for_vm, simple_setup_nested_vm_group, start_nested_vm_group,
-    update_nodes_hostos_version, update_unassigned_nodes, wait_for_expected_guest_version,
-    wait_for_guest_version, NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT,
+    check_hostos_version, elect_guestos_version, elect_hostos_version,
+    get_blessed_guestos_versions, get_host_boot_id, get_unassigned_nodes_config,
+    setup_ic_infrastructure, setup_nested_vm_group, setup_vector_targets_for_vm,
+    simple_setup_nested_vm_group, start_nested_vm_group, update_nodes_hostos_version,
+    update_unassigned_nodes, wait_for_expected_guest_version, wait_for_guest_version,
+    NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT,
 };
 
 use anyhow::bail;
@@ -26,8 +26,6 @@ const HOST_VM_NAME: &str = "host-1";
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS
 pub fn setup(env: TestEnv) {
-    assert_version_compatibility();
-
     setup_ic_infrastructure(&env, None);
 
     setup_nested_vm_group(env.clone(), &[HOST_VM_NAME]);
