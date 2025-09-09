@@ -436,9 +436,9 @@ impl PocketIcBuilder {
     /// Configures the new instance to make progress automatically,
     /// i.e., periodically update the time of the IC instance
     /// to the real time and execute rounds on the subnets.
-    pub fn with_auto_progress(mut self, artificial_delay_ms: Option<u64>) -> Self {
+    pub fn with_auto_progress(mut self) -> Self {
         let config = AutoProgressConfig {
-            artificial_delay_ms,
+            artificial_delay_ms: None,
         };
         self.initial_time = Some(InitialTime::AutoProgress(config));
         self
@@ -787,13 +787,6 @@ impl PocketIc {
     /// and the HTTP gateway for this IC instance.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn stop_live(&mut self) {
-        let runtime = self.runtime.clone();
-        runtime.block_on(async { self.pocket_ic.stop_live().await })
-    }
-
-    #[deprecated(note = "Use `stop_live` instead.")]
-    /// Use `stop_live` instead.
-    pub fn make_deterministic(&mut self) {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.stop_live().await })
     }

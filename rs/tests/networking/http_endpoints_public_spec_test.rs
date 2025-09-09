@@ -220,7 +220,7 @@ fn read_time(env: TestEnv, version: read_state::canister::Version) {
                 assert_2xx(&status);
             }
             read_state::canister::Version::V3 => {
-                // TODO: change it to 2xx once the boundary node supports the new endpoint
+                // TODO(CON-1586): change it to 2xx once the boundary node supports the new endpoint
                 assert_4xx(&status);
             }
         }

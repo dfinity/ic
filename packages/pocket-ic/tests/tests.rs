@@ -458,7 +458,7 @@ fn test_invalid_initial_timestamp_with_cycles_minting() {
 fn test_auto_progress() {
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
-        .with_auto_progress(None)
+        .with_auto_progress()
         .build();
 
     assert!(pic.auto_progress_enabled());
@@ -3242,7 +3242,7 @@ async fn with_http_gateway_config_and_cleanup_works() {
         .with_server_url(server_url.clone())
         .with_application_subnet()
         .with_http_gateway(http_gateway_config)
-        .with_auto_progress(None)
+        .with_auto_progress()
         .build_async()
         .await;
 
@@ -3346,7 +3346,7 @@ async fn with_http_gateway_config_invalid_gateway_port() {
         .with_server_url(server_url.clone())
         .with_application_subnet()
         .with_http_gateway(http_gateway_config.clone())
-        .with_auto_progress(None)
+        .with_auto_progress()
         .build_async()
         .await;
 
@@ -3446,7 +3446,7 @@ async fn with_http_gateway_config_invalid_gateway_https_config() {
 fn make_live_after_auto_progress() {
     let mut pic = PocketIcBuilder::new()
         .with_application_subnet()
-        .with_auto_progress(None)
+        .with_auto_progress()
         .build();
     pic.make_live(None);
 }

@@ -53,6 +53,7 @@ pub struct SetupConfig {
     pub impersonate_upstreams: bool,
 }
 
+#[derive(Debug)]
 pub struct TestConfig {}
 
 fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
