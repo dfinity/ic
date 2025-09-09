@@ -2,6 +2,7 @@
 //!
 use crate::{
     common::{BlockHeight, BlockchainBlock, BlockchainHeader, BlockchainNetwork},
+    header_cache::{init_cache_with_genesis, HeaderCache, HeaderNode},
     metrics::BlockchainStateMetrics,
 };
 use bitcoin::{block::Header as PureHeader, consensus::Encodable, BlockHash, Work};
@@ -26,36 +27,6 @@ pub struct Tip<Header> {
     /// This field stores the work of the Blockchain leading up to this tip.
     /// That is, this field is the sum of work of the above header and all its ancestors.
     pub work: Work,
-}
-
-/// Creates a new cache with a set genesis header determined by the
-/// provided network.
-fn init_cache_with_genesis<Header: BlockchainHeader>(
-    genesis_block_header: Header,
-) -> HashMap<BlockHash, HeaderNode<Header>> {
-    let cached_header = HeaderNode {
-        header: genesis_block_header.clone(),
-        height: 0,
-        work: genesis_block_header.work(),
-        children: vec![],
-    };
-    let mut headers = HashMap::new();
-    headers.insert(genesis_block_header.block_hash(), cached_header);
-    headers
-}
-
-/// This struct stores a BlockHeader along with its height in the Bitcoin Blockchain.
-#[derive(Debug)]
-pub struct HeaderNode<Header> {
-    /// This field stores a Bitcoin header.
-    pub header: Header,
-    /// This field stores the height of a Bitcoin header
-    pub height: BlockHeight,
-    /// This field stores the work of the Blockchain leading up to this header.
-    /// That is, this field is the sum of work of the above header and all its ancestors.
-    pub work: Work,
-    /// This field contains this node's successor headers.
-    pub children: Vec<BlockHash>,
 }
 
 /// The result when `BlockchainState::add_header(...)` is called.
@@ -102,7 +73,7 @@ pub struct BlockchainState<Network: BlockchainNetwork> {
     genesis_block_header: PureHeader,
 
     /// This field stores all the Bitcoin headers using a HashMap containining BlockHash and the corresponding header.
-    header_cache: HashMap<BlockHash, HeaderNode<Network::Header>>,
+    header_cache: HeaderCache<Network::Header>,
 
     /// This field stores a hashmap containing BlockHash and the corresponding SerializedBlock.
     block_cache: HashMap<BlockHash, Arc<SerializedBlock>>,

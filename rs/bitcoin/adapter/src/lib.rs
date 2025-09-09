@@ -36,6 +36,7 @@ mod connection;
 /// This module contains code that is used to manage multiple connections to
 /// BTC nodes.
 mod connectionmanager;
+mod header_cache;
 mod metrics;
 /// The module is responsible for awaiting messages from bitcoin peers and dispaching them
 /// to the correct component.
