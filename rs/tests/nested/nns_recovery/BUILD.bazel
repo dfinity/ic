@@ -44,6 +44,7 @@ rust_library(
 
 system_test_nns(
     name = "nr_large",
+    enable_head_nns_variant = False,
     env = ENV,
     flaky = True,
     tags = ["long_test"],
