@@ -11,6 +11,17 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-09-05: Proposal 138372
+
+http://dashboard.internetcomputer.org/proposal/138372
+
+## Removed
+
+- Removed `transaction_notification` and `transaction_notification_pb` endpoints as they
+  no longer be called. The ICP ledger removed the notify flow, and these methods were not
+  callable by callers other than the ICP ledger.
+
+
 # 2025-08-15: Proposal 137918
 
 http://dashboard.internetcomputer.org/proposal/137918

@@ -11,8 +11,6 @@ on the process that this file is part of, see
 
 ## Changed
 
-* Expose a metric for whether auto finalization has failed.
-
 ## Deprecated
 
 ## Removed

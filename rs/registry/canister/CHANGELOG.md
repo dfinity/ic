@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-09-05: Proposal 138371
+
+http://dashboard.internetcomputer.org/proposal/138371
+
+## Added
+* New update method that will be used for node swapping feature.
+* `migrate_canisters` returns the new registry version.
+
+
 # 2025-08-22: Proposal 138164
 
 http://dashboard.internetcomputer.org/proposal/138164

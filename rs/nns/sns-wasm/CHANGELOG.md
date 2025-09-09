@@ -11,6 +11,15 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-09-05: Proposal 138370
+
+http://dashboard.internetcomputer.org/proposal/138370
+
+## Added
+
+* A "/sns_canisters" HTTP endpoint for SNS canisters service discovery, used for prometheus.
+
+
 # 2025-06-06: Proposal 136892
 
 http://dashboard.internetcomputer.org/proposal/136892
