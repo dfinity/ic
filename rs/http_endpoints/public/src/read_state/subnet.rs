@@ -1,6 +1,8 @@
-use super::{parse_principal_id, verify_principal_ids};
+use super::{
+    get_certificate, make_service_unavailable_response, parse_principal_id, verify_principal_ids,
+};
 use crate::{
-    common::{into_cbor, Cbor, WithTimeout},
+    common::{Cbor, WithTimeout},
     HttpError, ReplicaHealthStatus,
 };
 
@@ -13,15 +15,12 @@ use axum::{
 use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::StatusCode;
-use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
+use ic_crypto_tree_hash::Path;
 use ic_interfaces_state_manager::StateReader;
 use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    messages::{
-        Blob, Certificate, HttpReadStateContent, HttpReadStateResponse, HttpRequest,
-        HttpRequestEnvelope, ReadState,
-    },
+    messages::{HttpReadStateContent, HttpRequest, HttpRequestEnvelope, ReadState},
     CanisterId, PrincipalId,
 };
 use std::{
@@ -126,12 +125,6 @@ pub(crate) async fn read_state_subnet(
         return (status, text).into_response();
     }
 
-    let make_service_unavailable_response = || {
-        let status = StatusCode::SERVICE_UNAVAILABLE;
-        let text = "Certified state is not available yet. Please try again...".to_string();
-        (status, text).into_response()
-    };
-
     // Convert the message to a strongly-typed struct.
     let request = match HttpRequest::<ReadState>::try_from(request) {
         Ok(request) => request,
@@ -142,10 +135,10 @@ pub(crate) async fn read_state_subnet(
         }
     };
     let read_state = request.content().clone();
+
     let response = tokio::task::spawn_blocking(move || {
-        let certified_state_reader = match state_reader.get_certified_state_snapshot() {
-            Some(reader) => reader,
-            None => return make_service_unavailable_response(),
+        let Some(certified_state_reader) = state_reader.get_certified_state_snapshot() else {
+            return make_service_unavailable_response();
         };
 
         // Verify authorization for requested paths.
@@ -155,42 +148,19 @@ pub(crate) async fn read_state_subnet(
             return (status, message).into_response();
         }
 
-        // Create labeled tree. This may be an expensive operation and by
-        // creating the labeled tree after verifying the paths we know that
-        // the depth is max 4.
-        // Always add "time" to the paths even if not explicitly requested.
-        let mut paths: Vec<Path> = read_state.paths;
-        paths.push(Path::from(Label::from("time")));
-        let labeled_tree = match sparse_labeled_tree_from_paths(&paths) {
-            Ok(tree) => tree,
-            Err(TooLongPathError) => {
-                let status = StatusCode::BAD_REQUEST;
-                let text = "Failed to parse requested paths: path is too long.".to_string();
-                return (status, text).into_response();
-            }
-        };
-
-        let (tree, certification) = match certified_state_reader.read_certified_state(&labeled_tree)
-        {
-            Some(r) => r,
-            None => return make_service_unavailable_response(),
-        };
-
-        let signature = certification.signed.signature.signature.get().0;
         let delegation_from_nns = match version {
             Version::V2 => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
             Version::V3 => nns_delegation_reader.get_delegation(CanisterRangesFilter::None),
         };
-        Cbor(HttpReadStateResponse {
-            certificate: Blob(into_cbor(&Certificate {
-                tree,
-                signature: Blob(signature),
-                delegation: delegation_from_nns,
-            })),
-        })
-        .into_response()
+
+        get_certificate(
+            read_state.paths,
+            delegation_from_nns,
+            certified_state_reader.as_ref(),
+        )
     })
     .await;
+
     match response {
         Ok(res) => res,
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),

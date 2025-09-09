@@ -1,6 +1,8 @@
-use super::{parse_principal_id, verify_principal_ids};
+use super::{
+    get_certificate, make_service_unavailable_response, parse_principal_id, verify_principal_ids,
+};
 use crate::{
-    common::{build_validator, into_cbor, validation_error_to_http_error, Cbor, WithTimeout},
+    common::{build_validator, validation_error_to_http_error, Cbor, WithTimeout},
     HttpError, ReplicaHealthStatus,
 };
 
@@ -14,7 +16,7 @@ use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
-use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
+use ic_crypto_tree_hash::Path;
 use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
@@ -25,8 +27,8 @@ use ic_replicated_state::{canister_state::execution_state::CustomSectionType, Re
 use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, Certificate, HttpReadStateContent, HttpReadStateResponse, HttpRequest,
-        HttpRequestEnvelope, MessageId, ReadState, EXPECTED_MESSAGE_ID_LENGTH,
+        HttpReadStateContent, HttpRequest, HttpRequestEnvelope, MessageId, ReadState,
+        EXPECTED_MESSAGE_ID_LENGTH,
     },
     CanisterId, PrincipalId, UserId,
 };
@@ -182,15 +184,11 @@ pub(crate) async fn canister_read_state(
     let read_state = request.content().clone();
     let registry_version = registry_client.get_latest_version();
 
-    let make_service_unavailable_response = || {
-        let status = StatusCode::SERVICE_UNAVAILABLE;
-        let text = "Certified state is not available yet. Please try again...".to_string();
-        (status, text).into_response()
-    };
     let root_of_trust_provider =
         RegistryRootOfTrustProvider::new(Arc::clone(&registry_client), registry_version);
     // Since spawn blocking requires 'static we can't use any references
     let request_c = request.clone();
+
     let response = tokio::task::spawn_blocking(move || {
         let targets = match validator.validate_request(
             &request_c,
@@ -204,9 +202,8 @@ pub(crate) async fn canister_read_state(
             }
         };
 
-        let certified_state_reader = match state_reader.get_certified_state_snapshot() {
-            Some(reader) => reader,
-            None => return make_service_unavailable_response(),
+        let Some(certified_state_reader) = state_reader.get_certified_state_snapshot() else {
+            return make_service_unavailable_response();
         };
 
         // Verify authorization for requested paths.
@@ -221,43 +218,20 @@ pub(crate) async fn canister_read_state(
             return (status, message).into_response();
         }
 
-        // Create labeled tree. This may be an expensive operation and by
-        // creating the labeled tree after verifying the paths we know that
-        // the depth is max 4.
-        // Always add "time" to the paths even if not explicitly requested.
-        let mut paths: Vec<Path> = read_state.paths;
-        paths.push(Path::from(Label::from("time")));
-        let labeled_tree = match sparse_labeled_tree_from_paths(&paths) {
-            Ok(tree) => tree,
-            Err(TooLongPathError) => {
-                let status = StatusCode::BAD_REQUEST;
-                let text = "Failed to parse requested paths: path is too long.".to_string();
-                return (status, text).into_response();
-            }
-        };
-
-        let (tree, certification) = match certified_state_reader.read_certified_state(&labeled_tree)
-        {
-            Some(r) => r,
-            None => return make_service_unavailable_response(),
-        };
-
-        let signature = certification.signed.signature.signature.get().0;
         let delegation_from_nns = match version {
             Version::V2 => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
             Version::V3 => nns_delegation_reader
                 .get_delegation(CanisterRangesFilter::Tree(effective_canister_id)),
         };
-        let res = HttpReadStateResponse {
-            certificate: Blob(into_cbor(&Certificate {
-                tree,
-                signature: Blob(signature),
-                delegation: delegation_from_nns,
-            })),
-        };
-        Cbor(res).into_response()
+
+        get_certificate(
+            read_state.paths,
+            delegation_from_nns,
+            certified_state_reader.as_ref(),
+        )
     })
     .await;
+
     match response {
         Ok(res) => res,
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),

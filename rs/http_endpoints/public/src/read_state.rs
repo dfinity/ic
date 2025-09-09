@@ -1,8 +1,18 @@
 //! Module that deals with requests to /api/v2/canister/.../read_state
 
-use crate::HttpError;
+use crate::{
+    common::{into_cbor, Cbor},
+    HttpError,
+};
+use axum::response::IntoResponse;
 use hyper::StatusCode;
-use ic_types::PrincipalId;
+use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
+use ic_interfaces_state_manager::CertifiedStateSnapshot;
+use ic_replicated_state::ReplicatedState;
+use ic_types::{
+    messages::{Blob, Certificate, CertificateDelegation, HttpReadStateResponse},
+    PrincipalId,
+};
 
 pub mod canister;
 pub mod subnet;
@@ -31,4 +41,46 @@ fn verify_principal_ids(
         });
     }
     Ok(())
+}
+
+fn make_service_unavailable_response() -> axum::response::Response {
+    let status = StatusCode::SERVICE_UNAVAILABLE;
+    let text = "Certified state is not available yet. Please try again...".to_string();
+    (status, text).into_response()
+}
+
+fn get_certificate(
+    mut paths: Vec<Path>,
+    delegation_from_nns: Option<CertificateDelegation>,
+    certified_state_reader: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
+) -> axum::response::Response {
+    // Create labeled tree. This may be an expensive operation and by
+    // creating the labeled tree after verifying the paths we know that
+    // the depth is max 4.
+    // Always add "time" to the paths even if not explicitly requested.
+    paths.push(Path::from(Label::from("time")));
+    let labeled_tree = match sparse_labeled_tree_from_paths(&paths) {
+        Ok(tree) => tree,
+        Err(TooLongPathError) => {
+            let status = StatusCode::BAD_REQUEST;
+            let text = "Failed to parse requested paths: path is too long.".to_string();
+            return (status, text).into_response();
+        }
+    };
+
+    let (tree, certification) = match certified_state_reader.read_certified_state(&labeled_tree) {
+        Some(r) => r,
+        None => return make_service_unavailable_response(),
+    };
+
+    let signature = certification.signed.signature.signature.get().0;
+
+    let res = HttpReadStateResponse {
+        certificate: Blob(into_cbor(&Certificate {
+            tree,
+            signature: Blob(signature),
+            delegation: delegation_from_nns,
+        })),
+    };
+    Cbor(res).into_response()
 }
