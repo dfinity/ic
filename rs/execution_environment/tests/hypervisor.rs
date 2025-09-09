@@ -43,12 +43,6 @@ use ic_types::{
     methods::WasmMethod,
 };
 use ic_types::{
-    CanisterId, ComputeAllocation, Cycles, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions,
-    Time,
-    ingress::{IngressState, IngressStatus, WasmResult},
-    methods::WasmMethod,
-};
-use ic_types::{
     batch::CanisterCyclesCostSchedule,
     messages::{CanisterMessage, CanisterTask, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, NO_DEADLINE},
 };

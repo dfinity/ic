@@ -768,7 +768,6 @@ pub mod test {
     use bitcoin::consensus::deserialize;
     use bitcoin::{Block, Network};
     use bitcoin::{BlockHash, block::Header as BlockHeader, p2p::message::NetworkMessage};
-    use bitcoin::{BlockHash, p2p::message::NetworkMessage};
     use hex::FromHex;
     use ic_btc_adapter_test_utils::{
         BLOCK_1_ENCODED, BLOCK_2_ENCODED, generate_headers, generate_large_block_blockchain,
@@ -816,10 +815,10 @@ pub mod test {
         let command = channel.pop_front().expect("command not found");
         assert!(matches!(command.address, Some(address) if address == addr));
         assert!(
-            matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version: _, locator_hashes: _, stop_hash }) if stop_hash == &BlockHash::all_zeros())
+            matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version: _, locator_hashes: _, stop_hash }) if *stop_hash == BlockHash::all_zeros())
         );
         assert!(
-            matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version, locator_hashes: _, stop_hash: _ }) if version == &MINIMUM_VERSION_NUMBER)
+            matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version, locator_hashes: _, stop_hash: _ }) if *version == MINIMUM_VERSION_NUMBER)
         );
         assert!(
             matches!(&command.message, NetworkMessage::GetHeaders(GetHeadersMessage { version: _, locator_hashes, stop_hash: _ }) if locator_hashes[0] == genesis_hash)

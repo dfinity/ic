@@ -202,6 +202,7 @@ impl TransactionStore {
 mod test {
     use super::*;
     use bitcoin::{
+        Block, Network, Transaction,
         absolute::{LOCK_TIME_THRESHOLD, LockTime},
         block::Header,
         blockdata::constants::genesis_block,

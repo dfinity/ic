@@ -9,7 +9,10 @@ use std::{
     sync::Arc,
 };
 
-use bitcoin::p2p::{Magic, ServiceFlags};
+use bitcoin::{
+    BlockHash,
+    p2p::{Magic, ServiceFlags},
+};
 
 use bitcoin::{
     consensus::{deserialize_partial, encode, serialize},

@@ -4,7 +4,6 @@ use crate::{
         Followees, Governance as GovernanceProto, MonthlyNodeProviderRewards, NetworkEconomics,
         NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent,
         XdrConversionRate as XdrConversionRatePb,
-        governance::{GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand},
         governance::{GovernanceCachedMetrics, NeuronInFlightCommand},
     },
 };

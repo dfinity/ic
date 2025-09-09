@@ -305,10 +305,12 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
     if cfg.local_recovery {
-        std::env::set_var(
-            "IC_ADMIN_BIN",
-            get_dependency_path_from_env("IC_ADMIN_PATH"),
-        );
+        unsafe {
+            std::env::set_var(
+                "IC_ADMIN_BIN",
+                get_dependency_path_from_env("IC_ADMIN_PATH"),
+            );
+        }
     }
 
     let initial_version = get_guestos_img_version();

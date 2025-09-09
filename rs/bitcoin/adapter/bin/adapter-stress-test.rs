@@ -1,6 +1,6 @@
 use std::{convert::TryFrom, path::PathBuf, time::Duration};
 
-use bitcoin::{Block, BlockHash, consensus::Decodable};
+use bitcoin::{BlockHash, consensus::Decodable};
 use clap::Parser;
 use ic_btc_adapter::{AdapterNetwork, BlockchainBlock, BlockchainHeader, BlockchainNetwork};
 use ic_btc_service::{

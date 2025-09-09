@@ -1,22 +1,15 @@
 use crate::{
     CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, LABEL_COPY_CHUNKS, LABEL_COPY_FILES, LABEL_FETCH,
     LABEL_FETCH_MANIFEST_CHUNK, LABEL_FETCH_META_MANIFEST_CHUNK, LABEL_FETCH_STATE_CHUNK,
-    LABEL_PREALLOCATE, LABEL_STATE_SYNC_MAKE_CHECKPOINT, StateManagerMetrics, StateManagerMetrics,
-    StateSyncMetrics, StateSyncMetrics, StateSyncRefs, StateSyncRefs,
+    LABEL_PREALLOCATE, LABEL_STATE_SYNC_MAKE_CHECKPOINT, StateManagerMetrics, StateSyncMetrics,
+    StateSyncRefs,
     manifest::{DiffScript, build_file_group_chunks, filter_out_zero_chunks},
-    manifest::{DiffScript, build_file_group_chunks, filter_out_zero_chunks},
-    state_sync::StateSync,
     state_sync::StateSync,
     state_sync::types::{
         FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET, FileGroupChunks,
         MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK, Manifest, ManifestChunkIndex, MetaManifest,
         StateSyncChunk, StateSyncMessage, decode_manifest, decode_meta_manifest,
         state_sync_chunk_type,
-    },
-    state_sync::types::{
-        FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET, FileGroupChunks,
-        MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK, Manifest, MetaManifest, StateSyncChunk,
-        StateSyncMessage, decode_manifest, decode_meta_manifest, state_sync_chunk_type,
     },
 };
 use ic_interfaces::p2p::state_sync::{AddChunkError, Chunk, ChunkId, Chunkable};

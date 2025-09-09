@@ -1,4 +1,5 @@
 use crate::{
+    CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS, Clock, IcClock,
     governance::{LOG_PREFIX, TimeWarp},
     is_known_neuron_voting_history_enabled,
     neuron::types::Neuron,
