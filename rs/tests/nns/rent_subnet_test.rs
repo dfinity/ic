@@ -353,7 +353,12 @@ async fn assert_rented_subnet_works(
 
     // Verify 2.2: The created canister is of type Application.
     assert_subnet_type(
-        topology_snapshot.root_subnet().nodes().next().unwrap().get_public_url(),
+        topology_snapshot
+            .root_subnet()
+            .nodes()
+            .next()
+            .unwrap()
+            .get_public_url(),
         rented_subnet_id,
         SubnetType::Application,
     )
@@ -405,7 +410,11 @@ async fn assert_canister_belongs_to_subnet(
     assert_eq!(new_canister_subnet_id, expected_subnet_id.get(),);
 }
 
-async fn assert_subnet_type(nns_subnet_node_public_url: Url, subnet_id: SubnetId, expected_canister_type: SubnetType) {
+async fn assert_subnet_type(
+    nns_subnet_node_public_url: Url,
+    subnet_id: SubnetId,
+    expected_canister_type: SubnetType,
+) {
     let registry_client = RegistryCanister::new_with_query_timeout(
         vec![nns_subnet_node_public_url],
         Duration::from_secs(10),
