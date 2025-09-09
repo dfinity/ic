@@ -20,6 +20,12 @@ on the process that this file is part of, see
 * Added links to the `KnownNeuronData` that can be submitted as part of the `RegisterKnownNeuron`
   proposal.
 
+* Enable FulfillSubnetRentalRequest proposals. The main effect of such proposals
+  is the creation of an EXCLUSIVE subnet, meaning that only ONE principal is
+  allowed to create canisters in the subnet. For details, see
+  https://forum.dfinity.org/t/subnet-rental-canister-work-on-next-phase-has-started/52803
+  (This is also discussed under the heading "Swiss subnet".)
+
 ## Changed
 
 ## Deprecated
