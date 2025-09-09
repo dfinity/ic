@@ -11,6 +11,7 @@ use ic_node_rewards_canister_api::monthly_rewards::{
 };
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
     GetNodeProviderRewardsCalculationRequest, GetNodeProviderRewardsCalculationResponse,
+    NodeProviderRewardsDaily,
 };
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse, NodeProvidersRewards,
@@ -26,6 +27,7 @@ use ic_registry_keys::{
 use ic_registry_node_provider_rewards::{calculate_rewards_v0, RewardsPerNodeProvider};
 use ic_types::registry::RegistryClientError;
 use ic_types::{RegistryVersion, Time};
+use itertools::Itertools;
 use rewards_calculation::rewards_calculator::RewardsCalculatorInput;
 use rewards_calculation::rewards_calculator_results::RewardsCalculatorResults;
 use rewards_calculation::types::{DayUtc, RewardableNode};
@@ -358,13 +360,16 @@ impl NodeRewardsCanister {
 
         let node_provider_rewards = result
             .into_iter()
-            .filter_map(|(day, rewards)| {
+            .filter_map(|(day_utc, rewards)| {
                 rewards
                     .provider_results
                     .get(&provider_id)
-                    .map(|rewards| (day.into(), rewards.clone().into()))
+                    .map(|rewards| NodeProviderRewardsDaily {
+                        day_utc: day_utc.into(),
+                        node_provider_rewards: rewards.into(),
+                    })
             })
-            .collect::<BTreeMap<_, _>>();
+            .collect_vec();
 
         Ok(node_provider_rewards)
     }

@@ -10,8 +10,13 @@ pub struct GetNodeProviderRewardsCalculationRequest {
     pub provider_id: Principal,
 }
 
-pub type GetNodeProviderRewardsCalculationResponse =
-    Result<BTreeMap<DayUtc, NodeProviderRewards>, String>;
+pub type GetNodeProviderRewardsCalculationResponse = Result<Vec<NodeProviderRewardsDaily>, String>;
+
+#[derive(CandidType, candid::Deserialize, Clone)]
+pub struct NodeProviderRewardsDaily {
+    pub node_provider_rewards: NodeProviderRewards,
+    pub day_utc: DayUtc,
+}
 
 #[derive(PartialOrd, Ord, Eq, candid::CandidType, candid::Deserialize, Clone, Copy, PartialEq)]
 pub struct DayUtc {
