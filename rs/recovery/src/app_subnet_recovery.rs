@@ -320,7 +320,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
         }
     }
 
-    fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step + '_>> {
+    fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step + 'static>> {
         match step_type {
             StepType::Halt => {
                 let keys = if let Some(pub_key) = &self.params.pub_key {

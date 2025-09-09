@@ -82,7 +82,7 @@ pub trait RecoveryIterator<
     }
 }
 
-impl<'a> Iterator for &'a mut AppSubnetRecovery {
+impl Iterator for AppSubnetRecovery {
     type Item = (app_subnet_recovery::StepType, Box<dyn Step + 'static>);
     fn next(&mut self) -> Option<Self::Item> {
         self.next_step()

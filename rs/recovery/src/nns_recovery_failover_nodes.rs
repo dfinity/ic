@@ -247,7 +247,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
         }
     }
 
-    fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step + '_>> {
+    fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step + 'static>> {
         match step_type {
             StepType::StopReplica => {
                 if let Some(node_ip) = self.params.download_node {

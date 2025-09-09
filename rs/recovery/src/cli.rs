@@ -138,7 +138,7 @@ pub fn execute_steps<
     I: Iterator<Item = StepType>,
     Steps: HasRecoveryState<StepType = StepType, SubcommandArgsType = SubcommandArgsType>
         + RecoveryIterator<StepType, I>
-        + Iterator<Item = (StepType, Box<dyn Step>)>,
+        + Iterator<Item = (StepType, Box<dyn Step + 'static>)>,
 >(
     logger: &Logger,
     skip_prompts: bool,
