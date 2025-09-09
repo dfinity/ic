@@ -143,7 +143,7 @@ pub enum AbsentLabelRange<'a> {
     Between(&'a Label, &'a Label),
 }
 
-fn paths_to_absent_ranges(tree: &LabeledTree<Vec<u8>>) -> Vec<(Vec<&Label>, AbsentLabelRange)> {
+fn paths_to_absent_ranges(tree: &LabeledTree<Vec<u8>>) -> Vec<(Vec<&Label>, AbsentLabelRange<'_>)> {
     fn paths_to_ranges_impl<'a>(
         tree: &'a LabeledTree<Vec<u8>>,
         path: &mut Vec<&'a Label>,
@@ -503,7 +503,7 @@ fn add_subtree_in_path(
     subtree: LabeledTree<Vec<u8>>,
 ) {
     match tree {
-        LabeledTree::SubTree(ref mut children) => {
+        LabeledTree::SubTree(children) => {
             if path.is_empty() {
                 let mut label = label;
                 while children.contains_key(&label) {
@@ -643,7 +643,7 @@ fn modify_leaf_impl<F: Fn(&mut Vec<u8>)>(
             }
             false
         }
-        LabeledTree::Leaf(ref mut value) => {
+        LabeledTree::Leaf(value) => {
             if *num_traversed_leaves == leaf_index {
                 modify_bytes_fn(value);
                 true
