@@ -31,7 +31,7 @@ rust_library(
         "//rs/recovery",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
-        "//rs/tests/nested:nested",
+        "//rs/tests/nested",
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:futures",
