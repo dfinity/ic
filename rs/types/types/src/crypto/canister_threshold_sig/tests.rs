@@ -10,6 +10,7 @@ use ic_crypto_test_utils_canister_threshold_sigs::{ordered_node_id, set_of_nodes
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 #[test]
 fn should_create_quadruples_correctly() {
@@ -865,7 +866,7 @@ fn schnorr_transcript<R: Rng + CryptoRng>(
         verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type,
         algorithm_id: AlgorithmId::ThresholdSchnorrBip340,
-        internal_transcript_raw: vec![1, 2, 3],
+        internal_transcript_raw: Arc::new(vec![1, 2, 3]),
     }
 }
 

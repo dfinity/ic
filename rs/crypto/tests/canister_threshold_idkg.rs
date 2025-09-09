@@ -1497,7 +1497,7 @@ mod verify_transcript {
                 .support_dealing_from_all_receivers(dealing_resigned, &params);
 
             let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings)
-                .expect("We have unique access to the transcript");
+                .expect("No other refs to verified_dealings");
 
             assert!(verified_dealings.insert(dealer1_idx, dealing).is_some());
 
@@ -1709,7 +1709,7 @@ mod verify_transcript {
 
             let verification_threshold = params.verification_threshold().get() as usize;
             let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings)
-                .expect("We have unique access to the transcript");
+                .expect("No other refs to verified_dealings");
             let random_batchsigneddealing_signature_batch = &mut verified_dealings
                 .values_mut()
                 .choose(rng)
@@ -1745,7 +1745,7 @@ mod verify_transcript {
             let (env, params, mut transcript) = setup_for_verify_transcript(alg, rng, subnet_size);
 
             let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings)
-                .expect("We have unique access to the transcript");
+                .expect("No other refs to verified_dealings");
             let some_sig_in_some_dealing = verified_dealings
                 .values_mut()
                 .choose(rng)
@@ -3236,7 +3236,7 @@ mod open_transcript {
                 .index_for_dealer_id(complaint.dealer_id)
                 .expect("Missing dealer of corrupted dealing");
             let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings)
-                .expect("transcript.verified_dealings should be unique");
+                .expect("No other refs to verified_dealings");
             verified_dealings.remove(&corrupted_dealer_index);
 
             let opener = env.nodes.random_filtered_by_receivers_excluding(
@@ -3510,9 +3510,8 @@ mod verify_opening {
                     (batch_signed_dealing.dealer_id() == complaint.dealer_id).then_some(*index)
                 })
                 .expect("Inconsistent transcript");
-            let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings).expect(
-                "transcript.verified_dealings has no other Arc pointers, so we can get a mutable reference",
-            );
+            let verified_dealings = Arc::get_mut(&mut transcript.verified_dealings)
+                .expect("No other refs to verified_dealings");
             verified_dealings.remove(&dealer_index);
             let result = verifier.verify_opening(&transcript, opener.id(), &opening, &complaint);
             assert_matches!(

@@ -2756,7 +2756,7 @@ pub fn corrupt_dealings_and_generate_complaints<R: RngCore + CryptoRng>(
             corrupt_signed_dealing_for_one_receiver(
                 *index_to_corrupt,
                 Arc::get_mut(&mut transcript.verified_dealings)
-                    .expect("expected to get mutable access to dealings"),
+                    .expect("No other refs to verified_dealings"),
                 complainer_index,
                 rng,
             )

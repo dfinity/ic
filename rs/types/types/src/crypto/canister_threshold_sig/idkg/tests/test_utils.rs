@@ -8,6 +8,7 @@ use crate::{Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_test_utils_canister_threshold_sigs::node_id;
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 // Due to a quasi-circular dependency with ic-types
 // the test utilities here cannot be replaced by the ones in
