@@ -6,7 +6,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_management_canister_types::CanisterSettings;
 use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-    install_canister_on_subnet, load_registry_mutations, NnsInstaller, STARTING_CYCLES_PER_CANISTER,
+    install_canister_on_subnet, STARTING_CYCLES_PER_CANISTER,
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LEDGER_INDEX_CANISTER_ID, ROOT_CANISTER_ID};
@@ -18,18 +18,35 @@ use ic_sns_testing::utils::{
     SnsTestingNetworkValidationError, TREASURY_PRINCIPAL_ID,
 };
 use icp_ledger::Tokens;
+use pocket_ic::common::rest::{EmptyConfig, IcpFeatures};
 use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::TempDir;
 
 const DEV_PARTICIPANT_ID: PrincipalId = PrincipalId::new_user_test_id(1000);
-const DEV_NEURON_ID: NeuronId = NeuronId { id: 1000u64 };
 
 // TODO @rvem: I don't like the fact that this struct definition is copy-pasted from 'canister/canister.rs'.
 // We should extract it into a separate crate and reuse in both canister and this crates.
 #[derive(CandidType)]
 pub struct TestCanisterInitArgs {
     pub greeting: Option<String>,
+}
+
+// The `nns_ui` feature requires auto progress to be enabled when the instance is created
+// which would make `dev_nns_neuron_id` non-deterministic.
+// Hence, we deploy the NNS dapp separately for now.
+fn all_icp_features_but_nns_ui() -> IcpFeatures {
+    IcpFeatures {
+        registry: Some(EmptyConfig {}),
+        cycles_minting: Some(EmptyConfig {}),
+        icp_token: Some(EmptyConfig {}),
+        cycles_token: Some(EmptyConfig {}),
+        nns_governance: Some(EmptyConfig {}),
+        sns: Some(EmptyConfig {}),
+        ii: Some(EmptyConfig {}),
+        nns_ui: None,
+    }
 }
 
 async fn install_test_canister(pocket_ic: &PocketIc, args: TestCanisterInitArgs) -> CanisterId {
@@ -51,37 +68,40 @@ async fn install_test_canister(pocket_ic: &PocketIc, args: TestCanisterInitArgs)
 
 async fn prepare_network_for_test(
     dev_participant_id: PrincipalId,
-    dev_neuron_id: NeuronId,
     state_dir: PathBuf,
-) -> PocketIc {
+) -> (PocketIc, NeuronId) {
     // Preparing the PocketIC-based network
 
+    let current_time = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64;
     let pocket_ic = PocketIcBuilder::new()
         .with_state_dir(state_dir.clone())
+        .with_icp_features(all_icp_features_but_nns_ui())
+        .with_initial_timestamp(current_time)
         .with_nns_subnet()
         .with_sns_subnet()
         .with_ii_subnet()
         .with_application_subnet()
         .build_async()
         .await;
-    let registry_proto_path = state_dir.join("registry.proto");
-    let initial_mutations = load_registry_mutations(registry_proto_path);
     let treasury_principal_id = *TREASURY_PRINCIPAL_ID;
 
-    // Installing NNS canisters
-    bootstrap_nns(
+    let dev_nns_neuron_id = bootstrap_nns(
         &pocket_ic,
-        vec![initial_mutations],
-        vec![(
-            treasury_principal_id.into(),
-            Tokens::from_tokens(10_000_000).unwrap(),
-        )],
+        vec![
+            (
+                treasury_principal_id,
+                Tokens::from_tokens(10_000_000).unwrap(),
+            ),
+            (dev_participant_id, Tokens::from_tokens(100).unwrap()),
+        ],
         dev_participant_id,
-        dev_neuron_id,
     )
     .await;
     assert!(validate_network(&pocket_ic).await.is_empty());
-    pocket_ic
+    (pocket_ic, dev_nns_neuron_id)
 }
 
 async fn test_canister_query(pocket_ic: &PocketIc, test_canister_id: CanisterId, greeting: String) {
@@ -119,22 +139,37 @@ async fn prepare_test_canister(pocket_ic: &PocketIc) -> CanisterId {
 }
 
 #[tokio::test]
+async fn test_sns_testing_dev_nns_neuron_id() {
+    let state_dir = TempDir::new().unwrap();
+    let state_dir = state_dir.path().to_path_buf();
+
+    let dev_participant_id = DEV_PARTICIPANT_ID;
+
+    let (_pocket_ic, dev_nns_neuron_id) =
+        prepare_network_for_test(dev_participant_id, state_dir).await;
+
+    // The following NNS neuron ID is hard-coded in sns-testing README.
+    // If the test fails, then the README must be updated.
+    assert_eq!(dev_nns_neuron_id.id, 5562256181269567345);
+}
+
+#[tokio::test]
 async fn test_sns_testing_basic_scenario_with_sns_neuron_following() {
     let state_dir = TempDir::new().unwrap();
     let state_dir = state_dir.path().to_path_buf();
 
     let dev_participant_id = DEV_PARTICIPANT_ID;
-    let dev_neuron_id = DEV_NEURON_ID;
 
-    let pocket_ic = prepare_network_for_test(dev_participant_id, dev_neuron_id, state_dir).await;
+    let (pocket_ic, dev_nns_neuron_id) =
+        prepare_network_for_test(dev_participant_id, state_dir).await;
 
     let test_canister_id = prepare_test_canister(&pocket_ic).await;
 
     // Creating an SNS
-    let sns = create_sns(
+    let (sns, dev_sns_neuron_id) = create_sns(
         &pocket_ic,
         dev_participant_id,
-        dev_neuron_id,
+        dev_nns_neuron_id,
         vec![test_canister_id],
         true,
     )
@@ -144,6 +179,7 @@ async fn test_sns_testing_basic_scenario_with_sns_neuron_following() {
     let proposal_id = propose_sns_controlled_canister_upgrade(
         &pocket_ic,
         dev_participant_id,
+        dev_sns_neuron_id,
         sns.clone(),
         test_canister_id,
         Wasm::from_location_specified_by_env_var("sns_testing_canister", &[])
@@ -168,17 +204,17 @@ async fn test_sns_testing_basic_scenario_without_sns_neuron_following() {
     let state_dir = state_dir.path().to_path_buf();
 
     let dev_participant_id = DEV_PARTICIPANT_ID;
-    let dev_neuron_id = DEV_NEURON_ID;
 
-    let pocket_ic = prepare_network_for_test(dev_participant_id, dev_neuron_id, state_dir).await;
+    let (pocket_ic, dev_nns_neuron_id) =
+        prepare_network_for_test(dev_participant_id, state_dir).await;
 
     let test_canister_id = prepare_test_canister(&pocket_ic).await;
 
     // Creating an SNS
-    let sns = create_sns(
+    let (sns, dev_sns_neuron_id) = create_sns(
         &pocket_ic,
         dev_participant_id,
-        dev_neuron_id,
+        dev_nns_neuron_id,
         vec![test_canister_id],
         false,
     )
@@ -189,6 +225,7 @@ async fn test_sns_testing_basic_scenario_without_sns_neuron_following() {
     let proposal_id = propose_sns_controlled_canister_upgrade(
         &pocket_ic,
         dev_participant_id,
+        dev_sns_neuron_id,
         sns.clone(),
         test_canister_id,
         Wasm::from_location_specified_by_env_var("sns_testing_canister", &[])
@@ -221,24 +258,16 @@ async fn test_sns_testing_basic_scenario_without_sns_neuron_following() {
 #[tokio::test]
 pub async fn test_missing_nns_canisters() {
     let dev_participant_id = PrincipalId::new_user_test_id(1000);
-    let dev_neuron_id = NeuronId { id: 1000u64 };
     // Preparing the PocketIC-based network
     let pocket_ic = PocketIcBuilder::new()
+        .with_icp_features(all_icp_features_but_nns_ui())
         .with_nns_subnet()
         .with_sns_subnet()
         .with_ii_subnet()
         .with_application_subnet()
         .build_async()
         .await;
-    // Installing NNS canisters
-    bootstrap_nns(
-        &pocket_ic,
-        vec![],
-        vec![],
-        dev_participant_id,
-        dev_neuron_id,
-    )
-    .await;
+    bootstrap_nns(&pocket_ic, vec![], dev_participant_id).await;
 
     // Deleting the ledger-index canister
     pocket_ic
@@ -262,36 +291,6 @@ pub async fn test_missing_nns_canisters() {
         vec![SnsTestingNetworkValidationError::MissingNnsCanister(
             "ledger-index".to_string(),
         )]
-    )
-}
-
-#[tokio::test]
-pub async fn test_missing_sns_wasm_upgrade_steps() {
-    // Preparing the PocketIC-based network
-    let pocket_ic = PocketIcBuilder::new()
-        .with_nns_subnet()
-        .with_sns_subnet()
-        .with_ii_subnet()
-        .with_application_subnet()
-        .build_async()
-        .await;
-
-    // Install NNS canisters, but do not add SNS wasm modules to SNS-W canister
-    let mut nns_installer = NnsInstaller::default();
-    nns_installer.with_current_nns_canister_versions();
-    nns_installer.with_test_governance_canister();
-    nns_installer.with_cycles_minting_canister();
-    nns_installer.with_cycles_ledger();
-    nns_installer.with_index_canister();
-    nns_installer.with_custom_registry_mutations(vec![]);
-    nns_installer.with_ledger_balances(vec![]);
-    nns_installer.with_neurons_fund_hotkeys(vec![]);
-    nns_installer.install(&pocket_ic).await;
-
-    // Assert that the SNS-W canister is missing wasm upgrade steps
-    assert_eq!(
-        validate_network(&pocket_ic).await,
-        vec![SnsTestingNetworkValidationError::MissingSnsWasmModules]
     )
 }
 

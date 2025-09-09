@@ -26,7 +26,7 @@ use ic_tests_ckbtc::{
     install_minter, subnet_app, subnet_sys, upgrade_btc_checker,
     utils::{
         assert_account_balance, assert_burn_transaction, assert_mint_transaction, generate_blocks,
-        get_btc_address, get_btc_client, update_balance, upgrade_canister_with_args,
+        get_btc_address, get_rpc_client, update_balance, upgrade_canister_with_args,
         wait_for_bitcoin_balance, BTC_BLOCK_REWARD,
     },
     BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, RETRIEVE_BTC_MIN_AMOUNT, TIMEOUT_PER_TEST,
@@ -43,7 +43,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
     let subnet_app = subnet_app(&env);
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
     let app_node = subnet_app.nodes().next().expect("No node in app subnet.");
-    let btc_rpc = get_btc_client(&env);
+    let btc_rpc = get_rpc_client::<bitcoin::Network>(&env);
 
     let default_btc_address = btc_rpc.get_address().unwrap();
     // Creating the 10 first block to reach the min confirmations of the minter canister.

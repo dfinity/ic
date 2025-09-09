@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Changed
+- Burn and mint transaction fees are taken into account ([#6620](https://github.com/dfinity/ic/pull/6620))
+
 ## [1.2.6] - 2025-08-11
 ### Changed
 - Deprecate `network_type` parameter ([#6434](https://github.com/dfinity/ic/pull/6434))

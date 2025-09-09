@@ -1,13 +1,10 @@
 //! The module is responsible for keeping track of the blockchain state.
 //!
 use crate::{
-    common::{AdapterNetwork, BlockHeight, BlockLike},
-    config::Config,
+    common::{BlockHeight, BlockchainBlock, BlockchainHeader, BlockchainNetwork},
     metrics::BlockchainStateMetrics,
 };
-use bitcoin::{block::Header as BlockHeader, BlockHash};
-
-use bitcoin::Work;
+use bitcoin::{block::Header as PureHeader, consensus::Encodable, BlockHash, Work};
 use ic_btc_validation::{HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
 use std::{collections::HashMap, sync::Arc};
@@ -21,9 +18,9 @@ const ONE_MB: usize = 1_024 * 1_024;
 
 /// Contains the necessary information about a tip.
 #[derive(Clone, Debug)]
-pub struct Tip {
+pub struct Tip<Header> {
     /// This field stores a Bitcoin header.
-    pub header: BlockHeader,
+    pub header: Header,
     /// This field stores the height of the Bitcoin header stored in the field `header`.
     pub height: BlockHeight,
     /// This field stores the work of the Blockchain leading up to this tip.
@@ -33,9 +30,11 @@ pub struct Tip {
 
 /// Creates a new cache with a set genesis header determined by the
 /// provided network.
-fn init_cache_with_genesis(genesis_block_header: BlockHeader) -> HashMap<BlockHash, HeaderNode> {
+fn init_cache_with_genesis<Header: BlockchainHeader>(
+    genesis_block_header: Header,
+) -> HashMap<BlockHash, HeaderNode<Header>> {
     let cached_header = HeaderNode {
-        header: genesis_block_header,
+        header: genesis_block_header.clone(),
         height: 0,
         work: genesis_block_header.work(),
         children: vec![],
@@ -47,9 +46,9 @@ fn init_cache_with_genesis(genesis_block_header: BlockHeader) -> HashMap<BlockHa
 
 /// This struct stores a BlockHeader along with its height in the Bitcoin Blockchain.
 #[derive(Debug)]
-pub struct HeaderNode {
+pub struct HeaderNode<Header> {
     /// This field stores a Bitcoin header.
-    pub header: BlockHeader,
+    pub header: Header,
     /// This field stores the height of a Bitcoin header
     pub height: BlockHeight,
     /// This field stores the work of the Blockchain leading up to this header.
@@ -98,54 +97,54 @@ pub type SerializedBlock = Vec<u8>;
 /// The BlockChainState caches all the Bitcoin headers, some of the Bitcoin blocks.
 /// The BlockChainState also maintains the child relationhips between the headers.
 #[derive(Debug)]
-pub struct BlockchainState {
+pub struct BlockchainState<Network: BlockchainNetwork> {
     /// The starting point of the blockchain
-    genesis_block_header: BlockHeader,
+    genesis_block_header: PureHeader,
 
     /// This field stores all the Bitcoin headers using a HashMap containining BlockHash and the corresponding header.
-    header_cache: HashMap<BlockHash, HeaderNode>,
+    header_cache: HashMap<BlockHash, HeaderNode<Network::Header>>,
 
     /// This field stores a hashmap containing BlockHash and the corresponding SerializedBlock.
     block_cache: HashMap<BlockHash, Arc<SerializedBlock>>,
 
     /// This field contains the known tips of the header cache.
-    tips: Vec<Tip>,
+    tips: Vec<Tip<Network::Header>>,
 
     /// Used to determine how validation should be handled with `validate_header`.
-    network: AdapterNetwork,
+    network: Network,
     metrics: BlockchainStateMetrics,
 }
 
-impl BlockchainState {
+impl<Network: BlockchainNetwork> BlockchainState<Network> {
     /// This function is used to create a new BlockChainState object.  
-    pub fn new(config: &Config, metrics_registry: &MetricsRegistry) -> Self {
+    pub fn new(network: Network, metrics_registry: &MetricsRegistry) -> Self {
         // Create a header cache and inserting dummy header corresponding the `adapter_genesis_hash`.
-        let genesis_block_header = config.network.genesis_block_header();
-        let header_cache = init_cache_with_genesis(genesis_block_header);
+        let genesis_block_header = network.genesis_block_header();
+        let header_cache = init_cache_with_genesis(genesis_block_header.clone());
         let block_cache = HashMap::new();
         let tips = vec![Tip {
-            header: genesis_block_header,
+            header: genesis_block_header.clone(),
             height: 0,
             work: genesis_block_header.work(),
         }];
 
         BlockchainState {
-            genesis_block_header,
+            genesis_block_header: genesis_block_header.into_pure_header(),
             header_cache,
             block_cache,
             tips,
-            network: config.network,
+            network,
             metrics: BlockchainStateMetrics::new(metrics_registry),
         }
     }
 
     /// Returns the genesis header that the store is initialized with.
-    pub fn genesis(&self) -> &BlockHeader {
-        &self.genesis_block_header
+    pub fn genesis(&self) -> PureHeader {
+        self.genesis_block_header
     }
 
     /// Returns the header for the given block hash.
-    pub fn get_cached_header(&self, hash: &BlockHash) -> Option<&HeaderNode> {
+    pub fn get_cached_header(&self, hash: &BlockHash) -> Option<&HeaderNode<Network::Header>> {
         self.header_cache.get(hash)
     }
 
@@ -161,13 +160,13 @@ impl BlockchainState {
     /// a possible error that may have occurred while adding the headers.
     pub fn add_headers(
         &mut self,
-        headers: &[BlockHeader],
+        headers: &[Network::Header],
     ) -> (Vec<BlockHash>, Option<AddHeaderError>) {
         let mut block_hashes_of_added_headers = vec![];
 
         let err = headers
             .iter()
-            .try_for_each(|header| match self.add_header(*header) {
+            .try_for_each(|header| match self.add_header(header.clone()) {
                 Ok(AddHeaderResult::HeaderAdded(block_hash)) => {
                     block_hashes_of_added_headers.push(block_hash);
                     Ok(())
@@ -189,7 +188,7 @@ impl BlockchainState {
 
     /// This method adds the input header to the `header_cache`.
     #[allow(clippy::indexing_slicing)]
-    fn add_header(&mut self, header: BlockHeader) -> Result<AddHeaderResult, AddHeaderError> {
+    fn add_header(&mut self, header: Network::Header) -> Result<AddHeaderResult, AddHeaderError> {
         let block_hash = header.block_hash();
 
         // If the header already exists in the cache,
@@ -202,13 +201,12 @@ impl BlockchainState {
             return Err(AddHeaderError::InvalidHeader(block_hash, err));
         }
 
-        let parent = self
-            .header_cache
-            .get_mut(&header.prev_blockhash)
-            .ok_or(AddHeaderError::PrevHeaderNotCached(header.prev_blockhash))?;
+        let parent = self.header_cache.get_mut(&header.prev_block_hash()).ok_or(
+            AddHeaderError::PrevHeaderNotCached(header.prev_block_hash()),
+        )?;
 
         let cached_header = HeaderNode {
-            header,
+            header: header.clone(),
             height: parent.height + 1,
             work: parent.work + header.work(),
             children: vec![],
@@ -217,13 +215,13 @@ impl BlockchainState {
 
         // Update the tip headers.
         // If the previous header already exists in `tips`, then update it with the new tip.
-        let prev_hash = header.prev_blockhash;
+        let prev_hash = header.prev_block_hash();
         let maybe_cached_header_idx = self
             .tips
             .iter()
             .position(|tip| tip.header.block_hash() == prev_hash);
         let tip = Tip {
-            header,
+            header: header.clone(),
             height: cached_header.height,
             work: cached_header.work,
         };
@@ -245,7 +243,7 @@ impl BlockchainState {
     }
 
     /// This method adds a new block to the `block_cache`
-    pub fn add_block<Block: BlockLike>(&mut self, block: Block) -> Result<(), AddBlockError> {
+    pub fn add_block(&mut self, block: Network::Block) -> Result<(), AddBlockError> {
         let block_hash = block.block_hash();
 
         if block.compute_merkle_root().is_some() && !block.check_merkle_root() {
@@ -254,7 +252,7 @@ impl BlockchainState {
 
         // If the block's header is not added before, then add the header into the `header_cache` first.
         let _ = self
-            .add_header(block.header())
+            .add_header(block.header().clone())
             .map_err(AddBlockError::Header)?;
         self.tips.sort_unstable_by(|a, b| b.work.cmp(&a.work));
 
@@ -277,7 +275,7 @@ impl BlockchainState {
 
     /// This method returns the tip header with the highest cumulative work.
     #[allow(clippy::indexing_slicing)]
-    pub fn get_active_chain_tip(&self) -> &Tip {
+    pub fn get_active_chain_tip(&self) -> &Tip<Network::Header> {
         // `self.tips` is initialized in the new() method with the initial header.
         // `add_headers` sorts the tips by total work. The zero index will always be
         // the active tip.
@@ -309,7 +307,7 @@ impl BlockchainState {
     pub fn locator_hashes(&self) -> Vec<BlockHash> {
         let mut hashes = Vec::new();
         let tip = self.get_active_chain_tip();
-        let mut current_header = tip.header;
+        let mut current_header = tip.header.clone();
         let mut current_hash = current_header.block_hash();
         let mut step: u32 = 1;
         let mut last_hash = current_hash;
@@ -320,10 +318,10 @@ impl BlockchainState {
             last_hash = current_hash;
             hashes.push(current_hash);
             for _j in 0..step {
-                let prev_hash = current_header.prev_blockhash;
+                let prev_hash = current_header.prev_block_hash();
                 //If the prev header does not exist, then simply return the `hashes` vector.
                 if let Some(cached) = self.header_cache.get(&prev_hash) {
-                    current_header = cached.header;
+                    current_header = cached.header.clone();
                 } else {
                     if last_hash != genesis_hash {
                         hashes.push(genesis_hash);
@@ -363,10 +361,10 @@ impl BlockchainState {
     }
 }
 
-impl HeaderStore for BlockchainState {
-    fn get_header(&self, hash: &BlockHash) -> Option<(BlockHeader, BlockHeight)> {
+impl<Network: BlockchainNetwork> HeaderStore<Network::Header> for BlockchainState<Network> {
+    fn get_header(&self, hash: &BlockHash) -> Option<(Network::Header, BlockHeight)> {
         self.get_cached_header(hash)
-            .map(|cached| (cached.header, cached.height))
+            .map(|cached| (cached.header.clone(), cached.height))
     }
 
     fn get_initial_hash(&self) -> BlockHash {
@@ -384,15 +382,14 @@ mod test {
     use ic_metrics::MetricsRegistry;
 
     use super::*;
-    use crate::{common::test_common::TestState, config::test::ConfigBuilder};
+    use crate::common::test_common::TestState;
     use ic_btc_adapter_test_utils::{block_1, block_2, generate_header, generate_headers};
     use std::collections::HashSet;
 
     #[test]
     fn test_get_block() {
         let test_state = TestState::setup();
-        let config = ConfigBuilder::new().build();
-        let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
+        let mut state = BlockchainState::new(Network::Bitcoin, &MetricsRegistry::default());
 
         state
             .add_block(test_state.block_1.clone())
@@ -419,10 +416,7 @@ mod test {
     /// successfully.
     #[test]
     fn test_adding_headers_successfully() {
-        let config = ConfigBuilder::new()
-            .with_network(Network::Regtest.into())
-            .build();
-        let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
+        let mut state = BlockchainState::new(Network::Regtest, &MetricsRegistry::default());
 
         let initial_header = state.genesis();
         let chain = generate_headers(initial_header.block_hash(), initial_header.time, 16, &[]);
@@ -445,13 +439,10 @@ mod test {
     /// This is a regression test for incident at btc height 799_498.
     #[test]
     fn test_adding_mainnet_headers_successfully() {
-        let config = ConfigBuilder::new()
-            .with_network(Network::Bitcoin.into())
-            .build();
-        let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
+        let mut state = BlockchainState::new(Network::Bitcoin, &MetricsRegistry::default());
 
         let headers_json = include_str!("../test_data/first_2500_mainnet_headers.json");
-        let headers: Vec<BlockHeader> = serde_json::from_str(headers_json).unwrap();
+        let headers: Vec<_> = serde_json::from_str(headers_json).unwrap();
 
         let (added_headers, maybe_err) = state.add_headers(&headers);
         assert!(
@@ -470,13 +461,10 @@ mod test {
     /// at least one header validation with difficulty adjustment.
     #[test]
     fn test_adding_testnet_headers_successfully() {
-        let config = ConfigBuilder::new()
-            .with_network(Network::Testnet.into())
-            .build();
-        let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
+        let mut state = BlockchainState::new(Network::Testnet, &MetricsRegistry::default());
 
         let headers_json = include_str!("../test_data/first_2500_testnet_headers.json");
-        let headers: Vec<BlockHeader> = serde_json::from_str(headers_json).unwrap();
+        let headers: Vec<_> = serde_json::from_str(headers_json).unwrap();
 
         let (added_headers, maybe_err) = state.add_headers(&headers);
         assert!(
@@ -494,10 +482,7 @@ mod test {
     /// Tests whether or not the `BlockchainState::add_headers(...)` function can add headers that
     /// cause 2 forks in the chain. The state should be able to determine what is the active tip.
     fn test_forks_when_adding_headers() {
-        let config = ConfigBuilder::new()
-            .with_network(Network::Regtest.into())
-            .build();
-        let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
+        let mut state = BlockchainState::new(Network::Regtest, &MetricsRegistry::default());
         let initial_header = state.genesis();
 
         // Create an arbitrary chain and adding to the BlockchainState
@@ -536,8 +521,7 @@ mod test {
     /// Tests `BlockchainState::add_headers(...)` with an empty set of headers.
     #[test]
     fn test_adding_an_empty_headers_vector() {
-        let config = ConfigBuilder::new().build();
-        let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
+        let mut state = BlockchainState::new(Network::Bitcoin, &MetricsRegistry::default());
         let chain = vec![];
         let (added_headers, maybe_err) = state.add_headers(&chain);
         assert!(maybe_err.is_none());
@@ -549,10 +533,7 @@ mod test {
     /// headers in the state.
     #[test]
     fn test_adding_headers_that_already_exist() {
-        let config = ConfigBuilder::new()
-            .with_network(Network::Regtest.into())
-            .build();
-        let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
+        let mut state = BlockchainState::new(Network::Regtest, &MetricsRegistry::default());
 
         let initial_header = state.genesis();
         let chain = generate_headers(initial_header.block_hash(), initial_header.time, 16, &[]);
@@ -575,10 +556,7 @@ mod test {
     /// adding a header that is invalid.
     #[test]
     fn test_adding_headers_with_an_invalid_header() {
-        let config = ConfigBuilder::new()
-            .with_network(Network::Regtest.into())
-            .build();
-        let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
+        let mut state = BlockchainState::new(Network::Regtest, &MetricsRegistry::default());
 
         let initial_header = state.genesis();
         let mut chain = generate_headers(initial_header.block_hash(), initial_header.time, 16, &[]);
@@ -606,8 +584,7 @@ mod test {
         let block_1 = block_1();
         let mut block_2 = block_2();
 
-        let config = ConfigBuilder::new().build();
-        let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
+        let mut state = BlockchainState::new(Network::Bitcoin, &MetricsRegistry::default());
 
         // Attempt to add block 2 to the cache before block 1's header has been added.
         let block_2_hash = block_2.header.block_hash();
@@ -635,8 +612,7 @@ mod test {
     #[test]
     fn test_pruning_blocks_from_the_cache() {
         let test_state = TestState::setup();
-        let config = ConfigBuilder::new().build();
-        let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
+        let mut state = BlockchainState::new(Network::Bitcoin, &MetricsRegistry::default());
         let block_1_hash = test_state.block_1.block_hash();
         let block_2_hash = test_state.block_2.block_hash();
         state.add_block(test_state.block_1).unwrap();
@@ -652,8 +628,7 @@ mod test {
     #[test]
     fn test_pruning_blocks_below_a_given_height_from_the_cache() {
         let test_state = TestState::setup();
-        let config = ConfigBuilder::new().build();
-        let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
+        let mut state = BlockchainState::new(Network::Bitcoin, &MetricsRegistry::default());
         let block_1_hash = test_state.block_1.block_hash();
         let block_2_hash = test_state.block_2.block_hash();
         state.add_block(test_state.block_1).unwrap();
@@ -669,8 +644,7 @@ mod test {
     #[test]
     fn test_block_cache_size() {
         let test_state = TestState::setup();
-        let config = ConfigBuilder::new().build();
-        let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
+        let mut state = BlockchainState::new(Network::Bitcoin, &MetricsRegistry::default());
 
         let block_cache_size = state.get_block_cache_size();
         assert_eq!(block_cache_size, 0);
@@ -688,11 +662,8 @@ mod test {
     /// with unknown headers.
     #[test]
     fn test_sorted_tip() {
-        let config = ConfigBuilder::new()
-            .with_network(Network::Regtest.into())
-            .build();
-        let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let h1 = *state.genesis();
+        let mut state = BlockchainState::new(Network::Regtest, &MetricsRegistry::default());
+        let h1 = state.genesis();
         // h1 - h2
         let h2 = generate_header(h1.block_hash(), h1.time, 0);
         state.add_headers(&[h2]);
@@ -734,10 +705,7 @@ mod test {
     /// Test header store `get_header` function.
     #[test]
     fn test_headerstore_get_cached_header() {
-        let config = ConfigBuilder::new()
-            .with_network(Network::Regtest.into())
-            .build();
-        let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
+        let mut state = BlockchainState::new(Network::Regtest, &MetricsRegistry::default());
 
         let initial_header = state.genesis();
         let chain = generate_headers(initial_header.block_hash(), initial_header.time, 2500, &[]);
