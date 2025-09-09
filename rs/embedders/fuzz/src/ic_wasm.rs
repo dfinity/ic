@@ -1,4 +1,4 @@
-use crate::imports::{system_api_imports, SystemApiImportStore};
+use crate::imports::{SystemApiImportStore, system_api_imports};
 use crate::special_int::SpecialInt;
 use arbitrary::{Arbitrary, Result, Unstructured};
 use ic_config::embedders::Config as EmbeddersConfig;

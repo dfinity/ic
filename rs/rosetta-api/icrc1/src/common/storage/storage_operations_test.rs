@@ -5,7 +5,7 @@ use ic_icrc_rosetta::common::storage::types::{
     IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock, RosettaCounter,
 };
 use icrc_ledger_types::icrc1::account::Account;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use tempfile::tempdir;
 
 // Helper function to create a test block with a specific timestamp and data

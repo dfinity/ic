@@ -26,7 +26,7 @@ use canister_test::{Canister, Runtime};
 use dfn_candid::{candid, candid_one};
 use dfn_protobuf::protobuf;
 use ic_agent::Agent;
-use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair, Sender};
+use ic_canister_client_sender::{Ed25519KeyPair, Sender, ed25519_public_key_to_der};
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_nns_constants::{
@@ -43,8 +43,8 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{block_on, runtime_from_url};
 use ic_types::{CanisterId, PrincipalId};
 use icp_ledger::{
-    AccountIdentifier, BinaryAccountBalanceArgs, Block, BlockArg, BlockIndex, BlockRes, Memo,
-    Operation, Tokens, Transaction, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, BinaryAccountBalanceArgs, Block, BlockArg, BlockIndex, BlockRes,
+    DEFAULT_TRANSFER_FEE, Memo, Operation, Tokens, Transaction, TransferArgs, TransferError,
 };
 use quickcheck::{Arbitrary, Gen};
 use rand::Rng;
@@ -260,9 +260,9 @@ impl Arbitrary for Plan {
 }
 
 fn create_plan<R: Rng>(rng: &mut R) -> Plan {
-    let mut gen = Gen::new(rng.next_u64() as usize);
+    let mut r#gen = Gen::new(rng.next_u64() as usize);
     loop {
-        let plan: Plan = Arbitrary::arbitrary(&mut gen);
+        let plan: Plan = Arbitrary::arbitrary(&mut r#gen);
         if plan.length() > 25 {
             break plan;
         }

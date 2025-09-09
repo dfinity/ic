@@ -1,11 +1,11 @@
 use clap::Parser;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
-use ic_types::crypto::AlgorithmId;
 use ic_types::NumberOfNodes;
-use rand::thread_rng;
+use ic_types::crypto::AlgorithmId;
 use rand::Rng;
 use rand::RngCore;
 use rand::SeedableRng;
+use rand::thread_rng;
 use rand_chacha::ChaCha20Rng;
 use std::fs::File;
 use std::io;

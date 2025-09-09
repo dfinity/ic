@@ -1,6 +1,6 @@
 #![no_main]
-use candid::types::value::IDLArgs;
 use candid::DecoderConfig;
+use candid::types::value::IDLArgs;
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {

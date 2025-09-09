@@ -542,10 +542,12 @@ fn test_setup_failure_file_written() {
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
-    assert!(working_dir
-        .join("setup")
-        .join("setup_succeeded.json")
-        .exists());
+    assert!(
+        working_dir
+            .join("setup")
+            .join("setup_succeeded.json")
+            .exists()
+    );
 }
 
 #[test]
@@ -567,10 +569,12 @@ fn test_setup_failure_file_not_written() {
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
-    assert!(!working_dir
-        .join("setup")
-        .join("setup_succeeded.json")
-        .exists());
+    assert!(
+        !working_dir
+            .join("setup")
+            .join("setup_succeeded.json")
+            .exists()
+    );
     let summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
     assert!(summary.failure.len() == 2);
 }

@@ -5,12 +5,12 @@ use ic_config::{
 };
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
+    CompilationCacheBuilder, WasmExecutionInput, WasmtimeEmbedder,
     wasm_executor::{WasmExecutor, WasmExecutorImpl},
     wasmtime_embedder::system_api::{
-        sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
-        InstructionLimits,
+        ApiType, ExecutionParameters, InstructionLimits,
+        sandbox_safe_system_state::SandboxSafeSystemState,
     },
-    CompilationCacheBuilder, WasmExecutionInput, WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
@@ -18,9 +18,9 @@ use ic_management_canister_types_private::Global;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    ExecutionState, ExportedFunctions, Memory, MessageMemoryUsage, NetworkTopology,
     canister_state::execution_state::{WasmBinary, WasmMetadata},
     page_map::TestPageAllocatorFileDescriptorImpl,
-    ExecutionState, ExportedFunctions, Memory, MessageMemoryUsage, NetworkTopology,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_embedders::DEFAULT_NUM_INSTRUCTIONS;
@@ -28,9 +28,9 @@ use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
+    ComputeAllocation, MemoryAllocation, NumBytes,
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
-    ComputeAllocation, MemoryAllocation, NumBytes,
 };
 use ic_wasm_types::CanisterModule;
 use lazy_static::lazy_static;
