@@ -1551,7 +1551,7 @@ impl ExecutionEnvironment {
                     },
                     FlagStatus::Enabled => match &msg {
                         CanisterCall::Request(request) => {
-                            let fetch_canister_logs_fee = Cycles::new(1_000_000); // TODO: fix fees.
+                            let fetch_canister_logs_fee = Cycles::new(1_000_000); // TODO(EXC-2112): fix placeholder fees.
 
                             let response = if request.payment < fetch_canister_logs_fee {
                                 Err(UserError::new(
