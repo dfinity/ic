@@ -45,6 +45,7 @@ DEPENDENCIES = [
     "//packages/ic-http-types",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha2",
+    "//rs/limits",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/nervous_system/canisters",
