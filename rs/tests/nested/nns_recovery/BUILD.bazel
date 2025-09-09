@@ -21,33 +21,24 @@ RUNTIME_DEPS = IC_GATEWAY_RUNTIME_DEPS + IMPERSONATE_UPSTREAMS_RUNTIME_DEPS + ME
     "//rs/tests:recovery/binaries",
 ]
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/recovery",
-    "//rs/tests/consensus/utils",
-    "//rs/tests/driver:ic-system-test-driver",
-    "//rs/tests/nested:nested",
-    "//rs/types/types",
-    "@crate_index//:anyhow",
-    "@crate_index//:futures",
-    "@crate_index//:rand",
-    "@crate_index//:sha2",
-    "@crate_index//:slog",
-]
-
-RUNNER_DEPENDENCIES = [
-    # Keep sorted.
-    "common",
-    "//rs/tests/driver:ic-system-test-driver",
-    "@crate_index//:anyhow",
-]
-
 rust_library(
     name = "common",
     testonly = True,
     srcs = ["common.rs"],
     crate_name = "ic_nested_nns_recovery_common",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/recovery",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nested:nested",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:futures",
+        "@crate_index//:rand",
+        "@crate_index//:sha2",
+        "@crate_index//:slog",
+    ],
 )
 
 system_test_nns(
@@ -59,5 +50,10 @@ system_test_nns(
     uses_guestos_test_update = True,
     uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS,
-    deps = RUNNER_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":common",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
 )
