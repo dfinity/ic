@@ -26,7 +26,6 @@ ic-nervous-system-canisters = { path = "../../nervous_system/canisters" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-node-rewards-canister-api = { path = "./api" }
-ic-node-rewards-canister-protobuf = { path = "./protobuf" }
 ic-registry-canister-client = { path = "../../registry/canister-client" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-node-provider-rewards = { path = "../../registry/node_provider_rewards" }
