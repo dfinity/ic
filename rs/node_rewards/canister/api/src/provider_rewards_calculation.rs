@@ -13,8 +13,8 @@ pub type GetNodeProviderRewardsCalculationResponse = Result<Vec<NodeProviderRewa
 
 #[derive(CandidType, candid::Deserialize, Clone, Debug)]
 pub struct NodeProviderRewardsDaily {
-    pub node_provider_rewards: NodeProviderRewards,
-    pub day_utc: DayUtc,
+    pub day_utc: Option<DayUtc>,
+    pub node_provider_rewards: Option<NodeProviderRewards>,
 }
 
 #[derive(

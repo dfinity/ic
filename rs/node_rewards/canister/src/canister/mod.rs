@@ -370,8 +370,8 @@ impl NodeRewardsCanister {
 
             if let Some(rewards) = provider_daily_rewards {
                 let daily_rewards = NodeProviderRewardsDaily {
-                    day_utc: current_day.into(),
-                    node_provider_rewards: rewards.into(),
+                    day_utc: Some(current_day.into()),
+                    node_provider_rewards: Some(rewards.into()),
                 };
                 results.push(daily_rewards);
             }
