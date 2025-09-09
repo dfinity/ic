@@ -414,16 +414,26 @@ impl Orchestrator {
                                 OrchestratorControlFlow::Assigned(subnet_id),
                                 OrchestratorControlFlow::Leaving(_),
                             ) => {
-                                UtilityCommand::notify_host(&format!("The node {node_id} has been unassigned from the subnet {subnet_id}\
+                                UtilityCommand::notify_host(
+                                    &format!(
+                                        "The node {node_id} has been unassigned from the subnet {subnet_id}\
                                      in the registry. Please do not turn off the machine while it completes its graceful removal from the subnet.\
                                       This process can take up to 15 minutes. A new message will be displayed here when the node has been \
-                                      successfully removed."), 1);
+                                      successfully removed."
+                                    ),
+                                    1,
+                                );
                             }
                             (
                                 OrchestratorControlFlow::Leaving(subnet_id),
                                 OrchestratorControlFlow::Unassigned,
                             ) => {
-                                UtilityCommand::notify_host(&format!("The node {node_id} has gracefully left subnet {subnet_id}. The node can be turned off now."), 1);
+                                UtilityCommand::notify_host(
+                                    &format!(
+                                        "The node {node_id} has gracefully left subnet {subnet_id}. The node can be turned off now."
+                                    ),
+                                    1,
+                                );
                             }
                             // Other transitions are not important at the moment.
                             _ => {}

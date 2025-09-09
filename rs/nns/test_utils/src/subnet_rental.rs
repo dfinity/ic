@@ -19,10 +19,6 @@ impl SubnetRentalCanisterInitPayloadBuilder {
     }
 
     pub fn build(&mut self) -> Option<()> {
-        if self.enabled {
-            Some(())
-        } else {
-            None
-        }
+        if self.enabled { Some(()) } else { None }
     }
 }

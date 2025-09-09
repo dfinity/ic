@@ -1,11 +1,11 @@
 use candid::{Nat, Principal};
 use canister_test::{Canister, Runtime};
-use cycles_minting_canister::{NotifyCreateCanister, NotifyError, MEMO_CREATE_CANISTER};
+use cycles_minting_canister::{MEMO_CREATE_CANISTER, NotifyCreateCanister, NotifyError};
 use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, LEDGER_CANISTER_ID};
-use icp_ledger::{Subaccount, DEFAULT_TRANSFER_FEE};
+use icp_ledger::{DEFAULT_TRANSFER_FEE, Subaccount};
 use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{Memo, TransferArg, TransferError as Icrc1TransferError},

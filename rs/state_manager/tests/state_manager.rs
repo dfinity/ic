@@ -27,13 +27,9 @@ use ic_replicated_state::{
     page_map::{PageIndex, Shard, StorageLayout},
     testing::ReplicatedStateTesting,
 };
-<<<<<<< HEAD
-use ic_state_layout::{CheckpointLayout, ReadOnly, SYSTEM_METADATA_FILE, StateLayout, WASM_FILE};
-=======
 use ic_state_layout::{
-    CheckpointLayout, ReadOnly, StateLayout, CANISTER_FILE, SYSTEM_METADATA_FILE, WASM_FILE,
+    CANISTER_FILE, CheckpointLayout, ReadOnly, SYSTEM_METADATA_FILE, StateLayout, WASM_FILE,
 };
->>>>>>> master
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
 use ic_state_manager::{
@@ -52,11 +48,7 @@ use ic_test_utilities_consensus::fake::FakeVerifier;
 use ic_test_utilities_io::{make_mutable, make_readonly, write_all_at};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-<<<<<<< HEAD
-    Labels, fetch_histogram_vec_stats, fetch_int_counter_vec, fetch_int_gauge,
-=======
-    fetch_gauge, fetch_histogram_vec_stats, fetch_int_counter_vec, fetch_int_gauge, Labels,
->>>>>>> master
+    Labels, fetch_gauge, fetch_histogram_vec_stats, fetch_int_counter_vec, fetch_int_gauge,
 };
 use ic_test_utilities_state::{arb_stream, arb_stream_slice, canister_ids};
 use ic_test_utilities_tmpdir::tmpdir;

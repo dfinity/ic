@@ -154,13 +154,8 @@ use crate::{
 use anyhow::{Context, Result, anyhow, bail};
 use async_trait::async_trait;
 use canister_test::{RemoteTestRuntime, Runtime};
-<<<<<<< HEAD
 use ic_agent::{Agent, AgentError, export::Principal};
-use ic_base_types::PrincipalId;
-=======
-use ic_agent::{export::Principal, Agent, AgentError};
 use ic_base_types::{CanisterId, PrincipalId};
->>>>>>> master
 use ic_canister_client::{Agent as InternalAgent, Sender};
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;

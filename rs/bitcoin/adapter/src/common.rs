@@ -1,6 +1,6 @@
 use bitcoin::consensus::{Decodable, Encodable};
 use bitcoin::p2p::Magic;
-use bitcoin::{block::Header as PureHeader, BlockHash, Work};
+use bitcoin::{BlockHash, Work, block::Header as PureHeader};
 use ic_btc_validation::{HeaderStore, ValidateHeaderError};
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};

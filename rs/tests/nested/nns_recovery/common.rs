@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use futures::future::join_all;
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
@@ -9,16 +9,15 @@ use ic_consensus_system_test_utils::{
     },
     set_sandbox_env_vars,
     ssh_access::{
-        get_updatesubnetpayload_with_keys, update_subnet_record,
-        wait_until_authentication_is_granted, AuthMean,
+        AuthMean, get_updatesubnetpayload_with_keys, update_subnet_record,
+        wait_until_authentication_is_granted,
     },
     upgrade::assert_assigned_replica_version,
 };
 use ic_recovery::{
-    get_node_metrics,
+    RecoveryArgs, get_node_metrics,
     nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
     util::DataLocation,
-    RecoveryArgs,
 };
 use ic_system_test_driver::{
     driver::{
@@ -33,13 +32,13 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use nested::util::{
-    assert_version_compatibility, get_host_boot_id, setup_ic_infrastructure, setup_nested_vm_group,
-    setup_vector_targets_for_vm, start_nested_vm_group, NODE_REGISTRATION_BACKOFF,
-    NODE_REGISTRATION_TIMEOUT,
+    NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT, assert_version_compatibility,
+    get_host_boot_id, setup_ic_infrastructure, setup_nested_vm_group, setup_vector_targets_for_vm,
+    start_nested_vm_group,
 };
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 /// Four nodes is the minimum subnet size that satisfies 3f+1 for f=1
 pub const SUBNET_SIZE: usize = 4;

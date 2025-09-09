@@ -2,8 +2,8 @@ use candid::{Decode, Encode, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cbor::CertificateToCbor;
 use ic_certification::{
-    hash_tree::{empty, HashTreeNode, Label, LookupResult, SubtreeLookupResult},
     Certificate, HashTree,
+    hash_tree::{HashTreeNode, Label, LookupResult, SubtreeLookupResult, empty},
 };
 use ic_icrc1_ledger::Tokens;
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
