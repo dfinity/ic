@@ -122,7 +122,7 @@ pub async fn rejoin_test_large_state(
         agent_node.get_public_url(),
         agent_node.effective_canister_id(),
     );
-    let canisters = install_statesync_test_canisters(env, &endpoint_runtime, num_canisters).await;
+    let canisters = install_statesync_test_canisters(&env, &endpoint_runtime, num_canisters).await;
 
     info!(
         logger,
@@ -334,11 +334,11 @@ async fn store_and_read_stable(
     );
 }
 
-pub async fn install_statesync_test_canisters(
-    env: TestEnv,
-    endpoint_runtime: &Runtime,
+pub async fn install_statesync_test_canisters<'a>(
+    env: &'a TestEnv,
+    endpoint_runtime: &'a Runtime,
     num_canisters: usize,
-) -> Vec<Canister> {
+) -> Vec<Canister<'a>> {
     let logger = env.logger();
     let wasm = Wasm::from_file(get_dependency_path(
         env::var("STATESYNC_TEST_CANISTER_WASM_PATH")

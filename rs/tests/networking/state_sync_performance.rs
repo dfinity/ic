@@ -20,6 +20,7 @@ use ic_nns_governance_api::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
+        farm::HostFeature,
         group::SystemTestGroup,
         ic::{ImageSizeGiB, InternetComputer, Subnet, VmResources},
         prometheus_vm::{HasPrometheus, PrometheusVm},
@@ -67,6 +68,7 @@ fn setup(env: TestEnv) {
             )),
             ..VmResources::default()
         })
+        .with_required_host_features(vec![HostFeature::IoPerformance])
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(99))
@@ -131,7 +133,7 @@ fn test(env: TestEnv) {
             agent_node.effective_canister_id(),
         );
         let canisters =
-            install_statesync_test_canisters(env, &endpoint_runtime, NUM_CANISTERS).await;
+            install_statesync_test_canisters(&env, &endpoint_runtime, NUM_CANISTERS).await;
 
         info!(
             logger,
@@ -177,19 +179,30 @@ fn test(env: TestEnv) {
             vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT],
         )
         .await;
-        // let latest_certified_height = res[LATEST_CERTIFIED_HEIGHT][0];
-
         let base_count = res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT][0];
+
+        // Waiting a couple seconds, such that the registry can update
+        tokio::time::sleep(Duration::from_secs(10)).await;
+        env.sync_with_prometheus();
 
         let maybe_state_syncs = new_nodes
             .into_iter()
-            .map(|node| async {
-                assert_state_sync_has_happened(&logger, node, base_count).await;
-            })
+            .map(|node| async { assert_state_sync_has_happened(&logger, node, base_count).await })
             .collect::<Vec<_>>();
 
-        join_all(maybe_state_syncs).await
-        // TODO: Compute average state sync duration
+        let state_sync_durations = join_all(maybe_state_syncs).await;
+
+        let min = state_sync_durations
+            .iter()
+            .fold(f64::MAX, |acc, val| f64::min(acc, *val));
+        let max = state_sync_durations
+            .iter()
+            .fold(f64::MIN, |acc, val| f64::max(acc, *val));
+        let avr = state_sync_durations.iter().sum::<f64>() / (state_sync_durations.len() as f64);
+        info!(
+            logger,
+            "State sync durations: min: {}, avr: {}, max: {}", min, avr, max
+        );
     });
 }
 

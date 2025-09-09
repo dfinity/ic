@@ -415,6 +415,7 @@ system_test_nns(
         "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync-test-canister)",
     },
     tags = [
+        "colocate",
         "system_test_large",
     ],
     test_timeout = "eternal",
@@ -431,6 +432,7 @@ system_test_nns(
         "//rs/tests/message_routing/rejoin_test_lib",
         "//rs/types/types",
         "@crate_index//:futures",
+        "@crate_index//:tokio",
     ],
 )
 
