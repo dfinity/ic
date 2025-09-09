@@ -87,6 +87,11 @@ type GetNodeProvidersRewardsResponse = variant { Ok : NodeProvidersRewards; Err 
 
 // get_node_providers_monthly_xdr_rewards
 
+type NodeProvidersMonthlyXdrRewards = record {
+    rewards: vec record { principal; nat64 };
+    registry_version: opt nat64;
+};
+
 type GetNodeProvidersMonthlyXdrRewardsRequest = record {
     registry_version: opt nat64;
 };
