@@ -133,7 +133,7 @@ impl From<rewards_calculation::rewards_calculator_results::NodeProviderRewards>
 {
     fn from(rewards: rewards_calculation::rewards_calculator_results::NodeProviderRewards) -> Self {
         Self {
-            rewards_total_xdr_permyriad: Some(rewards.rewards_total_xdr_permyriad.into()),
+            rewards_total_xdr_permyriad: Some(rewards.rewards_total_xdr_permyriad),
             base_rewards: rewards.base_rewards.into_iter().map(Into::into).collect(),
             base_rewards_type3: rewards
                 .base_rewards_type3
