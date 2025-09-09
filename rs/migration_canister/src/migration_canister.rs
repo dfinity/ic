@@ -7,7 +7,10 @@ use ic_cdk::{api::msg_caller, init, post_upgrade, println, update};
 use serde::Deserialize;
 
 use crate::{
-    canister_state::{migrations_disabled, requests::insert_request},
+    canister_state::{
+        migrations_disabled,
+        requests::{insert_request, list_by},
+    },
     rate_limited, start_timers,
     validation::validate_request,
     RequestState, ValidationError,
@@ -64,6 +67,7 @@ enum MigrationStatus {
 /// The same (source, target) pair might be present in the `HISTORY`, and valid to process again, so
 fn migration_status(_args: MigrateCanisterArgs) -> Vec<MigrationStatus> {
     // TODO
+    println!("{:?}", list_by(|_| true));
     vec![MigrationStatus::Unknown]
 }
 

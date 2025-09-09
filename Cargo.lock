@@ -10723,7 +10723,6 @@ dependencies = [
  "pocket-ic",
  "registry-canister",
  "serde",
- "serde_bytes",
  "serde_cbor",
  "tempfile",
  "tokio",
