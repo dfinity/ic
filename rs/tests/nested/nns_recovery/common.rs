@@ -409,6 +409,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         .block_on(join_all(
             get_host_vm_names(cfg.subnet_size)
                 .iter()
+                .cloned()
                 .filter(|vm_name| {
                     env.get_nested_vm(vm_name)
                         .unwrap()
@@ -419,15 +420,24 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                 })
                 .collect::<Vec<_>>()
                 .choose_multiple(&mut rand::thread_rng(), 2 * f)
+                .cloned()
                 .map(|vm_name| {
-                    simulate_node_provider_action(
-                        &logger,
-                        &env,
-                        vm_name,
-                        RECOVERY_GUESTOS_IMG_VERSION,
-                        &recovery_img_hash[..6],
-                        &artifacts_hash,
-                    )
+                    let logger = logger.clone();
+                    let env = env.clone();
+                    let recovery_img_hash = recovery_img_hash.clone();
+                    let artifacts_hash = artifacts_hash.clone();
+
+                    tokio::task::spawn(async move {
+                        simulate_node_provider_action(
+                            &logger,
+                            &env,
+                            &vm_name,
+                            RECOVERY_GUESTOS_IMG_VERSION,
+                            &recovery_img_hash[..6],
+                            &artifacts_hash,
+                        )
+                        .await
+                    })
                 }),
         ));
 
