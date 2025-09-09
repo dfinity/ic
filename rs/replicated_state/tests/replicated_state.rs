@@ -566,7 +566,7 @@ fn memory_taken_by_canister_history() {
 
     // Push two canister changes into canister history.
     let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
-    canister_state.system_state.add_canister_change(
+    canister_state.system_state.metadata.add_canister_change(
         Time::from_nanos_since_unix_epoch(0),
         CanisterChangeOrigin::from_user(user_test_id(42).get()),
         CanisterChangeDetails::canister_creation(
@@ -574,7 +574,7 @@ fn memory_taken_by_canister_history() {
             None,
         ),
     );
-    canister_state.system_state.add_canister_change(
+    canister_state.system_state.metadata.add_canister_change(
         Time::from_nanos_since_unix_epoch(16),
         CanisterChangeOrigin::from_user(user_test_id(123).get()),
         CanisterChangeDetails::controllers_change(vec![
@@ -587,13 +587,14 @@ fn memory_taken_by_canister_history() {
 
     // Test fixed memory allocation.
     let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
-    canister_state.system_state.memory_allocation = MemoryAllocation::Reserved(NumBytes::from(888));
+    canister_state.system_state.metadata.memory_allocation =
+        MemoryAllocation::Reserved(NumBytes::from(888));
     assert_execution_memory_taken(888 + canister_history_memory, &fixture);
     assert_canister_history_memory_taken(canister_history_memory, &fixture);
 
     // Reset canister memory allocation.
     let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
-    canister_state.system_state.memory_allocation = MemoryAllocation::BestEffort;
+    canister_state.system_state.metadata.memory_allocation = MemoryAllocation::BestEffort;
 
     // Test a system subnet.
     fixture.state.metadata.own_subnet_type = SubnetType::System;

@@ -2790,7 +2790,7 @@ fn can_state_sync_from_cache() {
         // Modify the first canister to ensure that its chunks are not identical to the
         // other canister
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
-        canister_state.system_state.add_canister_change(
+        canister_state.system_state.metadata.add_canister_change(
             Time::from_nanos_since_unix_epoch(42),
             CanisterChangeOrigin::from_user(user_test_id(42).get()),
             CanisterChangeDetails::canister_creation(vec![user_test_id(42).get()], None),
@@ -5832,6 +5832,7 @@ fn can_reset_wasm_chunk_store() {
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
         canister_state
             .system_state
+            .metadata
             .wasm_chunk_store
             .page_map_mut()
             .update(&[
@@ -5860,9 +5861,10 @@ fn can_reset_wasm_chunk_store() {
 
         // Wipe data and write different data.
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
-        canister_state.system_state.wasm_chunk_store = WasmChunkStore::new_for_testing();
+        canister_state.system_state.metadata.wasm_chunk_store = WasmChunkStore::new_for_testing();
         canister_state
             .system_state
+            .metadata
             .wasm_chunk_store
             .page_map_mut()
             .update(&[
@@ -5874,6 +5876,7 @@ fn can_reset_wasm_chunk_store() {
         assert_eq!(
             canister_state
                 .system_state
+                .metadata
                 .wasm_chunk_store
                 .page_map()
                 .get_page(PageIndex::new(1)),
@@ -5882,6 +5885,7 @@ fn can_reset_wasm_chunk_store() {
         assert_eq!(
             canister_state
                 .system_state
+                .metadata
                 .wasm_chunk_store
                 .page_map()
                 .get_page(PageIndex::new(300)),
@@ -5907,6 +5911,7 @@ fn can_reset_wasm_chunk_store() {
         assert_eq!(
             canister_state
                 .system_state
+                .metadata
                 .wasm_chunk_store
                 .page_map()
                 .get_page(PageIndex::new(1)),
@@ -5915,6 +5920,7 @@ fn can_reset_wasm_chunk_store() {
         assert_eq!(
             canister_state
                 .system_state
+                .metadata
                 .wasm_chunk_store
                 .page_map()
                 .get_page(PageIndex::new(300)),
@@ -5922,7 +5928,7 @@ fn can_reset_wasm_chunk_store() {
         );
 
         // Wipe data completely.
-        canister_state.system_state.wasm_chunk_store = WasmChunkStore::new_for_testing();
+        canister_state.system_state.metadata.wasm_chunk_store = WasmChunkStore::new_for_testing();
 
         state_manager.commit_and_certify(state, height(3), CertificationScope::Full, None);
         state_manager.flush_tip_channel();
@@ -6431,7 +6437,7 @@ fn restore_snapshot(snapshot_id: SnapshotId, canister_id: CanisterId, state: &mu
     let snapshot = state.canister_snapshots.get(snapshot_id).unwrap().clone();
     let mut canister = state.take_canister_state(&canister_id).unwrap();
 
-    canister.system_state.wasm_chunk_store = snapshot.chunk_store().clone();
+    canister.system_state.metadata.wasm_chunk_store = snapshot.chunk_store().clone();
     canister.execution_state = Some(ExecutionState::new(
         Default::default(),
         WasmBinary::new(snapshot.execution_snapshot().wasm_binary.clone()),
@@ -6719,6 +6725,7 @@ fn can_create_and_restore_snapshot() {
                 .update(&[(PageIndex::new(0), &[2u8; PAGE_SIZE])]);
             canister_state
                 .system_state
+                .metadata
                 .wasm_chunk_store
                 .page_map_mut()
                 .update(&[(PageIndex::new(0), &[3u8; PAGE_SIZE])]);
@@ -6749,6 +6756,7 @@ fn can_create_and_restore_snapshot() {
                 .update(&[(PageIndex::new(0), &[5u8; PAGE_SIZE])]);
             canister_state
                 .system_state
+                .metadata
                 .wasm_chunk_store
                 .page_map_mut()
                 .update(&[(PageIndex::new(0), &[6u8; PAGE_SIZE])]);
@@ -6779,6 +6787,7 @@ fn can_create_and_restore_snapshot() {
                 assert_eq!(
                     canister_state
                         .system_state
+                        .metadata
                         .wasm_chunk_store
                         .page_map()
                         .get_page(PageIndex::new(0)),
@@ -7134,7 +7143,7 @@ fn migrate_canister(state: &mut ReplicatedState, old_id: CanisterId, new_id: Can
     // Take canister out.
     let mut canister = state.take_canister_state(&old_id).unwrap();
 
-    canister.system_state.canister_id = new_id;
+    canister.system_state.metadata.canister_id = new_id;
     state
         .metadata
         .unflushed_checkpoint_ops
@@ -7166,6 +7175,7 @@ fn can_rename_canister() {
                 .update(&[(PageIndex::new(0), &[2u8; PAGE_SIZE])]);
             canister_state
                 .system_state
+                .metadata
                 .wasm_chunk_store
                 .page_map_mut()
                 .update(&[(PageIndex::new(0), &[3u8; PAGE_SIZE])]);

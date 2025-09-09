@@ -1454,7 +1454,8 @@ fn canister_with_reserved_balance_is_not_uninstalled_too_early() {
         let canister = state.canister_state_mut(&canister_b).unwrap();
         canister
             .system_state
-            .reserve_cycles(canister.system_state.balance())
+            .metadata
+            .reserve_cycles(canister.system_state.metadata.balance())
             .unwrap();
         env.replace_canister_state(Arc::new(state), canister_b);
     }
@@ -1524,6 +1525,7 @@ fn canister_with_reserved_balance_is_not_frozen_too_early() {
         let canister = state.canister_state_mut(&canister_id).unwrap();
         canister
             .system_state
+            .metadata
             .reserve_cycles(reserved_cycles)
             .unwrap();
         env.replace_canister_state(Arc::new(state), canister_id);
@@ -2713,7 +2715,7 @@ fn initialize_default_wasm_memory_limit_with_low_memory_usage() {
     {
         let mut state = env.get_latest_state().as_ref().clone();
         let canister = state.canister_state_mut(&canister_id).unwrap();
-        canister.system_state.wasm_memory_limit = None;
+        canister.system_state.metadata.wasm_memory_limit = None;
         env.replace_canister_state(Arc::new(state), canister_id);
     }
 
@@ -2763,7 +2765,7 @@ fn initialize_default_wasm_memory_limit_with_high_memory_usage() {
     {
         let mut state = env.get_latest_state().as_ref().clone();
         let canister = state.canister_state_mut(&canister_id).unwrap();
-        canister.system_state.wasm_memory_limit = None;
+        canister.system_state.metadata.wasm_memory_limit = None;
         assert_eq!(
             canister.execution_state.as_ref().unwrap().wasm_memory.size,
             NumWasmPages::new(49152)

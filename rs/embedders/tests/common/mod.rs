@@ -258,6 +258,6 @@ pub fn get_system_state() -> SystemState {
 
 pub fn get_cmc_system_state() -> SystemState {
     let mut system_state = get_system_state();
-    system_state.canister_id = CYCLES_MINTING_CANISTER_ID;
+    system_state.metadata.canister_id = CYCLES_MINTING_CANISTER_ID;
     system_state
 }

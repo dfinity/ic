@@ -434,9 +434,9 @@ impl Hypervisor {
         }
         if let WasmExecutionResult::Finished(_, result, _) = &mut execution_result {
             if let Err(err) = &mut result.wasm_result {
-                let can_view = match &system_state.log_visibility {
+                let can_view = match &system_state.metadata.log_visibility {
                     LogVisibilityV2::Controllers => {
-                        caller.is_some_and(|c| system_state.controllers.contains(&c))
+                        caller.is_some_and(|c| system_state.metadata.controllers.contains(&c))
                     }
                     LogVisibilityV2::Public => true,
                     LogVisibilityV2::AllowedViewers(allowed) => {

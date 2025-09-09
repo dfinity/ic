@@ -1512,7 +1512,10 @@ fn ic0_global_timer_deactivated() {
 
     // The timer is initially inactive.
     assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .global_timer,
         CanisterTimer::Inactive
     );
 
@@ -1520,14 +1523,20 @@ fn ic0_global_timer_deactivated() {
     test.ingress(canister_id, "update", set_timer.clone())
         .unwrap();
     assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
     // Unsetting the timer in update call works and makes the timer inactive.
     test.ingress(canister_id, "update", unset_timer).unwrap();
     assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .global_timer,
         CanisterTimer::Inactive
     );
 
@@ -1535,14 +1544,20 @@ fn ic0_global_timer_deactivated() {
     test.ingress(canister_id, "update", set_timer.clone())
         .unwrap();
     assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
     // Failed upgrade does not unset the timer.
     test.upgrade_canister(canister_id, vec![]).unwrap_err();
     assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
@@ -1550,7 +1565,10 @@ fn ic0_global_timer_deactivated() {
     test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .global_timer,
         CanisterTimer::Inactive
     );
 
@@ -1558,14 +1576,20 @@ fn ic0_global_timer_deactivated() {
     test.ingress(canister_id, "update", set_timer.clone())
         .unwrap();
     assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
     // Uninstalling code unsets the timer.
     test.uninstall_code(canister_id).unwrap();
     assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .global_timer,
         CanisterTimer::Inactive
     );
 
@@ -1573,7 +1597,10 @@ fn ic0_global_timer_deactivated() {
     test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .global_timer,
         CanisterTimer::Inactive
     );
 
@@ -1581,14 +1608,20 @@ fn ic0_global_timer_deactivated() {
     test.ingress(canister_id, "update", set_timer.clone())
         .unwrap();
     assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
     // Failed reinstall does not unset the timer.
     test.reinstall_canister(canister_id, vec![]).unwrap_err();
     assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
@@ -1596,14 +1629,20 @@ fn ic0_global_timer_deactivated() {
     test.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .global_timer,
         CanisterTimer::Inactive
     );
 
     // We set the timer again for the sake of the following tests.
     test.ingress(canister_id, "update", set_timer).unwrap();
     assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
@@ -1611,28 +1650,40 @@ fn ic0_global_timer_deactivated() {
     test.canister_update_allocations_settings(canister_id, None, None)
         .unwrap();
     assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
     test.canister_update_allocations_settings(canister_id, Some(1000), None)
         .unwrap_err();
     assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
     // Stopping the canister does not unset the timer.
     test.stop_canister(canister_id);
     assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
     // Starting the canister does not unset the timer.
     test.start_canister(canister_id).unwrap();
     assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
@@ -1640,14 +1691,20 @@ fn ic0_global_timer_deactivated() {
     test.set_controller(canister_id, canister_id.into())
         .unwrap();
     assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 
     // Failed uninstall does not unset the timer.
     test.uninstall_code(canister_id).unwrap_err();
     assert_eq!(
-        test.canister_state(canister_id).system_state.global_timer,
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .global_timer,
         CanisterTimer::from_nanos_since_unix_epoch(Some(1))
     );
 }
@@ -2664,7 +2721,10 @@ fn ic0_call_cycles_add_deducts_cycles() {
     let transferred_cycles = Cycles::new(10_000_000_000);
     assert_eq!(
         initial_cycles - messaging_fee - transferred_cycles - test.execution_cost(),
-        test.canister_state(canister_id).system_state.balance(),
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance(),
     );
 }
 
@@ -2708,7 +2768,10 @@ fn ic0_call_cycles_add_has_no_effect_without_ic0_call_perform() {
     // Cycles deducted by `ic0.call_cycles_add` are refunded.
     assert_eq!(
         initial_cycles - test.execution_cost(),
-        test.canister_state(canister_id).system_state.balance(),
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance(),
     );
 }
 
@@ -2735,7 +2798,11 @@ const MINT_CYCLES: &str = r#"
 fn ic0_mint_cycles_fails_on_application_subnet() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.canister_from_wat(MINT_CYCLES).unwrap();
-    let initial_cycles = test.canister_state(canister_id).system_state.balance();
+    let initial_cycles = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
     assert!(err
@@ -2745,7 +2812,7 @@ fn ic0_mint_cycles_fails_on_application_subnet() {
     assert_eq!(0, canister_state.system_state.queues().output_queues_len());
     assert_balance_equals(
         initial_cycles,
-        canister_state.system_state.balance(),
+        canister_state.system_state.metadata.balance(),
         BALANCE_EPSILON,
     );
 }
@@ -2756,7 +2823,11 @@ fn ic0_mint_cycles_fails_on_system_subnet_non_cmc() {
         .with_subnet_type(SubnetType::System)
         .build();
     let canister_id = test.canister_from_wat(MINT_CYCLES).unwrap();
-    let initial_cycles = test.canister_state(canister_id).system_state.balance();
+    let initial_cycles = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
     assert!(err
@@ -2766,7 +2837,7 @@ fn ic0_mint_cycles_fails_on_system_subnet_non_cmc() {
     assert_eq!(0, canister_state.system_state.queues().output_queues_len());
     assert_balance_equals(
         initial_cycles,
-        canister_state.system_state.balance(),
+        canister_state.system_state.metadata.balance(),
         BALANCE_EPSILON,
     );
 }
@@ -2781,7 +2852,11 @@ fn ic0_mint_cycles_succeeds_on_cmc() {
     while canister_id != CYCLES_MINTING_CANISTER_ID {
         canister_id = test.canister_from_wat(MINT_CYCLES).unwrap();
     }
-    let initial_cycles = test.canister_state(canister_id).system_state.balance();
+    let initial_cycles = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     let result = test.ingress(canister_id, "test", vec![]).unwrap();
     // ic0_mint() returns the minted amount: hex(10_000_000_000) = 0x2_54_0b_e4_00.
     assert_eq!(WasmResult::Reply(vec![0, 228, 11, 84, 2, 0, 0, 0]), result);
@@ -2789,7 +2864,7 @@ fn ic0_mint_cycles_succeeds_on_cmc() {
     assert_eq!(0, canister_state.system_state.queues().output_queues_len());
     assert_balance_equals(
         initial_cycles + Cycles::new(10_000_000_000),
-        canister_state.system_state.balance(),
+        canister_state.system_state.metadata.balance(),
         BALANCE_EPSILON,
     );
 }
@@ -2797,7 +2872,11 @@ fn ic0_mint_cycles_succeeds_on_cmc() {
 // helper for mint_cycles128 tests
 fn verify_error_and_no_effect(mut test: ExecutionTest) {
     let canister_id = test.universal_canister().unwrap();
-    let initial_cycles = test.canister_state(canister_id).system_state.balance();
+    let initial_cycles = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     let payload = wasm()
         .mint_cycles128(Cycles::from(10_000_000_000_u128))
         .reply_data_append()
@@ -2812,7 +2891,7 @@ fn verify_error_and_no_effect(mut test: ExecutionTest) {
     assert_eq!(0, canister_state.system_state.queues().output_queues_len());
     assert_balance_equals(
         initial_cycles,
-        canister_state.system_state.balance(),
+        canister_state.system_state.metadata.balance(),
         BALANCE_EPSILON,
     );
 }
@@ -2841,7 +2920,11 @@ fn ic0_mint_cycles128_succeeds_on_cmc() {
         canister_id = test.universal_canister().unwrap();
     }
     assert_eq!(canister_id, CYCLES_MINTING_CANISTER_ID);
-    let initial_cycles = test.canister_state(canister_id).system_state.balance();
+    let initial_cycles = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     let amount: u128 = (1u128 << 64) + 2u128;
     let payload = wasm()
         .mint_cycles128(Cycles::from(amount))
@@ -2855,7 +2938,7 @@ fn ic0_mint_cycles128_succeeds_on_cmc() {
     assert_eq!(0, canister_state.system_state.queues().output_queues_len());
     assert_balance_equals(
         initial_cycles + Cycles::new(amount),
-        canister_state.system_state.balance(),
+        canister_state.system_state.metadata.balance(),
         BALANCE_EPSILON,
     );
 }
@@ -4910,7 +4993,7 @@ fn cycles_cannot_be_accepted_after_response() {
 
     // Canister A gets a refund for all transferred cycles.
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
             - test.call_fee("update", &b)
@@ -4919,7 +5002,7 @@ fn cycles_cannot_be_accepted_after_response() {
 
     // Canister B doesn't get the transferred cycles.
     assert_eq!(
-        test.canister_state(b_id).system_state.balance(),
+        test.canister_state(b_id).system_state.metadata.balance(),
         initial_cycles
             - test.canister_execution_cost(b_id)
             - test.call_fee("update", &c)
@@ -4928,7 +5011,7 @@ fn cycles_cannot_be_accepted_after_response() {
 
     // Canister C pays only for execution.
     assert_eq!(
-        test.canister_state(c_id).system_state.balance(),
+        test.canister_state(c_id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(c_id)
     );
 }
@@ -4990,7 +5073,7 @@ fn cycles_are_refunded_if_not_accepted() {
 
     // Canister A gets a refund for all cycles not accepted by B.
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
             - test.call_fee("update", &b)
@@ -5001,7 +5084,7 @@ fn cycles_are_refunded_if_not_accepted() {
     // Canister B gets all cycles it accepted and a refund for all cycles not
     // accepted by C.
     assert_eq!(
-        test.canister_state(b_id).system_state.balance(),
+        test.canister_state(b_id).system_state.metadata.balance(),
         initial_cycles
             - test.canister_execution_cost(b_id)
             - test.call_fee("update", &c)
@@ -5012,7 +5095,7 @@ fn cycles_are_refunded_if_not_accepted() {
 
     // Canister C get all cycles it accepted.
     assert_eq!(
-        test.canister_state(c_id).system_state.balance(),
+        test.canister_state(c_id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(c_id) + b_to_c_accepted
     );
 }
@@ -5063,7 +5146,7 @@ fn cycles_are_refunded_if_callee_traps() {
     // Canister A gets a refund for all transferred cycles because canister B
     // trapped after accepting.
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
             - test.call_fee("update", &b)
@@ -5072,7 +5155,7 @@ fn cycles_are_refunded_if_callee_traps() {
 
     // Canister B doesn't get any transferred cycles.
     assert_eq!(
-        test.canister_state(b_id).system_state.balance(),
+        test.canister_state(b_id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(b_id)
     );
 }
@@ -5113,7 +5196,7 @@ fn cycles_are_refunded_even_if_response_callback_traps() {
     // Calling trap in the reply callback shouldn't affect the amount of
     // refunded cycles. Canister A gets all cycles that are not accepted by B.
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
             - test.call_fee("update", &b)
@@ -5123,7 +5206,7 @@ fn cycles_are_refunded_even_if_response_callback_traps() {
 
     // Canister B gets cycles it accepted.
     assert_eq!(
-        test.canister_state(b_id).system_state.balance(),
+        test.canister_state(b_id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(b_id) + a_to_b_accepted
     );
 }
@@ -5162,7 +5245,7 @@ fn cycles_are_refunded_if_callee_is_a_query() {
 
     // Canister should get a refund for all transferred cycles.
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
             - test.call_fee("query", &b)
@@ -5171,7 +5254,7 @@ fn cycles_are_refunded_if_callee_is_a_query() {
 
     // Canister B doesn't get any transferred cycles.
     assert_eq!(
-        test.canister_state(b_id).system_state.balance(),
+        test.canister_state(b_id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(b_id)
     );
 }
@@ -5215,7 +5298,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_before_execution() {
 
     // Canister A gets a refund for all transferred cycles.
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
             - test.call_fee("update", &b)
@@ -5224,7 +5307,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_before_execution() {
 
     // Canister B doesn't get any cycles.
     assert_eq!(
-        test.canister_state(b_id).system_state.balance(),
+        test.canister_state(b_id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(b_id)
     );
 }
@@ -5308,7 +5391,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
 
     // Canister A gets all cycles that are not accepted by B.
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
             - test.call_fee("update", &b)
@@ -5319,7 +5402,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
     // Canister B gets all cycles it accepted and all cycles that canister C did
     // not accept.
     assert_eq!(
-        test.canister_state(b_id).system_state.balance(),
+        test.canister_state(b_id).system_state.metadata.balance(),
         initial_cycles
             - test.canister_execution_cost(b_id)
             - test.call_fee("update", &c)
@@ -5330,7 +5413,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
 
     // Canister C gets all cycles it accepted.
     assert_eq!(
-        test.canister_state(c_id).system_state.balance(),
+        test.canister_state(c_id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(c_id) + b_to_c_accepted
     );
 }
@@ -5416,7 +5499,7 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
 
     // Canister A gets all cycles that are not accepted by B.
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
             - test.call_fee("update", &b)
@@ -5427,7 +5510,7 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
     // Canister B gets all cycles it accepted and all cycles that canister C did
     // not accept.
     assert_eq!(
-        test.canister_state(b_id).system_state.balance(),
+        test.canister_state(b_id).system_state.metadata.balance(),
         initial_cycles
             - test.canister_execution_cost(b_id)
             - test.call_fee("update", &c)
@@ -5438,7 +5521,7 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
 
     // Canister C gets all cycles it accepted.
     assert_eq!(
-        test.canister_state(c_id).system_state.balance(),
+        test.canister_state(c_id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(c_id) + b_to_c_accepted
     );
 }
@@ -5538,7 +5621,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
 
     // Canister A gets a refund for all cycles that B did not accept.
     assert_eq!(
-        test.canister_state(a_id).system_state.balance(),
+        test.canister_state(a_id).system_state.metadata.balance(),
         initial_cycles
             - test.canister_execution_cost(a_id)
             - test.call_fee("update", &b_0)
@@ -5557,7 +5640,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
 
     // Canister B gets the cycles it accepted from A.
     assert_eq!(
-        test.canister_state(b_id).system_state.balance(),
+        test.canister_state(b_id).system_state.metadata.balance(),
         initial_cycles
             - test.canister_execution_cost(b_id)
             - test.call_fee("update", &b_1)
@@ -5799,8 +5882,11 @@ fn dts_abort_works_in_update_call() {
         NextExecution::ContinueLong
     );
     assert_eq!(
-        test.canister_state(canister_id).system_state.balance(),
-        original_system_state.balance()
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance(),
+        original_system_state.metadata.balance()
             - test.cycles_account_manager().execution_cost(
                 NumInstructions::from(100_000_000),
                 test.subnet_size(),
@@ -5833,8 +5919,11 @@ fn dts_abort_works_in_update_call() {
         NextExecution::ContinueLong
     );
     assert_eq!(
-        test.canister_state(canister_id).system_state.balance(),
-        original_system_state.balance()
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance(),
+        original_system_state.metadata.balance()
             - test.cycles_account_manager().execution_cost(
                 NumInstructions::from(100_000_000),
                 test.subnet_size(),
@@ -5856,8 +5945,11 @@ fn dts_abort_works_in_update_call() {
         NextExecution::None
     );
     assert_eq!(
-        test.canister_state(canister_id).system_state.balance(),
-        original_system_state.balance()
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance(),
+        original_system_state.metadata.balance()
             - (test.canister_execution_cost(canister_id) - original_execution_cost)
     );
     let ingress_status = test.ingress_status(&ingress_id);
@@ -6113,7 +6205,7 @@ fn cycles_correct_if_update_fails() {
     let execution_cost_after = test.canister_execution_cost(b_id);
     assert!(execution_cost_after > execution_cost_before);
     assert_eq!(
-        test.canister_state(b_id).system_state.balance(),
+        test.canister_state(b_id).system_state.metadata.balance(),
         initial_cycles - test.canister_execution_cost(b_id)
     );
 }
@@ -7421,7 +7513,11 @@ fn stable_memory_grow_reserves_cycles() {
         test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
             .unwrap();
 
-        let balance_before = test.canister_state(canister_id).system_state.balance();
+        let balance_before = test
+            .canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance();
         let result = test
             .ingress(
                 canister_id,
@@ -7436,11 +7532,16 @@ fn stable_memory_grow_reserves_cycles() {
             )
             .unwrap();
         assert_eq!(result, WasmResult::Reply(vec![]));
-        let balance_after = test.canister_state(canister_id).system_state.balance();
+        let balance_after = test
+            .canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance();
 
         assert_eq!(
             test.canister_state(canister_id)
                 .system_state
+                .metadata
                 .reserved_balance(),
             Cycles::zero()
         );
@@ -7450,7 +7551,11 @@ fn stable_memory_grow_reserves_cycles() {
         let subnet_memory_usage =
             CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
         let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
-        let balance_before = test.canister_state(canister_id).system_state.balance();
+        let balance_before = test
+            .canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance();
         let result = test
             .ingress(
                 canister_id,
@@ -7465,12 +7570,17 @@ fn stable_memory_grow_reserves_cycles() {
             )
             .unwrap();
         assert_eq!(result, WasmResult::Reply(vec![]));
-        let balance_after = test.canister_state(canister_id).system_state.balance();
+        let balance_after = test
+            .canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance();
         let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
 
         let reserved_cycles = test
             .canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance();
 
         assert_gt!(reserved_cycles, Cycles::zero());
@@ -7527,14 +7637,23 @@ fn wasm_memory_grow_reserves_cycles() {
         test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
             .unwrap();
 
-        let balance_before = test.canister_state(canister_id).system_state.balance();
+        let balance_before = test
+            .canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance();
         let result = test.ingress(canister_id, "update", vec![]).unwrap();
         assert_eq!(result, WasmResult::Reply(vec![]));
-        let balance_after = test.canister_state(canister_id).system_state.balance();
+        let balance_after = test
+            .canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance();
 
         assert_eq!(
             test.canister_state(canister_id)
                 .system_state
+                .metadata
                 .reserved_balance(),
             Cycles::zero()
         );
@@ -7544,15 +7663,24 @@ fn wasm_memory_grow_reserves_cycles() {
         let subnet_memory_usage =
             CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
         let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
-        let balance_before = test.canister_state(canister_id).system_state.balance();
+        let balance_before = test
+            .canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance();
         let result = test.ingress(canister_id, "update", vec![]).unwrap();
         assert_eq!(result, WasmResult::Reply(vec![]));
-        let balance_after = test.canister_state(canister_id).system_state.balance();
+        let balance_after = test
+            .canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance();
         let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
 
         let reserved_cycles = test
             .canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance();
 
         assert_gt!(reserved_cycles, Cycles::zero());
@@ -7607,14 +7735,23 @@ fn set_reserved_cycles_limit_below_existing_fails() {
     test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
         .unwrap();
 
-    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let balance_before = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     let result = test.ingress(canister_id, "update", vec![]).unwrap();
     assert_eq!(result, WasmResult::Reply(vec![]));
-    let balance_after = test.canister_state(canister_id).system_state.balance();
+    let balance_after = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
 
     assert_eq!(
         test.canister_state(canister_id)
             .system_state
+            .metadata
             .reserved_balance(),
         Cycles::zero()
     );
@@ -7624,15 +7761,24 @@ fn set_reserved_cycles_limit_below_existing_fails() {
     let subnet_memory_usage =
         CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
     let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
-    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let balance_before = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     let result = test.ingress(canister_id, "update", vec![]).unwrap();
     assert_eq!(result, WasmResult::Reply(vec![]));
-    let balance_after = test.canister_state(canister_id).system_state.balance();
+    let balance_after = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
 
     let reserved_cycles = test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .reserved_balance();
 
     assert_gt!(reserved_cycles, Cycles::zero());
@@ -7751,15 +7897,24 @@ fn resource_saturation_scaling_works_in_regular_execution() {
     let subnet_memory_usage =
         CAPACITY - test.subnet_available_memory().get_execution_memory() as u64;
     let memory_usage_before = test.canister_state(canister_id).execution_memory_usage();
-    let balance_before = test.canister_state(canister_id).system_state.balance();
+    let balance_before = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     let result = test.ingress(canister_id, "update", vec![]).unwrap();
     assert_eq!(result, WasmResult::Reply(vec![]));
-    let balance_after = test.canister_state(canister_id).system_state.balance();
+    let balance_after = test
+        .canister_state(canister_id)
+        .system_state
+        .metadata
+        .balance();
     let memory_usage_after = test.canister_state(canister_id).execution_memory_usage();
 
     let reserved_cycles = test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .reserved_balance();
 
     assert_gt!(reserved_cycles, Cycles::zero());
@@ -7816,6 +7971,7 @@ fn wasm_memory_grow_respects_reserved_cycles_limit() {
 
     test.canister_state_mut(canister_id)
         .system_state
+        .metadata
         .set_reserved_balance_limit(Cycles::new(1));
 
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
@@ -7853,6 +8009,7 @@ fn stable_memory_grow_respects_reserved_cycles_limit() {
 
     test.canister_state_mut(canister_id)
         .system_state
+        .metadata
         .set_reserved_balance_limit(Cycles::new(1));
 
     let err = test
@@ -7898,6 +8055,7 @@ fn stable_memory_grow_does_not_reserve_cycles_on_out_of_memory() {
     let reserved_cycles_before = test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .reserved_balance();
     test.ingress(
         canister_id,
@@ -7915,6 +8073,7 @@ fn stable_memory_grow_does_not_reserve_cycles_on_out_of_memory() {
     let reserved_cycles_after = test
         .canister_state(canister_id)
         .system_state
+        .metadata
         .reserved_balance();
     assert_eq!(reserved_cycles_before, reserved_cycles_after);
 }
@@ -8638,7 +8797,10 @@ fn ic0_mint_cycles_u64() {
     let result = test.ingress(canister_id, "test", vec![]);
     expect_canister_did_not_reply(result);
     assert_balance_equals(
-        test.canister_state(canister_id).system_state.balance(),
+        test.canister_state(canister_id)
+            .system_state
+            .metadata
+            .balance(),
         Cycles::new(2 * (1 << 64)),
         BALANCE_EPSILON,
     );

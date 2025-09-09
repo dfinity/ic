@@ -707,7 +707,7 @@ fn upgrade_fails_on_pre_upgrade_resume_error() {
     // Change canister controller to make it invalid
     // The default user id is 1, so changing it to 999 make the paused canister invalid
     let canister = test.canister_state_mut(canister_id);
-    canister.system_state.controllers = btreeset! {user_test_id(999).get()};
+    canister.system_state.metadata.controllers = btreeset! {user_test_id(999).get()};
     // Execute one more round
     assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
     test.execute_slice(canister_id);
@@ -788,7 +788,7 @@ fn upgrade_fails_on_start_resume_error() {
     // Change canister controller to make it invalid
     // The default user id is 1, so changing it to 999 make the paused canister invalid
     let canister = test.canister_state_mut(canister_id);
-    canister.system_state.controllers = btreeset! {user_test_id(999).get()};
+    canister.system_state.metadata.controllers = btreeset! {user_test_id(999).get()};
     // Execute one more round
     assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
     test.execute_slice(canister_id);
@@ -869,7 +869,7 @@ fn upgrade_fails_on_post_upgrade_resume_error() {
     // Change canister controller to make it invalid
     // The default user id is 1, so changing it to 999 make the paused canister invalid
     let canister = test.canister_state_mut(canister_id);
-    canister.system_state.controllers = btreeset! {user_test_id(999).get()};
+    canister.system_state.metadata.controllers = btreeset! {user_test_id(999).get()};
     // Execute one more round
     assert_eq!(test.ingress_state(&message_id), IngressState::Processing);
     test.execute_slice(canister_id);

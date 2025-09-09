@@ -2211,6 +2211,7 @@ impl ExecutionEnvironment {
                 let cycles = msg.take_cycles();
                 canister_state
                     .system_state
+                    .metadata
                     .add_cycles(cycles, CyclesUseCase::NonConsumed);
                 if cycles.get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
                     info!(
@@ -2258,7 +2259,7 @@ impl ExecutionEnvironment {
         state: &ReplicatedState,
     ) -> Result<Vec<u8>, UserError> {
         let canister = get_canister(canister_id, state)?;
-        let canister_history = canister.system_state.get_canister_history();
+        let canister_history = canister.system_state.metadata.get_canister_history();
         let total_num_changes = canister_history.get_total_num_changes();
         let changes = canister_history
             .get_changes(num_requested_changes.unwrap_or(0) as usize)
@@ -3457,7 +3458,7 @@ impl ExecutionEnvironment {
                 InstallCodeContext::chunked_install(
                     origin,
                     args,
-                    &store_canister.system_state.wasm_chunk_store,
+                    &store_canister.system_state.metadata.wasm_chunk_store,
                 )?
             }
             other => {
@@ -3892,11 +3893,14 @@ impl ExecutionEnvironment {
                     .replace_paused_with_aborted_task(aborted_task);
             }
             let canister_id = canister.canister_id();
-            canister.system_state.apply_ingress_induction_cycles_debit(
-                canister_id,
-                log,
-                &self.metrics.charging_from_balance_error,
-            );
+            canister
+                .system_state
+                .metadata
+                .apply_ingress_induction_cycles_debit(
+                    canister_id,
+                    log,
+                    &self.metrics.charging_from_balance_error,
+                );
         };
     }
 
@@ -4120,7 +4124,7 @@ impl ExecutionEnvironment {
                     }
                 });
             if stopped {
-                canister.system_state.canister_version += 1;
+                canister.system_state.metadata.canister_version += 1;
             }
             for stop_context in stop_contexts.iter() {
                 self.reply_to_stop_context(

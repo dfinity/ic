@@ -221,7 +221,7 @@ impl SystemStateModifications {
             info!(
                 logger,
                 "Canister {} sent {} cycles to canister {}.",
-                system_state.canister_id,
+                system_state.metadata.canister_id,
                 sent_cycles,
                 msg_receiver
             );
@@ -325,7 +325,9 @@ impl SystemStateModifications {
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
         // Verify total cycle change is not positive and update cycles balance.
-        self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
+        self.validate_cycle_change(
+            system_state.metadata.canister_id == CYCLES_MINTING_CANISTER_ID,
+        )?;
         self.apply_balance_changes(system_state);
 
         if let Some(hook_condition_check_result) =
@@ -346,7 +348,7 @@ impl SystemStateModifications {
         // context and update the call context balance.
         if let Some((context_id, call_context_balance_taken)) = self.call_context_balance_taken {
             if call_context_balance_taken != Cycles::zero() {
-                let own_canister_id = system_state.canister_id;
+                let own_canister_id = system_state.metadata.canister_id;
 
                 let call_context = system_state
                     .withdraw_cycles(context_id, call_context_balance_taken)
@@ -391,7 +393,10 @@ impl SystemStateModifications {
             network_topology.subnets.keys().map(|s| s.get()).collect();
         for mut msg in self.requests {
             if msg.receiver == IC_00 {
-                match Self::validate_sender_canister_version(&msg, system_state.canister_version) {
+                match Self::validate_sender_canister_version(
+                    &msg,
+                    system_state.metadata.canister_version,
+                ) {
                     Ok(()) => {
                         // This is a request to ic:00. Update the receiver to be the appropriate
                         // subnet and also update the corresponding callback.
@@ -400,7 +405,7 @@ impl SystemStateModifications {
                             msg.method_name.as_str(),
                             msg.method_payload.as_slice(),
                             own_subnet_id,
-                            system_state.canister_id,
+                            system_state.metadata.canister_id,
                             logger,
                         )
                         .map(CanisterId::unchecked_from_principal)
@@ -433,7 +438,10 @@ impl SystemStateModifications {
                     }
                 }
             } else if subnet_ids.contains(&msg.receiver.get()) {
-                match Self::validate_sender_canister_version(&msg, system_state.canister_version) {
+                match Self::validate_sender_canister_version(
+                    &msg,
+                    system_state.metadata.canister_version,
+                ) {
                     Ok(()) => {
                         if own_subnet_id != nns_subnet_id {
                             // This is a management canister call providing the target subnet ID
@@ -495,20 +503,26 @@ impl SystemStateModifications {
             if certified_data.len() > CERTIFIED_DATA_MAX_LENGTH {
                 return Err(Self::error("Certified data is too large"));
             }
-            system_state.certified_data.clone_from(certified_data);
+            system_state
+                .metadata
+                .certified_data
+                .clone_from(certified_data);
         }
 
         // Update canister global timer
         if let Some(new_global_timer) = self.new_global_timer {
-            system_state.global_timer = new_global_timer;
+            system_state.metadata.global_timer = new_global_timer;
         }
 
         // Append canister log.
-        system_state.canister_log.append(&mut self.canister_log);
+        system_state
+            .metadata
+            .canister_log
+            .append(&mut self.canister_log);
 
         // Bump the canister version after all changes have been applied.
         if self.should_bump_canister_version {
-            system_state.canister_version += 1;
+            system_state.metadata.canister_version += 1;
         }
 
         Ok(request_stats)
@@ -516,7 +530,7 @@ impl SystemStateModifications {
 
     /// Applies the balance change to the given state.
     pub fn apply_balance_changes(&self, state: &mut SystemState) {
-        let initial_balance = state.balance();
+        let initial_balance = state.metadata.balance();
 
         // `self.cycles_balance_change` consists of:
         // - CyclesBalanceChange::added(cycles_accepted_from_the_call_context)
@@ -538,22 +552,22 @@ impl SystemStateModifications {
         // Apply the main cycles balance change without the consumed and reserved cycles.
         match adjusted_balance_change {
             CyclesBalanceChange::Added(added) => {
-                state.add_cycles(added, CyclesUseCase::NonConsumed)
+                state.metadata.add_cycles(added, CyclesUseCase::NonConsumed)
             }
-            CyclesBalanceChange::Removed(removed) => {
-                state.remove_cycles(removed, CyclesUseCase::NonConsumed)
-            }
+            CyclesBalanceChange::Removed(removed) => state
+                .metadata
+                .remove_cycles(removed, CyclesUseCase::NonConsumed),
         }
 
         // Apply the consumed cycles with the use case metrics recording.
         for (use_case, amount) in self.consumed_cycles_by_use_case.iter() {
-            state.remove_cycles(*amount, *use_case);
+            state.metadata.remove_cycles(*amount, *use_case);
         }
 
         // Apply the reserved cycles. This must succeed because the cycle
         // changes were validated. If it doesn't succeed then, it is better to
         // crash here to avoid making the cycle balance incorrect.
-        state.reserve_cycles(self.reserved_cycles).unwrap();
+        state.metadata.reserve_cycles(self.reserved_cycles).unwrap();
 
         // All changes applied above should be equivalent to simply applying
         // `self.cycles_balance_change` to the initial balance.
@@ -561,7 +575,7 @@ impl SystemStateModifications {
             CyclesBalanceChange::Added(added) => initial_balance + added,
             CyclesBalanceChange::Removed(removed) => initial_balance - removed,
         };
-        assert_eq!(state.balance(), expected_balance);
+        assert_eq!(state.metadata.balance(), expected_balance);
     }
 
     fn add_consumed_cycles(&mut self, consumed_cycles: &[(CyclesUseCase, Cycles)]) {
@@ -791,16 +805,16 @@ impl SandboxSafeSystemState {
             .unwrap_or(SMALL_APP_SUBNET_MAX_SIZE);
 
         Self::new_internal(
-            system_state.canister_id,
+            system_state.metadata.canister_id,
             CanisterStatusView::from_canister_status_type(system_state.status()),
-            system_state.freeze_threshold,
-            system_state.memory_allocation,
-            system_state.wasm_memory_threshold,
+            system_state.metadata.freeze_threshold,
+            system_state.metadata.memory_allocation,
+            system_state.metadata.wasm_memory_threshold,
             compute_allocation,
-            system_state.environment_variables.clone().into(),
-            system_state.balance(),
-            system_state.reserved_balance(),
-            system_state.reserved_balance_limit(),
+            system_state.metadata.environment_variables.clone().into(),
+            system_state.metadata.balance(),
+            system_state.metadata.reserved_balance(),
+            system_state.metadata.reserved_balance_limit(),
             call_context_id,
             call_context_balance,
             call_context_deadline,
@@ -815,12 +829,12 @@ impl SandboxSafeSystemState {
             subnet_size,
             cost_schedule,
             dirty_page_overhead,
-            system_state.global_timer,
-            system_state.canister_version,
-            system_state.controllers.clone(),
+            system_state.metadata.global_timer,
+            system_state.metadata.canister_version,
+            system_state.metadata.controllers.clone(),
             request_metadata,
             caller,
-            system_state.canister_log.next_idx(),
+            system_state.metadata.canister_log.next_idx(),
             is_wasm64_execution,
             network_topology.clone(),
         )
@@ -1525,7 +1539,7 @@ mod tests {
             NumSeconds::from(100_000),
         );
 
-        let initial_cycles_balance = system_state.balance();
+        let initial_cycles_balance = system_state.metadata.balance();
 
         let removed = Cycles::new(500_000);
         let consumed = Cycles::new(100_000);
@@ -1536,9 +1550,12 @@ mod tests {
 
         system_state_modifications.apply_balance_changes(&mut system_state);
 
-        assert_eq!(initial_cycles_balance - removed, system_state.balance());
+        assert_eq!(
+            initial_cycles_balance - removed,
+            system_state.metadata.balance()
+        );
 
-        let initial_cycles_balance = system_state.balance();
+        let initial_cycles_balance = system_state.metadata.balance();
 
         let removed = Cycles::new(500_000);
         let consumed = Cycles::new(600_000);
@@ -1549,9 +1566,12 @@ mod tests {
 
         system_state_modifications.apply_balance_changes(&mut system_state);
 
-        assert_eq!(initial_cycles_balance - removed, system_state.balance());
+        assert_eq!(
+            initial_cycles_balance - removed,
+            system_state.metadata.balance()
+        );
 
-        let initial_cycles_balance = system_state.balance();
+        let initial_cycles_balance = system_state.metadata.balance();
 
         let added = Cycles::new(500_000);
         let consumed = Cycles::new(100_000);
@@ -1562,9 +1582,12 @@ mod tests {
 
         system_state_modifications.apply_balance_changes(&mut system_state);
 
-        assert_eq!(initial_cycles_balance + added, system_state.balance());
+        assert_eq!(
+            initial_cycles_balance + added,
+            system_state.metadata.balance()
+        );
 
-        let initial_cycles_balance = system_state.balance();
+        let initial_cycles_balance = system_state.metadata.balance();
 
         let added = Cycles::new(500_000);
         let consumed = Cycles::new(600_000);
@@ -1575,7 +1598,10 @@ mod tests {
 
         system_state_modifications.apply_balance_changes(&mut system_state);
 
-        assert_eq!(initial_cycles_balance + added, system_state.balance());
+        assert_eq!(
+            initial_cycles_balance + added,
+            system_state.metadata.balance()
+        );
     }
 
     fn helper_msg_deadline(call_context_deadline: Option<CoarseTime>) -> CoarseTime {

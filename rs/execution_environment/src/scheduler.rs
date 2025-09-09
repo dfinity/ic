@@ -381,7 +381,11 @@ impl SchedulerImpl {
 
             let may_schedule_heartbeat = canister.exports_heartbeat_method();
             let may_schedule_global_timer = canister.exports_global_timer_method()
-                && canister.system_state.global_timer.has_reached_deadline(now);
+                && canister
+                    .system_state
+                    .metadata
+                    .global_timer
+                    .has_reached_deadline(now);
 
             if !may_schedule_heartbeat && !may_schedule_global_timer {
                 // Canister has no heartbeat and no (schedulable) global timer.
@@ -513,7 +517,11 @@ impl SchedulerImpl {
             if is_first_iteration {
                 for partition in active_canisters_partitioned_by_cores.iter_mut() {
                     if let Some(canister) = partition.first_mut() {
-                        canister.system_state.canister_metrics.scheduled_as_first += 1;
+                        canister
+                            .system_state
+                            .metadata
+                            .canister_metrics
+                            .scheduled_as_first += 1;
                     }
                 }
             }
@@ -863,7 +871,7 @@ impl SchedulerImpl {
     fn observe_canister_metrics(&self, canister: &CanisterState) {
         self.metrics
             .canister_balance
-            .observe(canister.system_state.balance().get() as f64);
+            .observe(canister.system_state.metadata.balance().get() as f64);
         if let Some(es) = &canister.execution_state {
             self.metrics
                 .canister_binary_size
@@ -942,10 +950,13 @@ impl SchedulerImpl {
                         Arc::clone(&self.fd_factory),
                     ));
                     canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
-                    canister.system_state.memory_allocation = MemoryAllocation::BestEffort;
-                    canister.system_state.clear_canister_history();
+                    canister.system_state.metadata.memory_allocation = MemoryAllocation::BestEffort;
+                    canister.system_state.metadata.clear_canister_history();
                     // Burn the remaining balance of the canister.
-                    canister.system_state.burn_remaining_balance_for_uninstall();
+                    canister
+                        .system_state
+                        .metadata
+                        .burn_remaining_balance_for_uninstall();
 
                     info!(
                         self.log,
@@ -1174,13 +1185,13 @@ impl SchedulerImpl {
 
         let default_wasm_memory_limit = self.exec_env.default_wasm_memory_limit();
         for (_id, canister) in state.canister_states.iter_mut() {
-            if canister.system_state.wasm_memory_limit.is_none() {
+            if canister.system_state.metadata.wasm_memory_limit.is_none() {
                 let num_wasm_pages = canister
                     .execution_state
                     .as_ref()
                     .map_or_else(|| NumWasmPages::new(0), |es| es.wasm_memory.size);
                 if let Ok(wasm_memory_usage) = num_bytes_try_from(num_wasm_pages) {
-                    canister.system_state.wasm_memory_limit =
+                    canister.system_state.metadata.wasm_memory_limit =
                         Some(compute_default_wasm_memory_limit(
                             default_wasm_memory_limit,
                             wasm_memory_usage,
@@ -1573,14 +1584,15 @@ impl Scheduler for SchedulerImpl {
                     // TODO(EXC-1722): remove after migrating to v2.
                     self.metrics
                         .canister_log_memory_usage
-                        .observe(canister.system_state.canister_log.used_space() as f64);
+                        .observe(canister.system_state.metadata.canister_log.used_space() as f64);
                     self.metrics
                         .canister_log_memory_usage_v2
-                        .observe(canister.system_state.canister_log.used_space() as f64);
+                        .observe(canister.system_state.metadata.canister_log.used_space() as f64);
                     total_canister_history_memory_usage += canister.canister_history_memory_usage();
                     total_canister_memory_usage += canister.memory_usage();
-                    total_canister_balance += canister.system_state.balance();
-                    total_canister_reserved_balance += canister.system_state.reserved_balance();
+                    total_canister_balance += canister.system_state.metadata.balance();
+                    total_canister_reserved_balance +=
+                        canister.system_state.metadata.reserved_balance();
 
                     // TODO(EXC-1124): Re-enable once the cycle balance check is fixed.
                     // cycles_out_sum += canister.system_state.queues().output_queue_cycles();
@@ -1822,6 +1834,7 @@ fn execute_canisters_on_thread(
             if round_limits.instructions_reached() {
                 canister
                     .system_state
+                    .metadata
                     .canister_metrics
                     .interrupted_during_execution += 1;
                 break;
@@ -1922,7 +1935,7 @@ fn execute_canisters_on_thread(
             is_first_iteration,
             rank,
         );
-        canister.system_state.canister_metrics.executed += 1;
+        canister.system_state.metadata.canister_metrics.executed += 1;
         canisters.push(canister);
         // Skip per-canister overhead for canisters with not enough cycles.
         if total_instructions_used > 0.into() {
@@ -2012,11 +2025,16 @@ fn observe_replicated_state_metrics(
             | Some(&ExecutionTask::OnLowWasmMemory)
             | None => {}
         }
-        consumed_cycles_total += canister.system_state.canister_metrics.consumed_cycles;
+        consumed_cycles_total += canister
+            .system_state
+            .metadata
+            .canister_metrics
+            .consumed_cycles;
         join_consumed_cycles_by_use_case(
             &mut consumed_cycles_total_by_use_case,
             canister
                 .system_state
+                .metadata
                 .canister_metrics
                 .get_consumed_cycles_by_use_cases(),
         );

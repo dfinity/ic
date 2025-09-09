@@ -57,6 +57,7 @@ fn get_canister_history(env: &StateMachine, canister_id: CanisterId) -> Canister
         .canister_state(&canister_id)
         .unwrap()
         .system_state
+        .metadata
         .get_canister_history()
         .clone()
 }
@@ -1254,13 +1255,13 @@ fn check_environment_variables_for_create_canister_history(
     match environment_variables_flag {
         FlagStatus::Enabled => {
             assert_eq!(
-                canister_state.system_state.environment_variables,
+                canister_state.system_state.metadata.environment_variables,
                 EnvironmentVariables::new(env_vars.clone())
             );
         }
         FlagStatus::Disabled => {
             assert_eq!(
-                canister_state.system_state.environment_variables,
+                canister_state.system_state.metadata.environment_variables,
                 EnvironmentVariables::new(BTreeMap::new())
             );
         }
@@ -1357,7 +1358,10 @@ fn canister_history_tracking_env_vars_update_settings() {
     // Verify the environment variables of the canister state.
     let state = env.get_latest_state();
     let canister_state = state.canister_state(&canister_id).unwrap();
-    assert_eq!(canister_state.system_state.environment_variables, env_vars);
+    assert_eq!(
+        canister_state.system_state.metadata.environment_variables,
+        env_vars
+    );
 }
 
 #[test]
@@ -1568,7 +1572,10 @@ fn canister_history_tracking_env_vars_update_with_identical_values() {
     // Also check that the canister's environment variables are as expected.
     let state = env.get_latest_state();
     let canister_state = state.canister_state(&canister_id).unwrap();
-    assert_eq!(canister_state.system_state.environment_variables, env_vars);
+    assert_eq!(
+        canister_state.system_state.metadata.environment_variables,
+        env_vars
+    );
 }
 
 #[test]

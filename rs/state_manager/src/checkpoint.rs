@@ -244,7 +244,7 @@ impl PageMapType {
             }),
             PageMapType::WasmChunkStore(id) => state
                 .canister_state(id)
-                .map(|can| can.system_state.wasm_chunk_store.page_map()),
+                .map(|can| can.system_state.metadata.wasm_chunk_store.page_map()),
             PageMapType::SnapshotWasmMemory(id) => state
                 .canister_snapshots
                 .get(*id)
@@ -272,6 +272,7 @@ fn strip_page_map_deltas(
     for (_id, canister) in state.canister_states.iter_mut() {
         canister
             .system_state
+            .metadata
             .wasm_chunk_store
             .page_map_mut()
             .strip_all_deltas(Arc::clone(&fd_factory));
@@ -354,7 +355,11 @@ pub(crate) fn flush_canister_snapshots_and_page_maps(
     for (id, canister) in tip_state.canister_states.iter_mut() {
         add_to_pagemaps_and_strip(
             PageMapType::WasmChunkStore(id.to_owned()),
-            canister.system_state.wasm_chunk_store.page_map_mut(),
+            canister
+                .system_state
+                .metadata
+                .wasm_chunk_store
+                .page_map_mut(),
         );
         if let Some(execution_state) = canister.execution_state.as_mut() {
             add_to_pagemaps_and_strip(
@@ -521,7 +526,7 @@ impl CheckpointLoader {
 
         for canister_state in results.into_iter() {
             let (canister_state, durations) = canister_state?;
-            canister_states.insert(canister_state.system_state.canister_id(), canister_state);
+            canister_states.insert(canister_state.canister_id(), canister_state);
 
             durations.apply(&self.metrics);
         }

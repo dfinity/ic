@@ -737,10 +737,16 @@ impl<'a> CanisterFork<'a> {
         let canister = self.canister;
         match canister.execution_state.as_ref() {
             Some(execution_state) => match label {
-                CERTIFIED_DATA_LABEL => Some(Blob(&canister.system_state.certified_data[..], None)),
-                CONTROLLER_LABEL => Some(Blob(canister.system_state.controller().as_slice(), None)),
+                CERTIFIED_DATA_LABEL => Some(Blob(
+                    &canister.system_state.metadata.certified_data[..],
+                    None,
+                )),
+                CONTROLLER_LABEL => Some(Blob(
+                    canister.system_state.metadata.controller().as_slice(),
+                    None,
+                )),
                 CONTROLLERS_LABEL => Some(blob(move || {
-                    encode_controllers(&canister.system_state.controllers)
+                    encode_controllers(&canister.system_state.metadata.controllers)
                 })),
                 METADATA_LABEL => Some(canister_metadata_as_tree(execution_state, self.version)),
                 MODULE_HASH_LABEL => Some(blob(move || {
@@ -749,9 +755,12 @@ impl<'a> CanisterFork<'a> {
                 _ => None,
             },
             None => match label {
-                CONTROLLER_LABEL => Some(Blob(canister.system_state.controller().as_slice(), None)),
+                CONTROLLER_LABEL => Some(Blob(
+                    canister.system_state.metadata.controller().as_slice(),
+                    None,
+                )),
                 CONTROLLERS_LABEL => Some(blob(move || {
-                    encode_controllers(&canister.system_state.controllers)
+                    encode_controllers(&canister.system_state.metadata.controllers)
                 })),
                 _ => None,
             },
