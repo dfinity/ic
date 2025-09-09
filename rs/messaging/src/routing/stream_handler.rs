@@ -764,7 +764,7 @@ impl StreamHandlerImpl {
             // Induct messages with a matching sender; and responses from any subnet
             // on a canister's migration path.
             (SenderSubnet::Valid, _)
-            | (SenderSubnet::CanisterMigrating, RequestOrResponse::Response(_)) => {
+            | (SenderSubnet::CanisterMigrated, RequestOrResponse::Response(_)) => {
                 match self.induct_message_impl(
                     msg,
                     msg_type,
@@ -795,7 +795,7 @@ impl StreamHandlerImpl {
             // Reject requests from migrating senders, if they do not originate
             // from the sender's known host subnet. This is to ensure request
             // ordering guarantees.
-            (SenderSubnet::CanisterMigrating, RequestOrResponse::Request(_)) => {
+            (SenderSubnet::CanisterMigrated, RequestOrResponse::Request(_)) => {
                 self.observe_inducted_message_status(msg_type, LABEL_VALUE_SENDER_MIGRATED);
                 stream.push_reject_signal(RejectReason::CanisterMigrating);
                 Cycles::zero()
@@ -1012,7 +1012,7 @@ impl StreamHandlerImpl {
                     trace.contains(&actual_subnet_id) && trace.contains(&expected_subnet_id)
                 }) =>
             {
-                SenderSubnet::CanisterMigrating
+                SenderSubnet::CanisterMigrated
             }
 
             // A reject response addressed to a canister on this subnet A, yet it comes from a subnet B;
@@ -1030,7 +1030,7 @@ impl StreamHandlerImpl {
                 )
             }) =>
             {
-                SenderSubnet::CanisterMigrating
+                SenderSubnet::CanisterMigrated
             }
 
             // The sender is not known to be hosted by the originating subnet now (according to the
@@ -1263,7 +1263,7 @@ impl std::fmt::Display for StreamComponent {
 #[derive(Eq, PartialEq)]
 enum SenderSubnet {
     Valid,
-    CanisterMigrating,
+    CanisterMigrated,
     Mismatch,
 }
 
