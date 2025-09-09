@@ -293,10 +293,10 @@ impl BackupManager {
             if versions_hot_str.is_empty() {
                 break DEFAULT_VERSIONS_HOT;
             }
-            if let Ok(versions_num) = versions_hot_str.parse::<usize>() {
-                if versions_num > 0 {
-                    break versions_num;
-                }
+            if let Ok(versions_num) = versions_hot_str.parse::<usize>()
+                && versions_num > 0
+            {
+                break versions_num;
             }
             println!("Error: invalid number was entered!")
         };

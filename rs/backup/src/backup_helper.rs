@@ -549,12 +549,12 @@ impl BackupHelper {
         let prefix = "Please use the replay tool of version";
         let suffix = "to continue backup recovery from height";
         let min_version_len = 8;
-        if let Some(pos) = stdout.find(prefix) {
-            if pos + prefix.len() + min_version_len + suffix.len() < stdout.len() {
-                let pos2 = pos + prefix.len();
-                if let Some(pos3) = stdout[pos2..].find(suffix) {
-                    return Some(stdout[pos2..(pos2 + pos3)].trim().to_string());
-                }
+        if let Some(pos) = stdout.find(prefix)
+            && pos + prefix.len() + min_version_len + suffix.len() < stdout.len()
+        {
+            let pos2 = pos + prefix.len();
+            if let Some(pos3) = stdout[pos2..].find(suffix) {
+                return Some(stdout[pos2..(pos2 + pos3)].trim().to_string());
             }
         }
         None

@@ -84,10 +84,10 @@ pub(crate) fn find_expected_state_hash_for_subnet_id(
             is_the_right_section = subnet_id == subnet_id_from_str(subnet_id_str)?;
         }
 
-        if let Some(root_hash) = line.strip_prefix("ROOT HASH: ") {
-            if is_the_right_section {
-                return Ok(root_hash.to_string());
-            }
+        if let Some(root_hash) = line.strip_prefix("ROOT HASH: ")
+            && is_the_right_section
+        {
+            return Ok(root_hash.to_string());
         }
     }
 
