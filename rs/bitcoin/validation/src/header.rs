@@ -437,7 +437,7 @@ fn compute_next_difficulty(
 
 #[cfg(test)]
 mod test {
-    use std::{path::PathBuf, str::FromStr};
+    use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
     use bitcoin::{
         block::Version, consensus::deserialize, hashes::hex::FromHex, hashes::Hash, TxMerkleNode,
@@ -451,7 +451,72 @@ mod test {
         MAINNET_HEADER_586656, MAINNET_HEADER_705600, MAINNET_HEADER_705601, MAINNET_HEADER_705602,
         TESTNET_HEADER_2132555, TESTNET_HEADER_2132556,
     };
-    use crate::tests::utils::SimpleHeaderStore;
+
+    #[derive(Clone)]
+    struct StoredHeader {
+        header: BlockHeader,
+        height: BlockHeight,
+    }
+
+    struct SimpleHeaderStore {
+        headers: HashMap<BlockHash, StoredHeader>,
+        height: BlockHeight,
+        tip_hash: BlockHash,
+        initial_hash: BlockHash,
+    }
+
+    impl SimpleHeaderStore {
+        fn new(initial_header: BlockHeader, height: BlockHeight) -> Self {
+            let initial_hash = initial_header.block_hash();
+            let tip_hash = initial_header.block_hash();
+            let mut headers = HashMap::new();
+            headers.insert(
+                initial_hash,
+                StoredHeader {
+                    header: initial_header,
+                    height,
+                },
+            );
+
+            Self {
+                headers,
+                height,
+                tip_hash,
+                initial_hash,
+            }
+        }
+
+        fn add(&mut self, header: BlockHeader) {
+            let prev = self
+                .headers
+                .get(&header.prev_blockhash)
+                .expect("prev hash missing");
+            let stored_header = StoredHeader {
+                header,
+                height: prev.height + 1,
+            };
+
+            self.height = stored_header.height;
+            self.headers.insert(header.block_hash(), stored_header);
+            self.tip_hash = header.block_hash();
+        }
+    }
+
+    impl HeaderStore for SimpleHeaderStore {
+        fn get_header(&self, hash: &BlockHash) -> Option<(BlockHeader, BlockHeight)> {
+            self.headers
+                .get(hash)
+                .map(|stored| (stored.header, stored.height))
+        }
+
+        fn get_initial_hash(&self) -> BlockHash {
+            self.initial_hash
+        }
+
+        fn get_height(&self) -> BlockHeight {
+            self.height
+        }
+    }
 
     fn deserialize_header(encoded_bytes: &str) -> BlockHeader {
         let bytes = Vec::from_hex(encoded_bytes).expect("failed to decoded bytes");

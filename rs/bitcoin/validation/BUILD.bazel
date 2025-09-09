@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -18,20 +18,19 @@ rust_test(
     crate = ":validation",
     data = [
         # Keep sorted.
+        "tests/data/doge/header_0_2499_mainnet_raw.csv",
+        "tests/data/doge/header_0_2499_testnet_raw.csv",
+        "tests/data/doge/header_1_2500_mainnet_parsed.csv",
+        "tests/data/doge/header_1_2500_testnet_parsed.csv",
+        "tests/data/doge/headers_293100_294099_testnet_parsed_with_auxpow.csv",
+        "tests/data/doge/headers_521337_522336_mainnet_parsed_with_auxpow.csv",
         "tests/data/headers.csv",
     ],
     deps = [
         # Keep sorted.
         "@crate_index//:csv",
+        "@crate_index//:hex",
         "@crate_index//:rstest",
     ],
 )
 
-rust_test_suite(
-    name = "validation_integration",
-    srcs = glob(["tests/**/*.rs"]),
-    data = [
-        # Keep sorted.
-        "tests/data/headers.csv",
-    ],
-)

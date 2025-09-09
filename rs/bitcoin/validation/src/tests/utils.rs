@@ -1,14 +1,37 @@
 use crate::header::HeaderValidator;
 use crate::{BlockHeight, HeaderStore};
-use bitcoin::block::Header;
+use bitcoin::block::{Header, Version};
 use bitcoin::consensus::deserialize;
+use bitcoin::dogecoin::auxpow::AuxPow;
 use bitcoin::dogecoin::{
     constants::genesis_block as dogecoin_genesis_block, Header as DogecoinHeader,
     Network as DogecoinNetwork,
 };
 use bitcoin::hashes::hex::FromHex;
-use bitcoin::{BlockHash, CompactTarget};
+use bitcoin::{BlockHash, CompactTarget, TxMerkleNode};
+use csv::{Reader, StringRecord};
 use std::collections::HashMap;
+use std::path::PathBuf;
+use std::str::FromStr;
+
+const TEST_DATA_FOLDER: &str = "tests/data";
+
+pub mod doge_files {
+    pub const MAINNET_HEADERS_0_2499_RAW: &str = "doge/headers_0_2499_mainnet_raw.csv";
+    pub const TESTNET_HEADERS_0_2499_RAW: &str = "doge/headers_0_2499_testnet_raw.csv";
+    pub const MAINNET_HEADERS_1_2500_PARSED: &str = "doge/headers_1_2500_mainnet_parsed.csv";
+    pub const TESTNET_HEADERS_1_2500_PARSED: &str = "doge/headers_1_2500_testnet_parsed.csv";
+    pub const MAINNET_HEADERS_521337_522336_PARSED: &str =
+        "doge/headers_521337_522336_mainnet_parsed_with_auxpow.csv";
+    pub const TESTNET_HEADERS_293100_294099_PARSED: &str =
+        "doge/headers_293100_294099_testnet_parsed_with_auxpow.csv";
+}
+
+pub fn test_data_file(file: &str) -> PathBuf {
+    PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+        .join(TEST_DATA_FOLDER)
+        .join(file)
+}
 
 pub fn deserialize_header(encoded_bytes: &str) -> Header {
     let bytes = Vec::from_hex(encoded_bytes).expect("failed to decoded bytes");
@@ -84,6 +107,81 @@ impl HeaderStore for SimpleHeaderStore {
     fn get_height(&self) -> BlockHeight {
         self.height
     }
+}
+
+/// Creates a Header from a CSV record with fields: version, prev_blockhash, merkle_root, time, bits, nonce
+fn header_from_csv_record(record: &StringRecord) -> Header {
+    Header {
+        version: Version::from_consensus(i32::from_str_radix(record.get(0).unwrap(), 16).unwrap()),
+        prev_blockhash: BlockHash::from_str(record.get(1).unwrap()).unwrap(),
+        merkle_root: TxMerkleNode::from_str(record.get(2).unwrap()).unwrap(),
+        time: u32::from_str_radix(record.get(3).unwrap(), 16).unwrap(),
+        bits: CompactTarget::from_consensus(
+            u32::from_str_radix(record.get(4).unwrap(), 16).unwrap(),
+        ),
+        nonce: u32::from_str_radix(record.get(5).unwrap(), 16).unwrap(),
+    }
+}
+
+/// Creates an AuxPow from a CSV record with fields: coinbase_tx, parent_hash, coinbase_branch, coinbase_index, blockchain_branch, blockchain_index, parent_block_header
+fn auxpow_from_csv_record(record: &StringRecord) -> AuxPow {
+    AuxPow {
+        coinbase_tx: deserialize(Vec::from_hex(record.get(6).unwrap()).unwrap().as_slice())
+            .unwrap(),
+        parent_hash: BlockHash::from_str(record.get(7).unwrap()).unwrap(),
+        coinbase_branch: deserialize(Vec::from_hex(record.get(8).unwrap()).unwrap().as_slice())
+            .unwrap(),
+        coinbase_index: i32::from_le_bytes(
+            hex::decode(record.get(9).unwrap())
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
+        blockchain_branch: deserialize(Vec::from_hex(record.get(10).unwrap()).unwrap().as_slice())
+            .unwrap(),
+        blockchain_index: i32::from_le_bytes(
+            hex::decode(record.get(11).unwrap())
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ),
+        parent_block_header: deserialize_header(record.get(12).unwrap()),
+    }
+}
+
+/// This function reads all headers from the specified CSV file and returns them as a `Vec<Header>`.
+pub fn get_headers(file: &str) -> Vec<Header> {
+    let rdr = Reader::from_path(test_data_file(file));
+    assert!(rdr.is_ok(), "Unable to find {file} file");
+    let mut rdr = rdr.unwrap();
+    let mut headers = vec![];
+    for result in rdr.records() {
+        let record = result.unwrap();
+        let header = header_from_csv_record(&record);
+        headers.push(header);
+    }
+    headers
+}
+
+/// This function reads all auxpow headers from the specified CSV file and returns them as a `Vec<Header>`.
+pub fn get_auxpow_headers(file: &str) -> Vec<DogecoinHeader> {
+    let rdr = Reader::from_path(test_data_file(file));
+    assert!(rdr.is_ok(), "Unable to find {file} file");
+    let mut rdr = rdr.unwrap();
+    let mut headers = vec![];
+    for result in rdr.records() {
+        let record = result.unwrap();
+        let pure_header = header_from_csv_record(&record);
+        let aux_pow = pure_header
+            .has_auxpow_bit()
+            .then(|| auxpow_from_csv_record(&record));
+        let header = DogecoinHeader {
+            pure_header,
+            aux_pow,
+        };
+        headers.push(header);
+    }
+    headers
 }
 
 pub fn dogecoin_genesis_header(network: &DogecoinNetwork, bits: CompactTarget) -> Header {

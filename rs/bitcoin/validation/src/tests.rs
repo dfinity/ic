@@ -1,9 +1,11 @@
 mod doge;
-pub(crate) mod utils;
+mod utils;
 
 use crate::header::AuxPowHeaderValidator;
 use crate::header::{is_timestamp_valid, HeaderValidator};
-use crate::tests::utils::deserialize_auxpow_header;
+use crate::tests::utils::{
+    deserialize_auxpow_header, get_auxpow_headers, get_headers, test_data_file,
+};
 use crate::ValidateHeaderError;
 use crate::{BlockHeight, HeaderStore};
 use bitcoin::block::{Header, Version};
@@ -38,6 +40,50 @@ fn verify_consecutive_headers_auxpow<T: AuxPowHeaderValidator>(
     store.add(*header_1);
     let result = validator.validate_auxpow_header(&store, &header_2);
     assert!(result.is_ok());
+}
+
+fn verify_header_sequence<T: HeaderValidator>(
+    validator: &T,
+    file: &str,
+    start_header: Header,
+    start_height: BlockHeight,
+) {
+    let mut store = SimpleHeaderStore::new(start_header, start_height);
+    let headers = get_headers(file);
+    for (i, header) in headers.iter().enumerate() {
+        let result = validator.validate_header(&store, header);
+        assert!(
+            result.is_ok(),
+            "Failed to validate header on line {} for header {}: {:?}",
+            i,
+            header.block_hash(),
+            result
+        );
+        store.add(*header);
+    }
+}
+
+fn verify_header_sequence_auxpow<T: AuxPowHeaderValidator>(
+    validator: T,
+    file: &str,
+    header_1: Header,
+    height_1: BlockHeight,
+    header_2: Header,
+) {
+    let mut store = SimpleHeaderStore::new(header_1, height_1);
+    store.add(header_2);
+    let headers = get_auxpow_headers(file);
+    for (i, header) in headers.iter().enumerate() {
+        let result = validator.validate_auxpow_header(&store, header);
+        assert!(
+            result.is_ok(),
+            "Failed to validate header on line {} for header {}: {:?}",
+            i,
+            header.block_hash(),
+            result
+        );
+        store.add(header.pure_header);
+    }
 }
 
 fn verify_with_missing_parent<T: HeaderValidator>(
@@ -112,6 +158,47 @@ fn verify_with_excessive_target<T: HeaderValidator>(
         result,
         Err(ValidateHeaderError::TargetDifficultyAboveMax)
     ));
+}
+
+fn verify_difficulty_adjustment<T: HeaderValidator>(
+    validator: &T,
+    headers_path: &str,
+    up_to_height: usize,
+) {
+    use bitcoin::consensus::Decodable;
+    use std::io::BufRead;
+    let file = std::fs::File::open(test_data_file(headers_path)).unwrap();
+
+    let rdr = std::io::BufReader::new(file);
+
+    println!("Loading headers...");
+    let mut headers = vec![];
+    for line in rdr.lines() {
+        let header = line.unwrap();
+        // If this line fails make sure you install git-lfs.
+        let decoded = hex::decode(header.trim()).unwrap();
+        let header = Header::consensus_decode(&mut &decoded[..]).unwrap();
+        headers.push(header);
+    }
+
+    println!("Creating header store...");
+    let mut store = SimpleHeaderStore::new(headers[0], 0);
+    for header in headers[1..].iter() {
+        store.add(*header);
+    }
+
+    println!("Verifying next targets...");
+    for i in 0..up_to_height {
+        // Compute what the target of the next header should be.
+        let expected_next_target =
+            validator.get_next_target(&store, &headers[i], i as u32, headers[i + 1].time);
+
+        // Assert that the expected next target matches the next header's target.
+        assert_eq!(
+            expected_next_target,
+            Target::from_compact(headers[i + 1].bits)
+        );
+    }
 }
 
 // This checks the chain of headers of different lengths
