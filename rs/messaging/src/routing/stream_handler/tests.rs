@@ -291,9 +291,9 @@ fn induct_loopback_stream_reroute_response() {
 
             metrics.assert_inducted_xnet_messages_eq(&[
                 (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SUCCESS, 1),
-                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_MIGRATED, 1),
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_RECEIVER_MIGRATED, 1),
                 (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 2),
-                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_CANISTER_MIGRATED, 1),
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_RECEIVER_MIGRATED, 1),
             ]);
             assert_eq!(3, metrics.fetch_inducted_payload_sizes_stats().count);
             // No critical errors raised.
@@ -1409,7 +1409,7 @@ fn garbage_collect_local_state_with_reject_signals_for_request_from_migrating_ca
             // 1 reject response failed to induct.
             metrics.assert_inducted_xnet_messages_eq(&[(
                 LABEL_VALUE_TYPE_RESPONSE,
-                LABEL_VALUE_CANISTER_MIGRATED,
+                LABEL_VALUE_RECEIVER_MIGRATED,
                 1,
             )]);
 
@@ -2205,7 +2205,7 @@ fn induct_stream_slices_receiver_subnet_mismatch() {
             metrics.assert_inducted_xnet_messages_eq(&[
                 (
                     LABEL_VALUE_TYPE_REQUEST,
-                    LABEL_VALUE_CANISTER_LIKELY_MIGRATED,
+                    LABEL_VALUE_RECEIVER_LIKELY_MIGRATED,
                     2,
                 ),
                 (
@@ -2301,8 +2301,8 @@ fn induct_stream_slices_with_messages_to_migrating_canister() {
             );
 
             metrics.assert_inducted_xnet_messages_eq(&[
-                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_MIGRATED, 1),
-                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_CANISTER_MIGRATED, 1),
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_RECEIVER_MIGRATED, 1),
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_RECEIVER_MIGRATED, 1),
             ]);
             assert_eq!(0, metrics.fetch_inducted_payload_sizes_stats().count);
             // No critical errors raised.
@@ -2384,8 +2384,8 @@ fn induct_stream_slices_with_messages_to_migrated_canister() {
             );
 
             metrics.assert_inducted_xnet_messages_eq(&[
-                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_MIGRATED, 1),
-                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_CANISTER_MIGRATED, 1),
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_RECEIVER_MIGRATED, 1),
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_RECEIVER_MIGRATED, 1),
             ]);
             assert_eq!(0, metrics.fetch_inducted_payload_sizes_stats().count);
             // No critical errors raised.
@@ -2430,10 +2430,11 @@ fn induct_stream_slices_with_messages_from_migrating_canister() {
             );
 
             let mut expected_state = state.clone();
-            // The expected state has the two messages inducted...
-            push_inputs(
+
+            // The expected state has the response @44 inducted...
+            push_input(
                 &mut expected_state,
-                messages_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 43..=44),
+                message_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 44).clone(),
             );
             // ...and a stream with...
             let migration_stream = state.get_stream(&CANISTER_MIGRATION_SUBNET);
@@ -2444,6 +2445,11 @@ fn induct_stream_slices_with_messages_from_migrating_canister() {
                     message_in_stream(migration_stream, 21).clone(),
                     message_in_stream(migration_stream, 22).clone(),
                 ],
+                // ...a reject signal for the request @43...
+                reject_signals: vec![RejectSignal::new(
+                    RejectReason::CanisterMigrating,
+                    43.into(),
+                )],
                 // ...and a `signals_end` incremented by 2.
                 signals_end: 45,
                 ..StreamConfig::default()
@@ -2465,10 +2471,10 @@ fn induct_stream_slices_with_messages_from_migrating_canister() {
             );
 
             metrics.assert_inducted_xnet_messages_eq(&[
-                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SUCCESS, 1),
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SENDER_MIGRATED, 1),
                 (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 1),
             ]);
-            assert_eq!(2, metrics.fetch_inducted_payload_sizes_stats().count);
+            assert_eq!(1, metrics.fetch_inducted_payload_sizes_stats().count);
             // No critical errors raised.
             metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
         },
@@ -2649,15 +2655,10 @@ fn process_stream_slices_with_reject_signals_partial_success() {
             );
 
             let mut expected_state = state.clone();
-            // The expected state has the 3 loopback messages inducted...
+            // The expected state has the 3 loopback messages inducted.
             push_inputs(
                 &mut expected_state,
                 messages_in_stream(state.get_stream(&LOCAL_SUBNET), 21..=23),
-            );
-            // ...and the first request from the incoming slice (the 2nd is dropped).
-            push_input(
-                &mut expected_state,
-                message_in_slice(slices.get(&REMOTE_SUBNET), 153).clone(),
             );
 
             // The expected loopback stream is gc'ed.
@@ -2666,7 +2667,7 @@ fn process_stream_slices_with_reject_signals_partial_success() {
                 signals_end: 24,
                 ..StreamConfig::default()
             });
-            // The expected outgoing stream has some of its constituents gc'ed.
+            // The expected outgoing stream has some of its constituents gc'ed...
             let expected_outgoing_stream = stream_from_config(StreamConfig {
                 begin: 34,
                 messages: vec![message_in_stream(state.get_stream(&REMOTE_SUBNET), 34).clone()],
@@ -2674,6 +2675,8 @@ fn process_stream_slices_with_reject_signals_partial_success() {
                 reject_signals: vec![
                     RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
                     RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+                    // ...and reject signals for the requests @153 and @154.
+                    RejectSignal::new(RejectReason::CanisterMigrating, 153.into()),
                     RejectSignal::new(RejectReason::CanisterMigrating, 154.into()),
                 ],
                 ..StreamConfig::default()
@@ -2694,17 +2697,19 @@ fn process_stream_slices_with_reject_signals_partial_success() {
 
             assert_eq!(expected_state, inducted_state);
             metrics.assert_inducted_xnet_messages_eq(&[
-                // The request from an unknown canister @154 is dropped.
+                // The request from a migrating canister @153...
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SENDER_MIGRATED, 1),
+                // ...and from and unknown canister @154 are rejected.
                 (
                     LABEL_VALUE_TYPE_REQUEST,
                     LABEL_VALUE_SENDER_SUBNET_MISMATCH_MIGRATING,
                     1,
                 ),
-                // Three loopback and one incoming requests successfully inducted.
-                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SUCCESS, 4),
+                // Three loopback requests are successfully inducted.
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SUCCESS, 3),
             ]);
-            // 4 messages inducted.
-            assert_eq!(4, metrics.fetch_inducted_payload_sizes_stats().count);
+            // 3 messages inducted.
+            assert_eq!(3, metrics.fetch_inducted_payload_sizes_stats().count);
             // 3 messages GC-ed from loopback stream, 3 from outgoing stream.
             assert_eq!(
                 Some(6),
@@ -2727,6 +2732,8 @@ fn process_stream_slices_with_reject_signals_partial_success() {
                 metric_vec(&[(&[(&LABEL_REMOTE, &REMOTE_SUBNET.to_string().as_str())], 2)]),
                 metrics.fetch_histogram_vec_count(METRIC_TIME_IN_BACKLOG),
             );
+            // No critical errors raised.
+            metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
         },
     );
 }
@@ -2834,24 +2841,26 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
             );
 
             let mut expected_state = state.clone();
-            // The expected state has the first 5 loopback messages @21..=25 inducted...
+            // The expected state has the first 3 loopback messages @21..=23 inducted...
             push_inputs(
                 &mut expected_state,
-                messages_in_stream(state.get_stream(&LOCAL_SUBNET), 21..=25),
+                messages_in_stream(state.get_stream(&LOCAL_SUBNET), 21..=23),
             );
-            // ...and a reject response for the request @26 and the first incoming message @153.
-            push_inputs(
+            // ..., the response @25...
+            push_input(
                 &mut expected_state,
-                [
-                    &generate_reject_response_for(
-                        RejectReason::CanisterMigrating,
-                        request_in_stream(state.get_stream(&LOCAL_SUBNET), 26),
-                    ),
-                    message_in_slice(slices.get(&REMOTE_SUBNET), 153),
-                ],
+                message_in_stream(state.get_stream(&LOCAL_SUBNET), 25).clone(),
+            );
+            // ...and a reject response for the request @26.
+            push_input(
+                &mut expected_state,
+                generate_reject_response_for(
+                    RejectReason::CanisterMigrating,
+                    request_in_stream(state.get_stream(&LOCAL_SUBNET), 26),
+                ),
             );
 
-            // The expected loopback stream has all initial messages gc'ed.
+            // The expected loopback stream has all initial messages gc'ed...
             let expected_loopback_stream = stream_from_config(StreamConfig {
                 begin: 28,
                 signals_end: 28,
@@ -2859,7 +2868,7 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
             });
 
             // The expected outgoing stream is pruned and has reject signals for the messages
-            // @154..=157.
+            // @153..=157.
             let pruned_outgoing_stream = stream_from_config(StreamConfig {
                 begin: 34,
                 messages: vec![
@@ -2870,6 +2879,7 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
                 reject_signals: vec![
                     RejectSignal::new(RejectReason::CanisterMigrating, 142.into()),
                     RejectSignal::new(RejectReason::CanisterMigrating, 145.into()),
+                    RejectSignal::new(RejectReason::CanisterMigrating, 153.into()),
                     RejectSignal::new(RejectReason::CanisterMigrating, 154.into()),
                     RejectSignal::new(RejectReason::CanisterMigrating, 155.into()),
                     RejectSignal::new(RejectReason::CanisterMigrating, 156.into()),
@@ -2881,6 +2891,11 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
             // The expected stream to `CANISTER_MIGRATION_SUBNET` has...
             let rerouted_stream = stream_from_config(StreamConfig {
                 messages: vec![
+                    // ...the request @24 is rejected and turned into a reject response...
+                    generate_reject_response_for(
+                        RejectReason::CanisterMigrating,
+                        request_in_stream(state.get_stream(&LOCAL_SUBNET), 24),
+                    ),
                     // ...the response @27 rerouted...
                     message_in_stream(state.get_stream(&LOCAL_SUBNET), 27).clone(),
                     // ...and the response @33 rerouted.
@@ -2900,24 +2915,25 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
 
             assert_eq!(expected_state, inducted_state);
 
-            // 2 incoming messages discarded and 3 loopback +1 incoming inducted.
+            // 2 incoming messages discarded and 2 loopback +1 incoming inducted.
             metrics.assert_inducted_xnet_messages_eq(&[
-                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_CANISTER_MIGRATED, 3),
-                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_CANISTER_MIGRATED, 3),
-                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SUCCESS, 5),
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_RECEIVER_MIGRATED, 2),
+                (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_RECEIVER_MIGRATED, 4),
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SENDER_MIGRATED, 3),
+                (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_SUCCESS, 3),
                 (LABEL_VALUE_TYPE_RESPONSE, LABEL_VALUE_SUCCESS, 2),
             ]);
-            // 7 messages inducted, compare above.
-            assert_eq!(7, metrics.fetch_inducted_payload_sizes_stats().count);
+            // 5 messages inducted, compare above.
+            assert_eq!(5, metrics.fetch_inducted_payload_sizes_stats().count);
             // 7 messages GC-ed from loopback stream, 3 from outgoing stream.
             assert_eq!(
                 Some(10),
                 metrics.fetch_int_counter(METRIC_GCED_XNET_MESSAGES),
             );
             // 3 reject signals from outgoing stream (138, 139, 142) were gc-ed;
-            // and 1 reject signal for the rejected request in the loopback stream.
+            // and 2 reject signals for the rejected requests in the loopback stream.
             assert_eq!(
-                Some(4),
+                Some(5),
                 metrics.fetch_int_counter(METRIC_GCED_XNET_REJECT_SIGNALS),
             );
             assert_eq!(
@@ -2934,6 +2950,8 @@ fn process_stream_slices_canister_migration_in_both_subnets_success() {
                 metric_vec(&[(&[(&LABEL_REMOTE, &REMOTE_SUBNET.to_string().as_str())], 5)]),
                 metrics.fetch_histogram_vec_count(METRIC_TIME_IN_BACKLOG),
             );
+            // No critical errors raised.
+            metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
         },
     );
 }
