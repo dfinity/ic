@@ -1,5 +1,5 @@
 {
-  "checksum": "8302df3c8391e72434a266be9750616b83092ea0c3105f2b9bc5f8309144084c",
+  "checksum": "4205d77f306af6cdd08fc713c9bf5f9418d2cd94957dba1378151826506709d5",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21549,6 +21549,10 @@
             {
               "id": "scraper 0.17.1",
               "target": "scraper"
+            },
+            {
+              "id": "scrypt 0.11.0",
+              "target": "scrypt"
             },
             {
               "id": "secp256k1 0.22.2",
@@ -95101,6 +95105,7 @@
     "scoped_threadpool 0.1.9",
     "scopeguard 1.2.0",
     "scraper 0.17.1",
+    "scrypt 0.11.0",
     "secp256k1 0.22.2",
     "semver 1.0.26",
     "serde 1.0.219",
