@@ -56,9 +56,9 @@
 use crate::{
     common::rest::{
         AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet,
-        HttpsConfig, IcpFeatures, InitialTime, InstanceId, MockCanisterHttpResponse,
-        NonmainnetFeatures, RawEffectivePrincipal, RawMessageId, RawTime, SubnetId, SubnetKind,
-        SubnetSpec, Topology,
+        HttpsConfig, IcpFeatures, InitialTime, InstanceHttpGatewayConfig, InstanceId,
+        MockCanisterHttpResponse, NonmainnetFeatures, RawEffectivePrincipal, RawMessageId, RawTime,
+        SubnetId, SubnetKind, SubnetSpec, Topology,
     },
     nonblocking::PocketIc as PocketIcAsync,
 };
@@ -100,7 +100,7 @@ use wslpath::windows_to_wsl;
 pub mod common;
 pub mod nonblocking;
 
-pub const EXPECTED_SERVER_VERSION: &str = "9.0.3";
+pub const EXPECTED_SERVER_VERSION: &str = "10.0.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -154,6 +154,7 @@ impl PocketIcState {
 
 pub struct PocketIcBuilder {
     config: Option<ExtendedSubnetConfigSet>,
+    http_gateway_config: Option<InstanceHttpGatewayConfig>,
     server_binary: Option<PathBuf>,
     server_url: Option<Url>,
     max_request_time_ms: Option<u64>,
@@ -171,6 +172,7 @@ impl PocketIcBuilder {
     pub fn new() -> Self {
         Self {
             config: None,
+            http_gateway_config: None,
             server_binary: None,
             server_url: None,
             max_request_time_ms: Some(DEFAULT_MAX_REQUEST_TIME_MS),
@@ -203,6 +205,7 @@ impl PocketIcBuilder {
             self.bitcoind_addr,
             self.icp_features,
             self.initial_time,
+            self.http_gateway_config,
         )
     }
 
@@ -219,6 +222,7 @@ impl PocketIcBuilder {
             self.bitcoind_addr,
             self.icp_features,
             self.initial_time,
+            self.http_gateway_config,
         )
         .await
     }
@@ -413,13 +417,6 @@ impl PocketIcBuilder {
         self
     }
 
-    /// Enables all ICP features supported by PocketIC and implemented by system canisters
-    /// (deployed to the PocketIC instance automatically when creating a new PocketIC instance).
-    pub fn with_all_icp_features(mut self) -> Self {
-        self.icp_features = IcpFeatures::all_icp_features();
-        self
-    }
-
     /// Enables selected ICP features supported by PocketIC and implemented by system canisters
     /// (deployed to the PocketIC instance automatically when creating a new PocketIC instance).
     pub fn with_icp_features(mut self, icp_features: IcpFeatures) -> Self {
@@ -445,6 +442,11 @@ impl PocketIcBuilder {
             artificial_delay_ms,
         };
         self.initial_time = Some(InitialTime::AutoProgress(config));
+        self
+    }
+
+    pub fn with_http_gateway(mut self, http_gateway_config: InstanceHttpGatewayConfig) -> Self {
+        self.http_gateway_config = Some(http_gateway_config);
         self
     }
 }
@@ -561,6 +563,7 @@ impl PocketIc {
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
         initial_time: Option<InitialTime>,
+        http_gateway_config: Option<InstanceHttpGatewayConfig>,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -585,6 +588,7 @@ impl PocketIc {
                 bitcoind_addr,
                 icp_features,
                 initial_time,
+                http_gateway_config,
             )
             .await
         });

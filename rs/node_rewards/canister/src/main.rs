@@ -1,3 +1,4 @@
+use ic_cdk::api::in_replicated_execution;
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -120,14 +121,18 @@ async fn get_node_providers_rewards(
 
 #[query]
 fn get_node_provider_rewards_calculation(
-    _request: GetNodeProviderRewardsCalculationRequest,
+    request: GetNodeProviderRewardsCalculationRequest,
 ) -> GetNodeProviderRewardsCalculationResponse {
-    // TODO: Add rate limiting and restrictions on reward period before enabling it.
-    // NodeRewardsCanister::get_node_provider_rewards_calculation::<RegistryStoreStableMemoryBorrower>(
-    //     &CANISTER, request,
-    // );
+    if in_replicated_execution() {
+        return Err(
+            "Replicated execution of this method is not allowed. Use a non-replicated query call."
+                .to_string(),
+        );
+    }
 
-    Err("Not yet active.".to_string())
+    NodeRewardsCanister::get_node_provider_rewards_calculation::<RegistryStoreStableMemoryBorrower>(
+        &CANISTER, request,
+    )
 }
 
 #[cfg(test)]

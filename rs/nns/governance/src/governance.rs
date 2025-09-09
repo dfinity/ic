@@ -2368,6 +2368,11 @@ impl Governance {
         // New neurons are not allowed when the heap is too large.
         self.check_heap_can_grow()?;
 
+        let &manage_neuron::Split {
+            amount_e8s: split_amount_e8s,
+            memo,
+        } = split;
+
         let min_stake = self
             .heap_data
             .economics
@@ -2393,14 +2398,14 @@ impl Governance {
             return Err(GovernanceError::new(ErrorType::NotAuthorized));
         }
 
-        if split.amount_e8s < min_stake + transaction_fee_e8s {
+        if split_amount_e8s < min_stake + transaction_fee_e8s {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
                 format!(
                     "Trying to split a neuron with argument {} e8s. This is too little: \
                       at the minimum, one needs the minimum neuron stake, which is {} e8s, \
                       plus the transaction fee, which is {}. Hence the minimum split amount is {}.",
-                    split.amount_e8s,
+                    split_amount_e8s,
                     min_stake,
                     transaction_fee_e8s,
                     min_stake + transaction_fee_e8s
@@ -2408,7 +2413,7 @@ impl Governance {
             ));
         }
 
-        if minted_stake_e8s < min_stake + split.amount_e8s {
+        if minted_stake_e8s < min_stake + split_amount_e8s {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
                 format!(
@@ -2416,7 +2421,7 @@ impl Governance {
                      This is not allowed, because the parent has stake {} e8s. \
                      If the requested amount was subtracted from it, there would be less than \
                      the minimum allowed stake, which is {} e8s. ",
-                    split.amount_e8s, id.id, minted_stake_e8s, min_stake
+                    split_amount_e8s, id.id, minted_stake_e8s, min_stake
                 ),
             ));
         }
@@ -2426,7 +2431,12 @@ impl Governance {
 
         let from_subaccount = parent_neuron.subaccount();
 
-        let to_subaccount = Subaccount(self.randomness.random_byte_array()?);
+        let to_subaccount_bytes = if let Some(memo) = memo {
+            ledger::compute_neuron_split_subaccount_bytes(parent_neuron.controller(), memo)
+        } else {
+            self.randomness.random_byte_array()?
+        };
+        let to_subaccount = Subaccount(to_subaccount_bytes);
 
         // Make sure there isn't already a neuron with the same sub-account.
         if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
@@ -2441,7 +2451,7 @@ impl Governance {
             command: Some(InFlightCommand::Split(*split)),
         };
 
-        let staked_amount = split.amount_e8s - transaction_fee_e8s;
+        let staked_amount = split_amount_e8s - transaction_fee_e8s;
 
         // Make sure the parent neuron is not already undergoing a ledger
         // update.
@@ -2484,12 +2494,12 @@ impl Governance {
         self.neuron_store.with_neuron_mut(id, |parent_neuron| {
             parent_neuron.cached_neuron_stake_e8s = parent_neuron
                 .cached_neuron_stake_e8s
-                .checked_sub(split.amount_e8s)
+                .checked_sub(split_amount_e8s)
                 .expect("Subtracting neuron stake underflows");
         })?;
 
         let now = self.env.now();
-        tla_log_locals! { sn_amount : split.amount_e8s, sn_child_neuron_id: child_nid.id, sn_parent_neuron_id: id.id, sn_child_account_id: tla::account_to_tla(neuron_subaccount(to_subaccount)) };
+        tla_log_locals! { sn_amount : split_amount_e8s, sn_child_neuron_id: child_nid.id, sn_parent_neuron_id: id.id, sn_child_account_id: tla::account_to_tla(neuron_subaccount(to_subaccount)) };
         let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(
@@ -2509,7 +2519,7 @@ impl Governance {
                 .with_neuron_mut(id, |parent_neuron| {
                     parent_neuron.cached_neuron_stake_e8s = parent_neuron
                         .cached_neuron_stake_e8s
-                        .checked_add(split.amount_e8s)
+                        .checked_add(split_amount_e8s)
                         .expect("Neuron stake overflows");
                 })
                 .expect("Expected the parent neuron to exist");
@@ -2544,7 +2554,7 @@ impl Governance {
             transfer_maturity_e8s,
             transfer_staked_maturity_e8s,
         } = calculate_split_neuron_effect(
-            split.amount_e8s,
+            split_amount_e8s,
             minted_stake_e8s,
             parent_maturity_e8s,
             parent_staked_maturity_e8s,

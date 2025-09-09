@@ -1064,27 +1064,29 @@ impl CreateNNSRecoveryTarStep {
     }
 
     fn get_create_commands(&self) -> String {
+        // We use debug formatting because it escapes the paths in case they contain spaces.
         format!(
             r#"
-mkdir -p {output_dir}
-tar --zstd -cvf {output_dir}/{tar_name} -C {work_dir} cup.proto {IC_REGISTRY_LOCAL_STORE}.tar.zst
+mkdir -p {output_dir:?}
+tar --zstd -cvf {tar_file:?} -C {work_dir:?} cup.proto {IC_REGISTRY_LOCAL_STORE}.tar.zst
 
-artifacts_hash="$(sha256sum {output_dir}/{tar_name} | cut -d ' ' -f1)"
-echo "$artifacts_hash" > {output_dir}/{sha_name}
+artifacts_hash="$(sha256sum {tar_file:?} | cut -d ' ' -f1)"
+echo "$artifacts_hash" > {sha_file:?}
             "#,
-            output_dir = self.output_dir.display(),
-            tar_name = self.get_tar_name(),
-            sha_name = self.get_sha_name(),
-            work_dir = self.work_dir.display(),
+            output_dir = self.output_dir,
+            tar_file = self.output_dir.join(self.get_tar_name()),
+            sha_file = self.output_dir.join(self.get_sha_name()),
+            work_dir = self.work_dir,
         )
     }
 
     fn get_next_steps(&self, artifacts_hash: &str) -> String {
+        // We use debug formatting because it escapes the paths in case they contain spaces.
         format!(
             r#"
-Recovery artifacts with checksum {artifacts_hash} were successfully created in {output_dir}.
+Recovery artifacts with checksum {artifacts_hash} were successfully created in {output_dir:?}.
 Now please:
-  - Upload {output_dir}/{tar_name} to:
+  - Upload {tar_file:?} to:
     - https://download.dfinity.systems/recovery/{artifacts_hash}/{tar_name}
     - https://download.dfinity.network/recovery/{artifacts_hash}/{tar_name}
   - Run the following command and commit + push to a branch of dfinity/ic:
@@ -1092,7 +1094,8 @@ Now please:
   - Build a recovery image from that branch.
   - Provide other Node Providers with the commit hash as version and the image hash. Ask them to reboot and follow the recovery instructions.
             "#,
-            output_dir = self.output_dir.display(),
+            output_dir = self.output_dir,
+            tar_file = self.output_dir.join(self.get_tar_name()),
             tar_name = self.get_tar_name(),
         )
     }

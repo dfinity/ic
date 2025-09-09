@@ -2,19 +2,19 @@
   "guestos": {
     "subnets": {
       "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe": {
-        "version": "1db8f933fdadc81a90e7db2389b081e21263a9b6",
-        "update_img_hash": "267364ce03a95444a5c9e5c5193a9244fb51025536c2fb9d4ff434a247531a2b"
+        "version": "84a268e93a909a6827d76ad794411b161c839a12",
+        "update_img_hash": "10c832dbabaac8cdfa4a7613ee6bfe450e14e3aa6b123a0f807f3a461b3ab41b"
       },
       "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe": {
-        "version": "f7b2fdb7deb1758622f9c8e282d09ab8813aac62",
-        "update_img_hash_dev": "9ed60bcfae0105d2c18b6c30a29eac345dd9df62c7d2b48433158ef5bc51d82f"
+        "version": "9152ba15ab6cc3c12eb407e13f8ee483a1d5723c",
+        "update_img_hash_dev": "2338d54b205940f0b3b94535087c1efa70e908f82cbbb4c592432c46d20a6a0d"
       }
     }
   },
   "hostos": {
     "latest_release": {
-      "version": "1db8f933fdadc81a90e7db2389b081e21263a9b6",
-      "update_img_hash_dev": "132f28a30bb97775734e64b09f6a0d04dca41b713229b95bd527d8ea90b2bed5"
+      "version": "9152ba15ab6cc3c12eb407e13f8ee483a1d5723c",
+      "update_img_hash_dev": "fd947411689dcdd0765e8e9737917615054a10cc186d65a3ff1ad8145771c389"
     }
   }
 }

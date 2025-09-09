@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
+ic-heap-bytes = { path = "../../../packages/ic-heap-bytes" }
 ic-sys = { path = "../../sys" }
 ic-types = { path = "../types" }
 ic-utils = { path = "../../utils" }

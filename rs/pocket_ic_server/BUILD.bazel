@@ -44,6 +44,7 @@ LIB_DEPENDENCIES = [
     "//rs/registry/proto_data_provider",
     "//rs/registry/routing_table",
     "//rs/registry/subnet_type",
+    "//rs/registry/transport",
     "//rs/replicated_state",
     "//rs/state_machine_tests",
     "//rs/state_manager",
@@ -148,9 +149,55 @@ MACRO_DEPENDENCIES = [
 
 ALIASES = {}
 
-MAINNET_CANISTER_DATA = [
-    "@internet_identity_dev_at_mainnet_commit//file",
+EXTERNAL_CANISTER_DATA = [
     "@mainnet_cycles_ledger_canister//file",
+    "@internet_identity_dev_at_mainnet_commit//file",
+    "@sns_aggregator//file",
+    "@nns_dapp_canister//file",
+]
+
+EXTERNAL_CANISTER_ENV = {
+    "CYCLES_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_cycles_ledger_canister//file)",
+    "INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH": "$(location @internet_identity_dev_at_mainnet_commit//file)",
+    "SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH": "$(location @sns_aggregator//file)",
+    "NNS_DAPP_TEST_CANISTER_WASM_PATH": "$(location @nns_dapp_canister//file)",
+}
+
+HEAD_NNS_CANISTER_DATA = [
+    "//rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256",
+    "//rs/ledger_suite/icrc1/archive:archive_canister",
+    "//rs/ledger_suite/icrc1/index-ng:index_ng_canister",
+    "//rs/ledger_suite/icrc1/ledger:ledger_canister",
+    "//rs/ledger_suite/icp/index:ic-icp-index-canister",
+    "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
+    "//rs/nns/cmc:cycles-minting-canister",
+    "//rs/registry/canister:registry-canister",
+    "//rs/nns/handlers/root/impl:root-canister",
+    "//rs/nns/sns-wasm:sns-wasm-canister",
+    "//rs/sns/governance:sns-governance-canister-test",
+    "//rs/sns/root:sns-root-canister",
+    "//rs/sns/swap:sns-swap-canister",
+    "//rs/nns/governance:governance-canister-test",
+]
+
+HEAD_NNS_CANISTER_ENV = {
+    "REGISTRY_CANISTER_WASM_PATH": "$(location //rs/registry/canister:registry-canister)",
+    "CYCLES_MINTING_CANISTER_WASM_PATH": "$(location //rs/nns/cmc:cycles-minting-canister)",
+    "ICP_LEDGER_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
+    "ICP_INDEX_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icp/index:ic-icp-index-canister)",
+    "CYCLES_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icrc1/index-ng:index_ng_canister_u256)",
+    "GOVERNANCE_TEST_CANISTER_WASM_PATH": "$(location //rs/nns/governance:governance-canister-test)",
+    "ROOT_CANISTER_WASM_PATH": "$(location //rs/nns/handlers/root/impl:root-canister)",
+    "SNS_WASM_CANISTER_WASM_PATH": "$(location //rs/nns/sns-wasm:sns-wasm-canister)",
+    "SNS_ROOT_CANISTER_WASM_PATH": "$(location //rs/sns/root:sns-root-canister)",
+    "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(location //rs/sns/governance:sns-governance-canister-test)",
+    "SNS_SWAP_CANISTER_WASM_PATH": "$(location //rs/sns/swap:sns-swap-canister)",
+    "SNS_LEDGER_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icrc1/ledger:ledger_canister)",
+    "SNS_LEDGER_ARCHIVE_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icrc1/archive:archive_canister)",
+    "SNS_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icrc1/index-ng:index_ng_canister)",
+}
+
+MAINNET_NNS_CANISTER_DATA = [
     "@mainnet_cycles_ledger_index//file",
     "@mainnet_ic-icrc1-archive//file",
     "@mainnet_ic-icrc1-index-ng//file",
@@ -165,15 +212,13 @@ MAINNET_CANISTER_DATA = [
     "@mainnet_sns-root-canister//file",
     "@mainnet_sns-swap-canister//file",
     "@nns_governance_canister_test_at_mainnet_commit//file",
-    "@sns_aggregator_test_at_mainnet_commit//file",
 ]
 
-MAINNET_CANISTER_ENV = {
+MAINNET_NNS_CANISTER_ENV = {
     "REGISTRY_CANISTER_WASM_PATH": "$(location @mainnet_nns_registry_canister//file)",
     "CYCLES_MINTING_CANISTER_WASM_PATH": "$(location @mainnet_nns_cycles-minting-canister//file)",
     "ICP_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_icp_ledger_canister//file)",
     "ICP_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_icp_index_canister//file)",
-    "CYCLES_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_cycles_ledger_canister//file)",
     "CYCLES_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_cycles_ledger_index//file)",
     "GOVERNANCE_TEST_CANISTER_WASM_PATH": "$(location @nns_governance_canister_test_at_mainnet_commit//file)",
     "ROOT_CANISTER_WASM_PATH": "$(location @mainnet_nns_root-canister//file)",
@@ -184,52 +229,68 @@ MAINNET_CANISTER_ENV = {
     "SNS_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-ledger//file)",
     "SNS_LEDGER_ARCHIVE_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-archive//file)",
     "SNS_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-index-ng//file)",
-    "SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH": "$(location @sns_aggregator_test_at_mainnet_commit//file)",
-    "INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH": "$(location @internet_identity_dev_at_mainnet_commit//file)",
 }
 
-cargo_build_script(
-    name = "build_script",
-    srcs = ["build.rs"],
-    aliases = ALIASES,
-    build_script_env = MAINNET_CANISTER_ENV,
-    data = MAINNET_CANISTER_DATA + [
-        "templates/dashboard.html",
-    ],
-    deps = BUILD_DEPENDENCIES,
-)
+[
+    cargo_build_script(
+        name = "build_script" + name_suffix,
+        srcs = ["build.rs"],
+        aliases = ALIASES,
+        build_script_env = EXTERNAL_CANISTER_ENV | nns_canister_env,
+        data = EXTERNAL_CANISTER_DATA + nns_canister_data + [
+            "templates/dashboard.html",
+        ],
+        deps = BUILD_DEPENDENCIES,
+    )
+    for (name_suffix, nns_canister_data, nns_canister_env) in [
+        ("_head_nns", HEAD_NNS_CANISTER_DATA, HEAD_NNS_CANISTER_ENV),
+        ("", MAINNET_NNS_CANISTER_DATA, MAINNET_NNS_CANISTER_ENV),
+    ]
+]
 
-rust_binary(
-    name = "pocket-ic-server",
-    testonly = True,
-    srcs = ["src/main.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    # TODO: restrict the visibility
-    visibility = ["//visibility:public"],
-    deps = LIB_DEPENDENCIES + [
-        ":pocket-ic-server-lib",
-        "//rs/canister_sandbox:build_script",
-    ],
-)
+[
+    rust_library(
+        name = "pocket-ic-server-lib" + name_suffix,
+        testonly = True,
+        srcs = [
+            "src/beta_features.rs",
+            "src/external_canister_types.rs",
+            "src/lib.rs",
+            "src/pocket_ic.rs",
+        ] + glob([
+            "src/state_api/**/*.rs",
+        ]),
+        compile_data = EXTERNAL_CANISTER_DATA + nns_canister_data,
+        crate_name = "pocket_ic_server",
+        proc_macro_deps = MACRO_DEPENDENCIES,
+        rustc_env = EXTERNAL_CANISTER_ENV | nns_canister_env,
+        version = "10.0.0",
+        deps = LIB_DEPENDENCIES + [":build_script"],
+    )
+    for (name_suffix, nns_canister_data, nns_canister_env) in [
+        ("-head-nns", HEAD_NNS_CANISTER_DATA, HEAD_NNS_CANISTER_ENV),
+        ("", MAINNET_NNS_CANISTER_DATA, MAINNET_NNS_CANISTER_ENV),
+    ]
+]
 
-rust_library(
-    name = "pocket-ic-server-lib",
-    testonly = True,
-    srcs = [
-        "src/beta_features.rs",
-        "src/external_canister_types.rs",
-        "src/lib.rs",
-        "src/pocket_ic.rs",
-    ] + glob([
-        "src/state_api/**/*.rs",
-    ]),
-    compile_data = MAINNET_CANISTER_DATA,
-    crate_name = "pocket_ic_server",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    rustc_env = MAINNET_CANISTER_ENV,
-    version = "9.0.3",
-    deps = LIB_DEPENDENCIES + [":build_script"],
-)
+[
+    rust_binary(
+        name = "pocket-ic-server" + name_suffix,
+        testonly = True,
+        srcs = ["src/main.rs"],
+        proc_macro_deps = MACRO_DEPENDENCIES,
+        # TODO: restrict the visibility
+        visibility = ["//visibility:public"],
+        deps = LIB_DEPENDENCIES + [
+            ":pocket-ic-server-lib" + name_suffix,
+            "//rs/canister_sandbox:build_script",
+        ],
+    )
+    for name_suffix in [
+        "-head-nns",
+        "",
+    ]
+]
 
 rust_ic_test(
     name = "pocket-ic-server-lib-test",
@@ -242,8 +303,8 @@ rust_test(
     name = "external_types_tests",
     size = "small",
     srcs = ["tests/external_types_tests.rs"],
-    data = MAINNET_CANISTER_DATA,
-    rustc_env = MAINNET_CANISTER_ENV,
+    data = EXTERNAL_CANISTER_DATA + MAINNET_NNS_CANISTER_DATA,
+    rustc_env = EXTERNAL_CANISTER_ENV | MAINNET_NNS_CANISTER_ENV,
     # this test is manual to not block automatic PR merge
     # bumping mainnet canister versions
     # from which the external types are derived

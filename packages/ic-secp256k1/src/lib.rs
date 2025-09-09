@@ -17,7 +17,7 @@ use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use std::sync::LazyLock;
 use zeroize::ZeroizeOnDrop;
 
-pub use candid::Principal as CanisterId;
+pub use ic_principal::Principal as CanisterId;
 
 /// An error indicating that decoding a key failed
 #[derive(Clone, Debug)]
