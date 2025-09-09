@@ -148,7 +148,7 @@ jobs:
     name: Bazel Test All
     needs: [ config ]
     <<: *dind-large-setup
-    timeout-minutes: 120
+    timeout-minutes: 150
     env:
       # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
       OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}

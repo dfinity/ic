@@ -155,12 +155,13 @@ use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
 use canister_test::{RemoteTestRuntime, Runtime};
 use ic_agent::{export::Principal, Agent, AgentError};
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client::{Agent as InternalAgent, Sender};
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{
-    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, GOVERNANCE_CANISTER_ID,
+    LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
 };
 use ic_nns_governance_api::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
@@ -219,6 +220,8 @@ const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
 // It usually takes below 60 secs to install nns canisters.
 const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(160);
+const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
+const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 // Be mindful when modifying this constant, as the event can be consumed by other parties.
 const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
@@ -718,6 +721,40 @@ impl TopologySnapshot {
     }
 }
 
+/// Panics if not found.
+pub fn find_subnet_that_hosts_canister_id(
+    topology_snapshot: &TopologySnapshot,
+    canister_id: CanisterId,
+) -> SubnetSnapshot {
+    // Scan for subnet
+    let mut subnets = topology_snapshot
+        .subnets()
+        .filter(|subnet| {
+            subnet
+                .subnet_canister_ranges()
+                .into_iter()
+                .any(|canister_id_range| canister_id_range.contains(&canister_id))
+        })
+        .collect::<Vec<_>>();
+
+    // Only one subnet.
+    assert_eq!(
+        subnets.len(),
+        1,
+        "{:#?}\n\n{:#?}",
+        subnets
+            .into_iter()
+            .map(|subnet| subnet.subnet_id)
+            .collect::<Vec<_>>(),
+        topology_snapshot
+            .subnets()
+            .map(|subnet| (subnet.subnet_id, subnet.subnet_canister_ranges()))
+            .collect::<Vec<_>>(),
+    );
+
+    subnets.pop().unwrap()
+}
+
 #[derive(Clone)]
 pub struct SubnetSnapshot {
     pub subnet_id: SubnetId,
@@ -749,6 +786,20 @@ impl SubnetSnapshot {
                 &format!("subnet_record(subnet_id={})", self.subnet_id),
             )
     }
+}
+
+pub fn new_subnet_runtime(subnet: &SubnetSnapshot) -> Runtime {
+    let node = subnet.nodes().next().unwrap();
+
+    let agent = InternalAgent::new(
+        node.get_public_url(),
+        Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
+    );
+
+    Runtime::Remote(RemoteTestRuntime {
+        agent,
+        effective_canister_id: node.effective_canister_id(),
+    })
 }
 
 #[derive(Clone)]
@@ -1287,14 +1338,10 @@ pub fn get_dependency_path<P: AsRef<Path>>(p: P) -> PathBuf {
 }
 
 /// Return the (actual) path of the (runfiles-relative) artifact in environment variable `v`.
-fn get_dependency_path_from_env(v: &str) -> PathBuf {
-    let runfiles =
-        std::env::var("RUNFILES").expect("Expected environment variable RUNFILES to be defined!");
-
+pub fn get_dependency_path_from_env(v: &str) -> PathBuf {
     let path_from_env =
         std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {} not set", v));
-
-    Path::new(&runfiles).join(path_from_env)
+    get_dependency_path(path_from_env)
 }
 
 pub fn read_dependency_to_string<P: AsRef<Path>>(p: P) -> Result<String> {
@@ -1701,7 +1748,7 @@ impl HasPublicApiUrl for IcNodeSnapshot {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct NnsCustomizations {
     /// Summarizes the custom parameters that a newly installed NNS should have.
     pub ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
@@ -1709,9 +1756,20 @@ pub struct NnsCustomizations {
     pub install_at_ids: bool,
 }
 
+impl NnsCustomizations {
+    pub fn with_balance(mut self, account_identifier: AccountIdentifier, amount: Tokens) -> Self {
+        self.ledger_balances
+            .get_or_insert_default()
+            .insert(account_identifier, amount);
+        self
+    }
+}
+
 pub struct NnsInstallationBuilder {
     customizations: NnsCustomizations,
     installation_timeout: Duration,
+    is_subnet_rental_canister_enabled: bool,
+    is_exchange_rate_canister_enabled: bool,
 }
 
 impl Default for NnsInstallationBuilder {
@@ -1725,6 +1783,8 @@ impl NnsInstallationBuilder {
         Self {
             customizations: NnsCustomizations::default(),
             installation_timeout: NNS_CANISTER_INSTALL_TIMEOUT,
+            is_subnet_rental_canister_enabled: false,
+            is_exchange_rate_canister_enabled: false,
         }
     }
 
@@ -1743,6 +1803,26 @@ impl NnsInstallationBuilder {
         self
     }
 
+    pub fn with_subnet_rental_canister(mut self) -> Self {
+        self.is_subnet_rental_canister_enabled = true;
+        self
+    }
+
+    /// WARNING: Due to technical limitations, this does not actually cause
+    /// Exchange Rate canister (XRC) to be created. Rather, this just makes the
+    /// Cycles Minting canister aware of the XRC. Creating XRC is done outside
+    /// of Self. The technical limitation is related to the fact that XRC is NOT
+    /// hosted on the NNS subnet, but rather on the II subnet.
+    pub fn with_exchange_rate_canister(mut self) -> Self {
+        self.is_exchange_rate_canister_enabled = true;
+        self
+    }
+
+    pub fn with_balance(mut self, account_identifier: AccountIdentifier, amount: Tokens) -> Self {
+        self.customizations = self.customizations.with_balance(account_identifier, amount);
+        self
+    }
+
     pub fn install(&self, node: &IcNodeSnapshot, test_env: &TestEnv) -> Result<()> {
         let log = test_env.logger();
         let ic_name = node.ic_name();
@@ -1754,15 +1834,7 @@ impl NnsInstallationBuilder {
         info!(log, "Wait for node reporting healthy status");
         node.await_status_is_healthy().unwrap();
 
-        let install_future = install_nns_canisters(
-            &log,
-            url,
-            &prep_dir,
-            true,
-            self.customizations.install_at_ids,
-            self.customizations.ledger_balances.clone(),
-            self.customizations.neurons.clone(),
-        );
+        let install_future = install_nns_canisters(&log, url, &prep_dir, self);
         block_on(async {
             let timeout_result =
                 tokio::time::timeout(self.installation_timeout, install_future).await;
@@ -2197,17 +2269,30 @@ pub async fn install_nns_canisters(
     logger: &Logger,
     url: Url,
     ic_prep_state_dir: &IcPrepStateDir,
-    nns_test_neurons_present: bool,
-    install_at_ids: bool,
-    ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
-    neurons: Option<Vec<Neuron>>,
+    nns_installation_builder: &NnsInstallationBuilder,
 ) {
     info!(
         logger,
         "Compiling/installing NNS canisters (might take a while)."
     );
+
+    let NnsCustomizations {
+        install_at_ids,
+        ledger_balances,
+        neurons,
+    } = nns_installation_builder.customizations.clone();
+
     let mut init_payloads = NnsInitPayloadsBuilder::new();
-    if nns_test_neurons_present {
+
+    if nns_installation_builder.is_subnet_rental_canister_enabled {
+        init_payloads.with_subnet_rental_canister();
+    }
+    if nns_installation_builder.is_exchange_rate_canister_enabled {
+        init_payloads.with_exchange_rate_canister(EXCHANGE_RATE_CANISTER_ID);
+    }
+
+    // Neurons.
+    {
         let mut ledger_balances = ledger_balances.unwrap_or_default();
         let neurons = neurons.unwrap_or_default();
         ledger_balances.insert(
@@ -2243,6 +2328,7 @@ pub async fn install_nns_canisters(
             .with_additional_neurons(neurons)
             .with_ledger_init_state(ledger_init_payload);
     }
+
     let registry_local_store = ic_prep_state_dir.registry_local_store_path();
     let initial_mutations = read_initial_mutations_from_local_store_dir(&registry_local_store);
     init_payloads.with_initial_mutations(initial_mutations);
@@ -2398,4 +2484,63 @@ pub fn emit_group_event(log: &slog::Logger, group: &str) {
         },
     );
     event.emit_log(log);
+}
+
+/// Copy a local file via SSH to a remote host.
+pub fn scp_send_to(
+    log: Logger,
+    session: &Session,
+    from_local: &std::path::Path,
+    to_remote: &std::path::Path,
+    mode: i32,
+) {
+    let size = fs::metadata(from_local).unwrap().len();
+    retry_with_msg!(
+        format!("scp-ing local {from_local:?} of {size:?} B to remote {to_remote:?}"),
+        log.clone(),
+        SCP_RETRY_TIMEOUT,
+        SCP_RETRY_BACKOFF,
+        || {
+            let mut remote_file = session.scp_send(to_remote, mode, size, None)?;
+            let mut from_file = std::fs::File::open(from_local)?;
+            std::io::copy(&mut from_file, &mut remote_file)?;
+            info!(
+                log,
+                "scp-ed local {from_local:?} of {size:?} B to remote {to_remote:?} ."
+            );
+            Ok(())
+        }
+    )
+    .unwrap_or_else(|e| {
+        panic!("Failed to scp local {from_local:?} to remote {to_remote:?} because: {e}")
+    });
+}
+
+/// Copy a file from a remote host to a local file.
+pub fn scp_recv_from(
+    log: Logger,
+    session: &Session,
+    from_remote: &std::path::Path,
+    to_local: &std::path::Path,
+) {
+    retry_with_msg!(
+        format!("scp-ing remote {from_remote:?} to local {to_local:?}"),
+        log.clone(),
+        SCP_RETRY_TIMEOUT,
+        SCP_RETRY_BACKOFF,
+        || {
+            let (mut remote_file, scp_file_stat) = session.scp_recv(from_remote)?;
+            let size = scp_file_stat.size();
+            let mut to_file = std::fs::File::create(to_local)?;
+            std::io::copy(&mut remote_file, &mut to_file)?;
+            info!(
+                log,
+                "scp-ed remote {from_remote:?} of {size:?} B to local {to_local:?}."
+            );
+            Ok(())
+        }
+    )
+    .unwrap_or_else(|e| {
+        panic!("Failed to scp remote {from_remote:?} to local {to_local:?} because: {e}")
+    });
 }
