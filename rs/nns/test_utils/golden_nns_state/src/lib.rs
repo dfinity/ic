@@ -5,9 +5,9 @@ use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConf
 
 use ic_config::flag_status::FlagStatus;
 use ic_nns_test_utils_prepare_golden_state::{
-    maybe_download_and_untar_golden_state_or_panic, StateSource,
+    StateSource, maybe_download_and_untar_golden_state_or_panic,
 };
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
+use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use std::ops::RangeInclusive;
 use std::str::FromStr;
 // TODO: Add support for PocketIc.

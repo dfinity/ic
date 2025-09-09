@@ -1,7 +1,7 @@
 use crate::host::agent::dispatch;
-use crate::protocol::{parse_request, Request, Response};
+use crate::protocol::{Request, Response, parse_request};
 use std::io::{Error, ErrorKind, Read, Result, Write};
-use vsock::{VsockAddr, VsockListener, VsockStream, VMADDR_CID_ANY};
+use vsock::{VMADDR_CID_ANY, VsockAddr, VsockListener, VsockStream};
 
 const DEFAULT_PORT: u32 = 19090;
 

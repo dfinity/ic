@@ -219,7 +219,10 @@ pub fn wait_until_sync_is_completed(
             entry.timestamp, entry.file, entry.line, entry.message
         ));
     }
-    panic!("The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}.\nLogs:\n{}", num_blocks_synced, chain_length, log_lines);
+    panic!(
+        "The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}.\nLogs:\n{}",
+        num_blocks_synced, chain_length, log_lines
+    );
 }
 
 #[cfg(feature = "icrc3_disabled")]

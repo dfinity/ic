@@ -353,25 +353,27 @@ fn init_flag() {
     let tmp_dir2 = tempdir().expect("temp dir creation should succeed");
     let metrics_file = tmp_dir.path().join("fstrim.prom");
 
-    assert!(fstrim_tool(
-        "/non/existent/command",
-        metrics_file
-            .to_str()
-            .expect("metrics file path should be valid")
-            .to_string(),
-        tmp_dir
-            .path()
-            .to_str()
-            .expect("tmp_dir path should be valid")
-            .to_string(),
-        true, //init should write out default metrics even though the command fails
-        tmp_dir2
-            .path()
-            .to_str()
-            .expect("tmp_dir path should be valid")
-            .to_string(),
-    )
-    .is_ok());
+    assert!(
+        fstrim_tool(
+            "/non/existent/command",
+            metrics_file
+                .to_str()
+                .expect("metrics file path should be valid")
+                .to_string(),
+            tmp_dir
+                .path()
+                .to_str()
+                .expect("tmp_dir path should be valid")
+                .to_string(),
+            true, //init should write out default metrics even though the command fails
+            tmp_dir2
+                .path()
+                .to_str()
+                .expect("tmp_dir path should be valid")
+                .to_string(),
+        )
+        .is_ok()
+    );
 
     let parsed_metrics =
         parse_existing_metrics_from_file(metrics_file.to_str().expect("valid path"))
@@ -387,45 +389,49 @@ fn init_flag_does_not_overwrite_existing_metrics() {
     let tmp_dir2 = tempdir().expect("temp dir creation should succeed");
 
     let metrics_file = tmp_dir.path().join("fstrim.prom");
-    assert!(fstrim_tool(
-        "true",
-        metrics_file
-            .to_str()
-            .expect("metrics file path should be valid")
-            .to_string(),
-        tmp_dir
-            .path()
-            .to_str()
-            .expect("tmp_dir path should be valid")
-            .to_string(),
-        false,
-        tmp_dir2
-            .path()
-            .to_str()
-            .expect("tmp_dir path should be valid")
-            .to_string(),
-    )
-    .is_ok());
+    assert!(
+        fstrim_tool(
+            "true",
+            metrics_file
+                .to_str()
+                .expect("metrics file path should be valid")
+                .to_string(),
+            tmp_dir
+                .path()
+                .to_str()
+                .expect("tmp_dir path should be valid")
+                .to_string(),
+            false,
+            tmp_dir2
+                .path()
+                .to_str()
+                .expect("tmp_dir path should be valid")
+                .to_string(),
+        )
+        .is_ok()
+    );
 
-    assert!(fstrim_tool(
-        "true",
-        metrics_file
-            .to_str()
-            .expect("metrics file path should be valid")
-            .to_string(),
-        tmp_dir
-            .path()
-            .to_str()
-            .expect("tmp_dir path should be valid")
-            .to_string(),
-        true,
-        tmp_dir2
-            .path()
-            .to_str()
-            .expect("tmp_dir path should be valid")
-            .to_string(),
-    )
-    .is_ok());
+    assert!(
+        fstrim_tool(
+            "true",
+            metrics_file
+                .to_str()
+                .expect("metrics file path should be valid")
+                .to_string(),
+            tmp_dir
+                .path()
+                .to_str()
+                .expect("tmp_dir path should be valid")
+                .to_string(),
+            true,
+            tmp_dir2
+                .path()
+                .to_str()
+                .expect("tmp_dir path should be valid")
+                .to_string(),
+        )
+        .is_ok()
+    );
 
     let content = read_to_string(&metrics_file).expect("reading metrics should succeed");
     assert!(content.contains("fstrim_runs_total 1"));

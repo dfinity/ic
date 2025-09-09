@@ -9,52 +9,52 @@ use crate::pocket_ic::{
 use crate::{InstanceId, OpId, Operation};
 use async_trait::async_trait;
 use axum::{
+    Router,
     extract::{Request as AxumRequest, State},
     response::{IntoResponse, Response},
     routing::get,
-    Router,
 };
-use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
+use axum_server::tls_rustls::RustlsConfig;
 use base64;
 use clap::Parser;
 use fqdn::fqdn;
 use futures::future::Shared;
 use http::{
+    Method, StatusCode,
     header::{
         ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, COOKIE, DNT,
         IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
     },
-    Method, StatusCode,
 };
 use ic_agent::agent::route_provider::RoundRobinRouteProvider;
 use ic_gateway::ic_bn_lib::http::{
-    headers::{X_IC_CANISTER_ID, X_REQUESTED_WITH, X_REQUEST_ID},
-    proxy::proxy,
     Client, ConnInfo,
+    headers::{X_IC_CANISTER_ID, X_REQUEST_ID, X_REQUESTED_WITH},
+    proxy::proxy,
 };
-use ic_gateway::{setup_router, Cli};
-use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, NodeId, PrincipalId, SubnetId};
+use ic_gateway::{Cli, setup_router};
+use ic_types::{CanisterId, NodeId, PrincipalId, SubnetId, canister_http::CanisterHttpRequestId};
 use itertools::Itertools;
+use pocket_ic::RejectResponse;
 use pocket_ic::common::rest::{
     AutoProgressConfig, CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig,
     HttpGatewayDetails, HttpGatewayInfo, InstanceHttpGatewayConfig, Topology,
 };
-use pocket_ic::RejectResponse;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     path::PathBuf,
-    sync::atomic::AtomicU64,
     sync::Arc,
+    sync::atomic::AtomicU64,
     time::{Duration, SystemTime},
 };
 use tokio::{
-    sync::mpsc::error::TryRecvError,
     sync::mpsc::Receiver,
-    sync::{mpsc, Mutex, RwLock},
-    task::{spawn, spawn_blocking, JoinHandle, JoinSet},
+    sync::mpsc::error::TryRecvError,
+    sync::{Mutex, RwLock, mpsc},
+    task::{JoinHandle, JoinSet, spawn, spawn_blocking},
     time::{self, sleep},
 };
 use tower::ServiceExt;
@@ -521,7 +521,7 @@ impl ApiState {
                         if received_stop_signal(rx) {
                             break None;
                         }
-                    }
+                    };
                 }
                 UpdateReply::Busy { .. } => {}
                 UpdateReply::Output(op_out) => break Some(op_out),
@@ -1034,8 +1034,7 @@ impl ApiState {
         let op_id = op.id().0;
         trace!(
             "update_with_timeout::start instance_id={} op_id={}",
-            instance_id,
-            op_id,
+            instance_id, op_id,
         );
         let instances_cloned = instances.clone();
         let instances_locked = instances_cloned.read().await;
@@ -1079,9 +1078,7 @@ impl ApiState {
                         move || {
                             trace!(
                                 "bg_task::start instance_id={} state_label={:?} op_id={}",
-                                instance_id,
-                                old_state_label,
-                                op_id.0,
+                                instance_id, old_state_label, op_id.0,
                             );
                             let result = op.compute(&mut pocket_ic);
                             pocket_ic.bump_state_label();
@@ -1096,7 +1093,9 @@ impl ApiState {
                             drop(graph_guard);
                             let mut instance = instances[instance_id].blocking_lock();
                             if let InstanceState::Deleted = &instance.state {
-                                error!("The instance is deleted immediately after an operation. This is a bug!");
+                                error!(
+                                    "The instance is deleted immediately after an operation. This is a bug!"
+                                );
                                 std::mem::drop(pocket_ic);
                             } else {
                                 instance.state = InstanceState::Available(pocket_ic);
@@ -1138,16 +1137,14 @@ impl ApiState {
         if let Ok(Ok(op_out)) = time::timeout(sync_wait_time, bg_handle).await {
             trace!(
                 "update_with_timeout::synchronous instance_id={} op_id={}",
-                instance_id,
-                op_id,
+                instance_id, op_id,
             );
             return Ok(UpdateReply::Output(op_out));
         }
 
         trace!(
             "update_with_timeout::timeout instance_id={} op_id={}",
-            instance_id,
-            op_id,
+            instance_id, op_id,
         );
         Ok(busy_outcome)
     }

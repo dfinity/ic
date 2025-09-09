@@ -1,4 +1,4 @@
-use ic_sys::fs::{write_atomically, Clobber};
+use ic_sys::fs::{Clobber, write_atomically};
 use regex::Regex;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;

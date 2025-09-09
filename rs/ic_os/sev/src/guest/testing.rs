@@ -1,8 +1,8 @@
 use crate::guest::firmware::{MockSevGuestFirmware, SevGuestFirmware};
-use der::pem::LineEnding;
 use der::EncodePem;
-use p384::ecdsa::signature::Signer;
+use der::pem::LineEnding;
 use p384::ecdsa::Signature;
+use p384::ecdsa::signature::Signer;
 use p384::pkcs8::EncodePublicKey;
 use rand::SeedableRng;
 use rsa::RsaPrivateKey;
@@ -11,12 +11,12 @@ use sev::firmware::guest::AttestationReport;
 use sha2::Sha384;
 use std::str::FromStr;
 use std::time::Duration;
+use x509_cert::Certificate;
 use x509_cert::builder::{Builder, CertificateBuilder, Profile};
 use x509_cert::name::Name;
 use x509_cert::serial_number::SerialNumber;
 use x509_cert::spki::SubjectPublicKeyInfo;
 use x509_cert::time::Validity;
-use x509_cert::Certificate;
 
 /// Builder for creating test attestation reports with customizable fields.
 pub struct AttestationReportBuilder {

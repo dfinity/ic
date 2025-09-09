@@ -1,6 +1,6 @@
 use crate::errors::ApiError;
 use crate::models::{ConstructionHashRequest, ConstructionHashResponse, SignedTransaction};
-use crate::request_handler::{verify_network_id, RosettaRequestHandler};
+use crate::request_handler::{RosettaRequestHandler, verify_network_id};
 use crate::transaction_id::{self, TransactionIdentifier};
 use serde_json::map::Map;
 use std::str::FromStr;

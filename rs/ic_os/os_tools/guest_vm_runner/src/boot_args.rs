@@ -1,5 +1,5 @@
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use regex::Regex;
 use std::path::Path;
 use std::sync::LazyLock;
@@ -279,10 +279,12 @@ DIFFERENT_VAR="some value"
         fs::write(temp_file.path(), content)?;
 
         let result = read_boot_args(temp_file.path(), "BOOT_ARGS");
-        assert!(result
-            .expect_err("Missing var should be error")
-            .to_string()
-            .contains("Variable BOOT_ARGS not found"));
+        assert!(
+            result
+                .expect_err("Missing var should be error")
+                .to_string()
+                .contains("Variable BOOT_ARGS not found")
+        );
         Ok(())
     }
 

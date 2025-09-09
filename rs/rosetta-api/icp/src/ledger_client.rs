@@ -32,7 +32,7 @@ use ic_nns_governance_api::{
 };
 use std::{
     convert::TryFrom,
-    sync::{atomic::AtomicBool, Arc},
+    sync::{Arc, atomic::AtomicBool},
     thread, time,
     time::{Duration, Instant},
 };
@@ -44,17 +44,17 @@ use tracing::{debug, error, warn};
 
 use ic_ledger_canister_blocks_synchronizer::{
     blocks::{Blocks, IndexOptimization, RosettaBlocksConfig, RosettaBlocksMode, RosettaDbConfig},
-    canister_access::{make_agent, CanisterAccess},
+    canister_access::{CanisterAccess, make_agent},
     certification::VerificationInfo,
     ledger_blocks_sync::LedgerBlocksSynchronizer,
 };
-use ic_nns_governance_api::{manage_neuron::NeuronIdOrSubaccount, GovernanceError, NeuronInfo};
+use ic_nns_governance_api::{GovernanceError, NeuronInfo, manage_neuron::NeuronIdOrSubaccount};
 use ic_types::{
+    CanisterId,
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{HttpCallContent, MessageId, SignedRequestBytes},
-    CanisterId,
 };
-use icp_ledger::{BlockIndex, Symbol, TransferFee, TransferFeeArgs, DEFAULT_TRANSFER_FEE};
+use icp_ledger::{BlockIndex, DEFAULT_TRANSFER_FEE, Symbol, TransferFee, TransferFeeArgs};
 
 use crate::{
     convert,
@@ -72,7 +72,7 @@ use crate::{
         handle_stop_dissolve::handle_stop_dissolve, neuron_response::NeuronResponse,
     },
     models::{EnvelopePair, SignedTransaction},
-    request::{request_result::RequestResult, transaction_results::TransactionResults, Request},
+    request::{Request, request_result::RequestResult, transaction_results::TransactionResults},
     request_types::{RequestType, Status},
     transaction_id::TransactionIdentifier,
 };
@@ -249,7 +249,9 @@ impl LedgerClient {
             }
             Err(e) => {
                 if e.contains("has no query method") || e.contains("not found") {
-                    tracing::warn!("Symbol endpoint not present in the ledger canister. Couldn't verify token symbol.");
+                    tracing::warn!(
+                        "Symbol endpoint not present in the ledger canister. Couldn't verify token symbol."
+                    );
                 } else {
                     return Err(ApiError::internal_error(format!(
                         "Failed to fetch symbol name from the ledger: {}",

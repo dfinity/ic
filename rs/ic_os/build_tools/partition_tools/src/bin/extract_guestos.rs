@@ -4,10 +4,10 @@ use anyhow::Result;
 use clap::Parser;
 use std::fs::File;
 use tar::Archive;
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 use zstd::Decoder;
 
-use partition_tools::{ext::ExtPartition, Partition};
+use partition_tools::{Partition, ext::ExtPartition};
 
 #[derive(Parser)]
 struct Cli {

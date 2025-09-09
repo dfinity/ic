@@ -1,7 +1,7 @@
 use crate::{errors::ApiError, ledger_client::OperationOutput};
 use ic_nns_governance_api::{
-    manage_neuron_response::{Command, SpawnResponse},
     ManageNeuronResponse,
+    manage_neuron_response::{Command, SpawnResponse},
 };
 
 pub fn handle_spawn(bytes: Vec<u8>) -> Result<Result<Option<OperationOutput>, ApiError>, String> {

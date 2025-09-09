@@ -5,16 +5,16 @@ mod sev;
 #[cfg(test)]
 mod tests;
 
-use crate::generated_key::{GeneratedKeyDiskEncryption, DEFAULT_GENERATED_KEY_PATH};
-use crate::sev::{SevDiskEncryption, PREVIOUS_KEY_PATH};
-use anyhow::{bail, Context, Result};
+use crate::generated_key::{DEFAULT_GENERATED_KEY_PATH, GeneratedKeyDiskEncryption};
+use crate::sev::{PREVIOUS_KEY_PATH, SevDiskEncryption};
+use anyhow::{Context, Result, bail};
 use clap::Parser;
-use config::{deserialize_config, DEFAULT_GUESTOS_CONFIG_OBJECT_PATH};
+use config::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::GuestOSConfig;
 use ic_sev::guest::firmware::SevGuestFirmware;
 use libcryptsetup_rs::consts::flags::CryptActivate;
 use nix::unistd::getuid;
-use std::ffi::{c_char, c_int, c_void, CStr};
+use std::ffi::{CStr, c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
 
 // We depend on the values of these constants in bash scripts and config files so be careful

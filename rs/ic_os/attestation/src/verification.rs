@@ -1,6 +1,6 @@
 use crate::custom_data::EncodeSevCustomData;
 use crate::{SevAttestationPackage, SevCertificateChain, VerificationError};
-use sev::certs::snp::{ca, Certificate, Chain, Verifiable};
+use sev::certs::snp::{Certificate, Chain, Verifiable, ca};
 use sev::firmware::guest::AttestationReport;
 use std::fmt::Debug;
 

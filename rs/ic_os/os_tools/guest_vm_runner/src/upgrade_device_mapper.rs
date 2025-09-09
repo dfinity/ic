@@ -1,5 +1,5 @@
-use anyhow::{bail, ensure, Context, Result};
-use devicemapper::{Bytes, DevId, DmName, DmOptions, Sectors, DM};
+use anyhow::{Context, Result, bail, ensure};
+use devicemapper::{Bytes, DM, DevId, DmName, DmOptions, Sectors};
 use ic_device::device_mapping::{BaseDevice, LinearSegment, MappedDevice, TempDevice};
 use std::path::Path;
 use std::sync::Arc;

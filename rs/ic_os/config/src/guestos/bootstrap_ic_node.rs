@@ -281,18 +281,24 @@ mod tests {
         // Verify files were copied correctly
         assert!(state_root.join("crypto").join("key.pem").exists());
         assert!(state_root.join("data/ic_state").join("state.dat").exists());
-        assert!(state_root
-            .join("data/ic_registry_local_store")
-            .join("registry.dat")
-            .exists());
+        assert!(
+            state_root
+                .join("data/ic_registry_local_store")
+                .join("registry.dat")
+                .exists()
+        );
         assert!(state_root.join("data/nns_public_key.pem").exists());
-        assert!(state_root
-            .join("data/node_operator_private_key.pem")
-            .exists());
-        assert!(config_root
-            .join("accounts_ssh_authorized_keys")
-            .join("authorized_keys")
-            .exists());
+        assert!(
+            state_root
+                .join("data/node_operator_private_key.pem")
+                .exists()
+        );
+        assert!(
+            config_root
+                .join("accounts_ssh_authorized_keys")
+                .join("authorized_keys")
+                .exists()
+        );
 
         // Verify file contents
         assert_eq!(

@@ -1,5 +1,5 @@
-use ic_icrc_rosetta_runner::start_rosetta;
 use ic_icrc_rosetta_runner::RosettaOptions;
+use ic_icrc_rosetta_runner::start_rosetta;
 use pocket_ic::PocketIcBuilder;
 use reqwest::StatusCode;
 use std::path::PathBuf;

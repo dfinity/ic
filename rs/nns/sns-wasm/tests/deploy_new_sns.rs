@@ -1,6 +1,6 @@
 use crate::common::{
-    get_deployed_sns_by_proposal_id_unchecked, set_up_state_machine_with_nns,
-    EXPECTED_SNS_CREATION_FEE,
+    EXPECTED_SNS_CREATION_FEE, get_deployed_sns_by_proposal_id_unchecked,
+    set_up_state_machine_with_nns,
 };
 use canister_test::Wasm;
 use ic_base_types::{CanisterId, PrincipalId};

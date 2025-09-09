@@ -7,9 +7,9 @@ use pocket_ic::common::rest::{
 };
 use pocket_ic::{PocketIc, PocketIcBuilder};
 use rcgen::{CertificateParams, KeyPair};
+use reqwest::Url;
 use reqwest::blocking::Client;
 use reqwest::header;
-use reqwest::Url;
 use reqwest::{Client as NonblockingClient, StatusCode};
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};

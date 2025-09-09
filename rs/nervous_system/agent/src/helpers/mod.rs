@@ -44,7 +44,10 @@ where
     F: Fn(&'a C) -> Fut,
     Fut: std::future::Future<Output = T>,
 {
-    assert!(expected_event_interval_seconds.start < expected_event_interval_seconds.end, "expected_event_interval_seconds.start must be less than expected_event_interval_seconds.end");
+    assert!(
+        expected_event_interval_seconds.start < expected_event_interval_seconds.end,
+        "expected_event_interval_seconds.start must be less than expected_event_interval_seconds.end"
+    );
     let timeout_seconds =
         expected_event_interval_seconds.end - expected_event_interval_seconds.start;
     agent

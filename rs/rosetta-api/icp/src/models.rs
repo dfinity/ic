@@ -95,8 +95,14 @@ impl TryFrom<ConstructionDeriveRequestMetadata> for ObjectMap {
     fn try_from(d: ConstructionDeriveRequestMetadata) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(serde_json::Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ConstructionDeriveRequestMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert ConstructionDeriveRequestMetadata to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert ConstructionDeriveRequestMetadata to ObjectMap. Expected type Object but received: {:?}",
+                o
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert ConstructionDeriveRequestMetadata to ObjectMap: {:?}",
+                err
+            ))),
         }
     }
 }
@@ -136,8 +142,14 @@ impl TryFrom<ConstructionMetadataRequestOptions> for ObjectMap {
     fn try_from(d: ConstructionMetadataRequestOptions) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(serde_json::Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ConstructionMetadataRequestOptions to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert ConstructionMetadataRequestOptions to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert ConstructionMetadataRequestOptions to ObjectMap. Expected type Object but received: {:?}",
+                o
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert ConstructionMetadataRequestOptions to ObjectMap: {:?}",
+                err
+            ))),
         }
     }
 }
@@ -224,8 +236,14 @@ impl TryFrom<ConstructionPayloadsRequestMetadata> for ObjectMap {
     fn try_from(d: ConstructionPayloadsRequestMetadata) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(serde_json::Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ConstructionPayloadsRequestMetadata to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert ConstructionPayloadsRequestMetadata to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert ConstructionPayloadsRequestMetadata to ObjectMap. Expected type Object but received: {:?}",
+                o
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert ConstructionPayloadsRequestMetadata to ObjectMap: {:?}",
+                err
+            ))),
         }
     }
 }
@@ -562,8 +580,15 @@ impl TryFrom<QueryBlockRangeRequest> for ObjectMap {
         match serde_json::to_value(d) {
             Ok(v) => match v {
                 serde_json::Value::Object(ob) => Ok(ob),
-                _ => Err(ApiError::internal_error(format!("Could not convert QueryBlockRangeRequest to ObjectMap. Expected type Object but received: {:?}",v)))
-            },Err(err) => Err(ApiError::internal_error(format!("Could not convert QueryBlockRangeRequest to ObjectMap: {:?}",err))),
+                _ => Err(ApiError::internal_error(format!(
+                    "Could not convert QueryBlockRangeRequest to ObjectMap. Expected type Object but received: {:?}",
+                    v
+                ))),
+            },
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert QueryBlockRangeRequest to ObjectMap: {:?}",
+                err
+            ))),
         }
     }
 }
@@ -591,8 +616,15 @@ impl TryFrom<QueryBlockRangeResponse> for ObjectMap {
         match serde_json::to_value(d) {
             Ok(v) => match v {
                 serde_json::Value::Object(ob) => Ok(ob),
-                _ => Err(ApiError::internal_error(format!("Could not convert QueryBlockRangeResponse to ObjectMap. Expected type Object but received: {:?}",v)))
-            },Err(err) =>Err(ApiError::internal_error(format!("Could not convert QueryBlockRangeResponse to ObjectMap: {:?}",err))),
+                _ => Err(ApiError::internal_error(format!(
+                    "Could not convert QueryBlockRangeResponse to ObjectMap. Expected type Object but received: {:?}",
+                    v
+                ))),
+            },
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert QueryBlockRangeResponse to ObjectMap: {:?}",
+                err
+            ))),
         }
     }
 }

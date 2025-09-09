@@ -9,10 +9,10 @@
 use std::num::NonZeroU64;
 
 use ic_cdk::println;
-use ic_nervous_system_common::{binary_search, E8};
+use ic_nervous_system_common::{E8, binary_search};
 use rust_decimal::{
-    prelude::{FromPrimitive, ToPrimitive},
     Decimal, RoundingStrategy,
+    prelude::{FromPrimitive, ToPrimitive},
 };
 use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
@@ -387,12 +387,10 @@ impl BinomialFormulaMember {
         // consistent, as the degree of its first member (2+2 = 4) differs from the degree of its
         // second member (1+4 = 5).
         if expected_degree != degree {
-            return Err(
-                format!(
-                    "Expected binomial member degree {}, but left/right atoms have degrees {} and {}, resp.",
-                    degree, left.degree, right.degree
-                )
-            );
+            return Err(format!(
+                "Expected binomial member degree {}, but left/right atoms have degrees {} and {}, resp.",
+                degree, left.degree, right.degree
+            ));
         }
         Ok(Self {
             coefficient,

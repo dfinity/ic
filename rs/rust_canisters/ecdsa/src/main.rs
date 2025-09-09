@@ -1,9 +1,9 @@
 #![allow(deprecated)]
-use candid::{candid_method, CandidType, Encode};
+use candid::{CandidType, Encode, candid_method};
 use ic_cdk::api::{call::call_raw, print};
 use ic_cdk::update;
 use ic_management_canister_types_private::{
-    DerivationPath, EcdsaCurve, EcdsaKeyId, Method as Ic00Method, SignWithECDSAArgs, IC_00,
+    DerivationPath, EcdsaCurve, EcdsaKeyId, IC_00, Method as Ic00Method, SignWithECDSAArgs,
 };
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;

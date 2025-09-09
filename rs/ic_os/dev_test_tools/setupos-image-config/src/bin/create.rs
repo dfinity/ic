@@ -4,12 +4,12 @@ use std::{
     path::PathBuf,
 };
 
-use anyhow::{bail, Context, Error};
+use anyhow::{Context, Error, bail};
 use clap::Parser;
 
 use config::setupos::deployment_json::{Deployment, DeploymentSettings, Logging, Nns, VmResources};
 use config_types::DeploymentEnvironment;
-use setupos_image_config::{write_config, ConfigIni, DeploymentConfig};
+use setupos_image_config::{ConfigIni, DeploymentConfig, write_config};
 
 #[derive(Parser)]
 #[command(name = "setupos-create-config")]

@@ -2,8 +2,8 @@
 use crate::{
     canister_api::CanisterApi,
     pb::v1::{
-        add_wasm_response, AddWasmRequest, AddWasmResponse, DappCanistersTransferResult,
-        DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns, GetDeployedSnsByProposalIdRequest,
+        AddWasmRequest, AddWasmResponse, DappCanistersTransferResult, DeployNewSnsRequest,
+        DeployNewSnsResponse, DeployedSns, GetDeployedSnsByProposalIdRequest,
         GetDeployedSnsByProposalIdResponse, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
         GetProposalIdThatAddedWasmRequest, GetProposalIdThatAddedWasmResponse,
         GetSnsSubnetIdsResponse, GetWasmMetadataRequest as GetWasmMetadataRequestPb,
@@ -13,7 +13,7 @@ use crate::{
         ListUpgradeStepsRequest, ListUpgradeStepsResponse, MetadataSection as MetadataSectionPb,
         SnsCanisterIds, SnsCanisterType, SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError,
         SnsWasmStableIndex, StableCanisterState, UpdateSnsSubnetListRequest,
-        UpdateSnsSubnetListResponse,
+        UpdateSnsSubnetListResponse, add_wasm_response,
     },
     stable_memory::SnsWasmStableMemory,
     wasm_metadata::MetadataSection,
@@ -22,7 +22,7 @@ use candid::Encode;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::api::stable::StableMemory;
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
-use ic_nervous_system_common::{hash_to_hex_string, ONE_TRILLION, SNS_CREATION_FEE};
+use ic_nervous_system_common::{ONE_TRILLION, SNS_CREATION_FEE, hash_to_hex_string};
 use ic_nervous_system_proto::pb::v1::Canister;
 use ic_nns_constants::{
     DEFAULT_SNS_GOVERNANCE_CANISTER_WASM_MEMORY_LIMIT,
@@ -30,19 +30,19 @@ use ic_nns_constants::{
 };
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_handler_root_interface::{
-    client::NnsRootCanisterClient, ChangeCanisterControllersRequest,
-    ChangeCanisterControllersResult,
+    ChangeCanisterControllersRequest, ChangeCanisterControllersResult,
+    client::NnsRootCanisterClient,
 };
 use ic_sns_governance::pb::v1::governance::Version;
-use ic_sns_init::{pb::v1::SnsInitPayload, SnsCanisterInitPayloads};
+use ic_sns_init::{SnsCanisterInitPayloads, pb::v1::SnsInitPayload};
 use ic_sns_root::GetSnsCanistersSummaryResponse;
 use ic_types::{Cycles, SubnetId};
 use ic_wasm;
 use maplit::{btreemap, hashmap};
-use serde_json::{json, Value as JsonValue};
+use serde_json::{Value as JsonValue, json};
 use std::{
     cell::RefCell,
-    collections::{hash_map::Entry, BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet, hash_map::Entry},
     convert::TryInto,
     iter::zip,
     thread::LocalKey,
@@ -247,10 +247,14 @@ impl From<DeployError> for DeployNewSnsResponse {
                 dapp_canisters_transfer_result: None,
             },
             DeployError::Reversible(_) => {
-                panic!("Do not try to use into() for DeployError::Reversible as this should be cleaned up")
+                panic!(
+                    "Do not try to use into() for DeployError::Reversible as this should be cleaned up"
+                )
             }
             DeployError::PartiallyReversible(_) => {
-                panic!("Do not try to use into() for DeployError::PartiallyReversible as this should be cleaned up")
+                panic!(
+                    "Do not try to use into() for DeployError::PartiallyReversible as this should be cleaned up"
+                )
             }
         }
     }
@@ -531,7 +535,7 @@ where
                         "Request.sns_governance_canister_id ({}) \
                         could not be converted to a canister ID",
                         id
-                    ))
+                    ));
                 }
             },
         };
@@ -1432,7 +1436,8 @@ where
                     "Failure deploying, and could not finish cleanup. Some dapp_canisters \
                     may not have been restored or transferred. Deployment failure was caused by: '{}' \n \
                     Cleanup failure was caused by: '{}'",
-                    deploy_error.message, failed_change_canister_controllers_result.join_failed_reasons(),
+                    deploy_error.message,
+                    failed_change_canister_controllers_result.join_failed_reasons(),
                 );
                 Some(SnsWasmError { message })
             }
@@ -1467,12 +1472,10 @@ where
             .collect::<Vec<_>>();
 
         if !canister_ids_with_empty_controller_sets.is_empty() {
-            return Err(
-                format!(
-                    "The following dapp canister(s) did not have any controllers, cannot transfer to an SNS. {:?}",
-                    canister_ids_with_empty_controller_sets.join("\n")
-                )
-            );
+            return Err(format!(
+                "The following dapp canister(s) did not have any controllers, cannot transfer to an SNS. {:?}",
+                canister_ids_with_empty_controller_sets.join("\n")
+            ));
         }
 
         Ok(dapp_canisters_original_controllers)
@@ -1850,7 +1853,7 @@ pub fn vec_to_hash(v: Vec<u8>) -> Result<[u8; 32], String> {
                 "Expected a hash of length {} but it was {}",
                 32,
                 original.len()
-            ))
+            ));
         }
     };
     Ok(*boxed_array)
@@ -2746,9 +2749,10 @@ mod test {
         assert_eq!(
             response.error,
             Some(SnsWasmError {
-                message:
-                format!("Cannot add custom upgrade path for non-existent SNS.  Governance canister {} not \
-                found in list of deployed SNSes.", CanisterId::from_u64(10)
+                message: format!(
+                    "Cannot add custom upgrade path for non-existent SNS.  Governance canister {} not \
+                found in list of deployed SNSes.",
+                    CanisterId::from_u64(10)
                 )
             })
         );
@@ -5187,9 +5191,9 @@ mod test {
     mod get_wasm_metadata {
         use super::*;
         use crate::pb::v1::{
-            get_wasm_metadata_response, GetWasmMetadataRequest as GetWasmMetadataRequestPb,
+            GetWasmMetadataRequest as GetWasmMetadataRequestPb,
             GetWasmMetadataResponse as GetWasmMetadataResponsePb,
-            MetadataSection as MetadataSectionPb,
+            MetadataSection as MetadataSectionPb, get_wasm_metadata_response,
         };
         use pretty_assertions::assert_eq;
 

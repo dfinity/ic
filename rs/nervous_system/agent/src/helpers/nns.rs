@@ -1,14 +1,14 @@
 use std::time::Duration;
 
 use candid::Encode;
-use cycles_minting_canister::{NotifyMintCyclesSuccess, MEMO_MINT_CYCLES};
+use cycles_minting_canister::{MEMO_MINT_CYCLES, NotifyMintCyclesSuccess};
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_nns_governance_api::{
-    manage_neuron_response::Command, CreateServiceNervousSystem, ExecuteNnsFunction, ListNeurons,
-    MakeProposalRequest, ManageNeuronCommandRequest, Neuron, NnsFunction, ProposalActionRequest,
-    ProposalInfo, Topic,
+    CreateServiceNervousSystem, ExecuteNnsFunction, ListNeurons, MakeProposalRequest,
+    ManageNeuronCommandRequest, Neuron, NnsFunction, ProposalActionRequest, ProposalInfo, Topic,
+    manage_neuron_response::Command,
 };
 use ic_sns_wasm::pb::v1::get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsWasm};
@@ -96,7 +96,7 @@ pub async fn wait_for_proposal_execution<
                 return Err(format!(
                     "Proposal {:?} doesn't have ProposalInfo",
                     proposal_id
-                ))
+                ));
             }
             Err(user_error) => {
                 // Upgrading NNS Governance results in the proposal info temporarily not

@@ -23,7 +23,7 @@
 use ic_types::malicious_behavior::MaliciousBehavior;
 use macaddr::MacAddr6;
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, DisplayFromStr};
+use serde_with::{DisplayFromStr, serde_as};
 use std::collections::HashMap;
 use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr};

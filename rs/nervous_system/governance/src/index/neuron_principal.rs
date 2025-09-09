@@ -5,7 +5,7 @@ use num_traits::bounds::LowerBounded;
 use std::{
     clone::Clone,
     cmp::Ord,
-    collections::{btree_map::Entry, BTreeMap, HashSet},
+    collections::{BTreeMap, HashSet, btree_map::Entry},
     hash::Hash,
 };
 

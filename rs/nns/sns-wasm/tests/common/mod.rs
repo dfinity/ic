@@ -8,8 +8,8 @@ use ic_nns_test_utils::{
     state_test_helpers::{create_canister, setup_nns_canisters, update_with_sender},
 };
 use ic_sns_wasm::pb::v1::{
-    get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult, DeployedSns,
-    GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse,
+    DeployedSns, GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse,
+    get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult,
 };
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 

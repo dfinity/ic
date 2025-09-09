@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use candid::types::number::Nat;
 use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
-use ic_ledger_core::{block::BlockIndex, Tokens};
+use ic_ledger_core::{Tokens, block::BlockIndex};
 pub use ic_nervous_system_canisters::ledger::ICRC1Ledger;
 use ic_nervous_system_common::NervousSystemError;
 use icrc_ledger_client::{ICRC1Client, Runtime};

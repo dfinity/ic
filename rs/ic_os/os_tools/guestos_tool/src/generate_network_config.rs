@@ -3,7 +3,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
 use config_types::Ipv6Config;
 use network::interfaces::{get_interface_name as get_valid_interface_name, get_interface_paths};
@@ -33,7 +33,9 @@ impl IpAddressInfo {
         gateway: &str,
     ) -> Result<IpAddressInfo> {
         if Self::verify_ipv4_address(address, prefix_length, gateway) {
-            eprintln!("Valid IPv4 address configuration provided:\nAddress: {address}\nPrefix length: {prefix_length}\nGateway: {gateway}");
+            eprintln!(
+                "Valid IPv4 address configuration provided:\nAddress: {address}\nPrefix length: {prefix_length}\nGateway: {gateway}"
+            );
             let address_with_prefix = format!("{}/{}", address, prefix_length);
 
             Ok(IpAddressInfo {
@@ -41,18 +43,24 @@ impl IpAddressInfo {
                 gateway: gateway.to_string(),
             })
         } else {
-            bail!("ERROR: invalid Ipv4 configuration:\nAddress: {address}\nPrefix length: {prefix_length}\nGateway: {gateway}")
+            bail!(
+                "ERROR: invalid Ipv4 configuration:\nAddress: {address}\nPrefix length: {prefix_length}\nGateway: {gateway}"
+            )
         }
     }
     pub fn new_ipv6_address(address_with_prefix: &str, gateway: &str) -> Result<IpAddressInfo> {
         if Self::verify_ipv6_address(address_with_prefix, gateway)? {
-            eprintln!("Valid IPv6 address configuration provided:\nAddress: {address_with_prefix}\nGateway: {gateway}");
+            eprintln!(
+                "Valid IPv6 address configuration provided:\nAddress: {address_with_prefix}\nGateway: {gateway}"
+            );
             Ok(IpAddressInfo {
                 address_with_prefix: address_with_prefix.to_string(),
                 gateway: gateway.to_string(),
             })
         } else {
-            bail!("ERROR: invalid Ipv6 configuration:\nAddress: {address_with_prefix}\nGateway: {gateway}")
+            bail!(
+                "ERROR: invalid Ipv6 configuration:\nAddress: {address_with_prefix}\nGateway: {gateway}"
+            )
         }
     }
 
@@ -132,11 +140,15 @@ pub fn validate_and_construct_ipv4_address_info(
             IpAddressInfo::new_ipv4_address(ipv4_address, ipv4_prefix_length, ipv4_gateway)?,
         )),
         (None, None, None) => {
-            eprintln!("No IPv4 address configuration provided. Configuring networkd without IPv4 address.");
+            eprintln!(
+                "No IPv4 address configuration provided. Configuring networkd without IPv4 address."
+            );
             Ok(None)
         }
         _ => {
-            bail!("ERROR: Incomplete configuration - an IPv4 address, prefix length, and gateway are required. Please specify all.");
+            bail!(
+                "ERROR: Incomplete configuration - an IPv4 address, prefix length, and gateway are required. Please specify all."
+            );
         }
     }
 }
@@ -319,9 +331,11 @@ mod tests {
 
     #[test]
     fn test_validate_ipv4_network_info_no_input() {
-        assert!(validate_and_construct_ipv4_address_info(None, None, None)
-            .unwrap()
-            .is_none());
+        assert!(
+            validate_and_construct_ipv4_address_info(None, None, None)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
@@ -330,12 +344,14 @@ mod tests {
             validate_and_construct_ipv4_address_info(None, Some("30"), Some("192.168.1.254"))
                 .is_err()
         );
-        assert!(validate_and_construct_ipv4_address_info(
-            Some("192.168.1.1"),
-            None,
-            Some("192.168.1.254")
-        )
-        .is_err());
+        assert!(
+            validate_and_construct_ipv4_address_info(
+                Some("192.168.1.1"),
+                None,
+                Some("192.168.1.254")
+            )
+            .is_err()
+        );
         assert!(
             validate_and_construct_ipv4_address_info(Some("192.168.1.1"), Some("30"), None)
                 .is_err()
@@ -344,24 +360,30 @@ mod tests {
 
     #[test]
     fn test_validate_ipv4_network_info_invalid_configuration() {
-        assert!(validate_and_construct_ipv4_address_info(
-            Some("invalid_ip"),
-            Some("30"),
-            Some("192.168.1.254")
-        )
-        .is_err());
-        assert!(validate_and_construct_ipv4_address_info(
-            Some("192.168.1.1"),
-            Some("30"),
-            Some("invalid_gateway")
-        )
-        .is_err());
-        assert!(validate_and_construct_ipv4_address_info(
-            Some("192.168.1.1"),
-            Some("33"),
-            Some("192.168.1.254")
-        )
-        .is_err());
+        assert!(
+            validate_and_construct_ipv4_address_info(
+                Some("invalid_ip"),
+                Some("30"),
+                Some("192.168.1.254")
+            )
+            .is_err()
+        );
+        assert!(
+            validate_and_construct_ipv4_address_info(
+                Some("192.168.1.1"),
+                Some("30"),
+                Some("invalid_gateway")
+            )
+            .is_err()
+        );
+        assert!(
+            validate_and_construct_ipv4_address_info(
+                Some("192.168.1.1"),
+                Some("33"),
+                Some("192.168.1.254")
+            )
+            .is_err()
+        );
     }
 
     #[test]

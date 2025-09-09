@@ -5,13 +5,13 @@ use ic_crypto_utils_threshold_sig_der::{
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_rosetta_api::request_handler::RosettaRequestHandler;
 use ic_rosetta_api::rosetta_server::{RosettaApiServer, RosettaApiServerOpt};
-use ic_rosetta_api::{ledger_client, DEFAULT_BLOCKCHAIN, DEFAULT_TOKEN_SYMBOL};
+use ic_rosetta_api::{DEFAULT_BLOCKCHAIN, DEFAULT_TOKEN_SYMBOL, ledger_client};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{CanisterId, PrincipalId};
 use rosetta_core::metrics::RosettaMetrics;
 use std::{path::Path, path::PathBuf, str::FromStr, sync::Arc};
 use tracing::level_filters::LevelFilter;
-use tracing::{error, info, warn, Level};
+use tracing::{Level, error, info, warn};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::FilterExt;
 use tracing_subscriber::filter::FilterFn;
@@ -292,7 +292,9 @@ async fn main() -> std::io::Result<()> {
 
     // Check for conflicting flags
     if opt.mainnet && opt.environment != Environment::DeprecatedTestnet {
-        eprintln!("Cannot specify both --mainnet and --environment flags. Please use --environment production instead of --mainnet.");
+        eprintln!(
+            "Cannot specify both --mainnet and --environment flags. Please use --environment production instead of --mainnet."
+        );
         std::process::exit(1);
     }
 

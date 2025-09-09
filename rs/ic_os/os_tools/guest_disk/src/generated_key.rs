@@ -1,7 +1,7 @@
 use crate::crypt::{activate_crypt_device, format_crypt_device};
-use crate::{activate_flags, DiskEncryption, Partition};
+use crate::{DiskEncryption, Partition, activate_flags};
 use anyhow::{Context, Result};
-use ic_sys::fs::{write_atomically_using_tmp_file, Clobber};
+use ic_sys::fs::{Clobber, write_atomically_using_tmp_file};
 use std::fs::Permissions;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;

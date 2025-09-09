@@ -8,8 +8,9 @@ use crate::{
 };
 use actix_rt::time::interval;
 use actix_web::{
+    App, HttpResponse, HttpServer,
     dev::{Server, ServerHandle},
-    get, post, web, App, HttpResponse, HttpServer,
+    get, post, web,
 };
 
 use rosetta_core::metrics::RosettaMetrics;
@@ -19,11 +20,11 @@ use std::{
     mem::replace,
     path::PathBuf,
     sync::{
+        Arc,
         atomic::{
             AtomicBool,
             Ordering::{Relaxed, SeqCst},
         },
-        Arc,
     },
     time::{Duration, Instant},
 };

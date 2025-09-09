@@ -1,19 +1,19 @@
 use crate::common::{
-    account, default_archive_options, index_ng_wasm, install_index_ng, install_ledger,
-    ledger_get_all_blocks, ledger_wasm, wait_until_sync_is_completed, ARCHIVE_TRIGGER_THRESHOLD,
-    FEE, MAX_BLOCKS_FROM_ARCHIVE,
+    ARCHIVE_TRIGGER_THRESHOLD, FEE, MAX_BLOCKS_FROM_ARCHIVE, account, default_archive_options,
+    index_ng_wasm, install_index_ng, install_ledger, ledger_get_all_blocks, ledger_wasm,
+    wait_until_sync_is_completed,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::{
-    FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
-    GetAccountTransactionsResult, GetBlocksResponse, IndexArg, InitArg as IndexInitArg,
-    ListSubaccountsArgs, TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+    DEFAULT_MAX_BLOCKS_PER_RESPONSE, FeeCollectorRanges, GetAccountTransactionsArgs,
+    GetAccountTransactionsResponse, GetAccountTransactionsResult, GetBlocksResponse, IndexArg,
+    InitArg as IndexInitArg, ListSubaccountsArgs, TransactionWithId,
 };
 use ic_icrc1_ledger::{ChangeFeeCollector, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs};
 use ic_icrc1_test_utils::{
-    minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
+    ArgWithCaller, LedgerEndpointArg, minter_identity, valid_transactions_strategy,
 };
 use ic_rosetta_test_utils::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
@@ -344,7 +344,10 @@ fn assert_ledger_index_parity(env: &StateMachine, ledger_id: CanisterId, index_i
         // We use the hash because nat64 and nat are not equal
         // but ICRC-3 doesn't have nat64.
         if ledger_block.hash() != index_block.hash() {
-            panic!("Ledger block at index {} is different from the index block at the same index\nLedger block: {:?}\nIndex block:  {:?}", index, ledger_block, index_block);
+            panic!(
+                "Ledger block at index {} is different from the index block at the same index\nLedger block: {:?}\nIndex block:  {:?}",
+                index, ledger_block, index_block
+            );
         }
     }
 }
@@ -883,13 +886,15 @@ fn test_list_subaccounts() {
     );
 
     // List account_3.owner subaccounts when an existing starting subaccount is specified but no subaccount is in that range.
-    assert!(list_subaccounts(
-        env,
-        index_id,
-        PrincipalId(account_3.owner),
-        Some(*account(3, 1).effective_subaccount())
-    )
-    .is_empty());
+    assert!(
+        list_subaccounts(
+            env,
+            index_id,
+            PrincipalId(account_3.owner),
+            Some(*account(3, 1).effective_subaccount())
+        )
+        .is_empty()
+    );
 
     // List account_4.owner subaccounts should return the default subaccount
     // mapped to [0;32].

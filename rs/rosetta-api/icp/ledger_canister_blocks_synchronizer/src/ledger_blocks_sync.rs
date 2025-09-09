@@ -1,7 +1,7 @@
 #![allow(clippy::disallowed_types)]
 use std::ops::Range;
-use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
 use core::ops::Deref;
 use std::time::Instant;
@@ -16,7 +16,7 @@ use tracing::{debug, error, info, trace};
 use crate::blocks::BlockStoreError;
 use crate::blocks::{Blocks, HashedBlock, RosettaDbConfig};
 use crate::blocks_access::BlocksAccess;
-use crate::certification::{verify_block_hash, VerificationInfo};
+use crate::certification::{VerificationInfo, verify_block_hash};
 use crate::errors::Error;
 use rosetta_core::metrics::RosettaMetrics;
 
@@ -437,17 +437,17 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
 mod test {
 
     use std::ops::Range;
-    use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
 
     use async_trait::async_trait;
+    use ic_ledger_core::Tokens;
     use ic_ledger_core::block::{BlockType, EncodedBlock};
     use ic_ledger_core::timestamp::TimeStamp;
-    use ic_ledger_core::Tokens;
     use ic_ledger_hash_of::HashOf;
     use ic_types::PrincipalId;
     use icp_ledger::{
-        AccountIdentifier, Block, BlockIndex, Memo, TipOfChainRes, DEFAULT_TRANSFER_FEE,
+        AccountIdentifier, Block, BlockIndex, DEFAULT_TRANSFER_FEE, Memo, TipOfChainRes,
     };
 
     use crate::blocks::RosettaDbConfig;

@@ -1,6 +1,6 @@
 use crate::common::{
-    default_archive_options, index_ng_wasm, install_index_ng, install_ledger,
-    wait_until_sync_is_completed, MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT, STARTING_CYCLES_PER_CANISTER,
+    MAX_ATTEMPTS_FOR_INDEX_SYNC_WAIT, STARTING_CYCLES_PER_CANISTER, default_archive_options,
+    index_ng_wasm, install_index_ng, install_ledger, wait_until_sync_is_completed,
 };
 use candid::{CandidType, Deserialize, Encode, Nat, Principal};
 use ic_agent::Identity;

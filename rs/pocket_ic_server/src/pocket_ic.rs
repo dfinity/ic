@@ -12,15 +12,16 @@ use axum::{
 use bitcoin::Network;
 use candid::{CandidType, Decode, Encode, Principal};
 use cycles_minting_canister::{
-    ChangeSubnetTypeAssignmentArgs, CyclesCanisterInitPayload, SetAuthorizedSubnetworkListArgs,
-    SubnetListWithType, UpdateSubnetTypeArgs, DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS,
+    ChangeSubnetTypeAssignmentArgs, CyclesCanisterInitPayload,
+    DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS, SetAuthorizedSubnetworkListArgs,
+    SubnetListWithType, UpdateSubnetTypeArgs,
 };
-use futures::future::BoxFuture;
 use futures::FutureExt;
+use futures::future::BoxFuture;
 use hyper::body::Bytes;
-use hyper::header::{HeaderValue, CONTENT_TYPE};
+use hyper::header::{CONTENT_TYPE, HeaderValue};
 use hyper::{Method, StatusCode};
-use ic_boundary::{status, Health, RootKey};
+use ic_boundary::{Health, RootKey, status};
 use ic_btc_adapter::config::{Config as BitcoinAdapterConfig, IncomingSource as BtcIncomingSource};
 use ic_btc_adapter::start_server as start_btc_server;
 use ic_config::adapters::AdaptersConfig;
@@ -32,19 +33,18 @@ use ic_config::{
 use ic_crypto_sha2::Sha256;
 use ic_http_endpoints_public::query;
 use ic_http_endpoints_public::{
-    call_async, call_sync, metrics::HttpHandlerMetrics, read_state,
     CanisterReadStateServiceBuilder, IngressValidatorBuilder, QueryServiceBuilder,
-    SubnetReadStateServiceBuilder,
+    SubnetReadStateServiceBuilder, call_async, call_sync, metrics::HttpHandlerMetrics, read_state,
 };
 use ic_https_outcalls_adapter::{
-    start_server as start_canister_http_server, Config as HttpsOutcallsConfig,
-    IncomingSource as CanisterHttpIncomingSource,
+    Config as HttpsOutcallsConfig, IncomingSource as CanisterHttpIncomingSource,
+    start_server as start_canister_http_server,
 };
-use ic_https_outcalls_adapter_client::{setup_canister_http_client, CanisterHttpAdapterClientImpl};
-use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsService;
-use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServiceServer;
+use ic_https_outcalls_adapter_client::{CanisterHttpAdapterClientImpl, setup_canister_http_client};
 use ic_https_outcalls_service::HttpsOutcallRequest;
 use ic_https_outcalls_service::HttpsOutcallResponse;
+use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsService;
+use ic_https_outcalls_service::https_outcalls_service_server::HttpsOutcallsServiceServer;
 use ic_icp_index::InitArg as IcpIndexInitArg;
 use ic_icrc1_index_ng::{IndexArg as CyclesLedgerIndexArg, InitArg as CyclesLedgerIndexInitArg};
 use ic_interfaces::{crypto::BasicSigner, ingress_pool::IngressPoolThrottler};
@@ -52,7 +52,7 @@ use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_interfaces_registry::{RegistryValue, ZERO_REGISTRY_VERSION};
 use ic_interfaces_state_manager::StateReader;
 use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
-use ic_logger::{no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, no_op_logger};
 use ic_management_canister_types_private::{
     BoundedVec, CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs, EcdsaCurve,
     EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId, Method as Ic00Method,
@@ -68,12 +68,12 @@ use ic_nns_constants::{
     SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_delegation_manager::{NNSDelegationBuilder, NNSDelegationReader};
-use ic_nns_governance_api::{neuron::DissolveState, NetworkEconomics, Neuron};
+use ic_nns_governance_api::{NetworkEconomics, Neuron, neuron::DissolveState};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{
-    are_disjoint, is_subset_of, CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET,
+    CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable, are_disjoint, is_subset_of,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::deserialize_atomic_mutate_response;
@@ -81,15 +81,16 @@ use ic_sns_wasm::init::SnsWasmCanisterInitPayloadBuilder;
 use ic_sns_wasm::pb::v1::add_wasm_response::Result as AddWasmResult;
 use ic_sns_wasm::pb::v1::{AddWasmRequest, AddWasmResponse, SnsCanisterType, SnsWasm};
 use ic_state_machine_tests::{
-    add_global_registry_records, add_initial_registry_records, FakeVerifier, StateMachine,
-    StateMachineBuilder, StateMachineConfig, StateMachineStateDir, SubmitIngressError, Subnets,
-    WasmResult,
+    FakeVerifier, StateMachine, StateMachineBuilder, StateMachineConfig, StateMachineStateDir,
+    SubmitIngressError, Subnets, WasmResult, add_global_registry_records,
+    add_initial_registry_records,
 };
 use ic_state_manager::StateManagerImpl;
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{CertificateDelegationFormat, CertificateDelegationMetadata};
 use ic_types::{
+    CanisterId, Cycles, Height, NodeId, NumInstructions, PrincipalId, RegistryVersion, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     canister_http::{
         CanisterHttpReject, CanisterHttpRequest as AdapterCanisterHttpRequest,
@@ -103,7 +104,6 @@ use ic_types::{
         QueryResponseHash, ReplicaHealthStatus,
     },
     time::GENESIS,
-    CanisterId, Cycles, Height, NodeId, NumInstructions, PrincipalId, RegistryVersion, SubnetId,
 };
 use ic_types::{NumBytes, Time};
 use ic_validator_ingress_message::StandaloneIngressSigVerifier;
@@ -116,7 +116,7 @@ use pocket_ic::common::rest::{
     RawEffectivePrincipal, RawMessageId, RawSetStableMemory, SubnetInstructionConfig, SubnetKind,
     TickConfigs, Topology,
 };
-use pocket_ic::{copy_dir, ErrorCode, RejectCode, RejectResponse};
+use pocket_ic::{ErrorCode, RejectCode, RejectResponse, copy_dir};
 use registry_canister::init::RegistryCanisterInitPayload;
 use serde::{Deserialize, Serialize};
 use slog::Level;
@@ -125,7 +125,7 @@ use std::hash::Hash;
 use std::str::FromStr;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
-    fs::{remove_file, File},
+    fs::{File, remove_file},
     io::{BufReader, Read, Write},
     net::SocketAddr,
     path::PathBuf,
@@ -2185,9 +2185,11 @@ impl PocketIc {
             let systime: SystemTime = time.into();
             let minimum_systime = default_timestamp(&icp_features);
             if systime < minimum_systime {
-                return Err(format!("The initial timestamp (unix timestamp in nanoseconds) must be no earlier than {} (provided {}).",
+                return Err(format!(
+                    "The initial timestamp (unix timestamp in nanoseconds) must be no earlier than {} (provided {}).",
                     systemtime_to_unix_epoch_nanos(minimum_systime),
-                    systemtime_to_unix_epoch_nanos(systime)));
+                    systemtime_to_unix_epoch_nanos(systime)
+                ));
             }
         }
         let initial_time: SystemTime = initial_time
@@ -2369,7 +2371,10 @@ impl PocketIc {
                     if let Some(mut subnet_kind_ranges) = subnet_kind_canister_range(subnet_kind) {
                         subnet_kind_ranges.sort();
                         if !is_subset_of(subnet_kind_ranges.iter(), sorted_ranges.iter()) {
-                            return Err(format!("The actual subnet canister ranges {:?} do not contain the canister ranges {:?} expected for the subnet kind {:?}.", sorted_ranges, subnet_kind_ranges, subnet_kind));
+                            return Err(format!(
+                                "The actual subnet canister ranges {:?} do not contain the canister ranges {:?} expected for the subnet kind {:?}.",
+                                sorted_ranges, subnet_kind_ranges, subnet_kind
+                            ));
                         }
                     }
                     for other_subnet_kind in SubnetKind::iter() {
@@ -2382,7 +2387,13 @@ impl PocketIc {
                                     other_subnet_kind_ranges.iter(),
                                     sorted_ranges.iter(),
                                 ) {
-                                    return Err(format!("The actual subnet canister ranges {:?} for the subnet kind {:?} are not disjoint from the canister ranges {:?} for a different subnet kind {:?}.", sorted_ranges, subnet_kind, other_subnet_kind_ranges, other_subnet_kind));
+                                    return Err(format!(
+                                        "The actual subnet canister ranges {:?} for the subnet kind {:?} are not disjoint from the canister ranges {:?} for a different subnet kind {:?}.",
+                                        sorted_ranges,
+                                        subnet_kind,
+                                        other_subnet_kind_ranges,
+                                        other_subnet_kind
+                                    ));
                                 }
                             }
                         }
@@ -3250,7 +3261,7 @@ impl TryFrom<RawMessageId> for MessageId {
             Err(_) => {
                 return Err(ConversionError {
                     message: "Bad message id".to_string(),
-                })
+                });
             }
         };
         Ok(MessageId {
@@ -3960,7 +3971,7 @@ impl TryFrom<RawCanisterCall> for CanisterCall {
             Err(_) => {
                 return Err(ConversionError {
                     message: "Bad sender principal".to_string(),
-                })
+                });
             }
         };
         let canister_id = match CanisterId::try_from(canister_id) {
@@ -3968,7 +3979,7 @@ impl TryFrom<RawCanisterCall> for CanisterCall {
             Err(_) => {
                 return Err(ConversionError {
                     message: "Bad canister id".to_string(),
-                })
+                });
             }
         };
 
@@ -4277,13 +4288,18 @@ fn route(
                     if matches!(subnet_kind, SubnetKind::NNS)
                         || matches!(subnet_kind, SubnetKind::II)
                     {
-                        return Err(format!("The effective canister ID {canister_id} belongs to the NNS or II subnet on the IC mainnet for which PocketIC provides a `SubnetKind`: please set up your PocketIC instance with a subnet of that `SubnetKind`."));
+                        return Err(format!(
+                            "The effective canister ID {canister_id} belongs to the NNS or II subnet on the IC mainnet for which PocketIC provides a `SubnetKind`: please set up your PocketIC instance with a subnet of that `SubnetKind`."
+                        ));
                     }
                     let instruction_config = SubnetInstructionConfig::Production;
                     // The binary representation of canister IDs on the IC mainnet consists of exactly 10 bytes.
                     let canister_id_slice: &[u8] = canister_id.as_ref();
                     if canister_id_slice.len() != 10 {
-                        return Err(format!("The binary representation {} of effective canister ID {canister_id} should consist of 10 bytes.", hex::encode(canister_id_slice)));
+                        return Err(format!(
+                            "The binary representation {} of effective canister ID {canister_id} should consist of 10 bytes.",
+                            hex::encode(canister_id_slice)
+                        ));
                     }
                     // The first 8 bytes of the binary representation of a canister ID on the IC mainnet represent:
                     // - the sequence number of the canister's subnet on the IC mainnet (all but the last 20 bits);
@@ -4291,7 +4307,9 @@ fn route(
                     let canister_id_u64: u64 =
                         u64::from_be_bytes(canister_id_slice[..8].try_into().unwrap());
                     if (canister_id_u64 >> 20) >= MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET {
-                        return Err(format!("The effective canister ID {canister_id} does not belong to an existing subnet and it is not a mainnet canister ID."));
+                        return Err(format!(
+                            "The effective canister ID {canister_id} does not belong to an existing subnet and it is not a mainnet canister ID."
+                        ));
                     }
                     // Hence, we derive the canister range of the canister ID on the IC mainnet by masking in/out the last 20 bits.
                     // This works for all IC mainnet subnets that have not been split.

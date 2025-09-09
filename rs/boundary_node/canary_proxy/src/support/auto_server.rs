@@ -15,7 +15,7 @@ use bytes::Bytes;
 use http::{Request, Response};
 use hyper::{
     body::{Body, Incoming},
-    rt::{bounds::Http2ServerConnExec, Timer},
+    rt::{Timer, bounds::Http2ServerConnExec},
     server::conn::{http1, http2},
     service::Service,
 };
@@ -457,7 +457,7 @@ impl<E> Http2Builder<'_, E> {
 
 #[cfg(test)]
 mod tests {
-    use crate::support::{tokio_executor::TokioExecutor, ServerBuilder, TokioIo};
+    use crate::support::{ServerBuilder, TokioIo, tokio_executor::TokioExecutor};
     use http::{Request, Response};
     use http_body::Body;
     use http_body_util::{BodyExt, Empty, Full};

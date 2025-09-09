@@ -7,27 +7,27 @@ use std::{
 use anyhow::anyhow;
 use bytes::Bytes;
 use clap::Parser;
-use futures_util::{future::Either, Future};
+use futures_util::{Future, future::Either};
 use http::{
-    header::{Entry, CONTENT_SECURITY_POLICY},
     HeaderValue, Uri, Version,
+    header::{CONTENT_SECURITY_POLICY, Entry},
 };
 use http_body::Body;
-use http_body_util::{combinators::BoxBody, BodyExt, Empty, Full};
+use http_body_util::{BodyExt, Empty, Full, combinators::BoxBody};
 use hyper::{
+    Method, Request, Response,
     body::Incoming,
     client::conn::{http1, http2},
     service::service_fn,
     upgrade::Upgraded,
-    Method, Request, Response,
 };
 use once_cell::sync::Lazy;
 use regex::bytes::Regex;
 use tokio::{
     io::copy_bidirectional,
-    net::{lookup_host, TcpListener, TcpStream},
+    net::{TcpListener, TcpStream, lookup_host},
 };
-use tracing::{error, info, Instrument, Span};
+use tracing::{Instrument, Span, error, info};
 
 mod support;
 use support::{ServerBuilder, TokioExecutor, TokioIo};

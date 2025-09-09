@@ -1,7 +1,7 @@
 use crate::pb::v1::{
-    get_wasm_metadata_response, GetWasmMetadataRequest as GetWasmMetadataRequestPb,
+    GetWasmMetadataRequest as GetWasmMetadataRequestPb,
     GetWasmMetadataResponse as GetWasmMetadataResponsePb, MetadataSection as MetadataSectionPb,
-    SnsWasmError as SnsWasmErrorPb,
+    SnsWasmError as SnsWasmErrorPb, get_wasm_metadata_response,
 };
 
 pub const MAX_METADATA_SECTION_NAME_BYTES: usize = 100;

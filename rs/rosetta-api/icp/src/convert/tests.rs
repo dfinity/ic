@@ -1,10 +1,10 @@
 use super::*;
+use crate::DEFAULT_TOKEN_SYMBOL;
 use crate::convert::from_account_or_account_identifier;
+use crate::models::OperationIdentifier;
 use crate::models::amount::signed_amount;
 use crate::models::operation::OperationType;
-use crate::models::OperationIdentifier;
 use crate::request_types::Stake;
-use crate::DEFAULT_TOKEN_SYMBOL;
 use icp_ledger::AccountIdentifier;
 use icp_ledger::Operation as LedgerOperation;
 
@@ -260,7 +260,9 @@ fn from_account_ai_to_ai_test() {
     let error = from_account_or_account_identifier(None, Some(incorrect_ai)).unwrap_err();
     assert_eq!(
         error,
-        ApiError::invalid_request("Could not parse recipient account identifier: Received an invalid AccountIdentifier with length 2 bytes instead of the expected 28 or 32.")
+        ApiError::invalid_request(
+            "Could not parse recipient account identifier: Received an invalid AccountIdentifier with length 2 bytes instead of the expected 28 or 32."
+        )
     );
 
     // Only Account, no subaccount

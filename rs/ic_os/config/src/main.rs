@@ -1,11 +1,11 @@
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 use config::generate_testnet_config::{
-    generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
+    GenerateTestnetConfigArgs, Ipv6ConfigType, generate_testnet_config,
 };
 use config::guestos::{bootstrap_ic_node::bootstrap_ic_node, generate_ic_config};
 use config::serialize_and_write_config;
-use config::setupos::config_ini::{get_config_ini_settings, ConfigIniSettings};
+use config::setupos::config_ini::{ConfigIniSettings, get_config_ini_settings};
 use config::setupos::deployment_json::get_deployment_settings;
 use config_types::*;
 use macaddr::MacAddr6;
@@ -173,7 +173,9 @@ pub fn main() -> Result<()> {
                 }),
                 (None, None, None) => None,
                 _ => {
-                    println!("Warning: Partial IPv4 configuration provided. All parameters are required for IPv4 configuration.");
+                    println!(
+                        "Warning: Partial IPv4 configuration provided. All parameters are required for IPv4 configuration."
+                    );
                     None
                 }
             };
@@ -193,9 +195,9 @@ pub fn main() -> Result<()> {
                 let node_reward_type_pattern = Regex::new(r"^type[0-9]+(\.[0-9])?$")?;
                 if !node_reward_type_pattern.is_match(node_reward_type) {
                     anyhow::bail!(
-                            "Invalid node_reward_type '{}'. It must match the pattern ^type[0-9]+(\\.[0-9])?$",
-                            node_reward_type
-                        );
+                        "Invalid node_reward_type '{}'. It must match the pattern ^type[0-9]+(\\.[0-9])?$",
+                        node_reward_type
+                    );
                 }
             } else {
                 println!("Node reward type is not set. Skipping validation.");

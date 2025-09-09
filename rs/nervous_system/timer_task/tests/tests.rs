@@ -3,7 +3,7 @@ use canister_test::Project;
 use ic_config::subnet_config::SubnetConfig;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
-use ic_types::{ingress::WasmResult, CanisterId};
+use ic_types::{CanisterId, ingress::WasmResult};
 
 fn state_machine_for_test() -> StateMachine {
     // Setting up the state machine with a lower instruction limit to make the tests run faster.
