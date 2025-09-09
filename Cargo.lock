@@ -11409,6 +11409,7 @@ dependencies = [
  "ic-dummy-getrandom-for-wasm",
  "ic-http-types",
  "ic-ledger-core",
+ "ic-limits",
  "ic-management-canister-types-private",
  "ic-metrics-encoder",
  "ic-nervous-system-canisters",
