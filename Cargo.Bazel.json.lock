@@ -1,9 +1,5 @@
 {
-<<<<<<< HEAD
-  "checksum": "a195f045d8898d15409a3251abfac09e8cc0200e1f5b9d771cb9b97b54715c41",
-=======
-  "checksum": "8302df3c8391e72434a266be9750616b83092ea0c3105f2b9bc5f8309144084c",
->>>>>>> master
+  "checksum": "7602dc23d6973c7fd590ddfac5f88fd11f3e954788fde474dcbb54a153d3bf14",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
