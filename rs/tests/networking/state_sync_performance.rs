@@ -36,8 +36,7 @@ use ic_system_test_driver::{
 use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
 use rejoin_test_lib::{
-    assert_state_sync_has_happened, fetch_metrics, install_statesync_test_canisters,
-    modify_canister_heap,
+    assert_state_sync_has_happened, install_statesync_test_canisters, modify_canister_heap,
 };
 use slog::info;
 use std::time::Duration;
@@ -100,8 +99,6 @@ fn setup(env: TestEnv) {
     );
     env.sync_with_prometheus();
 
-    // Currently, we make the assumption that the first subnets is the root
-    // subnet. This might not hold in the future.
     let nns_node = topology.root_subnet().nodes().next().unwrap();
     NnsInstallationBuilder::new()
         .install(&nns_node, &env)
@@ -173,21 +170,15 @@ fn test(env: TestEnv) {
         )
         .await;
 
-        let res = fetch_metrics::<u64>(
-            &logger,
-            agent_node.clone(),
-            vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT],
-        )
-        .await;
-        let base_count = res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT][0];
-
-        // Waiting a couple seconds, such that the registry can update
-        tokio::time::sleep(Duration::from_secs(10)).await;
+        let _topology = topology
+            .block_for_newer_registry_version()
+            .await
+            .expect("Failed to wait for new topology version");
         env.sync_with_prometheus();
 
         let maybe_state_syncs = new_nodes
             .into_iter()
-            .map(|node| async { assert_state_sync_has_happened(&logger, node, base_count).await })
+            .map(|node| async { assert_state_sync_has_happened(&logger, node, 0).await })
             .collect::<Vec<_>>();
 
         let state_sync_durations = join_all(maybe_state_syncs).await;

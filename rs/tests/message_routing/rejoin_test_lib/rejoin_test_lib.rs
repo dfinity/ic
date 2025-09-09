@@ -269,8 +269,6 @@ pub async fn assert_state_sync_has_happened(
 
             return time[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM][0];
         }
-
-        //info!(logger, "No state sync detected yet, attempt {i}.");
         tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
     }
     panic!("Couldn't verify that a state sync has happened after {NUM_RETRIES} attempts.");
@@ -411,15 +409,6 @@ pub async fn modify_canister_heap(
                         )
                     });
 
-                    // let _res: Result<u64, String> = canister
-                    //     .update_("expand_state", dfn_candid::candid, payload)
-                    //     .await
-                    //     .unwrap_or_else(|err| {
-                    //         panic!(
-                    //             "Calling expand_state() on canister {:?} failed: {}",
-                    //             canister, err
-                    //         )
-                    //     });
                     info!(
                         logger_clone,
                         "Expanded canister {:?} {} times, it is now {}",
