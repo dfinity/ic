@@ -482,6 +482,7 @@ pub fn nns_recovery_test(env: TestEnv) {
     let f = (SUBNET_SIZE - 1) / 3;
     let faulty_nodes = &nns_nodes[..(f + 1)];
     let healthy_nodes = &nns_nodes[(f + 1)..];
+    let healthy_node = healthy_nodes.first().unwrap();
     let dfinity_owned_node = faulty_nodes.first().unwrap();
     info!(
         logger,
@@ -520,15 +521,13 @@ pub fn nns_recovery_test(env: TestEnv) {
         });
     }
 
-    if let Some(healthy) = healthy_nodes.first() {
-        info!(logger, "Ensure a healthy node still works in read mode");
-        assert!(can_read_msg(
-            &logger,
-            &healthy.get_public_url(),
-            app_can_id,
-            msg
-        ));
-    }
+    info!(logger, "Ensure a healthy node still works in read mode");
+    assert!(can_read_msg(
+        &logger,
+        &healthy_node.get_public_url(),
+        app_can_id,
+        msg
+    ));
     info!(
         logger,
         "Ensure the subnet does not work in write mode anymore"
@@ -556,7 +555,7 @@ pub fn nns_recovery_test(env: TestEnv) {
 
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,
-        nns_url: dfinity_owned_node.get_public_url(),
+        nns_url: healthy_node.get_public_url(),
         replica_version: Some(ic_version),
         key_file: Some(ssh_priv_key_path.clone()),
         test_mode: true,
