@@ -40,7 +40,7 @@ pub fn calculate_daily_rewards(input: RewardsCalculatorInput) -> RewardsCalculat
         // Step 2: Extrapolated failure rate for each provider
         let relative_nodes_fr = provider_nodes_metrics_daily
             .iter()
-            .map(|(node, metrics)| (node.clone(), metrics.relative_fr))
+            .map(|(node, metrics)| (*node, metrics.relative_fr))
             .collect::<BTreeMap<_, _>>();
         let all_relative_frs = relative_nodes_fr.values().cloned().collect::<Vec<_>>();
         let extrapolated_fr = avg(&all_relative_frs).unwrap_or_default();
