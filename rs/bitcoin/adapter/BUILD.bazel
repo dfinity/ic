@@ -187,6 +187,7 @@ rust_bench(
         "@crate_index//:scrypt",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
+        "@crate_index//:sha2",
         "@crate_index//:slog",
         "@crate_index//:slog-async",
         "@crate_index//:static_assertions",

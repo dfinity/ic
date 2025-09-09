@@ -6754,6 +6754,7 @@ dependencies = [
  "scrypt",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "slog",
  "slog-async",
  "static_assertions",

@@ -13,6 +13,7 @@ use ic_interfaces_adapter_client::RpcAdapterClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use rand::{CryptoRng, Rng};
+use sha2::Digest;
 use std::path::Path;
 use tempfile::Builder;
 
@@ -119,13 +120,22 @@ fn e2e(criterion: &mut Criterion) {
 fn scrypt_header(criterion: &mut Criterion) {
     let rng = &mut ic_crypto_test_utils_reproducible_rng::reproducible_rng();
     let params = scrypt::Params::new(10, 1, 1, 32).expect("invalid scrypt params");
-    let mut group = criterion.benchmark_group("scrypt_header");
-
     let header = random_header(rng);
-    group.bench_function("scrypt", |bench| {
+
+    {
+        let mut scrypt_bench = criterion.benchmark_group("scrypt_header");
+        scrypt_bench.bench_function("scrypt", |bench| {
+            bench.iter(|| {
+                let mut hash = [0u8; 32];
+                scrypt::scrypt(&header, &header, &params, &mut hash).unwrap()
+            })
+        });
+    }
+
+    let mut sha256_bench = criterion.benchmark_group("sha256_header");
+    sha256_bench.bench_function("sha2-256", |bench| {
         bench.iter(|| {
-            let mut hash = [0u8; 32];
-            scrypt::scrypt(&header, &header, &params, &mut hash).unwrap()
+            let _hash = sha2::Sha256::digest(&header);
         })
     });
 }
