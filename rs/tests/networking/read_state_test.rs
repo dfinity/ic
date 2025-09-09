@@ -201,7 +201,7 @@ fn read_state_with_identity_and_principal_id(
         | Endpoint::SubnetReadState(read_state::subnet::Version::V2) => {
             api_boundary_node.get_public_url()
         }
-        // TODO: switch to api_boundary_node once the endpoints are
+        // TODO(CON-1586): switch to api_boundary_node once the endpoints are
         // allowlisted by the boundary nodes.
         Endpoint::CanisterReadState(read_state::canister::Version::V3)
         | Endpoint::SubnetReadState(read_state::subnet::Version::V3) => node.get_public_url(),
@@ -956,18 +956,28 @@ fn main() -> Result<()> {
     let mut group = SystemTestGroup::new()
         .with_setup(setup)
         .add_test(systest!(test_non_utf8_metadata))
-        .add_test(systest!(test_request_path; read_state::canister::Version::V2))
-        .add_test(systest!(test_request_path; read_state::canister::Version::V3))
-        .add_test(systest!(test_request_path_access; read_state::canister::Version::V2))
-        .add_test(systest!(test_request_path_access; read_state::canister::Version::V3))
-        .add_test(systest!(test_canister_canister_ranges_paths; read_state::canister::Version::V2))
-        .add_test(systest!(test_canister_canister_ranges_paths; read_state::canister::Version::V3))
         .add_test(systest!(test_subnet_canister_ranges_paths; read_state::subnet::Version::V2))
         .add_test(systest!(test_subnet_canister_ranges_paths; read_state::subnet::Version::V3))
-        .add_test(systest!(test_canister_path; read_state::canister::Version::V2))
-        .add_test(systest!(test_canister_path; read_state::canister::Version::V3))
+        .add_test(systest!(test_canister_canister_ranges_paths; read_state::canister::Version::V2))
+        .add_test(systest!(test_canister_canister_ranges_paths; read_state::canister::Version::V3))
+        // Only /api/{v2,v3}/canister/read_state endpoints are tested because /request_status
+        // paths are not supported by /api/{v2,v3}/subnet/read_state
+        .add_test(systest!(test_request_path; read_state::canister::Version::V2))
+        .add_test(systest!(test_request_path; read_state::canister::Version::V3))
+        // Only /api/{v2,v3}/canister/read_state endpoints are tested because /request_status
+        // paths are not supported by /api/{v2,v3}/subnet/read_state
+        .add_test(systest!(test_request_path_access; read_state::canister::Version::V2))
+        .add_test(systest!(test_request_path_access; read_state::canister::Version::V3))
+        // Only /api/{v2,v3}/canister/read_state endpoints are tested because /request_status
+        // paths are not supported by /api/{v2,v3}/subnet/read_state
         .add_test(systest!(test_absent_request; read_state::canister::Version::V2))
         .add_test(systest!(test_absent_request; read_state::canister::Version::V3))
+        // Only /api/{v2,v3}/canister/read_state endpoints are tested because /request_status
+        // paths are not supported by /api/{v2,v3}/subnet/read_state
+        .add_test(systest!(test_canister_path; read_state::canister::Version::V2))
+        .add_test(systest!(test_canister_path; read_state::canister::Version::V3))
+        // Only /api/{v2,v3}/canister/read_state endpoints are tested because /request_status
+        // paths are not supported by /api/{v2,v3}/subnet/read_state
         .add_test(systest!(test_metadata_path; read_state::canister::Version::V2))
         .add_test(systest!(test_metadata_path; read_state::canister::Version::V3));
 
