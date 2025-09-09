@@ -26,7 +26,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     consensus::{
         Block, CatchUpContent, CatchUpPackage, CatchUpPackageShare, CatchUpShareContent, HasHeight,
-        HasThresholdCommittee, HashedBlock, HashedRandomBeacon, ThresholdCommittee,
+        HasThresholdCommittee, HashedBlock, HashedRandomBeacon,
     },
     replica_config::ReplicaConfig,
 };
@@ -235,9 +235,11 @@ impl CatchUpPackageMaker {
                     registry_version,
                 );
                 let share_content = CatchUpShareContent::from(&content);
-                if let Some(dkg_id) =
-                    active_threshold_nidkg_id(pool.as_cache(), height, ThresholdCommittee::High)
-                {
+                if let Some(dkg_id) = active_threshold_nidkg_id(
+                    pool.as_cache(),
+                    height,
+                    CatchUpContent::threshold_committee(),
+                ) {
                     match self.crypto.sign(&content, my_node_id, dkg_id) {
                         Ok(signature) => {
                             // Caution: The log string below is checked in replica_determinism_test.

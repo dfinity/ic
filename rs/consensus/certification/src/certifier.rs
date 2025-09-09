@@ -20,7 +20,7 @@ use ic_types::{
         certification::{
             Certification, CertificationContent, CertificationMessage, CertificationShare,
         },
-        Committee, HasCommittee, HasHeight, HasThresholdCommittee, ThresholdCommittee,
+        Committee, HasCommittee, HasHeight, HasThresholdCommittee,
     },
     crypto::Signed,
     replica_config::ReplicaConfig,
@@ -343,7 +343,7 @@ impl CertifierImpl {
                 let dkg_id = active_threshold_nidkg_id(
                     self.consensus_pool_cache.as_ref(),
                     height,
-                    ThresholdCommittee::High,
+                    Certification::threshold_committee(),
                 )?;
                 match self
                     .crypto
@@ -399,7 +399,7 @@ impl CertifierImpl {
                 active_threshold_nidkg_id(
                     self.consensus_pool_cache.as_ref(),
                     cert.height(),
-                    ThresholdCommittee::High,
+                    Certification::threshold_committee(),
                 )
             }),
             shares,
@@ -576,7 +576,7 @@ impl CertifierImpl {
                             active_threshold_nidkg_id(
                                 self.consensus_pool_cache.as_ref(),
                                 share.height,
-                                ThresholdCommittee::High,
+                                Certification::threshold_committee(),
                             )?,
                         )
                         .map_err(VerifierError::from)

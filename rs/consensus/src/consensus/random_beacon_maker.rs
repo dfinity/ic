@@ -8,10 +8,7 @@ use ic_consensus_utils::{
 };
 use ic_logger::{error, trace, ReplicaLogger};
 use ic_types::{
-    consensus::{
-        HasThresholdCommittee, RandomBeacon, RandomBeaconContent, RandomBeaconShare,
-        ThresholdCommittee,
-    },
+    consensus::{HasThresholdCommittee, RandomBeacon, RandomBeaconContent, RandomBeaconShare},
     replica_config::ReplicaConfig,
 };
 use std::sync::Arc;
@@ -83,9 +80,11 @@ impl RandomBeaconMaker {
                 // beacon at height h only after there exists a block at
                 // height h, and we only use the random beacon at height
                 // h-1 in the validation of blocks at height h.
-                if let Some(dkg_id) =
-                    active_threshold_nidkg_id(pool.as_cache(), next_height, ThresholdCommittee::Low)
-                {
+                if let Some(dkg_id) = active_threshold_nidkg_id(
+                    pool.as_cache(),
+                    next_height,
+                    RandomBeacon::threshold_committee(),
+                ) {
                     match self.crypto.sign(&content, my_node_id, dkg_id) {
                         Ok(signature) => Some(RandomBeaconShare { content, signature }),
                         Err(err) => {

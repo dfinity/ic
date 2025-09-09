@@ -12,7 +12,7 @@ use ic_logger::ReplicaLogger;
 use ic_types::{
     consensus::{
         CatchUpContent, ConsensusMessage, ConsensusMessageHashable, FinalizationContent, HasHeight,
-        RandomTapeContent, ThresholdCommittee,
+        HasThresholdCommittee, RandomBeacon, RandomTape, RandomTapeContent,
     },
     crypto::Signed,
     Height,
@@ -60,7 +60,8 @@ impl ShareAggregator {
         let height = pool.get_random_beacon_height().increment();
         let shares = pool.get_random_beacon_shares(height);
         let state_reader = pool.as_cache();
-        let dkg_id = active_threshold_nidkg_id(state_reader, height, ThresholdCommittee::Low);
+        let dkg_id =
+            active_threshold_nidkg_id(state_reader, height, RandomBeacon::threshold_committee());
         to_messages(aggregate(
             &self.log,
             self.membership.as_ref(),
@@ -89,7 +90,11 @@ impl ShareAggregator {
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
             Box::new(|content: &RandomTapeContent| {
-                active_threshold_nidkg_id(state_reader, content.height(), ThresholdCommittee::Low)
+                active_threshold_nidkg_id(
+                    state_reader,
+                    content.height(),
+                    RandomTape::threshold_committee(),
+                )
             }),
             shares,
         ))
@@ -147,7 +152,11 @@ impl ShareAggregator {
                 }
             });
             let state_reader = pool.as_cache();
-            let dkg_id = active_threshold_nidkg_id(state_reader, height, ThresholdCommittee::High);
+            let dkg_id = active_threshold_nidkg_id(
+                state_reader,
+                height,
+                CatchUpContent::threshold_committee(),
+            );
             let result = aggregate(
                 &self.log,
                 self.membership.as_ref(),

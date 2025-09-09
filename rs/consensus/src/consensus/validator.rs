@@ -201,9 +201,12 @@ impl SignatureVerify for RandomTape {
         pool: &PoolReader<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
-        let dkg_id =
-            active_threshold_nidkg_id(pool.as_cache(), self.height(), ThresholdCommittee::Low)
-                .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
+        let dkg_id = active_threshold_nidkg_id(
+            pool.as_cache(),
+            self.height(),
+            RandomTape::threshold_committee(),
+        )
+        .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         if self.signature.signer == dkg_id {
             crypto.verify_aggregate(self, self.signature.signer.clone())?;
             Ok(())
@@ -222,8 +225,9 @@ impl SignatureVerify for RandomTapeShare {
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
-        let dkg_id = active_threshold_nidkg_id(pool.as_cache(), height, ThresholdCommittee::Low)
-            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
+        let dkg_id =
+            active_threshold_nidkg_id(pool.as_cache(), height, RandomTape::threshold_committee())
+                .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         verify_threshold_committee(
             membership,
             self.signature.signer,
@@ -243,9 +247,12 @@ impl SignatureVerify for RandomBeacon {
         pool: &PoolReader<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
-        let dkg_id =
-            active_threshold_nidkg_id(pool.as_cache(), self.height(), ThresholdCommittee::Low)
-                .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
+        let dkg_id = active_threshold_nidkg_id(
+            pool.as_cache(),
+            self.height(),
+            RandomBeacon::threshold_committee(),
+        )
+        .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         if self.signature.signer == dkg_id {
             crypto.verify_aggregate(self, self.signature.signer.clone())?;
             Ok(())
@@ -264,8 +271,9 @@ impl SignatureVerify for RandomBeaconShare {
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
-        let dkg_id = active_threshold_nidkg_id(pool.as_cache(), height, ThresholdCommittee::Low)
-            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
+        let dkg_id =
+            active_threshold_nidkg_id(pool.as_cache(), height, RandomBeacon::threshold_committee())
+                .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         verify_threshold_committee(
             membership,
             self.signature.signer,
@@ -287,8 +295,12 @@ impl SignatureVerify for Signed<CatchUpContent, ThresholdSignatureShare<CatchUpC
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
-        let dkg_id = active_threshold_nidkg_id(pool.as_cache(), height, ThresholdCommittee::High)
-            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
+        let dkg_id = active_threshold_nidkg_id(
+            pool.as_cache(),
+            height,
+            CatchUpContent::threshold_committee(),
+        )
+        .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
         verify_threshold_committee(
             membership,
             self.signature.signer,
