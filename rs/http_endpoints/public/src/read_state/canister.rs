@@ -1,5 +1,6 @@
 use super::{
-    get_certificate, make_service_unavailable_response, parse_principal_id, verify_principal_ids,
+    get_certificate_and_create_response, make_service_unavailable_response, parse_principal_id,
+    verify_principal_ids,
 };
 use crate::{
     common::{build_validator, validation_error_to_http_error, Cbor, WithTimeout},
@@ -224,7 +225,7 @@ pub(crate) async fn canister_read_state(
                 .get_delegation(CanisterRangesFilter::Tree(effective_canister_id)),
         };
 
-        get_certificate(
+        get_certificate_and_create_response(
             read_state.paths,
             delegation_from_nns,
             certified_state_reader.as_ref(),

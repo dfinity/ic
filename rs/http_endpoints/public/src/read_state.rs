@@ -1,4 +1,4 @@
-//! Module that deals with requests to /api/v2/canister/.../read_state
+//! Module that deals with requests to /api/{v2,v3}/canister/.../read_state and /api/{v2,v3}/subnet/.../read_state
 
 use crate::{
     common::{into_cbor, Cbor},
@@ -49,7 +49,7 @@ fn make_service_unavailable_response() -> axum::response::Response {
     (status, text).into_response()
 }
 
-fn get_certificate(
+fn get_certificate_and_create_response(
     mut paths: Vec<Path>,
     delegation_from_nns: Option<CertificateDelegation>,
     certified_state_reader: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
@@ -68,9 +68,9 @@ fn get_certificate(
         }
     };
 
-    let (tree, certification) = match certified_state_reader.read_certified_state(&labeled_tree) {
-        Some(r) => r,
-        None => return make_service_unavailable_response(),
+    let Some((tree, certification)) = certified_state_reader.read_certified_state(&labeled_tree)
+    else {
+        return make_service_unavailable_response();
     };
 
     let signature = certification.signed.signature.signature.get().0;
@@ -83,4 +83,62 @@ fn get_certificate(
         })),
     };
     Cbor(res).into_response()
+}
+
+#[cfg(test)]
+mod test {
+    use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
+    use ic_test_utilities_consensus::fake::Fake;
+    use ic_types::{
+        consensus::certification::{Certification, CertificationContent},
+        crypto::{CryptoHash, Signed},
+        signature::ThresholdSignature,
+        CryptoHashOfPartialState, Height,
+    };
+
+    use super::*;
+
+    struct FakeCertifiedStateReader {
+        tree: MixedHashTree,
+        certification: Certification,
+    }
+
+    impl CertifiedStateSnapshot for FakeCertifiedStateReader {
+        type State = ReplicatedState;
+
+        fn get_state(&self) -> &Self::State {
+            unimplemented!()
+        }
+
+        fn get_height(&self) -> ic_types::Height {
+            unimplemented!()
+        }
+
+        fn read_certified_state(
+            &self,
+            _paths: &LabeledTree<()>,
+        ) -> Option<(MixedHashTree, Certification)> {
+            Some((self.tree.clone(), self.certification.clone()))
+        }
+    }
+
+    #[test]
+    fn test() {
+        let tree = MixedHashTree::Empty;
+        let certification = Certification {
+            height: Height::new(0),
+            signed: Signed {
+                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
+                    vec![],
+                ))),
+                signature: ThresholdSignature::fake(),
+            },
+        };
+        let reader = FakeCertifiedStateReader {
+            tree,
+            certification,
+        };
+        let response = get_certificate_and_create_response(Vec::new(), None, &reader);
+        assert_eq!(response.status(), StatusCode::OK);
+    }
 }

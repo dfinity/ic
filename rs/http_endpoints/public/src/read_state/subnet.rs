@@ -1,5 +1,6 @@
 use super::{
-    get_certificate, make_service_unavailable_response, parse_principal_id, verify_principal_ids,
+    get_certificate_and_create_response, make_service_unavailable_response, parse_principal_id,
+    verify_principal_ids,
 };
 use crate::{
     common::{Cbor, WithTimeout},
@@ -153,7 +154,7 @@ pub(crate) async fn read_state_subnet(
             Version::V3 => nns_delegation_reader.get_delegation(CanisterRangesFilter::None),
         };
 
-        get_certificate(
+        get_certificate_and_create_response(
             read_state.paths,
             delegation_from_nns,
             certified_state_reader.as_ref(),
