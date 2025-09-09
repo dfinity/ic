@@ -276,7 +276,7 @@ pub fn install_canisters(
     subnets_count: usize,
     canisters_per_subnet: usize,
     wasm: Wasm,
-) -> Vec<Vec<Canister>> {
+) -> Vec<Vec<Canister<'_>>> {
     let mut canisters: Vec<Vec<Canister>> = Vec::new();
     block_on(async {
         for subnet_idx in 0..subnets_count {

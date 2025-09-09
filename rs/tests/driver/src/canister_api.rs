@@ -996,7 +996,7 @@ impl SnsRequestProvider {
         &self,
         buyer: Option<PrincipalId>,
         confirmation_text: Option<String>,
-    ) -> impl Request<RefreshBuyerTokensRes> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<RefreshBuyerTokensRes> + std::fmt::Debug + Clone + Sync + Send + use<> {
         let sale_canister = self.sns_canisters.swap().get().into();
         RefreshBuyerTokensRequest::new(sale_canister, buyer, confirmation_text)
     }
@@ -1070,7 +1070,7 @@ impl SnsRequestProvider {
     pub fn get_state(
         &self,
         mode: CallMode,
-    ) -> impl Request<GetStateRes> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<GetStateRes> + std::fmt::Debug + Clone + Sync + Send + use<> {
         let swap_canister = self.sns_canisters.swap().get().into();
         GetStateRequest::new(swap_canister, mode)
     }

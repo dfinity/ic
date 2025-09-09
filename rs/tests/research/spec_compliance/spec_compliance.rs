@@ -54,13 +54,15 @@ pub fn setup_impl(env: TestEnv, deploy_nns_canisters: bool, http_requests: bool)
     let cloned_env = env.clone();
     if http_requests {
         deploy_httpbin_uvm_thread = Some(spawn(move || {
-            env::set_var(
-                "SSL_CERT_FILE",
-                get_dependency_path(
-                    "ic-os/components/networking/dev-certs/canister_http_test_ca.cert",
-                ),
-            );
-            env::remove_var("NIX_SSL_CERT_FILE");
+            unsafe {
+                env::set_var(
+                    "SSL_CERT_FILE",
+                    get_dependency_path(
+                        "ic-os/components/networking/dev-certs/canister_http_test_ca.cert",
+                    ),
+                );
+                env::remove_var("NIX_SSL_CERT_FILE");
+            }
 
             // Set up Universal VM for httpbin testing service
             UniversalVm::new(String::from(UNIVERSAL_VM_NAME))

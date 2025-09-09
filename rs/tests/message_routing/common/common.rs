@@ -61,7 +61,7 @@ pub async fn install_canisters(
     endpoints_runtime: &[Runtime],
     subnets: usize,
     canisters_per_subnet: usize,
-) -> Vec<Vec<Canister>> {
+) -> Vec<Vec<Canister<'_>>> {
     let logger = env.logger();
     let wasm = Wasm::from_file(get_dependency_path(
         env::var("XNET_TEST_CANISTER_WASM_PATH").expect("XNET_TEST_CANISTER_WASM_PATH not set"),

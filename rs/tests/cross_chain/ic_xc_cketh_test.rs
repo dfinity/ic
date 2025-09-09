@@ -265,7 +265,7 @@ async fn eth_block_number(foundry: &DeployedUniversalVm) -> BlockNumber {
     serde_json::from_value(response_json["result"].clone()).unwrap()
 }
 
-async fn install_cketh_ledger(runtime: &Runtime, minter: Principal) -> LedgerCanister {
+async fn install_cketh_ledger(runtime: &Runtime, minter: Principal) -> LedgerCanister<'_> {
     let mut cketh_ledger_canister = create_canister(runtime).await;
     let ledger_init_args = LedgerArgument::Init(
         // See proposal 126309
@@ -349,7 +349,7 @@ fn minter_init_args(ecdsa_key_id: &EcdsaKeyId, cketh_ledger: Principal) -> Minte
 async fn install_ledger_suite_orchestrator(
     runtime: &Runtime,
     minter: Principal,
-) -> LedgerSuiteOrchestratorCanister {
+) -> LedgerSuiteOrchestratorCanister<'_> {
     let mut lso_canister = create_canister(runtime).await;
     let lso_init_args = OrchestratorArg::InitArg(InitArg {
         more_controller_ids: vec![ROOT_CANISTER_ID.get().0],

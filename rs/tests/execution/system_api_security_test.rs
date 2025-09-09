@@ -464,7 +464,7 @@ fn print_validate_num_cycles(
     }
     let result = ret_val.as_ref().unwrap_or(&vec![]).clone();
 
-    let num_cycles = if let Some(num_cycles) = convert_bytes_to_number(result.as_slice()) {
+    if let Some(num_cycles) = convert_bytes_to_number(result.as_slice()) {
         // Prints the number of cycles
         if ENABLE_DEBUG_LOG {
             print_cycles(logger, num_cycles, message);
@@ -476,8 +476,7 @@ fn print_validate_num_cycles(
             "{} - Error while converting query result for read_cycles", message
         );
         0
-    };
-    num_cycles
+    }
 }
 
 fn print_result(logger: &Logger, ret_val: &Result<Vec<u8>, AgentError>, msg: &str) {

@@ -15,7 +15,7 @@ pub trait RecoveryIterator<
 >
 {
     fn get_step_iterator(&mut self) -> &mut Peekable<I>;
-    fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step + '_>>;
+    fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step + 'static>>;
     fn store_next_step(&mut self, step_type: Option<StepType>);
 
     fn interactive(&self) -> bool;
@@ -42,7 +42,7 @@ pub trait RecoveryIterator<
         vec![]
     }
 
-    fn next_step(&mut self) -> Option<(StepType, Box<dyn Step + '_>)> {
+    fn next_step(&mut self) -> Option<(StepType, Box<dyn Step + 'static>)> {
         let skipped_steps = self.get_skipped_steps();
         let result = if let Some(current_step) = self.get_step_iterator().next() {
             if skipped_steps.contains(&current_step) {
@@ -82,22 +82,25 @@ pub trait RecoveryIterator<
     }
 }
 
-impl Iterator for AppSubnetRecovery {
-    type Item = (app_subnet_recovery::StepType, Box<dyn Step>);
+impl<'a> Iterator for &'a mut AppSubnetRecovery {
+    type Item = (app_subnet_recovery::StepType, Box<dyn Step + 'static>);
     fn next(&mut self) -> Option<Self::Item> {
         self.next_step()
     }
 }
 
 impl Iterator for NNSRecoverySameNodes {
-    type Item = (nns_recovery_same_nodes::StepType, Box<dyn Step>);
+    type Item = (nns_recovery_same_nodes::StepType, Box<dyn Step + 'static>);
     fn next(&mut self) -> Option<Self::Item> {
         self.next_step()
     }
 }
 
 impl Iterator for NNSRecoveryFailoverNodes {
-    type Item = (nns_recovery_failover_nodes::StepType, Box<dyn Step>);
+    type Item = (
+        nns_recovery_failover_nodes::StepType,
+        Box<dyn Step + 'static>,
+    );
     fn next(&mut self) -> Option<Self::Item> {
         self.next_step()
     }
