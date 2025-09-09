@@ -1054,7 +1054,7 @@ impl SnsRequestProvider {
     pub fn icrc1_metadata(
         &self,
         mode: CallMode,
-    ) -> impl Request<Icrc1MetadataResponse> + std::fmt::Debug + Clone + Sync + Send + use<> {
+    ) -> impl Request<Icrc1MetadataResponse> + std::fmt::Debug + Clone + Sync + Send {
         self.sns_ledger_request_provider
             .icrc1_metadata_request(mode)
     }

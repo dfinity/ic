@@ -1220,27 +1220,28 @@ async fn create_one_sale_participant(
     .result()?;
 
     // 2. Call icp_ledger.transfer
-    {
-        let sns_account = Account {
-            owner: sns_swap_canister_id.into(),
-            subaccount: Some(sns_subaccount.0),
-        };
-        let transfer_arg = TransferArg {
-            from_subaccount: None,
-            to: sns_account,
-            fee: None,
-            created_at_time: None,
-            memo: None,
-            amount: Nat::from(contribution),
-        };
-        ledger_agent.call_and_parse(&Icrc1TransferRequest::new(ledger_canister_id, transfer_arg))
-    }
-    .await
-    .context("error performing an ICP ledger transfer")
-    .map(|_| ())
-    .with_workflow_position(2)
-    .push_outcome_display_error(outcome)
-    .result()?;
+
+    let sns_account = Account {
+        owner: sns_swap_canister_id.into(),
+        subaccount: Some(sns_subaccount.0),
+    };
+    let transfer_arg = TransferArg {
+        from_subaccount: None,
+        to: sns_account,
+        fee: None,
+        created_at_time: None,
+        memo: None,
+        amount: Nat::from(contribution),
+    };
+    let request = Icrc1TransferRequest::new(ledger_canister_id, transfer_arg);
+    ledger_agent
+        .call_and_parse(&request)
+        .await
+        .context("error performing an ICP ledger transfer")
+        .map(|_| ())
+        .with_workflow_position(2)
+        .push_outcome_display_error(outcome)
+        .result()?;
 
     // 3. Call sns. refresh_buyer_tokens
     {
