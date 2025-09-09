@@ -33,9 +33,9 @@ pub enum StepType {
     CreateRegistryTar,
     CopyIcState,
     GetRecoveryCUP,
-    CreateArtifacts,
     UploadCUPAndRegistry,
     WaitForCUP,
+    CreateArtifacts,
     UploadState,
     Cleanup,
 }
@@ -66,7 +66,6 @@ pub struct NNSRecoverySameNodesArgs {
     /// The method of downloading state. Possible values are either `local` (for a
     /// local recovery on the admin node) or the ipv6 address of the source node.
     /// Local recoveries allow us to skip a potentially expensive data transfer.
-    /// Should be different to node used in nns-url.
     #[clap(long, value_parser=crate::util::data_location_from_str)]
     pub download_method: Option<DataLocation>,
 
@@ -75,6 +74,10 @@ pub struct NNSRecoverySameNodesArgs {
     /// Local recoveries allow us to skip a potentially expensive data transfer.
     #[clap(long, value_parser=crate::util::data_location_from_str)]
     pub upload_method: Option<DataLocation>,
+
+    /// IP address of the node used to poll for the recovery CUP
+    #[clap(long)]
+    pub wait_for_cup_node: Option<IpAddr>,
 
     /// The path to a file containing the private key that has backup access to all nodes in the subnet.
     #[clap(long)]
@@ -175,11 +178,22 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 }
             }
 
-            StepType::UploadCUPAndRegistry => {
+            StepType::UploadCUPAndRegistry | StepType::UploadState => {
                 if self.params.upload_method.is_none() {
                     self.params.upload_method = read_optional_data_location(
                         &self.logger,
                         "Are you performing a local recovery directly on the node, or a remote recovery? [local/<ipv6>]",
+                    );
+                }
+            }
+
+            StepType::WaitForCUP => {
+                if let Some(DataLocation::Remote(ip)) = self.params.upload_method {
+                    self.params.wait_for_cup_node = Some(ip);
+                } else {
+                    self.params.wait_for_cup_node = read_optional(
+                        &self.logger,
+                        "Enter IP of the node to be polled for the recovery CUP:",
                     );
                 }
             }
@@ -289,11 +303,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                     .get_recovery_cup_step(self.params.subnet_id, !self.interactive())?,
             )),
 
-            StepType::CreateArtifacts => Ok(Box::new(
-                self.recovery
-                    .get_create_nns_recovery_tar_step(self.params.output_dir.clone()),
-            )),
-
             StepType::UploadCUPAndRegistry => {
                 if let Some(method) = self.params.upload_method {
                     let node_ip = match method {
@@ -307,16 +316,17 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             }
 
             StepType::WaitForCUP => {
-                if let Some(method) = self.params.upload_method {
-                    let node_ip = match method {
-                        DataLocation::Remote(ip) => ip,
-                        DataLocation::Local => IpAddr::V6(Ipv6Addr::LOCALHOST),
-                    };
+                if let Some(node_ip) = self.params.wait_for_cup_node {
                     Ok(Box::new(self.recovery.get_wait_for_cup_step(node_ip)))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
             }
+
+            StepType::CreateArtifacts => Ok(Box::new(
+                self.recovery
+                    .get_create_nns_recovery_tar_step(self.params.output_dir.clone()),
+            )),
 
             StepType::UploadState => {
                 if let Some(method) = self.params.upload_method {

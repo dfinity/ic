@@ -18,7 +18,6 @@ ENV = MAINNET_ENV | IMPERSONATE_UPSTREAMS_ENV | MESSAGE_CANISTER_ENV | {
 
 RUNTIME_DEPS = IC_GATEWAY_RUNTIME_DEPS + IMPERSONATE_UPSTREAMS_RUNTIME_DEPS + MESSAGE_CANISTER_RUNTIME_DEPS + [
     "//ic-os/guestos/envs/recovery-dev:update-img.tar.zst",
-    "//rs/tests:recovery/binaries",
 ]
 
 rust_library(
@@ -42,7 +41,7 @@ rust_library(
 )
 
 system_test_nns(
-    name = "nr_remote",
+    name = "nr_local",
     env = ENV,
     flaky = True,
     tags = ["long_test"],
@@ -50,6 +49,25 @@ system_test_nns(
     uses_guestos_test_update = True,
     uses_setupos_img = True,
     runtime_deps = RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        ":common",
+        "//rs/tests/driver:ic-system-test-driver",
+        "@crate_index//:anyhow",
+    ],
+)
+
+system_test_nns(
+    name = "nr_remote",
+    env = ENV,
+    flaky = True,
+    tags = ["long_test"],
+    test_timeout = "eternal",
+    uses_guestos_test_update = True,
+    uses_setupos_img = True,
+    runtime_deps = RUNTIME_DEPS + [
+        "//rs/tests:recovery/binaries",
+    ],
     deps = [
         # Keep sorted.
         ":common",

@@ -17,6 +17,9 @@ Runbook::
 Success::
 . NNS subnet is functional after the recovery.
 
+Variant::
+. This test variant performs the recovery locally, i.e. SSHs into the DFINITY-owned node and runs the recovery tool there.
+
 end::catalog[] */
 
 use anyhow::Result;
@@ -35,7 +38,7 @@ fn main() -> Result<()> {
             )
         })
         .add_test(systest!(test; TestConfig {
-            local_recovery: false,
+            local_recovery: true,
         }))
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .with_overall_timeout(Duration::from_secs(35 * 60))
