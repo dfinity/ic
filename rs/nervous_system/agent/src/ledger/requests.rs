@@ -53,6 +53,8 @@ impl Request for BinaryAccountBalanceArgs {
     type Response = Tokens;
 }
 
+// TODO: For some reason clippy thinks this is unused.
+#[allow(dead_code)]
 pub(crate) struct Icrc1TotalSupplyRequest {}
 
 impl Request for Icrc1TotalSupplyRequest {

@@ -922,13 +922,12 @@ pub(crate) fn is_dealing_support_added_to_validated(
     dealer_id: &NodeId,
 ) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(support)) = action {
-            if support.transcript_id == *transcript_id
-                && support.dealer_id == *dealer_id
-                && support.sig_share.signer == NODE_1
-            {
-                return true;
-            }
+        if let IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(support)) = action
+            && support.transcript_id == *transcript_id
+            && support.dealer_id == *dealer_id
+            && support.sig_share.signer == NODE_1
+        {
+            return true;
         }
     }
     false
@@ -1012,10 +1011,10 @@ pub(crate) fn is_moved_to_validated(
     msg_id: &IDkgMessageId,
 ) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::MoveToValidated(msg) = action {
-            if IDkgArtifactId::from(msg) == *msg_id {
-                return true;
-            }
+        if let IDkgChangeAction::MoveToValidated(msg) = action
+            && IDkgArtifactId::from(msg) == *msg_id
+        {
+            return true;
         }
     }
     false
@@ -1027,10 +1026,10 @@ pub(crate) fn is_removed_from_validated(
     msg_id: &IDkgMessageId,
 ) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::RemoveValidated(id) = action {
-            if *id == *msg_id {
-                return true;
-            }
+        if let IDkgChangeAction::RemoveValidated(id) = action
+            && *id == *msg_id
+        {
+            return true;
         }
     }
     false
@@ -1042,10 +1041,10 @@ pub(crate) fn is_removed_from_unvalidated(
     msg_id: &IDkgMessageId,
 ) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::RemoveUnvalidated(id) = action {
-            if *id == *msg_id {
-                return true;
-            }
+        if let IDkgChangeAction::RemoveUnvalidated(id) = action
+            && *id == *msg_id
+        {
+            return true;
         }
     }
     false
@@ -1054,10 +1053,10 @@ pub(crate) fn is_removed_from_unvalidated(
 // Checks that artifact is being dropped as invalid
 pub(crate) fn is_handle_invalid(change_set: &[IDkgChangeAction], msg_id: &IDkgMessageId) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::HandleInvalid(id, _) = action {
-            if *id == *msg_id {
-                return true;
-            }
+        if let IDkgChangeAction::HandleInvalid(id, _) = action
+            && *id == *msg_id
+        {
+            return true;
         }
     }
     false

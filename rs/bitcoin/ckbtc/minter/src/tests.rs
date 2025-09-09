@@ -937,14 +937,13 @@ proptest! {
 
         let der = crate::signature::sec1_to_der(&sig);
         let decoded = from_der(&der).expect("failed to decode DER");
-        if let[Sequence(_, items)] = &decoded[..] {
-            if let [Integer(_, r), Integer(_, s)] = &items[..] {
+        if let[Sequence(_, items)] = &decoded[..] &&
+            let [Integer(_, r), Integer(_, s)] = &items[..] {
                 let (_, r_be) = r.to_bytes_be();
                 let (_, s_be) = s.to_bytes_be();
                 prop_assert_eq!(&r_be[..], &sig[..32]);
                 prop_assert_eq!(&s_be[..], &sig[32..]);
                 return Ok(());
-            }
         }
         prop_assert!(false, "expected a DER sequence with two items, got: {:?}", decoded);
     }
@@ -959,10 +958,9 @@ proptest! {
         let der = crate::signature::sec1_to_der(&sig);
         let decoded = from_der(&der).expect("failed to decode DER");
 
-        if let[Sequence(_, items)] = &decoded[..] {
-            if let [Integer(_, _r), Integer(_, _s)] = &items[..] {
-                return Ok(());
-            }
+        if let[Sequence(_, items)] = &decoded[..]
+            && let [Integer(_, _r), Integer(_, _s)] = &items[..] {
+               return Ok(());
         }
         prop_assert!(false, "expected a DER sequence with two items, got: {:?}", decoded);
     }

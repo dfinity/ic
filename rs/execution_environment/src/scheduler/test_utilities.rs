@@ -1309,12 +1309,11 @@ impl TestWasmExecutorCore {
             WasmMethod::System(SystemMethod::CanisterPostUpgrade),
             WasmMethod::System(SystemMethod::CanisterInit),
         ];
-        if !canister_module.as_slice().is_empty() {
-            if let Ok(text) = std::str::from_utf8(canister_module.as_slice()) {
-                if let Ok(system_task) = SystemMethod::try_from(text) {
-                    exported_functions.push(WasmMethod::System(system_task));
-                }
-            }
+        if !canister_module.as_slice().is_empty()
+            && let Ok(text) = std::str::from_utf8(canister_module.as_slice())
+            && let Ok(system_task) = SystemMethod::try_from(text)
+        {
+            exported_functions.push(WasmMethod::System(system_task));
         }
         let execution_state = ExecutionState::new(
             Default::default(),

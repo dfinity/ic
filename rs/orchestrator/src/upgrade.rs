@@ -244,16 +244,16 @@ impl Upgrade {
 
         // If we replaced the previous local CUP, compare potential threshold master public keys with
         // the ones in the new CUP, to make sure they haven't changed. Raise an alert if they did.
-        if let Some(old_cup) = local_cup {
-            if old_cup.height() < latest_cup.height() {
-                compare_master_public_keys(
-                    &old_cup,
-                    &latest_cup,
-                    self.metrics.as_ref(),
-                    self.orchestrator_data_directory.join(KEY_CHANGES_FILENAME),
-                    &self.logger,
-                );
-            }
+        if let Some(old_cup) = local_cup
+            && old_cup.height() < latest_cup.height()
+        {
+            compare_master_public_keys(
+                &old_cup,
+                &latest_cup,
+                self.metrics.as_ref(),
+                self.orchestrator_data_directory.join(KEY_CHANGES_FILENAME),
+                &self.logger,
+            );
         }
 
         // If the CUP is unsigned, it's a registry CUP and we're in a genesis or subnet
@@ -352,36 +352,35 @@ impl Upgrade {
             .get_cup_contents(subnet_id, registry_version)
             .ok()
             .and_then(|record| record.value)
+            && let Some(registry_store_uri) = registry_contents.registry_store_uri
         {
-            if let Some(registry_store_uri) = registry_contents.registry_store_uri {
-                warn!(
-                    self.logger,
-                    "Downloading registry data from {} with hash {} for subnet recovery",
-                    registry_store_uri.uri,
-                    registry_store_uri.hash,
-                );
-                let downloader = FileDownloader::new(Some(self.logger.clone()));
-                let local_store_location = tempfile::tempdir()
-                    .expect("temporary location for local store download could not be created")
-                    .keep();
-                downloader
-                    .download_and_extract_tar(
-                        &registry_store_uri.uri,
-                        &local_store_location,
-                        Some(registry_store_uri.hash),
-                    )
-                    .await
-                    .map_err(OrchestratorError::FileDownloadError)?;
-                if let Err(e) = self.stop_replica() {
-                    // Even though we fail to stop the replica, we should still
-                    // replace the registry local store, so we simply issue a warning.
-                    warn!(self.logger, "Failed to stop replica with error {:?}", e);
-                }
-                let new_local_store = LocalStoreImpl::new(local_store_location);
-                self.registry_replicator
-                    .stop_polling_and_set_local_registry_data(&new_local_store);
-                reexec_current_process(&self.logger);
+            warn!(
+                self.logger,
+                "Downloading registry data from {} with hash {} for subnet recovery",
+                registry_store_uri.uri,
+                registry_store_uri.hash,
+            );
+            let downloader = FileDownloader::new(Some(self.logger.clone()));
+            let local_store_location = tempfile::tempdir()
+                .expect("temporary location for local store download could not be created")
+                .keep();
+            downloader
+                .download_and_extract_tar(
+                    &registry_store_uri.uri,
+                    &local_store_location,
+                    Some(registry_store_uri.hash),
+                )
+                .await
+                .map_err(OrchestratorError::FileDownloadError)?;
+            if let Err(e) = self.stop_replica() {
+                // Even though we fail to stop the replica, we should still
+                // replace the registry local store, so we simply issue a warning.
+                warn!(self.logger, "Failed to stop replica with error {:?}", e);
             }
+            let new_local_store = LocalStoreImpl::new(local_store_location);
+            self.registry_replicator
+                .stop_polling_and_set_local_registry_data(&new_local_store);
+            reexec_current_process(&self.logger);
         }
         Ok(())
     }
@@ -659,10 +658,9 @@ fn should_node_become_unassigned(
     for version in oldest_relevant_version..=latest_registry_version {
         if let Ok(Some(members)) =
             registry.get_node_ids_on_subnet(subnet_id, RegistryVersion::from(version))
+            && members.iter().any(|id| id == &node_id)
         {
-            if members.iter().any(|id| id == &node_id) {
-                return false;
-            }
+            return false;
         }
     }
     true
@@ -1289,10 +1287,8 @@ mod tests {
             let c1 = make_cup(Height::from(10), Some(key.clone()));
 
             let key_id2 = clone_key_id_with_name(&key_id1, "other_key");
-            let c2 = if let (
-                MasterPublicKeyId::VetKd(ref key_id),
-                KeyTranscript::NiDkg(ref transcript),
-            ) = (&key_id2, &key.1)
+            let c2 = if let (MasterPublicKeyId::VetKd(key_id), KeyTranscript::NiDkg(transcript)) =
+                (&key_id2, &key.1)
             {
                 let mut transcript2 = transcript.clone();
                 transcript2.dkg_id.dkg_tag =

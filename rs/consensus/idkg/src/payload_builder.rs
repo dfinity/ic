@@ -1859,7 +1859,7 @@ mod tests {
             // set to Begin (membership changed).
             let payload_1 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(&key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -1904,7 +1904,7 @@ mod tests {
 
             let payload_3 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(&key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2053,7 +2053,7 @@ mod tests {
             // set to Begin (membership changed).
             let payload_1 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(&key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2097,7 +2097,7 @@ mod tests {
 
             let payload_2 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(&key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2159,7 +2159,7 @@ mod tests {
 
             let payload_4 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(&key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(2),
@@ -2318,7 +2318,7 @@ mod tests {
             // set to Begin.
             let payload_1 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(&key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2364,7 +2364,7 @@ mod tests {
             // unfinished next_in_creation
             let payload_3 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(&key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(3),
@@ -2401,7 +2401,7 @@ mod tests {
             );
             let payload_4 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(&key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(3),
@@ -2492,7 +2492,7 @@ mod tests {
             // set to XnetReshareOfUnmaskedParams.
             let payload_1 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(&key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(1),
@@ -2599,7 +2599,7 @@ mod tests {
             // should be created successfully
             let payload_5 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(&key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(4),
@@ -2624,7 +2624,7 @@ mod tests {
             // should be created successfully
             let payload_6 = create_summary_payload_helper(
                 subnet_id,
-                &[key_id.clone()],
+                std::slice::from_ref(&key_id),
                 registry.as_ref(),
                 &block_reader,
                 Height::from(5),

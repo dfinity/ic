@@ -758,8 +758,11 @@ mod tests {
             ])
         );
 
-        inspect_idkg_chain_key_initializations(&[ecdsa_init.clone()], &[chain_key_init_2.clone()])
-            .expect_err("Should fail when both arguments are non-empty");
+        inspect_idkg_chain_key_initializations(
+            std::slice::from_ref(&ecdsa_init),
+            std::slice::from_ref(&chain_key_init_2),
+        )
+        .expect_err("Should fail when both arguments are non-empty");
     }
 
     fn set_up_get_chain_key_config_test(

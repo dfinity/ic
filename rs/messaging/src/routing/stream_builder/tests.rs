@@ -1044,20 +1044,21 @@ fn requests_into_queue_round_robin(
 
     let mut bytes_routed = 0;
     while let Some((src, mut requests)) = request_ring.pop_front() {
-        if let Some((dst, mut req_queue)) = requests.pop_front() {
-            if let Some(request) = req_queue.pop_front() {
-                if let Some(limit) = byte_limit {
-                    if bytes_routed >= limit {
-                        break;
-                    }
-                }
-                let req: RequestOrResponse = request.into();
-                bytes_routed += req.count_bytes() as u64;
-                queue.push(req);
-                requests.push_back((dst, req_queue));
+        if let Some((dst, mut req_queue)) = requests.pop_front()
+            && let Some(request) = req_queue.pop_front()
+        {
+            if let Some(limit) = byte_limit
+                && bytes_routed >= limit
+            {
+                break;
             }
-            request_ring.push_back((src, requests));
+
+            let req: RequestOrResponse = request.into();
+            bytes_routed += req.count_bytes() as u64;
+            queue.push(req);
+            requests.push_back((dst, req_queue));
         }
+        request_ring.push_back((src, requests));
     }
 
     queue

@@ -1,4 +1,4 @@
-1/! The unit tests for `Governance` use *test fixtures*. The fixtures
+//! The unit tests for `Governance` use *test fixtures*. The fixtures
 //! are defi data_source: (), timestamp_seconds: ()ned as small but
 //! complex/weird configurations of neurons and proposals against which several
 //! tests are run.

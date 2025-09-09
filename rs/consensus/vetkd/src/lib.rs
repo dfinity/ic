@@ -674,23 +674,23 @@ mod tests {
             );
 
             // Enable the configured keys
-            if let Some(config) = config {
-                if keys_enabled {
-                    for key_id in config.key_ids() {
-                        registry_data_provider
-                            .add(
-                                &ic_registry_keys::make_chain_key_enabled_subnet_list_key(&key_id),
-                                registry.get_latest_version().increment(),
-                                Some(
-                                    ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList {
-                                        subnets: vec![subnet_id_into_protobuf(subnet_test_id(0))],
-                                    },
-                                ),
-                            )
-                            .expect("Could not add chain-key enabled subnet list");
-                    }
-                    registry.update_to_latest_version();
+            if let Some(config) = config
+                && keys_enabled
+            {
+                for key_id in config.key_ids() {
+                    registry_data_provider
+                        .add(
+                            &ic_registry_keys::make_chain_key_enabled_subnet_list_key(&key_id),
+                            registry.get_latest_version().increment(),
+                            Some(
+                                ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList {
+                                    subnets: vec![subnet_id_into_protobuf(subnet_test_id(0))],
+                                },
+                            ),
+                        )
+                        .expect("Could not add chain-key enabled subnet list");
                 }
+                registry.update_to_latest_version();
             }
 
             // Setup the state manager expectation

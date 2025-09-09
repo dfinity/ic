@@ -541,17 +541,16 @@ fn run_directive<'a>(
             module: mut wat,
             message,
         } => {
-            if let Ok(wasm) = parse_and_encode(&mut wat, text, path, multi_memory_enabled) {
-                if test_state
+            if let Ok(wasm) = parse_and_encode(&mut wat, text, path, multi_memory_enabled)
+                && test_state
                     .validate_with_wasmtime(&wasm, &wat, text, path)
                     .is_ok()
-                {
-                    return Err(format!(
-                        "Should not have been able to validate malformed module ({}) {}",
-                        message,
-                        location(&wat, text, path)
-                    ));
-                }
+            {
+                return Err(format!(
+                    "Should not have been able to validate malformed module ({}) {}",
+                    message,
+                    location(&wat, text, path)
+                ));
             }
             Ok(())
         }
@@ -565,17 +564,16 @@ fn run_directive<'a>(
             module: mut wat,
             message,
         } => {
-            if let Ok(wasm) = parse_and_encode(&mut wat, text, path, multi_memory_enabled) {
-                if test_state
+            if let Ok(wasm) = parse_and_encode(&mut wat, text, path, multi_memory_enabled)
+                && test_state
                     .validate_with_wasmtime(&wasm, &wat, text, path)
                     .is_ok()
-                {
-                    return Err(format!(
-                        "Should not have been able to validate invalid module ({}) {}",
-                        message,
-                        location(&wat, text, path)
-                    ));
-                }
+            {
+                return Err(format!(
+                    "Should not have been able to validate invalid module ({}) {}",
+                    message,
+                    location(&wat, text, path)
+                ));
             }
             Ok(())
         }

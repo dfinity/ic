@@ -96,7 +96,9 @@ where
     for request in requests {
         // first ask for the fee
         let mut fee_found = false;
-        for o in Request::requests_to_operations(&[request.request.clone()], token_name).unwrap() {
+        for o in Request::requests_to_operations(std::slice::from_ref(&request.request), token_name)
+            .unwrap()
+        {
             if o.type_.parse::<OperationType>().unwrap() == OperationType::Fee {
                 fee_found = true;
             } else {

@@ -6434,24 +6434,23 @@ fn helper_update_settings_updates_hook_status(
 
     let mut settings = CanisterSettingsArgsBuilder::new();
 
-    if updated_memory_state.wasm_memory_threshold != initial_memory_state.wasm_memory_threshold {
-        if let Some(updated_wasm_memory_threshold) = updated_memory_state.wasm_memory_threshold {
-            settings = settings.with_wasm_memory_threshold(updated_wasm_memory_threshold.get());
-        }
+    if updated_memory_state.wasm_memory_threshold != initial_memory_state.wasm_memory_threshold
+        && let Some(updated_wasm_memory_threshold) = updated_memory_state.wasm_memory_threshold
+    {
+        settings = settings.with_wasm_memory_threshold(updated_wasm_memory_threshold.get());
     }
 
-    if updated_memory_state.wasm_memory_limit != initial_memory_state.wasm_memory_limit {
-        if let Some(updated_wasm_memory_limit) = updated_memory_state.wasm_memory_limit {
-            settings = settings.with_wasm_memory_limit(updated_wasm_memory_limit.get());
-        }
+    if updated_memory_state.wasm_memory_limit != initial_memory_state.wasm_memory_limit
+        && let Some(updated_wasm_memory_limit) = updated_memory_state.wasm_memory_limit
+    {
+        settings = settings.with_wasm_memory_limit(updated_wasm_memory_limit.get());
     }
 
-    if updated_memory_state.memory_allocation != initial_memory_state.memory_allocation {
-        if let Some(MemoryAllocation::Reserved(updated_memory_allocation)) =
+    if updated_memory_state.memory_allocation != initial_memory_state.memory_allocation
+        && let Some(MemoryAllocation::Reserved(updated_memory_allocation)) =
             updated_memory_state.memory_allocation
-        {
-            settings = settings.with_memory_allocation(updated_memory_allocation.get());
-        }
+    {
+        settings = settings.with_memory_allocation(updated_memory_allocation.get());
     }
 
     let payload = UpdateSettingsArgs {

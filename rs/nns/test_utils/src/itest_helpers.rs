@@ -509,7 +509,7 @@ pub async fn install_ledger_canister(canister: &mut Canister<'_>, args: LedgerCa
 pub async fn set_up_ledger_canister(
     runtime: &Runtime,
     args: LedgerCanisterInitPayload,
-) -> Canister {
+) -> Canister<'_> {
     let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_ledger_canister(&mut canister, args).await;
     canister

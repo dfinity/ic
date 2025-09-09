@@ -344,8 +344,7 @@ fn run_n_rounds_and_check_pubkeys(
             || inst.deps.message_routing.expected_batch_height() >= Height::from(rounds)
     };
     run_test(config, modifiers, Box::new(got_pubkey), finish);
-    let result = *pubkey_exists.borrow();
-    result
+    *pubkey_exists.borrow()
 }
 
 /// Run a test subnets with `num_nodes` many nodes, out of which there are `num_nodes_equivocating` many equivocating blockmaker

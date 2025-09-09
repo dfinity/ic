@@ -668,11 +668,12 @@ impl std::fmt::Debug for SubnetSplittingTestState {
                 writeln!(f, "      {:?}", messages)?;
             }
         }
-        if let Some(messages) = &self.local_queue {
-            if !messages.is_empty() {
-                writeln!(f, "   local queue: {:?}", messages)?;
-            }
+        if let Some(messages) = &self.local_queue
+            && !messages.is_empty()
+        {
+            writeln!(f, "   local queue: {:?}", messages)?;
         }
+
         if let Some((header, messages)) = &self.reverse_stream {
             writeln!(f, "   reverse stream:")?;
             writeln!(f, "      {:?}", header)?;
@@ -680,10 +681,10 @@ impl std::fmt::Debug for SubnetSplittingTestState {
                 writeln!(f, "      {:?}", messages)?;
             }
         }
-        if let Some(messages) = &self.remote_queue {
-            if !messages.is_empty() {
-                writeln!(f, "   remote queue: {:?}", messages)?;
-            }
+        if let Some(messages) = &self.remote_queue
+            && !messages.is_empty()
+        {
+            writeln!(f, "   remote queue: {:?}", messages)?;
         }
         writeln!(
             f,

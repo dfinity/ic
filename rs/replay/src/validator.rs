@@ -298,7 +298,7 @@ impl ReplayValidator {
             };
 
             changes.iter().for_each(|action| match action {
-                ChangeAction::HandleInvalid(ref a, ref s) => {
+                ChangeAction::HandleInvalid(a, s) => {
                     let block_hash = match a {
                         ConsensusMessage::Finalization(f) => Some(f.block_hash().clone()),
                         ConsensusMessage::Notarization(n) => Some(n.block_hash().clone()),
