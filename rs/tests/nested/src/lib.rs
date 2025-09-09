@@ -25,7 +25,7 @@ const HOST_VM_NAME: &str = "host-1";
 
 /// Prepare the environment for nested tests.
 /// SetupOS -> HostOS -> GuestOS
-pub fn config(env: TestEnv) {
+pub fn setup(env: TestEnv) {
     assert_version_compatibility();
 
     setup_ic_infrastructure(&env, None);
