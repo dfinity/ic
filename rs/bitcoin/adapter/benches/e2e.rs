@@ -148,13 +148,13 @@ fn scrypt_vs_sha256<M: Measurement>(
     group.bench_function("scrypt", |bench| {
         bench.iter(|| {
             let mut hash = [0u8; 32];
-            let _hash = scrypt::scrypt(&header, &header, scrypt_params, &mut hash).unwrap();
+            scrypt::scrypt(header, header, scrypt_params, &mut hash).unwrap();
         })
     });
 
     group.bench_function("SHA2-256", |bench| {
         bench.iter(|| {
-            let _hash = sha2::Sha256::digest(&header);
+            let _hash = sha2::Sha256::digest(header);
         })
     });
 }
