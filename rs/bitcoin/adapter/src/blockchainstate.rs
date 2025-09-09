@@ -4,7 +4,7 @@ use crate::{
     common::{BlockHeight, BlockchainBlock, BlockchainHeader, BlockchainNetwork},
     metrics::BlockchainStateMetrics,
 };
-use bitcoin::{block::Header as PureHeader, consensus::Encodable, BlockHash, Work};
+use bitcoin::{block::Header, consensus::Encodable, BlockHash, Work};
 use ic_btc_validation::{HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
 use std::{collections::HashMap, sync::Arc};
@@ -99,7 +99,7 @@ pub type SerializedBlock = Vec<u8>;
 #[derive(Debug)]
 pub struct BlockchainState<Network: BlockchainNetwork> {
     /// The starting point of the blockchain
-    genesis_block_header: PureHeader,
+    genesis_block_header: Header,
 
     /// This field stores all the Bitcoin headers using a HashMap containining BlockHash and the corresponding header.
     header_cache: HashMap<BlockHash, HeaderNode<Network::Header>>,
@@ -139,7 +139,7 @@ impl<Network: BlockchainNetwork> BlockchainState<Network> {
     }
 
     /// Returns the genesis header that the store is initialized with.
-    pub fn genesis(&self) -> PureHeader {
+    pub fn genesis(&self) -> Header {
         self.genesis_block_header
     }
 
@@ -360,9 +360,9 @@ impl<Network: BlockchainNetwork> BlockchainState<Network> {
         self.block_cache.values().map(|block| block.len()).sum()
     }
 }
-// TODO: rename PureHeader -> Header
+
 impl<Network: BlockchainNetwork> HeaderStore for BlockchainState<Network> {
-    fn get_header(&self, hash: &BlockHash) -> Option<(PureHeader, BlockHeight)> {
+    fn get_header(&self, hash: &BlockHash) -> Option<(Header, BlockHeight)> {
         self.get_cached_header(hash)
             .map(|cached| (cached.header.clone().into_pure_header(), cached.height))
     }

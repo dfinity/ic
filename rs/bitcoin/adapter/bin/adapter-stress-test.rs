@@ -55,7 +55,8 @@ async fn main() {
 
 async fn run<Network: BlockchainNetwork>(network: Network, uds_path: PathBuf) {
     let interval_sleep_ms = Duration::from_millis(1000);
-    let request_timeout_ms = Duration::from_millis(50);
+    // Dogecoin `header` messages (containing 2,000 headers) take 20 sec to verify
+    let request_timeout_ms = Duration::from_millis(21000);
 
     let block_0 = network.genesis_block_header();
     let mut total_processed_block_hashes: usize = 0;

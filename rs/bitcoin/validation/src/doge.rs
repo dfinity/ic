@@ -1,3 +1,4 @@
+use crate::constants::SECONDS_IN_ONE_YEAR;
 pub(crate) use crate::header::{
     is_timestamp_valid, AuxPowHeaderValidator, HeaderStore, HeaderValidator,
     ValidateAuxPowHeaderError, ValidateHeaderError,
@@ -5,8 +6,10 @@ pub(crate) use crate::header::{
 use crate::BlockHeight;
 use bitcoin::dogecoin::Network as DogecoinNetwork;
 use bitcoin::{
-    block::Header as PureHeader, dogecoin::Header as DogecoinHeader, CompactTarget, Target,
+    block::Header as PureHeader, dogecoin::Header as DogecoinHeader, BlockHash, CompactTarget,
+    Target,
 };
+use std::str::FromStr;
 use std::time::Duration;
 
 /// Height after which the allow_min_difficulty_blocks parameter becomes active for Digishield blocks.
@@ -41,6 +44,7 @@ impl DogecoinHeaderValidator {
         store: &impl HeaderStore,
         header: &PureHeader,
     ) -> Result<Target, ValidateHeaderError> {
+        let chain_height = store.get_height();
         let (prev_header, prev_height) = match store.get_header(&header.prev_blockhash) {
             Some(result) => result,
             None => {
@@ -57,8 +61,16 @@ impl DogecoinHeaderValidator {
             return Err(ValidateAuxPowHeaderError::AuxPowBlockNotAllowed.into());
         }
 
+        if !self.is_header_within_one_year_of_tip(prev_height, chain_height) {
+            return Err(ValidateHeaderError::HeightTooLow);
+        }
+
         if !is_timestamp_valid(store, header) {
             return Err(ValidateHeaderError::HeaderIsOld);
+        }
+
+        if !self.is_checkpoint_valid(prev_height, header, chain_height) {
+            return Err(ValidateHeaderError::DoesNotMatchCheckpoint);
         }
 
         if (header.extract_base_version() < 3 && height >= self.network().params().bip66_height)
@@ -117,6 +129,41 @@ impl HeaderValidator for DogecoinHeaderValidator {
 
     fn allow_min_difficulty_blocks(&self, height: u32) -> bool {
         self.network().params().allow_min_difficulty_blocks(height)
+    }
+
+    fn checkpoints(&self) -> &[(BlockHeight, &str)] {
+        match self.network() {
+            Self::Network::Dogecoin => crate::constants::DOGECOIN,
+            Self::Network::Testnet => crate::constants::TESTNET_DOGECOIN,
+            Self::Network::Regtest => &[],
+            _ => &[],
+        }
+    }
+
+    fn is_checkpoint_valid(
+        &self,
+        prev_height: BlockHeight,
+        header: &PureHeader,
+        chain_height: BlockHeight,
+    ) -> bool {
+        let checkpoints = self.checkpoints();
+        let next_height = prev_height.saturating_add(1);
+
+        if let Some((_, expected_hash_str)) =
+            self.checkpoints().iter().find(|(h, _)| *h == next_height)
+        {
+            let expected_hash = BlockHash::from_str(expected_hash_str)
+                .expect("Programmer error: invalid hash in checkpoints");
+            return expected_hash == header.block_hash();
+        }
+
+        let checkpoint_height = checkpoints
+            .iter()
+            .rev()
+            .find(|(height, _)| *height <= chain_height)
+            .map_or(0, |(height, _)| *height);
+
+        next_height > checkpoint_height
     }
 
     fn validate_header(
@@ -273,6 +320,21 @@ impl HeaderValidator for DogecoinHeaderValidator {
             self.network,
             height,
         )
+    }
+
+    fn is_header_within_one_year_of_tip(
+        &self,
+        prev_height: BlockHeight,
+        chain_height: BlockHeight,
+    ) -> bool {
+        let header_height = prev_height
+            .checked_add(1)
+            .expect("next height causes an overflow");
+
+        let height_one_year_ago = chain_height.saturating_sub(
+            (SECONDS_IN_ONE_YEAR / self.network().params().pow_target_spacing) as u32,
+        );
+        header_height >= height_one_year_ago
     }
 }
 

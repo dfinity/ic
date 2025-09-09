@@ -229,7 +229,6 @@ impl BlockchainNetwork for bitcoin::dogecoin::Network {
         store: &impl HeaderStore,
         header: &Self::Header,
     ) -> Result<(), ValidateHeaderError> {
-        // TODO(XC-422): use real dogecoin validation
         let validator = DogecoinHeaderValidator::new(*self);
         validator.validate_auxpow_header(store, &header)
     }

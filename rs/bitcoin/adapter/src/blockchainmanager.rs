@@ -436,10 +436,7 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
         );
 
         match self.blockchain.lock().unwrap().add_block(block.clone()) {
-            Ok(()) => {
-                warn!(self.logger, "Able to add the received block in blockchain.",);
-                Ok(())
-            }
+            Ok(()) => Ok(()),
             Err(err) => {
                 warn!(
                     self.logger,

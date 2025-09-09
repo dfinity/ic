@@ -102,6 +102,20 @@ pub trait HeaderValidator {
     /// Returns `true` if mining a min-difficulty block is allowed after some delay.
     fn allow_min_difficulty_blocks(&self, height: u32) -> bool;
 
+    /// Checkpoints used to validate blocks at certain heights.
+    fn checkpoints(&self) -> &[(BlockHeight, &str)];
+
+    /// This validates the header against the network's checkpoints.
+    /// 1. If the next header is at a checkpoint height, the checkpoint is compared to the next header's block hash.
+    /// 2. If the header is not the same height, the function then compares the height to the latest checkpoint.
+    ///    If the next header's height is less than the last checkpoint's height, the header is invalid.
+    fn is_checkpoint_valid(
+        &self,
+        prev_height: BlockHeight,
+        header: &BlockHeader,
+        chain_height: BlockHeight,
+    ) -> bool;
+
     /// Validates a header. If a failure occurs, a
     /// [ValidateHeaderError](ValidateHeaderError) will be returned.
     fn validate_header(
@@ -142,6 +156,13 @@ pub trait HeaderValidator {
         prev_header: &BlockHeader,
         prev_height: BlockHeight,
     ) -> CompactTarget;
+
+    /// This validates that the header has a height that is within 1 year of the tip height.
+    fn is_header_within_one_year_of_tip(
+        &self,
+        prev_height: BlockHeight,
+        chain_height: BlockHeight,
+    ) -> bool;
 }
 
 pub trait AuxPowHeaderValidator: HeaderValidator {
