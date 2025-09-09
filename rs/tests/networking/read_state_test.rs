@@ -960,24 +960,24 @@ fn main() -> Result<()> {
         .add_test(systest!(test_subnet_canister_ranges_paths; read_state::subnet::Version::V3))
         .add_test(systest!(test_canister_canister_ranges_paths; read_state::canister::Version::V2))
         .add_test(systest!(test_canister_canister_ranges_paths; read_state::canister::Version::V3))
-        // Only /api/{v2,v3}/canister/read_state endpoints are tested because /request_status
-        // paths are not supported by /api/{v2,v3}/subnet/read_state
+        // Only /api/{v2,v3}/canister/read_state endpoints are tested because paths with
+        // /request_status prefix are not supported by /api/{v2,v3}/subnet/read_state
         .add_test(systest!(test_request_path; read_state::canister::Version::V2))
         .add_test(systest!(test_request_path; read_state::canister::Version::V3))
-        // Only /api/{v2,v3}/canister/read_state endpoints are tested because /request_status
-        // paths are not supported by /api/{v2,v3}/subnet/read_state
+        // Only /api/{v2,v3}/canister/read_state endpoints are tested because paths with
+        // /request_status prefix are not supported by /api/{v2,v3}/subnet/read_state
         .add_test(systest!(test_request_path_access; read_state::canister::Version::V2))
         .add_test(systest!(test_request_path_access; read_state::canister::Version::V3))
-        // Only /api/{v2,v3}/canister/read_state endpoints are tested because /request_status
-        // paths are not supported by /api/{v2,v3}/subnet/read_state
+        // Only /api/{v2,v3}/canister/read_state endpoints are tested because paths with
+        // /request_status prefix are not supported by /api/{v2,v3}/subnet/read_state
         .add_test(systest!(test_absent_request; read_state::canister::Version::V2))
         .add_test(systest!(test_absent_request; read_state::canister::Version::V3))
-        // Only /api/{v2,v3}/canister/read_state endpoints are tested because /request_status
-        // paths are not supported by /api/{v2,v3}/subnet/read_state
+        // Only /api/{v2,v3}/canister/read_state endpoints are tested because paths with
+        // /canister prefix are not supported by /api/{v2,v3}/subnet/read_state
         .add_test(systest!(test_canister_path; read_state::canister::Version::V2))
         .add_test(systest!(test_canister_path; read_state::canister::Version::V3))
-        // Only /api/{v2,v3}/canister/read_state endpoints are tested because /request_status
-        // paths are not supported by /api/{v2,v3}/subnet/read_state
+        // Only /api/{v2,v3}/canister/read_state endpoints are tested because paths with
+        // /canister prefix are not supported by /api/{v2,v3}/subnet/read_state
         .add_test(systest!(test_metadata_path; read_state::canister::Version::V2))
         .add_test(systest!(test_metadata_path; read_state::canister::Version::V3));
 
