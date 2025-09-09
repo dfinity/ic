@@ -110,11 +110,10 @@ impl RegistryQuerier {
                 ic_cdk::println!("Node {} has no NodeOperatorData: skipping", node_id);
                 continue;
             };
-            if let Some(provider_filter) = provider_filter {
-                if node_provider_id != provider_filter {
+            if let Some(provider_filter) = provider_filter
+                && node_provider_id != provider_filter {
                     continue;
                 }
-            }
             let Some(some_reward_type) = node_record.node_reward_type else {
                 ic_cdk::println!("Node {} has no node_reward_type: skipping", node_id);
                 // If the node does not have a node_reward_type, we skip it.

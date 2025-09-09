@@ -5,7 +5,6 @@ use crate::{
     metrics::BlockchainStateMetrics,
 };
 use bitcoin::{BlockHash, Work, block::Header as PureHeader, consensus::Encodable};
-use bitcoin::{BlockHash, block::Header as BlockHeader};
 use ic_btc_validation::{HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
 use std::{collections::HashMap, sync::Arc};
