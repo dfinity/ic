@@ -1,11 +1,13 @@
 use candid::Principal;
 use candid::{CandidType, Encode};
+use canister_test::{Canister, Wasm};
 use ic_base_types::SubnetId;
 use ic_ledger_core::Tokens;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID,
     SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
 };
+use ic_nns_test_utils::governance::install_nns_canister_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
@@ -16,9 +18,7 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::nns::set_authorized_subnetwork_list;
 use ic_system_test_driver::sns_client::add_subnet_to_sns_deploy_whitelist;
-use ic_system_test_driver::util::{
-    block_on, create_canister, install_canister, runtime_from_url, set_controller,
-};
+use ic_system_test_driver::util::{block_on, create_canister, install_canister, runtime_from_url};
 use icp_ledger::AccountIdentifier;
 use serde::{Deserialize, Serialize};
 use slog::info;
@@ -135,19 +135,14 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
 
     // deploy the Subnet Rental Canister
     let nns_node = topology.root_subnet().nodes().next().unwrap();
-    nns_node.install_canister_with_arg(
-        SUBNET_RENTAL_CANISTER_ID.get().0,
-        &env::var("SUBNET_RENTAL_WASM_PATH").unwrap(),
-        None,
-    );
-
-    // set the NNS root canister as a controller of the Subnet Rental Canister
-    let nns_agent = nns_node.build_default_agent();
+    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     block_on(async move {
-        set_controller(
-            &SUBNET_RENTAL_CANISTER_ID.get().0,
-            &ROOT_CANISTER_ID.get().0,
-            &nns_agent,
+        install_nns_canister_by_proposal(
+            &Canister::new(&nns, SUBNET_RENTAL_CANISTER_ID),
+            &Canister::new(&nns, GOVERNANCE_CANISTER_ID),
+            &Canister::new(&nns, ROOT_CANISTER_ID),
+            Wasm::from_bytes(load_wasm(env::var("SUBNET_RENTAL_WASM_PATH").unwrap())),
+            None,
         )
         .await;
     });

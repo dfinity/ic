@@ -101,6 +101,7 @@ impl From<ProposalActionRequest> for Action {
             ProposalActionRequest::RewardNodeProvider(v) => Action::RewardNodeProvider(v),
             ProposalActionRequest::RewardNodeProviders(v) => Action::RewardNodeProviders(v),
             ProposalActionRequest::RegisterKnownNeuron(v) => Action::RegisterKnownNeuron(v),
+            ProposalActionRequest::DeregisterKnownNeuron(v) => Action::DeregisterKnownNeuron(v),
             ProposalActionRequest::CreateServiceNervousSystem(v) => {
                 Action::CreateServiceNervousSystem(v)
             }

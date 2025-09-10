@@ -695,9 +695,9 @@ impl Proposal {
                 Action::RewardNodeProvider(_) | Action::RewardNodeProviders(_) => {
                     Topic::NodeProviderRewards
                 }
-                Action::SetDefaultFollowees(_) | Action::RegisterKnownNeuron(_) => {
-                    Topic::Governance
-                }
+                Action::SetDefaultFollowees(_)
+                | Action::RegisterKnownNeuron(_)
+                | Action::DeregisterKnownNeuron(_) => Topic::Governance,
                 Action::SetSnsTokenSwapOpenTimeWindow(_)
                 | Action::OpenSnsTokenSwap(_)
                 | Action::CreateServiceNervousSystem(_) => Topic::SnsAndCommunityFund,
@@ -779,6 +779,7 @@ impl Action {
             Action::RewardNodeProviders(_) => "ACTION_REWARD_NODE_PROVIDERS",
             Action::SetDefaultFollowees(_) => "ACTION_SET_DEFAULT_FOLLOWEES",
             Action::RegisterKnownNeuron(_) => "ACTION_REGISTER_KNOWN_NEURON",
+            Action::DeregisterKnownNeuron(_) => "ACTION_DEREGISTER_KNOWN_NEURON",
             Action::SetSnsTokenSwapOpenTimeWindow(_) => {
                 "ACTION_SET_SNS_TOKEN_SWAP_OPEN_TIME_WINDOW"
             }
@@ -4376,6 +4377,10 @@ impl Governance {
                 let result = self.register_known_neuron(known_neuron);
                 self.set_proposal_execution_status(pid, result);
             }
+            Action::DeregisterKnownNeuron(deregister_request) => {
+                let result = deregister_request.execute(&mut self.neuron_store);
+                self.set_proposal_execution_status(pid, result);
+            }
             Action::CreateServiceNervousSystem(ref create_service_nervous_system) => {
                 self.create_service_nervous_system(pid, create_service_nervous_system)
                     .await;
@@ -5012,6 +5017,9 @@ impl Governance {
             Action::UpdateCanisterSettings(update_settings) => update_settings.validate(),
             Action::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
                 fulfill_subnet_rental_request.validate()
+            }
+            Action::DeregisterKnownNeuron(deregister_known_neuron) => {
+                deregister_known_neuron.validate(&self.neuron_store)
             }
         }?;
 
