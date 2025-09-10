@@ -13,8 +13,6 @@ pub fn hypervisor_config() -> HypervisorConfig {
             },
             ..Default::default()
         },
-        canister_snapshot_download: FlagStatus::Enabled,
-        canister_snapshot_upload: FlagStatus::Enabled,
         environment_variables: FlagStatus::Enabled,
         ..Default::default()
     }
