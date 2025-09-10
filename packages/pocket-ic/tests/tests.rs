@@ -3192,9 +3192,6 @@ fn test_invalid_specified_id() {
 }
 
 #[test]
-#[should_panic(
-    expected = "Creating an HTTP gateway requires `AutoProgress` to be enabled via `initial_time`."
-)]
 fn with_http_gateway_config_but_no_auto_progress() {
     let http_gateway_config = InstanceHttpGatewayConfig {
         ip_addr: None,
@@ -3202,10 +3199,22 @@ fn with_http_gateway_config_but_no_auto_progress() {
         domains: None,
         https_config: None,
     };
-    let _pic = PocketIcBuilder::new()
+    let pic = PocketIcBuilder::new()
         .with_application_subnet()
         .with_http_gateway(http_gateway_config)
         .build();
+
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+
+    let (client, url) = frontend_canister(&pic, canister_id, true, "/asset.txt");
+    let resp = client.get(url).send().unwrap();
+    assert!(resp.status().is_success());
+    let msg = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+    assert_eq!(msg, "My sample asset.");
+
+    assert!(!pic.auto_progress_enabled());
 }
 
 // We already have a function `PocketIc::list_instances`,
