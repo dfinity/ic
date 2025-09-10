@@ -1120,12 +1120,13 @@ impl ApiState {
                 return Ok(UpdateReply::Output(res.unwrap()));
             }
         } else {
+            let res = bg_handle.await;
             trace!(
                 "update_with_timeout::synchronous instance_id={} op_id={}",
                 instance_id,
                 op_id,
             );
-            return Ok(UpdateReply::Output(bg_handle.await.unwrap()));
+            return Ok(UpdateReply::Output(res.unwrap()));
         }
 
         trace!(
