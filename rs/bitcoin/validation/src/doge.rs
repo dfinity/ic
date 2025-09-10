@@ -145,13 +145,13 @@ impl HeaderValidator for DogecoinHeaderValidator {
             return expected_hash == header.block_hash();
         }
 
-        let checkpoint_height = checkpoints
+        let latest_checkpoint_height = checkpoints
             .iter()
             .rev()
             .find(|(height, _)| *height <= chain_height)
             .map_or(0, |(height, _)| *height);
 
-        next_height > checkpoint_height
+        next_height > latest_checkpoint_height
     }
 
     fn validate_header(
