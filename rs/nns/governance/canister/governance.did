@@ -4,6 +4,7 @@ type AccountIdentifier = record {
 
 type Action = variant {
   RegisterKnownNeuron : KnownNeuron;
+  DeregisterKnownNeuron : DeregisterKnownNeuron;
   ManageNeuron : ManageNeuron;
   UpdateCanisterSettings : UpdateCanisterSettings;
   InstallCode : InstallCode;
@@ -438,6 +439,10 @@ type InstallCodeRequest = record {
 type KnownNeuron = record {
   id : opt NeuronId;
   known_neuron_data : opt KnownNeuronData;
+};
+
+type DeregisterKnownNeuron = record {
+  id : opt NeuronId;
 };
 
 type KnownNeuronData = record {
@@ -977,6 +982,7 @@ type Proposal = record {
 
 type ProposalActionRequest = variant {
   RegisterKnownNeuron : KnownNeuron;
+  DeregisterKnownNeuron : DeregisterKnownNeuron;
   ManageNeuron : ManageNeuronRequest;
   UpdateCanisterSettings : UpdateCanisterSettings;
   InstallCode : InstallCodeRequest;

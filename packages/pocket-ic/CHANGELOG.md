@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - The field `node_ids` from `SubnetConfig`. Node ids can always be retrieved from the registry.
+- The deprecated function `PocketIc::make_deterministic`.
 
 
 
