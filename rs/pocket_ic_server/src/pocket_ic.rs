@@ -2,12 +2,13 @@ use crate::external_canister_types::{
     CaptchaConfig, CaptchaTrigger, GoogleOpenIdConfig, InternetIdentityInit, RateLimitConfig,
     StaticCaptchaTrigger,
 };
+use crate::state_api::routes::into_api_response;
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
 use crate::{BlobStore, OpId, Operation, SubnetBlockmaker};
 use askama::Template;
 use axum::{
     extract::State,
-    response::{Html, IntoResponse, Response as AxumResponse},
+    response::{Html, IntoResponse},
 };
 use bitcoin::Network;
 use candid::{CandidType, Decode, Encode, Principal};
@@ -206,8 +207,8 @@ fn default_timestamp(icp_features: &Option<IcpFeatures>) -> SystemTime {
     }
 }
 
-/// The response type for `/api/v2` and `/api/v3` IC endpoint operations.
-pub(crate) type ApiResponse = BoxFuture<'static, (u16, BTreeMap<String, Vec<u8>>, Vec<u8>)>;
+/// The response type for `/api` IC endpoint operations.
+pub(crate) type ApiResponse = BoxFuture<'static, (StatusCode, BTreeMap<String, Vec<u8>>, Vec<u8>)>;
 
 /// We assume that the maximum number of subnets on the mainnet is 1024.
 /// Used for generating canister ID ranges that do not appear on mainnet.
@@ -238,20 +239,6 @@ fn user_error_to_reject_response(
         error_code: ErrorCode::try_from(err.code() as u64).unwrap(),
         certified,
     }
-}
-
-async fn into_api_response(resp: AxumResponse) -> (u16, BTreeMap<String, Vec<u8>>, Vec<u8>) {
-    (
-        resp.status().into(),
-        resp.headers()
-            .iter()
-            .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
-            .collect(),
-        axum::body::to_bytes(resp.into_body(), usize::MAX)
-            .await
-            .unwrap()
-            .to_vec(),
-    )
 }
 
 fn compute_subnet_seed(
@@ -3573,7 +3560,7 @@ impl Operation for CallRequest {
             is_provisional_create_canister,
         );
         match subnet {
-            Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
+            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
             Ok(subnet) => {
                 let node = &subnet.nodes[0];
                 let (s, mut r) = mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
@@ -3716,7 +3703,7 @@ impl Operation for QueryRequest {
             false,
         );
         match subnet {
-            Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
+            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
             Ok(subnet) => {
                 let subnet_id = subnet.get_subnet_id();
                 let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
@@ -3793,7 +3780,7 @@ impl Operation for CanisterReadStateRequest {
             EffectivePrincipal::CanisterId(self.effective_canister_id),
             false,
         ) {
-            Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
+            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
             Ok(subnet) => {
                 let subnet_id = subnet.get_subnet_id();
                 let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
@@ -3865,7 +3852,7 @@ pub struct SubnetReadStateRequest {
 impl Operation for SubnetReadStateRequest {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         match route(pic, EffectivePrincipal::SubnetId(self.subnet_id), false) {
-            Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
+            Err(e) => OpOut::Error(PocketIcError::SubnetRequestRoutingError(e)),
             Ok(subnet) => {
                 let subnet_id = subnet.get_subnet_id();
                 let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
