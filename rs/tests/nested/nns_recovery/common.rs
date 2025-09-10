@@ -54,7 +54,9 @@ pub struct SetupConfig {
     pub impersonate_upstreams: bool,
 }
 
-pub struct TestConfig {}
+pub struct TestConfig {
+    pub break_dfinity_owned_node: bool,
+}
 
 fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
     (1..=num_hosts).map(|i| format!("host-{}", i)).collect()
@@ -136,7 +138,7 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
     }
 }
 
-pub fn test(env: TestEnv, _cfg: TestConfig) {
+pub fn test(env: TestEnv, cfg: TestConfig) {
     let logger = env.logger();
 
     let recovery_img = std::fs::read(get_dependency_path(
@@ -252,19 +254,25 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
     let output_dir = env.get_path("recovery_output");
     set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
 
-    // Choose f+1 faulty nodes to break, choose one healthy node owned by DFINITY
+    // Choose f+1 faulty nodes to break
     let nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
     let f = (SUBNET_SIZE - 1) / 3;
     let faulty_nodes = &nns_nodes[..(f + 1)];
     let healthy_nodes = &nns_nodes[(f + 1)..];
+    // TODO(CON-1587): Consider breaking all nodes.
     let healthy_node = healthy_nodes.first().unwrap();
-    let dfinity_owned_node = faulty_nodes.first().unwrap();
     info!(
         logger,
         "Selected faulty nodes: {:?}. Selected healthy nodes: {:?}",
         faulty_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>(),
         healthy_nodes.iter().map(|n| n.node_id).collect::<Vec<_>>(),
     );
+    let dfinity_owned_node = if cfg.break_dfinity_owned_node {
+        faulty_nodes.first().unwrap()
+    } else {
+        // TODO(CON-1587): Consider breaking all nodes.
+        healthy_nodes.first().unwrap()
+    };
     info!(
         logger,
         "Selected DFINITY-owned NNS node: {} ({:?})",

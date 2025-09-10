@@ -17,6 +17,9 @@ Runbook::
 Success::
 . NNS subnet is functional after the recovery.
 
+Variant::
+. This test variant performs the recovery assuming the DFINITY-owned node is broken/lagging behind.
+
 end::catalog[] */
 
 use anyhow::Result;
@@ -35,7 +38,7 @@ fn main() -> Result<()> {
             )
         })
         .add_test(systest!(test; TestConfig {
-            break_dfinity_owned_node: false,
+            break_dfinity_owned_node: true,
         }))
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .with_overall_timeout(Duration::from_secs(35 * 60))
