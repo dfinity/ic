@@ -64,7 +64,7 @@ fn test_auxpow_version() {
         .into();
     assert_eq!(
         validator.validate_auxpow_header(&store_legacy, &dogecoin_header),
-        Err(ValidateAuxPowHeaderError::InvalidChainId.into())
+        Err(ValidateAuxPowHeaderError::InvalidChainId)
     );
 
     // Version 2 (with no chain ID) - should pass (before AuxPow activation)
@@ -110,7 +110,7 @@ fn test_auxpow_version() {
     };
     assert_eq!(
         validator.validate_auxpow_header(&store_legacy, &dogecoin_header),
-        Err(ValidateAuxPowHeaderError::AuxPowBlockNotAllowed.into())
+        Err(ValidateAuxPowHeaderError::AuxPowBlockNotAllowed)
     );
 
     // AuxPow bit set (with correct chain ID) - should pass (after AuxPow activation)
@@ -143,7 +143,7 @@ fn test_auxpow_version() {
         .into();
     assert_eq!(
         validator.validate_auxpow_header(&store_auxpow, &dogecoin_header),
-        Err(ValidateAuxPowHeaderError::InvalidChainId.into())
+        Err(ValidateAuxPowHeaderError::InvalidChainId)
     );
 }
 
@@ -176,7 +176,7 @@ fn test_without_auxpow_data() {
         .into();
     assert_eq!(
         validator.validate_auxpow_header(&legacy_store, &dogecoin_header),
-        Err(ValidateHeaderError::InvalidPoWForComputedTarget)
+        Err(ValidateHeaderError::InvalidPoWForComputedTarget.into())
     );
 
     // AuxPow flag set but no AuxPow data - should fail
@@ -190,7 +190,7 @@ fn test_without_auxpow_data() {
         .into();
     assert_eq!(
         validator.validate_auxpow_header(&legacy_store, &dogecoin_header),
-        Err(ValidateAuxPowHeaderError::InconsistentAuxPowBitSet.into())
+        Err(ValidateAuxPowHeaderError::InconsistentAuxPowBitSet)
     );
 }
 
@@ -235,7 +235,7 @@ fn test_with_auxpow_data() {
     };
     assert_eq!(
         validator.validate_auxpow_header(&store_auxpow, &dogecoin_header),
-        Err(ValidateAuxPowHeaderError::InvalidParentPoW.into())
+        Err(ValidateAuxPowHeaderError::InvalidParentPoW)
     );
 
     // Parent block with invalid PoW and block with valid PoW - should fail
@@ -255,7 +255,7 @@ fn test_with_auxpow_data() {
     };
     assert_eq!(
         validator.validate_auxpow_header(&store_auxpow, &dogecoin_header),
-        Err(ValidateAuxPowHeaderError::InvalidParentPoW.into())
+        Err(ValidateAuxPowHeaderError::InvalidParentPoW)
     );
 
     // AuxPow flag unset but with AuxPow data - should fail
@@ -275,7 +275,7 @@ fn test_with_auxpow_data() {
     };
     assert_eq!(
         validator.validate_auxpow_header(&store_auxpow, &dogecoin_header),
-        Err(ValidateAuxPowHeaderError::InconsistentAuxPowBitSet.into())
+        Err(ValidateAuxPowHeaderError::InconsistentAuxPowBitSet)
     );
 }
 
@@ -310,6 +310,6 @@ fn test_header_modification_invalidates_auxpow_proof() {
     // Should fail after modification because AuxPow references old block header
     assert_eq!(
         validator.validate_auxpow_header(&store_auxpow, &dogecoin_header),
-        Err(ValidateAuxPowHeaderError::InvalidAuxPoW.into())
+        Err(ValidateAuxPowHeaderError::InvalidAuxPoW)
     );
 }

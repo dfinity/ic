@@ -2,8 +2,11 @@ use bitcoin::consensus::{Decodable, Encodable};
 use bitcoin::p2p::Magic;
 use bitcoin::{block::Header as PureHeader, BlockHash, Work};
 use ic_btc_validation::doge::DogecoinHeaderValidator;
-use ic_btc_validation::{AuxPowHeaderValidator, HeaderStore, ValidateHeaderError};
+use ic_btc_validation::{
+    AuxPowHeaderValidator, HeaderStore, ValidateAuxPowHeaderError, ValidateHeaderError,
+};
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 use std::{fmt, str::FromStr};
 
 /// This const represents the default version that the adapter will support.
@@ -137,6 +140,8 @@ pub trait BlockchainNetwork: Copy {
     type Header: BlockchainHeader;
     /// Block type.
     type Block: BlockchainBlock<Header = Self::Header>;
+    /// Error type for header validation.
+    type ValidationHeaderError: Debug;
     /// P2P protocol version number.
     const P2P_PROTOCOL_VERSION: u32;
     /// Return genesis block header.
@@ -146,7 +151,7 @@ pub trait BlockchainNetwork: Copy {
         &self,
         store: &impl HeaderStore,
         header: &Self::Header,
-    ) -> Result<(), ValidateHeaderError>;
+    ) -> Result<(), Self::ValidationHeaderError>;
     /// Helper used to determine if multiple blocks should be returned
     /// in [GetSuccessorsResponse].
     fn are_multiple_blocks_allowed(&self, anchor_height: BlockHeight) -> bool;
@@ -167,6 +172,7 @@ pub trait BlockchainNetwork: Copy {
 impl BlockchainNetwork for bitcoin::Network {
     type Header = bitcoin::block::Header;
     type Block = bitcoin::Block;
+    type ValidationHeaderError = ValidateHeaderError;
     const P2P_PROTOCOL_VERSION: u32 = bitcoin::p2p::PROTOCOL_VERSION;
     fn genesis_block_header(&self) -> Self::Header {
         bitcoin::blockdata::constants::genesis_block(self).header
@@ -175,7 +181,7 @@ impl BlockchainNetwork for bitcoin::Network {
         &self,
         store: &impl HeaderStore,
         header: &Self::Header,
-    ) -> Result<(), ValidateHeaderError> {
+    ) -> Result<(), Self::ValidationHeaderError> {
         ic_btc_validation::validate_header(self, store, header)
     }
     fn are_multiple_blocks_allowed(&self, anchor_height: BlockHeight) -> bool {
@@ -220,6 +226,7 @@ impl BlockchainNetwork for bitcoin::Network {
 impl BlockchainNetwork for bitcoin::dogecoin::Network {
     type Header = bitcoin::dogecoin::Header;
     type Block = bitcoin::dogecoin::Block;
+    type ValidationHeaderError = ValidateAuxPowHeaderError;
     const P2P_PROTOCOL_VERSION: u32 = 70015;
     fn genesis_block_header(&self) -> Self::Header {
         bitcoin::dogecoin::constants::genesis_block(self).header
@@ -228,7 +235,7 @@ impl BlockchainNetwork for bitcoin::dogecoin::Network {
         &self,
         store: &impl HeaderStore,
         header: &Self::Header,
-    ) -> Result<(), ValidateHeaderError> {
+    ) -> Result<(), Self::ValidationHeaderError> {
         let validator = DogecoinHeaderValidator::new(*self);
         validator.validate_auxpow_header(store, header)
     }

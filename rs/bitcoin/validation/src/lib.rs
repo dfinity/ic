@@ -5,6 +5,9 @@ mod header;
 mod tests;
 
 pub use crate::constants::max_target;
-pub use crate::header::{validate_header, AuxPowHeaderValidator, HeaderStore, ValidateHeaderError};
+pub use crate::header::{
+    validate_header, AuxPowHeaderValidator, HeaderStore, ValidateAuxPowHeaderError,
+    ValidateHeaderError,
+};
 
 type BlockHeight = u32;

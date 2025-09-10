@@ -43,7 +43,7 @@ impl DogecoinHeaderValidator {
         &self,
         store: &impl HeaderStore,
         header: &PureHeader,
-    ) -> Result<Target, ValidateHeaderError> {
+    ) -> Result<(Target, BlockHeight), ValidateHeaderError> {
         let chain_height = store.get_height();
         let (prev_header, prev_height) = match store.get_header(&header.prev_blockhash) {
             Some(result) => result,
@@ -51,15 +51,6 @@ impl DogecoinHeaderValidator {
                 return Err(ValidateHeaderError::PrevHeaderNotFound);
             }
         };
-        let height = prev_height + 1;
-
-        if !self.allow_legacy_blocks(height) && header.is_legacy() {
-            return Err(ValidateAuxPowHeaderError::LegacyBlockNotAllowed.into());
-        }
-
-        if self.allow_legacy_blocks(height) && header.has_auxpow_bit() {
-            return Err(ValidateAuxPowHeaderError::AuxPowBlockNotAllowed.into());
-        }
 
         if !self.is_header_within_one_year_of_tip(prev_height, chain_height) {
             return Err(ValidateHeaderError::HeightTooLow);
@@ -71,12 +62,6 @@ impl DogecoinHeaderValidator {
 
         if !self.is_checkpoint_valid(prev_height, header, chain_height) {
             return Err(ValidateHeaderError::DoesNotMatchCheckpoint);
-        }
-
-        if (header.extract_base_version() < 3 && height >= self.network().params().bip66_height)
-            || (header.extract_base_version() < 4 && height >= self.network().params().bip65_height)
-        {
-            return Err(ValidateAuxPowHeaderError::VersionObsolete.into());
         }
 
         let header_target = header.target();
@@ -92,7 +77,7 @@ impl DogecoinHeaderValidator {
             return Err(ValidateHeaderError::InvalidPoWForComputedTarget);
         }
 
-        Ok(target)
+        Ok((target, prev_height + 1))
     }
 }
 
@@ -171,7 +156,7 @@ impl HeaderValidator for DogecoinHeaderValidator {
         store: &impl HeaderStore,
         header: &PureHeader,
     ) -> Result<(), ValidateHeaderError> {
-        let target = self.contextual_check_header(store, header)?;
+        let (target, _) = self.contextual_check_header(store, header)?;
 
         if let Err(err) = header.validate_pow_with_scrypt(target) {
             match err {
@@ -351,29 +336,53 @@ impl AuxPowHeaderValidator for DogecoinHeaderValidator {
         self.network.params().allow_legacy_blocks(height)
     }
 
+    fn contextual_check_header_auxpow(
+        &self,
+        header: &PureHeader,
+        height: BlockHeight,
+    ) -> Result<(), ValidateAuxPowHeaderError> {
+        if !self.allow_legacy_blocks(height) && header.is_legacy() {
+            return Err(ValidateAuxPowHeaderError::LegacyBlockNotAllowed);
+        }
+
+        if self.allow_legacy_blocks(height) && header.has_auxpow_bit() {
+            return Err(ValidateAuxPowHeaderError::AuxPowBlockNotAllowed);
+        }
+
+        if (header.extract_base_version() < 3 && height >= self.network().params().bip66_height)
+            || (header.extract_base_version() < 4 && height >= self.network().params().bip65_height)
+        {
+            return Err(ValidateAuxPowHeaderError::VersionObsolete);
+        }
+
+        Ok(())
+    }
+
     /// AuxPow header validation
     /// Ref: <https://github.com/dogecoin/dogecoin/blob/51cbc1fd5d0d045dda2ad84f53572bbf524c6a8e/src/dogecoin.cpp#L89>
     fn validate_auxpow_header(
         &self,
         store: &impl HeaderStore,
         header: &DogecoinHeader,
-    ) -> Result<(), ValidateHeaderError> {
+    ) -> Result<(), ValidateAuxPowHeaderError> {
         if !header.is_legacy()
             && self.strict_chain_id()
             && header.extract_chain_id() != self.auxpow_chain_id()
         {
-            return Err(ValidateAuxPowHeaderError::InvalidChainId.into());
+            return Err(ValidateAuxPowHeaderError::InvalidChainId);
         }
 
         if let Some(aux_pow) = header.aux_pow.as_ref() {
             if !header.has_auxpow_bit() {
-                return Err(ValidateAuxPowHeaderError::InconsistentAuxPowBitSet.into());
+                return Err(ValidateAuxPowHeaderError::InconsistentAuxPowBitSet);
             }
 
-            let target = self.contextual_check_header(store, &header.pure_header)?;
+            let (target, height) = self.contextual_check_header(store, &header.pure_header)?;
+
+            self.contextual_check_header_auxpow(&header.pure_header, height)?;
 
             if !target.is_met_by(aux_pow.parent_block_header.block_hash_with_scrypt()) {
-                return Err(ValidateAuxPowHeaderError::InvalidParentPoW.into());
+                return Err(ValidateAuxPowHeaderError::InvalidParentPoW);
             }
             if aux_pow
                 .check(
@@ -383,11 +392,11 @@ impl AuxPowHeaderValidator for DogecoinHeaderValidator {
                 )
                 .is_err()
             {
-                return Err(ValidateAuxPowHeaderError::InvalidAuxPoW.into());
+                return Err(ValidateAuxPowHeaderError::InvalidAuxPoW);
             }
         } else {
             if header.has_auxpow_bit() {
-                return Err(ValidateAuxPowHeaderError::InconsistentAuxPowBitSet.into());
+                return Err(ValidateAuxPowHeaderError::InconsistentAuxPowBitSet);
             }
 
             self.validate_header(store, &header.pure_header)?;

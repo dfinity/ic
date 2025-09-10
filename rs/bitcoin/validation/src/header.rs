@@ -40,12 +40,12 @@ pub enum ValidateHeaderError {
     /// Used when the predecessor of the input header is not found in the
     /// HeaderStore.
     PrevHeaderNotFound,
-    /// Used when the AuxPow header fails validation
-    ValidateAuxPowHeaderError(ValidateAuxPowHeaderError),
 }
 
 #[derive(Debug, PartialEq)]
 pub enum ValidateAuxPowHeaderError {
+    /// Used when the PureHeader fails validation
+    ValidatePureHeader(ValidateHeaderError),
     /// Used when version field is obsolete
     VersionObsolete,
     /// Used when legacy blocks are not allowed
@@ -62,9 +62,9 @@ pub enum ValidateAuxPowHeaderError {
     InvalidParentPoW,
 }
 
-impl From<ValidateAuxPowHeaderError> for ValidateHeaderError {
-    fn from(err: ValidateAuxPowHeaderError) -> Self {
-        ValidateHeaderError::ValidateAuxPowHeaderError(err)
+impl From<ValidateHeaderError> for ValidateAuxPowHeaderError {
+    fn from(err: ValidateHeaderError) -> Self {
+        ValidateAuxPowHeaderError::ValidatePureHeader(err)
     }
 }
 
@@ -168,18 +168,27 @@ pub trait HeaderValidator {
 pub trait AuxPowHeaderValidator: HeaderValidator {
     /// Returns `true` if the strict-chain-id rule is enabled.
     fn strict_chain_id(&self) -> bool;
+
     /// Returns the chain id used in this blockchain for AuxPow mining.
     fn auxpow_chain_id(&self) -> i32;
+
     /// Returns `true` if mining a legacy block is allowed.
     fn allow_legacy_blocks(&self, height: u32) -> bool;
 
+    /// Performs context-dependent validity checks for AuxPow headers.
+    fn contextual_check_header_auxpow(
+        &self,
+        header: &BlockHeader,
+        height: BlockHeight,
+    ) -> Result<(), ValidateAuxPowHeaderError>;
+
     /// Validates an AuxPow header. If a failure occurs, a
-    /// [ValidateHeaderError](ValidateHeaderError) will be returned.
+    /// [ValidateAuxPowHeaderError](ValidateAuxPowHeaderError) will be returned.
     fn validate_auxpow_header(
         &self,
         store: &impl HeaderStore,
         header: &AuxPowHeader,
-    ) -> Result<(), ValidateHeaderError>;
+    ) -> Result<(), ValidateAuxPowHeaderError>;
 }
 
 /// Validates a header. If a failure occurs, a

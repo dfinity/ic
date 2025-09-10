@@ -5,7 +5,7 @@ use crate::{
     metrics::BlockchainStateMetrics,
 };
 use bitcoin::{block::Header, consensus::Encodable, BlockHash, Work};
-use ic_btc_validation::{HeaderStore, ValidateHeaderError};
+use ic_btc_validation::HeaderStore;
 use ic_metrics::MetricsRegistry;
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
@@ -68,24 +68,24 @@ enum AddHeaderResult {
 }
 
 #[derive(Debug, Error)]
-pub enum AddHeaderError {
+pub enum AddHeaderError<Network: BlockchainNetwork> {
     /// This variant is used when the input header is invalid
     /// (eg: not of the right format)
     #[error("Received an invalid block header: {0}")]
-    InvalidHeader(BlockHash, ValidateHeaderError),
+    InvalidHeader(BlockHash, Network::ValidationHeaderError),
     /// This variant is used when the predecessor of the input header is not part of header_cache.
     #[error("Received a block header where we do not have the previous header in the cache: {0}")]
     PrevHeaderNotCached(BlockHash),
 }
 
 #[derive(Debug, Error)]
-pub enum AddBlockError {
+pub enum AddBlockError<Network: BlockchainNetwork> {
     /// Used to indicate that the merkle root of the block is invalid.
     #[error("Received a block with an invalid merkle root: {0}")]
     InvalidMerkleRoot(BlockHash),
     /// Used to indicate when the header causes an error while adding a block to the state.
     #[error("Block's header caused an error: {0}")]
-    Header(AddHeaderError),
+    Header(AddHeaderError<Network>),
     /// Used to indicate that the block could not be serialized.
     #[error("Serialization error for block {0} with error {1}")]
     CouldNotSerialize(BlockHash, String),
@@ -161,7 +161,7 @@ impl<Network: BlockchainNetwork> BlockchainState<Network> {
     pub fn add_headers(
         &mut self,
         headers: &[Network::Header],
-    ) -> (Vec<BlockHash>, Option<AddHeaderError>) {
+    ) -> (Vec<BlockHash>, Option<AddHeaderError<Network>>) {
         let mut block_hashes_of_added_headers = vec![];
 
         let err = headers
@@ -188,7 +188,10 @@ impl<Network: BlockchainNetwork> BlockchainState<Network> {
 
     /// This method adds the input header to the `header_cache`.
     #[allow(clippy::indexing_slicing)]
-    fn add_header(&mut self, header: Network::Header) -> Result<AddHeaderResult, AddHeaderError> {
+    fn add_header(
+        &mut self,
+        header: Network::Header,
+    ) -> Result<AddHeaderResult, AddHeaderError<Network>> {
         let block_hash = header.block_hash();
 
         // If the header already exists in the cache,
@@ -243,7 +246,7 @@ impl<Network: BlockchainNetwork> BlockchainState<Network> {
     }
 
     /// This method adds a new block to the `block_cache`
-    pub fn add_block(&mut self, block: Network::Block) -> Result<(), AddBlockError> {
+    pub fn add_block(&mut self, block: Network::Block) -> Result<(), AddBlockError<Network>> {
         let block_hash = block.block_hash();
 
         if block.compute_merkle_root().is_some() && !block.check_merkle_root() {
@@ -379,6 +382,7 @@ impl<Network: BlockchainNetwork> HeaderStore for BlockchainState<Network> {
 #[cfg(test)]
 mod test {
     use bitcoin::{consensus::Decodable, Block, Network, TxMerkleNode};
+    use ic_btc_validation::ValidateHeaderError;
     use ic_metrics::MetricsRegistry;
 
     use super::*;
