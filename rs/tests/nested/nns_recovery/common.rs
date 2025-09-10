@@ -62,6 +62,7 @@ pub struct SetupConfig {
     pub dkg_interval: u64,
 }
 
+#[derive(Debug)]
 pub struct TestConfig {
     pub subnet_size: usize,
 }

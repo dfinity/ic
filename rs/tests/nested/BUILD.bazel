@@ -19,6 +19,7 @@ rust_library(
         "//rs/registry/keys",
         "//rs/registry/nns_data_provider",
         "//rs/registry/subnet_type",
+        "//rs/registry/transport",
         "//rs/rust_canisters/canister_test",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
@@ -102,9 +103,9 @@ system_test_nns(
     test_driver_target = ":guestos_upgrade_test_bin",
     test_timeout = "eternal",
     uses_guestos_img = False,
-    uses_guestos_latest_release_mainnet_img = True,
+    uses_guestos_mainnet_latest_img = True,
     uses_guestos_update = True,
-    uses_setupos_latest_release_mainnet_img = True,
+    uses_setupos_mainnet_latest_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
     deps = [
         # Keep sorted.
@@ -156,34 +157,9 @@ system_test_nns(
     test_driver_target = ":hostos_upgrade_test_bin",
     test_timeout = "eternal",
     uses_guestos_img = False,
-    uses_guestos_latest_release_mainnet_img = True,
+    uses_guestos_mainnet_latest_img = True,
     uses_hostos_update = True,
-    uses_setupos_latest_release_mainnet_img = True,
-    runtime_deps = IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
-    deps = [
-        # Keep sorted.
-        ":nested",
-        "//rs/tests/driver:ic-system-test-driver",
-        "@crate_index//:anyhow",
-    ],
-)
-
-# Used to manually test if can upgrade
-# *from* an arbitrary mainnet version (mainnet_setupos_disk_image target)
-# *to* an arbitrary mainnet version ("latest_release" in mainnet-icos-revisions.json)
-system_test_nns(
-    name = "hostos_upgrade_from_mainnet_to_mainnet",
-    env = MAINNET_ENV | {
-        "NODE_OPERATOR_PRIV_KEY_PATH": "$(rootpath //ic-os/setupos:config/node_operator_private_key.pem)",
-    },
-    flaky = True,
-    tags = ["manual"],
-    test_driver_target = ":hostos_upgrade_test_bin",
-    test_timeout = "eternal",
-    uses_guestos_img = False,
-    uses_guestos_latest_release_mainnet_img = True,
-    uses_hostos_latest_release_mainnet_update = True,
-    uses_setupos_latest_release_mainnet_img = True,
+    uses_setupos_mainnet_latest_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS + ["//ic-os/setupos:config/node_operator_private_key.pem"],
     deps = [
         # Keep sorted.
@@ -201,7 +177,7 @@ system_test_nns(
     flaky = True,
     tags = ["long_test"],
     test_timeout = "eternal",
-    uses_guestos_nns_mainnet_update = True,
+    uses_guestos_mainnet_nns_update = True,
     uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = [
