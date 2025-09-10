@@ -10,6 +10,8 @@
 //! - target not stopped
 //!
 
+use std::time::Duration;
+
 use candid::{CandidType, Decode, Encode, Principal};
 use canister_test::Project;
 use ic_base_types::CanisterId;
@@ -127,6 +129,8 @@ async fn setup() -> Setup {
         )
         .await;
     pic.add_cycles(target, u128::MAX / 2).await;
+    println!("Source canister id: {}", source.to_text());
+    println!("Target canister id: {}", target.to_text());
 
     Setup {
         pic,
@@ -188,4 +192,10 @@ async fn test_validation_succeeds() {
         .unwrap();
     let res = Decode!(&res, Result<(), ValidationError>).unwrap();
     res.unwrap();
+
+    for _ in 0..100 {
+        println!("=============================================");
+        pic.advance_time(Duration::from_millis(100)).await;
+        pic.tick().await;
+    }
 }

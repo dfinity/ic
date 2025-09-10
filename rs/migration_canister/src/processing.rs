@@ -41,13 +41,29 @@ pub async fn process_all_by_predicate<F>(
     };
     let mut tasks = vec![];
     let requests = list_by(predicate);
+    if requests.is_empty() {
+        return;
+    }
+    println!(
+        "Entering `{}` with {} pending requests",
+        tag,
+        requests.len()
+    );
     for request in requests.iter() {
         tasks.push(processor(request.clone()));
     }
     let results = join_all(tasks).await;
+    let mut success_counter = 0;
     for (req, res) in zip(requests, results) {
+        if res.is_success() {
+            success_counter += 1;
+        }
         res.transition(req);
     }
+    println!(
+        "Exiting `{}` with {} successful transitions.",
+        tag, success_counter
+    );
 }
 
 /// Accepts an `Accepted` request, returns `ControllersChanged` on success.
