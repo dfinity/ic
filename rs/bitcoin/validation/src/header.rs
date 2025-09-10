@@ -256,7 +256,10 @@ fn is_checkpoint_valid(
     chain_height: BlockHeight,
 ) -> bool {
     let checkpoints = checkpoints(network);
-    let next_height = prev_height.saturating_add(1);
+    if prev_height == u32::MAX {
+        return false;
+    }
+    let next_height = prev_height + 1;
     if let Some(next_hash) = checkpoints.get(&next_height) {
         return *next_hash == header.block_hash();
     }

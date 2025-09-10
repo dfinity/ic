@@ -132,7 +132,10 @@ impl HeaderValidator for DogecoinHeaderValidator {
         chain_height: BlockHeight,
     ) -> bool {
         let checkpoints = self.checkpoints();
-        let next_height = prev_height.saturating_add(1);
+        if prev_height == u32::MAX {
+            return false;
+        }
+        let next_height = prev_height + 1;
 
         if let Some((_, expected_hash_str)) =
             self.checkpoints().iter().find(|(h, _)| *h == next_height)
