@@ -601,7 +601,7 @@ pub enum InitialTime {
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
-pub enum IncompleteStateConfig {
+pub enum IncompleteStateFlag {
     #[default]
     Disabled,
     Enabled,
@@ -616,7 +616,7 @@ pub struct InstanceConfig {
     pub log_level: Option<String>,
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
     pub icp_features: Option<IcpFeatures>,
-    pub incomplete_state: Option<IncompleteStateConfig>,
+    pub incomplete_state: Option<IncompleteStateFlag>,
     pub initial_time: Option<InitialTime>,
 }
 

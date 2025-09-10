@@ -19,7 +19,7 @@ use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
 #[cfg(not(windows))]
 use pocket_ic::common::rest::{
-    BlockmakerConfigs, ExtendedSubnetConfigSet, IncompleteStateConfig, RawSubnetBlockmaker,
+    BlockmakerConfigs, ExtendedSubnetConfigSet, IncompleteStateFlag, RawSubnetBlockmaker,
     TickConfigs,
 };
 #[cfg(not(windows))]
@@ -562,7 +562,7 @@ fn time_on_resumed_instance() {
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
 #[cfg(not(windows))]
 async fn resume_killed_instance_impl(
-    incomplete_state: Option<IncompleteStateConfig>,
+    incomplete_state: Option<IncompleteStateFlag>,
 ) -> Result<(), String> {
     let (mut server, server_url) = start_server(StartServerParams::default()).await;
     let temp_dir = TempDir::new().unwrap();
@@ -673,7 +673,7 @@ async fn resume_killed_instance_default() {
 #[cfg(not(windows))]
 #[tokio::test]
 async fn resume_killed_instance_strict() {
-    let err = resume_killed_instance_impl(Some(IncompleteStateConfig::Disabled))
+    let err = resume_killed_instance_impl(Some(IncompleteStateFlag::Disabled))
         .await
         .unwrap_err();
     assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is incomplete."));
@@ -683,7 +683,7 @@ async fn resume_killed_instance_strict() {
 #[cfg(not(windows))]
 #[tokio::test]
 async fn resume_killed_instance() {
-    resume_killed_instance_impl(Some(IncompleteStateConfig::Enabled))
+    resume_killed_instance_impl(Some(IncompleteStateFlag::Enabled))
         .await
         .unwrap();
 }

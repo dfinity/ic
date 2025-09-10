@@ -112,7 +112,7 @@ use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
     CanisterHttpResponse, ExtendedSubnetConfigSet, IcpConfig, IcpConfigFlag, IcpFeatures,
-    IcpFeaturesConfig, IncompleteStateConfig, MockCanisterHttpResponse, RawAddCycles,
+    IcpFeaturesConfig, IncompleteStateFlag, MockCanisterHttpResponse, RawAddCycles,
     RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
     SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
 };
@@ -2212,7 +2212,7 @@ impl PocketIc {
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
-        incomplete_state: Option<IncompleteStateConfig>,
+        incomplete_state: Option<IncompleteStateFlag>,
         initial_time: Option<Time>,
         auto_progress_enabled: bool,
         gateway_port: Option<u16>,
@@ -2276,8 +2276,8 @@ impl PocketIc {
                         range_gen.add_assigned(vec![allocation_range]).unwrap();
                     }
                     let expected_state_time = match incomplete_state {
-                        None | Some(IncompleteStateConfig::Disabled) => Some(topology.time),
-                        Some(IncompleteStateConfig::Enabled) => None,
+                        None | Some(IncompleteStateFlag::Disabled) => Some(topology.time),
+                        Some(IncompleteStateFlag::Enabled) => None,
                     };
                     SubnetConfigInfo {
                         ranges: config.ranges,
