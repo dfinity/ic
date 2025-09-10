@@ -121,7 +121,7 @@ fn e2e(criterion: &mut Criterion) {
 /// Gives a baseline on the runtime needed to verify a proof of work which involves hashing some amount of data (the block header).
 /// For simplification, the block header is modeled as a random bytes array.
 ///
-/// * In case of Bitcoin, a block header is always 80 bytes.
+/// * In case of Bitcoin, a block header is always 80 bytes and hashed twice with SHA2-256.
 /// * In case of Dogecoin, a block header may have a variable size due to the auxiliary proof of work, but scrypt is always used to hash 80 bytes:
 ///     1. If there is no auxiliary proof of work the block header is 80 bytes.
 ///     2. If there is an auxiliary proof of work, part of the verification involves hashing with scrypt the parent block header, which is also 80 bytes.
@@ -133,23 +133,23 @@ fn hash_block_header(criterion: &mut Criterion) {
     {
         let mut bench = criterion.benchmark_group("hash_block_header_80");
         let header: [u8; 80] = random_header(rng);
-        scrypt_vs_sha256(&mut bench, &params, &header);
+        scrypt_vs_double_sha256(&mut bench, &params, &header);
     }
 
     {
         let mut bench = criterion.benchmark_group("hash_block_header_500");
         let header: [u8; 500] = random_header(rng);
-        scrypt_vs_sha256(&mut bench, &params, &header);
+        scrypt_vs_double_sha256(&mut bench, &params, &header);
     }
 
     {
         let mut bench = criterion.benchmark_group("hash_block_header_1000");
         let header: [u8; 1_000] = random_header(rng);
-        scrypt_vs_sha256(&mut bench, &params, &header);
+        scrypt_vs_double_sha256(&mut bench, &params, &header);
     }
 }
 
-fn scrypt_vs_sha256<M: Measurement>(
+fn scrypt_vs_double_sha256<M: Measurement>(
     group: &mut BenchmarkGroup<'_, M>,
     scrypt_params: &scrypt::Params,
     header: &[u8],
@@ -161,9 +161,9 @@ fn scrypt_vs_sha256<M: Measurement>(
         })
     });
 
-    group.bench_function("SHA2-256", |bench| {
+    group.bench_function("double-SHA2-256", |bench| {
         bench.iter(|| {
-            let _hash = sha2::Sha256::digest(header);
+            let _hash = sha2::Sha256::digest(sha2::Sha256::digest(header));
         })
     });
 }
