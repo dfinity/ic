@@ -11488,6 +11488,7 @@ dependencies = [
  "bytes",
  "candid",
  "comparable",
+ "hex",
  "ic-base-types",
  "ic-crypto-sha2",
  "ic-nervous-system-clients",
