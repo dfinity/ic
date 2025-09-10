@@ -122,9 +122,11 @@ fn e2e(criterion: &mut Criterion) {
 /// For simplification, the block header is modeled as a random bytes array.
 ///
 /// * In case of Bitcoin, a block header is always 80 bytes.
-/// * In case of Dogecoin, a block header may have a variable size due to the auxiliary proof of work.
-///   The current mainnet block height of 6M blocks takes around 1.4 GB so that the average block header size is around 250 bytes.
-///   However, and contrary to SHA2-256, the runtime of scrypt (as used in Dogecoin) is little impacted by the input size.
+/// * In case of Dogecoin, a block header may have a variable size due to the auxiliary proof of work, but scrypt is always used to hash 80 bytes:
+///     1. If there is no auxiliary proof of work the block header is 80 bytes.
+///     2. If there is an auxiliary proof of work, part of the verification involves hashing with scrypt the parent block header, which is also 80 bytes.
+///
+///   Note that contrary to SHA2-256, the runtime of scrypt (as used in Dogecoin) is little impacted by the input size.
 fn hash_block_header(criterion: &mut Criterion) {
     let rng = &mut ic_crypto_test_utils_reproducible_rng::reproducible_rng();
     let params = scrypt::Params::new(10, 1, 1, 32).expect("invalid scrypt params");
