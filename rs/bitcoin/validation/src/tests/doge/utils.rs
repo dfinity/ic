@@ -254,3 +254,19 @@ impl Default for TransactionBuilder {
         Self::new()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::TransactionBuilder;
+    use bitcoin::OutPoint;
+
+    #[test]
+    fn should_be_coinbase_tx_when_default_new() {
+        let tx = TransactionBuilder::new().build();
+        assert!(tx.is_coinbase());
+        assert_eq!(tx.input.len(), 1);
+        assert_eq!(tx.input[0].previous_output, OutPoint::null());
+        assert_eq!(tx.output.len(), 1);
+        assert_eq!(tx.output[0].value.to_sat(), 50_0000_0000);
+    }
+}
