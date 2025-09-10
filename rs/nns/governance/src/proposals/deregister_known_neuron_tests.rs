@@ -1,7 +1,7 @@
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     neuron_store::NeuronStore,
-    pb::v1::{governance_error::ErrorType, DeregisterKnownNeuron, KnownNeuronData},
+    pb::v1::{DeregisterKnownNeuron, KnownNeuronData, governance_error::ErrorType},
     temporarily_disable_deregister_known_neuron, temporarily_enable_deregister_known_neuron,
 };
 use assert_matches::assert_matches;

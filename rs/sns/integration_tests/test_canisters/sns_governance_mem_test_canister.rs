@@ -15,12 +15,9 @@ use ic_nervous_system_common::memory_manager_upgrade_storage::store_protobuf;
 use ic_sns_governance::{
     governance::HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
     pb::v1::{
-        Ballot, Ballot, Governance as GovernanceProto, Governance as GovernanceProto, Motion,
-        Motion, NervousSystemFunction, NervousSystemFunction, NervousSystemParameters,
-        NervousSystemParameters, Neuron, Neuron, NeuronId, NeuronId, NeuronPermission,
-        NeuronPermission, NeuronPermissionType, NeuronPermissionType, Proposal, Proposal,
-        ProposalData, ProposalData, ProposalId, ProposalId, Topic, WaitForQuietState,
-        WaitForQuietState,
+        Ballot, Governance as GovernanceProto, Motion, NervousSystemFunction,
+        NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionType,
+        Proposal, ProposalData, ProposalId, Topic, WaitForQuietState,
         governance::{Mode, NeuronInFlightCommand, SnsMetadata},
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
         neuron::{DissolveState, Followees},
