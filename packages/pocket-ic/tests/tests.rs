@@ -3481,7 +3481,6 @@ fn canister_not_found() {
     };
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
-        .with_auto_progress()
         .with_http_gateway(http_gateway_config)
         .build();
 
@@ -3564,7 +3563,6 @@ fn payload_too_large() {
     };
     let pic = PocketIcBuilder::new()
         .with_application_subnet()
-        .with_auto_progress()
         .with_http_gateway(http_gateway_config)
         .build();
 
