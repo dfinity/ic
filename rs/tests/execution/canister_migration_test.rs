@@ -1,0 +1,211 @@
+use anyhow::Result;
+use candid::{CandidType, Decode, Deserialize, Encode, Principal};
+use canister_test::Wasm;
+use ic_agent::Agent;
+use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
+use ic_registry_subnet_type::SubnetType;
+use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::test_env_api::{
+    get_dependency_path, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
+    IcNodeContainer, IcNodeSnapshot,
+};
+use ic_system_test_driver::driver::{
+    ic::{InternetComputer, Subnet},
+    test_env::TestEnv,
+};
+use ic_system_test_driver::systest;
+use ic_system_test_driver::util::*;
+use ic_types::CanisterId;
+use ic_utils::call::AsyncCall;
+use ic_utils::interfaces::ManagementCanister;
+use slog::Logger;
+
+const CANISTER_ID_FILE: &str = "migration_canister_id";
+
+fn main() -> Result<()> {
+    SystemTestGroup::new()
+        .with_setup(setup)
+        .add_test(systest!(test))
+        .execute_from_args()?;
+
+    Ok(())
+}
+
+fn setup(env: TestEnv) {
+    InternetComputer::new()
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
+        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
+        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
+        .setup_and_start(&env)
+        .expect("failed to setup IC under test");
+
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet.nodes().for_each(|node| {
+            node.await_status_is_healthy()
+                .unwrap_or_else(|_| panic!("Node {} did not become healty.", node.ic_name))
+        })
+    });
+    install_nns_and_check_progress(env.topology_snapshot());
+
+    // TODO: Remove once the migration canister is installed as part of installing NNS canisters.
+    let migration_canister_id = block_on(install_migration_canister(&env));
+
+    env.write_json_object(CANISTER_ID_FILE, &migration_canister_id)
+        .expect("Could not write migration canister ID to TestEnv.");
+}
+
+async fn install_migration_canister(env: &TestEnv) -> CanisterId {
+    let nns_subnet = env.get_first_healthy_node_snapshot_from_nth_subnet_where(|_| true, 0);
+    let runtime = runtime_from_url(
+        nns_subnet.get_public_url(),
+        nns_subnet.effective_canister_id(),
+    );
+
+    let wasm = Wasm::from_file(get_dependency_path(
+        std::env::var("MIGRATION_CANISTER_WASM_PATH")
+            .expect("MIGRATION_CANISTER_WASM_PATH not set"),
+    ));
+    wasm.install(&runtime)
+        .bytes(vec![])
+        .await
+        .expect("Failed to install migration canister.")
+        .canister_id()
+}
+
+fn test(env: TestEnv) {
+    block_on(test_async(env));
+}
+
+#[derive(Clone, Debug, CandidType)]
+struct MigrateCanisterArgs {
+    pub source: Principal,
+    pub target: Principal,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
+pub enum ValidationError {
+    MigrationsDisabled,
+    RateLimited,
+    MigrationInProgress { canister: Principal },
+    CanisterNotFound { canister: Principal },
+    SameSubnet,
+    CallerNotController { canister: Principal },
+    NotController { canister: Principal },
+    SourceNotStopped,
+    SourceNotReady,
+    TargetNotStopped,
+    TargetHasSnapshots,
+    TargetInsufficientCycles,
+    CallFailed { reason: String },
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
+enum MigrationStatus {
+    Unknown,
+    InProgress { status: String },
+    Failed { reason: String },
+    Succeeded,
+}
+
+/// Install a stopped canister with the migration canister as one of the controllers.
+async fn install_canister<'a>(
+    node: &IcNodeSnapshot,
+    agent: &'a Agent,
+    migration_canister_id: Principal,
+    logger: &Logger,
+) -> UniversalCanister<'a> {
+    let management_canister = ManagementCanister::create(agent);
+    let canister =
+        UniversalCanister::new_with_retries(agent, node.effective_canister_id(), logger).await;
+    add_controller(&management_canister, &canister, migration_canister_id).await;
+    management_canister
+        .stop_canister(&canister.canister_id())
+        .call_and_wait()
+        .await
+        .expect("Failed to stop canister.");
+    canister
+}
+
+async fn add_controller(
+    management_canister: &ManagementCanister<'_>,
+    canister: &UniversalCanister<'_>,
+    controller: Principal,
+) {
+    let (status_result,) = management_canister
+        .canister_status(&canister.canister_id())
+        .call_and_wait()
+        .await
+        .expect("Failed to query canister controllers.");
+
+    let current_controllers: Vec<Principal> = status_result.settings.controllers;
+
+    let mut call = management_canister
+        .update_settings(&canister.canister_id())
+        .with_controller(controller);
+
+    for current_controller in current_controllers {
+        call = call.with_controller(current_controller);
+    }
+    call.call_and_wait()
+        .await
+        .expect("Failed to update canister controllers.");
+}
+
+async fn test_async(env: TestEnv) {
+    let logger = env.logger();
+    let migration_canister_id: Principal = env
+        .read_json_object(CANISTER_ID_FILE)
+        .expect("Failed to read migration canister id from TestEnv.");
+    let nns_agent = env
+        .get_first_healthy_node_snapshot_from_nth_subnet_where(|_| true, 0)
+        .build_default_agent_async()
+        .await;
+
+    let app_subnet_1 = env.get_first_healthy_node_snapshot_from_nth_subnet_where(|_| true, 1);
+    let app_subnet_1_agent = app_subnet_1.build_default_agent_async().await;
+    let source_canister = install_canister(
+        &app_subnet_1,
+        &app_subnet_1_agent,
+        migration_canister_id,
+        &logger,
+    )
+    .await;
+    let app_subnet_2 = env.get_first_healthy_node_snapshot_from_nth_subnet_where(|_| true, 2);
+    let app_subnet_2_agent = app_subnet_2.build_default_agent_async().await;
+    let target_canister = install_canister(
+        &app_subnet_2,
+        &app_subnet_2_agent,
+        migration_canister_id,
+        &logger,
+    )
+    .await;
+
+    let args = Encode!(&MigrateCanisterArgs {
+        source: source_canister.canister_id(),
+        target: target_canister.canister_id(),
+    })
+    .unwrap();
+
+    let result = nns_agent
+        .update(&migration_canister_id, "migrate_canister")
+        .with_arg(args.clone())
+        .call_and_wait()
+        .await
+        .expect("Failed to call migrate_canister.");
+
+    let decoded_result = Decode!(&result, Result<(), ValidationError>)
+        .expect("Failed to decode reponse from migrate_canister.");
+
+    assert_eq!(decoded_result, Ok(()));
+
+    let status = nns_agent
+        .update(&migration_canister_id, "migration_status")
+        .with_arg(args)
+        .call_and_wait()
+        .await
+        .expect("Failed to call migration_status.");
+    let decoded_status = Decode!(&status, Vec<MigrationStatus>)
+        .expect("Failed to decode response from migration_status.");
+
+    assert_eq!(decoded_status, vec![MigrationStatus::Unknown]);
+}
