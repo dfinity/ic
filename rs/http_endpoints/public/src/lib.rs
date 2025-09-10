@@ -365,6 +365,7 @@ pub fn start_server(
             nns_delegation_reader.clone(),
             state_reader.clone(),
             version,
+            log.clone(),
         )
         .with_health_status(health_status.clone())
         .build_router()

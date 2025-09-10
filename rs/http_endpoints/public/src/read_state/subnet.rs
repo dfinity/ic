@@ -18,6 +18,7 @@ use http::Request;
 use hyper::StatusCode;
 use ic_crypto_tree_hash::Path;
 use ic_interfaces_state_manager::StateReader;
+use ic_logger::ReplicaLogger;
 use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -42,6 +43,7 @@ pub enum Version {
 
 #[derive(Clone)]
 pub(crate) struct SubnetReadStateService {
+    logger: ReplicaLogger,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -49,6 +51,7 @@ pub(crate) struct SubnetReadStateService {
 }
 
 pub struct SubnetReadStateServiceBuilder {
+    logger: ReplicaLogger,
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -69,12 +72,14 @@ impl SubnetReadStateServiceBuilder {
         nns_delegation_reader: NNSDelegationReader,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         version: Version,
+        logger: ReplicaLogger,
     ) -> Self {
         Self {
             health_status: None,
             nns_delegation_reader,
             state_reader,
             version,
+            logger,
         }
     }
 
@@ -94,6 +99,7 @@ impl SubnetReadStateServiceBuilder {
             nns_delegation_reader: self.nns_delegation_reader,
             state_reader: self.state_reader,
             version: self.version,
+            logger: self.logger,
         };
         Router::new().route_service(
             SubnetReadStateService::route(self.version),
@@ -110,6 +116,7 @@ impl SubnetReadStateServiceBuilder {
 pub(crate) async fn read_state_subnet(
     axum::extract::Path(effective_canister_id): axum::extract::Path<CanisterId>,
     State(SubnetReadStateService {
+        logger,
         health_status,
         nns_delegation_reader,
         state_reader,
@@ -154,10 +161,17 @@ pub(crate) async fn read_state_subnet(
             Version::V3 => nns_delegation_reader.get_delegation(CanisterRangesFilter::None),
         };
 
+        let should_prune_deprecated_canister_ranges = match version {
+            Version::V2 => false,
+            Version::V3 => true,
+        };
+
         get_certificate_and_create_response(
             read_state.paths,
             delegation_from_nns,
             certified_state_reader.as_ref(),
+            should_prune_deprecated_canister_ranges,
+            &logger,
         )
     })
     .await;

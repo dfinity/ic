@@ -225,10 +225,17 @@ pub(crate) async fn canister_read_state(
                 .get_delegation(CanisterRangesFilter::Tree(effective_canister_id)),
         };
 
+        let should_prune_deprecated_canister_ranges = match version {
+            Version::V2 => false,
+            Version::V3 => true,
+        };
+
         get_certificate_and_create_response(
             read_state.paths,
             delegation_from_nns,
             certified_state_reader.as_ref(),
+            should_prune_deprecated_canister_ranges,
+            &log,
         )
     })
     .await;
