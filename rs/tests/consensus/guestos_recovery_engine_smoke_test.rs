@@ -35,8 +35,8 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            get_dependency_path, get_dependency_path_from_env, read_dependency_from_env_to_string,
-            secs, HasTopologySnapshot, IcNodeContainer, SshSession,
+            get_dependency_path_from_env, read_dependency_from_env_to_string, secs,
+            HasTopologySnapshot, IcNodeContainer, SshSession,
         },
     },
     retry_with_msg, systest,
@@ -131,7 +131,7 @@ pub fn setup(env: TestEnv) {
     setup_upstreams_uvm(&env);
     uvm_serve_recovery_artifacts(
         &env,
-        get_dependency_path_from_env("RECOVERY_ARTIFACTS_PATH"),
+        &get_dependency_path_from_env("RECOVERY_ARTIFACTS_PATH"),
         read_dependency_from_env_to_string("RECOVERY_HASH_PATH")
             .unwrap()
             .trim(),
