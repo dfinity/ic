@@ -1,8 +1,19 @@
+//! TODO:
+//! - source not controlled by user
+//! - target not controlled by user
+//! - source not controlled by MC
+//! - target not controlled by MC
+//! - not enough cycles for migration
+//! - rate-limited
+//! - disabled
+//! - source not stopped
+//! - target not stopped
+//!
+
 use candid::{CandidType, Decode, Encode, Principal};
 use canister_test::Project;
 use ic_base_types::CanisterId;
 use ic_management_canister_types::CanisterSettings;
-use ic_nns_test_utils::common::build_registry_wasm;
 use pocket_ic::{
     common::rest::{EmptyConfig, IcpFeatures},
     nonblocking::PocketIc,
@@ -57,7 +68,6 @@ async fn setup() -> (
             ..Default::default()
         })
         .with_state_dir(state_dir.clone())
-        .with_nns_subnet()
         .with_application_subnet()
         .with_application_subnet()
         .build_async()
@@ -68,25 +78,6 @@ async fn setup() -> (
     let c2 = Principal::self_authenticating(vec![2]);
     let c3 = Principal::self_authenticating(vec![3]);
     let controllers = vec![c1, c2, c3];
-
-    // let registry_wasm = build_registry_wasm();
-    // pic.create_canister_with_id(
-    //     Some(system_controller),
-    //     Some(CanisterSettings {
-    //         controllers: Some(vec![system_controller]),
-    //         ..Default::default()
-    //     }),
-    //     REGISTRY_CANISTER_ID.into(),
-    // )
-    // .await
-    // .unwrap();
-    // pic.install_canister(
-    //     REGISTRY_CANISTER_ID.into(),
-    //     registry_wasm.bytes(),
-    //     Encode!(&RegistryCanisterInitPayload::default()).unwrap(),
-    //     Some(system_controller),
-    // )
-    // .await;
 
     let migration_canister_wasm = Project::cargo_bin_maybe_from_env("migration-canister", &[]);
 
@@ -122,6 +113,7 @@ async fn setup() -> (
             source_subnet,
         )
         .await;
+    pic.add_cycles(source, u128::MAX / 2).await;
     let target = pic
         .create_canister_on_subnet(
             Some(c1),
@@ -132,6 +124,7 @@ async fn setup() -> (
             target_subnet,
         )
         .await;
+    pic.add_cycles(target, u128::MAX / 2).await;
 
     (
         pic,
@@ -144,9 +137,38 @@ async fn setup() -> (
 }
 
 #[tokio::test]
-async fn test() {
+async fn test_validation_succeeds() {
     let (pic, source_subnet, target_subnet, source, target, controllers) = setup().await;
     let sender = controllers[0];
+
+    // make migration canister controller of source
+    let mut new_controllers = controllers.clone();
+    new_controllers.push(MIGRATION_CANISTER_ID.into());
+    pic.update_canister_settings(
+        source,
+        Some(sender),
+        CanisterSettings {
+            controllers: Some(new_controllers.clone()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    // make migration canister controller of target
+    pic.update_canister_settings(
+        target,
+        Some(sender),
+        CanisterSettings {
+            controllers: Some(new_controllers),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    // stop source and target
+    pic.stop_canister(source, Some(sender)).await.unwrap();
+    pic.stop_canister(target, Some(sender)).await.unwrap();
+
     let res = pic
         .update_call(
             MIGRATION_CANISTER_ID.into(),
