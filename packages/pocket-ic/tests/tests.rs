@@ -18,13 +18,16 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_transport_types::Envelope;
 use ic_transport_types::EnvelopeContent::{Call, ReadState};
 #[cfg(not(windows))]
-use pocket_ic::common::rest::{BlockmakerConfigs, RawSubnetBlockmaker, TickConfigs};
+use pocket_ic::common::rest::{
+    BlockmakerConfigs, ExtendedSubnetConfigSet, IncompleteStateFlag, RawSubnetBlockmaker,
+    TickConfigs,
+};
 #[cfg(not(windows))]
-use pocket_ic::{common::rest::ExtendedSubnetConfigSet, nonblocking::PocketIc as PocketIcAsync};
+use pocket_ic::nonblocking::PocketIc as PocketIcAsync;
 use pocket_ic::{
     common::rest::{
         AutoProgressConfig, BlobCompression, CanisterHttpReply, CanisterHttpResponse,
-        CreateInstanceResponse, EmptyConfig, HttpGatewayDetails, HttpsConfig, IcpFeatures,
+        CreateInstanceResponse, HttpGatewayDetails, HttpsConfig, IcpFeatures, IcpFeaturesConfig,
         InitialTime, InstanceConfig, InstanceHttpGatewayConfig, MockCanisterHttpResponse,
         RawEffectivePrincipal, RawMessageId, SubnetConfigSet, SubnetKind,
     },
@@ -37,7 +40,6 @@ use reqwest::header::CONTENT_LENGTH;
 use reqwest::{Method, StatusCode, Url};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-#[cfg(windows)]
 use std::net::{IpAddr, Ipv4Addr};
 use std::{
     io::Read,
@@ -72,6 +74,24 @@ enum RejectionCode {
     CanisterReject,
     CanisterError,
     Unknown,
+}
+
+fn resolving_client(pic: &PocketIc, host: String) -> Client {
+    // Windows doesn't automatically resolve localhost subdomains.
+    if cfg!(windows) {
+        Client::builder()
+            .resolve(
+                &host,
+                SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                    pic.get_server_url().port().unwrap(),
+                ),
+            )
+            .build()
+            .unwrap()
+    } else {
+        Client::new()
+    }
 }
 
 // Create a counter canister and charge it with 2T cycles.
@@ -419,7 +439,7 @@ fn test_invalid_initial_timestamp() {
 fn test_initial_timestamp_with_cycles_minting() {
     let initial_timestamp = 1_620_633_601_000_000_000; // 10 May 2021 10:00:01
     let icp_features = IcpFeatures {
-        cycles_minting: Some(EmptyConfig {}),
+        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
         ..Default::default()
     };
     let pic = PocketIcBuilder::new()
@@ -443,7 +463,7 @@ fn test_initial_timestamp_with_cycles_minting() {
 fn test_invalid_initial_timestamp_with_cycles_minting() {
     let initial_timestamp = 1_620_328_630_000_000_000; // 06 May 2021 21:17:10 CEST
     let icp_features = IcpFeatures {
-        cycles_minting: Some(EmptyConfig {}),
+        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
         ..Default::default()
     };
     let _pic = PocketIcBuilder::new()
@@ -559,7 +579,7 @@ fn time_on_resumed_instance() {
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
 #[cfg(not(windows))]
 async fn resume_killed_instance_impl(
-    allow_incomplete_state: Option<EmptyConfig>,
+    incomplete_state: Option<IncompleteStateFlag>,
 ) -> Result<(), String> {
     let (mut server, server_url) = start_server(StartServerParams::default()).await;
     let temp_dir = TempDir::new().unwrap();
@@ -623,11 +643,11 @@ async fn resume_killed_instance_impl(
         subnet_config_set: ExtendedSubnetConfigSet::default(),
         http_gateway_config: None,
         state_dir: Some(temp_dir.path().to_path_buf()),
-        nonmainnet_features: None,
+        icp_config: None,
         log_level: None,
         bitcoind_addr: None,
         icp_features: None,
-        allow_incomplete_state,
+        incomplete_state,
         initial_time: None,
     };
     let response = client
@@ -661,7 +681,7 @@ async fn resume_killed_instance_impl(
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
 #[cfg(not(windows))]
 #[tokio::test]
-async fn resume_killed_instance_strict() {
+async fn resume_killed_instance_default() {
     let err = resume_killed_instance_impl(None).await.unwrap_err();
     assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is incomplete."));
 }
@@ -669,8 +689,18 @@ async fn resume_killed_instance_strict() {
 // Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
 #[cfg(not(windows))]
 #[tokio::test]
+async fn resume_killed_instance_strict() {
+    let err = resume_killed_instance_impl(Some(IncompleteStateFlag::Disabled))
+        .await
+        .unwrap_err();
+    assert!(err.contains("The state of subnet with seed 7712b2c09cb96b3aa3fbffd4034a21a39d5d13f80e043161d1d71f4c593434af is incomplete."));
+}
+
+// Killing the PocketIC server inside WSL is challenging => skipping this test on Windows.
+#[cfg(not(windows))]
+#[tokio::test]
 async fn resume_killed_instance() {
-    resume_killed_instance_impl(Some(EmptyConfig {}))
+    resume_killed_instance_impl(Some(IncompleteStateFlag::Enabled))
         .await
         .unwrap();
 }
@@ -2882,20 +2912,7 @@ fn test_http_methods() {
         Method::HEAD,
         Method::PATCH,
     ] {
-        // Windows doesn't automatically resolve localhost subdomains.
-        #[cfg(windows)]
-        let client = Client::builder()
-            .resolve(
-                &host,
-                SocketAddr::new(
-                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                    pic.get_server_url().port().unwrap(),
-                ),
-            )
-            .build()
-            .unwrap();
-        #[cfg(not(windows))]
-        let client = Client::new();
+        let client = resolving_client(&pic, host.clone());
         let res = client.request(method.clone(), url.clone()).send().unwrap();
         // The test canister rejects all request to the path `/` with `StatusCode::BAD_REQUEST`
         // and the error message "The request is not supported by the test canister.".
@@ -3175,9 +3192,6 @@ fn test_invalid_specified_id() {
 }
 
 #[test]
-#[should_panic(
-    expected = "Creating an HTTP gateway requires `AutoProgress` to be enabled via `initial_time`."
-)]
 fn with_http_gateway_config_but_no_auto_progress() {
     let http_gateway_config = InstanceHttpGatewayConfig {
         ip_addr: None,
@@ -3185,10 +3199,28 @@ fn with_http_gateway_config_but_no_auto_progress() {
         domains: None,
         https_config: None,
     };
-    let _pic = PocketIcBuilder::new()
+    let pic = PocketIcBuilder::new()
         .with_application_subnet()
         .with_http_gateway(http_gateway_config)
         .build();
+
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+
+    let mut endpoint = pic.url().unwrap();
+    assert_eq!(endpoint.host_str().unwrap(), "localhost");
+    let host = format!("{}.raw.localhost", canister_id);
+    endpoint.set_host(Some(&host)).unwrap();
+    endpoint.set_path("/asset.txt");
+
+    let client = resolving_client(&pic, host);
+    let resp = client.get(endpoint.clone()).send().unwrap();
+    assert!(resp.status().is_success());
+    let msg = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+    assert_eq!(msg, "My sample asset.");
+
+    assert!(!pic.auto_progress_enabled());
 }
 
 // We already have a function `PocketIc::list_instances`,
@@ -3302,11 +3334,11 @@ async fn with_http_gateway_config_invalid_instance_config() {
         subnet_config_set: subnet_config_set.into(),
         http_gateway_config: Some(http_gateway_config),
         state_dir: None,
-        nonmainnet_features: None,
+        icp_config: None,
         log_level: Some("invalid".to_string()),
         bitcoind_addr: None,
         icp_features: None,
-        allow_incomplete_state: None,
+        incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
     };
     assert_create_instance_failure(&server_url, instance_config, "Failed to parse log level").await;
@@ -3364,11 +3396,11 @@ async fn with_http_gateway_config_invalid_gateway_port() {
         subnet_config_set: subnet_config_set.into(),
         http_gateway_config: Some(http_gateway_config),
         state_dir: None,
-        nonmainnet_features: None,
+        icp_config: None,
         log_level: None,
         bitcoind_addr: None,
         icp_features: None,
-        allow_incomplete_state: None,
+        incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
     };
     assert_create_instance_failure(&server_url, instance_config, "Failed to bind to address").await;
@@ -3413,11 +3445,11 @@ async fn with_http_gateway_config_invalid_gateway_https_config() {
         subnet_config_set: subnet_config_set.into(),
         http_gateway_config: Some(http_gateway_config),
         state_dir: None,
-        nonmainnet_features: None,
+        icp_config: None,
         log_level: None,
         bitcoind_addr: None,
         icp_features: None,
-        allow_incomplete_state: None,
+        incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
     };
     assert_create_instance_failure(

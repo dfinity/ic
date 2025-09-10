@@ -50,6 +50,18 @@ impl From<pb_api::UpdateNodeProvider> for pb::UpdateNodeProvider {
     }
 }
 
+impl From<pb_api::DeregisterKnownNeuron> for pb::DeregisterKnownNeuron {
+    fn from(item: pb_api::DeregisterKnownNeuron) -> Self {
+        Self { id: item.id }
+    }
+}
+
+impl From<pb::DeregisterKnownNeuron> for pb_api::DeregisterKnownNeuron {
+    fn from(item: pb::DeregisterKnownNeuron) -> Self {
+        Self { id: item.id }
+    }
+}
+
 impl From<pb::BallotInfo> for pb_api::BallotInfo {
     fn from(item: pb::BallotInfo) -> Self {
         Self {
@@ -417,6 +429,9 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             pb_api::proposal::Action::RegisterKnownNeuron(v) => {
                 pb::proposal::Action::RegisterKnownNeuron(v.into())
             }
+            pb_api::proposal::Action::DeregisterKnownNeuron(v) => {
+                pb::proposal::Action::DeregisterKnownNeuron(v.into())
+            }
             pb_api::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v) => {
                 pb::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v.into())
             }
@@ -466,6 +481,9 @@ impl From<pb_api::ProposalActionRequest> for pb::proposal::Action {
             }
             pb_api::ProposalActionRequest::RegisterKnownNeuron(v) => {
                 pb::proposal::Action::RegisterKnownNeuron(v.into())
+            }
+            pb_api::ProposalActionRequest::DeregisterKnownNeuron(v) => {
+                pb::proposal::Action::DeregisterKnownNeuron(v.into())
             }
             pb_api::ProposalActionRequest::CreateServiceNervousSystem(v) => {
                 pb::proposal::Action::CreateServiceNervousSystem(v.into())
