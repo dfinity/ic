@@ -1,6 +1,6 @@
 use super::{
     get_certificate_and_create_response, make_service_unavailable_response, parse_principal_id,
-    verify_principal_ids,
+    verify_principal_ids, DeprecatedCanisterRangesFilter,
 };
 use crate::{
     common::{Cbor, WithTimeout},
@@ -23,7 +23,7 @@ use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     messages::{HttpReadStateContent, HttpRequest, HttpRequestEnvelope, ReadState},
-    CanisterId, PrincipalId,
+    CanisterId, PrincipalId, SubnetId,
 };
 use std::{
     convert::{Infallible, TryFrom},
@@ -36,8 +36,11 @@ pub enum Version {
     /// Endpoint with the NNS delegation using the flat format of the canister ranges.
     /// /subnet/<subnet_id>/canister_ranges path is allowed
     V2,
-    /// Endpoint with the NNS delegation will all canister ranges pruned out.
-    /// /subnet/<subnet_id>/canister_ranges path is NOT allowed
+    /// Endpoint with the NNS delegation using the tree format of the canister ranges.
+    /// Explicitly requesting /subnet/<subnet_id>/canister_ranges path is NOT allowed
+    /// except when subnet_id == nns_subnet_id. Moreover, all paths of the form
+    /// /subnet/<subnet_id>/canister_ranges, where subnet_id != nns_subnet_id, are
+    /// pruned from the returned certifcate.
     V3,
 }
 
@@ -47,6 +50,7 @@ pub(crate) struct SubnetReadStateService {
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    nns_subnet_id: SubnetId,
     version: Version,
 }
 
@@ -55,6 +59,7 @@ pub struct SubnetReadStateServiceBuilder {
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    nns_subnet_id: SubnetId,
     version: Version,
 }
 
@@ -71,6 +76,7 @@ impl SubnetReadStateServiceBuilder {
     pub fn builder(
         nns_delegation_reader: NNSDelegationReader,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+        nns_subnet_id: SubnetId,
         version: Version,
         logger: ReplicaLogger,
     ) -> Self {
@@ -78,6 +84,7 @@ impl SubnetReadStateServiceBuilder {
             health_status: None,
             nns_delegation_reader,
             state_reader,
+            nns_subnet_id,
             version,
             logger,
         }
@@ -98,6 +105,7 @@ impl SubnetReadStateServiceBuilder {
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
             nns_delegation_reader: self.nns_delegation_reader,
             state_reader: self.state_reader,
+            nns_subnet_id: self.nns_subnet_id,
             version: self.version,
             logger: self.logger,
         };
@@ -120,6 +128,7 @@ pub(crate) async fn read_state_subnet(
         health_status,
         nns_delegation_reader,
         state_reader,
+        nns_subnet_id,
         version,
     }): State<SubnetReadStateService>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpReadStateContent>>>,
@@ -150,9 +159,12 @@ pub(crate) async fn read_state_subnet(
         };
 
         // Verify authorization for requested paths.
-        if let Err(HttpError { status, message }) =
-            verify_paths(version, &read_state.paths, effective_canister_id.into())
-        {
+        if let Err(HttpError { status, message }) = verify_paths(
+            version,
+            &read_state.paths,
+            effective_canister_id.into(),
+            nns_subnet_id,
+        ) {
             return (status, message).into_response();
         }
 
@@ -161,16 +173,16 @@ pub(crate) async fn read_state_subnet(
             Version::V3 => nns_delegation_reader.get_delegation(CanisterRangesFilter::None),
         };
 
-        let should_prune_deprecated_canister_ranges = match version {
-            Version::V2 => false,
-            Version::V3 => true,
+        let maybe_nns_subnet_filter = match version {
+            Version::V2 => DeprecatedCanisterRangesFilter::KeepAll,
+            Version::V3 => DeprecatedCanisterRangesFilter::KeepOnly(nns_subnet_id),
         };
 
         get_certificate_and_create_response(
             read_state.paths,
             delegation_from_nns,
             certified_state_reader.as_ref(),
-            should_prune_deprecated_canister_ranges,
+            maybe_nns_subnet_filter,
             &logger,
         )
     })
@@ -186,6 +198,7 @@ fn verify_paths(
     version: Version,
     paths: &[Path],
     effective_principal_id: PrincipalId,
+    nns_subnet_id: SubnetId,
 ) -> Result<(), HttpError> {
     // Convert the paths to slices to make it easier to match below.
     let paths: Vec<Vec<&[u8]>> = paths
@@ -201,8 +214,12 @@ fn verify_paths(
             | [b"api_boundary_nodes", _node_id, b"domain" | b"ipv4_address" | b"ipv6_address"] => {}
             [b"subnet"] => {}
             [b"subnet", _subnet_id] | [b"subnet", _subnet_id, b"public_key" | b"node"] => {}
-            // /subnet/<subnet_id>/canister_ranges is only allowed on the /api/v2 endpoint.
+            // `/subnet/<subnet_id>/canister_ranges` is only allowed
+            // on the /api/v2 endpoint except when subnet_id == nns_subnet_id
             [b"subnet", _subnet_id, b"canister_ranges"] if version == Version::V2 => {}
+            [b"subnet", subnet_id, b"canister_ranges"]
+                if version == Version::V3
+                    && parse_principal_id(subnet_id)? == nns_subnet_id.get() => {}
             [b"subnet", _subnet_id, b"node", _node_id]
             | [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {}
             [b"canister_ranges", _subnet_id] => {}
@@ -227,9 +244,12 @@ fn verify_paths(
 mod test {
     use super::*;
     use ic_crypto_tree_hash::{Label, Path};
-    use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
+    use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, SUBNET_0, SUBNET_1};
     use rstest::rstest;
     use serde_bytes::ByteBuf;
+
+    const NNS_SUBNET_ID: SubnetId = SUBNET_0;
+    const APP_SUBNET_ID: SubnetId = SUBNET_1;
 
     #[rstest]
     fn test_verify_path(#[values(Version::V2, Version::V3)] version: Version) {
@@ -237,7 +257,8 @@ mod test {
             verify_paths(
                 version,
                 &[Path::from(Label::from("time"))],
-                subnet_test_id(1).get(),
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
             ),
             Ok(())
         );
@@ -245,7 +266,8 @@ mod test {
             verify_paths(
                 version,
                 &[Path::from(Label::from("subnet"))],
-                subnet_test_id(1).get(),
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
             ),
             Ok(())
         );
@@ -256,12 +278,12 @@ mod test {
                 &[
                     Path::new(vec![
                         Label::from("subnet"),
-                        ByteBuf::from(subnet_test_id(1).get().to_vec()).into(),
+                        APP_SUBNET_ID.get().to_vec().into(),
                         Label::from("public_key")
                     ]),
                     Path::new(vec![
                         Label::from("subnet"),
-                        ByteBuf::from(subnet_test_id(1).get().to_vec()).into(),
+                        APP_SUBNET_ID.get().to_vec().into(),
                         Label::from("metrics")
                     ]),
                     Path::new(vec![
@@ -269,7 +291,8 @@ mod test {
                         ByteBuf::from(subnet_test_id(1).get().to_vec()).into(),
                     ]),
                 ],
-                subnet_test_id(1).get(),
+                APP_SUBNET_ID.get(),
+                NNS_SUBNET_ID,
             ),
             Ok(())
         );
@@ -288,7 +311,8 @@ mod test {
                     Label::from("reply")
                 ])
             ],
-            subnet_test_id(1).get(),
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
         )
         .is_err());
 
@@ -306,30 +330,46 @@ mod test {
                     Label::from("module_hash")
                 ])
             ],
-            subnet_test_id(1).get(),
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
         )
         .is_err());
 
         assert!(verify_paths(
             version,
             &[Path::new(vec![Label::from("canister_ranges"),]),],
-            subnet_test_id(1).get(),
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
         )
         .is_err());
     }
 
     #[test]
-    fn deprecated_canister_ranges_path_is_not_allowed_on_the_v3_endpoint() {
+    fn deprecated_canister_ranges_path_is_not_allowed_on_the_v3_endpoint_except_for_the_nns_subnet()
+    {
         assert!(verify_paths(
             Version::V3,
             &[Path::new(vec![
                 Label::from("subnet"),
-                subnet_test_id(1).get().to_vec().into(),
+                APP_SUBNET_ID.get().to_vec().into(),
                 Label::from("canister_ranges"),
             ])],
-            subnet_test_id(1).get(),
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
         )
         .is_err());
+
+        assert!(verify_paths(
+            Version::V3,
+            &[Path::new(vec![
+                Label::from("subnet"),
+                NNS_SUBNET_ID.get().to_vec().into(),
+                Label::from("canister_ranges"),
+            ])],
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
+        )
+        .is_ok());
     }
 
     #[test]
@@ -338,10 +378,11 @@ mod test {
             Version::V2,
             &[Path::new(vec![
                 Label::from("subnet"),
-                ByteBuf::from(subnet_test_id(1).get().to_vec()).into(),
+                APP_SUBNET_ID.get().to_vec().into(),
                 Label::from("canister_ranges"),
             ])],
-            subnet_test_id(1).get(),
+            APP_SUBNET_ID.get(),
+            NNS_SUBNET_ID,
         )
         .is_ok());
     }

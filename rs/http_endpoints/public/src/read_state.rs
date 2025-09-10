@@ -14,7 +14,7 @@ use ic_logger::{error, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     messages::{Blob, Certificate, CertificateDelegation, HttpReadStateResponse},
-    PrincipalId,
+    PrincipalId, SubnetId,
 };
 
 pub mod canister;
@@ -52,13 +52,18 @@ fn make_service_unavailable_response() -> axum::response::Response {
     (status, text).into_response()
 }
 
+enum DeprecatedCanisterRangesFilter {
+    KeepAll,
+    KeepOnly(SubnetId),
+}
+
 fn get_certificate_and_create_response(
     mut paths: Vec<Path>,
     delegation_from_nns: Option<CertificateDelegation>,
     certified_state_reader: &dyn CertifiedStateSnapshot<State = ReplicatedState>,
-    // if `true`, we will prune the paths `/subnet/<subnet_id>/canister_ranges` for all
-    // subnet ids
-    should_prune_deprecated_canister_ranges: bool,
+    // if `Some(root_subnet_id)`, we will prune the paths `/subnet/<subnet_id>/canister_ranges` for all
+    // subnet ids except the `root_subnet_id`.
+    deprecated_canister_ranges_filter: DeprecatedCanisterRangesFilter,
     logger: &ReplicaLogger,
 ) -> axum::response::Response {
     // Create labeled tree. This may be an expensive operation and by
@@ -80,10 +85,13 @@ fn get_certificate_and_create_response(
         return make_service_unavailable_response();
     };
 
+    // A function which tries to prune the deprecated canister ranges from the tree.
+    // If it encounters any error, it logs it and returns the *original* tree.
     let maybe_prune_tree = || {
-        if !should_prune_deprecated_canister_ranges {
-            return tree;
-        }
+        let subnet_id_filter = match deprecated_canister_ranges_filter {
+            DeprecatedCanisterRangesFilter::KeepAll => return tree,
+            DeprecatedCanisterRangesFilter::KeepOnly(subnet_id) => subnet_id,
+        };
 
         let labeled_tree = match LabeledTree::try_from(tree.clone()) {
             Ok(tree) => tree,
@@ -100,10 +108,13 @@ fn get_certificate_and_create_response(
             Some(LabeledTree::SubTree(subtree)) => subtree
                 .keys()
                 .iter()
-                .map(|label| {
+                .filter(|subnet_id| {
+                    Label::from(subnet_id_filter.as_ref().as_slice()) != **subnet_id
+                })
+                .map(|subnet_id| {
                     Path::new(vec![
                         b"subnet".into(),
-                        label.clone(),
+                        subnet_id.clone(),
                         b"canister_ranges".into(),
                     ])
                 })
@@ -157,7 +168,7 @@ mod test {
     use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
     use ic_logger::no_op_logger;
     use ic_test_utilities_consensus::fake::Fake;
-    use ic_test_utilities_types::ids::subnet_test_id;
+    use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
     use ic_types::{
         consensus::certification::{Certification, CertificationContent},
         crypto::{CryptoHash, Signed},
@@ -167,6 +178,9 @@ mod test {
     use rand::thread_rng;
 
     use super::*;
+
+    const NNS_SUBNET_ID: SubnetId = SUBNET_0;
+    const APP_SUBNET_ID: SubnetId = SUBNET_1;
 
     struct FakeCertifiedStateReader {
         tree: MixedHashTree,
@@ -192,8 +206,7 @@ mod test {
         }
     }
 
-    #[tokio::test]
-    async fn test_does_not_purge_when_not_requested() {
+    fn set_up_state_reader(subnet_id: SubnetId) -> FakeCertifiedStateReader {
         let certification = Certification {
             height: Height::new(0),
             signed: Signed {
@@ -203,33 +216,74 @@ mod test {
                 signature: ThresholdSignature::fake(),
             },
         };
-        let reader = FakeCertifiedStateReader {
+
+        FakeCertifiedStateReader {
             tree: fake_certificate(
-                subnet_test_id(42),
+                subnet_id,
                 &vec![(CanisterId::from(0), CanisterId::from(10))],
                 /*with_flat_canister_ranges=*/ true,
             )
             .tree(),
             certification,
-        };
+        }
+    }
+
+    async fn parse_response(response: axum::response::Response) -> LabeledTree<Vec<u8>> {
+        let response_bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let response: HttpReadStateResponse = serde_cbor::from_slice(&response_bytes).unwrap();
+        let certificate: Certificate = serde_cbor::from_slice(&response.certificate).unwrap();
+        LabeledTree::try_from(certificate.tree).unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_does_not_purge_when_requested_to_keep_all_deprecated_canister_ranges() {
+        let reader = set_up_state_reader(APP_SUBNET_ID);
+
         let response = get_certificate_and_create_response(
             Vec::new(),
             /*delegation_from_nns=*/ None,
             &reader,
-            /*purge_deprecated_canister_ranges=*/ false,
+            DeprecatedCanisterRangesFilter::KeepAll,
             &no_op_logger(),
         );
+
         assert_eq!(response.status(), StatusCode::OK);
-        let response_bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        let response: HttpReadStateResponse = serde_cbor::from_slice(&response_bytes).unwrap();
-        let certificate: Certificate = serde_cbor::from_slice(&response.certificate).unwrap();
-        let labeled_tree = LabeledTree::try_from(certificate.tree).unwrap();
+        let labeled_tree = parse_response(response).await;
         assert!(
             lookup_path(
                 &labeled_tree,
                 &[
                     b"subnet",
-                    subnet_test_id(42).get_ref().as_ref(),
+                    APP_SUBNET_ID.get_ref().as_ref(),
+                    b"canister_ranges",
+                ],
+            )
+            .is_some(),
+            "/subnet/subnet_id/canister_ranges path should not have been purged from the certificate"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_purges_when_requested_to_purge_deprecated_canister_ranges_except_for_the_given_subnet_id(
+    ) {
+        let reader = set_up_state_reader(APP_SUBNET_ID);
+
+        let response = get_certificate_and_create_response(
+            Vec::new(),
+            /*delegation_from_nns=*/ None,
+            &reader,
+            DeprecatedCanisterRangesFilter::KeepOnly(APP_SUBNET_ID),
+            &no_op_logger(),
+        );
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let labeled_tree = parse_response(response).await;
+        assert!(
+            lookup_path(
+                &labeled_tree,
+                &[
+                    b"subnet",
+                    APP_SUBNET_ID.get_ref().as_ref(),
                     b"canister_ranges",
                 ],
             )
@@ -240,42 +294,24 @@ mod test {
 
     #[tokio::test]
     async fn test_does_purge_when_requested() {
-        let certification = Certification {
-            height: Height::new(0),
-            signed: Signed {
-                content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
-                    vec![],
-                ))),
-                signature: ThresholdSignature::fake(),
-            },
-        };
-        let reader = FakeCertifiedStateReader {
-            tree: fake_certificate(
-                subnet_test_id(42),
-                &vec![(CanisterId::from(0), CanisterId::from(10))],
-                /*with_flat_canister_ranges=*/ true,
-            )
-            .tree(),
-            certification,
-        };
+        let reader = set_up_state_reader(APP_SUBNET_ID);
+
         let response = get_certificate_and_create_response(
             Vec::new(),
             /*delegation_from_nns=*/ None,
             &reader,
-            /*purge_deprecated_canister_ranges=*/ true,
+            DeprecatedCanisterRangesFilter::KeepOnly(NNS_SUBNET_ID),
             &no_op_logger(),
         );
+
         assert_eq!(response.status(), StatusCode::OK);
-        let response_bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
-        let response: HttpReadStateResponse = serde_cbor::from_slice(&response_bytes).unwrap();
-        let certificate: Certificate = serde_cbor::from_slice(&response.certificate).unwrap();
-        let labeled_tree = LabeledTree::try_from(certificate.tree).unwrap();
+        let labeled_tree = parse_response(response).await;
         assert_eq!(
             lookup_path(
                 &labeled_tree,
                 &[
                     b"subnet",
-                    subnet_test_id(42).get_ref().as_ref(),
+                    APP_SUBNET_ID.get_ref().as_ref(),
                     b"canister_ranges",
                 ],
             ),

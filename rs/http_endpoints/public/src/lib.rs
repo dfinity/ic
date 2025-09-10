@@ -348,6 +348,7 @@ pub fn start_server(
             registry_client.clone(),
             ingress_verifier.clone(),
             nns_delegation_reader.clone(),
+            nns_subnet_id,
             version,
         )
         .with_health_status(health_status.clone())
@@ -364,6 +365,7 @@ pub fn start_server(
         SubnetReadStateServiceBuilder::builder(
             nns_delegation_reader.clone(),
             state_reader.clone(),
+            nns_subnet_id,
             version,
             log.clone(),
         )
