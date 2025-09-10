@@ -257,6 +257,7 @@ pub struct MemoryTrackerMetrics {
 pub struct SigsegvMemoryTracker {
     memory_area: MemoryArea,
     accessed_bitmap: RefCell<PageBitmap>,
+    accessed_pages: RefCell<Vec<PageIndex>>,
     dirty_bitmap: RefCell<PageBitmap>,
     dirty_pages: RefCell<Vec<PageIndex>>,
     speculatively_dirty_pages: RefCell<Vec<PageIndex>>,
@@ -286,6 +287,7 @@ impl SigsegvMemoryTracker {
 
         let memory_area = MemoryArea::new(addr, size);
         let accessed_bitmap = RefCell::new(PageBitmap::new(num_pages));
+        let accessed_pages = RefCell::new(Vec::new());
         let dirty_bitmap = RefCell::new(PageBitmap::new(num_pages));
         let dirty_pages = RefCell::new(Vec::new());
         let speculatively_dirty_pages = RefCell::new(Vec::new());
@@ -293,6 +295,7 @@ impl SigsegvMemoryTracker {
         let tracker = SigsegvMemoryTracker {
             memory_area,
             accessed_bitmap,
+            accessed_pages,
             dirty_bitmap,
             dirty_pages,
             speculatively_dirty_pages,
@@ -353,6 +356,10 @@ impl SigsegvMemoryTracker {
         self.dirty_bitmap.borrow_mut().grow(delta_pages);
     }
 
+    pub fn take_accessed_pages(&self) -> Vec<PageIndex> {
+        self.accessed_pages.take()
+    }
+
     pub fn take_dirty_pages(&self) -> Vec<PageIndex> {
         self.dirty_pages.take()
     }
@@ -389,6 +396,15 @@ impl SigsegvMemoryTracker {
 
     fn page_range(&self) -> Range<PageIndex> {
         self.accessed_bitmap.borrow().page_range()
+    }
+
+    fn add_accessed_pages(&self, prefetched_range: &Range<PageIndex>) {
+        let range = prefetched_range.start.get() as usize..prefetched_range.end.get() as usize;
+        let mut accessed_pages = self.accessed_pages.borrow_mut();
+        for i in range {
+            let page_index = PageIndex::new(i as u64);
+            accessed_pages.push(page_index);
+        }
     }
 
     fn add_dirty_pages(&self, dirty_page: PageIndex, prefetched_range: Range<PageIndex>) {
@@ -645,6 +661,7 @@ pub fn sigsegv_fault_handler_new(
                 max_prefetch_range,
             );
             accessed_bitmap.mark_range(&prefetch_range);
+            tracker.add_accessed_pages(&prefetch_range);
         }
         (AccessKind::Read, DirtyPageTracking::Track) => {
             // Set up the page mapping as read-only in order to get a signal on subsequent
@@ -662,6 +679,7 @@ pub fn sigsegv_fault_handler_new(
                 max_prefetch_range,
             );
             accessed_bitmap.mark_range(&prefetch_range);
+            tracker.add_accessed_pages(&prefetch_range);
         }
         (AccessKind::Write, DirtyPageTracking::Track) => {
             let mut dirty_bitmap = tracker.dirty_bitmap.borrow_mut();
@@ -721,6 +739,7 @@ pub fn sigsegv_fault_handler_new(
                     prefetch_range,
                 );
                 accessed_bitmap.mark_range(&prefetch_range);
+                tracker.add_accessed_pages(&prefetch_range);
                 dirty_bitmap.mark_range(&prefetch_range);
                 tracker.add_dirty_pages(faulting_page, prefetch_range);
             }
