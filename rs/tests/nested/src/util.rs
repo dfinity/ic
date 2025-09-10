@@ -53,13 +53,17 @@ pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 pub const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
 
 /// Setup the basic IC infrastructure (testnet, NNS, gateway)
-pub fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>) {
+pub fn setup_ic_infrastructure(env: &TestEnv, dkg_interval: Option<u64>, is_fast: bool) {
     let principal =
         PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
             .unwrap();
 
     // Setup "testnet"
-    let mut subnet = Subnet::fast_single_node(SubnetType::System);
+    let mut subnet = if is_fast {
+        Subnet::fast(SubnetType::System, 1)
+    } else {
+        Subnet::new(SubnetType::System).add_nodes(1)
+    };
     if let Some(dkg_interval) = dkg_interval {
         subnet = subnet.with_dkg_interval_length(Height::from(dkg_interval));
     }
