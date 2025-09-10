@@ -15,7 +15,7 @@ fn creating_node_operator_creates_dc_and_np() {
 #[should_panic]
 fn operator_defition_missing() {
     CompliantRegistryMutationsBuilder::default()
-        .with_node("operator", "node", None)
+        .with_node("node", "operator", None)
         .build();
 }
 
@@ -23,7 +23,7 @@ fn operator_defition_missing() {
 fn adding_node_should_add_subnet() {
     let mutations = CompliantRegistryMutationsBuilder::default()
         .with_operator("operator", "dc", "provider")
-        .with_node("operator", "node", Some("subnet"))
+        .with_node("node", "operator", Some("subnet"))
         .build();
 
     // Will panic internally if it doesn't exist

@@ -72,8 +72,8 @@ impl CompliantRegistryMutationsBuilder {
     #[track_caller]
     pub fn with_node(
         mut self,
-        operator_utility_id: &str,
         node_utility_id: &str,
+        operator_utility_id: &str,
         subnet_utility_id: Option<&str>,
     ) -> Self {
         let subnet_id = if let Some(key) = subnet_utility_id {
