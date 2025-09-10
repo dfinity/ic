@@ -5137,14 +5137,15 @@ Version {
             token_logo: Some(new_logo.clone()),
         })
         .unwrap();
+        let space = " ";
         assert_eq!(
             render,
             format!(
                 r#"# Proposal to change ledger parameters:
-# Set token transfer fee: {new_fee} token-quantums.
-# Set token name: {new_name}.
-# Set token symbol: {new_symbol}.
-# Set token logo: {new_logo}.
+# Set token transfer fee: {new_fee} token-quantums.{space}
+# Set token name: {new_name}.{space}
+# Set token symbol: {new_symbol}.{space}
+# Set token logo: {new_logo}.{space}
 "#
             )
         );
