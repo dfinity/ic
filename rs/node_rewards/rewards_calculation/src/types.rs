@@ -193,7 +193,7 @@ pub struct NodeMetricsDailyRaw {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct SubnetMetricsKey {
+pub struct SubnetMetricsDailyKey {
     pub subnet_id: SubnetId,
     pub day: DayUtc,
 }

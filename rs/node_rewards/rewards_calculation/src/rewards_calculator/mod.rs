@@ -4,7 +4,7 @@ use crate::rewards_calculator_results::{
     XDRPermyriad,
 };
 use crate::types::{
-    DayUtc, NodeMetricsDailyRaw, Region, RewardPeriod, RewardableNode, SubnetMetricsKey,
+    DayUtc, NodeMetricsDailyRaw, Region, RewardPeriod, RewardableNode, SubnetMetricsDailyKey,
 };
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
@@ -21,7 +21,7 @@ pub mod test_utils;
 pub struct RewardsCalculatorInput {
     pub reward_period: RewardPeriod,
     pub rewards_table: NodeRewardsTable,
-    pub daily_metrics_by_subnet: BTreeMap<SubnetMetricsKey, Vec<NodeMetricsDailyRaw>>,
+    pub daily_metrics_by_subnet: BTreeMap<SubnetMetricsDailyKey, Vec<NodeMetricsDailyRaw>>,
     pub provider_rewardable_nodes: BTreeMap<PrincipalId, Vec<RewardableNode>>,
 }
 
@@ -136,7 +136,7 @@ struct Step0Results {
     nodes_metrics_daily: BTreeMap<(DayUtc, NodeId), NodeMetricsDaily>,
 }
 fn step_0_subnets_nodes_fr(
-    daily_metrics_by_subnet: BTreeMap<SubnetMetricsKey, Vec<NodeMetricsDailyRaw>>,
+    daily_metrics_by_subnet: BTreeMap<SubnetMetricsDailyKey, Vec<NodeMetricsDailyRaw>>,
 ) -> Step0Results {
     fn calculate_daily_node_fr(num_blocks_proposed: u64, num_blocks_failed: u64) -> Decimal {
         let total_blocks = Decimal::from(num_blocks_proposed + num_blocks_failed);
@@ -156,7 +156,8 @@ fn step_0_subnets_nodes_fr(
 
     let mut result = Step0Results::default();
 
-    for (SubnetMetricsKey { subnet_id, day }, subnet_nodes_metrics) in daily_metrics_by_subnet {
+    for (SubnetMetricsDailyKey { subnet_id, day }, subnet_nodes_metrics) in daily_metrics_by_subnet
+    {
         let nodes_original_fr = subnet_nodes_metrics
             .iter()
             .map(|metrics| {

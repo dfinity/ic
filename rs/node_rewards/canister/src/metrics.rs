@@ -8,7 +8,7 @@ use ic_cdk::api::call::CallResult;
 use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
 use ic_stable_structures::StableBTreeMap;
 use itertools::Itertools;
-use rewards_calculation::types::{DayUtc, NodeMetricsDailyRaw, SubnetMetricsKey, UnixTsNanos};
+use rewards_calculation::types::{DayUtc, NodeMetricsDailyRaw, SubnetMetricsDailyKey, UnixTsNanos};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 
@@ -187,7 +187,7 @@ where
         &self,
         start_day: DayUtc,
         end_day: DayUtc,
-    ) -> BTreeMap<SubnetMetricsKey, Vec<NodeMetricsDailyRaw>> {
+    ) -> BTreeMap<SubnetMetricsDailyKey, Vec<NodeMetricsDailyRaw>> {
         let mut daily_metrics_by_subnet = BTreeMap::new();
         let previous_day_ts = start_day.previous_day().unix_ts_at_day_start();
         let first_key = SubnetMetricsKeyProto {
