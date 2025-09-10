@@ -3,7 +3,11 @@ use canister_test::Project;
 use ic_base_types::CanisterId;
 use ic_management_canister_types::CanisterSettings;
 use ic_nns_test_utils::common::build_registry_wasm;
-use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
+use pocket_ic::{
+    common::rest::{EmptyConfig, IcpFeatures},
+    nonblocking::PocketIc,
+    PocketIcBuilder,
+};
 use registry_canister::init::RegistryCanisterInitPayload;
 use serde::Deserialize;
 use tempfile::TempDir;
@@ -48,6 +52,10 @@ async fn setup() -> (
     let state_dir = state_dir.path().to_path_buf();
 
     let pic = PocketIcBuilder::new()
+        .with_icp_features(IcpFeatures {
+            registry: Some(EmptyConfig {}),
+            ..Default::default()
+        })
         .with_state_dir(state_dir.clone())
         .with_nns_subnet()
         .with_application_subnet()
@@ -61,24 +69,24 @@ async fn setup() -> (
     let c3 = Principal::self_authenticating(vec![3]);
     let controllers = vec![c1, c2, c3];
 
-    let registry_wasm = build_registry_wasm();
-    pic.create_canister_with_id(
-        Some(system_controller),
-        Some(CanisterSettings {
-            controllers: Some(vec![system_controller]),
-            ..Default::default()
-        }),
-        REGISTRY_CANISTER_ID.into(),
-    )
-    .await
-    .unwrap();
-    pic.install_canister(
-        REGISTRY_CANISTER_ID.into(),
-        registry_wasm.bytes(),
-        Encode!(&RegistryCanisterInitPayload::default()).unwrap(),
-        Some(system_controller),
-    )
-    .await;
+    // let registry_wasm = build_registry_wasm();
+    // pic.create_canister_with_id(
+    //     Some(system_controller),
+    //     Some(CanisterSettings {
+    //         controllers: Some(vec![system_controller]),
+    //         ..Default::default()
+    //     }),
+    //     REGISTRY_CANISTER_ID.into(),
+    // )
+    // .await
+    // .unwrap();
+    // pic.install_canister(
+    //     REGISTRY_CANISTER_ID.into(),
+    //     registry_wasm.bytes(),
+    //     Encode!(&RegistryCanisterInitPayload::default()).unwrap(),
+    //     Some(system_controller),
+    // )
+    // .await;
 
     let migration_canister_wasm = Project::cargo_bin_maybe_from_env("migration-canister", &[]);
 
