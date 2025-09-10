@@ -18,9 +18,7 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::nns::set_authorized_subnetwork_list;
 use ic_system_test_driver::sns_client::add_subnet_to_sns_deploy_whitelist;
-use ic_system_test_driver::util::{
-    block_on, create_canister, install_canister, runtime_from_url, set_controller,
-};
+use ic_system_test_driver::util::{block_on, create_canister, install_canister, runtime_from_url};
 use icp_ledger::AccountIdentifier;
 use serde::{Deserialize, Serialize};
 use slog::info;
@@ -145,17 +143,6 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
             &Canister::new(&nns, ROOT_CANISTER_ID),
             Wasm::from_bytes(load_wasm(env::var("SUBNET_RENTAL_WASM_PATH").unwrap())),
             None,
-        )
-        .await;
-    });
-
-    // set the NNS root canister as a controller of the Subnet Rental Canister
-    let nns_agent = nns_node.build_default_agent();
-    block_on(async move {
-        set_controller(
-            &SUBNET_RENTAL_CANISTER_ID.get().0,
-            &ROOT_CANISTER_ID.get().0,
-            &nns_agent,
         )
         .await;
     });
