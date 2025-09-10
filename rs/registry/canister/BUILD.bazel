@@ -81,6 +81,7 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/compare_dirs",
     "//rs/test_utilities/types",
     "//rs/types/types_test_utils",
+    "//rs/registry/canister/test_registry_builder",
     "@crate_index//:assert_matches",
     "@crate_index//:candid_parser",
     "@crate_index//:itertools",

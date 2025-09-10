@@ -104,6 +104,7 @@ tempfile = { workspace = true }
 tokio = { workspace = true }
 pocket-ic = { path = "../../../packages/pocket-ic" }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests"}
+test-registry-builder = { path = "./test_registry_builder/" }
 
 [features]
 test = []

@@ -84,7 +84,6 @@ pub fn get_invariant_compliant_subnet_record(node_ids: Vec<NodeId>) -> SubnetRec
         membership: node_ids.iter().map(|id| id.get().into_vec()).collect(),
         ..Default::default()
     }
-    .into()
 }
 
 pub fn make_add_node_registry_mutations(

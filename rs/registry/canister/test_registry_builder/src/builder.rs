@@ -132,7 +132,7 @@ impl CompliantRegistryMutationsBuilder {
             let (request, nodes) = prepare_mutations_with_nodes_and_operator_id(
                 nodes_with_keys.len() as u8 + 1,
                 1,
-                hint.operator_id.clone(),
+                hint.operator_id,
             );
 
             mutations.extend(request.mutations);
@@ -143,8 +143,8 @@ impl CompliantRegistryMutationsBuilder {
                 node_utility_id.to_string(),
                 TestNode {
                     id: principal_id,
-                    operator: hint.operator_id.clone(),
-                    subnet: hint.subnet.clone(),
+                    operator: hint.operator_id,
+                    subnet: hint.subnet,
                     public_key,
                 },
             );
@@ -166,7 +166,7 @@ impl CompliantRegistryMutationsBuilder {
             ));
         }
 
-        for (_, operator) in &self.operators {
+        for operator in self.operators.values() {
             mutations.push(upsert(
                 make_node_operator_record_key(operator.id),
                 NodeOperatorRecord {
@@ -180,7 +180,7 @@ impl CompliantRegistryMutationsBuilder {
             ));
         }
 
-        for (_, subnet) in &self.subnets {
+        for subnet in self.subnets.values() {
             let nodes_for_subnet: Vec<_> = nodes_with_keys
                 .values()
                 .filter(|test_node| test_node.subnet.is_some_and(|s| s == *subnet))
@@ -194,7 +194,7 @@ impl CompliantRegistryMutationsBuilder {
 
             let relevant_node_with_keys = nodes_for_subnet
                 .iter()
-                .map(|test_node| (test_node.id.clone(), test_node.public_key.clone()))
+                .map(|test_node| (test_node.id, test_node.public_key.clone()))
                 .collect();
             let threshold_pk_and_cup = create_subnet_threshold_signing_pubkey_and_cup_mutations(
                 *subnet,
@@ -212,7 +212,7 @@ impl CompliantRegistryMutationsBuilder {
         mutations.push(upsert(
             make_subnet_list_record_key(),
             SubnetListRecord {
-                subnets: self.subnets.iter().map(|(_, s)| s.get().to_vec()).collect(),
+                subnets: self.subnets.values().map(|s| s.get().to_vec()).collect(),
             }
             .encode_to_vec(),
         ));

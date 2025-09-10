@@ -20510,6 +20510,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "test-registry-builder",
  "tokio",
  "url",
 ]
