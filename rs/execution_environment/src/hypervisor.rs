@@ -17,7 +17,6 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
-use ic_management_canister_types_private::LogVisibilityV2;
 use ic_metrics::buckets::{decimal_buckets_with_zero, linear_buckets};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
@@ -35,6 +34,7 @@ use std::{
     sync::Arc,
 };
 
+use crate::canister_logs::check_log_visibility_permission;
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
 use crate::execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
 use crate::metrics::CallTreeMetrics;
@@ -436,16 +436,14 @@ impl Hypervisor {
         }
         if let WasmExecutionResult::Finished(_, result, _) = &mut execution_result {
             if let Err(err) = &mut result.wasm_result {
-                let can_view = match &system_state.log_visibility {
-                    LogVisibilityV2::Controllers => {
-                        caller.is_some_and(|c| system_state.controllers.contains(&c))
-                    }
-                    LogVisibilityV2::Public => true,
-                    LogVisibilityV2::AllowedViewers(allowed) => {
-                        caller.is_some_and(|c| allowed.get().contains(&c))
-                    }
-                };
-                if !can_view {
+                if caller.is_some_and(|c| {
+                    check_log_visibility_permission(
+                        &c,
+                        &system_state.log_visibility,
+                        &system_state.controllers,
+                    )
+                    .is_err()
+                }) {
                     remove_backtrace(err);
                 }
             }

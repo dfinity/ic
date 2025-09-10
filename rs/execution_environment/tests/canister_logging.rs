@@ -483,7 +483,7 @@ fn test_log_visibility_of_fetch_canister_logs() {
     fn not_allowed_error(caller: &PrincipalId) -> Result<WasmResult, UserError> {
         Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            format!("Caller {caller} is not allowed to query ic00 method fetch_canister_logs"),
+            format!("Caller {caller} is not allowed to access canister logs"),
         ))
     }
     let test_cases = vec![
