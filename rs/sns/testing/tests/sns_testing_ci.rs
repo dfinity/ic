@@ -10,7 +10,7 @@ use ic_nervous_system_integration_tests::pocket_ic_helpers::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LEDGER_INDEX_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_sns_testing::nns_dapp::bootstrap_nns;
+use ic_sns_testing::bootstrap::bootstrap_nns;
 use ic_sns_testing::sns::pocket_ic::{create_sns, propose_sns_controlled_canister_upgrade};
 use ic_sns_testing::sns::{await_sns_controlled_canister_upgrade, sns_proposal_upvote};
 use ic_sns_testing::utils::{

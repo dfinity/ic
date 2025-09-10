@@ -1,5 +1,5 @@
 use clap::Parser;
-use ic_sns_testing::nns_dapp::bootstrap_nns;
+use ic_sns_testing::bootstrap::bootstrap_nns;
 use ic_sns_testing::utils::{get_identity_principal, TREASURY_PRINCIPAL_ID};
 use ic_sns_testing::NnsInitArgs;
 use icp_ledger::Tokens;
