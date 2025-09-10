@@ -5,7 +5,9 @@
 /// body. This has to be canonicalized into a PocketIc Operation before we can
 /// deterministically update the PocketIc state machine.
 ///
-use super::state::{ApiState, OpOut, PocketIcError, StateLabel, UpdateReply};
+use super::state::{
+    ApiState, OpOut, PocketIcError, StateLabel, UpdateReply, DEFAULT_SYNC_WAIT_DURATION,
+};
 use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
     DashboardRequest, GetCanisterHttp, GetControllers, GetCyclesBalance, GetStableMemory,
@@ -57,6 +59,7 @@ type PocketHttpResponse = (BTreeMap<String, Vec<u8>>, Vec<u8>);
 /// Name of a header that allows clients to specify for how long their are willing to wait for a
 /// response on a open http request.
 pub static TIMEOUT_HEADER_NAME: HeaderName = HeaderName::from_static("processing-timeout-ms");
+
 const RETRY_TIMEOUT_S: u64 = 300;
 
 #[derive(Clone)]
@@ -1561,7 +1564,8 @@ impl headers::Header for ProcessingTimeout {
 }
 
 pub fn timeout_or_default(header_map: HeaderMap) -> Option<Duration> {
-    header_map.typed_get::<ProcessingTimeout>().map(|x| x.0)
+    let timeout_from_header = header_map.typed_get::<ProcessingTimeout>().map(|x| x.0);
+    Some(timeout_from_header.unwrap_or(DEFAULT_SYNC_WAIT_DURATION))
 }
 
 // ----------------------------------------------------------------------------------------------------------------- //
