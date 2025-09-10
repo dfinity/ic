@@ -338,6 +338,7 @@ pub fn registry_deltas_to_registry_records(
                     Some(value.value)
                 },
                 version: RegistryVersion::new(value.version),
+                timestamp_nanoseconds: value.timestamp_nanoseconds,
             });
         }
     }
