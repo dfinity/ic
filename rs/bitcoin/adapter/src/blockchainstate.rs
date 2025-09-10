@@ -2,7 +2,9 @@
 //!
 use crate::{
     common::{BlockHeight, BlockchainBlock, BlockchainHeader, BlockchainNetwork},
-    header_cache::{AddHeaderError, AddHeaderResult, HeaderCache, HeaderNode, Tip},
+    header_cache::{
+        AddHeaderError, AddHeaderResult, HeaderCache, HeaderNode, InMemoryHeaderCache, Tip,
+    },
     metrics::BlockchainStateMetrics,
 };
 use bitcoin::{block::Header as PureHeader, consensus::Encodable, BlockHash};
@@ -37,7 +39,7 @@ pub type SerializedBlock = Vec<u8>;
 /// The BlockChainState also maintains the child relationhips between the headers.
 pub struct BlockchainState<Network: BlockchainNetwork> {
     /// This field stores all the Bitcoin headers using a HashMap containining BlockHash and the corresponding header.
-    header_cache: HeaderCache<Network::Header>,
+    header_cache: Box<dyn HeaderCache<Header = Network::Header> + Send>,
 
     /// This field stores a hashmap containing BlockHash and the corresponding SerializedBlock.
     block_cache: HashMap<BlockHash, Arc<SerializedBlock>>,
@@ -47,12 +49,15 @@ pub struct BlockchainState<Network: BlockchainNetwork> {
     metrics: BlockchainStateMetrics,
 }
 
-impl<Network: BlockchainNetwork> BlockchainState<Network> {
+impl<Network: BlockchainNetwork> BlockchainState<Network>
+where
+    Network::Header: Send + Sync,
+{
     /// This function is used to create a new BlockChainState object.  
     pub fn new(network: Network, metrics_registry: &MetricsRegistry) -> Self {
         // Create a header cache and inserting dummy header corresponding the `adapter_genesis_hash`.
         let genesis_block_header = network.genesis_block_header();
-        let header_cache = HeaderCache::new(genesis_block_header);
+        let header_cache = Box::new(InMemoryHeaderCache::new(genesis_block_header));
         let block_cache = HashMap::new();
         BlockchainState {
             header_cache,
@@ -165,7 +170,7 @@ impl<Network: BlockchainNetwork> BlockchainState<Network> {
 
     /// This method returns the tip header with the highest cumulative work.
     #[allow(clippy::indexing_slicing)]
-    pub fn get_active_chain_tip(&self) -> &Tip<Network::Header> {
+    pub fn get_active_chain_tip(&self) -> Tip<Network::Header> {
         self.header_cache.get_active_chain_tip()
     }
 
@@ -248,7 +253,10 @@ impl<Network: BlockchainNetwork> BlockchainState<Network> {
     }
 }
 
-impl<Network: BlockchainNetwork> HeaderStore<Network::Header> for BlockchainState<Network> {
+impl<Network: BlockchainNetwork> HeaderStore<Network::Header> for BlockchainState<Network>
+where
+    Network::Header: Send + Sync,
+{
     fn get_header(&self, hash: &BlockHash) -> Option<(Network::Header, BlockHeight)> {
         self.get_cached_header(hash)
             .map(|cached| (cached.header.clone(), cached.height))

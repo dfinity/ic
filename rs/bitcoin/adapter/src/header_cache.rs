@@ -4,6 +4,7 @@ use crate::common::{BlockHeight, BlockchainHeader};
 use bitcoin::{block::Header as PureHeader, BlockHash, Work};
 use ic_btc_validation::ValidateHeaderError;
 use std::collections::HashMap;
+use std::sync::RwLock;
 use thiserror::Error;
 
 /// This struct stores a BlockHeader along with its height in the Bitcoin Blockchain.
@@ -52,7 +53,7 @@ pub enum AddHeaderError {
     PrevHeaderNotCached(BlockHash),
 }
 
-pub struct HeaderCache<Header> {
+pub struct InMemoryHeaderCache<Header> {
     /// The starting point of the blockchain
     genesis: PureHeader,
 
@@ -63,9 +64,36 @@ pub struct HeaderCache<Header> {
     tips: Vec<Tip<Header>>,
 }
 
-impl<Header: BlockchainHeader> HeaderCache<Header> {
+pub trait HeaderCache: Send + Sync {
+    type Header;
+
+    /// Returns the genesis header.
+    fn get_genesis(&self) -> PureHeader;
+
+    /// Returns the header for the given block hash.
+    fn get_header(&self, hash: &BlockHash) -> Option<HeaderNode<Self::Header>>;
+
+    /// This method adds the input header to the `header_cache`.
+    fn add_header(
+        &self,
+        block_hash: BlockHash,
+        header: Self::Header,
+    ) -> Result<AddHeaderResult, AddHeaderError>;
+
+    /// This method returns the tip header with the highest cumulative work.
+    fn get_active_chain_tip(&self) -> Tip<Self::Header>;
+
+    /// Sort the tips by the total work, return the total number of tips
+    fn sort_tips_by_work(&self) -> usize;
+
+    #[cfg(test)]
+    /// Return all tips.
+    fn get_tips(&self) -> Vec<Tip<Self::Header>>;
+}
+
+impl<Header: BlockchainHeader> InMemoryHeaderCache<Header> {
     /// Creates a new cache with a genesis header
-    pub fn new(genesis: Header) -> Self {
+    pub fn new(genesis: Header) -> RwLock<Self> {
         let tips = vec![Tip {
             header: genesis.clone(),
             height: 0,
@@ -79,31 +107,33 @@ impl<Header: BlockchainHeader> HeaderCache<Header> {
         };
         let mut cache = HashMap::new();
         cache.insert(genesis.block_hash(), cached_header);
-        HeaderCache {
+
+        RwLock::new(InMemoryHeaderCache {
             genesis: genesis.into_pure_header(),
             cache,
             tips,
-        }
+        })
+    }
+}
+
+impl<Header: BlockchainHeader + Send + Sync> HeaderCache for RwLock<InMemoryHeaderCache<Header>> {
+    type Header = Header;
+
+    fn get_genesis(&self) -> PureHeader {
+        self.read().unwrap().genesis
     }
 
-    /// Returns the header for the given block hash.
-    pub fn get_genesis(&self) -> PureHeader {
-        self.genesis
+    fn get_header(&self, hash: &BlockHash) -> Option<HeaderNode<Header>> {
+        self.read().unwrap().cache.get(hash).cloned()
     }
 
-    /// Returns the header for the given block hash.
-    pub fn get_header(&self, hash: &BlockHash) -> Option<HeaderNode<Header>> {
-        self.cache.get(hash).cloned()
-    }
-
-    /// This method adds the input header to the `header_cache`.
-    #[allow(clippy::indexing_slicing)]
-    pub fn add_header(
-        &mut self,
+    fn add_header(
+        &self,
         block_hash: BlockHash,
         header: Header,
     ) -> Result<AddHeaderResult, AddHeaderError> {
-        let parent = self.cache.get_mut(&header.prev_block_hash()).ok_or(
+        let mut this = self.write().unwrap();
+        let parent = this.cache.get_mut(&header.prev_block_hash()).ok_or(
             AddHeaderError::PrevHeaderNotCached(header.prev_block_hash()),
         )?;
 
@@ -118,7 +148,7 @@ impl<Header: BlockchainHeader> HeaderCache<Header> {
         // Update the tip headers.
         // If the previous header already exists in `tips`, then update it with the new tip.
         let prev_hash = header.prev_block_hash();
-        let maybe_cached_header_idx = self
+        let maybe_cached_header_idx = this
             .tips
             .iter()
             .position(|tip| tip.header.block_hash() == prev_hash);
@@ -130,36 +160,36 @@ impl<Header: BlockchainHeader> HeaderCache<Header> {
 
         match maybe_cached_header_idx {
             Some(idx) => {
-                self.tips[idx] = tip;
+                this.tips[idx] = tip;
             }
             None => {
                 // If the previous header is not a tip, then add the `cached_header` as a tip.
-                self.tips.push(tip);
+                this.tips.push(tip);
             }
         };
 
-        self.cache.insert(block_hash, cached_header);
+        this.cache.insert(block_hash, cached_header);
 
         Ok(AddHeaderResult::HeaderAdded(block_hash))
     }
 
     /// This method returns the tip header with the highest cumulative work.
-    #[allow(clippy::indexing_slicing)]
-    pub fn get_active_chain_tip(&self) -> &Tip<Header> {
+    fn get_active_chain_tip(&self) -> Tip<Header> {
         // `self.tips` is initialized in the new() method with the initial header.
         // `add_headers` sorts the tips by total work. The zero index will always be
         // the active tip.
-        &self.tips[0]
+        self.read().unwrap().tips[0].clone()
     }
 
     /// Sort the tips by the total work, return the total number of tips
-    pub fn sort_tips_by_work(&mut self) -> usize {
-        self.tips.sort_unstable_by(|a, b| b.work.cmp(&a.work));
-        self.tips.len()
+    fn sort_tips_by_work(&self) -> usize {
+        let mut this = self.write().unwrap();
+        this.tips.sort_unstable_by(|a, b| b.work.cmp(&a.work));
+        this.tips.len()
     }
 
     #[cfg(test)]
-    pub fn get_tips(&self) -> &[Tip<Header>] {
-        &self.tips
+    fn get_tips(&self) -> Vec<Tip<Header>> {
+        self.read().unwrap().tips.clone()
     }
 }
