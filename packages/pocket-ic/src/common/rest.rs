@@ -546,23 +546,30 @@ impl From<SubnetConfigSet> for ExtendedSubnetConfigSet {
     }
 }
 
-/// Forward-compatible configuration type used instead of `bool` and `Option<bool>`:
-/// if provided, the corresponding feature is enabled.
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
-pub struct EmptyConfig {}
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub enum IcpConfigFlag {
+    Disabled,
+    Enabled,
+}
 
-/// Specifies nonmainnet features enabled in this instance.
+/// Specifies ICP config of this instance.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
-pub struct NonmainnetFeatures {
-    /// Enables (beta) features (disabled on the ICP mainnet).
-    pub enable_beta_features: Option<EmptyConfig>,
-    /// Disables canister backtraces (enabled on the ICP mainnet).
-    pub disable_canister_backtrace: Option<EmptyConfig>,
-    /// Disables limits on function name length in canister WASM (enabled on the ICP mainnet).
-    pub disable_function_name_length_limits: Option<EmptyConfig>,
-    /// Disables rate-limiting of canister execution (enabled on the ICP mainnet).
+pub struct IcpConfig {
+    /// Beta features (disabled on the ICP mainnet).
+    pub beta_features: Option<IcpConfigFlag>,
+    /// Canister backtraces (enabled on the ICP mainnet).
+    pub canister_backtrace: Option<IcpConfigFlag>,
+    /// Limits on function name length in canister WASM (enabled on the ICP mainnet).
+    pub function_name_length_limits: Option<IcpConfigFlag>,
+    /// Rate-limiting of canister execution (enabled on the ICP mainnet).
     /// Canister execution refers to instructions and memory writes here.
-    pub disable_canister_execution_rate_limiting: Option<EmptyConfig>,
+    pub canister_execution_rate_limiting: Option<IcpConfigFlag>,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub enum IcpFeaturesConfig {
+    #[default]
+    DefaultConfig,
 }
 
 /// Specifies ICP features enabled by deploying their corresponding system canisters
@@ -570,15 +577,15 @@ pub struct NonmainnetFeatures {
 /// during the PocketIC instance lifetime.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct IcpFeatures {
-    pub registry: Option<EmptyConfig>,
+    pub registry: Option<IcpFeaturesConfig>,
     /// If the `cycles_minting` feature is enabled, then the default timestamp of a PocketIC instance is set to 10 May 2021 10:00:01 AM CEST (the smallest value that is strictly larger than the default timestamp hard-coded in the CMC state).
-    pub cycles_minting: Option<EmptyConfig>,
-    pub icp_token: Option<EmptyConfig>,
-    pub cycles_token: Option<EmptyConfig>,
-    pub nns_governance: Option<EmptyConfig>,
-    pub sns: Option<EmptyConfig>,
-    pub ii: Option<EmptyConfig>,
-    pub nns_ui: Option<EmptyConfig>,
+    pub cycles_minting: Option<IcpFeaturesConfig>,
+    pub icp_token: Option<IcpFeaturesConfig>,
+    pub cycles_token: Option<IcpFeaturesConfig>,
+    pub nns_governance: Option<IcpFeaturesConfig>,
+    pub sns: Option<IcpFeaturesConfig>,
+    pub ii: Option<IcpFeaturesConfig>,
+    pub nns_ui: Option<IcpFeaturesConfig>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -594,15 +601,22 @@ pub enum InitialTime {
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
+pub enum IncompleteStateFlag {
+    #[default]
+    Disabled,
+    Enabled,
+}
+
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct InstanceConfig {
     pub subnet_config_set: ExtendedSubnetConfigSet,
     pub http_gateway_config: Option<InstanceHttpGatewayConfig>,
     pub state_dir: Option<PathBuf>,
-    pub nonmainnet_features: Option<NonmainnetFeatures>,
+    pub icp_config: Option<IcpConfig>,
     pub log_level: Option<String>,
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
     pub icp_features: Option<IcpFeatures>,
-    pub allow_incomplete_state: Option<EmptyConfig>,
+    pub incomplete_state: Option<IncompleteStateFlag>,
     pub initial_time: Option<InitialTime>,
 }
 
@@ -766,27 +780,21 @@ impl ExtendedSubnetConfigSet {
             (sns, "sns"),
             (nns_ui, "nns_ui"),
         ] {
-            // using `EmptyConfig { }` explicitly
-            // to force an update after adding a new field to `EmptyConfig`
-            if let Some(EmptyConfig {}) = flag {
+            if flag.is_some() {
                 check_empty_subnet(&self.nns, "NNS", icp_feature_str)?;
                 self.nns = Some(self.nns.unwrap_or_default());
             }
         }
         // canisters on the II subnet
         for (flag, icp_feature_str) in [(cycles_token, "cycles_token"), (ii, "ii")] {
-            // using `EmptyConfig { }` explicitly
-            // to force an update after adding a new field to `EmptyConfig`
-            if let Some(EmptyConfig {}) = flag {
+            if flag.is_some() {
                 check_empty_subnet(&self.ii, "II", icp_feature_str)?;
                 self.ii = Some(self.ii.unwrap_or_default());
             }
         }
         // canisters on the SNS subnet
         for (flag, icp_feature_str) in [(sns, "sns")] {
-            // using `EmptyConfig { }` explicitly
-            // to force an update after adding a new field to `EmptyConfig`
-            if let Some(EmptyConfig {}) = flag {
+            if flag.is_some() {
                 check_empty_subnet(&self.sns, "SNS", icp_feature_str)?;
                 self.sns = Some(self.sns.unwrap_or_default());
             }
