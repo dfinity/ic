@@ -18,6 +18,9 @@ use {
     syscalls::Sysno,
 };
 
+#[cfg(all(target_os = "linux", feature = "fuzzing_code"))]
+use ic_canister_sandbox_backend_lib::{embed_sandbox_signature, SANDBOX_MAGIC_BYTES};
+
 #[allow(improper_ctypes)]
 extern "C" {
     fn LLVMFuzzerRunDriver(
@@ -33,6 +36,9 @@ pub struct SandboxFeatures {
     pub syscall_tracing: bool,
 }
 
+#[cfg(all(target_os = "linux", feature = "fuzzing_code"))]
+embed_sandbox_signature!();
+
 // In general, fuzzers don't include `main()` and the initialisation logic is deferred to libfuzzer.
 // However, to enable canister sandboxing, we override the initialisation by providing our own `main()`
 // which acts as a dispatcher for different sandboxed under certain arguments.
@@ -46,6 +52,12 @@ pub struct SandboxFeatures {
 // See https://github.com/rust-fuzz/libfuzzer/blob/c8275d1517933765b56a6de61a371bb1cc4268cb/src/lib.rs#L62
 
 pub fn fuzzer_main(features: SandboxFeatures) {
+    // Compiler hack to prevent the section from being removed.
+    #[cfg(all(target_os = "linux", feature = "fuzzing_code"))]
+    unsafe {
+        core::ptr::read_volatile(&SANDBOX_SIGNATURE);
+    }
+
     if std::env::args().any(|arg| arg == RUN_AS_CANISTER_SANDBOX_FLAG) {
         #[cfg(not(fuzzing))]
         if features.syscall_tracing {

@@ -1,9 +1,9 @@
 //! This module contains types and internal methods.  
 //!
-//! TODO: mention that new state is necessary as soon as effectful call is made. info gathering is irrelevant.
+//!
 
 use candid::{CandidType, Principal};
-use ic_cdk::{api::canister_self, futures::spawn};
+use ic_cdk::futures::spawn;
 use ic_cdk_timers::set_timer_interval;
 use ic_stable_structures::{storable::Bound, Storable};
 use serde::{Deserialize, Serialize};
@@ -11,12 +11,11 @@ use serde_cbor::{from_slice, to_vec};
 use std::{borrow::Cow, time::Duration};
 
 use crate::{
-    canister_state::{max_active_requests, num_active_requests, requests::list_by},
-    external_interfaces::{
-        management::{canister_status, CanisterStatusType},
-        registry::get_subnet_for_canister,
+    canister_state::{max_active_requests, num_active_requests},
+    processing::{
+        process_accepted, process_all_by_predicate, process_all_failed,
+        process_controllers_changed, process_renamed, process_stopped, process_updated,
     },
-    processing::{process_accepted, process_all_failed, process_all_generic},
 };
 
 mod canister_state;
@@ -24,6 +23,7 @@ mod external_interfaces;
 mod migration_canister;
 mod privileged;
 mod processing;
+mod validation;
 
 const DEFAULT_MAX_ACTIVE_REQUESTS: u64 = 50;
 
@@ -67,6 +67,18 @@ impl Request {
     }
 }
 
+/// Represents the state a `Request` is currently in and contains all data necessary
+/// to transition to the next state (and sometimes data for a future state).
+///
+/// The variants are ordered according to the successful path.
+/// Each variant has a corresponding `process_*` function which attempts to make progress.
+/// Every such function may collect data via various xnet calls, but for every function (and
+/// therefore state), only _one_ effectful call is allowed, and on success it has to transition
+/// to the next state.
+///
+/// If a transition fails, it may either be retried (signalled by `ProcessingResult::NoProgress`)
+/// or fails fatally and transitions into the Failed state. Failed states run a cleanup and end up
+/// as a record in the event log `HISTORY`.
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RequestState {
     /// Request was validated successfully.
@@ -212,14 +224,45 @@ impl Storable for Event {
     const BOUND: Bound = Bound::Unbounded;
 }
 
+// ========================================================================= //
+// Internal methods
+
 #[allow(clippy::disallowed_methods)]
 pub fn start_timers() {
     let interval = Duration::from_secs(1);
     set_timer_interval(interval, || {
-        spawn(process_all_generic(
+        spawn(process_all_by_predicate(
             "accepted",
             |r| matches!(r, RequestState::Accepted { .. }),
             process_accepted,
+        ))
+    });
+    set_timer_interval(interval, || {
+        spawn(process_all_by_predicate(
+            "controllers_changed",
+            |r| matches!(r, RequestState::ControllersChanged { .. }),
+            process_controllers_changed,
+        ))
+    });
+    set_timer_interval(interval, || {
+        spawn(process_all_by_predicate(
+            "stopped",
+            |r| matches!(r, RequestState::StoppedAndReady { .. }),
+            process_stopped,
+        ))
+    });
+    set_timer_interval(interval, || {
+        spawn(process_all_by_predicate(
+            "renamed_target",
+            |r| matches!(r, RequestState::RenamedTarget { .. }),
+            process_renamed,
+        ))
+    });
+    set_timer_interval(interval, || {
+        spawn(process_all_by_predicate(
+            "updated_routing_table",
+            |r| matches!(r, RequestState::UpdatedRoutingTable { .. }),
+            process_updated,
         ))
     });
 
@@ -229,84 +272,6 @@ pub fn start_timers() {
 
 pub fn rate_limited() -> bool {
     num_active_requests() > max_active_requests()
-}
-
-/// Validate as much as possible upfront, so that the processing state machine does as little work
-/// as possible.
-/// Some checks will have to be repeated because of time of check/time of use issues. But it's better
-/// to reject a request that has no chance upfront.
-/// This method makes several calls and might take a while. But it will respond to the user's call
-/// directly, which makes it worth the wait. The subsequent error conditions have to be polled by the
-/// caller.
-/// TODO: This comment should be a module-level overview.
-pub async fn validate_request(
-    source: Principal,
-    target: Principal,
-    caller: Principal,
-) -> Result<Request, ValidationError> {
-    // 1. Is any of these canisters already in a migration process?
-    for request in list_by(|_| true) {
-        if let Some(id) = request.request().affects_canister(source, target) {
-            return Err(ValidationError::MigrationInProgress { canister: id });
-        }
-    }
-    // 2. Does source canister exist?
-    let source_subnet = get_subnet_for_canister(source)
-        .await
-        .into_result("Call to registry canister failed. Try again later.")?;
-    // 3. Does target canister exist?
-    let target_subnet = get_subnet_for_canister(target)
-        .await
-        .into_result("Call to registry canister failed. Try again later.")?;
-    // 4. Are they on the same subnet?
-    if source_subnet == target_subnet {
-        return Err(ValidationError::SameSubnet);
-    }
-    // 5. Is the caller controller of the source? This fall fails if we are not controller.
-    let source_status = canister_status(source, source_subnet)
-        .await
-        .into_result("Call to management canister failed. Try again later.")?;
-    if !source_status.settings.controllers.contains(&caller) {
-        return Err(ValidationError::CallerNotController { canister: source });
-    }
-    // 6. Is the caller controller of the target? This fall fails if we are not controller.
-    let target_status = canister_status(target, target_subnet)
-        .await
-        .into_result("Call to management canister failed. Try again later.")?;
-    if !target_status.settings.controllers.contains(&caller) {
-        return Err(ValidationError::CallerNotController { canister: target });
-    }
-    // 7. Is the source stopped?
-    if source_status.status != CanisterStatusType::Stopped {
-        return Err(ValidationError::SourceNotStopped);
-    }
-    // 8. Is the source ready for migration?
-    if !source_status.ready_for_migration {
-        return Err(ValidationError::SourceNotReady);
-    }
-    // 9. Is the target stopped?
-    if target_status.status != CanisterStatusType::Stopped {
-        return Err(ValidationError::TargetNotStopped);
-    }
-    // 10. Does the target have snapshots?
-    // TODO: list snapshots
-
-    // n. Does the target have sufficient cycles for the migration?
-    // TODO
-
-    let mut source_original_controllers = source_status.settings.controllers;
-    source_original_controllers.retain(|e| *e != canister_self());
-    let mut target_original_controllers = target_status.settings.controllers;
-    target_original_controllers.retain(|e| *e != canister_self());
-    Ok(Request {
-        source,
-        source_subnet,
-        source_original_controllers,
-        target,
-        target_subnet,
-        target_original_controllers,
-        caller,
-    })
 }
 
 #[allow(dead_code)]

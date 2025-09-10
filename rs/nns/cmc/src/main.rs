@@ -8,8 +8,7 @@ use exchange_rate_canister::{
     RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
 };
 use ic_cdk::{
-    api::call::{arg_data_raw, reply_raw, CallResult, ManualReply},
-    futures::{in_executor_context, spawn_017_compat},
+    api::call::{reply_raw, CallResult, ManualReply},
     heartbeat, init, post_upgrade, pre_upgrade, println, query, update,
 };
 use ic_crypto_tree_hash::{
@@ -38,21 +37,20 @@ use ic_nns_constants::{
 };
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use icp_ledger::{
-    AccountIdentifier, Block, BlockIndex, BlockRes, CyclesResponse, Memo, Operation, SendArgs,
-    Subaccount, Tokens, Transaction, TransactionNotification, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, Block, BlockIndex, BlockRes, Memo, Operation, SendArgs, Subaccount, Tokens,
+    Transaction, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
-use on_wire::{FromWire, IntoWire, NewType};
+use on_wire::IntoWire;
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
-use std::time::SystemTime;
 use std::{
     cell::{Cell, RefCell},
     collections::{btree_map::Entry, BTreeMap, BTreeSet},
     convert::TryInto,
     thread::LocalKey,
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 
 mod environment;
@@ -1126,34 +1124,6 @@ fn remove_subnet_from_authorized_subnet_list(arg: RemoveSubnetFromAuthorizedSubn
     });
 }
 
-#[export_name = "canister_update transaction_notification_pb"]
-fn transaction_notification_pb() {
-    in_executor_context(|| {
-        let input = arg_data_raw();
-        spawn_017_compat(async move {
-            let request = ProtoBuf::<TransactionNotification>::from_bytes(input)
-                .expect("Could not decode TransactionNotification")
-                .into_inner();
-
-            match do_transaction_notification(request).await {
-                Ok(response) => match ProtoBuf::new(response).into_bytes() {
-                    Ok(buf) => reply_raw(&buf),
-                    Err(e) => ic_cdk::api::call::reject(&format!("Error: {:?}", e)),
-                },
-                Err(e) => ic_cdk::api::call::reject(&format!("Error: {:?}", e)),
-            }
-        })
-    })
-}
-
-#[update(manual_reply = true, hidden = true)]
-async fn transaction_notification(tn: TransactionNotification) {
-    match do_transaction_notification(tn).await {
-        Ok(response) => ManualReply::<CyclesResponse>::one(response),
-        Err(e) => ManualReply::reject(format!("Error: {:?}", e)),
-    };
-}
-
 fn is_transient_error<T>(result: &Result<T, NotifyError>) -> bool {
     if let Err(e) = result {
         return e.is_retriable();
@@ -1933,178 +1903,6 @@ async fn issue_automatic_refund_if_memo_not_offerred(
         reason: reason_for_refund,
         block_index: refund_block_index,
     })
-}
-
-/// Processes a legacy notification from the Ledger canister.
-async fn do_transaction_notification(
-    tn: TransactionNotification,
-) -> Result<CyclesResponse, String> {
-    let caller = caller();
-
-    print(format!(
-        "[cycles] notified about transaction {:?} by {}",
-        tn, caller
-    ));
-
-    let ledger_canister_id = with_state(|state| state.ledger_canister_id);
-
-    if CanisterId::unchecked_from_principal(caller) != ledger_canister_id {
-        return Err(format!(
-            "This canister can only be notified by the ledger canister ({}), not by {}.",
-            ledger_canister_id, caller
-        ));
-    }
-
-    // We need this check if MAX_NOTIFY_HISTORY is smaller than max number of transactions
-    // the ledger can process within 24h
-    let last_purged_notification = with_state(|state| state.last_purged_notification);
-
-    if tn.block_height <= last_purged_notification {
-        return Err(NotifyError::TransactionTooOld(last_purged_notification + 1).to_string());
-    }
-
-    let block_height = tn.block_height;
-    with_state_mut(|state| match state.blocks_notified.entry(block_height) {
-        Entry::Occupied(entry) => match entry.get() {
-            NotificationStatus::Processing => Err("Another notification is in progress".into()),
-            NotificationStatus::NotifiedTopUp(resp) => Err(format!("Already notified: {:?}", resp)),
-            NotificationStatus::NotifiedCreateCanister(resp) => {
-                Err(format!("Already notified: {:?}", resp))
-            }
-            NotificationStatus::NotifiedMint(resp) => Err(format!("Already notified: {:?}", resp)),
-            NotificationStatus::NotMeaningfulMemo(resp) => {
-                Err(format!("Already notified: {:?}", resp))
-            }
-        },
-        Entry::Vacant(entry) => {
-            entry.insert(NotificationStatus::Processing);
-            Ok(())
-        }
-    })?;
-
-    let from = AccountIdentifier::new(tn.from, tn.from_subaccount);
-
-    let (cycles_response, notification_status) = if tn.memo == MEMO_CREATE_CANISTER {
-        let controller = authorize_sender_to_create_canister_via_ledger_notify(&tn)?;
-        match process_create_canister(controller, from, tn.amount, None, None).await {
-            Ok(canister_id) => (
-                Ok(CyclesResponse::CanisterCreated(canister_id)),
-                Some(NotificationStatus::NotifiedCreateCanister(Ok(canister_id))),
-            ),
-            Err(NotifyError::Refunded {
-                reason,
-                block_index,
-            }) => (
-                Ok(CyclesResponse::Refunded(reason.clone(), block_index)),
-                Some(NotificationStatus::NotifiedCreateCanister(Err(
-                    NotifyError::Refunded {
-                        reason,
-                        block_index,
-                    },
-                ))),
-            ),
-            Err(e) => (Err(e), None),
-        }
-    } else if tn.memo == MEMO_TOP_UP_CANISTER {
-        let canister_id = (&tn
-            .to_subaccount
-            .ok_or_else(|| "Topping up requires a subaccount.".to_string())?)
-            .try_into()
-            .map_err(|err| format!("Cannot parse subaccount: {}", err))?;
-
-        // Always use base cycles limit for minting cycles, since the Subnet Rental Canister
-        // doesn't call this endpoint.
-        let process_top_up_result = process_top_up(
-            canister_id,
-            from,
-            tn.amount,
-            CyclesMintingLimiterSelector::BaseLimit,
-        )
-        .await;
-
-        match process_top_up_result {
-            Ok(cycles) => (
-                Ok(CyclesResponse::ToppedUp(())),
-                Some(NotificationStatus::NotifiedTopUp(Ok(cycles))),
-            ),
-            Err(NotifyError::Refunded {
-                reason,
-                block_index,
-            }) => (
-                Ok(CyclesResponse::Refunded(reason.clone(), block_index)),
-                Some(NotificationStatus::NotifiedTopUp(Err(
-                    NotifyError::Refunded {
-                        reason,
-                        block_index,
-                    },
-                ))),
-            ),
-            Err(e) => (Err(e), None),
-        }
-    } else {
-        let err = NotifyError::InvalidTransaction(format!(
-            "Do not know what to do with transaction with memo {}.",
-            tn.memo.0
-        ));
-        (Err(err), None)
-    };
-
-    with_state_mut(|state| {
-        if let Some(status) = notification_status {
-            state.blocks_notified.insert(block_height, status);
-        }
-        if is_transient_error(&cycles_response) {
-            state.blocks_notified.remove(&block_height);
-        }
-    });
-
-    cycles_response.map_err(|e| e.to_string())
-}
-
-/// Returns Ok(controller/creator/sender) if sender == creator (aka controller).
-///
-/// That is, we disallow sending ICP on behalf of someone else; whereas, we used to allow it.
-///
-/// The reason for this restriction is that the creator might be authorized to create canisters on
-/// restricted subnets.
-///
-/// The only fields used are
-///     * from: This is taken as the sender.
-///     * to_subaccount: This is used to infer the creator/controller.
-///
-/// It is assumed that memo == MEMO_CREATE_CANISTER. (However, behavior is the same if that
-/// assumption does not hold.)
-fn authorize_sender_to_create_canister_via_ledger_notify(
-    transaction_notification: &TransactionNotification,
-) -> Result<PrincipalId, String> {
-    let sender = transaction_notification.from;
-
-    let creator = {
-        let to_subaccount = transaction_notification.to_subaccount.ok_or_else(|| {
-            format!(
-                "Transfer has no destination subaccount:\n{:#?}",
-                transaction_notification,
-            )
-        })?;
-
-        PrincipalId::try_from(&to_subaccount).map_err(|err| {
-            format!(
-                "Cannot determine creator principal from ICP transfer to Cycles \
-                 Minting Canister destination subaccount {}: {}",
-                to_subaccount, err,
-            )
-        })?
-    };
-
-    if sender == creator {
-        return Ok(creator);
-    }
-
-    Err(format!(
-        "Principal {} sent ICP to the Cycles Minting Canister on behalf of {} \
-         in order to create a canister, but this is not allowed (anymore).",
-        sender, creator,
-    ))
 }
 
 // If conversion fails, log and return an error
@@ -2896,106 +2694,6 @@ mod tests {
             "{:#?}",
             caller_is_nns_dapp_result,
         );
-    }
-
-    #[test]
-    fn test_authorize_sender_to_create_canister_via_ledger_notify() {
-        // Happy case.
-        let creator = PrincipalId::new_user_test_id(777);
-        let ok_transaction_notification = TransactionNotification {
-            from: creator,
-            to_subaccount: Some(Subaccount::from(&creator)),
-
-            // These are not used.
-            memo: MEMO_CREATE_CANISTER, // Just for realism.
-            from_subaccount: None,
-            to: CanisterId::from_u64(111),
-            block_height: 222,
-            amount: Tokens::from_e8s(333),
-        };
-
-        // Evil case.
-        assert_eq!(
-            authorize_sender_to_create_canister_via_ledger_notify(&ok_transaction_notification,),
-            Ok(creator),
-        );
-
-        let evil = PrincipalId::new_user_test_id(666);
-        let evil_transaction_notification = TransactionNotification {
-            from: evil,
-            ..ok_transaction_notification.clone()
-        };
-
-        let evil_result =
-            authorize_sender_to_create_canister_via_ledger_notify(&evil_transaction_notification);
-
-        let evil_result = match evil_result {
-            Err(err) => err.to_lowercase(),
-            wrong => panic!("Evil result is supposed to be Err, but was {:?}", wrong),
-        };
-        for key_word in ["create", "canister", "on behalf of", "not allowed"] {
-            assert!(
-                evil_result.contains(key_word),
-                "{} not in {:?}",
-                key_word,
-                evil_result
-            );
-        }
-
-        // Invalid transfer case 1: no destination subaccount.
-        let no_destination_subaccount_transaction_notification = TransactionNotification {
-            to_subaccount: None,
-            ..ok_transaction_notification.clone()
-        };
-
-        let no_destination_subaccount_result =
-            authorize_sender_to_create_canister_via_ledger_notify(
-                &no_destination_subaccount_transaction_notification,
-            );
-
-        let no_destination_subaccount_result = match no_destination_subaccount_result {
-            Err(err) => err.to_lowercase(),
-            wrong => panic!(
-                "No destination subaccount result is supposed to be Err, but was {:?}",
-                wrong,
-            ),
-        };
-        for key_word in ["has no", "destination", "subaccount"] {
-            assert!(
-                no_destination_subaccount_result.contains(key_word),
-                "{} not in {:?}",
-                key_word,
-                no_destination_subaccount_result,
-            );
-        }
-
-        // Invalid transfer case 2: destination subaccount present, but does not map to (creator)
-        // principal.
-        let garbage_subaccount = [42_u8; 32];
-        let no_creator_transaction_notification = TransactionNotification {
-            to_subaccount: Some(Subaccount(garbage_subaccount)),
-            ..ok_transaction_notification
-        };
-
-        let no_creator_result = authorize_sender_to_create_canister_via_ledger_notify(
-            &no_creator_transaction_notification,
-        );
-
-        let no_creator_result = match no_creator_result {
-            Err(err) => err.to_lowercase(),
-            wrong => panic!(
-                "No destination subaccount result is supposed to be Err, but was {:?}",
-                wrong,
-            ),
-        };
-        for key_word in ["determine", "creator", "subaccount"] {
-            assert!(
-                no_creator_result.contains(key_word),
-                "{} not in {:?}",
-                key_word,
-                no_creator_result,
-            );
-        }
     }
 
     #[test]

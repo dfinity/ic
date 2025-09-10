@@ -1,4 +1,5 @@
 mod bitcoin;
+mod canister_logs;
 mod canister_manager;
 mod canister_settings;
 pub mod execution;

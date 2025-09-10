@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+
+
+## 10.0.0 - 2025-09-05
+
 ### Added
 - The function `start_server` and its input type `StartServerParams` to manually start a PocketIC server.
-- The function `PocketIcBuilder::with_all_icp_features` to specify that all ICP features (supported by PocketIC) should be enabled.
 - The function `PocketIc::upgrade_eop_canister` to upgrade a Motoko EOP canister.
 - The function `PocketIcBuilder::with_icp_features` to specify that selected ICP features (supported by PocketIC) should be enabled.
 - The function `PocketIcBuilder::with_initial_timestamp` to specify the initial timestamp of the newly created PocketIC instance.
@@ -19,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - The field `node_ids` from `SubnetConfig`. Node ids can always be retrieved from the registry.
+- The deprecated function `PocketIc::make_deterministic`.
+
+### Changed
+- Renamed `PocketIcBuilder::with_nonmainnet_features` to `PocketIcBuilder::with_icp_config` and changed the argument type
+  from a simple Boolean to a record with separate settings for the individual configuration options.
 
 
 

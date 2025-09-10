@@ -5,6 +5,7 @@ use crate::{messages::CallContextId, time::CoarseTime, Cycles};
 use ic_base_types::{CanisterId, PrincipalId};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::{canister_state_bits::v1 as pb, queues::v1::Cycles as PbCycles};
 use ic_protobuf::types::v1 as pb_types;
@@ -16,7 +17,9 @@ use std::{
 use strum_macros::EnumIter;
 
 /// Represents the types of methods that a Wasm module can export.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone, DeterministicHeapBytes, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize,
+)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum WasmMethod {
     /// An exported update method along with its name.
@@ -129,7 +132,18 @@ impl TryFrom<pb::WasmMethod> for WasmMethod {
 }
 
 /// The various system methods available to canisters.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, EnumIter, Serialize)]
+#[derive(
+    Clone,
+    DeterministicHeapBytes,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Debug,
+    Deserialize,
+    EnumIter,
+    Serialize,
+)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum SystemMethod {
     /// A system method for initializing a Wasm module.

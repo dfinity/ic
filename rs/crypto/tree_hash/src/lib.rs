@@ -669,6 +669,14 @@ pub enum FilterBuilder {
     Pruned(Digest),
 }
 
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+enum FilterMode {
+    /// The paths in the filter are kept, everything else is pruned.
+    Keep,
+    /// The paths in the filter are pruned, everything else is kept.
+    Prune,
+}
+
 impl FilterBuilder {
     pub fn digest(&self) -> &Digest {
         match self {
@@ -698,14 +706,16 @@ impl FilterBuilder {
         }
     }
 
-    /// Returns a [`MixedHashTree`] with everything pruned except the paths in `filter`.
-    pub fn filtered(
+    /// Common code of [`Self::filtered`] and [`Self::pruned`], as they both have the same recursion with the decisions to prune or keep a subtree flipped.
+    fn filtered_impl(
         &self,
         filter: &LabeledTree<()>,
+        filter_mode: FilterMode,
     ) -> Result<MixedHashTree, MixedHashTreeFilterError> {
         fn filtered_inner(
             tree: &FilterBuilder,
             filter: &LabeledTree<()>,
+            filter_mode: FilterMode,
             depth: u8,
         ) -> Result<MixedHashTree, MixedHashTreeFilterError> {
             if depth > MAX_HASH_TREE_DEPTH {
@@ -716,12 +726,15 @@ impl FilterBuilder {
                 // Pruned and empty subtrees are always kept.
                 (FilterBuilder::Empty(_), _) => Ok(tree.mixed_hash_tree()),
                 (FilterBuilder::Pruned(_), _) => Ok(tree.mixed_hash_tree()),
-                // Path ends in an inner node so we simply keep the entire subtree.
-                (_, LabeledTree::Leaf(_)) => Ok(tree.mixed_hash_tree()),
+                // If the path in `filter` ends, we keep the entire subtree if `FilterMode::Keep` and prune it otherwise.
+                (_, LabeledTree::Leaf(_)) => match filter_mode {
+                    FilterMode::Keep => Ok(tree.mixed_hash_tree()),
+                    FilterMode::Prune => Ok(MixedHashTree::Pruned(tree.digest().clone())),
+                },
                 // On a fork, filter both sides.
                 (FilterBuilder::Fork(digest, b), filter) => {
-                    let l = filtered_inner(&b.0, filter, depth + 1)?;
-                    let r = filtered_inner(&b.1, filter, depth + 1)?;
+                    let l = filtered_inner(&b.0, filter, filter_mode, depth + 1)?;
+                    let r = filtered_inner(&b.1, filter, filter_mode, depth + 1)?;
 
                     // If both branches are pruned, prune the node instead.
                     match (&l, &r) {
@@ -733,15 +746,22 @@ impl FilterBuilder {
                 }
                 // On a label, check if it is in `filter`.
                 (FilterBuilder::Labeled(digest, label, inner), LabeledTree::SubTree(flat_map)) => {
-                    match flat_map.get(label) {
-                        Some(subfilter) => {
-                            let mixed_hash_tree = filtered_inner(inner, subfilter, depth + 1)?;
+                    match (flat_map.get(label), filter_mode) {
+                        (Some(LabeledTree::Leaf(_)), FilterMode::Prune) => {
+                            // A path in `filter` ends here, so we prune this subtree including the label.
+                            Ok(MixedHashTree::Pruned(digest.clone()))
+                        }
+                        (Some(subfilter), _) => {
+                            // Recursive case
+                            let mixed_hash_tree =
+                                filtered_inner(inner, subfilter, filter_mode, depth + 1)?;
                             Ok(MixedHashTree::Labeled(
                                 label.clone(),
                                 Box::new(mixed_hash_tree),
                             ))
                         }
-                        None => Ok(MixedHashTree::Pruned(digest.clone())),
+                        (None, FilterMode::Keep) => Ok(MixedHashTree::Pruned(digest.clone())),
+                        (None, FilterMode::Prune) => Ok(tree.mixed_hash_tree()),
                     }
                 }
                 // The tree ends in a leaf, but the path still continues. Invalid input.
@@ -751,7 +771,25 @@ impl FilterBuilder {
             }
         }
 
-        filtered_inner(self, filter, 0)
+        filtered_inner(self, filter, filter_mode, 0)
+    }
+
+    /// Returns a [`MixedHashTree`] with everything pruned except the paths in `filter`.
+    /// See also [`Self::pruned`].
+    pub fn filtered(
+        &self,
+        filter: &LabeledTree<()>,
+    ) -> Result<MixedHashTree, MixedHashTreeFilterError> {
+        self.filtered_impl(filter, FilterMode::Keep)
+    }
+
+    /// Returns a [`MixedHashTree`] with everything in `paths` pruned.
+    /// See also [`Self::filtered`].
+    pub fn pruned(
+        &self,
+        paths: &LabeledTree<()>,
+    ) -> Result<MixedHashTree, MixedHashTreeFilterError> {
+        self.filtered_impl(paths, FilterMode::Prune)
     }
 }
 

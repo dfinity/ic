@@ -309,7 +309,6 @@ fn verify_paths(
             | [b"subnet", _subnet_id, b"public_key" | b"canister_ranges" | b"node"] => {}
             [b"subnet", _subnet_id, b"node", _node_id]
             | [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {}
-            [b"canister_ranges", _subnet_id] => {}
             [b"request_status", request_id]
             | [b"request_status", request_id, b"status" | b"reply" | b"reject_code" | b"reject_message" | b"error_code"] =>
             {
@@ -534,6 +533,31 @@ mod test {
     }
 
     #[test]
+    fn test_canister_ranges_are_not_allowed() {
+        let state = ReplicatedState::new_from_checkpoint(
+            BTreeMap::new(),
+            SystemMetadata::new(subnet_test_id(1), SubnetType::Application),
+            CanisterQueues::default(),
+            RawQueryStats::default(),
+            CanisterSnapshots::default(),
+        );
+
+        let error = verify_paths(
+            &state,
+            &user_test_id(1),
+            &[Path::new(vec![
+                Label::from("canister_ranges"),
+                [0; 32].into(),
+            ])],
+            &CanisterIdSet::all(),
+            canister_test_id(1).get(),
+        )
+        .expect_err("Should fail because canister_ranges are not allowed");
+
+        assert_eq!(error.status, StatusCode::NOT_FOUND)
+    }
+
+    #[test]
     fn test_verify_path() {
         let subnet_id = subnet_test_id(1);
         let mut metadata = SystemMetadata::new(subnet_id, SubnetType::Application);
@@ -570,7 +594,6 @@ mod test {
                         [0; 32].into(),
                         Label::from("reply")
                     ]),
-                    Path::new(vec![Label::from("canister_ranges"), [0; 32].into(),])
                 ],
                 &CanisterIdSet::all(),
                 canister_test_id(1).get(),

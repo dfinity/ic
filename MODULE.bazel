@@ -136,6 +136,16 @@ oci.pull(
 )
 use_repo(oci, "bitcoind", "bitcoind_linux_amd64")
 
+# dogecoin container used in test
+oci.pull(
+    name = "dogecoind",
+    image = "ghcr.io/dfinity/fiftysix/dogecoin-core@sha256:13c8b150b759eed9e11ebaf0edfdf998022bfd622164c8768d7057b43e4e156c",
+    platforms = [
+        "linux/amd64",
+    ],
+)
+use_repo(oci, "dogecoind", "dogecoind_linux_amd64")
+
 # IC HTTP Gateway container used in tests
 oci.pull(
     name = "ic_gatewayd",
@@ -569,8 +579,8 @@ http_file(
 http_file(
     name = "nns_dapp_canister",
     downloaded_file_path = "nns_dapp_canister.wasm.gz",
-    sha256 = "f4c5df6fdb8ee3aa043419ed4e4cc1fafdb07b4fde1c7faeb2a6730dfa04127f",
-    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-129618/nns-dapp_test.wasm.gz",
+    sha256 = "46e5cdad3c77465e938c6ddcc5f41f0ed0b22fd0efc4c9832c3bbd5eee656b0e",
+    url = "https://github.com/dfinity/nns-dapp/releases/download/nightly-2025-09-03/nns-dapp_test.wasm.gz",
 )
 
 # SNS aggregator canister
@@ -578,8 +588,8 @@ http_file(
 http_file(
     name = "sns_aggregator",
     downloaded_file_path = "sns_aggregator_dev.wasm.gz",
-    sha256 = "8a18ab37807605fe912080b4a072fc7735b4657e9d22b3867c345250c6e77d91",
-    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-129618/sns_aggregator_dev.wasm.gz",
+    sha256 = "ad1b1a3faa5f5db553198ee68f36361b173cf6cfdc064f7727b2c02a81020c7b",
+    url = "https://github.com/dfinity/nns-dapp/releases/download/nightly-2025-09-03/sns_aggregator_dev.wasm.gz",
 )
 
 # KongSwap backend canister
@@ -596,8 +606,8 @@ http_file(
 http_file(
     name = "kongswap-adaptor-canister",
     downloaded_file_path = "kongswap-adaptor-canister.wasm.gz",
-    sha256 = "4b3445ff18b417364a25c733f377eb0eb5943dea8781de73c226023657642ad1",
-    url = "https://github.com/dfinity/sns-kongswap-adaptor/releases/download/vrc-20250821-094346-bab9aa4/kongswap-adaptor-canister.wasm.gz",
+    sha256 = "1c07ceba560e7bcffa43d1b5ae97db81151854f068b707c1728e213948212a6c",
+    url = "https://github.com/dfinity/sns-kongswap-adaptor/releases/download/v1.0.0/kongswap-adaptor-canister.wasm.gz",
 )
 
 # Cycles Ledger canister
@@ -614,8 +624,8 @@ http_file(
 http_file(
     name = "subnet_rental_canister",
     downloaded_file_path = "subnet_rental_canister.wasm.gz",
-    sha256 = "d3d703b649bf32d60100e49f02b070a0b9c52022b556b30102139b1eb57bbb8b",
-    url = "https://github.com/dfinity/subnet-rental-canister/releases/download/0.2.0/subnet_rental_canister.wasm.gz",
+    sha256 = "860d30bc74facd4287b7af766004344e4cea4989ae0bf5408b4fb70ff337bc42",
+    url = "https://github.com/dfinity/subnet-rental-canister/releases/download/0.3.0/subnet_rental_canister.wasm.gz",
 )
 
 # Financial Integration artifacts for upgrade testing

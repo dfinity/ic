@@ -27,7 +27,9 @@ use ic_replicated_state::{
     ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages, PageMap,
     ReplicatedState, Stream, SubnetTopology,
 };
-use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout, SYSTEM_METADATA_FILE, WASM_FILE};
+use ic_state_layout::{
+    CheckpointLayout, ReadOnly, StateLayout, CANISTER_FILE, SYSTEM_METADATA_FILE, WASM_FILE,
+};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
 use ic_state_manager::{
@@ -46,7 +48,7 @@ use ic_test_utilities_consensus::fake::FakeVerifier;
 use ic_test_utilities_io::{make_mutable, make_readonly, write_all_at};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    fetch_histogram_vec_stats, fetch_int_counter_vec, fetch_int_gauge, Labels,
+    fetch_gauge, fetch_histogram_vec_stats, fetch_int_counter_vec, fetch_int_gauge, Labels,
 };
 use ic_test_utilities_state::{arb_stream, arb_stream_slice, canister_ids};
 use ic_test_utilities_tmpdir::tmpdir;
@@ -2506,7 +2508,7 @@ fn assert_error_counters(metrics: &MetricsRegistry) {
 fn assert_no_remaining_chunks(metrics: &MetricsRegistry) {
     assert_eq!(
         0,
-        fetch_int_gauge(metrics, "state_sync_remaining_chunks").unwrap()
+        fetch_gauge(metrics, "state_sync_remaining_chunks").unwrap() as i64
     );
 }
 
@@ -3005,6 +3007,190 @@ fn can_state_sync_from_cache_alone() {
                 );
                 assert_eq!(vec![height(1)], heights_to_certify(&*dst_state_manager));
             }
+            assert_no_remaining_chunks(dst_metrics);
+            assert_error_counters(dst_metrics);
+        })
+    })
+}
+
+#[test]
+fn copied_chunks_from_file_group_can_be_skipped_when_applying() {
+    use std::os::unix::fs::MetadataExt;
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    /// Snapshot of file metadata fields that are useful for checking if a file has been touched.
+    /// These fields include device and inode (to uniquely identify the file), size, and timestamps for modification and change.
+    struct FileMetadataSnapshot {
+        dev: u64,
+        ino: u64,
+        size: u64,
+        mtime: i64,
+        mtime_nsec: i64,
+        ctime: i64,
+        ctime_nsec: i64,
+    }
+    fn get_file_metadata_snapshot(path: &Path) -> FileMetadataSnapshot {
+        let metadata = std::fs::metadata(path).unwrap();
+        FileMetadataSnapshot {
+            dev: metadata.dev(),
+            ino: metadata.ino(),
+            size: metadata.size(),
+            mtime: metadata.mtime(),
+            mtime_nsec: metadata.mtime_nsec(),
+            ctime: metadata.ctime(),
+            ctime_nsec: metadata.ctime_nsec(),
+        }
+    }
+
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
+        let (_height, mut state) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(100));
+        insert_dummy_canister(&mut state, canister_test_id(200));
+
+        // Modify the first canister to ensure that its chunks are not identical to the
+        // other canister
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        canister_state.system_state.add_canister_change(
+            Time::from_nanos_since_unix_epoch(42),
+            CanisterChangeOrigin::from_user(user_test_id(42).get()),
+            CanisterChangeDetails::canister_creation(vec![user_test_id(42).get()], None),
+        );
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state
+            .stable_memory
+            .page_map
+            .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+        execution_state
+            .wasm_memory
+            .page_map
+            .update(&[(PageIndex::new(0), &[2u8; PAGE_SIZE])]);
+
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+        let hash = wait_for_checkpoint(&*src_state_manager, height(1));
+        let id = StateSyncArtifactId {
+            height: height(1),
+            hash: hash.get_ref().clone(),
+        };
+
+        let msg = src_state_sync
+            .get(&id)
+            .expect("failed to get state sync messages");
+        let state = src_state_manager.get_latest_state().take();
+
+        assert_error_counters(src_metrics);
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
+            // Not all chunk ids to be omitted will work for the purpose of this test
+            // They have to be (1) not included in a file group chunk and (2) not identical
+            // to another chunk that is not omitted.
+            //
+            // Here we choose the `system_metadata.pbuf` because it is never empty and unlikely to be identical to others.
+            // Given the current state layout, the chunk for `system_metadata.pbuf` is the last one in the chunk table.
+            // If there are changes to the state layout and it changes the position of `system_metadata.pbuf` in the chunk table,
+            // the assertion below will panic and we need to adjust the selected chunk id accordingly for this test.
+            let chunk_table_idx_to_omit = msg.manifest.chunk_table.len() - 1;
+            let chunk_id_to_omit = ChunkId::new(chunk_table_idx_to_omit as u32 + 1);
+            let file_table_idx_to_omit =
+                msg.manifest.chunk_table[chunk_table_idx_to_omit].file_index as usize;
+            let file_path = &msg.manifest.file_table[file_table_idx_to_omit].relative_path;
+            // Make sure the chunk to omit is from file `system_metadata.pbuf`.
+            assert!(file_path.ends_with(SYSTEM_METADATA_FILE));
+
+            let omit1: HashSet<ChunkId> = maplit::hashset! {chunk_id_to_omit};
+            // Drop the first state sync during the loading phase,
+            // mimicking a scenario where P2P loses all peer connections before completion.
+            {
+                let mut chunkable =
+                    set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
+
+                // First fetch chunk 0 (the meta-manifest) and manifest chunks, and then ask for all chunks afterwards,
+                // but never receive the chunk for `system_metadata.pbuf`
+                let completion = pipe_partial_state_sync(&msg, &mut *chunkable, &omit1, false);
+                assert_matches!(completion, Ok(false), "Unexpectedly completed state sync");
+            }
+            assert_no_remaining_chunks(dst_metrics);
+
+            // The second state sync targets the same state at height 1.
+            // Here, canister.pbuf files are both copied and fetched via file group chunks.
+            // This is to test that when applying file group chunks, any already-copied individual chunks are properly skipped.
+            // We verify this behavior by asserting that the remaining chunks metric never becomes negative.
+            {
+                // Compared to the checkpoint at height 1, the only different file in checkpoint at height 2 is `system_metadata.pbuf`.
+                let mut chunkable =
+                    set_fetch_state_and_start_start_sync(&dst_state_manager, &dst_state_sync, &id);
+
+                let result = pipe_meta_manifest(&msg, &mut *chunkable, false);
+                assert_matches!(result, Ok(false));
+                let result = pipe_manifest(&msg, &mut *chunkable, false);
+                assert_matches!(result, Ok(false));
+
+                let file_group_chunks: HashSet<ChunkId> = msg
+                    .state_sync_file_group
+                    .keys()
+                    .copied()
+                    .map(ChunkId::from)
+                    .collect();
+
+                let fetch_chunks: HashSet<ChunkId> =
+                    omit1.union(&file_group_chunks).copied().collect();
+
+                // Only the chunks not fetched in the first state sync plus chunks of the file group should still be requested
+                assert_eq!(fetch_chunks, chunkable.chunks_to_download().collect());
+
+                // Only finish the copy phase by omitting the chunks to fetch
+                let omit2: HashSet<ChunkId> = fetch_chunks;
+                let completion = pipe_partial_state_sync(&msg, &mut *chunkable, &omit2, false);
+                assert_matches!(completion, Ok(false), "Unexpectedly completed state sync");
+
+                let state_sync_root = dst_state_manager
+                    .state_layout()
+                    .state_sync_scratchpad(height(1))
+                    .expect("failed to create directory for state sync scratchpad");
+
+                let canister_pbuf_files: Vec<_> = msg
+                    .manifest
+                    .file_table
+                    .iter()
+                    .filter(|file| file.relative_path.ends_with(CANISTER_FILE))
+                    .map(|file| state_sync_root.join(&file.relative_path))
+                    .collect();
+                assert!(!canister_pbuf_files.is_empty());
+
+                // All canister.pbuf files should be already copied to the scratchpad and we take a snapshot of the metadata.
+                let original_metadata_snapshots: Vec<_> = canister_pbuf_files
+                    .iter()
+                    .map(|file| get_file_metadata_snapshot(file))
+                    .collect();
+
+                // Download the file group chunks
+                let omit3: HashSet<ChunkId> = maplit::hashset! {chunk_id_to_omit};
+                let completion = pipe_partial_state_sync(&msg, &mut *chunkable, &omit3, false);
+                assert_matches!(completion, Ok(false), "Unexpectedly completed state sync");
+
+                // Assert that all canister.pbuf files are not touched.
+                let new_metadata_snapshots: Vec<_> = canister_pbuf_files
+                    .iter()
+                    .map(|file| get_file_metadata_snapshot(file))
+                    .collect();
+                assert_eq!(original_metadata_snapshots, new_metadata_snapshots);
+
+                pipe_state_sync(msg.clone(), chunkable);
+                // Remaining chunks should be 0 before dropping the `IncompleteState` object.
+                assert_no_remaining_chunks(dst_metrics);
+
+                let recovered_state = dst_state_manager
+                    .get_state_at(height(1))
+                    .expect("Destination state manager didn't receive the state")
+                    .take();
+
+                assert_eq!(height(1), dst_state_manager.latest_state_height());
+                assert_eq!(state, recovered_state);
+                assert_eq!(
+                    *state.as_ref(),
+                    *dst_state_manager.get_latest_state().take()
+                );
+                assert_eq!(vec![height(1)], heights_to_certify(&*dst_state_manager));
+            }
+
+            // After dropping the `IncompleteState` object, the remaining chunks should also be 0.
             assert_no_remaining_chunks(dst_metrics);
             assert_error_counters(dst_metrics);
         })

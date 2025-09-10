@@ -9,8 +9,7 @@ use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
-    GetHistoricalRewardPeriodsResponse, GetNodeProviderRewardsCalculationRequest,
-    GetNodeProviderRewardsCalculationResponse,
+    GetNodeProviderRewardsCalculationRequest, GetNodeProviderRewardsCalculationResponse,
 };
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse,
@@ -134,18 +133,6 @@ fn get_node_provider_rewards_calculation(
     NodeRewardsCanister::get_node_provider_rewards_calculation::<RegistryStoreStableMemoryBorrower>(
         &CANISTER, request,
     )
-}
-
-#[query]
-fn get_historical_reward_periods() -> GetHistoricalRewardPeriodsResponse {
-    if in_replicated_execution() {
-        return Err(
-            "Replicated execution of this method is not allowed. Use a non-replicated query call."
-                .to_string(),
-        );
-    }
-
-    NodeRewardsCanister::get_historical_reward_periods()
 }
 
 #[cfg(test)]
