@@ -140,11 +140,9 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
 pub fn test(env: TestEnv, _cfg: TestConfig) {
     let logger = env.logger();
 
-    let recovery_img = std::fs::read(get_dependency_path(
-        std::env::var("RECOVERY_GUESTOS_IMG_PATH")
-            .expect("RECOVERY_GUESTOS_IMG_PATH environment variable not found"),
-    ))
-    .expect("Failed to read recovery GuestOS image");
+    let recovery_img_path = get_dependency_path_from_env("RECOVERY_GUESTOS_IMG_PATH");
+    let recovery_img =
+        std::fs::read(&recovery_img_path).expect("Failed to read recovery GuestOS image");
     let recovery_img_hash = Sha256::digest(&recovery_img)
         .iter()
         .map(|b| format!("{:02x}", b))
@@ -374,18 +372,18 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
     );
 
     info!(logger, "Setup UVM to serve recovery artifacts");
-    let artifacts = std::fs::read(output_dir.join("recovery.tar.zst")).unwrap();
+    let artifacts_path = output_dir.join("recovery.tar.zst");
     let artifacts_hash = std::fs::read_to_string(output_dir.join("recovery.tar.zst.sha256"))
         .unwrap()
         .trim()
         .to_string();
-    impersonate_upstreams::uvm_serve_recovery_artifacts(&env, artifacts, &artifacts_hash)
+    impersonate_upstreams::uvm_serve_recovery_artifacts(&env, &artifacts_path, &artifacts_hash)
         .expect("Failed to serve recovery artifacts from UVM");
 
     info!(logger, "Setup UVM to serve recovery-dev GuestOS image");
     impersonate_upstreams::uvm_serve_guestos_image(
         &env,
-        recovery_img,
+        &recovery_img_path,
         RECOVERY_GUESTOS_IMG_VERSION,
     )
     .unwrap();
