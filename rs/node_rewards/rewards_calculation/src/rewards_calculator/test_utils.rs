@@ -1,4 +1,4 @@
-use crate::types::{DayUtc, NodeMetricsDailyRaw, Region, RewardableNode, SubnetMetricsDailyKey};
+use crate::types::{DayUtc, NodeMetricsDailyRaw, Region, RewardableNode, SubnetMetricsKey};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardRates, NodeRewardsTable};
@@ -33,8 +33,8 @@ pub fn build_daily_metrics(
     subnet_id: SubnetId,
     day: DayUtc,
     nodes_data: &[(NodeId, u64, u64)],
-) -> (SubnetMetricsDailyKey, Vec<NodeMetricsDailyRaw>) {
-    let key = SubnetMetricsDailyKey { subnet_id, day };
+) -> (SubnetMetricsKey, Vec<NodeMetricsDailyRaw>) {
+    let key = SubnetMetricsKey { subnet_id, day };
     let metrics = nodes_data
         .iter()
         .map(|(node_id, proposed, failed)| NodeMetricsDailyRaw {
