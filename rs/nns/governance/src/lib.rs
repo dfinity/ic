@@ -210,6 +210,9 @@ thread_local! {
 
     static ENABLE_KNOWN_NEURON_VOTING_HISTORY: Cell<bool>
         = const { Cell::new(cfg!(feature = "test")) };
+
+    static ENABLE_DEREGISTER_KNOWN_NEURON: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
 }
 
 thread_local! {
@@ -261,6 +264,20 @@ pub fn temporarily_enable_known_neuron_voting_history() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_known_neuron_voting_history() -> Temporary {
     Temporary::new(&ENABLE_KNOWN_NEURON_VOTING_HISTORY, false)
+}
+
+pub fn is_deregister_known_neuron_enabled() -> bool {
+    ENABLE_DEREGISTER_KNOWN_NEURON.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_deregister_known_neuron() -> Temporary {
+    Temporary::new(&ENABLE_DEREGISTER_KNOWN_NEURON, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_deregister_known_neuron() -> Temporary {
+    Temporary::new(&ENABLE_DEREGISTER_KNOWN_NEURON, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {

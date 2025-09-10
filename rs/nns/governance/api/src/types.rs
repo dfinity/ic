@@ -602,6 +602,8 @@ pub mod proposal {
         RewardNodeProviders(super::RewardNodeProviders),
         /// Register Known Neuron
         RegisterKnownNeuron(super::KnownNeuron),
+        /// Deregister Known Neuron
+        DeregisterKnownNeuron(super::DeregisterKnownNeuron),
         /// Obsolete. Superseded by CreateServiceNervousSystem. Kept for Candid compatibility.
         SetSnsTokenSwapOpenTimeWindow(super::SetSnsTokenSwapOpenTimeWindow),
         /// Call the open method on an SNS swap canister.
@@ -1374,6 +1376,7 @@ pub enum ProposalActionRequest {
     RewardNodeProvider(RewardNodeProvider),
     RewardNodeProviders(RewardNodeProviders),
     RegisterKnownNeuron(KnownNeuron),
+    DeregisterKnownNeuron(DeregisterKnownNeuron),
     CreateServiceNervousSystem(CreateServiceNervousSystem),
     InstallCode(InstallCodeRequest),
     StopOrStartCanister(StopOrStartCanister),
@@ -2194,6 +2197,13 @@ pub struct KnownNeuron {
 pub struct KnownNeuronData {
     pub name: String,
     pub description: Option<String>,
+}
+/// Proposal action to deregister a known neuron by removing its name and description.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct DeregisterKnownNeuron {
+    pub id: Option<NeuronId>,
 }
 /// Proposal action to call the "open" method of an SNS token swap canister.
 #[derive(
