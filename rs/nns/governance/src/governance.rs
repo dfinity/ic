@@ -5322,8 +5322,14 @@ impl Governance {
         let action = self.validate_proposal(proposal)?;
 
         // At this point, the topic should be valid because the proposal was just validated, but we
-        // exit on error anyway.
+        // exit on error anyway and check for Topic::Unspecified, just to be safe.
         let topic = proposal.compute_topic_at_creation()?;
+        if topic == Topic::Unspecified {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "Topic is unspecified. This should never happen.",
+            ));
+        }
 
         // Before actually modifying anything, we first make sure that
         // the neuron is allowed to make this proposal and create the
