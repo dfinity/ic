@@ -107,31 +107,6 @@ impl Storable for pb::v1::NodeMetrics {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn max_bound_size() {
-        let max_subnet_id_stored = pb::v1::SubnetIdKey {
-            subnet_id: MAX_PRINCIPAL_ID.into(),
-        };
-        let max_subnet_metrics_stored_key = pb::v1::SubnetMetricsKey {
-            timestamp_nanos: u64::MAX,
-            subnet_id: MAX_PRINCIPAL_ID.into(),
-        };
-
-        assert_eq!(
-            max_subnet_id_stored.to_bytes().len(),
-            MAX_BYTES_SUBNET_ID_STORED as usize
-        );
-
-        assert_eq!(
-            max_subnet_metrics_stored_key.to_bytes().len(),
-            MAX_BYTES_NODE_METRICS_STORED_KEY as usize
-        );
-    }
-}
-
 impl From<SubnetId> for pb::v1::SubnetIdKey {
     fn from(subnet_id: SubnetId) -> Self {
         Self {
@@ -162,5 +137,30 @@ impl From<NodeMetrics> for pb::v1::NodeMetrics {
             num_blocks_proposed_total: metrics.num_blocks_proposed_total,
             num_blocks_failed_total: metrics.num_block_failures_total,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn max_bound_size() {
+        let max_subnet_id_stored = pb::v1::SubnetIdKey {
+            subnet_id: MAX_PRINCIPAL_ID.into(),
+        };
+        let max_subnet_metrics_stored_key = pb::v1::SubnetMetricsKey {
+            timestamp_nanos: u64::MAX,
+            subnet_id: MAX_PRINCIPAL_ID.into(),
+        };
+
+        assert_eq!(
+            max_subnet_id_stored.to_bytes().len(),
+            MAX_BYTES_SUBNET_ID_STORED as usize
+        );
+
+        assert_eq!(
+            max_subnet_metrics_stored_key.to_bytes().len(),
+            MAX_BYTES_NODE_METRICS_STORED_KEY as usize
+        );
     }
 }
