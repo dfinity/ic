@@ -19,9 +19,12 @@ use anyhow::Result;
 use candid::Principal;
 use canister_test::Canister;
 use ic_base_types::{NodeId, SubnetId};
-use ic_consensus_system_test_utils::rw_message::{
-    can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
-    install_nns_and_check_progress, store_message,
+use ic_consensus_system_test_utils::{
+    node::await_subnet_earliest_topology_version,
+    rw_message::{
+        can_read_msg, can_read_msg_with_retries, cert_state_makes_progress_with_retries,
+        install_nns_and_check_progress, store_message,
+    },
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::NnsFunction;
@@ -95,7 +98,24 @@ fn adding_new_nodes_to_subnet_test(env: TestEnv) {
             &logger,
         );
 
-        verify_node_is_making_progress(&unassigned_node, canister_id, &logger);
+        assert!(can_read_msg_with_retries(
+            &logger,
+            &unassigned_node.get_public_url(),
+            canister_id,
+            MESSAGE_IN_THE_CANISTER,
+            10,
+        ));
+    }
+
+    let (_, app_subnet) = get_subnets(&env);
+    for node in app_subnet.nodes() {
+        cert_state_makes_progress_with_retries(
+            &node.get_public_url(),
+            node.effective_canister_id(),
+            &logger,
+            secs(600),
+            secs(10),
+        );
     }
 }
 
@@ -152,7 +172,14 @@ fn wait_until_node_in_subnet(
     // The node is not unassigned anymore
     assert!(!new_topology_snapshot
         .unassigned_nodes()
-        .any(|node| node.node_id == node_id))
+        .any(|node| node.node_id == node_id));
+
+    let subnet = new_topology_snapshot
+        .subnets()
+        .find(|s| s.subnet_id == subnet_id)
+        .unwrap();
+    let target_version = new_topology_snapshot.get_registry_version();
+    await_subnet_earliest_topology_version(&subnet, target_version, logger);
 }
 
 fn prepare_subnet(subnet: &SubnetSnapshot, logger: &Logger) -> Principal {
@@ -182,22 +209,6 @@ fn prepare_subnet(subnet: &SubnetSnapshot, logger: &Logger) -> Principal {
     ));
 
     canister_id
-}
-
-fn verify_node_is_making_progress(node: &IcNodeSnapshot, canister_id: Principal, logger: &Logger) {
-    ic_consensus_system_test_utils::assert_node_is_making_progress(
-        node,
-        logger,
-        (3 * (DKG_INTERVAL + 1)).into(),
-    );
-
-    assert!(can_read_msg_with_retries(
-        logger,
-        &node.get_public_url(),
-        canister_id,
-        MESSAGE_IN_THE_CANISTER,
-        10,
-    ));
 }
 
 fn get_subnets(

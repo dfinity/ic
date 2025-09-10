@@ -15,7 +15,7 @@ use canister_test::Project;
 use ic_base_types::CanisterId;
 use ic_management_canister_types::CanisterSettings;
 use pocket_ic::{
-    common::rest::{EmptyConfig, IcpFeatures},
+    common::rest::{IcpFeatures, IcpFeaturesConfig},
     nonblocking::PocketIc,
     PocketIcBuilder,
 };
@@ -64,7 +64,7 @@ async fn setup() -> (
 
     let pic = PocketIcBuilder::new()
         .with_icp_features(IcpFeatures {
-            registry: Some(EmptyConfig {}),
+            registry: Some(IcpFeaturesConfig::DefaultConfig),
             ..Default::default()
         })
         .with_state_dir(state_dir.clone())
@@ -138,7 +138,7 @@ async fn setup() -> (
 
 #[tokio::test]
 async fn test_validation_succeeds() {
-    let (pic, source_subnet, target_subnet, source, target, controllers) = setup().await;
+    let (pic, _source_subnet, _target_subnet, source, target, controllers) = setup().await;
     let sender = controllers[0];
 
     // make migration canister controller of source

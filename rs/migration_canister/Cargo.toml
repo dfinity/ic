@@ -1,10 +1,10 @@
 [package]
-name = "ic-migration-canister"
-version.workspace = true
 authors.workspace = true
-edition.workspace = true
 description.workspace = true
 documentation.workspace = true
+edition.workspace = true
+name = "ic-migration-canister"
+version.workspace = true
 
 [lib]
 crate-type = ["cdylib"]
@@ -15,8 +15,8 @@ futures = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-stable-structures = "0.7.0"
+serde = { workspace = true }
 serde_cbor = { workspace = true }
-serde = { workspace =true }
 
 [dev-dependencies]
 pocket-ic = { path = "../../packages/pocket-ic" }
@@ -27,5 +27,4 @@ ic-management-canister-types = { workspace = true }
 ic-nns-test-utils = { path = "../nns/test_utils" }
 registry-canister = { path = "../registry/canister" }
 canister-test = { path = "../rust_canisters/canister_test" }
-
 

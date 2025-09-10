@@ -4,6 +4,7 @@ type AccountIdentifier = record {
 
 type Action = variant {
   RegisterKnownNeuron : KnownNeuron;
+  DeregisterKnownNeuron : DeregisterKnownNeuron;
   ManageNeuron : ManageNeuron;
   UpdateCanisterSettings : UpdateCanisterSettings;
   InstallCode : InstallCode;
@@ -308,7 +309,6 @@ type GlobalTimeOfDay = record {
 
 type Governance = record {
   default_followees : vec record { int32; Followees };
-  making_sns_proposal : opt MakingSnsProposal;
   most_recent_monthly_node_provider_rewards : opt MonthlyNodeProviderRewards;
   maturity_modulation_last_updated_at_timestamp_seconds : opt nat64;
   wait_for_quiet_threshold_seconds : nat64;
@@ -438,6 +438,10 @@ type KnownNeuron = record {
   known_neuron_data : opt KnownNeuronData;
 };
 
+type DeregisterKnownNeuron = record {
+  id : opt NeuronId;
+};
+
 type KnownNeuronData = record {
   name : text;
   description : opt text;
@@ -510,12 +514,6 @@ type MakeProposalRequest = record {
 type MakeProposalResponse = record {
   message : opt text;
   proposal_id : opt ProposalId;
-};
-
-type MakingSnsProposal = record {
-  proposal : opt Proposal;
-  caller : opt principal;
-  proposer_id : opt NeuronId;
 };
 
 type ManageNeuron = record {
@@ -868,6 +866,7 @@ type Proposal = record {
 
 type ProposalActionRequest = variant {
   RegisterKnownNeuron : KnownNeuron;
+  DeregisterKnownNeuron : DeregisterKnownNeuron;
   ManageNeuron : ManageNeuronRequest;
   UpdateCanisterSettings : UpdateCanisterSettings;
   InstallCode : InstallCodeRequest;

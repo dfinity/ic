@@ -58,6 +58,13 @@ pub mod common;
 pub mod ecdsa;
 pub mod schnorr;
 
+/// If enabled, pre-signature artifacts required to serve canister threshold signature requests
+/// (tECDSA/tSchnorr) will be stored in the pre-signature stash residing in replicated state.
+/// This means they will be immediately purged from the blockchain once delivered.
+/// If disabled, pre-signatures remain on the blockchain, until they are consumed by a signature
+/// request.
+pub const STORE_PRE_SIGNATURES_IN_STATE: bool = false;
+
 /// For completed signature requests, we differentiate between those
 /// that have already been reported and those that have not. This is
 /// to prevent signatures from being reported more than once.
@@ -97,6 +104,17 @@ impl From<IDkgMasterPublicKeyId> for MasterPublicKeyId {
 impl IDkgMasterPublicKeyId {
     pub fn inner(&self) -> &MasterPublicKeyId {
         &self.0
+    }
+
+    /// Return the transcript capacity required to create a pre-signature for this key ID
+    pub fn required_pre_sig_capacity(&self) -> usize {
+        match self.inner() {
+            // Ecdsa pre-signatures require working on 2 transcripts in parallel
+            MasterPublicKeyId::Ecdsa(_) => 2,
+            // Schnorr pre-signatures consist of only 1 transcript
+            MasterPublicKeyId::Schnorr(_) => 1,
+            MasterPublicKeyId::VetKd(_) => unreachable!("not an IDkg Key"),
+        }
     }
 }
 
@@ -367,6 +385,14 @@ impl IDkgPayload {
                 None
             }
         })
+    }
+
+    /// Return the total transcript capacity consumed by ongoing pre-signatures in this payload
+    pub fn consumed_pre_sig_capacity(&self) -> usize {
+        self.pre_signatures_in_creation
+            .values()
+            .map(|pre_sig| pre_sig.key_id().required_pre_sig_capacity())
+            .sum()
     }
 }
 

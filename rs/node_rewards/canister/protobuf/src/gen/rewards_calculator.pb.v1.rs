@@ -125,24 +125,3 @@ pub struct NodeProviderRewards {
     #[prost(message, repeated, tag = "4")]
     pub nodes_results: ::prost::alloc::vec::Vec<NodeResults>,
 }
-#[derive(PartialOrd, Ord, Eq, Clone, PartialEq, ::prost::Message)]
-pub struct NodeProviderRewardsKey {
-    #[prost(message, optional, tag = "1")]
-    pub principal_id: ::core::option::Option<::ic_base_types::PrincipalId>,
-    #[prost(message, optional, tag = "2")]
-    pub end_day: ::core::option::Option<DayUtc>,
-    #[prost(message, optional, tag = "3")]
-    pub start_day: ::core::option::Option<DayUtc>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SubnetsFailureRateValue {
-    #[prost(message, optional, tag = "1")]
-    pub subnet_fr_percent: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Decimal>,
-}
-#[derive(PartialOrd, Ord, Eq, Clone, PartialEq, ::prost::Message)]
-pub struct SubnetsFailureRateKey {
-    #[prost(message, optional, tag = "1")]
-    pub day: ::core::option::Option<DayUtc>,
-    #[prost(message, optional, tag = "2")]
-    pub subnet_id: ::core::option::Option<::ic_base_types::PrincipalId>,
-}

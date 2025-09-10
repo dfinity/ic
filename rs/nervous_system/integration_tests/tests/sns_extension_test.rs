@@ -208,8 +208,8 @@ async fn do_test_treasury_manager() {
         "After registering KongSwapAdaptor",
         &sns,
         &pocket_ic,
-        initial_icp_balance_e8s - initial_treasury_allocation_icp_e8s,
-        initial_sns_balance_e8s - initial_treasury_allocation_sns_e8s,
+        initial_icp_balance_e8s - (initial_treasury_allocation_icp_e8s + ICP_FEE),
+        initial_sns_balance_e8s - (initial_treasury_allocation_sns_e8s + SNS_FEE),
     )
     .await
     .unwrap();
@@ -226,11 +226,11 @@ async fn do_test_treasury_manager() {
             response.asset_to_balances,
             Some(btreemap! {
                 sns_token.clone() => empty_sns_balance_book.clone()
-                    .external_custodian(initial_treasury_allocation_sns_e8s - 4 * SNS_FEE)
-                    .fee_collector(2 * SNS_FEE),
+                    .external_custodian(initial_treasury_allocation_sns_e8s - 3 * SNS_FEE)
+                    .fee_collector(3 * SNS_FEE),
                 icp_token.clone() => empty_icp_balance_book.clone()
-                    .external_custodian(initial_treasury_allocation_icp_e8s - 4 * ICP_FEE)
-                    .fee_collector(2 * ICP_FEE),
+                    .external_custodian(initial_treasury_allocation_icp_e8s - 3 * ICP_FEE)
+                    .fee_collector(3 * ICP_FEE),
             }),
         );
     }
@@ -323,21 +323,26 @@ async fn do_test_treasury_manager() {
             println!(">>> AuditTrail: {:#?}", response);
         }
 
-        let expected_sns_fee_collector = 6 * SNS_FEE;
-        let expected_icp_fee_collector = 7 * ICP_FEE;
-
-        // As during deposits and intialisation, an approval and a transfer fee is also paid.
-        // Hence, the value reached the treasury manager is 2 * FEE less than the value in the proposal.
-        let num_deposits = 2;
-        let expected_fees_sns_e8s = expected_sns_fee_collector + num_deposits * 2 * SNS_FEE;
-        let expected_fees_icp_e8s = expected_icp_fee_collector + num_deposits * 2 * ICP_FEE;
+        // We have done 2 deposits and 1 withdrawal.
+        // Each deposit has three fees:
+        // - transfer fee from treasury owner to the treasury manager
+        // - approval fee given from the treasury manager to the external custodian
+        // - transfer fee from the treasury manager to the external custodian
+        // Withdrawal has two fees:
+        // - transfer fee from the external custodian to the treasury manager
+        // - transfer fee from the treasury manager to the treasury owner
+        let expected_sns_fee_collector = 8 * SNS_FEE;
+        // Second deposit takes place with deposit ratio (SNS/ICP)
+        // lower than the market ratio (SNS/ICP in the pool). Hence,
+        // the excess amount of ICP is returned to the treasury owner.
+        let expected_icp_fee_collector = 9 * ICP_FEE;
 
         let treasury_allocation_sns_e8s = initial_treasury_allocation_sns_e8s
             + topup_treasury_allocation_sns_e8s
-            - expected_fees_sns_e8s;
+            - expected_sns_fee_collector;
         let treasury_allocation_icp_e8s = initial_treasury_allocation_icp_e8s
             + topup_treasury_allocation_icp_e8s
-            - expected_fees_icp_e8s;
+            - expected_icp_fee_collector;
 
         let response = pocket_ic
             .call(extension_canister_id, BalancesRequest {})

@@ -602,6 +602,8 @@ pub mod proposal {
         RewardNodeProviders(super::RewardNodeProviders),
         /// Register Known Neuron
         RegisterKnownNeuron(super::KnownNeuron),
+        /// Deregister Known Neuron
+        DeregisterKnownNeuron(super::DeregisterKnownNeuron),
         /// Obsolete. Superseded by CreateServiceNervousSystem. Kept for Candid compatibility.
         SetSnsTokenSwapOpenTimeWindow(super::SetSnsTokenSwapOpenTimeWindow),
         /// Call the open method on an SNS swap canister.
@@ -1374,6 +1376,7 @@ pub enum ProposalActionRequest {
     RewardNodeProvider(RewardNodeProvider),
     RewardNodeProviders(RewardNodeProviders),
     RegisterKnownNeuron(KnownNeuron),
+    DeregisterKnownNeuron(DeregisterKnownNeuron),
     CreateServiceNervousSystem(CreateServiceNervousSystem),
     InstallCode(InstallCodeRequest),
     StopOrStartCanister(StopOrStartCanister),
@@ -2195,6 +2198,13 @@ pub struct KnownNeuronData {
     pub name: String,
     pub description: Option<String>,
 }
+/// Proposal action to deregister a known neuron by removing its name and description.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct DeregisterKnownNeuron {
+    pub id: Option<NeuronId>,
+}
 /// Proposal action to call the "open" method of an SNS token swap canister.
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
@@ -2708,7 +2718,6 @@ pub struct Governance {
     /// Whether the heartbeat function is currently spawning neurons, meaning
     /// that it should finish before being called again.
     pub spawning_neurons: Option<bool>,
-    pub making_sns_proposal: Option<governance::MakingSnsProposal>,
     /// Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
     pub xdr_conversion_rate: Option<XdrConversionRate>,
     /// The summary of restore aging event.
@@ -2866,22 +2875,6 @@ pub mod governance {
             pub deciding_voting_power_buckets: ::std::collections::HashMap<u64, u64>,
             pub potential_voting_power_buckets: ::std::collections::HashMap<u64, u64>,
         }
-    }
-    /// Records that making an OpenSnsTokenSwap (OSTS) or CreateServiceNervousSystem (CSNS)
-    /// proposal is in progress. We only want one of these to be happening at the same time,
-    /// because otherwise, it is error prone to enforce that open OSTS or CSNS proposals are
-    /// unique. In particular, the result of checking that the proposal currently being made
-    /// would be unique is liable to becoming invalid during an .await.
-    ///
-    /// This is a temporary measure, because OSTS is part of the SNS flow that will
-    /// be replaced by 1-proposal very soon.
-    #[derive(
-        candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
-    )]
-    pub struct MakingSnsProposal {
-        pub proposer_id: Option<NeuronId>,
-        pub caller: Option<PrincipalId>,
-        pub proposal: Option<super::Proposal>,
     }
 }
 #[derive(

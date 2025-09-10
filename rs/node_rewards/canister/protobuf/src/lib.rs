@@ -105,36 +105,6 @@ impl Storable for pb::rewards_calculator::v1::NodeProviderRewards {
     const BOUND: Bound = Bound::Unbounded;
 }
 
-impl Storable for pb::rewards_calculator::v1::NodeProviderRewardsKey {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
-        Cow::Owned(self.encode_to_vec())
-    }
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
-        Self::decode(bytes.as_ref()).unwrap()
-    }
-    const BOUND: Bound = Bound::Unbounded;
-}
-
-impl Storable for pb::rewards_calculator::v1::SubnetsFailureRateKey {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
-        Cow::Owned(self.encode_to_vec())
-    }
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
-        Self::decode(bytes.as_ref()).unwrap()
-    }
-    const BOUND: Bound = Bound::Unbounded;
-}
-
-impl Storable for pb::rewards_calculator::v1::SubnetsFailureRateValue {
-    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
-        Cow::Owned(self.encode_to_vec())
-    }
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
-        Self::decode(bytes.as_ref()).unwrap()
-    }
-    const BOUND: Bound = Bound::Unbounded;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
