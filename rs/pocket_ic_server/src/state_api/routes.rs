@@ -921,7 +921,7 @@ async fn handle_raw<T: Operation + Send + Sync + 'static>(
         }
         ApiResponse::Error { message } => make_plaintext_response(code, message),
         ApiResponse::Busy { .. } | ApiResponse::Started { .. } => {
-            unreachable!("/api endpoints should always produce a full response")
+            unreachable!("/api endpoints should always produce a response")
         }
     };
     (code, NoApi(response))
