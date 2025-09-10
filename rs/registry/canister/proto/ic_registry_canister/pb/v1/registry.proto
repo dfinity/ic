@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package ic_registry_canister.pb.v1;
 
-// DO NOT MERGE - import "ic_registry_transport/pb/v1/transport.proto";
 import "ic_base_types/pb/v1/types.proto";
 
 message ChangelogEntry {
