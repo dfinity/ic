@@ -27,7 +27,9 @@ pub enum Error {
     UnknownKeyIdentifier,
     /// The algorithm is not supported (possibly due to an unset feature)
     AlgorithmNotSupported,
-    /// Currently the canister must be specified
+    /// The canister must be specified in the argument structs since the library
+    /// has no other way of determining the correct value, and the canister id
+    /// is a necessary component of the key derivation.
     CanisterIdMissing,
     /// The derivation path is not valid for this algorithm
     ///
@@ -150,7 +152,6 @@ impl TryFrom<&SchnorrKeyId> for MasterPublicKey {
             }
         }
 
-        let _ignored = key_id;
         Err(Error::AlgorithmNotSupported)
     }
 }
@@ -167,7 +168,6 @@ impl TryFrom<&VetKDKeyId> for MasterPublicKey {
             }
         }
 
-        let _ignore = key_id;
         Err(Error::AlgorithmNotSupported)
     }
 }
@@ -194,7 +194,10 @@ pub struct CanisterMasterKey {
 impl CanisterMasterKey {
     /// Derive the public key from a canister key and a single contextual input
     ///
-    /// This is the only supported method for VetKD keys
+    /// VetKeys requires exactly one contextual input be supplied. In addition,
+    /// if that contextual input is the empty bytestring then the "derived key"
+    /// is identical to the canister master public key. This matches the
+    /// behavior of the management canister interface.
     ///
     /// For other keys, which support a path of inputs, this is equivalent to deriving
     /// using a path of length 1
@@ -235,7 +238,11 @@ impl CanisterMasterKey {
 
     /// Derive a public key using a path of contextual inputs
     ///
-    /// This can fail in the case of VetKD which only supports a single path input
+    /// VetKeys requires exactly one contextual input be supplied. In addition,
+    /// if that contextual input is the empty bytestring then the "derived key"
+    /// is identical to the canister master public key. This matches the
+    /// behavior of the management canister interface.
+    ///
     pub fn derive_key(&self, path: &[Vec<u8>]) -> Result<DerivedPublicKey, Error> {
         let inner = match &self.inner {
             #[cfg(feature = "secp256k1")]
@@ -274,11 +281,7 @@ impl CanisterMasterKey {
             }
             #[cfg(feature = "vetkeys")]
             DerivedPublicKeyInner::VetKD(ck) => {
-                // Note here we reject also empty paths which behave quite differently for VetKD vs
-                // the BIP32-derived schemes; if the context is empty then the original canister master
-                // public key is returned. To avoid confusing situations we reject both empty paths
-                // also require exactly one path element is supplied
-                if path.len() == 1 && !path[0].is_empty() {
+                if path.len() == 1 {
                     DerivedPublicKeyInner::VetKD(ck.derive_sub_key(&path[0]))
                 } else {
                     return Err(Error::InvalidPath);
@@ -402,14 +405,8 @@ pub fn derive_vetkd_key(args: &VetKDPublicKeyArgs) -> Result<VetKDPublicKeyResul
 
     let ck = MasterPublicKey::try_from(&args.key_id)?.derive_canister_key(&canister_id);
 
-    if args.context.is_empty() {
-        Ok(VetKDPublicKeyResult {
-            public_key: ck.serialize(),
-        })
-    } else {
-        let dk = ck.derive_key_with_context(&args.context);
-        Ok(VetKDPublicKeyResult {
-            public_key: dk.serialize(),
-        })
-    }
+    let dk = ck.derive_key_with_context(&args.context);
+    Ok(VetKDPublicKeyResult {
+        public_key: dk.serialize(),
+    })
 }
