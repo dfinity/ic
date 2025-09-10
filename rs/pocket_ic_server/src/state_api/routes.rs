@@ -37,8 +37,8 @@ use ic_http_endpoints_public::{cors_layer, query, read_state};
 use ic_types::{CanisterId, SubnetId};
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
-    HttpGatewayDetails, IcpFeatures, InitialTime, InstanceConfig, MockCanisterHttpResponse,
-    NonmainnetFeatures, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
+    HttpGatewayDetails, IcpConfig, IcpFeatures, InitialTime, InstanceConfig,
+    MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
     RawCanisterResult, RawCycles, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
     RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, TickConfigs,
     Topology,
@@ -1327,15 +1327,6 @@ pub async fn create_instance(
     };
     let auto_progress_enabled = auto_progress.is_some();
 
-    if instance_config.http_gateway_config.is_some() && !auto_progress_enabled {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(rest::CreateInstanceResponse::Error {
-                message: "Creating an HTTP gateway requires `AutoProgress` to be enabled via `initial_time`.".to_string()
-            }),
-        );
-    }
-
     if let Some(ref icp_features) = instance_config.icp_features {
         // using `let IcpFeatures { }` with explicit field names
         // to force an update after adding a new field to `IcpFeatures`
@@ -1387,13 +1378,11 @@ pub async fn create_instance(
                     seed,
                     subnet_configs,
                     instance_config.state_dir,
-                    instance_config
-                        .nonmainnet_features
-                        .unwrap_or(NonmainnetFeatures::default()),
+                    instance_config.icp_config.unwrap_or(IcpConfig::default()),
                     log_level,
                     instance_config.bitcoind_addr,
                     instance_config.icp_features,
-                    instance_config.allow_incomplete_state,
+                    instance_config.incomplete_state,
                     initial_time,
                     auto_progress_enabled,
                     gateway_port,

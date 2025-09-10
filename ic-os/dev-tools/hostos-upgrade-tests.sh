@@ -24,7 +24,7 @@ for version in "${VERSIONS[@]}"; do
     echo "==================================="
 
     tmpfile=$(mktemp)
-    url="https://download.dfinity.systems/ic/${version}/host-os/update-img-dev/update-img.tar.zst"
+    url="https://download.dfinity.systems/ic/${version}/host-os/update-img/update-img.tar.zst"
 
     echo "Downloading update image from $url ..."
     if ! curl -fL -o "$tmpfile" "$url"; then
@@ -35,12 +35,12 @@ for version in "${VERSIONS[@]}"; do
     fi
 
     hash=$(sha256sum "$tmpfile" | awk '{print $1}')
-    echo "Calculated update_img_hash_dev: $hash"
+    echo "Calculated update_img_hash: $hash"
     rm -f "$tmpfile"
 
     # Update the mainnet-icos-revisions.json file with the current version and computed hash.
     if ! jq --arg ver "$version" --arg hash "$hash" \
-        '.hostos.latest_release.version = $ver | .hostos.latest_release.update_img_hash_dev = $hash' \
+        '.hostos.latest_release.version = $ver | .hostos.latest_release.update_img_hash = $hash' \
         "$REVISIONS_FILE" >"${REVISIONS_FILE}.tmp"; then
         echo "Failed to update $REVISIONS_FILE for version $version."
         results["$version"]="JSON update failed"

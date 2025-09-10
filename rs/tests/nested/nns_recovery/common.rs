@@ -60,6 +60,7 @@ pub struct SetupConfig {
     pub impersonate_upstreams: bool,
 }
 
+#[derive(Debug)]
 pub struct TestConfig {
     pub local_recovery: bool,
 }

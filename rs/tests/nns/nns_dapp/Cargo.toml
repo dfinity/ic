@@ -7,10 +7,12 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
+canister-test = { path = "../../../rust_canisters/canister_test" }
 ic-ledger-core = { path = "../../../ledger_suite/common/ledger_core" }
 icp-ledger = { path = "../../../ledger_suite/icp" }
 ic-icrc1-ledger = { path = "../../../ledger_suite/icrc1/ledger" }
 ic-nns-constants = { path = "../../../nns/constants" }
+ic-nns-test-utils = { path = "../../../nns/test_utils" }
 ic-registry-subnet-type = { path = "../../../registry/subnet_type" }
 ic-system-test-driver = { path = "../../driver" }
 ic-base-types = { path = "../../../types/base_types" }
