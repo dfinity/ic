@@ -56,9 +56,9 @@
 use crate::{
     common::rest::{
         AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet,
-        HttpsConfig, IcpFeatures, InitialTime, InstanceHttpGatewayConfig, InstanceId,
-        MockCanisterHttpResponse, NonmainnetFeatures, RawEffectivePrincipal, RawMessageId, RawTime,
-        SubnetId, SubnetKind, SubnetSpec, Topology,
+        HttpsConfig, IcpConfig, IcpFeatures, InitialTime, InstanceHttpGatewayConfig, InstanceId,
+        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, RawTime, SubnetId,
+        SubnetKind, SubnetSpec, Topology,
     },
     nonblocking::PocketIc as PocketIcAsync,
 };
@@ -160,7 +160,7 @@ pub struct PocketIcBuilder {
     max_request_time_ms: Option<u64>,
     read_only_state_dir: Option<PathBuf>,
     state_dir: Option<PocketIcState>,
-    nonmainnet_features: NonmainnetFeatures,
+    icp_config: IcpConfig,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
     icp_features: IcpFeatures,
@@ -178,7 +178,7 @@ impl PocketIcBuilder {
             max_request_time_ms: Some(DEFAULT_MAX_REQUEST_TIME_MS),
             read_only_state_dir: None,
             state_dir: None,
-            nonmainnet_features: NonmainnetFeatures::default(),
+            icp_config: IcpConfig::default(),
             log_level: None,
             bitcoind_addr: None,
             icp_features: IcpFeatures::default(),
@@ -200,7 +200,7 @@ impl PocketIcBuilder {
             self.max_request_time_ms,
             self.read_only_state_dir,
             self.state_dir,
-            self.nonmainnet_features,
+            self.icp_config,
             self.log_level,
             self.bitcoind_addr,
             self.icp_features,
@@ -217,7 +217,7 @@ impl PocketIcBuilder {
             self.max_request_time_ms,
             self.read_only_state_dir,
             self.state_dir,
-            self.nonmainnet_features,
+            self.icp_config,
             self.log_level,
             self.bitcoind_addr,
             self.icp_features,
@@ -259,8 +259,8 @@ impl PocketIcBuilder {
         self
     }
 
-    pub fn with_nonmainnet_features(mut self, nonmainnet_features: NonmainnetFeatures) -> Self {
-        self.nonmainnet_features = nonmainnet_features;
+    pub fn with_icp_config(mut self, icp_config: IcpConfig) -> Self {
+        self.icp_config = icp_config;
         self
     }
 
@@ -437,9 +437,9 @@ impl PocketIcBuilder {
     /// Configures the new instance to make progress automatically,
     /// i.e., periodically update the time of the IC instance
     /// to the real time and execute rounds on the subnets.
-    pub fn with_auto_progress(mut self, artificial_delay_ms: Option<u64>) -> Self {
+    pub fn with_auto_progress(mut self) -> Self {
         let config = AutoProgressConfig {
-            artificial_delay_ms,
+            artificial_delay_ms: None,
         };
         self.initial_time = Some(InitialTime::AutoProgress(config));
         self
@@ -558,7 +558,7 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
         read_only_state_dir: Option<PathBuf>,
         state_dir: Option<PocketIcState>,
-        nonmainnet_features: NonmainnetFeatures,
+        icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
@@ -583,7 +583,7 @@ impl PocketIc {
                 max_request_time_ms,
                 read_only_state_dir,
                 state_dir,
-                nonmainnet_features,
+                icp_config,
                 log_level,
                 bitcoind_addr,
                 icp_features,
@@ -785,13 +785,6 @@ impl PocketIc {
     /// and the HTTP gateway for this IC instance.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn stop_live(&mut self) {
-        let runtime = self.runtime.clone();
-        runtime.block_on(async { self.pocket_ic.stop_live().await })
-    }
-
-    #[deprecated(note = "Use `stop_live` instead.")]
-    /// Use `stop_live` instead.
-    pub fn make_deterministic(&mut self) {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.stop_live().await })
     }

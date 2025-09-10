@@ -1,12 +1,17 @@
 use crate::{
     are_fulfill_subnet_rental_request_proposals_enabled,
-    governance::Environment,
+    governance::{Environment, LOG_PREFIX},
     pb::v1::{governance_error::ErrorType, FulfillSubnetRentalRequest, GovernanceError},
 };
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 #[allow(unused)]
 use ic_cdk::println;
+use ic_limits::{
+    DKG_DEALINGS_PER_BLOCK, DKG_INTERVAL_HEIGHT, INITIAL_NOTARY_DELAY, MAX_BLOCK_PAYLOAD_SIZE,
+    MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET, MAX_INGRESS_MESSAGES_PER_BLOCK,
+    UNIT_DELAY_APP_SUBNET,
+};
 use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_constants::{REGISTRY_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID};
 use ic_protobuf::registry::subnet::v1::SubnetFeatures;
@@ -187,6 +192,27 @@ impl FulfillSubnetRentalRequest {
 
     async fn create_subnet(&self, env: &Arc<dyn Environment>) -> Result<SubnetId, GovernanceError> {
         // Construct create_subnet request.
+        let unit_delay_millis = u64::try_from(UNIT_DELAY_APP_SUBNET.as_millis()).unwrap_or_else(|err| {
+            println!(
+                "{}WARNING: unable to convert UNIT_DELAY_APP_SUBNET ({:?}) to u64 (in ms); falling back to 1_000 ms: {}",
+                LOG_PREFIX, UNIT_DELAY_APP_SUBNET, err,
+            );
+            1_000
+        });
+        let initial_notary_delay_millis = u64::try_from(INITIAL_NOTARY_DELAY.as_millis()).unwrap_or_else(|err| {
+            println!(
+                "{}WARNING: unable to convert INITIAL_NOTARY_DELAY ({:?}) to u64 (in ms); falling back to 300 ms: {}",
+                LOG_PREFIX, INITIAL_NOTARY_DELAY, err,
+            );
+            300
+        });
+        let dkg_dealings_per_block = u64::try_from(DKG_DEALINGS_PER_BLOCK).unwrap_or_else(|err| {
+            println!(
+                "{}WARNING: unable to convert DKG_DEALINGS_PER_BLOCK ({:?}) to u64; falling back to 1: {}",
+                LOG_PREFIX, DKG_DEALINGS_PER_BLOCK, err,
+            );
+            1
+        });
         let create_subnet_payload = Encode!(&CreateSubnetPayload {
             // This is the main thing that distinguishes this subnet from "normal" subnets.
             canister_cycles_cost_schedule: Some(CanisterCyclesCostSchedule::Free),
@@ -199,10 +225,9 @@ impl FulfillSubnetRentalRequest {
                 .collect(),
             replica_version_id: self.replica_version_id.clone(),
 
-            // Remaining fields contain standard values.
-            // TODO(NNS1-3931): Confirm that the hard-coded values used
-            // below are appropriate for rented subnets. (I ripped these
-            // from a create_subnet proposal.)
+            // Remaining fields contain standard values. If the value is not
+            // from an ic_limits constant, then, I most likely grabbed the value
+            // seen here from an adopted create application subnet NNS proposal.
             features: SubnetFeatures {
                 canister_sandboxing: false,
                 http_requests: true,
@@ -216,13 +241,13 @@ impl FulfillSubnetRentalRequest {
             chain_key_config: None,
 
             // Sizes
-            max_ingress_bytes_per_message: 2 << 20, // 2 MiB
-            max_ingress_messages_per_block: 1000,
-            max_block_payload_size: 4 << 20,
-            unit_delay_millis: 1000,
-            initial_notary_delay_millis: 300,
-            dkg_dealings_per_block: 1,
-            dkg_interval_length: 499,
+            max_ingress_bytes_per_message: MAX_INGRESS_BYTES_PER_MESSAGE_APP_SUBNET,
+            max_ingress_messages_per_block: MAX_INGRESS_MESSAGES_PER_BLOCK,
+            max_block_payload_size: MAX_BLOCK_PAYLOAD_SIZE,
+            unit_delay_millis,
+            initial_notary_delay_millis,
+            dkg_dealings_per_block,
+            dkg_interval_length: DKG_INTERVAL_HEIGHT,
             max_number_of_canisters: 0,
 
             // Authorization.

@@ -8,10 +8,10 @@ use ic_error_types::{RejectCode, UserError};
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
-    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    Method, Payload as _, ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs,
-    ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs, StoredChunksArgs,
-    TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
+    FetchCanisterLogsRequest, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs, Method, Payload as _, ProvisionalTopUpCanisterArgs,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
+    StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
     UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_protobuf::{
@@ -271,10 +271,12 @@ impl Request {
                 // No effective canister id.
                 None
             }
-            // `FetchCanisterLogs` method is only allowed for messages sent by
-            // end users in non-replicated mode, so we should never reach this point.
-            // If we do, we return `None` (which should be no-op) to avoid panicking.
-            Ok(Method::FetchCanisterLogs) => None,
+            Ok(Method::FetchCanisterLogs) => {
+                match FetchCanisterLogsRequest::decode(&self.method_payload) {
+                    Ok(record) => Some(record.get_canister_id()),
+                    Err(_) => None,
+                }
+            }
             Err(_) => None,
         }
     }

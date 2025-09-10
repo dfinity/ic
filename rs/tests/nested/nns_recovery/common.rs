@@ -54,6 +54,7 @@ pub struct SetupConfig {
     pub impersonate_upstreams: bool,
 }
 
+#[derive(Debug)]
 pub struct TestConfig {
     pub break_dfinity_owned_node: bool,
 }

@@ -1089,7 +1089,6 @@ impl Neuron {
 
     /// Does NOT touch visiblity. If you want to go private, call set_visibility
     /// after calling this.
-    #[cfg(test)] // This can be used in production, but so far, it is not needed.
     pub(crate) fn clear_known_neuron_data(&mut self) {
         self.known_neuron_data = None;
     }
