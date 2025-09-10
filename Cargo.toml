@@ -324,6 +324,7 @@ members = [
     "rs/registry/canister",
     "rs/registry/canister/api",
     "rs/registry/canister/chunkify",
+    "rs/registry/canister/test_registry_builder",
     "rs/registry/canister-client",
     "rs/registry/canister/protobuf_generator",
     "rs/registry/client",
