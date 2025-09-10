@@ -33,9 +33,9 @@ pub enum StepType {
     CreateRegistryTar,
     CopyIcState,
     GetRecoveryCUP,
+    CreateArtifacts,
     UploadCUPAndRegistry,
     WaitForCUP,
-    CreateArtifacts,
     UploadState,
     Cleanup,
 }
@@ -84,6 +84,10 @@ pub struct NNSRecoverySameNodesArgs {
     pub backup_key_file: Option<PathBuf>,
 
     /// The output directory where the recovery artifacts (and its hash) will be stored.
+    /// IMPORTANT: this directory must be in a shared mount of the node if doing the recovery
+    /// locally (like /var/lib/ic/data) because the WaitForCUP step (which happens after the
+    /// artifacts are created) upgrades the node and thus swaps partitions. If not in a shared
+    /// mount, the recovery artifacts will be lost after the upgrade.
     #[clap(long)]
     pub output_dir: Option<PathBuf>,
 
@@ -175,6 +179,15 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 if self.params.replay_until_height.is_none() {
                     self.params.replay_until_height =
                         read_optional(&self.logger, "Replay until height: ");
+                }
+            }
+
+            StepType::CreateArtifacts => {
+                if self.params.output_dir.is_none() {
+                    self.params.output_dir = read_optional(
+                        &self.logger,
+                        "Enter output directory for recovery artifacts (must be in a shared mount if doing local recovery):",
+                    );
                 }
             }
 
@@ -303,6 +316,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                     .get_recovery_cup_step(self.params.subnet_id, !self.interactive())?,
             )),
 
+            StepType::CreateArtifacts => Ok(Box::new(
+                self.recovery
+                    .get_create_nns_recovery_tar_step(self.params.output_dir.clone()),
+            )),
+
             StepType::UploadCUPAndRegistry => {
                 if let Some(method) = self.params.upload_method {
                     let node_ip = match method {
@@ -322,11 +340,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                     Err(RecoveryError::StepSkipped)
                 }
             }
-
-            StepType::CreateArtifacts => Ok(Box::new(
-                self.recovery
-                    .get_create_nns_recovery_tar_step(self.params.output_dir.clone()),
-            )),
 
             StepType::UploadState => {
                 if let Some(method) = self.params.upload_method {

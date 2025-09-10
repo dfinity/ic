@@ -54,7 +54,7 @@ pub const RECOVERY_GUESTOS_IMG_VERSION: &str = "RECOVERY_VERSION";
 
 const ADMIN_KEY_FILE_REMOTE_PATH: &str = "/var/lib/admin/admin_key";
 const BACKUP_KEY_FILE_REMOTE_PATH: &str = "/var/lib/admin/backup_key";
-const OUTPUT_DIR_REMOTE_PATH: &str = "/var/lib/admin/recovery_output";
+const OUTPUT_DIR_REMOTE_PATH: &str = "/var/lib/ic/data/recovery/output";
 
 pub struct SetupConfig {
     pub impersonate_upstreams: bool,
