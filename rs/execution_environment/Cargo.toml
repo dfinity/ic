@@ -87,6 +87,7 @@ regex = { workspace = true }
 rstest = { workspace = true }
 test-strategy = "0.3.1"
 wat = { workspace = true }
+wirm = { workspace = true }
 
 [build-dependencies]
 escargot = "0.5"

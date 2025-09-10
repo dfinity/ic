@@ -1,6 +1,6 @@
 ---
 source: rs/embedders/tests/instrumentation.rs
-assertion_line: 63
+assertion_line: 65
 expression: out
 ---
 (module
@@ -29,8 +29,8 @@ expression: out
   (export "canister counter_instructions" (global 0))
   (export "canister counter_dirty_pages" (global 1))
   (export "canister counter_accessed_pages" (global 2))
-  (func $compute (;5;) (type 0) (param $count i64) (result i64)
-    (local $reg i64)
+  (func $compute (;5;) (type 0) (param i64) (result i64)
+    (local i64)
     global.get 0
     i64.const 16
     i64.sub
@@ -41,13 +41,13 @@ expression: out
     if ;; label = @1
       call 0
     end
-    local.get $count
+    local.get 0
     i64.const 3
     i64.mul
     call $inc
-    local.set $reg
+    local.set 1
     block ;; label = @1
-      local.get $reg
+      local.get 1
       i64.const 1
       i64.and
       i32.wrap_i64
@@ -56,12 +56,12 @@ expression: out
       i64.const 10
       i64.sub
       global.set 0
-      local.get $reg
+      local.get 1
       i64.const 222
       i64.add
-      local.set $reg
+      local.set 1
       block ;; label = @2
-        local.get $reg
+        local.get 1
         i64.const 1
         i64.and
         i32.wrap_i64
@@ -70,7 +70,7 @@ expression: out
         i64.const 5
         i64.sub
         global.set 0
-        local.get $reg
+        local.get 1
         i64.const 1666
         i64.gt_s
         br_if 1 (;@1;)
@@ -78,10 +78,10 @@ expression: out
         i64.const 7
         i64.sub
         global.set 0
-        local.get $reg
+        local.get 1
         i64.const 100
         i64.mul
-        local.tee $reg
+        local.tee 1
         i32.wrap_i64
         if ;; label = @3
           global.get 0
@@ -89,31 +89,31 @@ expression: out
           i64.sub
           global.set 0
           i64.const -1
-          local.get $reg
+          local.get 1
           i64.mul
-          local.set $reg
+          local.set 1
         else
           global.get 0
           i64.const 2
           i64.sub
           global.set 0
-          local.get $count
-          local.set $reg
+          local.get 0
+          local.set 1
         end
       end
       global.get 0
       i64.const 7
       i64.sub
       global.set 0
-      local.get $reg
+      local.get 1
       call $tenfold
-      local.set $reg
+      local.set 1
     end
     global.get 0
     i64.const 1
     i64.sub
     global.set 0
-    local.get $reg
+    local.get 1
   )
   (func $tenfold (;6;) (type 0) (param i64) (result i64)
     global.get 0

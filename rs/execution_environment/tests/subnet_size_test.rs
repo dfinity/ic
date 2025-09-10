@@ -23,6 +23,7 @@ use ic_types::{
 use more_asserts::assert_lt;
 use std::time::Duration;
 use std::{convert::TryFrom, str::FromStr};
+use wirm::wasmparser;
 
 const B: u64 = 1_000_000_000;
 
