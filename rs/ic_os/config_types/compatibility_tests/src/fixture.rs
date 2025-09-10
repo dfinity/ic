@@ -33,19 +33,18 @@ where
 /// Checks if the current config_types structure has changed compared to the existing fixture version
 fn config_structure_changed<T>(existing_fixture_path: &Path, new_config: &T) -> Result<bool>
 where
-    T: serde::de::DeserializeOwned + PartialEq,
+    T: serde::Serialize + serde::de::DeserializeOwned,
 {
     // If an existing fixture doesn't exist, this is a new config version
     if !existing_fixture_path.exists() {
         return Ok(false);
     }
 
-    let file = fs::File::open(existing_fixture_path)?;
+    let existing_json = fs::read_to_string(existing_fixture_path)?;
+    let new_json = serde_json::to_string_pretty(new_config)?;
 
-    match serde_json::from_reader::<_, T>(file) {
-        Ok(existing_config) => Ok(existing_config != *new_config),
-        Err(_) => Ok(true), // If we can't parse the existing fixture, assume structure changed
-    }
+    // Compare the JSON strings - if they're different, the config structure or default values have changed
+    Ok(existing_json != new_json)
 }
 
 fn generate_default_hostos_config() -> HostOSConfig {

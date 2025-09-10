@@ -1,8 +1,8 @@
 use super::*;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
-    pb::v1::{Followees, MaturityDisbursement},
-    storage::with_stable_neuron_indexes,
+    pb::v1::{BallotInfo, Followees, KnownNeuronData, MaturityDisbursement},
+    storage::{with_stable_neuron_indexes, with_voting_history_store},
 };
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -990,5 +990,45 @@ fn test_approve_genesis_kyc_cap_exceeded() {
         assert!(!neuron_store
             .with_neuron(&neuron.id(), |n| n.kyc_verified)
             .unwrap());
+    }
+}
+
+#[test]
+fn test_record_neuron_vote() {
+    let mut neuron_store = NeuronStore::new(BTreeMap::new());
+    let neuron = simple_neuron_builder(1)
+        .with_known_neuron_data(Some(KnownNeuronData {
+            name: "my known neuron".to_string(),
+            description: Some("my known neuron description".to_string()),
+        }))
+        .build();
+    let neuron_id = neuron_store.add_neuron(neuron).unwrap();
+
+    neuron_store
+        .record_neuron_vote(
+            neuron_id,
+            Topic::NetworkEconomics,
+            ProposalId { id: 1 },
+            Vote::Yes,
+        )
+        .unwrap();
+
+    let recent_ballots = neuron_store
+        .with_neuron(&neuron_id, |n| n.recent_ballots.clone())
+        .unwrap();
+    assert_eq!(
+        recent_ballots,
+        vec![BallotInfo {
+            proposal_id: Some(ProposalId { id: 1 }),
+            vote: Vote::Yes as i32,
+        }]
+    );
+
+    let voting_history =
+        with_voting_history_store(|voting_history| voting_history.list_neuron_votes(neuron_id));
+    if cfg!(feature = "test") {
+        assert_eq!(voting_history, vec![(ProposalId { id: 1 }, Vote::Yes)]);
+    } else {
+        assert_eq!(voting_history, vec![]);
     }
 }

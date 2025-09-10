@@ -18,7 +18,7 @@ use ic_sns_testing::utils::{
     SnsTestingNetworkValidationError, TREASURY_PRINCIPAL_ID,
 };
 use icp_ledger::Tokens;
-use pocket_ic::common::rest::{EmptyConfig, IcpFeatures, InstanceHttpGatewayConfig};
+use pocket_ic::common::rest::{IcpFeatures, IcpFeaturesConfig, InstanceHttpGatewayConfig};
 use pocket_ic::nonblocking::PocketIc;
 use pocket_ic::PocketIcBuilder;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -55,16 +55,15 @@ async fn prepare_network_for_test(
     state_dir: PathBuf,
 ) -> (PocketIc, NeuronId) {
     // Preparing the PocketIC-based network
-
     let all_icp_features = IcpFeatures {
-        registry: Some(EmptyConfig {}),
-        cycles_minting: Some(EmptyConfig {}),
-        icp_token: Some(EmptyConfig {}),
-        cycles_token: Some(EmptyConfig {}),
-        nns_governance: Some(EmptyConfig {}),
-        sns: Some(EmptyConfig {}),
-        ii: Some(EmptyConfig {}),
-        nns_ui: Some(EmptyConfig {}),
+        registry: Some(IcpFeaturesConfig::DefaultConfig),
+        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
+        icp_token: Some(IcpFeaturesConfig::DefaultConfig),
+        cycles_token: Some(IcpFeaturesConfig::DefaultConfig),
+        nns_governance: Some(IcpFeaturesConfig::DefaultConfig),
+        sns: Some(IcpFeaturesConfig::DefaultConfig),
+        ii: Some(IcpFeaturesConfig::DefaultConfig),
+        nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
     };
     let current_time = SystemTime::now()
         .duration_since(UNIX_EPOCH)

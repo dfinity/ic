@@ -412,10 +412,10 @@ impl SandboxedExecutionMetrics {
     fn observe_instance_stats(&self, instance_stats: &InstanceStats, api_type_label: &str) {
         self.accessed_pages
             .with_label_values(&[api_type_label, "wasm"])
-            .observe(instance_stats.wasm_accessed_pages as f64);
+            .observe(instance_stats.wasm_accessed_os_pages_count as f64);
         self.dirty_pages
             .with_label_values(&[api_type_label, "wasm"])
-            .observe(instance_stats.wasm_dirty_pages as f64);
+            .observe(instance_stats.wasm_dirty_os_pages_count as f64);
         self.read_before_write_count
             .with_label_values(&[api_type_label, "wasm"])
             .observe(instance_stats.wasm_read_before_write_count as f64);

@@ -1,5 +1,10 @@
 use candid::{Decode, Encode, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_cbor::CertificateToCbor;
+use ic_certification::{
+    hash_tree::{empty, HashTreeNode, Label, LookupResult, SubtreeLookupResult},
+    Certificate, HashTree,
+};
 use ic_icrc1_ledger::Tokens;
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
 use ic_icrc3_test_ledger::AddBlockResult;
@@ -7,6 +12,7 @@ use ic_state_machine_tests::StateMachine;
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
 use icrc_ledger_types::icrc3::blocks::{
     BlockWithId, GetBlocksRequest, GetBlocksResponse, GetBlocksResult,
 };
@@ -431,4 +437,99 @@ fn test_icrc3_blocks_compatibility_with_production_ledger() {
         encode_init_args,
         icrc3_test_ledger_wasm(),
     );
+}
+
+fn get_icrc3_get_tip_certificate(
+    env: &StateMachine,
+    canister_id: CanisterId,
+) -> Option<ICRC3DataCertificate> {
+    Decode!(
+        &env.query(
+            canister_id,
+            "icrc3_get_tip_certificate",
+            Encode!(&()).unwrap()
+        )
+        .expect("failed to get tip certificate")
+        .bytes(),
+        Option<ICRC3DataCertificate>
+    )
+    .expect("failed to decode tip certificate response")
+}
+
+fn lookup_hashtree(hash_tree: &HashTree, leaf_name: &str) -> Result<Vec<u8>, String> {
+    match hash_tree.lookup_subtree([leaf_name.as_bytes()]) {
+        SubtreeLookupResult::Found(tree) => match tree.as_ref() {
+            HashTreeNode::Leaf(result) => Ok(result.clone()),
+            _ => Err("Expected a leaf node".to_string()),
+        },
+        _ => Err(format!(
+            "Expected to find a leaf node: Hash tree: {:?}, leaf_name: {}",
+            hash_tree, leaf_name
+        )
+        .to_string()),
+    }
+}
+
+fn check_tip_certificate(
+    cert: ICRC3DataCertificate,
+    canister_id: CanisterId,
+    block_index_and_hash: Option<(u64, Vec<u8>)>,
+) {
+    let certified_data_path: [Label<Vec<u8>>; 3] = [
+        "canister".into(),
+        canister_id.get().0.as_slice().into(),
+        "certified_data".into(),
+    ];
+    let certificate = Certificate::from_cbor(cert.certificate.as_slice()).unwrap();
+    let certified_data = match certificate.tree.lookup_path(&certified_data_path) {
+        LookupResult::Found(v) => v,
+        _ => panic!("could not find certified data in certificate"),
+    };
+
+    let hash_tree: HashTree = ciborium::de::from_reader(cert.hash_tree.as_slice()).unwrap();
+
+    assert_eq!(certified_data, hash_tree.digest());
+
+    match block_index_and_hash {
+        None => assert_eq!(hash_tree, empty()),
+        Some((block_index, block_hash)) => {
+            let tree_block_index = leb128::read::unsigned(&mut std::io::Cursor::new(
+                lookup_hashtree(&hash_tree, "last_block_index").unwrap(),
+            ))
+            .unwrap();
+            assert_eq!(tree_block_index, block_index);
+
+            let tree_block_hash = lookup_hashtree(&hash_tree, "last_block_hash").unwrap();
+            assert_eq!(tree_block_hash, block_hash);
+        }
+    }
+}
+
+#[test]
+fn test_icrc3_get_tip_certificate() {
+    let (env, canister_id) = setup_icrc3_test_ledger();
+    // Check the certificate for empty ledger.
+    let cert = get_icrc3_get_tip_certificate(&env, canister_id).unwrap();
+    check_tip_certificate(cert, canister_id, None);
+
+    // Create some test blocks, we only care that they are different.
+    let block0 = BlockBuilder::new(0, 1000)
+        .mint(TEST_ACCOUNT_1, Tokens::from(1_000_000u64))
+        .build();
+    let block1 = BlockBuilder::new(1, 2000)
+        .transfer(TEST_ACCOUNT_1, TEST_ACCOUNT_2, Tokens::from(100_000u64))
+        .build();
+    assert_ne!(block0.clone().hash(), block1.clone().hash());
+
+    // Add block and check if it is reflected in the certificate.
+    let result0 = add_block(&env, canister_id, &block0).expect("Failed to add block 0");
+    assert_eq!(result0, Nat::from(0u64));
+    let cert = get_icrc3_get_tip_certificate(&env, canister_id).unwrap();
+    check_tip_certificate(cert, canister_id, Some((0, block0.clone().hash().to_vec())));
+
+    // Add another block and check if it is reflected in the certificate.
+    let result1 = add_block(&env, canister_id, &block1).expect("Failed to add block 1");
+    assert_eq!(result1, Nat::from(1u64));
+    let cert = get_icrc3_get_tip_certificate(&env, canister_id).unwrap();
+    check_tip_certificate(cert, canister_id, Some((1, block1.clone().hash().to_vec())));
 }

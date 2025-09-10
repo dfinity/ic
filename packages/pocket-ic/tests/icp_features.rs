@@ -3,8 +3,8 @@ use flate2::read::GzDecoder;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use pocket_ic::common::rest::{
-    EmptyConfig, ExtendedSubnetConfigSet, IcpFeatures, InstanceConfig, InstanceHttpGatewayConfig,
-    SubnetSpec,
+    ExtendedSubnetConfigSet, IcpFeatures, IcpFeaturesConfig, InstanceConfig,
+    InstanceHttpGatewayConfig, SubnetSpec,
 };
 use pocket_ic::{
     start_server, update_candid, update_candid_as, PocketIc, PocketIcBuilder, PocketIcState,
@@ -41,14 +41,14 @@ fn decode_gzipped_bytes(data: Vec<u8>) -> Vec<u8> {
 
 fn all_icp_features() -> IcpFeatures {
     IcpFeatures {
-        registry: Some(EmptyConfig {}),
-        cycles_minting: Some(EmptyConfig {}),
-        icp_token: Some(EmptyConfig {}),
-        cycles_token: Some(EmptyConfig {}),
-        nns_governance: Some(EmptyConfig {}),
-        sns: Some(EmptyConfig {}),
-        ii: Some(EmptyConfig {}),
-        nns_ui: Some(EmptyConfig {}),
+        registry: Some(IcpFeaturesConfig::DefaultConfig),
+        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
+        icp_token: Some(IcpFeaturesConfig::DefaultConfig),
+        cycles_token: Some(IcpFeaturesConfig::DefaultConfig),
+        nns_governance: Some(IcpFeaturesConfig::DefaultConfig),
+        sns: Some(IcpFeaturesConfig::DefaultConfig),
+        ii: Some(IcpFeaturesConfig::DefaultConfig),
+        nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
     }
 }
 
@@ -56,13 +56,13 @@ fn all_icp_features() -> IcpFeatures {
 // so we only enable this feature for frontend canister tests.
 fn all_icp_features_but_nns_ui() -> IcpFeatures {
     IcpFeatures {
-        registry: Some(EmptyConfig {}),
-        cycles_minting: Some(EmptyConfig {}),
-        icp_token: Some(EmptyConfig {}),
-        cycles_token: Some(EmptyConfig {}),
-        nns_governance: Some(EmptyConfig {}),
-        sns: Some(EmptyConfig {}),
-        ii: Some(EmptyConfig {}),
+        registry: Some(IcpFeaturesConfig::DefaultConfig),
+        cycles_minting: Some(IcpFeaturesConfig::DefaultConfig),
+        icp_token: Some(IcpFeaturesConfig::DefaultConfig),
+        cycles_token: Some(IcpFeaturesConfig::DefaultConfig),
+        nns_governance: Some(IcpFeaturesConfig::DefaultConfig),
+        sns: Some(IcpFeaturesConfig::DefaultConfig),
+        ii: Some(IcpFeaturesConfig::DefaultConfig),
         nns_ui: None,
     }
 }
@@ -107,12 +107,12 @@ fn nns_ui_requires_other_icp_features() {
         https_config: None,
     };
     let icp_features = IcpFeatures {
-        nns_ui: Some(EmptyConfig {}),
+        nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
         ..Default::default()
     };
     let _pic = PocketIcBuilder::new()
         .with_icp_features(icp_features)
-        .with_auto_progress(None)
+        .with_auto_progress()
         .with_http_gateway(instance_http_gateway_config)
         .build();
 }
@@ -126,7 +126,7 @@ fn frontend_smoke_test(frontend_canister_id: Principal, expected_str: &str) {
     };
     let pic = PocketIcBuilder::new()
         .with_icp_features(all_icp_features())
-        .with_auto_progress(None)
+        .with_auto_progress()
         .with_http_gateway(instance_http_gateway_config)
         .build();
 
@@ -1150,11 +1150,11 @@ async fn with_all_icp_features_and_nns_subnet_state() {
         },
         http_gateway_config: None,
         state_dir: None,
-        nonmainnet_features: None,
+        icp_config: None,
         log_level: None,
         bitcoind_addr: None,
         icp_features: Some(all_icp_features()),
-        allow_incomplete_state: None,
+        incomplete_state: None,
         initial_time: None,
     };
     let response = client
