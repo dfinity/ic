@@ -54,6 +54,22 @@ use tracing::trace;
 
 type PocketHttpResponse = (BTreeMap<String, Vec<u8>>, Vec<u8>);
 
+pub(crate) async fn into_api_response(
+    resp: Response,
+) -> (StatusCode, BTreeMap<String, Vec<u8>>, Vec<u8>) {
+    (
+        resp.status(),
+        resp.headers()
+            .iter()
+            .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
+            .collect(),
+        axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .to_vec(),
+    )
+}
+
 /// Name of a header that allows clients to specify for how long their are willing to wait for a
 /// response on a open http request.
 pub static TIMEOUT_HEADER_NAME: HeaderName = HeaderName::from_static("processing-timeout-ms");
@@ -542,25 +558,13 @@ impl FromOpOut for PocketHttpResponse {
             err: ErrorClientFacing,
         ) -> (StatusCode, ApiResponse<PocketHttpResponse>) {
             let resp = err.into_response();
-            let status = resp.status();
-            let headers = resp
-                .headers()
-                .iter()
-                .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
-                .collect();
-            let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
-                .await
-                .unwrap()
-                .to_vec();
+            let (status, headers, bytes) = into_api_response(resp).await;
             (status, ApiResponse::Success((headers, bytes)))
         }
         match value {
             OpOut::RawResponse(fut) => {
                 let (status, headers, bytes) = fut.await;
-                (
-                    StatusCode::from_u16(status).unwrap(),
-                    ApiResponse::Success((headers, bytes)),
-                )
+                (status, ApiResponse::Success((headers, bytes)))
             }
             OpOut::Error(PocketIcError::CanisterRequestRoutingError(_)) => {
                 from_bn_err(ErrorClientFacing::CanisterNotFound).await
@@ -1021,8 +1025,7 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
             .into_response(),
         OpOut::RawResponse(fut) => {
             let (status, headers, bytes) = fut.await;
-            let code = StatusCode::from_u16(status).unwrap();
-            let mut resp = Response::builder().status(code);
+            let mut resp = Response::builder().status(status);
             for (name, value) in headers {
                 resp = resp.header(name, value);
             }
