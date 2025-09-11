@@ -19,13 +19,12 @@ use ic_ckbtc_minter::{
     MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY,
 };
 use icrc_ledger_types::icrc1::account::Account;
-use lazy_static::lazy_static;
 use maplit::btreeset;
 use std::cell::RefCell;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, LazyLock, RwLock};
 
 pub mod mock {
     use async_trait::async_trait;
@@ -81,13 +80,12 @@ pub fn mock_ecdsa_public_key() -> ECDSAPublicKey {
     }
 }
 
-lazy_static! {
-    static ref MAINNET_EVENTS: GetEventsResult = Mainnet.deserialize();
-    static ref MAINNET_STATE: CkBtcMinterState =
-        replay::<SkipCheckInvariantsImpl>(MAINNET_EVENTS.events.iter().cloned())
-            .expect("Failed to replay events");
-    static ref TESTNET_EVENTS: GetEventsResult = Testnet.deserialize();
-}
+static MAINNET_EVENTS: LazyLock<GetEventsResult> = LazyLock::new(|| Mainnet.deserialize());
+static MAINNET_STATE: LazyLock<CkBtcMinterState> = LazyLock::new(|| {
+    replay::<SkipCheckInvariantsImpl>(MAINNET_EVENTS.events.iter().cloned())
+        .expect("Failed to replay events")
+});
+static TESTNET_EVENTS: LazyLock<GetEventsResult> = LazyLock::new(|| Testnet.deserialize());
 
 #[tokio::test]
 async fn should_replay_events_for_mainnet() {
