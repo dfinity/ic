@@ -126,16 +126,16 @@ jobs:
 
 
           if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}' == 'true' ]]; then
-              override_didc_check="true"
+              skip_didc_checks="true"
           else
-              override_didc_check="false"
+              skip_didc_checks="false"
           fi
 
 
           if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}' == 'true' ]]; then
-              override_buf_breaking="true"
+              skip_buf_checks="true"
           else
-              override_buf_breaking="false"
+              skip_buf_checks="false"
           fi
 
 
@@ -158,13 +158,13 @@ jobs:
           echo "full_macos_build=$full_macos_build" >> "$GITHUB_OUTPUT"
           echo "| \`full_macos_build\` | \`$full_macos_build\` |" >> "$GITHUB_STEP_SUMMARY"
 
-          echo "override_didc_check: $override_didc_check"
-          echo "override_didc_check=$override_didc_check" >> "$GITHUB_OUTPUT"
-          echo "| \`override_didc_check\` | \`$override_didc_check\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "skip_didc_checks: $skip_didc_checks"
+          echo "skip_didc_checks=$skip_didc_checks" >> "$GITHUB_OUTPUT"
+          echo "| \`skip_didc_checks\` | \`$skip_didc_checks\` |" >> "$GITHUB_STEP_SUMMARY"
 
-          echo "override_buf_breaking: $override_buf_breaking"
-          echo "override_buf_breaking=$override_buf_breaking" >> "$GITHUB_OUTPUT"
-          echo "| \`override_buf_breaking\` | \`$override_buf_breaking\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "skip_buf_checks: $skip_buf_checks"
+          echo "skip_buf_checks=$skip_buf_checks" >> "$GITHUB_OUTPUT"
+          echo "| \`skip_buf_checks\` | \`$skip_buf_checks\` |" >> "$GITHUB_STEP_SUMMARY"
 
   bazel-test-all:
     name: Bazel Test All
@@ -213,6 +213,12 @@ jobs:
             targets_args=()
             if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
               targets_args+=("--skip_long_tests")
+            fi
+            if [[ '${{ needs.config.outputs.skip_didc_checks }}' == 'true' ]]; then
+              targets_args+=("--skip_didc_checks")
+            fi
+            if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
+              targets_args+=("--skip_buf_checks")
             fi
             if [[ '${{ needs.config.outputs.diff_only }}' == 'true' ]]; then
               targets_args+=(
