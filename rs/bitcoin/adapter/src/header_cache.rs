@@ -132,7 +132,6 @@ pub trait HeaderCache: Send + Sync {
     /// Return the number of tips.
     fn get_num_tips(&self) -> usize;
 
-    #[cfg(test)]
     /// Return all tips.
     fn get_tips(&self) -> Vec<Tip<Self::Header>>;
 }
@@ -227,7 +226,6 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for RwLock<InMemoryHead
         self.read().unwrap().tips.len()
     }
 
-    #[cfg(test)]
     fn get_tips(&self) -> Vec<Tip<Header>> {
         self.read().unwrap().tips.clone()
     }
@@ -493,13 +491,8 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for LMDBHeaderCache<Hea
 
     /// This method returns the tip header with the highest cumulative work.
     fn get_active_chain_tip(&self) -> Tip<Header> {
-        let tips = log_err!(
-            self.run_ro_txn(|tx| self.tx_get_tips(tx)),
-            self.log,
-            "tx_get_tips"
-        )
-        .unwrap_or_else(|err| panic!("Failed to get tips {:?}", err));
-        tips.into_iter()
+        self.get_tips()
+            .into_iter()
             .max_by(|x, y| x.work.cmp(&y.work))
             .unwrap_or_else(|| panic!("Impossible: failed to find active_chain_tip"))
     }
@@ -508,19 +501,18 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for LMDBHeaderCache<Hea
         log_err!(
             self.run_ro_txn(|tx| self.tx_get_num_tips(tx)),
             self.log,
-            "tx_get_tips"
+            "tx_num_tips"
         )
         .unwrap_or_else(|err| panic!("Failed to get_num_tips {:?}", err))
     }
 
-    #[cfg(test)]
     fn get_tips(&self) -> Vec<Tip<Header>> {
         log_err!(
             self.run_ro_txn(|tx| self.tx_get_tips(tx)),
             self.log,
-            "get_tips"
+            "tx_get_tips"
         )
-        .unwrap_or_default()
+        .unwrap_or_else(|err| panic!("Failed to get tips {:?}", err))
     }
 }
 
