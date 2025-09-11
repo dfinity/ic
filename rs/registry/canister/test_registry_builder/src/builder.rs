@@ -24,12 +24,19 @@ use crate::{
 };
 use prost::Message;
 
+/// Represents the minimum information needed to specify relevant nodes
+/// for the tests.
 #[derive(Debug)]
 struct NodeHint {
     operator_id: PrincipalId,
     subnet: Option<SubnetId>,
 }
 
+/// The builder for the compliant registry mutations for tests.
+///
+/// This is the entry point meant to be used to generate the
+/// mutations that will later be consumed by the registry canister.
+/// To see examples of how to use the builder see [tests](./tests.rs)
 #[derive(Default)]
 pub struct CompliantRegistryMutationsBuilder {
     nodes: BTreeMap<String, NodeHint>,
@@ -37,9 +44,14 @@ pub struct CompliantRegistryMutationsBuilder {
     operators: BTreeMap<String, TestNodeOperator>,
     providers: BTreeMap<String, PrincipalId>,
     data_centers: BTreeSet<String>,
+    //TODO: extend with other records and their validations
 }
 
 impl CompliantRegistryMutationsBuilder {
+    /// Add an operator to the registry.
+    ///
+    /// It will add the data center record if it isn't already
+    /// specified.
     #[track_caller]
     pub fn with_operator(
         mut self,
@@ -69,6 +81,12 @@ impl CompliantRegistryMutationsBuilder {
         self
     }
 
+    /// Add a node to the registry.
+    ///
+    /// Panics if the node operator isn't already added with `with_operator`.
+    ///
+    /// If the node should be a part of the subnet and if that subnet isn't
+    /// already registered, the function will automatically register that subnet.
     #[track_caller]
     pub fn with_node(
         mut self,
@@ -109,6 +127,9 @@ impl CompliantRegistryMutationsBuilder {
         self
     }
 
+    /// Add a subnet to the registry.
+    ///
+    /// Adding the same subnet multiple times won't cause a panic.
     pub fn with_subnet(mut self, subnet_utility_id: &str) -> Self {
         if !self.subnets.contains_key(subnet_utility_id) {
             self.subnets.insert(
@@ -120,11 +141,17 @@ impl CompliantRegistryMutationsBuilder {
         self
     }
 
+    /// Add a data center to the registry.
+    ///
+    /// Adding the same data center multiple times won't cause a
+    /// panic.
     pub fn with_data_center(mut self, dc_id: &str) -> Self {
         self.data_centers.insert(dc_id.to_string());
         self
     }
 
+    /// Consumes the builder and produces the `CompliantRegistryMutations` which
+    /// can be used to easily track test data.
     pub fn build(self) -> CompliantRegistryMutations {
         let mut mutations = vec![];
         let mut nodes_with_keys = BTreeMap::new();
@@ -209,6 +236,7 @@ impl CompliantRegistryMutationsBuilder {
             mutations.extend(threshold_pk_and_cup);
         }
 
+        // TODO: don't rely on invariant_compliant_mutation
         let invariant_compliant_mutation = invariant_compliant_mutation(0);
         let initial_subnets = invariant_compliant_mutation
             .iter()
@@ -247,6 +275,7 @@ impl CompliantRegistryMutationsBuilder {
     }
 }
 
+/// Represents the built data. To build this struct use `CompliantRegistryMutationsBuilder`.
 pub struct CompliantRegistryMutations {
     nodes: BTreeMap<String, TestNode>,
     subnets: BTreeMap<String, SubnetId>,
@@ -254,13 +283,20 @@ pub struct CompliantRegistryMutations {
     providers: BTreeMap<String, PrincipalId>,
     data_centers: BTreeSet<String>,
     mutations: Vec<RegistryMutation>,
+    //TODO: add support for other records stored by the registry.
 }
 
 impl CompliantRegistryMutations {
+    /// Fetch a node id from the given utility key.
+    ///
+    /// Panics if the utility key is not registered in the test data.
     pub fn node_id(&self, node_utility_key: &str) -> NodeId {
         self.nodes.get(node_utility_key).map(|tn| tn.id).unwrap()
     }
 
+    /// Fetch a node operator id from the given utility key.
+    ///
+    /// Panics if the utility key is not registered in the test data.
     pub fn operator_id(&self, operator_utility_key: &str) -> PrincipalId {
         self.operators
             .get(operator_utility_key)
@@ -268,26 +304,43 @@ impl CompliantRegistryMutations {
             .unwrap()
     }
 
+    /// Fetch a subnet id from the given utility key.
+    ///
+    /// Panics if the utility key is not registered in the test data.
     pub fn subnet_id(&self, subnet_utility_key: &str) -> SubnetId {
         *self.subnets.get(subnet_utility_key).unwrap()
     }
 
+    /// Returns the mutations that should be applied to the registry.
+    ///
+    /// The mutations should be applied with `maybe_apply_mutation_internal`
+    /// as they produce an invariant compliant registry.
     pub fn mutations(&self) -> Vec<RegistryMutation> {
         self.mutations.clone()
     }
 
+    /// Fetch provider id from the given utility key.
+    ///
+    /// Panics if the utility key is not registered in the test data.
     pub fn provider_id(&self, provider_utility_key: &str) -> PrincipalId {
         *self.providers.get(provider_utility_key).unwrap()
     }
 
+    /// Fetch registered data centers.
     pub fn dcs(&self) -> BTreeSet<String> {
         self.data_centers.clone()
     }
 
+    /// Fetch a node from the given utility key.
+    ///
+    /// Panics if the utility key is not registered in the test data.
     pub fn node(&self, node_utility_key: &str) -> TestNode {
         self.nodes.get(node_utility_key).cloned().unwrap()
     }
 
+    /// Fetch an operator from the given utility key.
+    ///
+    /// Panics if the utility key is not registered in the test data.
     pub fn operator(&self, operator_utility_key: &str) -> TestNodeOperator {
         self.operators.get(operator_utility_key).cloned().unwrap()
     }
