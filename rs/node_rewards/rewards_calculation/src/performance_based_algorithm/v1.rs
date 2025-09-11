@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+#[allow(unused_imports)]
 use crate::performance_based_algorithm::results::RewardsCalculatorResults;
 use crate::performance_based_algorithm::{DataProvider, PerformanceBasedAlgorithm};
 use crate::types::DayUtc;
