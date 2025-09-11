@@ -304,13 +304,13 @@ mod test {
     use ic_btc_validation::ValidateHeaderError;
     use std::collections::HashSet;
 
-    fn run_in_memory(network: Network, f: impl Fn(BlockchainState<Network>)) {
-        f(BlockchainState::new(network, &MetricsRegistry::default()))
+    fn run_in_memory(network: Network, test_fn: impl Fn(BlockchainState<Network>)) {
+        test_fn(BlockchainState::new(network, &MetricsRegistry::default()))
     }
 
-    fn run_with_cache_dir(network: Network, f: impl Fn(BlockchainState<Network>)) {
+    fn run_with_cache_dir(network: Network, test_fn: impl Fn(BlockchainState<Network>)) {
         let dir = tempdir().unwrap();
-        f(BlockchainState::new_with_cache_dir(
+        test_fn(BlockchainState::new_with_cache_dir(
             network,
             dir.path().to_path_buf(),
             &MetricsRegistry::default(),

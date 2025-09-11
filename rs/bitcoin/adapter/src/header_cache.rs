@@ -307,7 +307,9 @@ impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
     pub fn new(genesis: Header, mut cache_dir: PathBuf, log: ReplicaLogger) -> Self {
         cache_dir.push("headers");
         let path = cache_dir.as_path();
-        std::fs::create_dir_all(path).ok();
+        std::fs::create_dir_all(path).unwrap_or_else(|err| {
+            panic!("Error creating DB directory {}: {}", path.display(), err)
+        });
         let db_env = create_db_env(path);
         let headers = db_env
             .create_db(Some("HEADERS"), DatabaseFlags::empty())
