@@ -189,7 +189,6 @@ where
     }
 
     /// This method returns the tip header with the highest cumulative work.
-    #[allow(clippy::indexing_slicing)]
     pub fn get_active_chain_tip(&self) -> Tip<Network::Header> {
         self.header_cache.get_active_chain_tip()
     }
