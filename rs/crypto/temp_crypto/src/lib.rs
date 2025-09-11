@@ -29,6 +29,7 @@ pub mod internal {
     use ic_crypto::{CryptoComponent, CryptoComponentImpl};
     use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
     use ic_crypto_internal_csp::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
+    use ic_crypto_internal_csp::secret_key_store::memory_secret_key_store::InMemorySecretKeyStore;
     use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
     use ic_crypto_internal_csp::vault::local_csp_vault::ProdLocalCspVault;
     use ic_crypto_internal_csp::LocalCspVault;
@@ -122,7 +123,7 @@ pub mod internal {
         crypto_component: CryptoComponentImpl<C>,
         remote_vault_environment: Option<
             RemoteVaultEnvironment<
-                LocalCspVault<R, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicKeyStore>,
+                LocalCspVault<R, ProtoSecretKeyStore, InMemorySecretKeyStore, ProtoPublicKeyStore>,
             >,
         >,
         temp_dir: TempDir,
