@@ -8,7 +8,7 @@ static ALLOC: wee_alloc::WeeAlloc<'_> = wee_alloc::WeeAlloc::INIT;
 #[allow(clippy::unused_unit)]
 mod ic0 {
     #[link(wasm_import_module = "ic0")]
-    extern "C" {
+    unsafe extern "C" {
         pub fn accept_message() -> ();
         pub fn canister_self_copy(dst: u32, offset: u32, size: u32) -> ();
         pub fn canister_self_size() -> u32;

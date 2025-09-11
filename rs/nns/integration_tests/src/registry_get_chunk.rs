@@ -37,7 +37,7 @@ fn get_state_machine_time_nanoseconds(machine: &StateMachine) -> u64 {
 }
 
 macro_rules! assert_timestamp {
-    ($lower:expr, $timestamp:expr, $upper:expr) => {
+    ($lower:expr_2021, $timestamp:expr_2021, $upper:expr_2021) => {
         if !($lower <= $timestamp && $timestamp <= $upper) {
             panic!(
                 "Timestamp assertion doesn't hold. Expected {} to be within range: [{}, {}]",

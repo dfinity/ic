@@ -32,7 +32,7 @@ pub struct Ed25519KeyPair {
 
 impl Ed25519KeyPair {
     pub fn generate<R: Rng + CryptoRng>(rng: &mut R) -> Self {
-        let mut rng = ChaCha20Rng::from_seed(rng.gen());
+        let mut rng = ChaCha20Rng::from_seed(rng.r#gen());
         let key = ic_ed25519::PrivateKey::generate_using_rng(&mut rng);
         Self {
             secret_key: key.serialize_raw(),
@@ -65,7 +65,7 @@ impl Secp256k1KeyPair {
         self.sk.sign_message_with_ecdsa(msg).to_vec()
     }
     pub fn generate<R: Rng + CryptoRng>(rng: &mut R) -> Self {
-        let mut rng = ChaCha20Rng::from_seed(rng.gen());
+        let mut rng = ChaCha20Rng::from_seed(rng.r#gen());
         let sk = ic_secp256k1::PrivateKey::generate_using_rng(&mut rng);
         let pk = sk.public_key();
         Self { sk, pk }
@@ -84,12 +84,15 @@ pub enum SigKeys {
 impl SigKeys {
     /// Parses a key pair from a PEM file.
     pub fn from_pem(pem: &str) -> Result<Self, &'static str> {
-        if let Ok(secp_key) = Secp256k1KeyPair::from_pem(pem) {
-            Ok(SigKeys::EcdsaSecp256k1(secp_key))
-        } else if let Ok(ed25519_key) = Ed25519KeyPair::from_pem(pem) {
-            Ok(SigKeys::Ed25519(ed25519_key))
-        } else {
-            Err("unsupported or malformed secret key pem")
+        match Secp256k1KeyPair::from_pem(pem) {
+            Ok(secp_key) => Ok(SigKeys::EcdsaSecp256k1(secp_key)),
+            _ => {
+                if let Ok(ed25519_key) = Ed25519KeyPair::from_pem(pem) {
+                    Ok(SigKeys::Ed25519(ed25519_key))
+                } else {
+                    Err("unsupported or malformed secret key pem")
+                }
+            }
         }
     }
 }

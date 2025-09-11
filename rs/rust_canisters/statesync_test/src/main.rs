@@ -33,7 +33,7 @@ async fn change_state(seed: u32) -> Result<u64, String> {
     let mut rng = Pcg64Mcg::seed_from_u64(seed as u64);
 
     for index in (0..VECTOR_LENGTH).step_by(1023) {
-        state[index] = rng.gen();
+        state[index] = rng.r#gen();
     }
     *num_changed += 1;
     Ok(*num_changed)
@@ -59,9 +59,9 @@ async fn expand_state(index: u32, seed: u32) -> Result<u64, String> {
         7 => V_DATA_7.lock().expect("Could not lock V_DATA_7 mutex"),
         _ => V_DATA_8.lock().expect("Could not lock V_DATA_8 mutex"),
     };
-    let offset = rng.gen::<u16>();
+    let offset = rng.r#gen::<u16>();
     for ind in (offset as usize..VECTOR_LENGTH).step_by(1024) {
-        state[ind] = rng.gen();
+        state[ind] = rng.r#gen();
     }
     *num_changed += 1;
     Ok(*num_changed)
