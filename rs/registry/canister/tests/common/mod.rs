@@ -1,3 +1,5 @@
+// Not all tests have to use these functions
+#![allow(dead_code)]
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
 use test_registry_builder::builder::CompliantRegistryMutations;

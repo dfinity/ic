@@ -209,15 +209,32 @@ impl CompliantRegistryMutationsBuilder {
             mutations.extend(threshold_pk_and_cup);
         }
 
+        let invariant_compliant_mutation = invariant_compliant_mutation(0);
+        let initial_subnets = invariant_compliant_mutation
+            .iter()
+            .find_map(|mutation| {
+                if mutation.key != make_subnet_list_record_key().as_bytes() {
+                    return None;
+                }
+
+                let subnets = SubnetListRecord::decode(mutation.value.as_slice()).unwrap();
+                Some(subnets.subnets)
+            })
+            .unwrap_or_default();
+
+        mutations.extend(invariant_compliant_mutation);
         mutations.push(upsert(
             make_subnet_list_record_key(),
             SubnetListRecord {
-                subnets: self.subnets.values().map(|s| s.get().to_vec()).collect(),
+                subnets: self
+                    .subnets
+                    .values()
+                    .map(|s| s.get().to_vec())
+                    .chain(initial_subnets)
+                    .collect(),
             }
             .encode_to_vec(),
         ));
-
-        mutations.extend(invariant_compliant_mutation(0));
 
         CompliantRegistryMutations {
             nodes: nodes_with_keys,
