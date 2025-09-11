@@ -665,20 +665,20 @@ fn local_recovery(
     let command = format!(
         r#"/opt/ic/bin/ic-recovery \
         --nns-url {nns_url} \
-        {maybe_admin_key_file} \
+        {maybe_admin_key_file}\
         --test --skip-prompts --use-local-binaries \
         nns-recovery-same-nodes \
         --subnet-id {subnet_id} \
-        {maybe_upgrade_version} \
+        {maybe_upgrade_version}\
         {maybe_replay_until_height}\
-        {maybe_upgrade_image_url} \
-        {maybe_upgrade_image_hash} \
+        {maybe_upgrade_image_url}\
+        {maybe_upgrade_image_hash}\
         --download-method local \
         --upload-method local \
         --wait-for-cup-node {node_ip} \
-        {maybe_backup_key_file} \
+        {maybe_backup_key_file}\
         --output-dir {OUTPUT_DIR_REMOTE_PATH} \
-        {maybe_skips} \
+        {maybe_skips}\
         --skip Cleanup \
         "#
     );
