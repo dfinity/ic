@@ -21,7 +21,7 @@ Success::
 
 end::catalog[] */
 
-use anyhow::{anyhow, ensure, Result};
+use anyhow::{anyhow, bail, ensure, Result};
 use ic_consensus_system_test_utils::{
     impersonate_upstreams::{
         get_upstreams_uvm_ipv6, setup_upstreams_uvm, spoof_node_dns, uvm_serve_recovery_artifacts,
@@ -42,6 +42,7 @@ use ic_system_test_driver::{
 };
 use slog::info;
 use ssh2::Session;
+use std::time::Duration;
 
 fn read_env_var_path(env_var: &str) -> Vec<u8> {
     let dependency_path = get_dependency_path(
@@ -153,16 +154,6 @@ pub fn setup(env: TestEnv) {
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
-
-    let node = env
-        .topology_snapshot()
-        .subnets()
-        .flat_map(|s| s.nodes())
-        .next()
-        .unwrap();
-
-    let server_ipv6 = get_upstreams_uvm_ipv6(&env);
-    spoof_node_dns(&node, &server_ipv6).unwrap();
 }
 
 pub fn test(env: TestEnv) {
@@ -172,6 +163,7 @@ pub fn test(env: TestEnv) {
     let expected_cup_b64 = read_env_var_path_to_string("RECOVERY_CUP_B64_PATH");
     let expected_local_store_1_b64 = read_env_var_path_to_string("RECOVERY_STORE_1_B64_PATH");
     let expected_local_store_2_b64 = read_env_var_path_to_string("RECOVERY_STORE_2_B64_PATH");
+    let recovery_hash = read_env_var_path_to_string("RECOVERY_HASH_PATH");
 
     let node = env
         .topology_snapshot()
@@ -182,9 +174,77 @@ pub fn test(env: TestEnv) {
 
     let ssh_session = node.block_on_ssh_session().unwrap();
 
+    let boot_id_pre_reboot = execute_bash_command(
+        &ssh_session,
+        "journalctl -q --list-boots | tail -n1 | awk '{print $2}'".to_string(),
+    )
+    .map_err(|e| anyhow!(e))
+    .unwrap();
+    info!(log, "Current boot ID: {}", boot_id_pre_reboot);
+
+    info!(
+        log,
+        "Remounting /boot as read-write and updating boot_args file"
+    );
+    let boot_args_command = format!(
+        "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)\"/\\1 recovery-hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot",
+        recovery_hash
+    );
+    execute_bash_command(&ssh_session, boot_args_command)
+        .map_err(|e| anyhow!(e))
+        .unwrap();
+    info!(log, "Boot_args file updated successfully.");
+
+    info!(log, "Verifying boot_args file contents");
+    let updated_boot_args = execute_bash_command(&ssh_session, "cat /boot/boot_args".to_string())
+        .map_err(|e| anyhow!(e))
+        .unwrap();
+    info!(log, "Updated boot_args content:\n{}", updated_boot_args);
+
+    info!(log, "Rebooting the host");
+    execute_bash_command(&ssh_session, "sudo reboot".to_string())
+        .map_err(|e| anyhow!(e))
+        .unwrap();
+
+    info!(log, "Waiting for host to reboot...");
+
+    retry_with_msg!(
+        format!(
+            "Waiting until the host's boot ID changes from its pre reboot value of '{}'",
+            boot_id_pre_reboot
+        ),
+        log.clone(),
+        Duration::from_secs(2 * 60),
+        Duration::from_secs(5),
+        || {
+            let new_ssh_session = node.block_on_ssh_session().unwrap();
+            let boot_id = execute_bash_command(
+                &new_ssh_session,
+                "journalctl -q --list-boots | tail -n1 | awk '{print $2}'".to_string(),
+            )
+            .map_err(|e| anyhow!(e))
+            .unwrap();
+            if boot_id != boot_id_pre_reboot {
+                info!(
+                    log,
+                    "Host boot ID changed from '{}' to '{}'", boot_id_pre_reboot, boot_id
+                );
+                Ok(())
+            } else {
+                bail!("Host boot ID is still '{}'", boot_id_pre_reboot)
+            }
+        }
+    )
+    .unwrap();
+
+    let server_ipv6 = get_upstreams_uvm_ipv6(&env);
+    spoof_node_dns(&node, &server_ipv6).unwrap();
+
     //
     // Verify contents
     //
+
+    let ssh_session = node.block_on_ssh_session().unwrap();
 
     // We retry multiple times the first time because the files being overwritten by the recovery
     // engine and this read are racing against each other.
