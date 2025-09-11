@@ -440,7 +440,7 @@ mod tests {
         // some pseudo random entries
         (0..n)
             .map(|_i| {
-                let k = rng.gen::<usize>() % 64 + 2;
+                let k = rng.r#gen::<usize>() % 64 + 2;
                 (0..(k + 2)).map(|k| key_mutation(k, rng)).collect()
             })
             .collect()
@@ -448,7 +448,7 @@ mod tests {
 
     fn key_mutation(k: usize, rng: &mut ThreadRng) -> KeyMutation {
         let s = rng.next_u64() & 64;
-        let set: bool = rng.gen();
+        let set: bool = rng.r#gen();
         KeyMutation {
             key: k.to_string(),
             value: if set {

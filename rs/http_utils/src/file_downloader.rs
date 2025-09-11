@@ -30,7 +30,7 @@ pub struct FileDownloader {
 }
 
 macro_rules! maybe_log {
-    ($logger:expr, $level:expr, $($arg:tt)+) => {
+    ($logger:expr_2021, $level:expr_2021, $($arg:tt)+) => {
         if let Some(logger) = $logger.as_ref() {
             log!(logger, $level, $($arg)+);
         }
@@ -38,23 +38,23 @@ macro_rules! maybe_log {
 }
 
 macro_rules! maybe_info {
-    (every_n_seconds => $seconds:expr, $logger:expr, $($arg:tt)+) => {
+    (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $($arg:tt)+) => {
         if let Some(logger) = $logger.as_ref() {
             info!(every_n_seconds => $seconds, logger, $($arg)+);
         }
     };
-    ($logger:expr, $($arg:tt)+) => {
+    ($logger:expr_2021, $($arg:tt)+) => {
         maybe_log!($logger, Level::Info, $($arg)+);
     };
 }
 
 macro_rules! maybe_warn {
-    (every_n_seconds => $seconds:expr, $logger:expr, $($arg:tt)+) => {
+    (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $($arg:tt)+) => {
         if let Some(logger) = $logger.as_ref() {
             warn!(every_n_seconds => $seconds, logger, $($arg)+);
         }
     };
-    ($logger:expr, $($arg:tt)+) => {
+    ($logger:expr_2021, $($arg:tt)+) => {
         maybe_log!($logger, Level::Warning, $($arg)+);
     };
 }

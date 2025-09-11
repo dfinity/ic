@@ -453,10 +453,10 @@ mod tests {
         R: RngCore,
     {
         QueryStats {
-            num_calls: rng.gen(),
-            num_instructions: rng.gen(),
-            ingress_payload_size: rng.gen(),
-            egress_payload_size: rng.gen(),
+            num_calls: rng.r#gen(),
+            num_instructions: rng.r#gen(),
+            ingress_payload_size: rng.r#gen(),
+            egress_payload_size: rng.r#gen(),
         }
     }
 }

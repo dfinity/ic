@@ -133,6 +133,7 @@ rust_test(
         "TESTNET_HEADERS_DATA_PATH": "$(rootpath @bitcoin_adapter_testnet_headers//file)",
         "TESTNET_BLOCKS_DATA_PATH": "$(rootpath @bitcoin_adapter_testnet_blocks//file)",
     },
+    flaky = True,
     tags = ["requires-network"],
     # Because dogecoind binary package is not available on darwin or arm64.
     target_compatible_with = [
@@ -167,6 +168,7 @@ rust_bench(
         "//rs/bitcoin/service",
         "//rs/bitcoin/validation",
         "//rs/config",
+        "//rs/crypto/test_utils/reproducible_rng",
         "//rs/http_endpoints/async_utils",
         "//rs/interfaces/adapter_client",
         "//rs/monitoring/logger",
@@ -183,8 +185,10 @@ rust_bench(
         "@crate_index//:prometheus",
         "@crate_index//:prost",
         "@crate_index//:rand",
+        "@crate_index//:scrypt",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
+        "@crate_index//:sha2",
         "@crate_index//:slog",
         "@crate_index//:slog-async",
         "@crate_index//:static_assertions",

@@ -198,7 +198,7 @@ pub mod arbitrary {
 
     // Macro to simplify writing strategies that generate structs.
     macro_rules! prop_struct {
-        ($struct_path:path { $($field_name:ident: $strategy:expr),* $(,)? }) => {
+        ($struct_path:path { $($field_name:ident: $strategy:expr_2021),* $(,)? }) => {
             #[allow(unused_parens)]
             ($($strategy),*).prop_map(|($($field_name),*)| {
                 $struct_path {

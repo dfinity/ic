@@ -25,7 +25,7 @@ pub(crate) fn topic_to_manage_canister(canister_id: &CanisterId) -> Topic {
     } else if SNS_RELATED_CANISTER_IDS.contains(&canister_id) {
         Topic::ServiceNervousSystemManagement
     } else {
-        Topic::NetworkCanisterManagement
+        Topic::ApplicationCanisterManagement
     }
 }
 

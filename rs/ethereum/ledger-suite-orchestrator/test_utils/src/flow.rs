@@ -429,7 +429,7 @@ impl CanisterHttpQuery<UserError> for ManagedCanistersAssert {
 }
 
 macro_rules! assert_ledger {
-    ($name:expr, $ty:ty) => {
+    ($name:expr_2021, $ty:ty) => {
         paste::paste! {
             pub fn [<call_ledger_$name:snake >](env: &ic_state_machine_tests::StateMachine, ledger_canister_id: ic_base_types::CanisterId) -> $ty {
                 candid::Decode!(

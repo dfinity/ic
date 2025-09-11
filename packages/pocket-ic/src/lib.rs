@@ -1901,36 +1901,39 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
         options.write(true).create_new(true);
         #[cfg(unix)]
         options.mode(0o777);
-        if let Ok(out) = options.open(&default_bin_path) {
-            #[cfg(target_os = "macos")]
-            let os = "darwin";
-            #[cfg(not(target_os = "macos"))]
-            let os = "linux";
-            #[cfg(target_arch = "aarch64")]
-            let arch = "arm64";
-            #[cfg(not(target_arch = "aarch64"))]
-            let arch = "x86_64";
-            let server_url = format!(
-                "https://github.com/dfinity/pocketic/releases/download/{}/pocket-ic-{}-{}.gz",
-                EXPECTED_SERVER_VERSION, arch, os
-            );
-            println!("Failed to validate PocketIC server binary: `{}`. Going to download PocketIC server {} from {} to the local path {}. To avoid downloads during test execution, please specify the path to the (ungzipped and executable) PocketIC server {} using the function `PocketIcBuilder::with_server_binary` or using the `POCKET_IC_BIN` environment variable.", e, EXPECTED_SERVER_VERSION, server_url, default_bin_path.display(), EXPECTED_SERVER_VERSION);
-            if let Err(e) = download_pocketic_server(server_url, out).await {
-                let _ = std::fs::remove_file(default_bin_path);
-                panic!("{}", e);
+        match options.open(&default_bin_path) {
+            Ok(out) => {
+                #[cfg(target_os = "macos")]
+                let os = "darwin";
+                #[cfg(not(target_os = "macos"))]
+                let os = "linux";
+                #[cfg(target_arch = "aarch64")]
+                let arch = "arm64";
+                #[cfg(not(target_arch = "aarch64"))]
+                let arch = "x86_64";
+                let server_url = format!(
+                    "https://github.com/dfinity/pocketic/releases/download/{}/pocket-ic-{}-{}.gz",
+                    EXPECTED_SERVER_VERSION, arch, os
+                );
+                println!("Failed to validate PocketIC server binary: `{}`. Going to download PocketIC server {} from {} to the local path {}. To avoid downloads during test execution, please specify the path to the (ungzipped and executable) PocketIC server {} using the function `PocketIcBuilder::with_server_binary` or using the `POCKET_IC_BIN` environment variable.", e, EXPECTED_SERVER_VERSION, server_url, default_bin_path.display(), EXPECTED_SERVER_VERSION);
+                if let Err(e) = download_pocketic_server(server_url, out).await {
+                    let _ = std::fs::remove_file(default_bin_path);
+                    panic!("{}", e);
+                }
             }
-        } else {
-            // PocketIC server has already been created: wait until it's fully downloaded.
-            let start = std::time::Instant::now();
-            loop {
-                if check_pocketic_server_version(&default_bin_path).is_ok() {
-                    break;
+            _ => {
+                // PocketIC server has already been created: wait until it's fully downloaded.
+                let start = std::time::Instant::now();
+                loop {
+                    if check_pocketic_server_version(&default_bin_path).is_ok() {
+                        break;
+                    }
+                    if start.elapsed() > std::time::Duration::from_secs(60) {
+                        let _ = std::fs::remove_file(&default_bin_path);
+                        panic!("Timed out waiting for PocketIC server being available at the local path {}.", default_bin_path.display());
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(100));
                 }
-                if start.elapsed() > std::time::Duration::from_secs(60) {
-                    let _ = std::fs::remove_file(&default_bin_path);
-                    panic!("Timed out waiting for PocketIC server being available at the local path {}.", default_bin_path.display());
-                }
-                std::thread::sleep(std::time::Duration::from_millis(100));
             }
         }
     }

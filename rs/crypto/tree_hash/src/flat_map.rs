@@ -26,9 +26,9 @@ mod tests;
 /// ```
 #[macro_export]
 macro_rules! flatmap {
-    ( $($key:expr => $value:expr,)+ ) => (flatmap!($($key => $value),+));
+    ( $($key:expr_2021 => $value:expr_2021,)+ ) => (flatmap!($($key => $value),+));
 
-    ( $($key:expr => $value:expr),* ) => {
+    ( $($key:expr_2021 => $value:expr_2021),* ) => {
             $crate::flat_map::FlatMap::from_key_values(vec![$(($key, $value)),*])
     };
 }

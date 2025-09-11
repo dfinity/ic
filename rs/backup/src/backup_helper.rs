@@ -306,10 +306,9 @@ impl BackupHelper {
         cmd.arg("--min-size=1").arg(remote_dir).arg(local_dir);
         debug!(self.log, "Will execute: {:?}", cmd);
 
-        if let Err(e) = exec_cmd(&mut cmd) {
-            Err(format!("Error: {}", e))
-        } else {
-            Ok(())
+        match exec_cmd(&mut cmd) {
+            Err(e) => Err(format!("Error: {}", e)),
+            _ => Ok(()),
         }
     }
 

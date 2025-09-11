@@ -77,8 +77,10 @@ fn setup_and_run_ic_ref_test(
 
         // set `SSL_CERT_FILE` so that the canister http outcalls adapter accepts the self-signed certificate
         // (this affects all tests and thus `httbin_https` should only be set to `true` in a single test)
-        std::env::set_var("SSL_CERT_FILE", cert_path.clone());
-        std::env::remove_var("NIX_SSL_CERT_FILE");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("SSL_CERT_FILE", cert_path.clone()) };
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::remove_var("NIX_SSL_CERT_FILE") };
 
         cmd.arg("--cert-file").arg(cert_path);
         cmd.arg("--key-file").arg(key_path);

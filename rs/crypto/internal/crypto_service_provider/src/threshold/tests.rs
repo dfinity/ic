@@ -49,7 +49,7 @@ pub mod util {
         let verifier = Csp::builder_for_test()
             .with_vault(
                 LocalCspVault::builder_for_test()
-                    .with_rng(ChaChaRng::from_seed(rng.gen::<[u8; 32]>()))
+                    .with_rng(ChaChaRng::from_seed(rng.r#gen::<[u8; 32]>()))
                     .build(),
             )
             .build();
@@ -85,7 +85,7 @@ pub mod util {
             //
             // * Signatures cannot be generated with an incorrect key_id:
             if let Some((csp, _key_id)) = signers.first() {
-                let wrong_key_id = KeyId::from(rng.gen::<[u8; 32]>());
+                let wrong_key_id = KeyId::from(rng.r#gen::<[u8; 32]>());
                 let mut key_ids = signers.iter().map(|(_, key_id)| *key_id);
 
                 assert!(
