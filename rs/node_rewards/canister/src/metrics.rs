@@ -1,5 +1,5 @@
 #![allow(deprecated)]
-use crate::pb::v1::{SubnetIdKey, SubnetMetricsKey as SubnetMetricsKeyProto, SubnetMetricsValue};
+use crate::pb::v1::{SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue};
 use crate::KeyRange;
 use async_trait::async_trait;
 use candid::Principal;
@@ -50,7 +50,7 @@ where
 {
     pub(crate) client: Box<dyn ManagementCanisterClient>,
     pub(crate) subnets_metrics:
-        RefCell<StableBTreeMap<SubnetMetricsKeyProto, SubnetMetricsValue, Memory>>,
+        RefCell<StableBTreeMap<SubnetMetricsKey, SubnetMetricsValue, Memory>>,
     pub(crate) subnets_to_retry: RefCell<StableBTreeMap<SubnetIdKey, RetryCount, Memory>>,
     pub(crate) last_timestamp_per_subnet: RefCell<StableBTreeMap<SubnetIdKey, UnixTsNanos, Memory>>,
 }
@@ -139,7 +139,7 @@ where
                         } in subnet_update
                         {
                             self.subnets_metrics.borrow_mut().insert(
-                                SubnetMetricsKeyProto {
+                                SubnetMetricsKey {
                                     timestamp_nanos,
                                     subnet_id: Some(subnet_id.get()),
                                 },
@@ -190,13 +190,13 @@ where
     ) -> BTreeMap<SubnetMetricsDailyKey, Vec<NodeMetricsDailyRaw>> {
         let mut daily_metrics_by_subnet = BTreeMap::new();
         let previous_day_ts = start_day.previous_day().unix_ts_at_day_start();
-        let first_key = SubnetMetricsKeyProto {
+        let first_key = SubnetMetricsKey {
             timestamp_nanos: previous_day_ts,
-            ..SubnetMetricsKeyProto::min_key()
+            ..SubnetMetricsKey::min_key()
         };
-        let last_key = SubnetMetricsKeyProto {
+        let last_key = SubnetMetricsKey {
             timestamp_nanos: end_day.get(),
-            ..SubnetMetricsKeyProto::max_key()
+            ..SubnetMetricsKey::max_key()
         };
 
         let mut subnets_metrics_by_day: BTreeMap<DayUtc, _> = self
