@@ -205,9 +205,7 @@ impl CatchUpPackageMaker {
                 );
             }
             Err(StateHashError::Permanent(StateNotFullyCertified(_))) => {
-                panic!(
-                    "Height {height} is not a fully certified height. This should not happen.",
-                );
+                panic!("Height {height} is not a fully certified height. This should not happen.",);
             }
             Ok(state_hash) => {
                 let summary = start_block.payload.as_ref().as_summary();

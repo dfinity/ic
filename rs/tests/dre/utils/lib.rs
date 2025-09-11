@@ -206,9 +206,7 @@ fn update_env_variables(pairs: Vec<(String, &str)>) {
     for (value, env_variable) in pairs {
         // TODO: Audit that the environment access only happens in single-threaded code.
         unsafe { std::env::set_var(env_variable, &value) };
-        eprintln!(
-            "Overriden env variable `{env_variable}` to value: {value}"
-        )
+        eprintln!("Overriden env variable `{env_variable}` to value: {value}")
     }
 }
 
@@ -249,8 +247,8 @@ async fn fetch_update_file_sha256_with_retry(version: &ReplicaVersion) -> String
 
 async fn fetch_update_file_sha256(version: &ReplicaVersion) -> Result<String, String> {
     let sha_url = get_public_update_image_sha_url(version);
-    let tmpfile = tempfile::NamedTempFile::new()
-        .map_err(|err| format!("Unable to create tmpfile: {err}"))?;
+    let tmpfile =
+        tempfile::NamedTempFile::new().map_err(|err| format!("Unable to create tmpfile: {err}"))?;
     FileDownloader::new(None)
         .download_file(&sha_url, tmpfile.path(), None)
         .await
@@ -292,8 +290,8 @@ async fn fetch_update_file_measurements_with_retry(
 }
 
 async fn fetch_update_file_measurements(version: &ReplicaVersion) -> Result<PathBuf, String> {
-    let tmpfile = tempfile::NamedTempFile::new()
-        .map_err(|err| format!("Unable to create tmpfile: {err}"))?;
+    let tmpfile =
+        tempfile::NamedTempFile::new().map_err(|err| format!("Unable to create tmpfile: {err}"))?;
     FileDownloader::new(None)
         .download_file(
             &get_public_update_image_guest_launch_measurements(version),

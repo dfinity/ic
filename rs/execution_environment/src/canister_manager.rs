@@ -2934,7 +2934,6 @@ pub fn uninstall_canister(
     };
 
     let canister_id = canister.canister_id();
-    
 
     canister
         .system_state

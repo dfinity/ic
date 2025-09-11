@@ -199,9 +199,7 @@ impl ProtocolSetup {
     pub fn next_dealing_seed(&self) -> Seed {
         let round = self.protocol_round.get();
 
-        let seed = self
-            .seed
-            .derive(&format!("ic-crypto-tecdsa-round-{round}"));
+        let seed = self.seed.derive(&format!("ic-crypto-tecdsa-round-{round}"));
 
         self.protocol_round.set(round + 1);
 

@@ -568,9 +568,7 @@ pub fn from_account_or_account_identifier(
             Some(icp_ledger::AccountIdentifier::from(account))
         }
         (None, Some(a)) => Some((&a).try_into().map_err(|e| {
-            ApiError::invalid_request(format!(
-                "Could not parse recipient account identifier: {e}"
-            ))
+            ApiError::invalid_request(format!("Could not parse recipient account identifier: {e}"))
         })?),
         (Some(_), Some(_)) => {
             return Err(ApiError::invalid_request(

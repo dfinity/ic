@@ -124,9 +124,7 @@ pub fn make_hsm_sender(hsm_slot: &str, key_id: &str, pin: &str) -> Sender {
     let pub_key = UtilityCommand::read_public_key(Some(hsm_slot), Some(key_id))
         .execute()
         .unwrap_or_else(|e| {
-            panic!(
-                "Error while trying to read the public key from the HSM. Underlying error: {e}"
-            )
+            panic!("Error while trying to read the public key from the HSM. Underlying error: {e}")
         });
 
     let key_id = key_id.to_string();

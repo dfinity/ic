@@ -37,9 +37,7 @@ pub fn load_wasm(manifest_dir: impl AsRef<Path>, binary_name: &str, features: &[
     match env::var_os(&var_name) {
         Some(path) => {
             let bytes = std::fs::read(&path).unwrap_or_else(|e| {
-                panic!(
-                    "failed to load Wasm file from path {path:?} (env var {var_name}): {e}"
-                )
+                panic!("failed to load Wasm file from path {path:?} (env var {var_name}): {e}")
             });
             eprintln!(
                 "Using pre-built binary for {} (size = {} bytes)",

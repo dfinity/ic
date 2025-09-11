@@ -4625,9 +4625,8 @@ fn chunk_store_methods_fail_from_non_controller() {
             .build();
 
         let result = test.ingress(uc, "update", wasm);
-        let expected_err = format!(
-            "Only the controllers of the canister {canister_id} can control it."
-        );
+        let expected_err =
+            format!("Only the controllers of the canister {canister_id} can control it.");
         match result {
             Ok(WasmResult::Reject(reject)) => {
                 assert!(

@@ -118,9 +118,7 @@ fn mk_transition_predicate(
     let old_transition_predicate =
         add_parameters(old_transition_predicate, predicate_parameters.clone());
     let new_next_predicate = add_parameters(new_next_predicate, predicate_parameters);
-    format!(
-        "{new_next_predicate} ==\n  /\\ {old_transition_predicate}\n{post_state_constraint}",
-    )
+    format!("{new_next_predicate} ==\n  /\\ {old_transition_predicate}\n{post_state_constraint}",)
 }
 
 fn mk_constant_definitions(constants: HashMap<String, String>) -> Vec<String> {
@@ -177,10 +175,8 @@ fn run_apalache(
             } else {
                 Err(ApalacheError::CheckFailed(
                     e.code(),
-                    format!(
-                        "When checking file\n{tla_module:?}\nApalache returned the error: {e}"
-                    )
-                    .to_string(),
+                    format!("When checking file\n{tla_module:?}\nApalache returned the error: {e}")
+                        .to_string(),
                 ))
             }
         })
@@ -300,10 +296,7 @@ pub fn check_tla_code_link_raw(
         )[..32];
         let module_body = module_body.replace(
             format!("MODULE {}", module_name.clone()).as_str(),
-            format!(
-                "MODULE {new_module_prefix}_{module_name}_{new_module_suffix}"
-            )
-            .as_str(),
+            format!("MODULE {new_module_prefix}_{module_name}_{new_module_suffix}").as_str(),
         );
 
         let module_body = module_body.replace(

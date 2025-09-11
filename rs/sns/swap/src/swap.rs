@@ -229,18 +229,14 @@ pub fn apportion_approximately_equally(total: u64, len: u64) -> Result<Vec<u64>,
             // next_back only returns None after len calls.
             // Therefore, next_back does not return None here.
             // Therefore, this expect will never panic.
-            .ok_or_else(|| {
-                format!(
-                    "Ran out of elements to increment. total={total}, len={len}",
-                )
-            })?;
+            .ok_or_else(
+                || format!("Ran out of elements to increment. total={total}, len={len}",),
+            )?;
 
         // This cannot overflow because the result must be <= total. Thus, this
         // will not panic.
         *element = element.checked_add(1).ok_or_else(|| {
-            format!(
-                "Incrementing element by 1 resulted in overflow. total={total}, len={len}",
-            )
+            format!("Incrementing element by 1 resulted in overflow. total={total}, len={len}",)
         })?;
     }
 
@@ -3463,9 +3459,7 @@ impl SnsNeuronRecipe {
         let neuron_attributes = neuron_attributes.as_ref().ok_or_else(|| {
             (
                 ConversionError::Invalid,
-                format!(
-                    "Missing neuron_attributes information for neuron recipe {self:?}"
-                ),
+                format!("Missing neuron_attributes information for neuron recipe {self:?}"),
             )
         })?;
         // SnsNeuronRecipe.sns should always be present as it is set in `commit`.
@@ -3473,9 +3467,7 @@ impl SnsNeuronRecipe {
         let transferable_amount = transferable_amount.as_ref().ok_or_else(|| {
             (
                 ConversionError::Invalid,
-                format!(
-                    "Missing transferable_amount (field `sns`) for neuron recipe {self:?}"
-                ),
+                format!("Missing transferable_amount (field `sns`) for neuron recipe {self:?}"),
             )
         })?;
 
@@ -3484,9 +3476,7 @@ impl SnsNeuronRecipe {
             let claimed_status = claimed_status.ok_or_else(|| {
                 (
                     ConversionError::Invalid,
-                    format!(
-                        "Missing claimed_status information for neuron recipe {self:?}"
-                    ),
+                    format!("Missing claimed_status information for neuron recipe {self:?}"),
                 )
             })?;
             let claimed_status = ClaimedStatus::try_from(claimed_status).map_err(|err| {
@@ -3559,9 +3549,7 @@ impl SnsNeuronRecipe {
                     Err(e) => {
                         return Err((
                             ConversionError::Invalid,
-                            format!(
-                                "Invalid Neurons' Fund neuron: recipe={self:?} error={e}"
-                            ),
+                            format!("Invalid Neurons' Fund neuron: recipe={self:?} error={e}"),
                         ));
                     }
                 };

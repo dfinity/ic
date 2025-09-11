@@ -56,11 +56,7 @@ impl Registry {
             timestamp_nanoseconds: _,
         } = self
             .get(&make_subnet_record_key(subnet_id).into_bytes(), version)
-            .ok_or_else(|| {
-                format!(
-                    "Subnet record for {subnet_id:} not found in the registry."
-                )
-            })?;
+            .ok_or_else(|| format!("Subnet record for {subnet_id:} not found in the registry."))?;
 
         SubnetRecord::decode(subnet_record_vec.as_slice()).map_err(|err| err.to_string())
     }
@@ -161,9 +157,7 @@ impl Registry {
                 if let Some(chain_key_config) = subnet_record.chain_key_config {
                     let chain_key_config = ChainKeyConfig::try_from(chain_key_config)
                         .unwrap_or_else(|err| {
-                            panic!(
-                                "{LOG_PREFIX}Cannot interpret data as ChainKeyConfig: {err}"
-                            );
+                            panic!("{LOG_PREFIX}Cannot interpret data as ChainKeyConfig: {err}");
                         });
                     chain_key_config.key_ids().iter().for_each(|key_id| {
                         if !key_map.contains_key(key_id) {
@@ -323,9 +317,7 @@ impl Registry {
             .map(|chain_key_config| {
                 let chain_key_config =
                     ChainKeyConfig::try_from(chain_key_config).unwrap_or_else(|err| {
-                        panic!(
-                            "{LOG_PREFIX}Cannot interpret data as ChainKeyConfig: {err}"
-                        );
+                        panic!("{LOG_PREFIX}Cannot interpret data as ChainKeyConfig: {err}");
                     });
                 chain_key_config.key_ids()
             })

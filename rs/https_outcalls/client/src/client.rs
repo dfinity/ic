@@ -335,9 +335,7 @@ async fn transform_adapter_response(
     let method_payload = Encode!(&transform_args).map_err(|encode_error| {
         (
             RejectCode::SysFatal,
-            format!(
-                "Failed to parse http response to 'http_response' candid: {encode_error}"
-            ),
+            format!("Failed to parse http response to 'http_response' candid: {encode_error}"),
         )
     })?;
 

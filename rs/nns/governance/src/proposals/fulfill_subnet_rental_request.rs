@@ -270,9 +270,7 @@ impl FulfillSubnetRentalRequest {
             .map_err(|(code, message)| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!(
-                        "Unable to call the Registry.create_subnet: {code:?}: {message}",
-                    ),
+                    format!("Unable to call the Registry.create_subnet: {code:?}: {message}",),
                 )
             })?;
 
@@ -281,17 +279,13 @@ impl FulfillSubnetRentalRequest {
             .map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!(
-                        "Unable to decode the response from Registry.create_subnet: {err}",
-                    ),
+                    format!("Unable to decode the response from Registry.create_subnet: {err}",),
                 )
             })?
             .map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!(
-                        "create_subnet reply from the Registry canister was an Err: {err}",
-                    ),
+                    format!("create_subnet reply from the Registry canister was an Err: {err}",),
                 )
             })?;
 

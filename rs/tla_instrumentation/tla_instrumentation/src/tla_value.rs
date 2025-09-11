@@ -65,8 +65,7 @@ impl TlaValue {
                             }
                             Some(Diff::FunctionDiff(m)) => {
                                 diff.extend(
-                                    m.into_iter()
-                                        .map(|(k2, dv)| (format!("{k}[{k2:?}]"), dv)),
+                                    m.into_iter().map(|(k2, dv)| (format!("{k}[{k2:?}]"), dv)),
                                 );
                             }
                             Some(d @ Diff::Other(_, _)) => {
@@ -131,18 +130,14 @@ impl Display for TlaValue {
                 write!(f, "{{{}}}", elements.join(", "))
             }
             TlaValue::Record(map) => {
-                let elements: Vec<_> = map
-                    .iter()
-                    .map(|(k, v)| format!("{k} |-> {v}"))
-                    .collect();
+                let elements: Vec<_> = map.iter().map(|(k, v)| format!("{k} |-> {v}")).collect();
                 write!(f, "[{}]", elements.join(", "))
             }
             TlaValue::Function(map) => {
                 if map.is_empty() {
                     f.write_str("[x \\in {} |-> CHOOSE y \\in {}: TRUE]")
                 } else {
-                    let elements: Vec<_> =
-                        map.iter().map(|(k, v)| format!("{k} :> {v}")).collect();
+                    let elements: Vec<_> = map.iter().map(|(k, v)| format!("{k} :> {v}")).collect();
                     write!(f, "({})", elements.join(" @@ "))
                 }
             }

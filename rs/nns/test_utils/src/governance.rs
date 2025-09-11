@@ -251,9 +251,7 @@ pub async fn wait_for_final_state(
         num_observed_accepted_state += 1;
         std::thread::sleep(Duration::from_millis(500));
     }
-    eprintln!(
-        "Non-final states were seen {num_observed_accepted_state} times for {id}."
-    );
+    eprintln!("Non-final states were seen {num_observed_accepted_state} times for {id}.");
     // Return the final state
     get_proposal_info(governance_canister, id).await.unwrap()
 }

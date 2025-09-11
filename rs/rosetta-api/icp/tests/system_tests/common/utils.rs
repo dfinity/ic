@@ -225,9 +225,7 @@ pub async fn account_balance(pocket_ic: &PocketIc, account: &AccountIdentifier) 
         .await
     {
         Err(err) => {
-            panic!(
-                "failed to get the balance of account id: {account}, error msg: {err}"
-            );
+            panic!("failed to get the balance of account id: {account}, error msg: {err}");
         }
         Ok(res) => Decode!(&res, Tokens)
             .unwrap_or_else(|_| panic!("error decoding account_balance response")),

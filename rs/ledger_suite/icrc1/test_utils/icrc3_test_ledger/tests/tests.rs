@@ -56,8 +56,6 @@ fn add_block(
     canister_id: CanisterId,
     block: &ICRC3Value,
 ) -> Result<Nat, String> {
-    
-
     Decode!(
         &env.execute_ingress(canister_id, "add_block", Encode!(block).unwrap())
             .expect("failed to add block")

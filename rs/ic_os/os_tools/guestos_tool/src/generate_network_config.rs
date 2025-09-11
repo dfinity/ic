@@ -112,9 +112,7 @@ pub fn generate_networkd_config(
 
     let networkd_config_file_contents =
         generate_networkd_config_contents(network_info, &network_interface_name, disable_dad);
-    eprintln!(
-        "Networkd config contents: {networkd_config_file_contents:#?}"
-    );
+    eprintln!("Networkd config contents: {networkd_config_file_contents:#?}");
 
     let networkd_config_file_path =
         systemd_network_dir.join(format!("10-{network_interface_name}.network"));

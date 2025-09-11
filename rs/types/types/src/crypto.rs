@@ -528,10 +528,9 @@ impl fmt::Debug for CryptoError {
                 "Cannot find TLS public key certificate record for node with ID {node_id:?} at registry version {registry_version:?} "
             ),
 
-            CryptoError::SecretKeyNotFound { algorithm, key_id } => write!(
-                f,
-                "Cannot find {algorithm:?} secret key with ID {key_id:?}"
-            ),
+            CryptoError::SecretKeyNotFound { algorithm, key_id } => {
+                write!(f, "Cannot find {algorithm:?} secret key with ID {key_id:?}")
+            }
 
             CryptoError::TlsSecretKeyNotFound { certificate_der } => write!(
                 f,
@@ -558,10 +557,7 @@ impl fmt::Debug for CryptoError {
                 algorithm,
                 internal_error,
                 ..
-            } => write!(
-                f,
-                "Malformed {algorithm:?} public key: {internal_error}"
-            ),
+            } => write!(f, "Malformed {algorithm:?} public key: {internal_error}"),
 
             CryptoError::MalformedSignature {
                 algorithm,

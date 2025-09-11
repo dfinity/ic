@@ -90,9 +90,7 @@ async fn query_garbage_response() {
 
     match result {
         Err(XNetClientError::ProxyDecodeError(ProxyDecodeError::DecodeError(_))) => (),
-        _ => panic!(
-            "Expecting Err(ProxyDecodeError(DecodeError(_))), got {result:?}"
-        ),
+        _ => panic!("Expecting Err(ProxyDecodeError(DecodeError(_))), got {result:?}"),
     }
     assert_eq!(
         metric_vec(&[
@@ -119,9 +117,7 @@ async fn query_invalid_proto() {
 
     match result {
         Err(XNetClientError::ProxyDecodeError(ProxyDecodeError::MissingField(_))) => (),
-        _ => panic!(
-            "Expecting Err(ProxyDecodeError(MissingField(_))), got {result:?}"
-        ),
+        _ => panic!("Expecting Err(ProxyDecodeError(MissingField(_))), got {result:?}"),
     }
     assert_eq!(
         metric_vec(&[

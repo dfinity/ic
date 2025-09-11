@@ -97,8 +97,6 @@ fn upgrade_with_routing_table(num_canisters: u64) -> BenchResult {
             registry_storage.encode_to_vec()
         };
 
-        
-
         {
             let _s2 = bench_scope("post_upgrade");
             let registry_storage = RegistryCanisterStableStorage::decode(bytes.as_slice())

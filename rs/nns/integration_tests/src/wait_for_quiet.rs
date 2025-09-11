@@ -98,9 +98,9 @@ fn test_deadline_is_extended_with_wait_for_quiet() {
             .unwrap()
         {
             CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
-            some_error => panic!(
-                "Cannot find proposal id in response. The response is: {some_error:?}"
-            ),
+            some_error => {
+                panic!("Cannot find proposal id in response. The response is: {some_error:?}")
+            }
         };
 
         let pi: Option<ProposalInfo> = nns_canisters

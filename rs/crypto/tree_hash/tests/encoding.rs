@@ -93,9 +93,7 @@ fn prop_fails_on_extra_array_items(#[strategy(arbitrary_valid_cbor_encoding())] 
         let v = Cbor::Array(vec);
         let r: Result<MixedHashTree, _> = serde_cbor::value::from_value(v.clone());
         match r {
-            Ok(_) => panic!(
-                "Successfully parsed a MixedHashTree from invalid CBOR {v:?}"
-            ),
+            Ok(_) => panic!("Successfully parsed a MixedHashTree from invalid CBOR {v:?}"),
             Err(err) => assert!(
                 err.to_string().contains("length"),
                 "Expected invalid length error, got {err:?}"
@@ -114,9 +112,7 @@ fn prop_fails_on_missing_array_items(#[strategy(arbitrary_valid_cbor_encoding())
         let v = Cbor::Array(vec);
         let r: Result<MixedHashTree, _> = serde_cbor::value::from_value(v.clone());
         match r {
-            Ok(_) => panic!(
-                "Successfully parsed a MixedHashTree from invalid CBOR {v:?}"
-            ),
+            Ok(_) => panic!("Successfully parsed a MixedHashTree from invalid CBOR {v:?}"),
             Err(err) => assert!(
                 err.to_string().contains("length"),
                 "Expected invalid length error, got {err:?}"
@@ -136,9 +132,7 @@ fn fail_to_decode_unknown_tag() {
         as Result<MixedHashTree, Error>
     {
         Err(err) if err.to_string().contains("unknown tag: 5") => (),
-        other => panic!(
-            "Expected an error with message containing 'unknown tag', got {other:?}"
-        ),
+        other => panic!("Expected an error with message containing 'unknown tag', got {other:?}"),
     }
 }
 

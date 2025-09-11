@@ -330,7 +330,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             None => None,
         };
         // Specialisation to this scheme:
-        
+
         match algorithm_id {
             AlgorithmId::NiDkg_Groth20_Bls12_381 => {
                 let maybe_resharing_secret_key_bytes = match maybe_resharing_secret_key {
@@ -387,7 +387,6 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         fs_key_id: KeyId,
         receiver_index: NodeIndex,
     ) -> Result<(), ni_dkg_errors::CspDkgLoadPrivateKeyError> {
-        
         match algorithm_id {
             AlgorithmId::NiDkg_Groth20_Bls12_381 => {
                 let threshold_key_id =

@@ -101,9 +101,7 @@ pub async fn get_subnet_list_record() -> Option<(SubnetListRecord, u64)> {
         Ok((slr, version)) => Some((slr, version)),
         Err(error) => match error {
             Error::KeyNotPresent(_) => None,
-            _ => panic!(
-                "Error while fetching current subnet list record: {error:?}"
-            ),
+            _ => panic!("Error while fetching current subnet list record: {error:?}"),
         },
     }
 }

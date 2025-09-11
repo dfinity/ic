@@ -392,9 +392,7 @@ pub fn check_success(
                 i,
                 format!("Error ratio below {}%", config.error_percentage_threshold).as_str(),
                 "Failed calls",
-                &format!(
-                    "{error_percentage}% ({failed_calls}/{attempted_calls})"
-                ),
+                &format!("{error_percentage}% ({failed_calls}/{attempted_calls})"),
             );
         }
 

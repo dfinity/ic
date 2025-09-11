@@ -84,9 +84,7 @@ pub async fn install_canisters(
                     .with_effective_canister_id(effective_canister_id)
                     .call_and_wait()
                     .await
-                    .map_err(|err| {
-                        format!("Couldn't create canister with provisional API: {err}")
-                    })
+                    .map_err(|err| format!("Couldn't create canister with provisional API: {err}"))
                     .unwrap();
                 let install_code = mgr.install_code(&canister_id, canister_bytes);
                 install_code

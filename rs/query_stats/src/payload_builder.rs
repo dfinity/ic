@@ -611,9 +611,9 @@ mod tests {
                     InvalidQueryStatsPayloadReason::InvalidNodeId { expected, reported },
                 ),
             )) if expected == node_test_id(1) && reported == node_test_id(2) => (),
-            Err(err) => panic!(
-                "QueryStatsPayload had wrong node id, yet instead got error {err:?}"
-            ),
+            Err(err) => {
+                panic!("QueryStatsPayload had wrong node id, yet instead got error {err:?}")
+            }
             Ok(_) => panic!("QueryStatsPayload had wrong node id, yet got validated"),
         }
     }
@@ -655,9 +655,9 @@ mod tests {
                 ),
             )) if highest_aggregated_epoch == QueryStatsEpoch::new(1234)
                 && payload_epoch == QueryStatsEpoch::new(0) => {}
-            Err(err) => panic!(
-                "QueryStatsPayload had epoch too low, yet instead got error {err:?}"
-            ),
+            Err(err) => {
+                panic!("QueryStatsPayload had epoch too low, yet instead got error {err:?}")
+            }
             Ok(_) => panic!("QueryStatsPayload had epoch too low, yet got validated"),
         }
     }
@@ -694,9 +694,9 @@ mod tests {
                 ),
             )) if expected == QueryStatsEpoch::new(0) && reported == QueryStatsEpoch::new(1234) => {
             }
-            Err(err) => panic!(
-                "QueryStatsPayload had epoch too high, yet instead got error {err:?}"
-            ),
+            Err(err) => {
+                panic!("QueryStatsPayload had epoch too high, yet instead got error {err:?}")
+            }
             Ok(_) => panic!("QueryStatsPayload had epoch too high, yet got validated"),
         }
     }
@@ -751,9 +751,7 @@ mod tests {
                 Err(err) => panic!(
                     "QueryStatsPayload test {id} had duplicates, yet instead got error {err:?}"
                 ),
-                Ok(_) => panic!(
-                    "QueryStatsPayload test {id} had duplicates, yet got validated"
-                ),
+                Ok(_) => panic!("QueryStatsPayload test {id} had duplicates, yet got validated"),
             }
         }
     }

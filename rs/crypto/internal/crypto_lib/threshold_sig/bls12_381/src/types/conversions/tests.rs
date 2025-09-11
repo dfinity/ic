@@ -58,9 +58,7 @@ fn test_invalid_public_key_fails_to_parse() {
     let invalid_public_key = PublicKeyBytes([0xCC; 96]);
     match PublicKey::try_from(&invalid_public_key) {
         Err(ThresholdSigPublicKeyBytesConversionError::Malformed { .. }) => (),
-        other => panic!(
-            "Expected a ThresholdSigPublicKeyBytes::Malformed error.  Got: {other:?}"
-        ),
+        other => panic!("Expected a ThresholdSigPublicKeyBytes::Malformed error.  Got: {other:?}"),
     }
 }
 
@@ -78,9 +76,9 @@ fn test_invalid_secret_key_fails_to_parse() {
         match (valid, secret_key) {
             (false, Err(ClibThresholdSignError::MalformedSecretKey { .. })) => (),
             (true, Ok(_)) => (),
-            (false, other) => panic!(
-                "Expected a MalformedSecretKey error for {name}.  Got: {other:?}"
-            ),
+            (false, other) => {
+                panic!("Expected a MalformedSecretKey error for {name}.  Got: {other:?}")
+            }
             (true, other) => panic!("Failed to parse valid secret key {name}: {other:?}"),
         }
     }

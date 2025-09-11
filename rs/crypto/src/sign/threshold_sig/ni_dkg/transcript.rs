@@ -70,9 +70,7 @@ mod creation {
             .collect();
         if !dealing_node_ids_not_in_dealers.is_empty() {
             // panic because this is a precondition violation:
-            panic!(
-                "Missing node ids in dealers: {dealing_node_ids_not_in_dealers:?}"
-            );
+            panic!("Missing node ids in dealers: {dealing_node_ids_not_in_dealers:?}");
         }
     }
 
@@ -121,9 +119,7 @@ mod creation {
             .committee
             .position(dealer)
             .unwrap_or_else(|| {
-                panic!(
-                    "This operation requires node ({dealer}) to be a dealer, but it is not."
-                )
+                panic!("This operation requires node ({dealer}) to be a dealer, but it is not.")
             })
     }
 

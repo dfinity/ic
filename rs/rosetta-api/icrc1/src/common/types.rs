@@ -131,9 +131,7 @@ impl Error {
     pub fn unsupported_operation(op_type: OperationType) -> Self {
         Self(rosetta_core::miscellaneous::Error {
             code: ERROR_CODE_UNSUPPORTED_OPERATION,
-            message: format!(
-                "The operation {op_type} is not supported by ICRC Rosetta."
-            ),
+            message: format!("The operation {op_type} is not supported by ICRC Rosetta."),
             description: None,
             retriable: false,
             details: None,

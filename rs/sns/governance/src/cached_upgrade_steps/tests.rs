@@ -255,9 +255,7 @@ fn cached_upgrade_steps_with_pending_upgrades() {
     assert!(cached_upgrade_steps.has_pending_upgrades());
 
     // .contains_in_order
-    let expected_err = Err(format!(
-        "{cached_upgrade_steps:?} does not contain {v3:?}"
-    ));
+    let expected_err = Err(format!("{cached_upgrade_steps:?} does not contain {v3:?}"));
     assert_eq!(cached_upgrade_steps.contains_in_order(&v0, &v0), Ok(true));
     assert_eq!(cached_upgrade_steps.contains_in_order(&v0, &v1), Ok(true));
     assert_eq!(cached_upgrade_steps.contains_in_order(&v0, &v2), Ok(true));

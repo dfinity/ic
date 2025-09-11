@@ -227,9 +227,7 @@ impl CatchUpPackageProvider {
         subnet_id: SubnetId,
     ) -> Result<Option<(pb::CatchUpPackage, CatchUpPackage)>, String> {
         let http = node_record.clone().http.ok_or_else(|| {
-            format!(
-                "Node {node_id} record's http endpoint is None: {node_record:?}"
-            )
+            format!("Node {node_id} record's http endpoint is None: {node_record:?}")
         })?;
         let mut uri = https_endpoint_to_url(&http)?;
         uri.path_segments_mut()
@@ -279,11 +277,7 @@ impl CatchUpPackageProvider {
         let client_config = self
             .crypto_tls_config
             .client_config(*node_id, self.registry.get_latest_version())
-            .map_err(|e| {
-                format!(
-                    "Failed to create tls client config for {node_id}: {e:?}"
-                )
-            })?;
+            .map_err(|e| format!("Failed to create tls client config for {node_id}: {e:?}"))?;
 
         let https = HttpsConnectorBuilder::new()
             .with_tls_config(client_config)

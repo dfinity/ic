@@ -2131,9 +2131,9 @@ pub fn panic_due_to_exit(output: ExitStatus, pid: u32) {
     match output.code() {
         // Do nothing when the Sandbox Launcher process terminates normally.
         Some(0) => {}
-        Some(code) => panic!(
-            "Error from launcher process, pid {pid} exited with status code: {code}"
-        ),
+        Some(code) => {
+            panic!("Error from launcher process, pid {pid} exited with status code: {code}")
+        }
         None => panic!(
             "Error from launcher process, pid {pid} exited due to signal! In test environments (e.g., PocketIC), you can safely ignore this message."
         ),

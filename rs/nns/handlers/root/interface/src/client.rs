@@ -113,9 +113,7 @@ impl NnsRootCanisterClient for SpyNnsRootCanisterClient {
 
         match reply {
             SpyNnsRootCanisterClientReply::ChangeCanisterControllers(response) => response,
-            reply => panic!(
-                "Expected a ChangeCanisterControllers reply. Instead have {reply:?}"
-            ),
+            reply => panic!("Expected a ChangeCanisterControllers reply. Instead have {reply:?}"),
         }
     }
 

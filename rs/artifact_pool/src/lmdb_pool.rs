@@ -399,9 +399,7 @@ fn create_db_env(path: &Path, read_only: bool, max_dbs: c_uint) -> Environment {
     let db_env = builder
         .open_with_permissions(path, permission)
         .unwrap_or_else(|err| {
-            panic!(
-                "Error opening LMDB environment with permissions at {path:?}: {err:?}"
-            )
+            panic!("Error opening LMDB environment with permissions at {path:?}: {err:?}")
         });
 
     unsafe {
@@ -1366,11 +1364,7 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
             self.log.clone(),
         )
         .next()
-        .unwrap_or_else(|| {
-            panic!(
-                "This should be impossible since we found a max height at {h:?}"
-            )
-        })
+        .unwrap_or_else(|| panic!("This should be impossible since we found a max height at {h:?}"))
     }
 
     /// Number of artifacts in the DB.

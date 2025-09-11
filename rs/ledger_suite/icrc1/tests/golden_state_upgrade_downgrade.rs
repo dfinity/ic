@@ -298,9 +298,7 @@ impl LedgerSuiteConfig {
                 Ok(())
             }
             Err(err) => {
-                println!(
-                    "Failed to get index principal for ledger {ledger_canister_id}: {err:?}"
-                );
+                println!("Failed to get index principal for ledger {ledger_canister_id}: {err:?}");
                 Err(Icrc106CheckError::IndexPrincipalNotSet)
             }
         }
@@ -327,9 +325,7 @@ impl LedgerSuiteConfig {
             state_machine
                 .upgrade_canister(archive_canister_id, wasm.clone().bytes(), vec![])
                 .unwrap_or_else(|e| {
-                    panic!(
-                        "should successfully upgrade archive '{archive_canister_id}': {e}"
-                    )
+                    panic!("should successfully upgrade archive '{archive_canister_id}': {e}")
                 });
         }
         println!("Upgraded {num_archives} archive(s)");
@@ -388,9 +384,7 @@ impl LedgerSuiteConfig {
                     .expect("should downgrade to mainnet ledger version");
             }
             (true, Err(e)) => {
-                panic!(
-                    "should successfully downgrade to mainnet ledger version: {e}"
-                );
+                panic!("should successfully downgrade to mainnet ledger version: {e}");
             }
             (false, Ok(_)) => {
                 panic!("should not successfully downgrade to mainnet ledger version");

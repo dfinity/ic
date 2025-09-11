@@ -505,10 +505,7 @@ async fn test_sns_lifecycle(
                 ErrorType::PreconditionFailed,
                 "{err:#?}"
             );
-            assert!(
-                error_message.contains("PreInitializationSwap"),
-                "{err:#?}"
-            );
+            assert!(error_message.contains("PreInitializationSwap"), "{err:#?}");
         } else {
             panic!("Unexpected error: {err:?}");
         }
@@ -1249,10 +1246,7 @@ async fn test_sns_lifecycle(
                     ErrorType::PreconditionFailed,
                     "{err:#?}"
                 );
-                assert!(
-                    error_message.contains("PreInitializationSwap"),
-                    "{err:#?}"
-                );
+                assert!(error_message.contains("PreInitializationSwap"), "{err:#?}");
             } else {
                 panic!("Unexpected error: {err:?}");
             }
@@ -1378,9 +1372,7 @@ async fn test_sns_lifecycle(
             .await
             .result
         else {
-            panic!(
-                "Proposal {nns_proposal_id:?} did not result in a successfully deployed SNS"
-            );
+            panic!("Proposal {nns_proposal_id:?} did not result in a successfully deployed SNS");
         };
         neurons_fund_audit_info
             .final_neurons_fund_participation
@@ -1842,9 +1834,7 @@ async fn test_sns_lifecycle(
             .await
             .result
         else {
-            panic!(
-                "Proposal {nns_proposal_id:?} did not result in a successfully deployed SNS"
-            );
+            panic!("Proposal {nns_proposal_id:?} did not result in a successfully deployed SNS");
         };
         // Maps neuron IDs to maturity equivalent ICP e8s.
         let mut final_neurons_fund_participation: BTreeMap<PrincipalId, Vec<u64>> =
@@ -1936,8 +1926,7 @@ async fn test_sns_lifecycle(
                     .collect()
             };
             assert_eq!(
-                nns_neuron_maturities_e8s,
-                original_nns_neuron_maturities_e8s,
+                nns_neuron_maturities_e8s, original_nns_neuron_maturities_e8s,
                 "Unexpected mismatch in maturity ICP equivalent for controller {controller_principal_id}. \
                 nns_neuron_maturities_e8s={nns_neuron_maturities_e8s:?} e8s, original_nns_neuron_maturities_e8s({original_nns_neuron_maturities_e8s:?}) e8s.",
             );

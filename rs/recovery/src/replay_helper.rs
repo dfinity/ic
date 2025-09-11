@@ -74,9 +74,7 @@ pub fn store_replay_output(state_params: StateParams, output_file: PathBuf) -> R
 pub fn read_output(output_file: PathBuf) -> RecoveryResult<StateParams> {
     let content = read_file(&output_file)?;
     let state_params: StateParams = serde_json::from_str(&content).map_err(|e| {
-        RecoveryError::invalid_output_error(format!(
-            "Failed to deserialize ic-replay output: {e}"
-        ))
+        RecoveryError::invalid_output_error(format!("Failed to deserialize ic-replay output: {e}"))
     })?;
     Ok(state_params)
 }

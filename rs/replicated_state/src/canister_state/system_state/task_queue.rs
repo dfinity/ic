@@ -156,14 +156,10 @@ impl TaskQueue {
         if let Some(task) = self.queue.front() {
             match task {
                 ExecutionTask::Heartbeat => {
-                    panic!(
-                        "Unexpected heartbeat task after a round in canister {id:?}"
-                    );
+                    panic!("Unexpected heartbeat task after a round in canister {id:?}");
                 }
                 ExecutionTask::GlobalTimer => {
-                    panic!(
-                        "Unexpected global timer task after a round in canister {id:?}"
-                    );
+                    panic!("Unexpected global timer task after a round in canister {id:?}");
                 }
                 ExecutionTask::OnLowWasmMemory
                 | ExecutionTask::AbortedExecution { .. }

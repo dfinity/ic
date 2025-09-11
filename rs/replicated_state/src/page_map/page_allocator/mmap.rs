@@ -842,9 +842,7 @@ unsafe fn get_file_length(fd: RawFd) -> FileOffset {
     unsafe {
         let mut stat = std::mem::MaybeUninit::<libc::stat64>::uninit();
         cvt(libc::fstat64(fd, stat.as_mut_ptr())).unwrap_or_else(|err| {
-            panic!(
-                "MmapPageAllocator failed to get the length of the file #{fd}: {err}"
-            )
+            panic!("MmapPageAllocator failed to get the length of the file #{fd}: {err}")
         });
         stat.assume_init().st_size
     }

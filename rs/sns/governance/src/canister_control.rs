@@ -228,9 +228,7 @@ async fn canister_status(
         Err(err) => {
             let err = GovernanceError::new_with_message(
                 ErrorType::External,
-                format!(
-                    "An error occurred while waiting for the target canister to stop: {err:?}"
-                ),
+                format!("An error occurred while waiting for the target canister to stop: {err:?}"),
             );
             log!(ERROR, "{}{:?}", log_prefix(), err);
             Err(err)

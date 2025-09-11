@@ -79,11 +79,7 @@ fn make_checkpoint_and_get_state_impl(
         &state_manager_metrics(log).checkpoint_metrics,
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
-    .unwrap_or_else(|err| {
-        panic!(
-            "Expected make_unvalidated_checkpoint to succeed, got {err:?}"
-        )
-    });
+    .unwrap_or_else(|err| panic!("Expected make_unvalidated_checkpoint to succeed, got {err:?}"));
     *state = (*switched_state).clone();
     flush_tip_channel(tip_channel);
     load_checkpoint_and_validate_parallel(

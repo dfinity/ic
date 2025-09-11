@@ -232,9 +232,7 @@ impl GovernanceCanister {
         })?;
 
         result.map_err(|e| {
-            format!(
-                "Error returned by 'claim_gtc_neurons' of the Governance canister: {e:?}"
-            )
+            format!("Error returned by 'claim_gtc_neurons' of the Governance canister: {e:?}")
         })
     }
 
@@ -259,9 +257,7 @@ impl GovernanceCanister {
         })?;
 
         result.map_err(|e| {
-            format!(
-                "Error returned by 'transfer_gtc_neuron' of the Governance canister: {e:?}"
-            )
+            format!("Error returned by 'transfer_gtc_neuron' of the Governance canister: {e:?}")
         })
     }
 }

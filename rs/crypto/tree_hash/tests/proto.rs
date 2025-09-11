@@ -50,9 +50,9 @@ fn error_invalid_digest() {
 
     match <v1::Witness as ProtoProxy<Witness>>::proxy_decode(&witness_vec) {
         Err(ProxyDecodeError::InvalidDigestLength { actual: 4, .. }) => (),
-        other => panic!(
-            "Expected ProxyDecodeError::InvalidDigestLength {{ actual: 4 }}, got {other:?}"
-        ),
+        other => {
+            panic!("Expected ProxyDecodeError::InvalidDigestLength {{ actual: 4 }}, got {other:?}")
+        }
     }
 }
 

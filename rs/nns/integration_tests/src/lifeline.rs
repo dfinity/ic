@@ -95,9 +95,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
     {
         resp.proposal_id.unwrap()
     } else {
-        panic!(
-            "Unexpected proposal submission response: {proposal_submission_response:?}"
-        );
+        panic!("Unexpected proposal submission response: {proposal_submission_response:?}");
     };
 
     // Should have 1 pending proposals
@@ -195,9 +193,7 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
     {
         resp.proposal_id.unwrap()
     } else {
-        panic!(
-            "Unexpected proposal submission response: {proposal_submission_response:?}"
-        );
+        panic!("Unexpected proposal submission response: {proposal_submission_response:?}");
     };
 
     // Should have 1 pending proposals

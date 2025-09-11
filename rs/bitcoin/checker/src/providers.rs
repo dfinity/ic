@@ -107,9 +107,7 @@ impl Provider {
                 Ok(btcscan_request(txid, max_response_bytes))
             }
             (provider, btc_network) => {
-                panic!(
-                    "Provider {provider} does not support Bitcoin {btc_network}"
-                )
+                panic!("Provider {provider} does not support Bitcoin {btc_network}")
             }
         }
     }
@@ -160,9 +158,7 @@ fn make_post_request(
     max_response_bytes: u32,
 ) -> Result<CanisterHttpRequestArgument, String> {
     let (url, header) = parse_authorization_header_from_url(json_rpc_url)?;
-    let body = format!(
-        "{{\"method\": \"gettransaction\", \"params\": [\"{txid}\"]}}"
-    );
+    let body = format!("{{\"method\": \"gettransaction\", \"params\": [\"{txid}\"]}}");
     Ok(CanisterHttpRequestArgument {
         url: url.to_string(),
         method: HttpMethod::POST,

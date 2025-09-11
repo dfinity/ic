@@ -194,9 +194,7 @@ pub fn sns_governance_list_neurons(
     let result = match result {
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
-            panic!(
-                "list_neurons was rejected by the governance canister: {reject:#?}"
-            )
+            panic!("list_neurons was rejected by the governance canister: {reject:#?}")
         }
     };
     Decode!(&result, ListNeuronsResponse).unwrap()
@@ -304,9 +302,7 @@ pub fn participate_in_swap(
     let response = match response {
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
-            panic!(
-                "refresh_buyer_tokens was rejected by the swap canister: {reject:#?}"
-            )
+            panic!("refresh_buyer_tokens was rejected by the swap canister: {reject:#?}")
         }
     };
 
@@ -387,9 +383,7 @@ pub fn send_participation_funds(
             .expect("Failed to decode response")
             .expect("Failed to transfer participation funds"),
         WasmResult::Reject(reject) => {
-            panic!(
-                "transfer was rejected by the ICP ledger canister: {reject:#?}"
-            )
+            panic!("transfer was rejected by the ICP ledger canister: {reject:#?}")
         }
     };
 }
@@ -449,9 +443,7 @@ pub fn sns_root_register_dapp_canister(
     let result = match result {
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
-            panic!(
-                "register_dapp_canisters was rejected by the swap canister: {reject:#?}"
-            )
+            panic!("register_dapp_canisters was rejected by the swap canister: {reject:#?}")
         }
     };
     Decode!(&result, RegisterDappCanisterResponse).unwrap()
@@ -477,9 +469,7 @@ pub fn sns_root_register_dapp_canisters(
     let result = match result {
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
-            panic!(
-                "register_dapp_canisters was rejected by the swap canister: {reject:#?}"
-            )
+            panic!("register_dapp_canisters was rejected by the swap canister: {reject:#?}")
         }
     };
     Decode!(&result, RegisterDappCanistersResponse).unwrap()

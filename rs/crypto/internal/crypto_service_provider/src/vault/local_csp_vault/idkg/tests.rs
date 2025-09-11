@@ -2031,10 +2031,9 @@ mod idkg_open_dealing {
 
             let mut mnsks = MockSecretKeyStore::new();
             mnsks.expect_get().times(1).return_once(move |_key_id| {
-                
                 tmp_vault.sks_read_lock().get(
-                        &KeyId::try_from(&pk).expect("failed to convert a public key to the KeyId"),
-                    )
+                    &KeyId::try_from(&pk).expect("failed to convert a public key to the KeyId"),
+                )
             });
 
             Box::new(

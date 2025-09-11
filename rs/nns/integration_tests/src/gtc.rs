@@ -599,9 +599,9 @@ fn forward_whitelisted_unclaimed_accounts(
         .unwrap();
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!(
-            "Call to forward_whitelisted_unclaimed_accounts failed: {s:#?}"
-        ),
+        WasmResult::Reject(s) => {
+            panic!("Call to forward_whitelisted_unclaimed_accounts failed: {s:#?}")
+        }
     };
 
     Decode!(&result, Result<(), String>).unwrap()

@@ -805,9 +805,7 @@ impl Blocks {
             BlockStoreError::Other(format!("Failed to initialize SQLite database: {e}"))
         })?;
         store.cache_rosetta_blocks_mode().map_err(|e| {
-            BlockStoreError::Other(format!(
-                "Failed to determine the Rosetta Blocks Mode: {e}"
-            ))
+            BlockStoreError::Other(format!("Failed to determine the Rosetta Blocks Mode: {e}"))
         })?;
 
         store.check_table_coherence()?;

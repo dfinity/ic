@@ -281,9 +281,7 @@ impl Registry {
             decode_high_capacity_registry_value::<pb::RoutingTable, _>(range_to_decode, chunks)
         }) {
             Some(rt) => RoutingTable::try_from(rt).map_err(|e| e.to_string()),
-            None => Err(format!(
-                "{LOG_PREFIX}Could not decode routing table shard"
-            )),
+            None => Err(format!("{LOG_PREFIX}Could not decode routing table shard")),
         }
     }
 

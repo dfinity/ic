@@ -654,8 +654,7 @@ impl Metrics {
         );
         for operation in BooleanOperation::iter() {
             for result in BooleanResult::iter() {
-                boolean_results
-                    .with_label_values(&[&format!("{operation}"), &format!("{result}")]);
+                boolean_results.with_label_values(&[&format!("{operation}"), &format!("{result}")]);
             }
         }
         let rotation_results = r.int_counter_vec(

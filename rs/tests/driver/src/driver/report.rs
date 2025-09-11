@@ -172,11 +172,10 @@ impl Display for SystemTestGroupError {
                 task_id.name(),
                 signal
             ),
-            SystemTestGroupError::SystemTestFailure(report) => writeln!(
-                f,
-                "Test driver completed normally, but some tests failed"
-            )
-            .and(write!(f, "{report}")),
+            SystemTestGroupError::SystemTestFailure(report) => {
+                writeln!(f, "Test driver completed normally, but some tests failed")
+                    .and(write!(f, "{report}"))
+            }
         }
     }
 }

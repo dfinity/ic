@@ -402,9 +402,7 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
     .await;
 
     res.map_err(|(code, msg)| {
-        let s = format!(
-            "Setting controller of archive node failed with code {code}: {msg}"
-        );
+        let s = format!("Setting controller of archive node failed with code {code}: {msg}");
         FailedToArchiveBlocks(s)
     })?;
 

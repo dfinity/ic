@@ -374,11 +374,8 @@ pub fn encode_meta_manifest(meta_manifest: &MetaManifest) -> Vec<u8> {
 }
 
 pub fn decode_meta_manifest(bytes: Chunk) -> Result<MetaManifest, String> {
-    pb::MetaManifest::proxy_decode(bytes.as_bytes()).map_err(|err| {
-        format!(
-            "failed to convert MetaManifest proto into an object: {err}"
-        )
-    })
+    pb::MetaManifest::proxy_decode(bytes.as_bytes())
+        .map_err(|err| format!("failed to convert MetaManifest proto into an object: {err}"))
 }
 
 pub(crate) type P2PChunkId = u32;

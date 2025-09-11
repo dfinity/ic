@@ -48,9 +48,7 @@ impl RegistryClient for RegistryCanisterClient {
         key: &str,
         version: RegistryVersion,
     ) -> RegistryClientVersionedResult<Vec<u8>> {
-        println!(
-            "Getting registry value of key {key} at version {version}..."
-        );
+        println!("Getting registry value of key {key} at version {version}...");
 
         let canister = self.0.clone();
         let key_bytes = key.as_bytes().to_vec();
@@ -121,9 +119,8 @@ pub(crate) async fn get_nodes(
                     )
                     .await
                     .unwrap_or_else(|e| panic!("failed to get node record {node_id}: {e}"));
-                let record = NodeRecord::decode(&node_record_bytes[..]).unwrap_or_else(|e| {
-                    panic!("failed to deserialize node record {node_id}: {e}")
-                });
+                let record = NodeRecord::decode(&node_record_bytes[..])
+                    .unwrap_or_else(|e| panic!("failed to deserialize node record {node_id}: {e}"));
                 (node_id, record)
             })
         })

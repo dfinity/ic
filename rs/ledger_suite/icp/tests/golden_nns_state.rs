@@ -361,9 +361,7 @@ impl Setup {
                 );
             }
             (true, Err(err)) => {
-                panic!(
-                    "should successfully downgrade ledger to mainnet version: {err}"
-                );
+                panic!("should successfully downgrade ledger to mainnet version: {err}");
             }
         }
         self.check_ledger_metrics();

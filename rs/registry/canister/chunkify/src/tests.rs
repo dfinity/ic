@@ -111,11 +111,7 @@ fn test_dechunkify_mutation_chunked() {
     let mut chunks = Chunks::init(memory);
 
     let chunk_content_sha256s = chunks.upsert_monolithic_blob(b"blobity blob".to_vec());
-    assert_eq!(
-        chunk_content_sha256s.len(),
-        1,
-        "{chunk_content_sha256s:?}"
-    );
+    assert_eq!(chunk_content_sha256s.len(), 1, "{chunk_content_sha256s:?}");
 
     let mutation = HighCapacityRegistryMutation {
         mutation_type: MutationType::Update as i32,

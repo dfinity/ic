@@ -122,9 +122,7 @@ impl IDkgComplaintHandlerImpl {
                     .complaint_errors_inc("duplicate_complaints_in_batch");
                 ret.push(IDkgChangeAction::HandleInvalid(
                     id,
-                    format!(
-                        "Duplicate complaint in unvalidated batch: {signed_complaint}"
-                    ),
+                    format!("Duplicate complaint in unvalidated batch: {signed_complaint}"),
                 ));
                 continue;
             }

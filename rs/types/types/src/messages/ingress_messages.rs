@@ -464,15 +464,11 @@ impl ParseIngressError {
             ),
             ParseIngressError::SubnetMethodNotAllowed => UserError::new(
                 ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "ic00 method {method_name} can not be called via ingress messages"
-                ),
+                format!("ic00 method {method_name} can not be called via ingress messages"),
             ),
             ParseIngressError::InvalidSubnetPayload(err) => UserError::new(
                 ErrorCode::InvalidManagementPayload,
-                format!(
-                    "Failed to parse payload for ic00 method {method_name}: {err}"
-                ),
+                format!("Failed to parse payload for ic00 method {method_name}: {err}"),
             ),
         }
     }

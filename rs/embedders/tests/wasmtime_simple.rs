@@ -163,9 +163,7 @@ fn instantiate_module(
                         .into_extern(),
                 );
             } else {
-                panic!(
-                    "Import {field_name} was not found in module {module_name}"
-                )
+                panic!("Import {field_name} was not found in module {module_name}")
             }
         } else {
             panic!("Import module {module_name} was not found")

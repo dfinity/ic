@@ -67,11 +67,7 @@ pub fn rescale_to_icp(x_icp_e8s: u64) -> Result<Decimal, String> {
 pub fn rescale_to_icp_e8s(x_icp: Decimal) -> Result<u64, String> {
     x_icp
         .checked_mul(u64_to_dec(E8)?)
-        .ok_or_else(|| {
-            format!(
-                "Overflow while rescaling {x_icp} ICP to e8s within Decimal."
-            )
-        })
+        .ok_or_else(|| format!("Overflow while rescaling {x_icp} ICP to e8s within Decimal."))
         .and_then(dec_to_u64)
 }
 
@@ -454,11 +450,9 @@ impl BinomialFormula {
             .enumerate()
             // Avoid using `try_fold` here as we should not short-circuit errors.
             .fold(Ok(Decimal::ZERO), |overall_result, (i, member)| {
-                let sub_result = member.eval().map_err(|e| {
-                    format!(
-                        "Cannot evaluate binomial member #{i} of {self:?}: {e}"
-                    )
-                });
+                let sub_result = member
+                    .eval()
+                    .map_err(|e| format!("Cannot evaluate binomial member #{i} of {self:?}: {e}"));
                 match (overall_result, sub_result) {
                     (Ok(total), Ok(sub_total)) => total.checked_add(sub_total).ok_or_else(|| {
                         vec![format!("Decimal overflow while computing {:?}.", self)]
@@ -849,22 +843,21 @@ impl PolynomialMatchingFunction {
 
         let one_tenth_maturity_equivalent_icp = dec!(0.1) * total_maturity_equivalent_icp;
 
-        let (cap, human_readable_cap_formula) =
-            if global_cap_icp <= one_tenth_maturity_equivalent_icp {
-                (
-                    global_cap_icp,
-                    format!(
-                        "max_theoretical_neurons_fund_participation_amount_icp ({global_cap_icp})",
-                    ),
-                )
-            } else {
-                (
-                    one_tenth_maturity_equivalent_icp,
-                    format!(
-                        "(0.1 * total_maturity_equivalent_icp ({total_maturity_equivalent_icp})) ({one_tenth_maturity_equivalent_icp})",
-                    ),
-                )
-            };
+        let (cap, human_readable_cap_formula) = if global_cap_icp
+            <= one_tenth_maturity_equivalent_icp
+        {
+            (
+                global_cap_icp,
+                format!("max_theoretical_neurons_fund_participation_amount_icp ({global_cap_icp})",),
+            )
+        } else {
+            (
+                one_tenth_maturity_equivalent_icp,
+                format!(
+                    "(0.1 * total_maturity_equivalent_icp ({total_maturity_equivalent_icp})) ({one_tenth_maturity_equivalent_icp})",
+                ),
+            )
+        };
 
         let persistent_data = PolynomialMatchingFunctionPersistentData {
             t_1: neurons_fund_participation_limits.contribution_threshold_icp,

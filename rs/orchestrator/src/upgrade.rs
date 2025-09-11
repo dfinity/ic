@@ -756,9 +756,7 @@ fn remove_node_state(
 
     let consensus_pool_path = config.artifact_pool.consensus_pool_path;
     remove_dir_all(&consensus_pool_path).map_err(|err| {
-        format!(
-            "Couldn't delete the consensus pool at {consensus_pool_path:?}: {err:?}"
-        )
+        format!("Couldn't delete the consensus pool at {consensus_pool_path:?}: {err:?}")
     })?;
 
     let state_path = config.state_manager.state_root();
@@ -834,14 +832,10 @@ fn remove_node_state(
 
     let key_changed_metric = orchestrator_data_directory.join(KEY_CHANGES_FILENAME);
     if key_changed_metric.try_exists().map_err(|err| {
-        format!(
-            "Failed to check if {key_changed_metric:?} exists, because {err:?}"
-        )
+        format!("Failed to check if {key_changed_metric:?} exists, because {err:?}")
     })? {
         remove_file(&key_changed_metric).map_err(|err| {
-            format!(
-                "Couldn't delete the key changes metric at {key_changed_metric:?}: {err:?}"
-            )
+            format!("Couldn't delete the key changes metric at {key_changed_metric:?}: {err:?}")
         })?;
     }
 

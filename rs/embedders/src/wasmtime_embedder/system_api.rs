@@ -1509,9 +1509,7 @@ impl SystemApiImpl {
             } => {
                 match outgoing_request {
                     None => Err(HypervisorError::ToolchainContractViolation {
-                        error: format!(
-                            "{method_name} called when no call is under construction."
-                        ),
+                        error: format!("{method_name} called when no call is under construction."),
                     }),
                     Some(request) => {
                         self.sandbox_safe_system_state

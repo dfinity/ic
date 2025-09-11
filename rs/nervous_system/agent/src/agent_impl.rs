@@ -109,15 +109,13 @@ impl CallCanisters for Agent {
         let (controllers, errors): (Vec<_>, Vec<_>) =
             controllers.into_iter().partition_map(|value| {
                 let Value::Bytes(bytes) = value else {
-                    let err = format!(
-                        "Expected canister controller to be of type bytes, got {value:?}"
-                    );
+                    let err =
+                        format!("Expected canister controller to be of type bytes, got {value:?}");
                     return Either::Right(err);
                 };
                 match Principal::try_from(&bytes) {
                     Err(err) => {
-                        let err =
-                            format!("Cannot interpret canister controller principal: {err}");
+                        let err = format!("Cannot interpret canister controller principal: {err}");
                         Either::Right(err)
                     }
                     Ok(principal) => Either::Left(principal),

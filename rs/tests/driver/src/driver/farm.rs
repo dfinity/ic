@@ -198,9 +198,7 @@ impl Farm {
         template_name: &str,
         image_specs: Vec<AttachImageSpec>,
     ) -> FarmResult<()> {
-        let path = format!(
-            "group/{group_name}/vm/{vm_name}/drive-templates/{template_name}"
-        );
+        let path = format!("group/{group_name}/vm/{vm_name}/drive-templates/{template_name}");
         let req = self.put(&path);
         let attach_drives_req = AttachDrivesRequest {
             drives: image_specs,

@@ -137,10 +137,7 @@ fn unspecified_mode_is_invalid() {
         mode: governance::Mode::Unspecified as i32,
         ..basic_governance_proto()
     };
-    assert!(
-        ValidGovernanceProto::try_from(g.clone()).is_err(),
-        "{g:#?}"
-    );
+    assert!(ValidGovernanceProto::try_from(g.clone()).is_err(), "{g:#?}");
 }
 
 #[test]
@@ -149,10 +146,7 @@ fn garbage_mode_is_invalid() {
         mode: 0xDEADBEF,
         ..basic_governance_proto()
     };
-    assert!(
-        ValidGovernanceProto::try_from(g.clone()).is_err(),
-        "{g:#?}"
-    );
+    assert!(ValidGovernanceProto::try_from(g.clone()).is_err(), "{g:#?}");
 }
 
 #[tokio::test]
@@ -547,9 +541,7 @@ fn swap_canister_id_is_required_when_mode_is_pre_initialization_swap() {
 
     let r = ValidGovernanceProto::try_from(proto.clone());
     match r {
-        Ok(_ok) => panic!(
-            "Invalid Governance proto, but wasn't rejected: {proto:#?}"
-        ),
+        Ok(_ok) => panic!("Invalid Governance proto, but wasn't rejected: {proto:#?}"),
         Err(err) => {
             for key_word in ["swap_canister_id", "populate"] {
                 assert!(
@@ -870,10 +862,7 @@ async fn test_disallow_enabling_voting_rewards_while_in_pre_initialization_swap(
     };
 
     let err = err.error_message.to_lowercase();
-    assert!(
-        err.contains("manage nervous system parameters"),
-        "{err:#?}"
-    );
+    assert!(err.contains("manage nervous system parameters"), "{err:#?}");
     assert!(err.contains("not allowed"), "{err:#?}");
     assert!(
         err.contains("in preinitializationswap (2) mode"),

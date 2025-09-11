@@ -62,9 +62,7 @@ impl<T> MinterEventAssert<T> {
             .into_iter()
             .find(|event| predicate(&event.payload))
         {
-            panic!(
-                "Found an event satisfying the predicate: {unexpected_event:?}"
-            )
+            panic!("Found an event satisfying the predicate: {unexpected_event:?}")
         }
         self.setup
     }

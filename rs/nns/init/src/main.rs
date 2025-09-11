@@ -169,9 +169,7 @@ async fn main() {
         true => NnsCanisters::set_up_at_ids(&runtime, init_payloads).await,
         false => NnsCanisters::set_up(&runtime, init_payloads).await,
     };
-    eprintln!(
-        "{LOG_PREFIX}All NNS canisters have been set up on the replica with {url}"
-    );
+    eprintln!("{LOG_PREFIX}All NNS canisters have been set up on the replica with {url}");
 }
 
 /// Constructs the `NnsInitPayloads` from the command line options.
@@ -185,9 +183,7 @@ fn create_init_payloads(args: &CliArgs) -> NnsInitPayloads {
     );
 
     if let Some(path) = &args.initial_neurons {
-        eprintln!(
-            "{LOG_PREFIX}Initializing neurons from CSV file: {path:?}"
-        );
+        eprintln!("{LOG_PREFIX}Initializing neurons from CSV file: {path:?}");
         init_payloads_builder.with_neurons_from_csv_file(path);
     } else {
         eprintln!(

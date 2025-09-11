@@ -81,9 +81,7 @@ impl Registry {
         let previous_timestamp_set = match self.get(idkg_pk_key.as_bytes(), self.latest_version()) {
             Some(record) => {
                 let pk = PublicKey::decode(record.value.as_slice()).map_err(|e| {
-                    format!(
-                        "idkg_dealing_encryption_pk is not in the expected format: {e:?}"
-                    )
+                    format!("idkg_dealing_encryption_pk is not in the expected format: {e:?}")
                 })?;
                 // If the timestamp exists, we reject if it's recent enough, otherwise we accept the
                 // update as this is a new node joining the signing subnet.
@@ -133,9 +131,7 @@ impl Registry {
                     .map_or(&vec![], |v| v)[..],
             )
             .map_err(|e| {
-                format!(
-                    "idkg_dealing_encryption_pk is not in the expected format: {e:?}"
-                )
+                format!("idkg_dealing_encryption_pk is not in the expected format: {e:?}")
             })?;
             // Set the key timestamp to the current time.
             pk.timestamp = Some(duration_since_unix_epoch.as_millis() as u64);
@@ -163,9 +159,7 @@ impl Registry {
             .map(|subnet_id| self.get_subnet_or_panic(subnet_id))
             .find(|subnet_record| subnet_record.membership.contains(&node_id.get().to_vec()))
             .unwrap_or_else(|| {
-                panic!(
-                    "{LOG_PREFIX}subnet record for node {node_id:} not found in the registry."
-                )
+                panic!("{LOG_PREFIX}subnet record for node {node_id:} not found in the registry.")
             })
     }
 

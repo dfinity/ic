@@ -748,9 +748,7 @@ impl Erc20Balances {
         match self.balance_by_erc20_contract.get(&erc20_contract) {
             Some(previous_value) => {
                 let new_value = previous_value.checked_add(deposit).unwrap_or_else(|| {
-                    panic!(
-                        "BUG: overflow when adding {deposit} to {previous_value}"
-                    )
+                    panic!("BUG: overflow when adding {deposit} to {previous_value}")
                 });
                 self.balance_by_erc20_contract
                     .insert(erc20_contract, new_value);
@@ -770,9 +768,7 @@ impl Erc20Balances {
         let new_value = previous_value
             .checked_sub(withdrawal_amount)
             .unwrap_or_else(|| {
-                panic!(
-                    "BUG: underflow when subtracting {withdrawal_amount} from {previous_value}"
-                )
+                panic!("BUG: underflow when subtracting {withdrawal_amount} from {previous_value}")
             });
         self.balance_by_erc20_contract
             .insert(erc20_contract, new_value);

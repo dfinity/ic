@@ -364,15 +364,11 @@ pub(crate) fn get_identity(identity: &str, network: &str) -> PrincipalId {
     let output = call_dfx(&["identity", "--network", network, identity]);
 
     let canister_id = String::from_utf8(output.stdout).unwrap_or_else(|_| {
-        panic!(
-            "Could not parse the output of 'dfx identity {identity}' as a string"
-        )
+        panic!("Could not parse the output of 'dfx identity {identity}' as a string")
     });
 
     PrincipalId::from_str(canister_id.trim()).unwrap_or_else(|_| {
-        panic!(
-            "Could not parse the output of 'dfx identity {identity}' as a PrincipalId"
-        )
+        panic!("Could not parse the output of 'dfx identity {identity}' as a PrincipalId")
     })
 }
 
@@ -553,9 +549,7 @@ impl Canister {
         let response = hex::decode(response)
             .with_context(|| format!("Unable to hex decode the response:\n{response:?}.",))?;
         Decode!(&response, Req::Response).with_context(|| {
-            format!(
-                "Candid deserialization of response failed. Response:\n{response:?}",
-            )
+            format!("Candid deserialization of response failed. Response:\n{response:?}",)
         })
     }
 }
@@ -797,9 +791,7 @@ fn call_dfx(args: &[&str]) -> Output {
         print!("{}", String::from_utf8_lossy(&output.stdout));
         print!("{std_err}");
     } else {
-        println!(
-            "dfx failed when called with args: {args:?}, error: {std_err}"
-        );
+        println!("dfx failed when called with args: {args:?}, error: {std_err}");
     }
 
     output

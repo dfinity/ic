@@ -337,9 +337,7 @@ fn test_sns_metrics() {
             genesis_timestamp_seconds,
         }) = get_metrics_result
         else {
-            panic!(
-                "Expected to get an Ok() from the response, got {get_metrics_result:?}"
-            );
+            panic!("Expected to get an Ok() from the response, got {get_metrics_result:?}");
         };
 
         {

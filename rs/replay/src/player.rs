@@ -284,9 +284,7 @@ impl Player {
             Ok(Some(record)) => {
                 SubnetType::try_from(record.subnet_type).expect("Failed to decode subnet type")
             }
-            err => panic!(
-                "Failed to extract subnet type of {subnet_id:?} from registry: {err:?}"
-            ),
+            err => panic!("Failed to extract subnet type of {subnet_id:?} from registry: {err:?}"),
         };
 
         let metrics_registry = MetricsRegistry::new();
@@ -1256,8 +1254,8 @@ async fn get_changes_since(
     match perform_query.perform_query(query).await.unwrap() {
         Ok((Ok(wasm_result), _time)) => match wasm_result {
             WasmResult::Reply(v) => {
-                let (high_capacity_deltas, _version) = deserialize_get_changes_since_response(v)
-                    .map_err(|err| format!("{err:?}"))?;
+                let (high_capacity_deltas, _version) =
+                    deserialize_get_changes_since_response(v).map_err(|err| format!("{err:?}"))?;
 
                 // Dechunkify deltas.
                 let mut inlined_deltas = vec![];
@@ -1299,9 +1297,7 @@ impl<PerformQueryImpl: PerformQuery + Sync> GetChunk for GetChunkImpl<'_, Perfor
             content_sha256: Some(chunk_content_sha256.to_vec()),
         };
         let request = Encode!(&request).map_err(|err| {
-            format!(
-                "Unable to call get_chunk, because unable to encode request: {err}"
-            )
+            format!("Unable to call get_chunk, because unable to encode request: {err}")
         })?;
         let request = Query {
             source: QuerySource::User {
@@ -1342,9 +1338,7 @@ impl<PerformQueryImpl: PerformQuery + Sync> GetChunk for GetChunkImpl<'_, Perfor
 
         // Unpack reply.
         let result = Decode!(&result, Result<Chunk, String>).map_err(|err| {
-            format!(
-                "Unable to decode get_chunk response from the Registry canister: {err}"
-            )
+            format!("Unable to decode get_chunk response from the Registry canister: {err}")
         })?;
         let Chunk { content } = result
             .map_err(|err| format!("The Registry canister replied, but with an Err: {err}"))?;
@@ -1381,11 +1375,7 @@ where
         key.as_bytes().to_vec(),
         None, // latest version
     )
-    .map_err(|err| {
-        format!(
-            "Failed to serialize get_value request where key={key}: {err}",
-        )
-    })?;
+    .map_err(|err| format!("Failed to serialize get_value request where key={key}: {err}",))?;
     let query = Query {
         source: QuerySource::User {
             user_id: UserId::from(PrincipalId::new_anonymous()),
@@ -1427,15 +1417,11 @@ where
     let record: Vec<u8> = dechunkify_get_value_response_content(content, &get_chunk)
         .await
         .map_err(|err| {
-            format!(
-                "Unable to dechunkify get_value response where key={key}: {err:?}",
-            )
+            format!("Unable to dechunkify get_value response where key={key}: {err:?}",)
         })?;
     let record: Record = deserialize_registry_value::<Record>(Ok(Some(record)))
         .map_err(|err| {
-            format!(
-                "Failed to deserialize content of Registry record with key={key}: {err}",
-            )
+            format!("Failed to deserialize content of Registry record with key={key}: {err}",)
         })?
         .ok_or_else(|| format!("Registry key {key} does not exist"))?;
 

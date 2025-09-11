@@ -289,12 +289,12 @@ impl std::fmt::Display for NeuronBasketConstructionParametersValidationError {
                     < SnsInitPayload.max_dissolve_delay_seconds = {max_dissolve_delay_seconds}"
                 )
             }
-            Self::BasketSizeTooSmall => format!(
-                "basket count must be at least {MIN_SNS_NEURONS_PER_BASKET}"
-            ),
-            Self::BasketSizeTooBig => format!(
-                "basket count must be at most {MAX_SNS_NEURONS_PER_BASKET}"
-            ),
+            Self::BasketSizeTooSmall => {
+                format!("basket count must be at least {MIN_SNS_NEURONS_PER_BASKET}")
+            }
+            Self::BasketSizeTooBig => {
+                format!("basket count must be at most {MAX_SNS_NEURONS_PER_BASKET}")
+            }
             Self::InadequateDissolveDelay => {
                 "dissolve_delay_interval_seconds must be at least 1".to_string()
             }

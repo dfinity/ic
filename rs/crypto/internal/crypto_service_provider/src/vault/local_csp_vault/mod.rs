@@ -268,9 +268,7 @@ fn ensure_unique_paths(paths: &[&Path]) {
     let mut distinct_paths: HashSet<&Path> = HashSet::new();
     for path in paths {
         if !distinct_paths.insert(*path) {
-            panic!(
-                "Expected key stores to use distinct files but {path:?} is used more than once"
-            )
+            panic!("Expected key stores to use distinct files but {path:?} is used more than once")
         }
     }
     assert_eq!(

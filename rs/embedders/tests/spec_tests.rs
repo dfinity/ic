@@ -54,9 +54,7 @@ mod convert {
                 }
             },
             HeapType::Concrete(_) => {
-                panic!(
-                    "Unable to handle heap type {heap_type:?}. The GC proposal isn't supported"
-                )
+                panic!("Unable to handle heap type {heap_type:?}. The GC proposal isn't supported")
             }
         }
     }
@@ -78,9 +76,7 @@ mod convert {
                 Some(unsafe { wasmtime::AnyRef::from_raw(store, n).unwrap().into() })
             }
             WastArg::Component(_) => {
-                println!(
-                    "Component feature not enabled. Can't handle WastArg {arg:?}"
-                );
+                println!("Component feature not enabled. Can't handle WastArg {arg:?}");
                 None
             }
             _ => {
@@ -472,9 +468,7 @@ fn span_location(span: Span, text: &str, path: &PathBuf) -> String {
         .split_terminator('\n')
         .next()
         .unwrap();
-    format!(
-        "Test failed in wast {path:?} at line {line}: {line_text}"
-    )
+    format!("Test failed in wast {path:?} at line {line}: {line_text}")
 }
 
 fn location(wat: &QuoteWat, text: &str, path: &PathBuf) -> String {

@@ -24,9 +24,7 @@ fn verify_data(tag: String, expected_hash: &str, serialized: &[u8]) {
     if !UPDATING_TEST_VECTORS {
         assert_eq!(computed_hash, expected_hash, "{tag}");
     } else if computed_hash != expected_hash {
-        println!(
-            "perl -pi -e s/{expected_hash}/{computed_hash}/g tests/serialization.rs"
-        );
+        println!("perl -pi -e s/{expected_hash}/{computed_hash}/g tests/serialization.rs");
     }
 }
 
@@ -92,11 +90,7 @@ fn check_bip340_shares(
     for (index, hash) in hashes.iter().enumerate() {
         let index = index as u32;
         let share = shares.get(&index).expect("Unable to find signature share");
-        verify_data(
-            format!("share {index}"),
-            hash,
-            &share.serialize().unwrap(),
-        )
+        verify_data(format!("share {index}"), hash, &share.serialize().unwrap())
     }
 
     Ok(())

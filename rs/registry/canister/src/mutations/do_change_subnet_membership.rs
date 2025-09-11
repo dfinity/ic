@@ -17,9 +17,7 @@ impl Registry {
     /// This method is called by the governance canister, after a proposal
     /// for modifying a subnet by changing the membership (adding/removing) has been accepted.
     pub fn do_change_subnet_membership(&mut self, payload: ChangeSubnetMembershipPayload) {
-        println!(
-            "{LOG_PREFIX}do_change_subnet_membership started: {payload:?}"
-        );
+        println!("{LOG_PREFIX}do_change_subnet_membership started: {payload:?}");
 
         let nodes_to_add = payload.node_ids_add.clone();
         let subnet_id = SubnetId::from(payload.subnet_id);
@@ -66,9 +64,7 @@ impl Registry {
         // Check the invariants and apply the mutations if invariants are satisfied
         self.maybe_apply_mutation_internal(mutations);
 
-        println!(
-            "{LOG_PREFIX}do_change_subnet_membership finished: {payload:?}"
-        );
+        println!("{LOG_PREFIX}do_change_subnet_membership finished: {payload:?}");
     }
 }
 

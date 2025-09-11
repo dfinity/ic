@@ -141,9 +141,7 @@ pub fn build_icrc1_transaction_from_canister_method_args(
                 memo,
                 created_at_time,
             } = Decode!(&candid_bytes, TransferFromArgs).with_context(|| {
-                format!(
-                    "Could not decode transfer from args from: {candid_bytes:?} "
-                )
+                format!("Could not decode transfer from args from: {candid_bytes:?} ")
             })?;
 
             let operation = crate::common::storage::types::IcrcOperation::Transfer {

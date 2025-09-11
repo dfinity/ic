@@ -423,9 +423,7 @@ impl Display for SaveToErrors {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let error_string = match self {
             SaveToErrors::FileOpenFailed(path_buf, reason) => {
-                format!(
-                    "could not open file for writing {path_buf:?} due to {reason}"
-                )
+                format!("could not open file for writing {path_buf:?} due to {reason}")
             }
             SaveToErrors::FileWriteFailed(path_buf, reason) => {
                 format!("could not write to file {path_buf:?} due to {reason}")

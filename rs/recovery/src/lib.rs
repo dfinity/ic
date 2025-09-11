@@ -549,15 +549,13 @@ impl Recovery {
     /// Lookup the image [Url] and sha hash of the given [ReplicaVersion]
     pub fn get_img_url_and_sha(version: &ReplicaVersion) -> RecoveryResult<(Url, String)> {
         let version_string = version.to_string();
-        let url_base = format!(
-            "https://download.dfinity.systems/ic/{version_string}/guest-os/update-img/"
-        );
+        let url_base =
+            format!("https://download.dfinity.systems/ic/{version_string}/guest-os/update-img/");
 
         let image_name = "update-img.tar.zst";
         let upgrade_url_string = format!("{url_base}{image_name}");
-        let invalid_url = |url, e| {
-            RecoveryError::invalid_output_error(format!("Invalid Url string: {url}, {e}"))
-        };
+        let invalid_url =
+            |url, e| RecoveryError::invalid_output_error(format!("Invalid Url string: {url}, {e}"));
         let upgrade_url =
             Url::parse(&upgrade_url_string).map_err(|e| invalid_url(upgrade_url_string, e))?;
 

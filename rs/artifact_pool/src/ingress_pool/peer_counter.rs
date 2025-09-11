@@ -110,9 +110,7 @@ impl PeerCounter {
                 );
 
                 if cfg!(debug_assertions) {
-                    panic!(
-                        "Attempting to subtract the counter for unknown node: {originator_id}"
-                    );
+                    panic!("Attempting to subtract the counter for unknown node: {originator_id}");
                 }
             }
         }

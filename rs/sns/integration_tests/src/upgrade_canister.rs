@@ -438,9 +438,7 @@ fn test_upgrade_canister_proposal_execution_fail() {
                 upgrade.new_canister_wasm = vec![];
                 upgrade.canister_upgrade_arg = None;
             }
-            action => panic!(
-                "Proposal action was not UpgradeSnsControlledCanister: {action:?}"
-            ),
+            action => panic!("Proposal action was not UpgradeSnsControlledCanister: {action:?}"),
         };
         fn age_s(t: u64) -> u64 {
             SystemTime::now()

@@ -344,7 +344,7 @@ fn run_n_rounds_and_check_pubkeys(
             || inst.deps.message_routing.expected_batch_height() >= Height::from(rounds)
     };
     run_test(config, modifiers, Box::new(got_pubkey), finish);
-    
+
     *pubkey_exists.borrow()
 }
 

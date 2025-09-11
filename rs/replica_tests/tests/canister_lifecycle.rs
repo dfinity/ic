@@ -521,9 +521,7 @@ fn can_create_canister_with_cycles_from_another_canister() {
 
         let old_canister_cycles_balance_after =
             test.canister_state(&canister_id).system_state.balance();
-        println!(
-            "old canister balance after: {old_canister_cycles_balance_after}"
-        );
+        println!("old canister balance after: {old_canister_cycles_balance_after}");
         let new_canister_cycles_balance =
             test.canister_state(&new_canister_id).system_state.balance();
 

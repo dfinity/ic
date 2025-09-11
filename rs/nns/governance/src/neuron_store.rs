@@ -977,9 +977,7 @@ pub fn approve_genesis_kyc(
         });
         // Log errors but continue with the rest of the neurons.
         if let Err(e) = result {
-            eprintln!(
-                "{LOG_PREFIX}ERROR: Failed to approve KYC for neuron {neuron_id:?}: {e:?}"
-            );
+            eprintln!("{LOG_PREFIX}ERROR: Failed to approve KYC for neuron {neuron_id:?}: {e:?}");
         }
     }
     Ok(())

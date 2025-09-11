@@ -86,9 +86,7 @@ impl TryFrom<pb::NiDkgConfig> for NiDkgConfig {
                     .into_iter()
                     .map(|receiver| crate::node_id_try_from_option(Some(receiver)))
                     .collect::<Result<BTreeSet<_>, _>>()
-                    .map_err(|err| {
-                        format!("Problem loading receivers in NiDkgConfig: {err:?}")
-                    })?,
+                    .map_err(|err| format!("Problem loading receivers in NiDkgConfig: {err:?}"))?,
             )
             .map_err(|e| format!("{e:?}"))?,
             threshold: NiDkgThreshold::new(NumberOfNodes::from(config.threshold))

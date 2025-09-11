@@ -927,8 +927,8 @@ pub(crate) fn ls_path(log: &Logger, dir: &Path) -> Result<(), String> {
     let mut cmd = Command::new("ls");
     cmd.arg(dir);
     debug!(log, "Will execute: {:?}", cmd);
-    let res = exec_cmd(&mut cmd)
-        .map_err(|err| format!("Error listing cold store directory: {err:?}"))?;
+    let res =
+        exec_cmd(&mut cmd).map_err(|err| format!("Error listing cold store directory: {err:?}"))?;
     debug!(log, "{:?}", res);
     Ok(())
 }

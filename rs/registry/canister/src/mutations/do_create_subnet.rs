@@ -68,18 +68,14 @@ impl Registry {
         .unwrap();
 
         let response = SetupInitialDKGResponse::decode(&response_bytes).unwrap();
-        println!(
-            "{LOG_PREFIX}response from setup_initial_dkg successfully received"
-        );
+        println!("{LOG_PREFIX}response from setup_initial_dkg successfully received");
 
         let generated_subnet_id = response.fresh_subnet_id;
         let subnet_id = payload
             .subnet_id_override
             .map(SubnetId::new)
             .unwrap_or(generated_subnet_id);
-        println!(
-            "{LOG_PREFIX}do_create_subnet: {{payload: {payload:?}, subnet_id: {subnet_id}}}"
-        );
+        println!("{LOG_PREFIX}do_create_subnet: {{payload: {payload:?}, subnet_id: {subnet_id}}}");
 
         // 2b. Invoke reshare_chain_key on ic_00
 
@@ -139,9 +135,7 @@ impl Registry {
             .iter()
             .any(|x| *x == subnet_id.get().to_vec())
         {
-            panic!(
-                "Subnet already present in subnet list record: {subnet_id:?}"
-            );
+            panic!("Subnet already present in subnet list record: {subnet_id:?}");
         }
         subnet_list_record.subnets.push(subnet_id.get().to_vec());
 

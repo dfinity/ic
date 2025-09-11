@@ -471,9 +471,9 @@ impl<'a> UniversalCanister<'a> {
     /// Tries to read `len` bytes of the stable memory, starting from `offset`.
     /// Panics if the read could not be performed.
     pub async fn try_read_stable(&self, offset: u32, len: u32) -> Vec<u8> {
-        self.read_stable(offset, len).await.unwrap_or_else(|err| {
-            panic!("could not read message of len {len} from stable: {err}")
-        })
+        self.read_stable(offset, len)
+            .await
+            .unwrap_or_else(|err| panic!("could not read message of len {len} from stable: {err}"))
     }
 
     /// Tries to read `len` bytes of the stable memory, starting from `offset`.
@@ -498,9 +498,7 @@ impl<'a> UniversalCanister<'a> {
                 }
             }
         }
-        panic!(
-            "Could not read message from stable memory after {max_retries} retries."
-        );
+        panic!("Could not read message from stable memory after {max_retries} retries.");
     }
 
     /// Forwards a message to the `receiver` that calls
@@ -1048,9 +1046,9 @@ pub fn assert_reject<T: std::fmt::Debug>(res: Result<T, AgentError>, code: Rejec
                 code, reject_code,
                 "Expect code {code:?} did not match {reject_code:?}. Reject message: {reject_message}"
             ),
-            others => panic!(
-                "Expected call to fail with a replica error but got {others:?} instead"
-            ),
+            others => {
+                panic!("Expected call to fail with a replica error but got {others:?} instead")
+            }
         },
     }
 }
@@ -1099,9 +1097,9 @@ pub fn assert_reject_msg<T: std::fmt::Debug>(
                     "Actual reject message: {reject_message}"
                 );
             }
-            others => panic!(
-                "Expected call to fail with a replica error but got {others:?} instead"
-            ),
+            others => {
+                panic!("Expected call to fail with a replica error but got {others:?} instead")
+            }
         },
     }
 }

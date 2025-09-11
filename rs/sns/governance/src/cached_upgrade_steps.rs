@@ -73,9 +73,7 @@ impl TryFrom<&CachedUpgradeStepsPb> for CachedUpgradeSteps {
 
         // Check for duplicate versions in the response
         upgrade_steps.validate_no_duplicates().map_err(|err| {
-            format!(
-                "CachedUpgradeSteps.upgrade_steps must not contain duplicates: {err}"
-            )
+            format!("CachedUpgradeSteps.upgrade_steps must not contain duplicates: {err}")
         })?;
 
         let Some((current_version, subsequent_versions)) = upgrade_steps.versions.split_first()
@@ -237,9 +235,7 @@ impl CachedUpgradeSteps {
         let versions = Versions { versions };
 
         versions.validate_no_duplicates().map_err(|err| {
-            format!(
-                "ListUpgradeStepsResponse.steps must not contain duplicates: {err}"
-            )
+            format!("ListUpgradeStepsResponse.steps must not contain duplicates: {err}")
         })?;
 
         let mut versions = versions.versions.into_iter();

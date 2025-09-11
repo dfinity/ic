@@ -233,9 +233,7 @@ impl Wasm {
                 .await;
             match install_result {
                 Ok(()) => {
-                    println!(
-                        "Successfully installed wasm into canister with ID: {canister_id}"
-                    );
+                    println!("Successfully installed wasm into canister with ID: {canister_id}");
                     return Ok(());
                 }
                 Err(e) => {

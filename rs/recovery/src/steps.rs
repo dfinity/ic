@@ -668,9 +668,8 @@ impl Step for UploadAndRestartStep {
             let upload_dir = format!("{IC_DATA_PATH}/{NEW_IC_STATE}");
             let ic_checkpoints_path = format!("{IC_DATA_PATH}/{IC_CHECKPOINTS_PATH}");
             // path of highest checkpoint on upload node
-            let copy_from = format!(
-                "{ic_checkpoints_path}/$(ls {ic_checkpoints_path} | sort | tail -1)"
-            );
+            let copy_from =
+                format!("{ic_checkpoints_path}/$(ls {ic_checkpoints_path} | sort | tail -1)");
             // path and name of checkpoint after replay
             let copy_to = format!("{upload_dir}/{CHECKPOINTS}/{max_checkpoint}");
             let cp = format!("sudo cp -r {copy_from} {copy_to}");
@@ -704,9 +703,8 @@ impl Step for UploadAndRestartStep {
             )?;
 
             let cmd_set_permissions = Self::cmd_set_permissions(&ic_state_path, &upload_dir);
-            let cmd_replace_state = format!(
-                "sudo rm -r {ic_state_path}; sudo mv {upload_dir} {ic_state_path};"
-            );
+            let cmd_replace_state =
+                format!("sudo rm -r {ic_state_path}; sudo mv {upload_dir} {ic_state_path};");
 
             info!(self.logger, "Restarting replica...");
             ssh_helper.ssh(Self::CMD_STOP_REPLICA.to_string())?;
@@ -1009,9 +1007,7 @@ impl Step for UploadCUPAndTarStep {
 
         info!(self.logger, "Uploading to {}", self.node_ip);
         let upload_dir = UploadCUPAndTarStep::get_upload_dir_name();
-        ssh_helper.ssh(format!(
-            "sudo rm -rf {upload_dir} && mkdir {upload_dir}"
-        ))?;
+        ssh_helper.ssh(format!("sudo rm -rf {upload_dir} && mkdir {upload_dir}"))?;
 
         let target = format!("{}@[{}]:{}/", SshUser::Admin, self.node_ip, upload_dir);
 

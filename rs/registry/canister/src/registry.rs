@@ -281,9 +281,7 @@ impl Registry {
 
             // Convert to high_capacity_registry_value::Content.
             let mutation_type = Type::try_from(mutation_type).unwrap_or_else(|err| {
-                panic!(
-                    "Unable to convert mutation_type ({mutation_type}): {err}"
-                );
+                panic!("Unable to convert mutation_type ({mutation_type}): {err}");
             });
             let content = if mutation_type.is_delete() {
                 high_capacity_registry_value::Content::DeletionMarker(true)

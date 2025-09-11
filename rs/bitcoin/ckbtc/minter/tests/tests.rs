@@ -1240,9 +1240,7 @@ impl CkBtcSetup {
         }
         self.print_minter_logs();
         self.print_minter_events();
-        panic!(
-            "did not reach condition '{description}' in {max_ticks} ticks"
-        )
+        panic!("did not reach condition '{description}' in {max_ticks} ticks")
     }
 
     /// Check that the given condition holds for the specified number of state machine ticks.
@@ -1255,9 +1253,7 @@ impl CkBtcSetup {
         for n in 0..num_ticks {
             self.env.tick();
             if !condition(self) {
-                panic!(
-                    "Condition '{description}' does not hold after {n} ticks"
-                );
+                panic!("Condition '{description}' does not hold after {n} ticks");
             }
         }
     }

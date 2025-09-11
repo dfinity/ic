@@ -1280,11 +1280,7 @@ mod tests {
                 let change_set =
                     certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
 
-                assert_eq!(
-                    change_set.len(),
-                    2,
-                    "unexpected changeset: {change_set:?}"
-                );
+                assert_eq!(change_set.len(), 2, "unexpected changeset: {change_set:?}");
 
                 assert!(
                     change_set

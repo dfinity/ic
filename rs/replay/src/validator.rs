@@ -331,9 +331,7 @@ impl ReplayValidator {
         }
 
         let new_height = PoolReader::new(pool).get_finalized_height();
-        println!(
-            "Validated artifacts up to new finalized height: {new_height}"
-        );
+        println!("Validated artifacts up to new finalized height: {new_height}");
 
         if new_height < target_height {
             Err(ReplayError::ValidationIncomplete(

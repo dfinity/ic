@@ -353,9 +353,7 @@ async fn test_upgrade_existing_sns() {
         SnsCanisterType::Ledger,
         SnsCanisterType::Archive,
     ] {
-        eprintln!(
-            "upgrade_sns_to_next_version_and_assert_change {sns_canister_type:?} ..."
-        );
+        eprintln!("upgrade_sns_to_next_version_and_assert_change {sns_canister_type:?} ...");
         sns::upgrade_sns_to_next_version_and_assert_change(&pocket_ic, &sns, sns_canister_type)
             .await;
     }

@@ -858,9 +858,7 @@ impl Governance {
     fn invalid_subaccount_with_nonce(memo: u64) -> GovernanceError {
         GovernanceError::new_with_message(
             ErrorType::PreconditionFailed,
-            format!(
-                "A neuron already exists with given PrincipalId and memo: {memo:?}"
-            ),
+            format!("A neuron already exists with given PrincipalId and memo: {memo:?}"),
         )
     }
 
@@ -955,9 +953,7 @@ impl Governance {
         if self.proto.neurons.contains_key(&neuron_id.to_string()) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                format!(
-                    "Cannot add neuron. There is already a neuron with id: {neuron_id}"
-                ),
+                format!("Cannot add neuron. There is already a neuron with id: {neuron_id}"),
             ));
         }
 
@@ -992,9 +988,7 @@ impl Governance {
         if !self.proto.neurons.contains_key(&neuron_id.to_string()) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotFound,
-                format!(
-                    "Cannot remove neuron. Can't find a neuron with id: {neuron_id}"
-                ),
+                format!("Cannot remove neuron. Can't find a neuron with id: {neuron_id}"),
             ));
         }
 
@@ -1630,9 +1624,7 @@ impl Governance {
             Some(account) => Account::try_from(account.clone()).map_err(|e| {
                 GovernanceError::new_with_message(
                     ErrorType::InvalidCommand,
-                    format!(
-                        "The given account to disburse the maturity to is invalid due to: {e}"
-                    ),
+                    format!("The given account to disburse the maturity to is invalid due to: {e}"),
                 )
             })?,
         };
@@ -3145,9 +3137,7 @@ impl Governance {
         .map_err(|e| {
             GovernanceError::new_with_message(
                 ErrorType::External,
-                format!(
-                    "Could not execute proposal. Error getting ledger canister wasm: {e}"
-                ),
+                format!("Could not execute proposal. Error getting ledger canister wasm: {e}"),
             )
         })?
         .wasm;
@@ -5121,11 +5111,8 @@ impl Governance {
     }
 
     async fn treasury_valuation_amount_e8s(&self, treasury: i32) -> Result<u64, String> {
-        let token = interpret_token_code(treasury).map_err(|err| {
-            format!(
-                "Failed to interpret treasury token code {treasury}: {err}"
-            )
-        })?;
+        let token = interpret_token_code(treasury)
+            .map_err(|err| format!("Failed to interpret treasury token code {treasury}: {err}"))?;
 
         let treasury_valuation_result = assess_treasury_balance(
             token,
@@ -5140,28 +5127,19 @@ impl Governance {
 
         let amount_e8s =
             tokens_to_e8s(treasury_valuation.valuation_factors.tokens).map_err(|err| {
-                format!(
-                    "Failed to convert treasury balance to e8s for {token:?}: {err}"
-                )
+                format!("Failed to convert treasury balance to e8s for {token:?}: {err}")
             })?;
 
         Ok(amount_e8s)
     }
 
     fn treasury_account(&self, treasury: i32) -> Result<Account, String> {
-        let token = interpret_token_code(treasury).map_err(|err| {
-            format!(
-                "Failed to interpret treasury token code {treasury}: {err}"
-            )
-        })?;
+        let token = interpret_token_code(treasury)
+            .map_err(|err| format!("Failed to interpret treasury token code {treasury}: {err}"))?;
 
         let treasury_account = token
             .treasury_account(self.env.canister_id())
-            .map_err(|err| {
-                format!(
-                    "Failed to get treasury account for token {token:?}: {err}"
-                )
-            })?;
+            .map_err(|err| format!("Failed to get treasury account for token {token:?}: {err}"))?;
 
         Ok(treasury_account)
     }
@@ -5181,9 +5159,7 @@ impl Governance {
             .map_err(|err| format!("Calling Swap.get_derived_state failed: {err:?}"))
             .and_then(|response| {
                 Decode!(&response, GetDerivedStateResponse).map_err(|err| {
-                    format!(
-                        "Failed to decode Swap.get_derived_state response: {err:?}"
-                    )
+                    format!("Failed to decode Swap.get_derived_state response: {err:?}")
                 })
             })?;
 
@@ -6464,9 +6440,7 @@ impl Governance {
             None => {
                 return Err(GovernanceError::new_with_message(
                     ErrorType::PreconditionFailed,
-                    format!(
-                        "Cannot update neuron. There is no neuron with id: {neuron_id}"
-                    ),
+                    format!("Cannot update neuron. There is no neuron with id: {neuron_id}"),
                 ));
             }
         };

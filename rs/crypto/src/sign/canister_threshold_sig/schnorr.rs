@@ -312,12 +312,10 @@ fn internal_bip340_sig_shares_by_index_from_sig_shares(
             let index = inputs
                 .index_for_signer_id(id)
                 .ok_or(ThresholdSchnorrCombineSigSharesError::SignerNotAllowed { node_id: id })?;
-            let internal_share = ThresholdBip340SignatureShareInternal::deserialize(
-                &share.sig_share_raw,
-            )
-            .map_err(|e| {
-                ThresholdSchnorrCombineSigSharesError::SerializationError(format!("{e:?}"))
-            })?;
+            let internal_share =
+                ThresholdBip340SignatureShareInternal::deserialize(&share.sig_share_raw).map_err(
+                    |e| ThresholdSchnorrCombineSigSharesError::SerializationError(format!("{e:?}")),
+                )?;
             Ok((index, internal_share))
         })
         .collect()

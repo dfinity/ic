@@ -25,15 +25,14 @@ pub struct AddErc20TokenFlow {
 impl AddErc20TokenFlow {
     pub fn expect_new_ledger_and_index_canisters(self) -> ManagedCanistersAssert {
         let contract = self.params.contract;
-        let canister_ids =
-            self.setup.wait_for(
-                || match self.setup.call_orchestrator_canister_ids(&contract) {
-                    Some(ids) if ids.ledger.is_some() && ids.index.is_some() => Ok(ids),
-                    incomplete_ids => Err(format!(
-                        "Not all canister IDs are available for ERC-20 {contract:?}: {incomplete_ids:?}"
-                    )),
-                },
-            );
+        let canister_ids = self.setup.wait_for(|| {
+            match self.setup.call_orchestrator_canister_ids(&contract) {
+                Some(ids) if ids.ledger.is_some() && ids.index.is_some() => Ok(ids),
+                incomplete_ids => Err(format!(
+                    "Not all canister IDs are available for ERC-20 {contract:?}: {incomplete_ids:?}"
+                )),
+            }
+        });
         assert_ne!(
             canister_ids.ledger, canister_ids.index,
             "BUG: ledger and index canister IDs MUST be different"

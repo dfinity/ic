@@ -954,9 +954,9 @@ async fn add_fiduciary_subnet_to_cmc(pocket_ic: &PocketIc, fiduciary_subnet_id: 
         .await;
 
     match result {
-        Ok(_) => println!(
-            "Successfully registered fiduciary subnet {fiduciary_subnet_id} with CMC"
-        ),
+        Ok(_) => {
+            println!("Successfully registered fiduciary subnet {fiduciary_subnet_id} with CMC")
+        }
         Err(e) => panic!("Failed to register fiduciary subnet with CMC: {e:?}"),
     }
 }

@@ -111,9 +111,7 @@ fn run_upgrade() -> Response {
 }
 
 async fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
-    println!(
-        "Trying to fetch hostOS upgrade file from request: {upgrade_data:?}"
-    );
+    println!("Trying to fetch hostOS upgrade file from request: {upgrade_data:?}");
     create_hostos_upgrade_file(
         &upgrade_data.url,
         UPGRADE_FILE_PATH,

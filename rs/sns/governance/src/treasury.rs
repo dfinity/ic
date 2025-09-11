@@ -59,9 +59,7 @@ pub(crate) fn tokens_to_e8s(tokens: Decimal) -> Result<u64, String> {
     })?;
 
     let e8s = u64::try_from(e8s).map_err(|err| {
-        format!(
-            "Unable to convert {tokens} tokens (Decimal) to e8s (u64): {err:?}",
-        )
+        format!("Unable to convert {tokens} tokens (Decimal) to e8s (u64): {err:?}",)
     })?;
 
     Ok(e8s)
@@ -123,9 +121,7 @@ impl TryFrom<&ValuationPb> for Valuation {
 
         let account =
             Account::try_from(account.clone().unwrap_or_default()).unwrap_or_else(|err| {
-                defects.push(format!(
-                    "Unable to convert `account` {account:?}: {err:?}",
-                ));
+                defects.push(format!("Unable to convert `account` {account:?}: {err:?}",));
                 // Ditto earlier comment.
                 Account {
                     owner: Principal::from(PrincipalId::new_user_test_id(0)),
@@ -210,9 +206,7 @@ impl TryFrom<&ValuationFactorsPb> for ValuationFactors {
             });
 
             Decimal::try_from(decimal).unwrap_or_else(|err| {
-                defects.push(format!(
-                    "Unable to convert `{name}' {value:?}: {err:?}",
-                ));
+                defects.push(format!("Unable to convert `{name}' {value:?}: {err:?}",));
                 // Ditto earlier comment.
                 Decimal::from(0)
             })
@@ -270,9 +264,7 @@ pub(crate) async fn assess_treasury_balance(
         .assess_balance(sns_ledger_canister_id, swap_canister_id, treasury_account)
         .await
         .map_err(|valuation_error| {
-            format!(
-                "Unable to assess current treasury balance: {valuation_error:?}"
-            )
+            format!("Unable to assess current treasury balance: {valuation_error:?}")
         })?;
     Ok(valuation)
 }

@@ -2240,9 +2240,7 @@ impl<T> RegistryResultHelper<T> for RegistryClientResult<T> {
     fn unwrap_result(self, registry_version: RegistryVersion, key_name: &str) -> T {
         match self {
             Ok(value) => value.unwrap_or_else(|| {
-                panic!(
-                    "registry (v.{registry_version}) does not have value for key `{key_name}`"
-                )
+                panic!("registry (v.{registry_version}) does not have value for key `{key_name}`")
             }),
             Err(err) => {
                 panic!("registry (v.{registry_version}) error: {err}")

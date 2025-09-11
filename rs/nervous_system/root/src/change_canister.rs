@@ -243,9 +243,7 @@ where
     if stop_before_installing {
         let stop_result = stop_canister::<Rt>(canister_id).await;
         if stop_result.is_err() {
-            println!(
-                "{LOG_PREFIX}change_canister: Failed to stop canister, trying to restart..."
-            );
+            println!("{LOG_PREFIX}change_canister: Failed to stop canister, trying to restart...");
             return match start_canister::<Rt>(canister_id).await {
                 Ok(_) => Err(format!(
                     "Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and succeeded in that."

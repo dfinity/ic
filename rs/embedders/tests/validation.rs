@@ -555,9 +555,7 @@ fn many_exported_functions(n: usize) -> String {
         } else {
             "composite_query"
         };
-        ret = format!(
-            "{ret}  (export \"canister_{typ} xxx{i}\" (func $read))\n"
-        );
+        ret = format!("{ret}  (export \"canister_{typ} xxx{i}\" (func $read))\n");
     }
     format!("{ret}\n)")
 }

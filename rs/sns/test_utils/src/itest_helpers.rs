@@ -1040,9 +1040,9 @@ impl SnsCanisters<'_> {
         match manage_neuron_response.command.unwrap() {
             CommandResponse::AddNeuronPermission(response) => Ok(response),
             CommandResponse::Error(error) => Err(error),
-            response => panic!(
-                "Unexpected response from manage_neuron::AddNeuronPermissions: {response:?}"
-            ),
+            response => {
+                panic!("Unexpected response from manage_neuron::AddNeuronPermissions: {response:?}")
+            }
         }
     }
 
@@ -1177,9 +1177,7 @@ impl SnsCanisters<'_> {
 
             self.governance.runtime().tick().await;
         }
-        panic!(
-            "Canister {canister_id} didn't reach the running state after upgrading"
-        )
+        panic!("Canister {canister_id} didn't reach the running state after upgrading")
     }
 
     pub async fn await_proposal_execution_or_failure(
@@ -1269,17 +1267,13 @@ impl SnsCanisters<'_> {
         for attempt in 0..MAX_ATTEMPTS {
             let response = self.get_maturity_modulation().await;
             if response.maturity_modulation.as_ref().is_some() {
-                println!(
-                    "got MaturityModulation on attempt {attempt}: {response:#?}"
-                );
+                println!("got MaturityModulation on attempt {attempt}: {response:#?}");
                 return;
             }
             self.governance.runtime().tick().await;
         }
 
-        panic!(
-            "maturity_modulation still None after {MAX_ATTEMPTS} attempts."
-        );
+        panic!("maturity_modulation still None after {MAX_ATTEMPTS} attempts.");
     }
 }
 

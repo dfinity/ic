@@ -387,7 +387,6 @@ impl CanisterHttpPayloadBuilderImpl {
             .set(unique_includable_responses);
 
         // Now that we have the candidates, aggregate the signatures and construct the payload
-        
 
         CanisterHttpPayload {
             responses: candidates

@@ -282,9 +282,7 @@ pub(crate) fn get_highest_finalized_block(
                         return proposal.content.into_inner();
                     }
                 }
-                panic!(
-                    "Missing validated block proposal matching finalization {finalization:?}"
-                )
+                panic!("Missing validated block proposal matching finalization {finalization:?}")
             }
         }
         Err(_) => catch_up_package.content.block.as_ref().clone(),

@@ -188,11 +188,9 @@ impl HttpClient {
     }
 
     fn build_uri(&self, url: &Url, end_point: &str) -> Result<HyperUri, String> {
-        let url = url.join(end_point).map_err(|e| {
-            format!(
-                "HttpClient: Failed to create URI for {end_point}: {e:?}"
-            )
-        })?;
+        let url = url
+            .join(end_point)
+            .map_err(|e| format!("HttpClient: Failed to create URI for {end_point}: {e:?}"))?;
 
         url.as_str()
             .parse::<HyperUri>()
@@ -205,11 +203,7 @@ impl HttpClient {
             .uri(uri.clone())
             .header(CONTENT_TYPE, "application/cbor")
             .body(Full::new(Bytes::from(http_body)))
-            .map_err(|e| {
-                format!(
-                    "HttpClient: Failed to create POST request for {uri:?}: {e:?}"
-                )
-            })?;
+            .map_err(|e| format!("HttpClient: Failed to create POST request for {uri:?}: {e:?}"))?;
         Ok(self.hyper.request(req))
     }
 
@@ -302,8 +296,8 @@ impl HttpClient {
         let response = tokio::time::timeout_at(deadline, response_future)
             .await
             .map_err(|e| format!("HttpClient: Request timed out for {uri:?}: {e:?}"))?;
-        let response_body = response
-            .map_err(|e| format!("HttpClient: Request failed out for {uri:?}: {e:?}"))?;
+        let response_body =
+            response.map_err(|e| format!("HttpClient: Request failed out for {uri:?}: {e:?}"))?;
         let status_code = response_body.status();
         let response_bytes = tokio::time::timeout_at(deadline, response_body.collect())
             .await

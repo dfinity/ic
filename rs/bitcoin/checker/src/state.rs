@@ -36,10 +36,9 @@ impl fmt::Display for HttpGetTxError {
         use HttpGetTxError::*;
         match self {
             TxEncoding(s) => write!(f, "TxEncoding: {s}"),
-            TxidMismatch { expected, decoded } => write!(
-                f,
-                "TxidMismatch: expected {expected} but decoded {decoded}"
-            ),
+            TxidMismatch { expected, decoded } => {
+                write!(f, "TxidMismatch: expected {expected} but decoded {decoded}")
+            }
             ResponseTooLarge => write!(f, "ResponseTooLarge"),
             Rejected { code, message } => write!(f, "Rejected: code {code:?}, {message}"),
         }

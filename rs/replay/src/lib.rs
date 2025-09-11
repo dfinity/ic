@@ -193,7 +193,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             }
         }
     });
-    
+
     result.borrow().clone()
 }
 

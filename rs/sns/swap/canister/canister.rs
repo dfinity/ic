@@ -184,9 +184,7 @@ async fn do_get_canister_status(
         .await
         .map(CanisterStatusResultV2::from)
         .unwrap_or_else(|err| {
-            panic!(
-                "Couldn't get canister_status of {canister_id}. Err: {err:#?}"
-            )
+            panic!("Couldn't get canister_status of {canister_id}. Err: {err:#?}")
         })
 }
 

@@ -728,9 +728,7 @@ fn submit_nns_proposal(state_machine: &StateMachine, action: ProposalActionReque
 
     let proposal_id = match response.command.unwrap() {
         CommandResponse::MakeProposal(x) => x.proposal_id.unwrap(),
-        response => panic!(
-            "Unexpected response returned from NNS governance: {response:?}"
-        ),
+        response => panic!("Unexpected response returned from NNS governance: {response:?}"),
     };
 
     nns_wait_for_proposal_execution(state_machine, proposal_id.id);

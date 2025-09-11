@@ -630,9 +630,7 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
             assert!(error_message.contains("too large"), "{err:?}");
         }
 
-        wrong => panic!(
-            "Proposal submission was NOT rejected (as it should have been): {wrong:?}"
-        ),
+        wrong => panic!("Proposal submission was NOT rejected (as it should have been): {wrong:?}"),
     }
     match &take_sns_tokens_make_proposal_result {
         Err(err) => {
@@ -649,9 +647,7 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
             assert!(error_message.contains("too large"), "{err:?}");
         }
 
-        wrong => panic!(
-            "Proposal submission was NOT rejected (as it should have been): {wrong:?}"
-        ),
+        wrong => panic!("Proposal submission was NOT rejected (as it should have been): {wrong:?}"),
     }
 
     // Step 3.2: Assert that balances are unchanged.

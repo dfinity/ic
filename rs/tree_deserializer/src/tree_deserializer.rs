@@ -52,10 +52,9 @@ impl fmt::Display for Error {
             ),
             Self::BadLabel(s) => write!(f, "failed to deserialize label: {s}"),
             Self::BadString(s) => write!(f, "failed to convert byte sequence to a string: {s}"),
-            Self::BadState(s) => write!(
-                f,
-                "tree shape is incompatible with the data structure: {s}"
-            ),
+            Self::BadState(s) => {
+                write!(f, "tree shape is incompatible with the data structure: {s}")
+            }
             Self::Other(s) => write!(f, "{s}"),
         }
     }

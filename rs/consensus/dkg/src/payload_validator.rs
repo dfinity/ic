@@ -495,8 +495,6 @@ mod tests {
                 idkg: idkg::Payload::default(),
             });
 
-            
-
             validate_payload(
                 subnet_id,
                 registry.as_ref(),

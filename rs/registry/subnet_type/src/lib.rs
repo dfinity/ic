@@ -86,9 +86,7 @@ impl TryFrom<pb::SubnetType> for SubnetType {
         match src {
             pb::SubnetType::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "SubnetType",
-                err: format!(
-                    "{src:?} is not one of the expected variants of SubnetType.",
-                ),
+                err: format!("{src:?} is not one of the expected variants of SubnetType.",),
             }),
             pb::SubnetType::Application => Ok(SubnetType::Application),
             pb::SubnetType::System => Ok(SubnetType::System),

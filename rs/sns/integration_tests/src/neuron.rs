@@ -1139,9 +1139,9 @@ fn test_stake_maturity_fails_when_not_authorized() {
 
         let response = match manage_neuron_response.command.unwrap() {
             CommandResponse::Error(error) => error,
-            CommandResponse::StakeMaturity(response) => panic!(
-                "Neuron should not have been able to stake maturity: {response:?}"
-            ),
+            CommandResponse::StakeMaturity(response) => {
+                panic!("Neuron should not have been able to stake maturity: {response:?}")
+            }
             response => panic!("Unexpected response from manage_neuron: {response:?}"),
         };
         assert_eq!(response.error_type, ErrorType::NotAuthorized as i32);

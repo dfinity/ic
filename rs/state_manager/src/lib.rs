@@ -3730,9 +3730,7 @@ impl PageAllocatorFileDescriptorImpl {
             .write(true)
             .open(&file_path)
         {
-            Err(why) => panic!(
-                "MmapPageAllocatorCore failed to create the backing file {why}"
-            ),
+            Err(why) => panic!("MmapPageAllocatorCore failed to create the backing file {why}"),
             Ok(file) => {
                 let crnt_fd = file.into_raw_fd();
                 // In Unix-based systems, when deleting a file while there are still open file
@@ -3761,9 +3759,7 @@ impl PageAllocatorFileDescriptorImpl {
         ) {
             Ok(fd) => fd,
             Err(err) => {
-                panic!(
-                    "MmapPageAllocatorCore failed to create the memory backing file {err}"
-                )
+                panic!("MmapPageAllocatorCore failed to create the memory backing file {err}")
             }
         }
     }
@@ -3777,9 +3773,7 @@ impl PageAllocatorFileDescriptorImpl {
         match tempfile() {
             Ok(file) => file.into_raw_fd(),
             Err(err) => {
-                panic!(
-                    "MmapPageAllocatorCore failed to create the MacOS/WSL backing file {err}"
-                )
+                panic!("MmapPageAllocatorCore failed to create the MacOS/WSL backing file {err}")
             }
         }
     }

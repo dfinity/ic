@@ -32,9 +32,7 @@ pub(crate) fn check_subnet_invariants(
         let subnet_record = subnet_records_map
             .remove(&make_subnet_record_key(subnet_id).into_bytes())
             .unwrap_or_else(|| {
-                panic!(
-                    "Subnet {subnet_id:} is in subnet list but no record exists"
-                )
+                panic!("Subnet {subnet_id:} is in subnet list but no record exists")
             });
 
         if subnet_record.ssh_readonly_access.len() > MAX_NUM_SSH_KEYS
@@ -84,9 +82,7 @@ pub(crate) fn check_subnet_invariants(
         // Each node appears at most once in at most one subnet membership
         if !intersection.is_empty() {
             return Err(InvariantCheckError {
-                msg: format!(
-                    "Nodes in subnet {subnet_id:} also belong to other subnets"
-                ),
+                msg: format!("Nodes in subnet {subnet_id:} also belong to other subnets"),
                 source: None,
             });
         }

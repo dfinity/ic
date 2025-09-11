@@ -66,9 +66,7 @@ impl Registry {
 
         let payload_chain_key_config = payload.chain_key_config.clone().map(|chain_key_config| {
             ChainKeyConfigInternal::try_from(chain_key_config).unwrap_or_else(|err| {
-                panic!(
-                    "{LOG_PREFIX}Invalid UpdateSubnetPayload.chain_key_config: {err}"
-                );
+                panic!("{LOG_PREFIX}Invalid UpdateSubnetPayload.chain_key_config: {err}");
             })
         });
 

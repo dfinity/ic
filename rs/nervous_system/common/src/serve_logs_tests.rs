@@ -196,9 +196,7 @@ fn test_serve_logs_time_bound() {
     // Step 2: Call the code under test.
     let http_request = HttpRequest {
         method: "GET".to_string(),
-        url: format!(
-            "http://example.com/logs?time={between_timestamp_nanoseconds}"
-        ),
+        url: format!("http://example.com/logs?time={between_timestamp_nanoseconds}"),
         headers: vec![],
         body: ByteBuf::new(),
     };

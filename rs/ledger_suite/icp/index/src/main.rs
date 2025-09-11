@@ -393,9 +393,9 @@ fn append_blocks(new_blocks: Vec<EncodedBlock>) -> Result<(), String> {
     for block in new_blocks {
         // append the encoded block to the block log
         with_blocks(|blocks| {
-            blocks.append(&block.0).map_err(|msg| {
-                format!("could append the encoded block to the block log: {msg:?}")
-            })
+            blocks
+                .append(&block.0)
+                .map_err(|msg| format!("could append the encoded block to the block log: {msg:?}"))
         })?;
 
         let decoded_block = decode_encoded_block(block_index, block)?;

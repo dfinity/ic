@@ -276,9 +276,7 @@ pub fn test(env: TestEnv) {
             let tar = subnet_recovery.get_local_store_tar();
             let url_to_file = setup_file_server(&env, &tar);
             let url = Url::parse(&url_to_file).unwrap_or_else(|err| {
-                panic!(
-                    "Couldn't parse url {url_to_file} to registry tar: {err:?}"
-                )
+                panic!("Couldn't parse url {url_to_file} to registry tar: {err:?}")
             });
             info!(logger, "URL: {}", url);
             subnet_recovery.params.registry_url = Some(url);

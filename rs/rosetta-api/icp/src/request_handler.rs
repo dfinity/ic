@@ -243,9 +243,10 @@ impl RosettaRequestHandler {
                         )
                         .saturating_sub(1),
                     );
-                    if storage.contains_block(&lowest_index).map_err(|err| {
-                        ApiError::InvalidBlockId(false, format!("{err:?}").into())
-                    })? {
+                    if storage
+                        .contains_block(&lowest_index)
+                        .map_err(|err| ApiError::InvalidBlockId(false, format!("{err:?}").into()))?
+                    {
                         // TODO: Use block range with rosetta blocks
                         for hb in storage
                             .get_hashed_block_range(

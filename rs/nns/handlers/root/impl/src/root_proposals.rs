@@ -437,9 +437,7 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
 fn get_proposal_clone(proposer: &PrincipalId) -> Result<GovernanceUpgradeRootProposal, String> {
     let proposal = PROPOSALS.with(|proposals| proposals.borrow().get(proposer).cloned());
     if proposal.is_none() {
-        let message = format!(
-            "No root governance upgrade proposal from {proposer} is pending"
-        );
+        let message = format!("No root governance upgrade proposal from {proposer} is pending");
         println!("{message}");
         return Err(message);
     }
@@ -477,9 +475,7 @@ async fn get_nns_subnet_id() -> Result<SubnetId, String> {
     )
     .await
     .map_err(|(code, message)| {
-        format!(
-            "Error when calling get_subnet_for_canister, code: {code:?}, message: {message}"
-        )
+        format!("Error when calling get_subnet_for_canister, code: {code:?}, message: {message}")
     })?;
     let response = response?;
     let nns_subnet_id = response
@@ -517,13 +513,9 @@ async fn get_node_operator_pid_of_node(
         get_value::<NodeRecordPb>(make_node_record_key(*node_id).as_bytes(), Some(version))
             .await
             .map_err(|e| {
-                format!(
-                    "Error getting the node record from the registry. Error: {e:?}"
-                )
+                format!("Error getting the node record from the registry. Error: {e:?}")
             })?;
     PrincipalId::try_from(node_record.node_operator_id).map_err(|e| {
-        format!(
-            "Error decoding the node operator id from the node record. Error: {e:?}"
-        )
+        format!("Error decoding the node operator id from the node record. Error: {e:?}")
     })
 }

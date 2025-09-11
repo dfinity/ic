@@ -1091,9 +1091,7 @@ fn add_node_(payload: AddNodePayload) -> NodeId {
     let node_id = registry_mut()
         .do_add_node(payload)
         .unwrap_or_else(|error_message| {
-            trap_with(&format!(
-                "{LOG_PREFIX} Add node failed: {error_message}"
-            ))
+            trap_with(&format!("{LOG_PREFIX} Add node failed: {error_message}"))
         });
 
     recertify_registry();

@@ -153,9 +153,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
         // We will always either set `error`, or return `Ok` from this loop.
         let mut error = UpgradeError::GenericError("unreachable".to_string());
         for release_package_url in release_package_urls.iter() {
-            let req = format!(
-                "Request to download image {version:?} from {release_package_url}"
-            );
+            let req = format!("Request to download image {version:?} from {release_package_url}");
             let file_downloader =
                 FileDownloader::new_with_timeout(Some(self.log().clone()), Duration::from_secs(60));
             let start_time = std::time::Instant::now();

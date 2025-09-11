@@ -221,9 +221,7 @@ fn test_encode_metrics() {
                 )
             });
         f64::from_str(metric_value).unwrap_or_else(|err| {
-            panic!(
-                "{err}\n\nError caused by trying to parse {metric_value:?} as a float"
-            )
+            panic!("{err}\n\nError caused by trying to parse {metric_value:?} as a float")
         })
     }
 

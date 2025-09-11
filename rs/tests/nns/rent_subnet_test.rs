@@ -617,9 +617,7 @@ fn wait_for_cycles_minting_to_get_price_of_icp(
             Ok(ok) => ok,
             Err(err) => {
                 if err_budget == 0 {
-                    panic!(
-                        "Giving up on calling the Cycles Minting canister: {err:?}"
-                    );
+                    panic!("Giving up on calling the Cycles Minting canister: {err:?}");
                 }
 
                 info!(

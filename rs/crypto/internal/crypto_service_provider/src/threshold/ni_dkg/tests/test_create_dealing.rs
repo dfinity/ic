@@ -85,9 +85,7 @@ impl StateWithConfig {
                 .map(CspPublicCoefficients::from),
         );
         match dealing {
-            Ok(_) => panic!(
-                "Dealing should fail with AlgorithmId: {incorrect_algorithm_id:?}"
-            ),
+            Ok(_) => panic!("Dealing should fail with AlgorithmId: {incorrect_algorithm_id:?}"),
             Err(CspDkgCreateReshareDealingError::UnsupportedAlgorithmId(algorithm_id)) => {
                 assert_eq!(
                     algorithm_id, incorrect_algorithm_id,

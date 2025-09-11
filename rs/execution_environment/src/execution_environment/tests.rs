@@ -2156,10 +2156,7 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
     let result = test.ingress(a_id, "update", a);
     let reply = get_reply(result);
     let error = std::str::from_utf8(&reply).unwrap();
-    assert!(
-        error.contains("out of cycles"),
-        "Unexpected error: {error}"
-    );
+    assert!(error.contains("out of cycles"), "Unexpected error: {error}");
 }
 
 #[test]
@@ -2929,9 +2926,9 @@ fn can_refund_cycles_after_successful_provisional_create_canister() {
     let result = test.ingress(canister, "update", create_canister).unwrap();
     let new_canister = match result {
         WasmResult::Reply(bytes) => Decode!(&bytes, CanisterIdRecord).unwrap(),
-        WasmResult::Reject(err) => panic!(
-            "Expected ProvisionalCreateCanisterWithCycles to succeed but got {err}"
-        ),
+        WasmResult::Reject(err) => {
+            panic!("Expected ProvisionalCreateCanisterWithCycles to succeed but got {err}")
+        }
     };
     assert_eq!(
         CanisterStatusType::Running,
@@ -2967,9 +2964,9 @@ fn create_canister_with_specified_id(
     let result = test.ingress(*canister, "update", create_canister).unwrap();
     match result {
         WasmResult::Reply(bytes) => Decode!(&bytes, CanisterIdRecord).unwrap(),
-        WasmResult::Reject(err) => panic!(
-            "Expected ProvisionalCreateCanisterWithCycles to succeed but got {err}"
-        ),
+        WasmResult::Reject(err) => {
+            panic!("Expected ProvisionalCreateCanisterWithCycles to succeed but got {err}")
+        }
     }
 }
 
@@ -3891,9 +3888,7 @@ fn test_ecdsa_public_key_api_is_enabled() {
     let response = test.xnet_messages()[0].clone();
     assert_eq!(
         get_reject_message(response),
-        format!(
-            "Subnet {own_subnet} does not hold threshold key ecdsa:{nonexistent_key_id}."
-        ),
+        format!("Subnet {own_subnet} does not hold threshold key ecdsa:{nonexistent_key_id}."),
     );
 
     let response = test.xnet_messages()[1].clone();
@@ -4009,9 +4004,7 @@ fn test_vetkd_public_key_api_is_enabled() {
     let response = test.xnet_messages()[0].clone();
     assert_eq!(
         get_reject_message(response),
-        format!(
-            "Subnet {own_subnet} does not hold threshold key vetkd:{nonexistent_key_id}."
-        ),
+        format!("Subnet {own_subnet} does not hold threshold key vetkd:{nonexistent_key_id}."),
     );
 
     let response = test.xnet_messages()[1].clone();

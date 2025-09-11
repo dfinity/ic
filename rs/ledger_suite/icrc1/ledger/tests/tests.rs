@@ -1862,9 +1862,7 @@ fn is_valid_root_hash(
     let cert_hash = match certificate.tree.lookup_path(&certified_data_path) {
         LookupResult::Found(v) => v,
         _ => {
-            panic!(
-                "could not find certified_data for canister: {ledger_canister_id}"
-            )
+            panic!("could not find certified_data for canister: {ledger_canister_id}")
         }
     };
 

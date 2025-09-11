@@ -109,9 +109,7 @@ impl NeuronsFundEconomics {
         field_value_pb: DecimalPb,
     ) -> Result<Decimal, String> {
         Decimal::try_from(field_value_pb).map_err(|err| {
-            format!(
-                "NeuronsFundEconomics.{field_name} must be parsed as Decimal: {err}",
-            )
+            format!("NeuronsFundEconomics.{field_name} must be parsed as Decimal: {err}",)
         })
     }
 }
@@ -704,10 +702,7 @@ impl std::fmt::Display for NeuronsFundSnapshotValidationError {
         let prefix = "Cannot validate NeuronsFundSnapshot: ";
         match self {
             Self::NeuronsFundNeuronPortionError(index, error) => {
-                write!(
-                    f,
-                    "{prefix}neurons_fund_neuron_portions[{index}]: {error}"
-                )
+                write!(f, "{prefix}neurons_fund_neuron_portions[{index}]: {error}")
             }
         }
     }

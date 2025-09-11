@@ -40,9 +40,7 @@ impl RecoveryError {
     pub(crate) fn cmd_error(cmd: &Command, exit_code: Option<i32>, output: impl Display) -> Self {
         RecoveryError::CommandError(
             exit_code,
-            format!(
-                "Failed to execute system command: {cmd:?}, Output: {output}"
-            ),
+            format!("Failed to execute system command: {cmd:?}, Output: {output}"),
         )
     }
     pub(crate) fn invalid_output_error(output: impl Display) -> Self {
@@ -55,10 +53,7 @@ impl RecoveryError {
         RecoveryError::SerializationError(e)
     }
     pub(crate) fn download_error(url: impl Display, target: &Path, e: FileDownloadError) -> Self {
-        RecoveryError::DownloadError(
-            format!("Failed to download from {url} to {target:?}"),
-            e,
-        )
+        RecoveryError::DownloadError(format!("Failed to download from {url} to {target:?}"), e)
     }
     pub fn validation_failed(message: impl Display, error: impl Display) -> Self {
         RecoveryError::ValidationFailed(format!("{message}: {error}"))

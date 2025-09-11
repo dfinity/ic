@@ -181,9 +181,7 @@ fn test_store_simplest_nontrivial_case() {
             ),
         },
 
-        _ => panic!(
-            "create(evil_twin_neuron) did not result in an Err: {bad_create_result:?}"
-        ),
+        _ => panic!("create(evil_twin_neuron) did not result in an Err: {bad_create_result:?}"),
     }
 
     // 3. Read back the first neuron (the second one should have no effect).
@@ -202,9 +200,7 @@ fn test_store_simplest_nontrivial_case() {
             _ => panic!("read returns error other than not found: {err:?}"),
         },
 
-        _ => panic!(
-            "read(0xDEAD) did not result in an Err: {bad_read_result:?}"
-        ),
+        _ => panic!("read(0xDEAD) did not result in an Err: {bad_read_result:?}"),
     }
 
     // 5. Update existing neuron.

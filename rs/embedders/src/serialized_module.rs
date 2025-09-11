@@ -255,9 +255,7 @@ impl OnDiskSerializedModule {
             )
         }
         .unwrap_or_else(|err| {
-            panic!(
-                "Reading OnDiskSerializedModule initial_state failed: {err:?}"
-            )
+            panic!("Reading OnDiskSerializedModule initial_state failed: {err:?}")
         }) as *mut u8;
         // Safety: allocation was made with length `mmap_size`.
         let data = unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) };

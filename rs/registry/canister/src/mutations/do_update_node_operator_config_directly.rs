@@ -21,9 +21,7 @@ impl Registry {
         &mut self,
         payload: UpdateNodeOperatorConfigDirectlyPayload,
     ) {
-        println!(
-            "{LOG_PREFIX}do_update_node_operator_config_directly: {payload:?}"
-        );
+        println!("{LOG_PREFIX}do_update_node_operator_config_directly: {payload:?}");
 
         // 1. Look up the record of the requested target NodeOperatorRecord.
         let node_operator_id = payload

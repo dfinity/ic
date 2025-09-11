@@ -44,8 +44,8 @@ pub(super) struct HeightArtifacts {
 // Reads the file at `path` and the returns the content as bytes.
 fn read_file(path: &Path) -> Vec<u8> {
     let mut buffer = Vec::new();
-    let mut file = fs::File::open(path)
-        .unwrap_or_else(|err| panic!("Couldn't open file {path:?}: {err:?}"));
+    let mut file =
+        fs::File::open(path).unwrap_or_else(|err| panic!("Couldn't open file {path:?}: {err:?}"));
     file.read_to_end(&mut buffer)
         .unwrap_or_else(|err| panic!("Couldn't read file {path:?}: {err:?}"));
     buffer
@@ -459,9 +459,7 @@ pub(crate) fn deserialize_consensus_artifacts(
         // height, we need to deliver all batches before we insert the cup.
         if let Some(cup_height) = last_cup_height {
             if height >= cup_height && !height_artifacts.finalizations.is_empty() {
-                println!(
-                    "Found a CUP at height {cup_height:?}, finalized at height {height:?}"
-                );
+                println!("Found a CUP at height {cup_height:?}, finalized at height {height:?}");
                 return Err(ExitPoint::CUPHeightWasFinalized(cup_height));
             }
         }

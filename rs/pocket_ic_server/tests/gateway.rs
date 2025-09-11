@@ -169,9 +169,7 @@ async fn test_gateway(server_url: Url, https: bool) {
     }
 
     // perform frontend asset request for the title page at http(s)://localhost:<port>/?canisterId=<canister-id>
-    let canister_url = format!(
-        "{proto}://{localhost}:{port}/?canisterId={canister_id}"
-    );
+    let canister_url = format!("{proto}://{localhost}:{port}/?canisterId={canister_id}");
     test_urls.push(canister_url);
 
     // perform frontend asset request for the title page at http(s)://<canister-id>.localhost:<port>
@@ -207,9 +205,7 @@ async fn test_gateway(server_url: Url, https: bool) {
     test_referers.push(referer_url);
 
     // perform request where canister ID is specified in the referer header query parameters
-    let referer_url = format!(
-        "{proto}://{localhost}:{port}/?canisterId={canister_id}"
-    );
+    let referer_url = format!("{proto}://{localhost}:{port}/?canisterId={canister_id}");
     test_referers.push(referer_url);
 
     let test_url = format!("{proto}://{localhost}:{port}");

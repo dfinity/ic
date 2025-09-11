@@ -606,9 +606,7 @@ impl CheckpointLoader {
         ref_canister_snapshots: &CanisterSnapshots,
     ) -> Result<(), String> {
         let mut on_disk_snapshot_ids = self.checkpoint_layout.snapshot_ids().map_err(|err| {
-            format!(
-                "Snapshot validation: failed to load list of snapshot ids: {err}"
-            )
+            format!("Snapshot validation: failed to load list of snapshot ids: {err}")
         })?;
         let mut ref_snapshot_ids: Vec<_> = ref_canister_snapshots.iter().map(|x| *x.0).collect();
         on_disk_snapshot_ids.sort();
@@ -623,9 +621,7 @@ impl CheckpointLoader {
                 Arc::clone(&self.fd_factory),
             )
             .map_err(|err| {
-                format!(
-                    "Failed to load canister snapshot {snapshot_id} for validation: {err}"
-                )
+                format!("Failed to load canister snapshot {snapshot_id} for validation: {err}")
             })?
             .0
             .validate_eq(

@@ -464,7 +464,6 @@ fn print_validate_num_cycles(
     }
     let result = ret_val.as_ref().unwrap_or(&vec![]).clone();
 
-    
     if let Some(num_cycles) = convert_bytes_to_number(result.as_slice()) {
         // Prints the number of cycles
         if ENABLE_DEBUG_LOG {

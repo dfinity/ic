@@ -52,10 +52,7 @@ impl MetricsObservationsAssert {
                 local_public_key_count as f64,
             ) && self.contains_crypto_gauge_vec_metric(
                 "crypto_key_counts",
-                labels(&[
-                    ("key_type", "secret_sks"),
-                    ("result", &format!("{result}"))
-                ]),
+                labels(&[("key_type", "secret_sks"), ("result", &format!("{result}"))]),
                 secret_key_count as f64,
             )
         );
@@ -121,9 +118,7 @@ impl MetricsObservationsAssert {
                 if actual_value > &0f64 {
                     true
                 } else {
-                    println!(
-                        "Expected boolean counter value ge 0, found {actual_value}"
-                    );
+                    println!("Expected boolean counter value ge 0, found {actual_value}");
                     false
                 }
             }
@@ -140,9 +135,7 @@ impl MetricsObservationsAssert {
                 if actual_counter == metric_value {
                     true
                 } else {
-                    println!(
-                        "Expected counter value {metric_value}, found {actual_counter}"
-                    );
+                    println!("Expected counter value {metric_value}, found {actual_counter}");
                     false
                 }
             }
@@ -157,18 +150,14 @@ impl MetricsObservationsAssert {
     ) -> bool {
         match fetch_gauge_vec(&self.metrics_registry, metric_name).get(&metric_labels) {
             None => {
-                println!(
-                    "no gauge found with name {metric_name} and labels {metric_labels:?}"
-                );
+                println!("no gauge found with name {metric_name} and labels {metric_labels:?}");
                 false
             }
             Some(actual_value) => {
                 if actual_value == &metric_value {
                     true
                 } else {
-                    println!(
-                        "Expected gauge value {metric_value}, found {actual_value}"
-                    );
+                    println!("Expected gauge value {metric_value}, found {actual_value}");
                     false
                 }
             }

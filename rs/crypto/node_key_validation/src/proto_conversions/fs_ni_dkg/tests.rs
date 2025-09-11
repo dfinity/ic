@@ -78,9 +78,7 @@ fn assert_malformed_fs_encryption_pubkey_error_containing(
     if let FsNiDkgPubkeyFromPubkeyProtoError::PublicKeyConversion { error } = error {
         assert!(error.contains(substring))
     } else {
-        panic!(
-            "expected MalformedFsEncryptionPublicKey error, but got {error}"
-        )
+        panic!("expected MalformedFsEncryptionPublicKey error, but got {error}")
     }
 }
 

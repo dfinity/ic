@@ -210,9 +210,7 @@ fn blocks_len() -> u64 {
 fn append_block(block: &EncodedBlock) {
     BLOCKS.with_borrow_mut(|blocks| match blocks.append(&block.0) {
         Ok(_) => {}
-        Err(e) => ic_cdk::trap(format!(
-            "Could not append block to stable block log: {e:?}"
-        )),
+        Err(e) => ic_cdk::trap(format!("Could not append block to stable block log: {e:?}")),
     });
 }
 

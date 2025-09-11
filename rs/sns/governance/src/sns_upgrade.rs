@@ -86,9 +86,7 @@ pub(crate) async fn get_wasm(
         .ok_or_else(|| "No WASM found using hash returned from SNS-WASM canister.".to_string())?;
 
     let returned_canister_type = SnsCanisterType::try_from(wasm.canister_type).map_err(|err| {
-        format!(
-            "Could not convert response from SNS-WASM to valid SnsCanisterType: {err}"
-        )
+        format!("Could not convert response from SNS-WASM to valid SnsCanisterType: {err}")
     })?;
 
     if returned_canister_type != expected_sns_canister_type {
@@ -110,9 +108,7 @@ pub(crate) async fn get_proposal_id_that_added_wasm(
             SNS_WASM_CANISTER_ID,
             "get_proposal_id_that_added_wasm",
             Encode!(&GetProposalIdThatAddedWasmRequest { hash: wasm_hash }).map_err(|e| {
-                format!(
-                    "Could not encode GetProposalIdThatAddedWasmRequest: {e:?}"
-                )
+                format!("Could not encode GetProposalIdThatAddedWasmRequest: {e:?}")
             })?,
         )
         .await
@@ -124,11 +120,8 @@ pub(crate) async fn get_proposal_id_that_added_wasm(
             )
         })?;
 
-    let response = Decode!(&response, GetProposalIdThatAddedWasmResponse).map_err(|e| {
-        format!(
-            "Decoding GetProposalIdThatAddedWasmResponse failed: {e:?}"
-        )
-    })?;
+    let response = Decode!(&response, GetProposalIdThatAddedWasmResponse)
+        .map_err(|e| format!("Decoding GetProposalIdThatAddedWasmResponse failed: {e:?}"))?;
     let proposal_id = response.proposal_id;
 
     Ok(proposal_id)
@@ -161,9 +154,7 @@ pub(crate) async fn get_canisters_to_upgrade(
         .map(|maybe_principal| {
             maybe_principal
                 .ok_or_else(|| {
-                    format!(
-                        "Did not receive {label} CanisterId from list_sns_canisters call"
-                    )
+                    format!("Did not receive {label} CanisterId from list_sns_canisters call")
                 })
                 .map(CanisterId::unchecked_from_principal)
         })
@@ -307,9 +298,7 @@ pub(crate) async fn get_upgrade_steps(
         .map_err(|err| format!("Request failed for get_next_sns_version: {err:?}"))?;
 
     let response = Decode!(&response, ListUpgradeStepsResponse).map_err(|err| {
-        format!(
-            "Could not decode the response from SnsW.list_upgrade_steps: {err}"
-        )
+        format!("Could not decode the response from SnsW.list_upgrade_steps: {err}")
     })?;
 
     let response_timestamp_seconds = env.now();

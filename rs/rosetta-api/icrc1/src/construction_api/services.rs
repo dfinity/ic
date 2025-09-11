@@ -293,9 +293,7 @@ mod tests {
             assert!(
                 operations.contains(&operation),
                 "{}",
-                format!(
-                    "Operation {operation:?} not found in operations {operations:?}"
-                )
+                format!("Operation {operation:?} not found in operations {operations:?}")
             )
         });
 

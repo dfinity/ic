@@ -661,8 +661,6 @@ mod tests {
             }
         }
 
-        
-
         (if test_unvalidated {
             idkg_pool.unvalidated()
         } else {

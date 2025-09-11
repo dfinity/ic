@@ -61,10 +61,8 @@ impl TryFrom<InitArg> for State {
             .map_err(|e| {
                 InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e}"))
             })?;
-        let last_scraped_block_number =
-            BlockNumber::try_from(last_scraped_block_number).map_err(|e| {
-                InvalidStateError::InvalidLastScrapedBlockNumber(format!("ERROR: {e}"))
-            })?;
+        let last_scraped_block_number = BlockNumber::try_from(last_scraped_block_number)
+            .map_err(|e| InvalidStateError::InvalidLastScrapedBlockNumber(format!("ERROR: {e}")))?;
         let first_scraped_block_number =
             last_scraped_block_number
                 .checked_increment()

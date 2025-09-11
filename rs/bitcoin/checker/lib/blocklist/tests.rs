@@ -9,9 +9,7 @@ fn should_be_valid_bitcoin_address_in_canonical_format() {
             .unwrap_or_else(|e| panic!("BUG: invalid bitcoin address '{address}', error '{e}'"))
             .require_network(Network::Bitcoin)
             .unwrap_or_else(|e| {
-                panic!(
-                    "BUG: invalid address '{address}' for Mainnet Bitcoin, error '{e}'"
-                )
+                panic!("BUG: invalid address '{address}' for Mainnet Bitcoin, error '{e}'")
             });
 
         assert_eq!(address, &parsed_address.to_string())

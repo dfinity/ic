@@ -227,8 +227,6 @@ fn opt_slice_to_string(slice: Option<CertifiedStreamSlice>) -> String {
 }
 
 fn slice_to_string(slice: CertifiedStreamSlice) -> String {
-    UnpackedStreamSlice::try_from(slice.clone()).map_or_else(
-        |_| format!("{slice:?}"),
-        |unpacked| format!("{unpacked:?}"),
-    )
+    UnpackedStreamSlice::try_from(slice.clone())
+        .map_or_else(|_| format!("{slice:?}"), |unpacked| format!("{unpacked:?}"))
 }

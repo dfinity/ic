@@ -1586,9 +1586,7 @@ impl CkBtcMinterState {
             .pending_withdrawal_reimbursements
             .remove(&burn_index)
             .unwrap_or_else(|| {
-                panic!(
-                    "BUG: missing pending reimbursement of withdrawal {burn_index}."
-                )
+                panic!("BUG: missing pending reimbursement of withdrawal {burn_index}.")
             });
         let reimbursed = ReimbursedWithdrawal {
             account: reimbursement.account,

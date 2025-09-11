@@ -739,9 +739,7 @@ impl From<CanisterManagerError> for UserError {
         match err {
             CanisterAlreadyExists(canister_id) => Self::new(
                 ErrorCode::CanisterAlreadyInstalled,
-                format!(
-                    "Canister {canister_id} is already installed.{additional_help}"
-                ),
+                format!("Canister {canister_id} is already installed.{additional_help}"),
             ),
             SubnetComputeCapacityOverSubscribed {
                 requested,
@@ -825,9 +823,7 @@ impl From<CanisterManagerError> for UserError {
             ),
             DeleteCanisterSelf(canister_id) => Self::new(
                 ErrorCode::CanisterInvalidController,
-                format!(
-                    "Canister {canister_id} cannot delete itself.{additional_help}",
-                ),
+                format!("Canister {canister_id} cannot delete itself.{additional_help}",),
             ),
             SenderNotInWhitelist(_) => {
                 // Methods that are whitelisted are private and should be invisible to users
@@ -860,9 +856,7 @@ impl From<CanisterManagerError> for UserError {
             ),
             InstallCodeNotEnoughCycles(err) => Self::new(
                 ErrorCode::CanisterOutOfCycles,
-                format!(
-                    "Canister installation failed with `{err}`.{additional_help}"
-                ),
+                format!("Canister installation failed with `{err}`.{additional_help}"),
             ),
             InstallCodeRateLimited(canister_id) => Self::new(
                 ErrorCode::CanisterInstallCodeRateLimited,
@@ -876,9 +870,7 @@ impl From<CanisterManagerError> for UserError {
             ),
             InvalidSettings { message } => Self::new(
                 ErrorCode::CanisterContractViolation,
-                format!(
-                    "Could not validate the settings: {message} {additional_help}"
-                ),
+                format!("Could not validate the settings: {message} {additional_help}"),
             ),
             MaxNumberOfCanistersReached {
                 subnet_id,
@@ -891,9 +883,7 @@ impl From<CanisterManagerError> for UserError {
             ),
             CanisterNotHostedBySubnet { message } => Self::new(
                 ErrorCode::CanisterNotHostedBySubnet,
-                format!(
-                    "Unsuccessful validation of specified ID: {message}{additional_help}"
-                ),
+                format!("Unsuccessful validation of specified ID: {message}{additional_help}"),
             ),
             InsufficientCyclesInComputeAllocation {
                 compute_allocation,
@@ -1001,9 +991,7 @@ impl From<CanisterManagerError> for UserError {
             ),
             CanisterSnapshotExecutionStateNotFound { canister_id } => Self::new(
                 ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "Failed to create snapshot for empty canister {canister_id}:",
-                ),
+                format!("Failed to create snapshot for empty canister {canister_id}:",),
             ),
             CanisterSnapshotLimitExceeded { canister_id, limit } => Self::new(
                 ErrorCode::CanisterRejectedMessage,
@@ -1013,9 +1001,7 @@ impl From<CanisterManagerError> for UserError {
             ),
             CanisterSnapshotNotEnoughCycles(err) => Self::new(
                 ErrorCode::CanisterOutOfCycles,
-                format!(
-                    "Canister snapshotting failed with: `{err}`{additional_help}"
-                ),
+                format!("Canister snapshotting failed with: `{err}`{additional_help}"),
             ),
             CanisterSnapshotImmutable => Self::new(
                 ErrorCode::CanisterSnapshotImmutable,

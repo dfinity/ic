@@ -72,9 +72,7 @@ pub fn get_node_operator_id_for_node(
                         .node_operator_id,
                 )
                 .map_err(|_| {
-                    format!(
-                        "Could not decode node_record's node_operator_id for Node Id {node_id}"
-                    )
+                    format!("Could not decode node_record's node_operator_id for Node Id {node_id}")
                 })
             },
         )
@@ -208,7 +206,6 @@ pub fn make_remove_node_registry_mutations(
     ];
 
     let latest_version = registry.latest_version();
-    
 
     keys_to_maybe_remove
         .iter()

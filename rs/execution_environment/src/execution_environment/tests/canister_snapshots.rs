@@ -219,9 +219,7 @@ fn take_canister_snapshot_fails_invalid_replace_snapshot_id() {
         assert_eq!(res.originator, *receiver);
         res.response_payload.assert_contains_reject(
             RejectCode::DestinationInvalid,
-            &format!(
-                "Could not find the snapshot ID {snapshot_id} for canister {canister_id}."
-            ),
+            &format!("Could not find the snapshot ID {snapshot_id} for canister {canister_id}."),
         );
     }
 
@@ -263,10 +261,9 @@ fn take_canister_snapshot_fails_canister_does_not_own_replace_snapshot() {
         .unwrap_err();
 
     assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
-    let message = format!(
-        "The snapshot {snapshot_id} does not belong to canister {canister_id_2}",
-    )
-    .to_string();
+    let message =
+        format!("The snapshot {snapshot_id} does not belong to canister {canister_id_2}",)
+            .to_string();
     assert!(error.description().contains(&message));
 
     // Verify the canisters exists in the `ReplicatedState`.
@@ -1087,10 +1084,9 @@ fn delete_canister_snapshot_fails_snapshot_not_found() {
         .subnet_message("delete_canister_snapshot", args.encode())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
-    let message = format!(
-        "Could not find the snapshot ID {snapshot_id} for canister {canister_id}",
-    )
-    .to_string();
+    let message =
+        format!("Could not find the snapshot ID {snapshot_id} for canister {canister_id}",)
+            .to_string();
     assert!(error.description().contains(&message));
     assert!(test.state().canister_state(&canister_id).is_some());
 }
@@ -1130,10 +1126,9 @@ fn delete_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
         .subnet_message("delete_canister_snapshot", args.encode())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
-    let message = format!(
-        "The snapshot {snapshot_id} does not belong to canister {canister_id_2}",
-    )
-    .to_string();
+    let message =
+        format!("The snapshot {snapshot_id} does not belong to canister {canister_id_2}",)
+            .to_string();
     assert!(error.description().contains(&message));
     assert!(test.state().canister_state(&canister_id_2).is_some());
     assert_eq!(
@@ -1425,10 +1420,9 @@ fn load_canister_snapshot_fails_snapshot_not_found() {
         .subnet_message("load_canister_snapshot", args.encode())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
-    let message = format!(
-        "Could not find the snapshot ID {snapshot_id} for canister {canister_id}",
-    )
-    .to_string();
+    let message =
+        format!("Could not find the snapshot ID {snapshot_id} for canister {canister_id}",)
+            .to_string();
     assert!(error.description().contains(&message));
     assert!(test.state().canister_state(&canister_id).is_some());
 }
@@ -1468,10 +1462,9 @@ fn load_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
         .subnet_message("load_canister_snapshot", args.encode())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
-    let message = format!(
-        "The snapshot {snapshot_id} does not belong to canister {canister_id_2}",
-    )
-    .to_string();
+    let message =
+        format!("The snapshot {snapshot_id} does not belong to canister {canister_id_2}",)
+            .to_string();
     assert!(error.description().contains(&message));
     assert!(test.state().canister_state(&canister_id_2).is_some());
     assert_eq!(

@@ -19,14 +19,10 @@ impl Registry {
     /// This method is called directly by the node operator tied to the node.
     pub fn do_remove_node_directly(&mut self, payload: RemoveNodeDirectlyPayload) {
         let caller_id = dfn_core::api::caller();
-        println!(
-            "{LOG_PREFIX}do_remove_node_directly started: {payload:?} caller: {caller_id:?}"
-        );
+        println!("{LOG_PREFIX}do_remove_node_directly started: {payload:?} caller: {caller_id:?}");
         self.do_remove_node(payload.clone(), caller_id);
 
-        println!(
-            "{LOG_PREFIX}do_remove_node_directly finished: {payload:?}"
-        );
+        println!("{LOG_PREFIX}do_remove_node_directly finished: {payload:?}");
     }
 
     #[cfg(test)]
@@ -62,11 +58,7 @@ impl Registry {
         // 1. Find the node operator id for this record
         // and abort if the node record is not found
         let node_operator_id = get_node_operator_id_for_node(self, payload.node_id)
-            .map_err(|e| {
-                format!(
-                    "{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {e}"
-                )
-            })
+            .map_err(|e| format!("{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {e}"))
             .unwrap();
 
         // 2. Compare the caller_id (node operator) with the node's node operator and, if that fails,
@@ -78,17 +70,13 @@ impl Registry {
         if caller_id != node_operator_id {
             let node_operator_caller = get_node_operator_record(self, caller_id)
                 .map_err(|e| {
-                    format!(
-                        "{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {e}"
-                    )
+                    format!("{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {e}")
                 })
                 .unwrap();
             let dc_caller = node_operator_caller.dc_id;
             let dc_orig_node_operator = get_node_operator_record(self, node_operator_id)
                 .map_err(|e| {
-                    format!(
-                        "{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {e}"
-                    )
+                    format!("{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {e}")
                 })
                 .unwrap()
                 .dc_id;
@@ -98,15 +86,11 @@ impl Registry {
             );
             let node_provider_caller = get_node_provider_id_for_operator_id(self, caller_id)
                 .map_err(|e| {
-                    format!(
-                        "{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {e}"
-                    )
+                    format!("{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {e}")
                 });
             let node_provider_of_the_node =
                 get_node_provider_id_for_operator_id(self, node_operator_id).map_err(|e| {
-                    format!(
-                        "{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {e}"
-                    )
+                    format!("{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {e}")
                 });
             assert_eq!(
                 node_provider_caller, node_provider_of_the_node,
@@ -180,9 +164,7 @@ impl Registry {
         // 5. Retrieve the NO record and increment its node allowance by 1
         let mut updated_node_operator_record = get_node_operator_record(self, node_operator_id)
             .map_err(|err| {
-                format!(
-                    "{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {err}"
-                )
+                format!("{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {err}")
             })
             .unwrap();
         updated_node_operator_record.node_allowance += 1;

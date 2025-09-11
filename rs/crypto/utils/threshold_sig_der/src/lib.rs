@@ -33,9 +33,7 @@ pub fn public_key_from_der(bytes: &[u8]) -> Result<[u8; PUBLIC_KEY_SIZE], String
     };
 
     let unexpected_struct_err = |s: &ASN1Block| {
-        format!(
-            "unexpected ASN1 structure: {s:?}, wanted: seq(seq(OID, OID), bitstring)"
-        )
+        format!("unexpected ASN1 structure: {s:?}, wanted: seq(seq(OID, OID), bitstring)")
     };
 
     let asn1_values =

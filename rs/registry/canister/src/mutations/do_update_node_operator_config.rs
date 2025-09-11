@@ -16,9 +16,7 @@ use std::collections::BTreeMap;
 impl Registry {
     /// Update an existing Node Operator's config
     pub fn do_update_node_operator_config(&mut self, payload: UpdateNodeOperatorConfigPayload) {
-        println!(
-            "{LOG_PREFIX}do_update_node_operator_config: {payload:?}"
-        );
+        println!("{LOG_PREFIX}do_update_node_operator_config: {payload:?}");
 
         let node_operator_id = payload.node_operator_id.unwrap();
         let node_operator_record_key = make_node_operator_record_key(node_operator_id).into_bytes();

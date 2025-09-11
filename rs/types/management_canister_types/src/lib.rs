@@ -2275,9 +2275,7 @@ impl SetupInitialDKGArgs {
             if !set.insert(NodeId::new(*node_id)) {
                 return Err(UserError::new(
                     ErrorCode::InvalidManagementPayload,
-                    format!(
-                        "Expected a set of NodeIds. The NodeId {node_id} is repeated"
-                    ),
+                    format!("Expected a set of NodeIds. The NodeId {node_id} is repeated"),
                 ));
             }
         }
@@ -2983,9 +2981,7 @@ impl ReshareChainKeyArgs {
             if !set.insert(NodeId::new(*node_id)) {
                 return Err(UserError::new(
                     ErrorCode::InvalidManagementPayload,
-                    format!(
-                        "Expected a set of NodeIds. The NodeId {node_id} is repeated"
-                    ),
+                    format!("Expected a set of NodeIds. The NodeId {node_id} is repeated"),
                 ));
             }
         }
@@ -4640,9 +4636,7 @@ mod tests {
     fn schnorr_algorithm_round_trip() {
         for algorithm in SchnorrAlgorithm::iter() {
             assert_eq!(
-                format!("{algorithm}")
-                    .parse::<SchnorrAlgorithm>()
-                    .unwrap(),
+                format!("{algorithm}").parse::<SchnorrAlgorithm>().unwrap(),
                 algorithm
             );
         }
@@ -4689,10 +4683,7 @@ mod tests {
                     algorithm,
                     name: name.to_string(),
                 });
-                assert_eq!(
-                    format!("{key}").parse::<MasterPublicKeyId>().unwrap(),
-                    key
-                );
+                assert_eq!(format!("{key}").parse::<MasterPublicKeyId>().unwrap(), key);
             }
         }
 
@@ -4702,10 +4693,7 @@ mod tests {
                     curve,
                     name: name.to_string(),
                 });
-                assert_eq!(
-                    format!("{key}").parse::<MasterPublicKeyId>().unwrap(),
-                    key
-                );
+                assert_eq!(format!("{key}").parse::<MasterPublicKeyId>().unwrap(), key);
             }
         }
 
@@ -4715,10 +4703,7 @@ mod tests {
                     curve,
                     name: name.to_string(),
                 });
-                assert_eq!(
-                    format!("{key}").parse::<MasterPublicKeyId>().unwrap(),
-                    key
-                );
+                assert_eq!(format!("{key}").parse::<MasterPublicKeyId>().unwrap(), key);
             }
         }
     }

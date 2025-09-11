@@ -879,9 +879,7 @@ pub async fn forward_call_via_universal_canister(
     {
         UNIVERSAL_CANISTER_YEAH_RESPONSE => true,
         UNIVERSAL_CANISTER_NOPE_RESPONSE => false,
-        other => panic!(
-            "Unexpected response from the universal canister: {other:?}"
-        ),
+        other => panic!("Unexpected response from the universal canister: {other:?}"),
     }
 }
 

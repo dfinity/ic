@@ -712,9 +712,7 @@ where
             actual_num_balances,
             self.balances.len()
         );
-        println!(
-            "Checking {actual_num_balances} balances and {actual_num_approvals} allowances"
-        );
+        println!("Checking {actual_num_balances} balances and {actual_num_approvals} allowances");
         let mut balances_checked = 0;
         let now = Instant::now();
         for (account, balance) in self.balances.iter() {

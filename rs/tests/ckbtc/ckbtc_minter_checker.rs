@@ -164,9 +164,7 @@ pub fn test_btc_checker(env: TestEnv) {
         match update_balance_checker_unavailable {
             Err(UpdateBalanceError::TemporarilyUnavailable(_)) => (),
             other => {
-                panic!(
-                    "Expected the Bitcoin checker canister to be unavailable, got {other:?}"
-                );
+                panic!("Expected the Bitcoin checker canister to be unavailable, got {other:?}");
             }
         }
         start_canister(&btc_checker_canister).await;

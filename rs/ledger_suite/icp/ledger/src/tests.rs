@@ -656,9 +656,7 @@ fn apply_at(ledger: &mut Ledger, op: &Operation, ts: TimeStamp) -> BlockIndex {
     ledger
         .add_payment_with_timestamp(memo, op.clone(), None, ts)
         .unwrap_or_else(|e| {
-            panic!(
-                "Failed to execute operation {op:?} with memo {memo:?} at {ts:?}: {e:?}"
-            )
+            panic!("Failed to execute operation {op:?} with memo {memo:?} at {ts:?}: {e:?}")
         })
         .0
 }

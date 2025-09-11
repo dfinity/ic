@@ -261,9 +261,7 @@ fn test_disburse_maturity_succeeds_to_self() {
         .expect("missing response from manage_neuron operation");
     let response = match command_response {
         CommandResponse::DisburseMaturity(response) => response,
-        _ => panic!(
-            "Wrong response to DisburseMaturity: {command_response:#?}"
-        ),
+        _ => panic!("Wrong response to DisburseMaturity: {command_response:#?}"),
     };
     assert_eq!(response.amount_disbursed_e8s, earned_maturity_e8s);
 

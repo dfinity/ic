@@ -499,9 +499,7 @@ async fn assert_rosetta_balance(
         }
 
         if start.elapsed() > timeout {
-            panic!(
-                "Failed to get block index {block_index} within {timeout:?}"
-            );
+            panic!("Failed to get block index {block_index} within {timeout:?}");
         }
     }
 

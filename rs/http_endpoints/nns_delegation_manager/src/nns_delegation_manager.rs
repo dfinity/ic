@@ -462,11 +462,7 @@ async fn connect(
             tcp_stream,
         )
         .await
-        .map_err(|err| {
-            format!(
-                "Could not establish TLS stream to node {addr}. {err:?}."
-            )
-        })?;
+        .map_err(|err| format!("Could not establish TLS stream to node {addr}. {err:?}."))?;
 
     info!(
         log,
@@ -506,9 +502,7 @@ fn get_random_node_from_nns_subnet(
     ))?;
     match registry_client.get_node_record(*nns_node, registry_client.get_latest_version()) {
         Ok(Some(node)) => Ok((*nns_node, node.http.ok_or("No http endpoint for node")?)),
-        Ok(None) => Err(format!(
-            "No transport info found for nns node. {nns_node}"
-        )),
+        Ok(None) => Err(format!("No transport info found for nns node. {nns_node}")),
         Err(err) => Err(format!(
             "failed to get node record for nns node {nns_node}. Err: {err}"
         )),

@@ -4,9 +4,8 @@ use assert_matches::assert_matches;
 use ic_http_utils::file_downloader::{FileDownloadError, FileDownloader};
 
 async fn get_hash(downloader: FileDownloader, version: &str) -> String {
-    let url = format!(
-        "https://download.dfinity.systems/ic/{version}/guest-os/update-img/SHA256SUMS"
-    );
+    let url =
+        format!("https://download.dfinity.systems/ic/{version}/guest-os/update-img/SHA256SUMS");
 
     let file_path = std::path::Path::new("/tmp/shasums");
     downloader

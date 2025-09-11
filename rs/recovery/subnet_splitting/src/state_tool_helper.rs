@@ -95,9 +95,7 @@ impl StateToolHelper {
 
         verify_manifest(manifest_file)
             .map_err(|err| {
-                RecoveryError::StateToolError(format!(
-                    "Failed to verify the state manifest: {err}"
-                ))
+                RecoveryError::StateToolError(format!("Failed to verify the state manifest: {err}"))
             })
             .map(hex::encode)
     }

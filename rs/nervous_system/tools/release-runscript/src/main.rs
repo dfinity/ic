@@ -758,9 +758,7 @@ SNS: {}",
         commit_all_into_branch(&branch_name)?;
 
         // Create PR
-        let title = format!(
-            "chore(nervous-system): Update changelog for release {today}"
-        );
+        let title = format!("chore(nervous-system): Update changelog for release {today}");
         let body = &format!(
             "Update CHANGELOG.md for today's release.
 

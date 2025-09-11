@@ -330,9 +330,7 @@ pub fn wait_for_checkpoint(state_manager: &impl StateManager, h: Height) -> Cryp
             }
             Err(StateHashError::Transient(err)) => match err {
                 TransientStateHashError::StateNotCommittedYet(_) => {
-                    panic!(
-                        "state must be committed before calling wait_for_checkpoint: {err:?}"
-                    );
+                    panic!("state must be committed before calling wait_for_checkpoint: {err:?}");
                 }
                 TransientStateHashError::HashNotComputedYet(_) => {
                     std::thread::sleep(Duration::from_millis(500));

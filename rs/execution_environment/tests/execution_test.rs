@@ -1188,9 +1188,7 @@ fn subnet_memory_reservation_scales_with_number_of_cores() {
     let err = env.execute_ingress(a_id, "update", a).unwrap_err();
     err.assert_contains(
         ErrorCode::CanisterTrapped,
-        &format!(
-            "Error from Canister {a_id}: Canister trapped: stable memory out of bounds"
-        ),
+        &format!("Error from Canister {a_id}: Canister trapped: stable memory out of bounds"),
     );
 }
 

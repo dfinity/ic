@@ -659,9 +659,7 @@ fn map_metadata_or_trap(arg_metadata: Vec<(String, Value)>) -> Vec<(String, Stor
         .into_iter()
         .map(|(k, v)| {
             if DISALLOWED_METADATA_FIELDS.contains(&k.as_str()) {
-                ic_cdk::trap(format!(
-                    "Metadata field {k} is reserved and cannot be set"
-                ));
+                ic_cdk::trap(format!("Metadata field {k} is reserved and cannot be set"));
             }
             (k, StoredValue::from(v))
         })
@@ -704,9 +702,7 @@ impl Ledger {
             minting_account,
             fee_collector: fee_collector_account.map(FeeCollector::from),
             transfer_fee: Tokens::try_from(transfer_fee.clone()).unwrap_or_else(|e| {
-                panic!(
-                    "failed to convert transfer fee {transfer_fee} to tokens: {e}"
-                )
+                panic!("failed to convert transfer fee {transfer_fee} to tokens: {e}")
             }),
             token_symbol,
             token_name,
@@ -728,15 +724,11 @@ impl Ledger {
 
         for (account, balance) in initial_balances.into_iter() {
             let amount = Tokens::try_from(balance.clone()).unwrap_or_else(|e| {
-                panic!(
-                    "failed to convert initial balance {balance} to tokens: {e}"
-                )
+                panic!("failed to convert initial balance {balance} to tokens: {e}")
             });
             let mint = Transaction::mint(account, amount, Some(now), None);
             apply_transaction(&mut ledger, mint, now, Tokens::ZERO).unwrap_or_else(|err| {
-                panic!(
-                    "failed to mint {balance} tokens to {account}: {err:?}"
-                )
+                panic!("failed to mint {balance} tokens to {account}: {err:?}")
             });
         }
 

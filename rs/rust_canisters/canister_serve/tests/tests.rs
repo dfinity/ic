@@ -212,9 +212,7 @@ fn test_serve_logs_time_bound() {
     // Step 2: Call the code under test.
     let http_request = CanisterHttpRequestArgument {
         method: HttpMethod::GET,
-        url: format!(
-            "http://example.com/logs?time={between_timestamp_nanoseconds}"
-        ),
+        url: format!("http://example.com/logs?time={between_timestamp_nanoseconds}"),
         headers: vec![],
         body: Some(vec![]),
         max_response_bytes: None,

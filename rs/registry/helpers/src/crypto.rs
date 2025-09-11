@@ -180,9 +180,7 @@ pub fn initial_ni_dkg_transcript_from_registry_record(
             dkg_transcript_record.internal_csp_transcript.as_slice(),
         )
         .map_err(|err| DecodeError {
-            error: format!(
-                "failed to deserialize CSP NI-DKG transcript from CBOR: {err}"
-            ),
+            error: format!("failed to deserialize CSP NI-DKG transcript from CBOR: {err}"),
         })?,
     })
 }

@@ -17,9 +17,7 @@ impl Registry {
         &mut self,
         payload: DeployGuestosToAllSubnetNodesPayload,
     ) {
-        println!(
-            "{LOG_PREFIX}do_deploy_guestos_to_all_subnet_nodes: {payload:?}"
-        );
+        println!("{LOG_PREFIX}do_deploy_guestos_to_all_subnet_nodes: {payload:?}");
 
         check_replica_version_is_blessed(self, &payload.replica_version_id);
 

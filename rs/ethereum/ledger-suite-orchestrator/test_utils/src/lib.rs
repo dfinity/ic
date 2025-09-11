@@ -321,9 +321,7 @@ impl LedgerSuiteOrchestrator {
                 }
             }
         }
-        panic!(
-            "Failed to get result after {MAX_TICKS} ticks: {last_error:?}"
-        );
+        panic!("Failed to get result after {MAX_TICKS} ticks: {last_error:?}");
     }
 
     pub fn wait_for_canister_to_be_installed_and_running(&self, canister_id: Principal) {

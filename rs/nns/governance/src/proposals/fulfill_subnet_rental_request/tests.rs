@@ -74,10 +74,7 @@ fn test_validate_fulfill_subnet_rental_request() {
                 .to_lowercase()
                 .contains(&key_word.to_lowercase());
 
-            assert!(
-                ok,
-                "{key_word:?} not in error message ({error_message:?})",
-            );
+            assert!(ok, "{key_word:?} not in error message ({error_message:?})",);
         }
     }
 

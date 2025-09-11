@@ -46,9 +46,9 @@ fn process_err(
             api.set_execution_error(e);
             result
         }
-        Err(_) => anyhow::Error::msg(
-            format! {"Failed to access system api while processing error: {e}"},
-        ),
+        Err(_) => {
+            anyhow::Error::msg(format! {"Failed to access system api while processing error: {e}"})
+        }
     }
 }
 
@@ -1066,9 +1066,8 @@ pub fn syscalls<
             move |mut caller: Caller<'_, StoreData>| {
                 charge_for_cpu(&mut caller, overhead::ROOT_KEY_SIZE)?;
                 with_system_api(&mut caller, |s| s.ic0_root_key_size()).and_then(|s| {
-                    I::try_from(s).map_err(|e| {
-                        anyhow::Error::msg(format!("ic0::root_key_size failed: {e}"))
-                    })
+                    I::try_from(s)
+                        .map_err(|e| anyhow::Error::msg(format!("ic0::root_key_size failed: {e}")))
                 })
             }
         })
@@ -1256,9 +1255,7 @@ pub fn syscalls<
                     let dst: usize = dst.try_into().expect("Failed to convert I to usize");
                     s.ic0_cost_sign_with_schnorr(src, size, algorithm, dst, memory)
                 })
-                .map_err(|e| {
-                    anyhow::Error::msg(format!("ic0_cost_sign_with_schnorr failed: {e}"))
-                })
+                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_sign_with_schnorr failed: {e}")))
             }
         })
         .unwrap();

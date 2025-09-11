@@ -399,9 +399,7 @@ mod tests {
         );
 
         if let Err(err) = check_endpoint_invariants(&snapshot, true) {
-            panic!(
-                "Expected Ok result from registry invariant check, got {err:?}"
-            );
+            panic!("Expected Ok result from registry invariant check, got {err:?}");
         }
 
         // Add a node with conflicting sockets

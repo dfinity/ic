@@ -1589,10 +1589,7 @@ mod assertions {
             for link in self.actual.select(&selector) {
                 let href = link.value().attr("href").expect("href not found");
                 if filter(href) {
-                    assert!(
-                        predicate(href),
-                        "Link '{href}' does not satisfy predicate"
-                    );
+                    assert!(predicate(href), "Link '{href}' does not satisfy predicate");
                 }
             }
             self

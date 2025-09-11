@@ -319,9 +319,7 @@ impl TryFrom<(Time, pb_metadata::SetupInitialDkgContext)> for SetupInitialDkgCon
 /// Tries to convert a vector of bytes into an array of N bytes.
 fn try_into_array<const N: usize>(bytes: Vec<u8>, name: &str) -> Result<[u8; N], ProxyDecodeError> {
     if bytes.len() != N {
-        return Err(ProxyDecodeError::Other(format!(
-            "{name} is not {N} bytes."
-        )));
+        return Err(ProxyDecodeError::Other(format!("{name} is not {N} bytes.")));
     }
     let mut id = [0; N];
     id.copy_from_slice(&bytes);

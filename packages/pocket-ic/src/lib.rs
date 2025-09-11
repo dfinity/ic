@@ -2086,10 +2086,7 @@ mod test {
         );
         for ic_reject_code in ic_error_types::RejectCode::iter() {
             let reject_code: RejectCode = (ic_reject_code as u64).try_into().unwrap();
-            assert_eq!(
-                format!("{reject_code:?}"),
-                format!("{:?}", ic_reject_code)
-            );
+            assert_eq!(format!("{reject_code:?}"), format!("{:?}", ic_reject_code));
         }
     }
 

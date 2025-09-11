@@ -135,9 +135,7 @@ pub(crate) async fn get_subnet_list_record(
             // It might be the first time we store a subnet, so we might
             // have to update the subnet list record.
             Error::KeyNotPresent(_) => (SubnetListRecordPb::default(), true),
-            _ => panic!(
-                "Error while fetching current subnet list record: {error:?}"
-            ),
+            _ => panic!("Error while fetching current subnet list record: {error:?}"),
         },
     }
 }

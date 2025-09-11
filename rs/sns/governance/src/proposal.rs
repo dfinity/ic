@@ -799,9 +799,7 @@ where
     // Finally, inspect the proposal's amount: it must not exceed max - spent (remainder). Or if
     // you prefer, equivalently, amount + spent must be <= max.
     let allowance_remainder_tokens = max_tokens.checked_sub(spent_tokens).ok_or_else(|| {
-        format!(
-            "Arithmetic error while performing {max_tokens} - {spent_tokens}",
-        )
+        format!("Arithmetic error while performing {max_tokens} - {spent_tokens}",)
     })?;
     let proposal_amount_tokens = action.proposal_amount_tokens()?;
     if proposal_amount_tokens > allowance_remainder_tokens {
@@ -1011,11 +1009,9 @@ impl TokenProposalAction for MintSnsTokens {
         denominations_to_tokens(amount_e8s, E8)
             // This Err will not be generated, because we are dividing a u64 (amount_e8s) by a
             // positive number (E8).
-            .ok_or_else(|| {
-                format!(
-                    "Unable to convert proposal amount {amount_e8s} e8s to tokens.",
-                )
-            })
+            .ok_or_else(
+                || format!("Unable to convert proposal amount {amount_e8s} e8s to tokens.",),
+            )
     }
 
     fn recent_amount_total_tokens<'a>(
@@ -1080,9 +1076,8 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
         Ok(principal_id) => match CanisterId::try_from_principal_id(*principal_id) {
             Ok(canister_id) => Some(canister_id),
             Err(err) => {
-                let defect = format!(
-                    "UpgradeSnsControlledCanister.canister_id is invalid: {err:?}"
-                );
+                let defect =
+                    format!("UpgradeSnsControlledCanister.canister_id is invalid: {err:?}");
                 defects.push(defect);
                 None
             }
@@ -1188,9 +1183,7 @@ async fn validate_and_render_upgrade_sns_to_next_version(
     } = get_upgrade_params(env, root_canister_id, &current_version)
         .await
         .map_err(|e| {
-            format!(
-                "UpgradeSnsToNextVersion was invalid for the following reason: {e}\n"
-            )
+            format!("UpgradeSnsToNextVersion was invalid for the following reason: {e}\n")
         })?;
 
     let proposal_id_message = get_proposal_id_that_added_wasm(env, new_wasm_hash.to_vec())
@@ -1844,15 +1837,11 @@ fn validate_and_render_manage_dapp_canister_settings(
         no_change = false;
     }
     if let Some(freezing_threshold) = &manage_dapp_canister_settings.freezing_threshold {
-        render += &format!(
-            "# Set freezing threshold to: {freezing_threshold} seconds\n"
-        );
+        render += &format!("# Set freezing threshold to: {freezing_threshold} seconds\n");
         no_change = false;
     }
     if let Some(reserved_cycles_limit) = &manage_dapp_canister_settings.reserved_cycles_limit {
-        render += &format!(
-            "# Set reserved cycles limit to: {reserved_cycles_limit} \n"
-        );
+        render += &format!("# Set reserved cycles limit to: {reserved_cycles_limit} \n");
         no_change = false;
     }
     if let Some(log_visibility) = &manage_dapp_canister_settings.log_visibility {
@@ -1905,9 +1894,8 @@ fn validate_and_render_advance_sns_target_version_proposal(
     let current_target_versions_render =
         render_two_versions_as_markdown_table(upgrade_steps.current(), &target_version);
 
-    let upgrade_journal_url_render = format!(
-        "https://{sns_governance_canister_id}.raw.icp0.io/journal/json",
-    );
+    let upgrade_journal_url_render =
+        format!("https://{sns_governance_canister_id}.raw.icp0.io/journal/json",);
 
     let render = format!(
         "# Proposal to advance SNS target version\n\n\

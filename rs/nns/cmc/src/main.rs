@@ -2018,9 +2018,7 @@ async fn process_top_up(
 /// Burning doesn't return errors - we don't want to reject the transaction
 /// notification because then it could be retried.
 async fn burn_and_log(from_subaccount: Subaccount, amount: Tokens) {
-    let msg = format!(
-        "Burning of {amount} ICPTs from subaccount {from_subaccount}"
-    );
+    let msg = format!("Burning of {amount} ICPTs from subaccount {from_subaccount}");
     let minting_account_id = with_state(|state| state.minting_account_id);
     if minting_account_id.is_none() {
         print(format!("{msg} failed: minting_account_id not set"));
@@ -2203,9 +2201,7 @@ async fn do_create_canister(
                         subnet_types_to_subnets
                             .get(&subnet_type)
                             .map(|set| set.iter().cloned().collect())
-                            .ok_or(format!(
-                                "Provided subnet type {subnet_type} does not exist"
-                            ))
+                            .ok_or(format!("Provided subnet type {subnet_type} does not exist"))
                     }
                     None => Ok(get_subnets_for(&controller_id)),
                 })

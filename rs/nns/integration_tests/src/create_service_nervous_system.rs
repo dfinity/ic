@@ -92,9 +92,7 @@ fn test_several_proposals() {
     let proposal_id_1 = response_1
         .proposal_id
         .unwrap_or_else(|| {
-            panic!(
-                "First proposal response did not contain a proposal_id: {response_1:#?}"
-            )
+            panic!("First proposal response did not contain a proposal_id: {response_1:#?}")
         })
         .id;
 
@@ -128,9 +126,7 @@ fn test_several_proposals() {
     let proposal_id_3 = response_3
         .proposal_id
         .unwrap_or_else(|| {
-            panic!(
-                "Third proposal response did not contain a proposal_id: {response_1:#?}"
-            )
+            panic!("Third proposal response did not contain a proposal_id: {response_1:#?}")
         })
         .id;
 
@@ -263,9 +259,7 @@ fn test_nf_is_permitted_with_test_flag() {
         _ => panic!("Proposal failed to be submitted: {response:#?}"),
     };
     response.proposal_id.unwrap_or_else(|| {
-        panic!(
-            "Proposal response did not contain a proposal_id: {response:#?}"
-        )
+        panic!("Proposal response did not contain a proposal_id: {response:#?}")
     });
 }
 

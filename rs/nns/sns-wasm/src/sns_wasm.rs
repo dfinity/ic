@@ -1072,9 +1072,7 @@ where
                 )
                 .await
                 .map_err(|err| {
-                    format!(
-                        "Unable to set SNS-W and Root as Governance canister controller: {err}"
-                    )
+                    format!("Unable to set SNS-W and Root as Governance canister controller: {err}")
                 }),
             // Set Root as controller of Ledger.
             canister_api
@@ -1084,9 +1082,7 @@ where
                 )
                 .await
                 .map_err(|err| {
-                    format!(
-                        "Unable to set SNS-W and Root as Ledger canister controller: {err}"
-                    )
+                    format!("Unable to set SNS-W and Root as Ledger canister controller: {err}")
                 }),
             // Set Root as controller of Index.
             canister_api
@@ -1096,9 +1092,7 @@ where
                 )
                 .await
                 .map_err(|err| {
-                    format!(
-                        "Unable to set SNS-W and Root as Index canister controller: {err}"
-                    )
+                    format!("Unable to set SNS-W and Root as Index canister controller: {err}")
                 }),
             // Set Governance as controller of Root.
             canister_api
@@ -1108,9 +1102,7 @@ where
                 )
                 .await
                 .map_err(|err| {
-                    format!(
-                        "Unable to set SNS-W and Governance as Root canister controller: {err}"
-                    )
+                    format!("Unable to set SNS-W and Governance as Root canister controller: {err}")
                 }),
             // Set Root as the controller of Swap.
             canister_api
@@ -1120,9 +1112,7 @@ where
                 )
                 .await
                 .map_err(|err| {
-                    format!(
-                        "Unable to set SNS-W and Root as Swap canister controller: {err}"
-                    )
+                    format!("Unable to set SNS-W and Root as Swap canister controller: {err}")
                 }),
         ];
 
@@ -1142,9 +1132,7 @@ where
                     vec![canisters.root.unwrap()],
                 )
                 .await
-                .map_err(|err| {
-                    format!("Unable to remove SNS-W as Governance's controller: {err}")
-                }),
+                .map_err(|err| format!("Unable to remove SNS-W as Governance's controller: {err}")),
             // Removing SNS-W, leaving SNS Root.
             canister_api
                 .set_controllers(
@@ -1220,9 +1208,7 @@ where
             ])
             .await,
         )
-        .map(|(label, result)| {
-            result.map_err(|e| format!("Error installing {label} WASM: {e}"))
-        })
+        .map(|(label, result)| result.map_err(|e| format!("Error installing {label} WASM: {e}")))
         .collect();
 
         join_errors_or_ok(results)

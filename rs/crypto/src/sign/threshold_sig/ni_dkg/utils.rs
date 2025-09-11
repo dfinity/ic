@@ -32,9 +32,7 @@ pub fn index_in_resharing_committee_or_panic(
 /// * If the dealer is not included in `NiDkgDealers`.
 pub fn dealer_index_in_dealers_or_panic(dealers: &NiDkgDealers, dealer: NodeId) -> NodeIndex {
     dealers.position(dealer).unwrap_or_else(|| {
-        panic!(
-            "This operation requires node ({dealer}) to be a dealer, but it is not."
-        )
+        panic!("This operation requires node ({dealer}) to be a dealer, but it is not.")
     })
 }
 

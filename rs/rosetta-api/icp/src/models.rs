@@ -34,12 +34,8 @@ pub struct SignedTransaction {
 impl FromStr for SignedTransaction {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_cbor::from_slice(
-            hex::decode(s)
-                .map_err(|err| format!("{err:?}"))?
-                .as_slice(),
-        )
-        .map_err(|err| format!("{err:?}"))
+        serde_cbor::from_slice(hex::decode(s).map_err(|err| format!("{err:?}"))?.as_slice())
+            .map_err(|err| format!("{err:?}"))
     }
 }
 impl std::fmt::Display for SignedTransaction {
@@ -188,9 +184,7 @@ impl TryFrom<ConstructionParseRequest> for ParsedTransaction {
         } else {
             Ok(ParsedTransaction::Unsigned(
                 serde_cbor::from_slice(&from_hex(&value.transaction)?).map_err(|e| {
-                    ApiError::invalid_request(format!(
-                        "Could not decode unsigned transaction: {e}"
-                    ))
+                    ApiError::invalid_request(format!("Could not decode unsigned transaction: {e}"))
                 })?,
             ))
         }
@@ -264,12 +258,8 @@ impl std::fmt::Display for UnsignedTransaction {
 impl FromStr for UnsignedTransaction {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_cbor::from_slice(
-            hex::decode(s)
-                .map_err(|err| format!("{err:?}"))?
-                .as_slice(),
-        )
-        .map_err(|err| format!("{err:?}"))
+        serde_cbor::from_slice(hex::decode(s).map_err(|err| format!("{err:?}"))?.as_slice())
+            .map_err(|err| format!("{err:?}"))
     }
 }
 

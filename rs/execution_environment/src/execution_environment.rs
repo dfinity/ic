@@ -3797,9 +3797,7 @@ impl ExecutionEnvironment {
             | ExecutionTask::OnLowWasmMemory
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::AbortedExecution { .. } => {
-                panic!(
-                    "Unexpected task {task:?} in `resume_install_code` (broken precondition)."
-                );
+                panic!("Unexpected task {task:?} in `resume_install_code` (broken precondition).");
             }
             ExecutionTask::PausedInstallCode(id) => {
                 let since = Instant::now();
@@ -4491,9 +4489,7 @@ fn get_master_public_key<'a>(
     match chain_key_subnet_public_keys.get(key_id) {
         None => Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            format!(
-                "Subnet {subnet_id} does not hold threshold key {key_id}."
-            ),
+            format!("Subnet {subnet_id} does not hold threshold key {key_id}."),
         )),
         Some(master_key) => Ok(master_key),
     }

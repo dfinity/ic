@@ -223,9 +223,7 @@ fn create_and_verify_key_shares_for_each<C: CryptoComponentRng>(
             let key_share = crypto
                 .create_encrypted_key_share(vetkd_args.clone())
                 .unwrap_or_else(|e| {
-                    panic!(
-                        "vetKD encrypted key share creation by node {creator:?} failed: {e}"
-                    )
+                    panic!("vetKD encrypted key share creation by node {creator:?} failed: {e}")
                 });
             assert_eq!(
                 crypto.verify_encrypted_key_share(*creator, &key_share, vetkd_args),

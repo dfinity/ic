@@ -369,12 +369,7 @@ async fn test_wrong_canister_id(env: &TestEnv, node_url: Url, root_key_blob: Opt
     let err = send_icpts(&ros, Arc::new(kp), acc2, Tokens::from_e8s(1000))
         .await
         .unwrap_err();
-    assert_ic_error(
-        &err,
-        740,
-        200,
-        &format!("Canister {some_can_id} not found"),
-    );
+    assert_ic_error(&err, 740, 200, &format!("Canister {some_can_id} not found"));
 }
 
 fn rosetta_cli_construction_check(conf_file: &str) {

@@ -73,9 +73,7 @@ mod create_dealing_error_conversions_v2 {
                     // This would be an implementation error, since we inserted a key that is
                     // malformed:
                     // TODO (CRP-576): implement `Display`?
-                    panic!(
-                        "{panic_prefix}MalformedReshareSecretKeyError: {error:?}"
-                    );
+                    panic!("{panic_prefix}MalformedReshareSecretKeyError: {error:?}");
                 }
                 CspDkgCreateReshareDealingError::TransientInternalError(error) => {
                     DkgCreateDealingError::TransientInternalError(InternalError {

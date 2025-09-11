@@ -34,9 +34,7 @@ impl<T: RegistryClient + ?Sized> RoutingTableRegistry for T {
                 let bytes = self.get_value(key, version);
                 // This should never fail, as the keys all have values and should be valid
                 deserialize_registry_value::<pb::RoutingTable>(bytes)?.ok_or_else(|| DecodeError {
-                    error: format!(
-                        "canister ranges key {key} does not have a routing table shard"
-                    ),
+                    error: format!("canister ranges key {key} does not have a routing table shard"),
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;

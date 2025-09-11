@@ -366,9 +366,7 @@ fn root_get_sns_canisters_summary(
     let result = match result {
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
-            panic!(
-                "get_sns_canisters_summary was rejected by the swap canister: {reject:#?}"
-            )
+            panic!("get_sns_canisters_summary was rejected by the swap canister: {reject:#?}")
         }
     };
     let response = Decode!(&result, GetSnsCanistersSummaryResponse).unwrap();

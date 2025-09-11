@@ -1140,9 +1140,7 @@ impl NeuronSubsetMetricsPb {
         );
         encode_dissolve_delay_buckets(
             w.gauge_vec(
-                &format!(
-                    "governance_{neuron_subset_name}_deciding_voting_power_buckets"
-                ),
+                &format!("governance_{neuron_subset_name}_deciding_voting_power_buckets"),
                 &format!(
                     "The total amount of deciding voting power (used to decide proposals) \
                      in neurons that {neuron_subset_description}, grouped by dissolve delay.",

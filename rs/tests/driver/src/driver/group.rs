@@ -586,9 +586,7 @@ impl SystemTestGroup {
                             .max_blocking_threads(1)
                             .enable_all()
                             .build()
-                            .unwrap_or_else(|err| {
-                                panic!("Could not create tokio runtime: {err}")
-                            });
+                            .unwrap_or_else(|err| panic!("Could not create tokio runtime: {err}"));
                         let root_search_dir = {
                             let root_env = group_ctx
                                 .clone()

@@ -141,10 +141,7 @@ impl fmt::Display for RewardCalculatorError {
                 write!(f, "Node: {node_id} has metrics but is not rewardable")
             }
             RewardCalculatorError::RewardableNodeOutOfRange(node_id) => {
-                write!(
-                    f,
-                    "Node: {node_id} is not rewardable in the reward period"
-                )
+                write!(f, "Node: {node_id} is not rewardable in the reward period")
             }
         }
     }

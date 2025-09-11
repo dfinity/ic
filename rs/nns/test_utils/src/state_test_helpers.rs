@@ -128,9 +128,7 @@ pub fn registry_mutate_test_high_capacity_records(
     let result = match result {
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
-            panic!(
-                "get_changes_since was rejected by the NNS registry canister: {reject:#?}"
-            )
+            panic!("get_changes_since was rejected by the NNS registry canister: {reject:#?}")
         }
     };
 
@@ -165,9 +163,7 @@ pub fn registry_high_capacity_get_changes_since(
     let result = match result {
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
-            panic!(
-                "get_changes_since was rejected by the NNS registry canister: {reject:#?}"
-            )
+            panic!("get_changes_since was rejected by the NNS registry canister: {reject:#?}")
         }
     };
 
@@ -191,9 +187,7 @@ pub fn registry_get_value(
     let result = match result {
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
-            panic!(
-                "get_changes_since was rejected by the NNS registry canister: {reject:#?}"
-            )
+            panic!("get_changes_since was rejected by the NNS registry canister: {reject:#?}")
         }
     };
 
@@ -218,9 +212,7 @@ pub fn registry_get_chunk(
     let result = match result {
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
-            panic!(
-                "get chunk was rejected by the NNS registry canister: {reject:#?}"
-            )
+            panic!("get chunk was rejected by the NNS registry canister: {reject:#?}")
         }
     };
 
@@ -851,9 +843,7 @@ pub fn nns_governance_get_full_neuron(
     let result = match result {
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
-            panic!(
-                "get_full_neuron was rejected by the NNS governance canister: {reject:#?}"
-            )
+            panic!("get_full_neuron was rejected by the NNS governance canister: {reject:#?}")
         }
     };
     Decode!(&result, Result<nns_governance_pb::Neuron, GovernanceError>).unwrap()
@@ -876,9 +866,7 @@ pub fn nns_governance_get_neuron_info(
     let result = match result {
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
-            panic!(
-                "get_neuron_info was rejected by the NNS governance canister: {reject:#?}"
-            )
+            panic!("get_neuron_info was rejected by the NNS governance canister: {reject:#?}")
         }
     };
     Decode!(&result, Result<nns_governance_pb::NeuronInfo, GovernanceError>).unwrap()
@@ -908,9 +896,7 @@ pub fn nns_governance_get_proposal_info(
     let result = match result {
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
-            panic!(
-                "get_proposal_info was rejected by the NNS governance canister: {reject:#?}"
-            )
+            panic!("get_proposal_info was rejected by the NNS governance canister: {reject:#?}")
         }
     };
 
@@ -1546,9 +1532,7 @@ pub fn nns_get_most_recent_monthly_node_provider_rewards(
     let result = match result {
         WasmResult::Reply(result) => result,
         WasmResult::Reject(s) => {
-            panic!(
-                "Call to get_most_recent_monthly_node_provider_rewards failed: {s:#?}"
-            )
+            panic!("Call to get_most_recent_monthly_node_provider_rewards failed: {s:#?}")
         }
     };
 
@@ -1732,9 +1716,7 @@ pub fn nns_wait_for_proposal_execution(machine: &StateMachine, proposal_id: u64)
         machine.advance_time(Duration::from_millis(100));
     }
 
-    panic!(
-        "Looks like proposal {proposal_id:?} is never going to be executed: {last_proposal:#?}",
-    );
+    panic!("Looks like proposal {proposal_id:?} is never going to be executed: {last_proposal:#?}",);
 }
 
 /// Returns when the proposal has failed execution. A proposal is considered to be
@@ -1757,9 +1739,7 @@ pub fn nns_wait_for_proposal_failure(machine: &StateMachine, proposal_id: u64) {
         machine.advance_time(Duration::from_millis(100));
     }
 
-    panic!(
-        "Looks like proposal {proposal_id:?} is never going to be executed: {last_proposal:#?}",
-    );
+    panic!("Looks like proposal {proposal_id:?} is never going to be executed: {last_proposal:#?}",);
 }
 
 pub fn sns_stake_neuron(
@@ -1910,12 +1890,10 @@ pub fn sns_claim_staked_neuron(
 
             response.refreshed_neuron_id.unwrap()
         }
-        SnsCommandResponse::Error(error) => panic!(
-            "Unexpected error when claiming neuron for user {sender}: {error}"
-        ),
-        _ => panic!(
-            "Unexpected command response when claiming neuron for user {sender}."
-        ),
+        SnsCommandResponse::Error(error) => {
+            panic!("Unexpected error when claiming neuron for user {sender}: {error}")
+        }
+        _ => panic!("Unexpected command response when claiming neuron for user {sender}."),
     };
 
     // Increase dissolve delay
@@ -1966,12 +1944,12 @@ pub fn sns_increase_dissolve_delay(
 
     match increase_response.command.unwrap() {
         SnsCommandResponse::Configure(_) => (),
-        SnsCommandResponse::Error(error) => panic!(
-            "Unexpected error when increasing dissolve delay for user {sender}: {error}"
-        ),
-        _ => panic!(
-            "Unexpected command response when increasing dissolve delay for user {sender}."
-        ),
+        SnsCommandResponse::Error(error) => {
+            panic!("Unexpected error when increasing dissolve delay for user {sender}: {error}")
+        }
+        _ => {
+            panic!("Unexpected command response when increasing dissolve delay for user {sender}.")
+        }
     };
 }
 

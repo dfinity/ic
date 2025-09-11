@@ -24,9 +24,8 @@ pub async fn download_binary(
     binary_name: String,
     target_dir: &Path,
 ) -> RecoveryResult<PathBuf> {
-    let binary_url = format!(
-        "https://download.dfinity.systems/ic/{replica_version}/release/{binary_name}.gz"
-    );
+    let binary_url =
+        format!("https://download.dfinity.systems/ic/{replica_version}/release/{binary_name}.gz");
 
     let mut file = target_dir.join(format!("{binary_name}.gz"));
 

@@ -73,9 +73,7 @@ async fn try_file_operation(file_path: String, operation: FileOperation) -> bool
     let release_on_drop = acquire_for(&FILE_LOCKS, file_path.clone(), operation);
     if let Err(existing_operation) = release_on_drop {
         // Abort. Do not do real work.
-        eprintln!(
-            "File '{file_path}' already has {existing_operation:?} operation in progress."
-        );
+        eprintln!("File '{file_path}' already has {existing_operation:?} operation in progress.");
         return false;
     }
 

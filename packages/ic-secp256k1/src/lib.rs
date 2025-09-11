@@ -458,8 +458,8 @@ impl PrivateKey {
 
     /// Deserialize a private key encoded in PKCS8 format with PEM encoding
     pub fn deserialize_pkcs8_pem(pem: &str) -> Result<Self, KeyDecodingError> {
-        let der = pem::parse(pem)
-            .map_err(|e| KeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
+        let der =
+            pem::parse(pem).map_err(|e| KeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
         if der.tag != PEM_HEADER_PKCS8 {
             return Err(KeyDecodingError::UnexpectedPemLabel(der.tag));
         }
@@ -475,8 +475,8 @@ impl PrivateKey {
 
     /// Deserialize a private key encoded in RFC 5915 format with PEM encoding
     pub fn deserialize_rfc5915_pem(pem: &str) -> Result<Self, KeyDecodingError> {
-        let der = pem::parse(pem)
-            .map_err(|e| KeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
+        let der =
+            pem::parse(pem).map_err(|e| KeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
         if der.tag != PEM_HEADER_RFC5915 {
             return Err(KeyDecodingError::UnexpectedPemLabel(der.tag));
         }
@@ -803,8 +803,8 @@ impl PublicKey {
 
     /// Deserialize a public key stored in PEM SubjectPublicKeyInfo format
     pub fn deserialize_pem(pem: &str) -> Result<Self, KeyDecodingError> {
-        let der = pem::parse(pem)
-            .map_err(|e| KeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
+        let der =
+            pem::parse(pem).map_err(|e| KeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
         if der.tag != "PUBLIC KEY" {
             return Err(KeyDecodingError::UnexpectedPemLabel(der.tag));
         }

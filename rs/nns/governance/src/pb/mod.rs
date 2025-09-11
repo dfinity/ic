@@ -81,9 +81,7 @@ impl SetFollowing {
             let topic = Topic::try_from(topic).map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::InvalidCommand,
-                    format!(
-                        "The operation specified an invalid topic code ({topic:?}): {err}",
-                    ),
+                    format!("The operation specified an invalid topic code ({topic:?}): {err}",),
                 )
             })?;
 
@@ -93,9 +91,7 @@ impl SetFollowing {
                 // Violation of uniqueness.
                 return Err(GovernanceError::new_with_message(
                     ErrorType::InvalidCommand,
-                    format!(
-                        "The operation specified the same topic ({topic:?}) more than once.",
-                    ),
+                    format!("The operation specified the same topic ({topic:?}) more than once.",),
                 ));
             }
         }

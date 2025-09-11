@@ -46,9 +46,7 @@ pub fn create_transcript<R: CryptoComponentRng>(
 ) -> NiDkgTranscript {
     crypto_for(node_id, crypto_components)
         .create_transcript(ni_dkg_config, dealings)
-        .unwrap_or_else(|error| {
-            panic!("failed to create transcript for {node_id:?}: {error:?}")
-        })
+        .unwrap_or_else(|error| panic!("failed to create transcript for {node_id:?}: {error:?}"))
 }
 
 pub fn load_transcript<R: CryptoComponentRng>(
@@ -120,9 +118,7 @@ pub fn create_dealing<R: CryptoComponentRng>(
     crypto_for(node_id, crypto_components)
         .create_dealing(ni_dkg_config)
         .unwrap_or_else(|error| {
-            panic!(
-                "failed to create NI-DKG dealing for {node_id:?}: {error:?}"
-            )
+            panic!("failed to create NI-DKG dealing for {node_id:?}: {error:?}")
         })
 }
 
@@ -161,11 +157,7 @@ pub fn retain_only_active_keys<R: CryptoComponentRng>(
 ) {
     crypto_for(node_id, crypto_components)
         .retain_only_active_keys(retained_transcripts)
-        .unwrap_or_else(|error| {
-            panic!(
-                "failed to retain active keys for {node_id:?}: {error:?}"
-            )
-        });
+        .unwrap_or_else(|error| panic!("failed to retain active keys for {node_id:?}: {error:?}"));
 }
 
 pub fn sign_threshold_for_each<H: Signable, R: CryptoComponentRng>(

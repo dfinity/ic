@@ -79,10 +79,7 @@ impl RosettaRequestHandler {
                                 })?,
                             )
                             .map_err(|err| {
-                                ApiError::InvalidPublicKey(
-                                    false,
-                                    Details::from(format!("{err:?}")),
-                                )
+                                ApiError::InvalidPublicKey(false, Details::from(format!("{err:?}")))
                             })?,
                         )),
                         sender_sig: Some(Blob(from_hex(&transaction_signature.hex_bytes)?)),
@@ -103,10 +100,7 @@ impl RosettaRequestHandler {
                                 })?,
                             )
                             .map_err(|err| {
-                                ApiError::InvalidPublicKey(
-                                    false,
-                                    Details::from(format!("{err:?}")),
-                                )
+                                ApiError::InvalidPublicKey(false, Details::from(format!("{err:?}")))
                             })?,
                         )),
                         sender_sig: Some(Blob(from_hex(&transaction_signature.hex_bytes)?)),
@@ -134,10 +128,7 @@ impl RosettaRequestHandler {
                                 })?,
                             )
                             .map_err(|err| {
-                                ApiError::InvalidPublicKey(
-                                    false,
-                                    Details::from(format!("{err:?}")),
-                                )
+                                ApiError::InvalidPublicKey(false, Details::from(format!("{err:?}")))
                             })?,
                         )),
                         sender_sig: Some(Blob(from_hex(&read_state_signature.hex_bytes)?)),
@@ -158,10 +149,7 @@ impl RosettaRequestHandler {
                                 })?,
                             )
                             .map_err(|err| {
-                                ApiError::InvalidPublicKey(
-                                    false,
-                                    Details::from(format!("{err:?}")),
-                                )
+                                ApiError::InvalidPublicKey(false, Details::from(format!("{err:?}")))
                             })?,
                         )),
 

@@ -311,12 +311,8 @@ pub fn get_extension_operation_spec_from_cache(
         return Err("extension_canister_id is required.".to_string());
     };
 
-    let extension_canister_id =
-        CanisterId::try_from_principal_id(*extension_canister_id).map_err(|err| {
-            format!(
-                "Cannot interpret extension_canister_id as canister ID: {err}"
-            )
-        })?;
+    let extension_canister_id = CanisterId::try_from_principal_id(*extension_canister_id)
+        .map_err(|err| format!("Cannot interpret extension_canister_id as canister ID: {err}"))?;
 
     let Some(operation_name) = operation_name else {
         return Err("operation_name is required.".to_string());
@@ -620,9 +616,7 @@ impl Governance {
             };
             return Err(GovernanceError::new_with_message(
                 ErrorType::External,
-                format!(
-                    "Root.register_extension failed with code {code}: {description}"
-                ),
+                format!("Root.register_extension failed with code {code}: {description}"),
             ));
         }
 
@@ -834,9 +828,7 @@ async fn list_extensions(
         .map_err(|err| {
             GovernanceError::new_with_message(
                 ErrorType::External,
-                format!(
-                    "Canister method call Root.list_sns_canisters failed: {err:?}"
-                ),
+                format!("Canister method call Root.list_sns_canisters failed: {err:?}"),
             )
         })
         .and_then(|blob| {
@@ -957,8 +949,8 @@ fn construct_treasury_manager_deposit_payload(
     let allowances = construct_treasury_manager_deposit_allowances(context, value)?;
 
     let arg = DepositRequest { allowances };
-    let arg = candid::encode_one(&arg)
-        .map_err(|err| format!("Error encoding DepositRequest: {err}"))?;
+    let arg =
+        candid::encode_one(&arg).map_err(|err| format!("Error encoding DepositRequest: {err}"))?;
 
     Ok(arg)
 }
@@ -968,8 +960,8 @@ fn construct_treasury_manager_withdraw_payload(_value: Precise) -> Result<Vec<u8
     let arg = WithdrawRequest {
         withdraw_accounts: None,
     };
-    let arg = candid::encode_one(&arg)
-        .map_err(|err| format!("Error encoding WithdrawRequest: {err}"))?;
+    let arg =
+        candid::encode_one(&arg).map_err(|err| format!("Error encoding WithdrawRequest: {err}"))?;
 
     Ok(arg)
 }
@@ -1124,12 +1116,8 @@ pub async fn validate_upgrade_extension(
         .map_err(|err| format!("Invalid extension_canister_id: {err}"))?;
 
     // Validate that the extension is registered
-    let current_extension =
-        get_registered_extension_from_cache(extension_canister_id).ok_or_else(|| {
-            format!(
-                "Extension canister {extension_canister_id} is not registered"
-            )
-        })?;
+    let current_extension = get_registered_extension_from_cache(extension_canister_id)
+        .ok_or_else(|| format!("Extension canister {extension_canister_id} is not registered"))?;
 
     // Extract and validate WASM (either direct bytes or chunked)
     let Some(pb_wasm) = wasm else {
@@ -1218,9 +1206,7 @@ async fn get_subnet_for_canister(
         .call_canister(REGISTRY_CANISTER_ID, "get_subnet_for_canister", payload)
         .await
         .map_err(|(code, err)| {
-            format!(
-                "Registry.get_subnet_for_canister failed with code {code:?}: {err}"
-            )
+            format!("Registry.get_subnet_for_canister failed with code {code:?}: {err}")
         })?;
 
     let response = Decode!(&response_blob, Result<SubnetForCanister, String>)
@@ -1253,16 +1239,11 @@ async fn get_subnet_types_to_subnets(
         )
         .await
         .map_err(|(code, err)| {
-            format!(
-                "CMC.get_subnet_types_to_subnets failed with code {code:?}: {err}"
-            )
+            format!("CMC.get_subnet_types_to_subnets failed with code {code:?}: {err}")
         })?;
 
-    let response = Decode!(&response_blob, SubnetTypesToSubnetsResponse).map_err(|e| {
-        format!(
-            "Failed to decode get_subnet_types_to_subnets response: {e}"
-        )
-    })?;
+    let response = Decode!(&response_blob, SubnetTypesToSubnetsResponse)
+        .map_err(|e| format!("Failed to decode get_subnet_types_to_subnets response: {e}"))?;
 
     Ok(response)
 }
@@ -1303,9 +1284,7 @@ async fn get_extension_spec_and_update_cache(
     if !registered_extensions.contains(&extension_canister_id.get()) {
         return Err(GovernanceError::new_with_message(
             ErrorType::NotFound,
-            format!(
-                "Extension canister {extension_canister_id} is not registered with the SNS."
-            ),
+            format!("Extension canister {extension_canister_id} is not registered with the SNS."),
         ));
     }
 
@@ -1359,9 +1338,7 @@ pub(crate) async fn validate_execute_extension_operation(
         CanisterId::try_from_principal_id(extension_canister_id).map_err(|err| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                format!(
-                    "Cannot interpret extension_canister_id as canister ID: {err}"
-                ),
+                format!("Cannot interpret extension_canister_id as canister ID: {err}"),
             )
         })?;
 
@@ -1439,9 +1416,7 @@ async fn execute_treasury_manager_deposit(
         construct_treasury_manager_deposit_payload(context, original).map_err(|err| {
             GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                format!(
-                    "Failed to construct treasury manager deposit payload: {err}"
-                ),
+                format!("Failed to construct treasury manager deposit payload: {err}"),
             )
         })?;
 
@@ -1500,9 +1475,7 @@ async fn execute_treasury_manager_withdraw(
     let arg_blob = construct_treasury_manager_withdraw_payload(arg.original).map_err(|err| {
         GovernanceError::new_with_message(
             ErrorType::PreconditionFailed,
-            format!(
-                "Failed to construct treasury manager withdraw payload: {err}"
-            ),
+            format!("Failed to construct treasury manager withdraw payload: {err}"),
         )
     })?;
 

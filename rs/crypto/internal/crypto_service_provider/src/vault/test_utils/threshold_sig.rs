@@ -261,9 +261,7 @@ pub fn test_threshold_scheme_with_basic_keygen<R, S, C, P>(
     let rng = &mut seed.into_rng();
     let threshold = NumberOfNodes::from(rng.gen_range(1..10));
     let number_of_signers = NumberOfNodes::from(rng.gen_range(0..10));
-    println!(
-        "--- threshold: {threshold}, number_of_signers: {number_of_signers}"
-    );
+    println!("--- threshold: {threshold}, number_of_signers: {number_of_signers}");
     match csp_vault.threshold_keygen_for_test(
         AlgorithmId::ThresBls12_381,
         threshold,

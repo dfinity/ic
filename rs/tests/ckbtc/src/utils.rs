@@ -252,9 +252,7 @@ pub async fn wait_for_finalization<T: RpcClientType>(
     let start = Instant::now();
     loop {
         if start.elapsed() >= LONG_TIMEOUT {
-            panic!(
-                "Retrieve btc request {block_index} did not finalize in {LONG_TIMEOUT:?}"
-            );
+            panic!("Retrieve btc request {block_index} did not finalize in {LONG_TIMEOUT:?}");
         };
         self_check(ckbtc_minter_agent)
             .await
@@ -296,9 +294,7 @@ pub async fn wait_for_finalization_no_new_blocks(
     let start = Instant::now();
     loop {
         if start.elapsed() >= LONG_TIMEOUT {
-            panic!(
-                "Retrieve btc request {block_index} did not finalize in {LONG_TIMEOUT:?}"
-            );
+            panic!("Retrieve btc request {block_index} did not finalize in {LONG_TIMEOUT:?}");
         };
         self_check(ckbtc_minter_agent)
             .await

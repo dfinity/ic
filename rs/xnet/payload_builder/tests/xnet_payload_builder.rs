@@ -849,9 +849,7 @@ fn system_subnet_stream_throttling(
             );
             assert_eq!(1, xnet_payload_builder.slice_payload_size_stats().count);
         } else {
-            panic!(
-                "Expecting payload with a single slice, from {REMOTE_SUBNET}"
-            );
+            panic!("Expecting payload with a single slice, from {REMOTE_SUBNET}");
         }
     });
 }

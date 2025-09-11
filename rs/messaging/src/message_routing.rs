@@ -617,9 +617,7 @@ fn registry_error(
     err: RegistryClientError,
 ) -> ReadRegistryError {
     let errmsg = match subnet_id {
-        Some(subnet_id) => format!(
-            "'{what} [for subnet {subnet_id}]', RegistryClientError: {err}"
-        ),
+        Some(subnet_id) => format!("'{what} [for subnet {subnet_id}]', RegistryClientError: {err}"),
         None => format!("'{what}', RegistryClientError: {err}"),
     };
     if err.is_reproducible() {

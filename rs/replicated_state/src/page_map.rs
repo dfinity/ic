@@ -260,10 +260,9 @@ impl std::fmt::Display for PersistenceError {
             PersistenceError::InvalidOverlay { path, message } => {
                 write!(f, "Overlay file {path} is broken: {message}")
             }
-            PersistenceError::BadPageSize { expected, actual } => write!(
-                f,
-                "Bad slice size: expected {expected}, actual {actual}"
-            ),
+            PersistenceError::BadPageSize { expected, actual } => {
+                write!(f, "Bad slice size: expected {expected}, actual {actual}")
+            }
             PersistenceError::VersionMismatch {
                 path,
                 file_version,

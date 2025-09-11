@@ -163,10 +163,9 @@ impl fmt::Display for OrchestratorError {
                     "Failed to get the role of the node at the registry version {registry_version}: {msg}"
                 )
             }
-            OrchestratorError::DomainNameMissingError(node_id) => write!(
-                f,
-                "Node {node_id} does not have an associated domain name"
-            ),
+            OrchestratorError::DomainNameMissingError(node_id) => {
+                write!(f, "Node {node_id} does not have an associated domain name")
+            }
         }
     }
 }

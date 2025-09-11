@@ -291,9 +291,7 @@ impl TryFrom<Nat> for Tokens {
     fn try_from(value: Nat) -> Result<Self, Self::Error> {
         match value.0.to_u64() {
             Some(e8s) => Ok(Self { e8s }),
-            None => Err(format!(
-                "value {value} is bigger than Tokens::max_value()"
-            )),
+            None => Err(format!("value {value} is bigger than Tokens::max_value()")),
         }
     }
 }

@@ -409,11 +409,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         &state_manager_metrics.checkpoint_metrics,
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )
-    .unwrap_or_else(|err| {
-        panic!(
-            "Expected make_unvalidated_checkpoint to succeed, got {err:?}"
-        )
-    });
+    .unwrap_or_else(|err| panic!("Expected make_unvalidated_checkpoint to succeed, got {err:?}"));
     flush_tip_channel(&tip_channel);
     let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
     validate_and_finalize_checkpoint_and_remove_unverified_marker(

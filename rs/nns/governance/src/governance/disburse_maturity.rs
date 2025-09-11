@@ -105,9 +105,7 @@ impl From<InitiateMaturityDisbursementError> for GovernanceError {
             InitiateMaturityDisbursementError::TooManyDisbursements => {
                 GovernanceError::new_with_message(
                     ErrorType::PreconditionFailed,
-                    format!(
-                        "Too many disbursements in progress. Max: {MAX_NUM_DISBURSEMENTS}",
-                    ),
+                    format!("Too many disbursements in progress. Max: {MAX_NUM_DISBURSEMENTS}",),
                 )
             }
             InitiateMaturityDisbursementError::DisbursementTooSmall {

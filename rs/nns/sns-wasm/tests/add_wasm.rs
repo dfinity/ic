@@ -151,9 +151,7 @@ fn test_sns_w_saves_metadata_on_upgrade() {
             result: Some(Result::Ok(Ok { sections })),
         } = response
         else {
-            panic!(
-                "Unexpected response from SnsW.get_wasm_metadata: {response:?}"
-            );
+            panic!("Unexpected response from SnsW.get_wasm_metadata: {response:?}");
         };
 
         assert_eq!(sections, expected_metadata);
@@ -174,9 +172,7 @@ fn test_sns_w_saves_metadata_on_upgrade() {
             result: Some(Result::Ok(Ok { sections })),
         } = response
         else {
-            panic!(
-                "Unexpected response from SnsW.get_wasm_metadata: {response:?}"
-            );
+            panic!("Unexpected response from SnsW.get_wasm_metadata: {response:?}");
         };
         assert_eq!(sections, expected_metadata);
     }

@@ -300,9 +300,7 @@ impl InternalState {
     fn get_root_subnet_id(&self, version: RegistryVersion) -> Result<SubnetId, String> {
         match self.registry_client.get_root_subnet_id(version) {
             Ok(Some(v)) => Ok(v),
-            Ok(_) => Err(format!(
-                "No NNS subnet id configured at version {version}"
-            )),
+            Ok(_) => Err(format!("No NNS subnet id configured at version {version}")),
             Err(e) => Err(format!(
                 "Could not fetch nns subnet id at version {version}: {e:?}"
             )),

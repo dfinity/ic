@@ -13,15 +13,11 @@ fn test_backwards_compatibility() {
 
         if filename.starts_with("hostos_") {
             serde_json::from_str::<HostOSConfig>(&config_json).unwrap_or_else(|e| {
-                panic!(
-                    "Failed to deserialize historical HostOSConfig from {filename}: {e}"
-                )
+                panic!("Failed to deserialize historical HostOSConfig from {filename}: {e}")
             });
         } else if filename.starts_with("guestos_") {
             serde_json::from_str::<GuestOSConfig>(&config_json).unwrap_or_else(|e| {
-                panic!(
-                    "Failed to deserialize historical GuestOSConfig from {filename}: {e}"
-                )
+                panic!("Failed to deserialize historical GuestOSConfig from {filename}: {e}")
             });
         }
 

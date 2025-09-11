@@ -710,9 +710,9 @@ impl PocketIc {
         match status {
             IngressStatusResult::NotAvailable => None,
             IngressStatusResult::Success(status) => Some(status),
-            IngressStatusResult::Forbidden(err) => panic!(
-                "Retrieving ingress status was forbidden: {err}. This is a bug!"
-            ),
+            IngressStatusResult::Forbidden(err) => {
+                panic!("Retrieving ingress status was forbidden: {err}. This is a bug!")
+            }
         }
     }
 

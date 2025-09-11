@@ -229,9 +229,7 @@ impl CanisterApiImpl {
                     .await
                     .map(CanisterStatusResultV2::from)
                     .map_err(|(code, msg)| {
-                        format!(
-                            "Unable to get target canister status: error code {code}: {msg}"
-                        )
+                        format!("Unable to get target canister status: error code {code}: {msg}")
                     })?;
 
             if status.status() == CanisterStatusType::Stopped {

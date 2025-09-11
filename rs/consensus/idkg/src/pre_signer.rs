@@ -401,9 +401,7 @@ impl IDkgPreSignerImpl {
             {
                 ret.push(IDkgChangeAction::HandleInvalid(
                     id,
-                    format!(
-                        "Duplicate dealing support in unvalidated batch: {support}"
-                    ),
+                    format!("Duplicate dealing support in unvalidated batch: {support}"),
                 ));
                 continue;
             };
@@ -826,9 +824,7 @@ impl IDkgPreSignerImpl {
                 self.metrics.pre_sign_errors_inc("verify_dealing_support");
                 Some(IDkgChangeAction::HandleInvalid(
                     id,
-                    format!(
-                        "Support validation failed: {support}, error = {error:?}"
-                    ),
+                    format!("Support validation failed: {support}, error = {error:?}"),
                 ))
             }
             Ok(_) => {

@@ -129,9 +129,7 @@ pub fn untar_state_archive_or_panic(
     state_dir: &str,
     create_temp_dir: impl Fn() -> TempDir,
 ) {
-    println!(
-        "Unpacking {state_dir} from {source:?} to {destination:?}..."
-    );
+    println!("Unpacking {state_dir} from {source:?} to {destination:?}...");
 
     // TODO: Mathias reports having problems with this (or something similar) on Mac.
     let unpack_destination = create_temp_dir();
@@ -154,9 +152,7 @@ pub fn untar_state_archive_or_panic(
 
     // Move $UNTAR_DESTINATION/nns_state/ic_state to final output dir path, StateMachine's so-called
     // state_dir.
-    println!(
-        "Renaming {unpack_destination:?}/{state_dir}/ic_state to {destination:?}..."
-    );
+    println!("Renaming {unpack_destination:?}/{state_dir}/ic_state to {destination:?}...");
     std::fs::rename(
         format!("{unpack_destination}/{state_dir}/ic_state"),
         destination,

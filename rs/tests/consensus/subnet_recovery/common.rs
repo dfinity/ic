@@ -784,9 +784,7 @@ fn corrupt_latest_cup(subnet: &SubnetSnapshot, recovery: &Recovery, logger: &Log
         let session = node.block_on_ssh_session().unwrap();
         execute_bash_command(
             &session,
-            format!(
-                "sudo touch {NEW_CUP_PATH}; sudo chmod a+rw {NEW_CUP_PATH}"
-            ),
+            format!("sudo touch {NEW_CUP_PATH}; sudo chmod a+rw {NEW_CUP_PATH}"),
         )
         .expect("touch");
         let mut channel = session
@@ -797,9 +795,7 @@ fn corrupt_latest_cup(subnet: &SubnetSnapshot, recovery: &Recovery, logger: &Log
         info!(logger, "Restarting node {:?}", node.get_ip_addr());
         execute_bash_command(
             &session,
-            format!(
-                "sudo mv {NEW_CUP_PATH} {CUP_PATH}; sudo systemctl restart ic-replica"
-            ),
+            format!("sudo mv {NEW_CUP_PATH} {CUP_PATH}; sudo systemctl restart ic-replica"),
         )
         .expect("restart");
     }

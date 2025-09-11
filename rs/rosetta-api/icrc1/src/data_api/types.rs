@@ -30,11 +30,8 @@ impl TryFrom<QueryBlockRangeRequest> for ObjectMap {
 impl TryFrom<ObjectMap> for QueryBlockRangeRequest {
     type Error = String;
     fn try_from(o: ObjectMap) -> Result<Self, Self::Error> {
-        serde_json::from_value(serde_json::Value::Object(o)).map_err(|e| {
-            format!(
-                "Could not parse QueryBlockRangeRequest from JSON object: {e}"
-            )
-        })
+        serde_json::from_value(serde_json::Value::Object(o))
+            .map_err(|e| format!("Could not parse QueryBlockRangeRequest from JSON object: {e}"))
     }
 }
 
@@ -65,10 +62,7 @@ impl TryFrom<QueryBlockRangeResponse> for ObjectMap {
 impl TryFrom<ObjectMap> for QueryBlockRangeResponse {
     type Error = String;
     fn try_from(o: ObjectMap) -> Result<Self, Self::Error> {
-        serde_json::from_value(serde_json::Value::Object(o)).map_err(|e| {
-            format!(
-                "Could not parse QueryBlockRangeResponse from JSON object: {e}"
-            )
-        })
+        serde_json::from_value(serde_json::Value::Object(o))
+            .map_err(|e| format!("Could not parse QueryBlockRangeResponse from JSON object: {e}"))
     }
 }

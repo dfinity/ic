@@ -532,10 +532,7 @@ async fn handle_stream_with_byte_limit() {
 async fn handle_stream_nonexistent() {
     let fixture = EndpointTestFixture::with_replicated_state();
 
-    let url = Url::parse(&format!(
-        "http://localhost/api/v1/stream/{UNKNOWN_SUBNET}"
-    ))
-    .unwrap();
+    let url = Url::parse(&format!("http://localhost/api/v1/stream/{UNKNOWN_SUBNET}")).unwrap();
 
     let response = route_request(
         url,

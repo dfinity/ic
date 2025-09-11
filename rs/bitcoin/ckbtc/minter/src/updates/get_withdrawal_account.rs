@@ -12,9 +12,7 @@ pub async fn get_withdrawal_account() -> Account {
     let caller_subaccount: Subaccount = compute_subaccount(caller, 0);
     // Check that the computed subaccount doesn't collide with minting account.
     if &caller_subaccount == DEFAULT_SUBACCOUNT {
-        panic!(
-            "Subaccount collision with principal {caller}. Please contact DFINITY support."
-        );
+        panic!("Subaccount collision with principal {caller}. Please contact DFINITY support.");
     }
     Account {
         owner: ck_btc_principal,

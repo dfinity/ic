@@ -180,10 +180,9 @@ impl std::fmt::Display for ProxyDecodeError {
                 f,
                 "Replica does not implement certification version {version}"
             ),
-            Self::UnknownStateSyncVersion(version) => write!(
-                f,
-                "Replica does not implement state sync version {version}"
-            ),
+            Self::UnknownStateSyncVersion(version) => {
+                write!(f, "Replica does not implement state sync version {version}")
+            }
             Self::Other(msg) => f.write_str(msg),
         }
     }

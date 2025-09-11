@@ -140,9 +140,7 @@ impl CustomServer {
                 )
             }
         } else if let Err(error) = &result {
-            panic!(
-                "expected the server result to be ok but got error: {error}"
-            )
+            panic!("expected the server result to be ok but got error: {error}")
         }
         result.map(|_tls_stream| ())
     }

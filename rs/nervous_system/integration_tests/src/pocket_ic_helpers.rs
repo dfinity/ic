@@ -179,9 +179,7 @@ pub async fn install_canister_with_controllers(
         .install_canister(canister_id, wasm.bytes(), arg, controller_principal)
         .await;
     let subnet_id = pocket_ic.get_subnet(canister_id).await.unwrap();
-    println!(
-        "Installed the {name} canister ({canister_id}) onto {subnet_id:?}"
-    );
+    println!("Installed the {name} canister ({canister_id}) onto {subnet_id:?}");
 }
 
 pub async fn install_canister_on_subnet(
@@ -1048,9 +1046,7 @@ pub async fn upgrade_nns_canister_to_tip_of_master_or_panic(
         .unwrap();
 
     if pre_upgrade_module_hash == expected_hash.to_vec() {
-        println!(
-            "The {label} canister is already at the tip of the master branch."
-        );
+        println!("The {label} canister is already at the tip of the master branch.");
 
         return;
     }
@@ -1544,9 +1540,7 @@ pub mod sns {
                 .module_hash
                 .unwrap();
             if canister_version_from_sns_pov != canister_version_from_ic00_pov {
-                println!(
-                    "pre_upgrade_canister_version = {pre_upgrade_canister_version:?}"
-                );
+                println!("pre_upgrade_canister_version = {pre_upgrade_canister_version:?}");
                 return Err(SnsUpgradeError::CanisterVersionMismatch {
                     canister_type: expected_type_to_change,
                     canister_version_from_sns_pov,
@@ -1574,9 +1568,7 @@ pub mod sns {
     ) {
         try_upgrade_sns_to_next_version(pocket_ic, sns, expected_type_to_change)
             .await
-            .unwrap_or_else(|err| {
-                panic!("Upgrading {expected_type_to_change:?} failed: {err:#?}")
-            });
+            .unwrap_or_else(|err| panic!("Upgrading {expected_type_to_change:?} failed: {err:#?}"));
     }
 
     pub mod governance {
@@ -2019,12 +2011,12 @@ pub mod sns {
             {
                 let (actual, expected) = match either_or_both {
                     EitherOrBoth::Both(actual, expected) => (actual, expected),
-                    EitherOrBoth::Left(actual) => panic!(
-                        "Observed an unexpected journal entry at index {index}: {actual:?}"
-                    ),
-                    EitherOrBoth::Right(expected) => panic!(
-                        "Did not observe an expected entry at index {index}: {expected:?}"
-                    ),
+                    EitherOrBoth::Left(actual) => {
+                        panic!("Observed an unexpected journal entry at index {index}: {actual:?}")
+                    }
+                    EitherOrBoth::Right(expected) => {
+                        panic!("Did not observe an expected entry at index {index}: {expected:?}")
+                    }
                 };
                 assert!(actual.timestamp_seconds.is_some());
                 assert_eq!(

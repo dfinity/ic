@@ -82,9 +82,9 @@ fn test_add_and_remove_nodes_from_registry() {
             .unwrap()
         {
             CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
-            some_error => panic!(
-                "Cannot find proposal id in response. The response is: {some_error:?}"
-            ),
+            some_error => {
+                panic!("Cannot find proposal id in response. The response is: {some_error:?}")
+            }
         };
 
         // Wait for the proposal to be accepted and executed.
@@ -144,10 +144,7 @@ fn test_add_and_remove_nodes_from_registry() {
         )
         .await;
         // Check if some fields are present
-        assert!(
-            node_record.http.is_some(),
-            "node_record : {node_record:?}"
-        );
+        assert!(node_record.http.is_some(), "node_record : {node_record:?}");
 
         let proposal_payload = RemoveNodesPayload {
             node_ids: vec![node_id],

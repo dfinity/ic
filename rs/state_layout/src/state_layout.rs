@@ -1240,16 +1240,12 @@ impl StateLayout {
         self.rename_to_tmp_path(&cp_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
                 path: cp_path.clone(),
-                message: format!(
-                    "failed to rename diverged checkpoint {height} to tmp path"
-                ),
+                message: format!("failed to rename diverged checkpoint {height} to tmp path"),
                 io_err: err,
             })?;
         std::fs::remove_dir_all(&tmp_path).map_err(|err| LayoutError::IoError {
             path: cp_path,
-            message: format!(
-                "failed to remove diverged checkpoint {height} from tmp path"
-            ),
+            message: format!("failed to remove diverged checkpoint {height} from tmp path"),
             io_err: err,
         })
     }
@@ -1530,9 +1526,7 @@ where
 /// directory names under `canister_states`).
 fn parse_canister_id(hex: &str) -> Result<CanisterId, String> {
     let blob = hex::decode(hex).map_err(|err| {
-        format!(
-            "failed to convert directory name {hex} into a canister ID: {err}"
-        )
+        format!("failed to convert directory name {hex} into a canister ID: {err}")
     })?;
 
     Ok(CanisterId::unchecked_from_principal(
@@ -1545,9 +1539,7 @@ fn parse_canister_id(hex: &str) -> Result<CanisterId, String> {
 /// directory names under `snapshots`).
 fn parse_snapshot_id(hex: &str) -> Result<SnapshotId, String> {
     let blob = hex::decode(hex).map_err(|err| {
-        format!(
-            "failed to convert directory name {hex} into a snapshot ID: {err}"
-        )
+        format!("failed to convert directory name {hex} into a snapshot ID: {err}")
     })?;
 
     SnapshotId::try_from(&blob).map_err(|err| format!("failed to parse snapshot ID: {err}"))
@@ -1578,9 +1570,7 @@ fn parse_and_sort_checkpoint_heights(names: &[String]) -> Result<Vec<Height>, La
                 .map(Height::new)
                 .map_err(|e| LayoutError::CorruptedLayout {
                     path: name.into(),
-                    message: format!(
-                        "failed to convert checkpoint name {name} into a number: {e}"
-                    ),
+                    message: format!("failed to convert checkpoint name {name} into a number: {e}"),
                 })
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -2015,9 +2005,7 @@ impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
             copy_file_and_set_permissions(log, &overlay, &dst_path).map_err(|err| {
                 LayoutError::IoError {
                     path: dst.base(),
-                    message: format!(
-                        "Cannot copy or hardlink file {overlay:?} to {dst_path:?}"
-                    ),
+                    message: format!("Cannot copy or hardlink file {overlay:?} to {dst_path:?}"),
                     io_err: err,
                 }
             })?;

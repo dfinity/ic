@@ -231,9 +231,7 @@ impl BackupManager {
                 .parse::<usize>()
                 .unwrap_or(DEFAULT_SYNC_NODES);
 
-            println!(
-                "Enter period of syncing in minutes (default {DEFAULT_SYNC_PERIOD}):"
-            );
+            println!("Enter period of syncing in minutes (default {DEFAULT_SYNC_PERIOD}):");
             let mut sync_period_min = String::new();
             let _ = reader.read_line(&mut sync_period_min);
             let sync_period_secs = 60
@@ -241,9 +239,7 @@ impl BackupManager {
                     .trim()
                     .parse::<u64>()
                     .unwrap_or(DEFAULT_SYNC_PERIOD);
-            println!(
-                "Enter period of replaying in minutes (default {DEFAULT_REPLAY_PERIOD}):"
-            );
+            println!("Enter period of replaying in minutes (default {DEFAULT_REPLAY_PERIOD}):");
             let mut replay_period_min = String::new();
             let _ = reader.read_line(&mut replay_period_min);
             let replay_period_secs = 60
@@ -331,9 +327,7 @@ impl BackupManager {
                         continue;
                     }
                     if !old_state_dir.join("checkpoints").exists() {
-                        println!(
-                            "Error: directory {old_state_dir:?} doesn't have checkpoints!"
-                        );
+                        println!("Error: directory {old_state_dir:?} doesn't have checkpoints!");
                         continue;
                     }
                     let mut cmd = Command::new("rsync");
@@ -479,9 +473,7 @@ fn cold_store(m: Arc<BackupManager>) {
                 }
             };
             if let Err(err) = b.backup_helper.do_move_cold_storage() {
-                let msg = format!(
-                    "Error moving to cold storage for subnet {subnet_id}: {err:?}"
-                );
+                let msg = format!("Error moving to cold storage for subnet {subnet_id}: {err:?}");
                 error!(m.log, "{}", msg);
                 b.backup_helper
                     .notification_client

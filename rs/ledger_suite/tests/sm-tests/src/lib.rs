@@ -2244,10 +2244,7 @@ where
     // We didn't set the max_memo_length in the init params of the ledger
     // so the memo will be accepted only if it's 32 bytes or less.
     for i in 0..=32 {
-        assert!(
-            transfer_with_memo(&vec![0u8; i]).is_ok(),
-            "Memo size: {i}"
-        );
+        assert!(transfer_with_memo(&vec![0u8; i]).is_ok(), "Memo size: {i}");
     }
     expect_memo_length_error(transfer_with_memo, &[0u8; 33]);
 
@@ -2262,10 +2259,7 @@ where
 
     // Now the ledger should accept memos up to 64 bytes.
     for i in 0..=64 {
-        assert!(
-            transfer_with_memo(&vec![0u8; i]).is_ok(),
-            "Memo size: {i}"
-        );
+        assert!(transfer_with_memo(&vec![0u8; i]).is_ok(), "Memo size: {i}");
     }
     expect_memo_length_error(transfer_with_memo, &[0u8; 65]);
 
@@ -5428,9 +5422,7 @@ pub fn generate_transactions(
         u64_fee
             .checked_mul(params.transfer_from_multiplier)
             .unwrap_or_else(|| {
-                panic!(
-                    "transfer_from amount overflowed for canister {canister_id:?}"
-                )
+                panic!("transfer_from amount overflowed for canister {canister_id:?}")
             }),
     );
     let approve_amount = Nat::from(

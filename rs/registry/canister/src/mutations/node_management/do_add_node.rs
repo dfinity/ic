@@ -34,9 +34,7 @@ impl Registry {
     pub fn do_add_node(&mut self, payload: AddNodePayload) -> Result<NodeId, String> {
         // Get the caller ID and check if it is in the registry
         let caller_id = dfn_core::api::caller();
-        println!(
-            "{LOG_PREFIX}do_add_node started: {payload:?} caller: {caller_id:?}"
-        );
+        println!("{LOG_PREFIX}do_add_node started: {payload:?} caller: {caller_id:?}");
         self.do_add_node_(payload, caller_id)
     }
 
@@ -106,9 +104,7 @@ impl Registry {
             .as_ref()
             .map(|t| {
                 validate_str_as_node_reward_type(t).map_err(|e| {
-                    format!(
-                        "{LOG_PREFIX}do_add_node: Error parsing node type from payload: {e}"
-                    )
+                    format!("{LOG_PREFIX}do_add_node: Error parsing node type from payload: {e}")
                 })
             })
             .transpose()?
@@ -218,9 +214,7 @@ fn validate_str_as_node_reward_type<T: AsRef<str> + Display>(
 /// The string is written in form: `ipv4:port` or `[ipv6]:port`.
 pub fn connection_endpoint_from_string(endpoint: &str) -> ConnectionEndpoint {
     match endpoint.parse::<SocketAddr>() {
-        Err(e) => panic!(
-            "Could not convert {endpoint:?} to a connection endpoint: {e:?}"
-        ),
+        Err(e) => panic!("Could not convert {endpoint:?} to a connection endpoint: {e:?}"),
         Ok(sa) => ConnectionEndpoint {
             ip_addr: sa.ip().to_string(),
             port: sa.port() as u32, // because protobufs don't have u16
@@ -256,38 +250,27 @@ fn valid_keys_from_payload(
     // NodePublicKeys first
     let node_signing_pk = PublicKey::decode(&payload.node_signing_pk[..])
         .map_err(|e| format!("node_signing_pk is not in the expected format: {e:?}"))?;
-    let committee_signing_pk =
-        PublicKey::decode(&payload.committee_signing_pk[..]).map_err(|e| {
-            format!(
-                "committee_signing_pk is not in the expected format: {e:?}"
-            )
-        })?;
+    let committee_signing_pk = PublicKey::decode(&payload.committee_signing_pk[..])
+        .map_err(|e| format!("committee_signing_pk is not in the expected format: {e:?}"))?;
     let tls_certificate = X509PublicKeyCert::decode(&payload.transport_tls_cert[..])
         .map_err(|e| format!("transport_tls_cert is not in the expected format: {e:?}"))?;
     let dkg_dealing_encryption_pk = PublicKey::decode(&payload.ni_dkg_dealing_encryption_pk[..])
         .map_err(|e| {
-            format!(
-                "ni_dkg_dealing_encryption_pk is not in the expected format: {e:?}"
-            )
+            format!("ni_dkg_dealing_encryption_pk is not in the expected format: {e:?}")
         })?;
     // TODO(NNS1-1197): Refactor when nodes are provisioned for threshold ECDSA subnets
     let idkg_dealing_encryption_pk =
         if let Some(idkg_de_pk_bytes) = &payload.idkg_dealing_encryption_pk {
             Some(PublicKey::decode(&idkg_de_pk_bytes[..]).map_err(|e| {
-                format!(
-                    "idkg_dealing_encryption_pk is not in the expected format: {e:?}"
-                )
+                format!("idkg_dealing_encryption_pk is not in the expected format: {e:?}")
             })?)
         } else {
             None
         };
 
     // 3. get the node id from the node_signing_pk
-    let node_id = crypto_basicsig_conversions::derive_node_id(&node_signing_pk).map_err(|e| {
-        format!(
-            "node signing public key couldn't be converted to a NodeId: {e:?}"
-        )
-    })?;
+    let node_id = crypto_basicsig_conversions::derive_node_id(&node_signing_pk)
+        .map_err(|e| format!("node signing public key couldn't be converted to a NodeId: {e:?}"))?;
 
     // 4. get the keys for verification -- for that, we need to create
     let node_pks = CurrentNodePublicKeys {
@@ -813,9 +796,7 @@ mod tests {
         let expected_remove_node_id = node_ids[1]; // same offset as the subnet membership vector
         let expected_remove_node = registry.get_node(subnet_membership[1]).unwrap();
 
-        println!(
-            "Original subnet membership (node ids): {subnet_membership:?}"
-        );
+        println!("Original subnet membership (node ids): {subnet_membership:?}");
 
         // Add a new node with the same IP address and port as an existing node, which should replace the existing node
         let (mut payload, _valid_pks) = prepare_add_node_payload(2);

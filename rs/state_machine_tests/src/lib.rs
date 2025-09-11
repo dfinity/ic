@@ -2618,9 +2618,7 @@ impl StateMachine {
             self.tick();
         }
         if !reached_completion {
-            panic!(
-                "The state machine did not reach completion after {max_ticks} ticks"
-            );
+            panic!("The state machine did not reach completion after {max_ticks} ticks");
         }
     }
 
@@ -3077,9 +3075,7 @@ impl StateMachine {
 
             return Ok(());
         }
-        Err(format!(
-            "No canister state for canister id {canister_id}."
-        ))
+        Err(format!("No canister state for canister id {canister_id}."))
     }
 
     /// Returns the controllers of a canister or `None` if the canister does not exist.
@@ -3486,9 +3482,7 @@ impl StateMachine {
         .map(|res| match res {
             WasmResult::Reply(data) => UploadCanisterSnapshotMetadataResponse::decode(&data),
             WasmResult::Reject(reason) => {
-                panic!(
-                    "upload_canister_snapshot_metadata call rejected: {reason}"
-                )
+                panic!("upload_canister_snapshot_metadata call rejected: {reason}")
             }
         })?
     }

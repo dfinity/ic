@@ -2539,9 +2539,11 @@ fn test_burn_whole_balance() {
         let response = env.execute_ingress_as(p1, canister_id, "transfer", Encode!(&args).unwrap());
         if let Some(error_tokens) = error_tokens {
             assert!(response.is_err());
-            assert!(response.unwrap_err().description().contains(
-                &format!("Burns lower than {error_tokens} are not allowed").to_string()
-            ));
+            assert!(
+                response.unwrap_err().description().contains(
+                    &format!("Burns lower than {error_tokens} are not allowed").to_string()
+                )
+            );
         } else {
             let result = Decode!(&response.expect("burn transfer failed").bytes(), Result<BlockIndex, icp_ledger::TransferError> )
         .expect("failed to decode transfer response");

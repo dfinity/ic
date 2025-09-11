@@ -165,9 +165,7 @@ impl TryFrom<&CspPublicCoefficients> for KeyId {
             THRESHOLD_PUBLIC_COEFFICIENTS_KEY_ID_DOMAIN,
         ));
         hash.write(&serde_cbor::to_vec(&coefficients).map_err(|err| {
-            Self::Error::InvalidArguments(format!(
-                "Failed to serialize public coefficients: {err}"
-            ))
+            Self::Error::InvalidArguments(format!("Failed to serialize public coefficients: {err}"))
         })?);
         Ok(KeyId::from(hash.finish()))
     }

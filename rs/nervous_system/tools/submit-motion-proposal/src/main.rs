@@ -113,9 +113,7 @@ fn handle_response(response: Vec<u8>) {
         .unwrap_or_else(|| "???".to_string());
 
     println!("Succes! 🚀");
-    println!(
-        "Proposal URL: https://dashboard.internetcomputer.org/proposals/{proposal_id}"
-    );
+    println!("Proposal URL: https://dashboard.internetcomputer.org/proposals/{proposal_id}");
     if let Some(message) = message {
         println!("Message: {message}");
     }

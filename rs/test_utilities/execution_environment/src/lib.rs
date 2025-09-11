@@ -344,9 +344,7 @@ impl ExecutionTest {
     pub fn get_xnet_response(&self, index: usize) -> &Arc<Response> {
         match &self.xnet_messages[index] {
             RequestOrResponse::Request(request) => {
-                panic!(
-                    "Expected the xnet message to be a Response, but got a Request: {request:?}"
-                )
+                panic!("Expected the xnet message to be a Response, but got a Request: {request:?}")
             }
             RequestOrResponse::Response(response) => response,
         }

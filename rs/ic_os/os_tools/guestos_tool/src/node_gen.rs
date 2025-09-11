@@ -39,9 +39,7 @@ fn parse_hardware_gen(cpu_model_line: &str) -> Result<HardwareGen> {
         Some('2') => Ok(HardwareGen::Gen1),
         Some('3') => Ok(HardwareGen::Gen2),
         Some(_) => {
-            eprintln!(
-                "CPU model other than EPYC Rome or Milan: {cpu_model_line}"
-            );
+            eprintln!("CPU model other than EPYC Rome or Milan: {cpu_model_line}");
             Ok(HardwareGen::Unknown)
         }
         None => Err(anyhow!(

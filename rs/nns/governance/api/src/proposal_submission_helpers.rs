@@ -60,11 +60,7 @@ pub fn create_make_proposal_payload(
 
 pub fn decode_make_proposal_response(response: Vec<u8>) -> Result<ProposalId, String> {
     match Decode!(&response, ManageNeuronResponse)
-        .map_err(|e| {
-            format!(
-                "Cannot candid-deserialize the response from manage_neuron: {e}"
-            )
-        })?
+        .map_err(|e| format!("Cannot candid-deserialize the response from manage_neuron: {e}"))?
         .command
     {
         Some(CommandResponse::MakeProposal(resp)) => {

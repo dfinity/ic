@@ -64,9 +64,7 @@ fn execute_ingress_with_dts(
             }
         }
     }
-    panic!(
-        "Did not get answer to ingress {msg_id} after {MAX_TICKS} state machine ticks",
-    )
+    panic!("Did not get answer to ingress {msg_id} after {MAX_TICKS} state machine ticks",)
 }
 
 /// Creates, installs, and possibly reinstall/upgrades (depends on `mode`) the canister code

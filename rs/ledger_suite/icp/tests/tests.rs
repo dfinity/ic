@@ -403,9 +403,7 @@ fn archive_blocks_small_test() {
         // For this test we will use a tiny node size. This is because
         // we want multiple archive nodes to be created.
         let blocks_per_archive_node = 2;
-        println!(
-            "[test] blocks per archive node: {blocks_per_archive_node}"
-        );
+        println!("[test] blocks per archive node: {blocks_per_archive_node}");
         // The tiny maximum message size will force archiving one block at a
         // time.
         let max_message_size_bytes = 192;

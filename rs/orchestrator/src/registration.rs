@@ -539,10 +539,7 @@ impl NodeRegistration {
             Ok(_) => true,
             Err(e) => {
                 warn!(self.log, "Node keys are not setup: {:?}", e);
-                UtilityCommand::notify_host(
-                    format!("Node keys are not setup: {e:?}").as_str(),
-                    1,
-                );
+                UtilityCommand::notify_host(format!("Node keys are not setup: {e:?}").as_str(), 1);
                 false
             }
         }

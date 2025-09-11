@@ -393,9 +393,7 @@ async fn modify_canister_heap(
                         .update_("expand_state", dfn_candid::candid, payload)
                         .await
                         .unwrap_or_else(|err| {
-                            panic!(
-                                "Calling expand_state() on canister {canister:?} failed: {err}"
-                            )
+                            panic!("Calling expand_state() on canister {canister:?} failed: {err}")
                         });
                     info!(
                         logger_clone,

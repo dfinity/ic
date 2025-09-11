@@ -71,9 +71,7 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
     let address = Address::from_str(args.address.trim())
         .unwrap_or_else(|err| ic_cdk::trap(format!("Invalid Bitcoin address: {err}")))
         .require_network(btc_network.clone().into())
-        .unwrap_or_else(|err| {
-            ic_cdk::trap(format!("Not a Bitcoin {btc_network} address: {err}"))
-        });
+        .unwrap_or_else(|err| ic_cdk::trap(format!("Not a Bitcoin {btc_network} address: {err}")));
 
     match config.check_mode {
         CheckMode::AcceptAll => CheckAddressResponse::Passed,

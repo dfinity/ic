@@ -938,9 +938,7 @@ fn test_hotkey_can_join_and_leave_community_fund() {
                 "{error:?}"
             );
         }
-        _ => panic!(
-            "Unexpected response to AddHotKey:\n{add_hot_key_response:#?}"
-        ),
+        _ => panic!("Unexpected response to AddHotKey:\n{add_hot_key_response:#?}"),
     }
 
     // Steps 2d, 3d: Controller can perform any neuron configure operation.

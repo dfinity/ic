@@ -80,13 +80,8 @@ fn assert_inducted_ingress_messages_eq(
 
 /// Retrieves the stats of the `METRIC_INDUCTED_PAYLOAD_SIZES` histogram.
 fn fetch_inducted_payload_size_stats(metrics_registry: &MetricsRegistry) -> HistogramStats {
-    fetch_histogram_stats(metrics_registry, METRIC_INDUCTED_INGRESS_PAYLOAD_SIZES).unwrap_or_else(
-        || {
-            panic!(
-                "Histogram not found: {METRIC_INDUCTED_INGRESS_PAYLOAD_SIZES}"
-            )
-        },
-    )
+    fetch_histogram_stats(metrics_registry, METRIC_INDUCTED_INGRESS_PAYLOAD_SIZES)
+        .unwrap_or_else(|| panic!("Histogram not found: {METRIC_INDUCTED_INGRESS_PAYLOAD_SIZES}"))
 }
 
 #[test]

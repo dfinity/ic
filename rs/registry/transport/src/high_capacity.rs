@@ -350,9 +350,7 @@ async fn dechunkify_value_content(
 
         high_capacity_registry_value::Content::LargeValueChunkKeys(keys) => {
             let monolithic_blob = dechunkify(get_chunk, &keys).await.map_err(|err| {
-                Error::UnknownError(format!(
-                    "Unable to reconstitute chunked/large value: {err}",
-                ))
+                Error::UnknownError(format!("Unable to reconstitute chunked/large value: {err}",))
             })?;
 
             Ok(Some(monolithic_blob))

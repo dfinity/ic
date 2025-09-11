@@ -52,9 +52,7 @@ impl From<CspDkgLoadPrivateKeyError> for DkgLoadTranscriptError {
             } => {
                 // This would be an IDKM implementation error, since EpochTooOldError is mapped
                 // to `Ok(())` and ignored in load_transcript
-                panic!(
-                    "{panic_prefix}EpochTooOldError: {ciphertext_epoch}/{secret_key_epoch}"
-                );
+                panic!("{panic_prefix}EpochTooOldError: {ciphertext_epoch}/{secret_key_epoch}");
             }
             CspDkgLoadPrivateKeyError::TransientInternalError(e) => {
                 DkgLoadTranscriptError::TransientInternalError(

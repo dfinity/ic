@@ -206,9 +206,7 @@ fn test_check_address() {
             address: "n47QBape2PcisN2mkHR2YnhqoBr56iPhJh".to_string(),
         },),
     );
-    assert!(
-        result.is_err_and(|err| format!("{err:?}").contains("Not a Bitcoin mainnet address"))
-    );
+    assert!(result.is_err_and(|err| format!("{err:?}").contains("Not a Bitcoin mainnet address")));
 
     // Test CheckMode::AcceptAll
     env.upgrade_canister(
@@ -251,9 +249,7 @@ fn test_check_address() {
             address: blocked_address,
         },),
     );
-    assert!(
-        result.is_err_and(|err| format!("{err:?}").contains("Not a Bitcoin testnet address"))
-    );
+    assert!(result.is_err_and(|err| format!("{err:?}").contains("Not a Bitcoin testnet address")));
 
     // Test CheckMode::RejectAll
     env.upgrade_canister(

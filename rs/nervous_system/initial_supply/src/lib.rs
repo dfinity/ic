@@ -40,9 +40,7 @@ pub async fn initial_supply_e8s<MyRuntime: Runtime>(
         // This will be used later to determine whether we can break early.
         let len = transactions.len();
         let len = u64::try_from(len).map_err(|err| {
-            format!(
-                "Unable to convert transactions length ({len}) to a u64: {err:?}",
-            )
+            format!("Unable to convert transactions length ({len}) to a u64: {err:?}",)
         })?;
 
         for transaction in transactions {
@@ -111,9 +109,7 @@ pub async fn initial_supply_e8s<MyRuntime: Runtime>(
 
     // Convert to return type.
     let result = u64::try_from(result.0).map_err(|err| {
-        format!(
-            "Failed to convert initial supply in e8s to u64. Reason: {err:?}",
-        )
+        format!("Failed to convert initial supply in e8s to u64. Reason: {err:?}",)
     })?;
 
     Ok(result)

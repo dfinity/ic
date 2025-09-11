@@ -867,10 +867,7 @@ mod tests {
 
         match result {
             Err(FileDownloadError::IoError(message, _)) => {
-                assert_eq!(
-                    message,
-                    format!("Failed to unpack tar file: {tar_path:?}")
-                );
+                assert_eq!(message, format!("Failed to unpack tar file: {tar_path:?}"));
             }
             _ => panic!("Expected FileDownloadError::IoError"),
         }

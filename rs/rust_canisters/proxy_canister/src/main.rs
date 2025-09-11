@@ -109,9 +109,7 @@ async fn run_continuous_request_loop(request: RemoteHttpRequest) {
             }
         }
     }
-    println!(
-        "Finished batch of {BATCH_SIZE} requests => successes: {successes}, errors: {errors}"
-    );
+    println!("Finished batch of {BATCH_SIZE} requests => successes: {successes}, errors: {errors}");
 
     spawn(async move {
         run_continuous_request_loop(request).await;

@@ -191,9 +191,7 @@ impl CustomClient {
             }
         } else {
             match result {
-                Err(error) => panic!(
-                    "expected the client result to be ok but got error: {error}"
-                ),
+                Err(error) => panic!("expected the client result to be ok but got error: {error}"),
                 Ok(_tls_stream) => (),
             }
         }

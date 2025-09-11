@@ -148,7 +148,6 @@ impl NodeRewardsCanister {
             daily_metrics_by_subnet,
             provider_rewardable_nodes,
         };
-        
 
         rewards_calculation::rewards_calculator::calculate_rewards(input)
             .map_err(|e| format!("Could not calculate rewards: {e:?}"))
@@ -265,9 +264,10 @@ impl NodeRewardsCanister {
         let mut result = canister.with_borrow(|canister| {
             canister.calculate_rewards::<S>(request_inner, Some(provider_id))
         })?;
-        let node_provider_rewards = result.provider_results.remove(&provider_id).ok_or(format!(
-            "No rewards found for node provider {provider_id}"
-        ))?;
+        let node_provider_rewards = result
+            .provider_results
+            .remove(&provider_id)
+            .ok_or(format!("No rewards found for node provider {provider_id}"))?;
 
         Ok(to_candid_type(node_provider_rewards))
     }

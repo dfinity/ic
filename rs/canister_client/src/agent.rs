@@ -198,9 +198,7 @@ impl Agent {
             None
         } else {
             Some(pb::CatchUpPackage::decode(&bytes[..]).map_err(|e| {
-                format!(
-                    "Failed to deserialize CUP from protobuf, got: {bytes:?} - error {e:?}"
-                )
+                format!("Failed to deserialize CUP from protobuf, got: {bytes:?} - error {e:?}")
             })?)
         };
 

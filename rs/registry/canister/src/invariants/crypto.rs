@@ -269,9 +269,7 @@ fn check_chain_key_configs(snapshot: &RegistrySnapshot) -> Result<(), InvariantC
         let subnet_record: SubnetRecord = subnet_records_map
             .remove(&make_subnet_record_key(subnet_id).into_bytes())
             .unwrap_or_else(|| {
-                panic!(
-                    "Subnet {subnet_id:} is in subnet list but no record exists"
-                )
+                panic!("Subnet {subnet_id:} is in subnet list but no record exists")
             });
 
         let Some(chain_key_config_pb) = subnet_record.chain_key_config else {
@@ -416,9 +414,7 @@ fn check_no_orphaned_node_crypto_records(
 fn check_high_threshold_public_key_matches_the_one_in_cup(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
-    println!(
-        "{LOG_PREFIX}high_threshold_public_key_matches_the_one_in_cup_check_start"
-    );
+    println!("{LOG_PREFIX}high_threshold_public_key_matches_the_one_in_cup_check_start");
 
     let mut bad_subnets: Vec<SubnetId> = vec![];
     let mut ok_subnet_count = 0;

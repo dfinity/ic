@@ -14,8 +14,8 @@ pub mod v1 {
         pub fn read_from_file<P: AsRef<Path> + std::fmt::Debug>(
             filepath: P,
         ) -> Result<Self, String> {
-            let cup_file = File::open(&filepath)
-                .map_err(|e| format!("open failed: {filepath:?}: {e:?}"))?;
+            let cup_file =
+                File::open(&filepath).map_err(|e| format!("open failed: {filepath:?}: {e:?}"))?;
             Self::read_from_reader(cup_file)
         }
 

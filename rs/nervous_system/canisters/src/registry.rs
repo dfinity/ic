@@ -111,8 +111,8 @@ impl GetChunk for RegistryCanister {
         let request = GetChunkRequest {
             content_sha256: Some(chunk_content_sha256.to_vec()),
         };
-        let request = Encode!(&request)
-            .map_err(|err| format!("Unable to encode GetChunkRequest: {err}",))?;
+        let request =
+            Encode!(&request).map_err(|err| format!("Unable to encode GetChunkRequest: {err}",))?;
 
         // Call get_chunk.
         let callee = self.canister_id;

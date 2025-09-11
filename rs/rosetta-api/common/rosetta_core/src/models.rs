@@ -156,9 +156,7 @@ impl RosettaSupportedKeyPair for Secp256k1KeyPair {
                     .serialize_der();
                 Ok(PrincipalId::new_self_authenticating(&public_key_der))
             }
-            Err(e) => Err(e.context(format!(
-                "Could not decode hex public key {pk_hex_encoded}"
-            ))),
+            Err(e) => Err(e.context(format!("Could not decode hex public key {pk_hex_encoded}"))),
         }
     }
     fn der_encode_pk(pk_sec1: Vec<u8>) -> anyhow::Result<Vec<u8>> {

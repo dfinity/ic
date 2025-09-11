@@ -1040,9 +1040,7 @@ fn validate_recent_ballots(recent_ballots: &[BallotInfo]) -> Result<(), NeuronSt
     }
 
     Err(NeuronStoreError::InvalidData {
-        reason: format!(
-            "Some elements in Neuron.recent_ballots are invalid: {defects:?}"
-        ),
+        reason: format!("Some elements in Neuron.recent_ballots are invalid: {defects:?}"),
     })
 }
 

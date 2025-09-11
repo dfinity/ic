@@ -227,9 +227,7 @@ impl Registry {
         let initial_chain_key_config =
             InitialChainKeyConfigInternal::try_from(initial_chain_key_config.clone())
                 .unwrap_or_else(|err| {
-                    panic!(
-                        "{LOG_PREFIX}Invalid RecoverSubnetPayload.chain_key_config: {err}"
-                    );
+                    panic!("{LOG_PREFIX}Invalid RecoverSubnetPayload.chain_key_config: {err}");
                 });
 
         let own_subnet_id = Some(payload.subnet_id);
@@ -467,9 +465,7 @@ fn get_record_version_as_of_registry_version(
         .get(record_key.as_bytes(), version)
         .map(|record| record.version)
         .unwrap_or_else(|| {
-            panic!(
-                "{LOG_PREFIX}Record for {record_key} not found in registry"
-            );
+            panic!("{LOG_PREFIX}Record for {record_key} not found in registry");
         })
 }
 

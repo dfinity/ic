@@ -143,16 +143,13 @@ impl ParsedCanisterConfig {
         // Apply environment preset defaults when no explicit value provided
         let ledger_canister_id = match config.ledger_canister_id {
             Some(explicit_value) => CanisterId::unchecked_from_principal(
-                PrincipalId::from_str(&explicit_value).map_err(|e| {
-                    format!("Invalid ledger canister ID '{explicit_value}': {e}")
-                })?,
+                PrincipalId::from_str(&explicit_value)
+                    .map_err(|e| format!("Invalid ledger canister ID '{explicit_value}': {e}"))?,
             ),
             None => match environment {
                 Environment::Test => CanisterId::unchecked_from_principal(
                     PrincipalId::from_str(TEST_LEDGER_CANISTER_ID).map_err(|e| {
-                        format!(
-                            "Invalid test ledger canister ID '{TEST_LEDGER_CANISTER_ID}': {e}"
-                        )
+                        format!("Invalid test ledger canister ID '{TEST_LEDGER_CANISTER_ID}': {e}")
                     })?,
                 ),
                 Environment::Production | Environment::DeprecatedTestnet => LEDGER_CANISTER_ID,

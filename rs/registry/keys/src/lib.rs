@@ -197,12 +197,10 @@ pub fn make_firewall_rules_record_key(scope: &FirewallRulesScope) -> String {
 /// Returns the principal_id associated with a given firewall_record key if
 /// the key is, in fact, a valid firewall_record_key of node or subnet scope.
 pub fn get_firewall_rules_record_principal_id(key: &str) -> Option<PrincipalId> {
-    let firewall_node_record_prefix = format!(
-        "{FIREWALL_RULES_RECORD_KEY_PREFIX}{FIREWALL_RULES_SCOPE_NODE_PREFIX}_"
-    );
-    let firewall_subnet_record_prefix = format!(
-        "{FIREWALL_RULES_RECORD_KEY_PREFIX}{FIREWALL_RULES_SCOPE_SUBNET_PREFIX}_"
-    );
+    let firewall_node_record_prefix =
+        format!("{FIREWALL_RULES_RECORD_KEY_PREFIX}{FIREWALL_RULES_SCOPE_NODE_PREFIX}_");
+    let firewall_subnet_record_prefix =
+        format!("{FIREWALL_RULES_RECORD_KEY_PREFIX}{FIREWALL_RULES_SCOPE_SUBNET_PREFIX}_");
     if let Some(key) = key.strip_prefix(&firewall_node_record_prefix) {
         PrincipalId::from_str(key).ok()
     } else if let Some(key) = key.strip_prefix(&firewall_subnet_record_prefix) {
@@ -218,9 +216,7 @@ pub fn make_provisional_whitelist_record_key() -> String {
 
 // Makes a key for a NodeOperatorRecord.
 pub fn make_node_operator_record_key(node_operator_principal_id: PrincipalId) -> String {
-    format!(
-        "{NODE_OPERATOR_RECORD_KEY_PREFIX}{node_operator_principal_id}"
-    )
+    format!("{NODE_OPERATOR_RECORD_KEY_PREFIX}{node_operator_principal_id}")
 }
 
 /// Checks whether a given key is a Node Operator record key
@@ -452,8 +448,7 @@ mod tests {
     #[test]
     fn ecdsa_enabled_subnet_list_bad_key_id_error_message() {
         let bad_key = "key_without_curve";
-        let signing_subnet_list_key =
-            format!("{ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX}{bad_key}");
+        let signing_subnet_list_key = format!("{ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX}{bad_key}");
         assert_eq!(
             get_ecdsa_key_id_from_signing_subnet_list_key(&signing_subnet_list_key).unwrap_err(),
             RegistryClientError::DecodeError {
@@ -465,8 +460,7 @@ mod tests {
     #[test]
     fn ecdsa_enabled_subnet_list_bad_curve_error_message() {
         let bad_key = "UnknownCurve:key_name";
-        let signing_subnet_list_key =
-            format!("{ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX}{bad_key}");
+        let signing_subnet_list_key = format!("{ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX}{bad_key}");
         assert_eq!(
             get_ecdsa_key_id_from_signing_subnet_list_key(&signing_subnet_list_key).unwrap_err(),
             RegistryClientError::DecodeError {

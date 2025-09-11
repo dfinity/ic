@@ -582,15 +582,11 @@ pub async fn execute_fulfill_subnet_rental_request(
         other => panic!("Unexpected response: {other:?}"),
     };
     let proposal_id = ProposalId::from(response.proposal_id.unwrap());
-    println!(
-        "Submitted FulfillSubnetRentalRequest proposal {proposal_id}."
-    );
+    println!("Submitted FulfillSubnetRentalRequest proposal {proposal_id}.");
 
     // Vote the proposal in...
     vote_on_proposal(&governance, proposal_id).await;
-    println!(
-        "Voted on FulfillSubnetRentalRequest proposal {proposal_id}."
-    );
+    println!("Voted on FulfillSubnetRentalRequest proposal {proposal_id}.");
 
     let proposal_info = wait_for_final_state(&governance, proposal_id).await;
     println!(

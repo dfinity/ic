@@ -514,9 +514,7 @@ fn validate_headers(raw_headers: Vec<HttpHeader>) -> Result<HeaderMap, Status> {
     {
         return Err(Status::new(
             tonic::Code::InvalidArgument,
-            format!(
-                "Header name or value exceeds size limit of {HEADER_NAME_VALUE_LIMIT}"
-            ),
+            format!("Header name or value exceeds size limit of {HEADER_NAME_VALUE_LIMIT}"),
         ));
     }
 

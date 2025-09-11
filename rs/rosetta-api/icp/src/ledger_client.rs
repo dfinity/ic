@@ -132,9 +132,7 @@ impl TryFrom<ObjectMap> for OperationOutput {
     type Error = ApiError;
     fn try_from(o: ObjectMap) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o)).map_err(|e| {
-            ApiError::internal_error(format!(
-                "Could not parse OperationOutput from Object: {e}"
-            ))
+            ApiError::internal_error(format!("Could not parse OperationOutput from Object: {e}"))
         })
     }
 }
@@ -390,9 +388,7 @@ impl LedgerAccess for LedgerClient {
         Decode!(bytes.as_slice(), Vec<ProposalInfo>).map_err(|err| {
             ApiError::InvalidRequest(
                 false,
-                Details::from(format!(
-                    "Could not decode PendingProposals response: {err}"
-                )),
+                Details::from(format!("Could not decode PendingProposals response: {err}")),
             )
         })
     }
@@ -415,9 +411,7 @@ impl LedgerAccess for LedgerClient {
             .map_err(|err| {
                 ApiError::InvalidRequest(
                     false,
-                    Details::from(format!(
-                        "Could not decode NetworkEconomics response: {err}"
-                    )),
+                    Details::from(format!("Could not decode NetworkEconomics response: {err}")),
                 )
             })
             .map(
@@ -536,9 +530,8 @@ impl LedgerAccess for LedgerClient {
                     transfer_fee: DEFAULT_TRANSFER_FEE,
                 })
             }
-            Ok(bytes) => Decode!(&bytes, TransferFee).map_err(|e| {
-                ApiError::internal_error(format!("Error querying transfer_fee: {e}"))
-            }),
+            Ok(bytes) => Decode!(&bytes, TransferFee)
+                .map_err(|e| ApiError::internal_error(format!("Error querying transfer_fee: {e}"))),
         }
     }
 

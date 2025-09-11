@@ -105,7 +105,7 @@ fn bench_create_dealing<M: Measurement, R: RngCore + CryptoRng>(
                         context.setup_params(&env, test_case.alg(), rng);
                     (context, params)
                 });
-                
+
                 env.nodes.random_dealer(params, rng)
             },
             |dealer| {
@@ -412,9 +412,7 @@ fn bench_retain_active_transcripts<M: Measurement, R: RngCore + CryptoRng>(
 
     let num_transcripts_to_delete = num_pre_sig_quadruples * 4;
     group.bench_function(
-        format!(
-            "retain_active_transcripts(keep=1,delete={num_transcripts_to_delete})"
-        ),
+        format!("retain_active_transcripts(keep=1,delete={num_transcripts_to_delete})"),
         |bench| {
             bench.iter_batched(
                 || {

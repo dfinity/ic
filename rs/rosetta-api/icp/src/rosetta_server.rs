@@ -295,10 +295,8 @@ impl RosettaApiServer {
                     web::JsonConfig::default()
                         .limit(4 * 1024 * 1024)
                         .error_handler(move |e, _| {
-                            errors::convert_to_error(&ApiError::invalid_request(format!(
-                                "{e:#?}"
-                            )))
-                            .into()
+                            errors::convert_to_error(&ApiError::invalid_request(format!("{e:#?}")))
+                                .into()
                         }),
                 ))
                 .app_data(web::Data::new(req_handler.clone()))

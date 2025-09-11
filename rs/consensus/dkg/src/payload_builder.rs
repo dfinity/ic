@@ -501,9 +501,7 @@ pub fn get_dkg_summary_from_cup_contents(
         let key_id = NiDkgMasterPublicKeyId::try_from(key_id)
             .map_err(|err| format!("IDkg key combined with NiDkg initialization: {err}"))?;
         let transcript = initial_ni_dkg_transcript_from_registry_record(record).map_err(|err| {
-            format!(
-                "Decoding high-threshold DKG for key-id {key_id} failed: {err}"
-            )
+            format!("Decoding high-threshold DKG for key-id {key_id} failed: {err}")
         })?;
         transcripts.insert(NiDkgTag::HighThresholdForKey(key_id), transcript);
     }

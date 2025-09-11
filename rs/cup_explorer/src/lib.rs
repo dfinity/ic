@@ -109,9 +109,7 @@ pub async fn explore(registry_url: Url, subnet_id: SubnetId, path: Option<PathBu
                 let hash = hex::encode(&content.state_hash[..]);
                 let time = block.time;
 
-                println!(
-                    " ✔ [{node_id}]: time = {time}, height = {height}, state_hash: {hash}"
-                );
+                println!(" ✔ [{node_id}]: time = {time}, height = {height}, state_hash: {hash}");
                 if height > latest_height {
                     latest_height = height;
                     latest = Some((node_id, cup));
@@ -160,9 +158,7 @@ pub fn verify(
 ) -> SubnetStatus {
     let client = Arc::new(RegistryCanisterClient::new(nns_url, nns_pem));
     let latest_version = client.get_latest_version();
-    println!(
-        "Registry client created. Latest registry version: {latest_version}",
-    );
+    println!("Registry client created. Latest registry version: {latest_version}",);
 
     println!("\nCreating crypto component...");
     let (crypto_config, _tmp) = CryptoConfig::new_in_temp_dir();
@@ -202,11 +198,7 @@ pub fn verify(
             subnet_id,
             block.context.registry_version,
         )
-        .map_err(|e| {
-            format!(
-                "Failed to verify CUP signature at: {cup_path:?} with: {e:?}"
-            )
-        })
+        .map_err(|e| format!("Failed to verify CUP signature at: {cup_path:?} with: {e:?}"))
         .unwrap();
     println!("CUP signature verification successful!");
 
@@ -283,9 +275,7 @@ pub fn verify(
                 }
             }
             Err(err) => {
-                println!(
-                    "Failed to fetch CUP contents at version {version}: {err}"
-                )
+                println!("Failed to fetch CUP contents at version {version}: {err}")
             }
         }
     }

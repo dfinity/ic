@@ -547,9 +547,7 @@ pub fn get_block_at_idx(
     connection: &Connection,
     block_idx: u64,
 ) -> anyhow::Result<Option<RosettaBlock>> {
-    let command = format!(
-        "SELECT idx,serialized_block FROM blocks WHERE idx = {block_idx}"
-    );
+    let command = format!("SELECT idx,serialized_block FROM blocks WHERE idx = {block_idx}");
     let mut stmt = connection.prepare_cached(&command)?;
     read_single_block(&mut stmt, params![])
 }
@@ -699,9 +697,7 @@ pub fn get_account_balance_at_block_idx(
         .next()
         .transpose()
         .with_context(|| {
-            format!(
-                "Unable to fetch balance of account {account} at index {block_idx}"
-            )
+            format!("Unable to fetch balance of account {account} at index {block_idx}")
         })?
         .map(|x: String| Nat::from_str(&x))
         .transpose()?)

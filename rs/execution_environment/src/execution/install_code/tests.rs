@@ -473,9 +473,7 @@ fn install_code_with_start_with_err() {
     let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
     err.assert_contains(
         ErrorCode::CanisterTrapped,
-        &format!(
-            "Error from Canister {canister_id}: Canister trapped: unreachable"
-        ),
+        &format!("Error from Canister {canister_id}: Canister trapped: unreachable"),
     );
 }
 
@@ -581,9 +579,7 @@ fn install_code_with_init_method_with_error() {
     let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
     err.assert_contains(
         ErrorCode::CanisterTrapped,
-        &format!(
-            "Error from Canister {canister_id}: Canister trapped: unreachable"
-        ),
+        &format!("Error from Canister {canister_id}: Canister trapped: unreachable"),
     );
 }
 

@@ -939,9 +939,7 @@ fn test_vote_on_non_existent_proposal() {
                 panic!("Registering vote on non-existent proposal should fail")
             }
             Command::Error(err) => err,
-            response => panic!(
-                "Unexpected response when registering a vote: {response:?}"
-            ),
+            response => panic!("Unexpected response when registering a vote: {response:?}"),
         };
 
         assert_eq!(expected_error.error_type, ErrorType::NotFound as i32);

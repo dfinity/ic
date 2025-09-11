@@ -96,9 +96,8 @@ fn create_and_verify_dealing(
     epoch: Epoch,
     resharing_secret: Option<SecretKeyBytes>,
 ) -> Dealing {
-    let keygen_seed = Seed::from_bytes(
-        format!("ic-crypto-create-dealing-keygen-seed-{dealer_index}").as_bytes(),
-    );
+    let keygen_seed =
+        Seed::from_bytes(format!("ic-crypto-create-dealing-keygen-seed-{dealer_index}").as_bytes());
     let encryption_seed = Seed::from_bytes(
         format!("ic-crypto-create-dealing-encryption-seed-{dealer_index}").as_bytes(),
     );

@@ -2199,9 +2199,7 @@ impl ProposeToAddOrRemoveDataCentersCmd {
             .iter()
             .map(|str| {
                 let dc: DataCenterRecord = serde_json::from_str(str).unwrap_or_else(|e| {
-                    panic!(
-                        "Unable to parse JSON DataCenterRecord: {str}\nError: {e}"
-                    );
+                    panic!("Unable to parse JSON DataCenterRecord: {str}\nError: {e}");
                 });
 
                 dc
@@ -3682,9 +3680,7 @@ async fn find_reachable_nns_urls(nns_urls: Vec<Url>) -> Vec<Url> {
                                         }
                                     },
                                     Err(err) => {
-                                        eprintln!(
-                                            "WARNING: Failed to connect to {ip}: {err:?}"
-                                        );
+                                        eprintln!("WARNING: Failed to connect to {ip}: {err:?}");
                                     }
                                 }
                             }
@@ -5118,9 +5114,7 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
                         .expect("Error decoding value from registry."),
                 )
                 .unwrap();
-                println!(
-                    "Canister migrations. Most recent version is {version:?}.\n"
-                );
+                println!("Canister migrations. Most recent version is {version:?}.\n");
                 for (range, trace) in value.iter() {
                     println!(
                         "Trace: {}",
@@ -5758,9 +5752,8 @@ fn get_api_boundary_node_ids(nns_url: Vec<Url>) -> Vec<String> {
             registry_client.get_latest_version(),
         )
         .unwrap();
-    
-    keys
-        .iter()
+
+    keys.iter()
         .map(|k| {
             k.strip_prefix(API_BOUNDARY_NODE_RECORD_KEY_PREFIX)
                 .unwrap()
@@ -6033,9 +6026,9 @@ async fn submit_root_proposal_to_upgrade_governance_canister(
         .await;
     match result {
         Ok(()) => println!("Root proposal to upgrade the governance canister submitted."),
-        Err(error) => println!(
-            "Error submitting root proposal to upgrade governance canister: {error}"
-        ),
+        Err(error) => {
+            println!("Error submitting root proposal to upgrade governance canister: {error}")
+        }
     }
 }
 
@@ -6311,11 +6304,7 @@ impl GovernanceCanisterClient {
             ))),
             id: Some((*self.0.proposal_author()).into()),
         })
-        .map_err(|e| {
-            format!(
-                "Cannot candid-serialize the submit_proposal_action payload: {e}"
-            )
-        })?;
+        .map_err(|e| format!("Cannot candid-serialize the submit_proposal_action payload: {e}"))?;
         let response = self
             .0
             .execute_update("manage_neuron", serialized)
@@ -6331,9 +6320,7 @@ impl GovernanceCanisterClient {
         title: &str,
     ) -> Result<ProposalId, String> {
         let serialized = Encode!(submit_proposal_command).map_err(|e| {
-            format!(
-                "Cannot candid-serialize the payload of proposal:'{title}'. Payload: {e}"
-            )
+            format!("Cannot candid-serialize the payload of proposal:'{title}'. Payload: {e}")
         })?;
         let response = self
             .0
@@ -6384,9 +6371,7 @@ impl RootCanisterClient {
             .unwrap();
 
         let status = Decode!(&response, CanisterStatusResult).map_err(|e| {
-            format!(
-                "Cannot candid-deserialize the response from canister_status: {e}"
-            )
+            format!("Cannot candid-deserialize the response from canister_status: {e}")
         })?;
 
         let module_hash = status.module_hash.as_ref().unwrap().clone();

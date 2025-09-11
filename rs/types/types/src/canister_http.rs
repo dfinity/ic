@@ -471,9 +471,7 @@ impl From<CanisterHttpRequestContextError> for UserError {
             ),
             CanisterHttpRequestContextError::UrlTooLong(url_size) => UserError::new(
                 ErrorCode::CanisterRejectedMessage,
-                format!(
-                    "url size {url_size} exceeds {MAX_CANISTER_HTTP_URL_SIZE}"
-                ),
+                format!("url size {url_size} exceeds {MAX_CANISTER_HTTP_URL_SIZE}"),
             ),
             CanisterHttpRequestContextError::TooManyHeaders(num_headers) => UserError::new(
                 ErrorCode::CanisterRejectedMessage,

@@ -212,9 +212,7 @@ impl DkgImpl {
             None => {
                 return get_handle_invalid_change_action(
                     message,
-                    format!(
-                        "No DKG configuration for Id={message_dkg_id:?} was found."
-                    ),
+                    format!("No DKG configuration for Id={message_dkg_id:?} was found."),
                 )
                 .into();
             }

@@ -130,10 +130,7 @@ impl std::fmt::Display for Error {
                 )
             }
             Error::ConversionError(s) => {
-                write!(
-                    f,
-                    "Unable to convert wasmparser type to wasm-encoder: {s}"
-                )
+                write!(f, "Unable to convert wasmparser type to wasm-encoder: {s}")
             }
             Error::IncorrectCodeCounts {
                 function_section_count,

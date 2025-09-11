@@ -319,9 +319,7 @@ fn parse_image_path(
     };
     let image = image.as_path();
     let image_content = std::fs::read(image).map_err(|err| {
-        format!(
-            "An error occurred while reading the image file ({image_path:?}): {err}",
-        )
+        format!("An error occurred while reading the image file ({image_path:?}): {err}",)
     })?;
     let image_content = base64::encode(image_content);
     let base64_encoding = Some(format!("data:image/png;base64,{image_content}"));

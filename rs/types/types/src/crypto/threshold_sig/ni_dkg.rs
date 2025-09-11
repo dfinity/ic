@@ -86,9 +86,7 @@ impl TryFrom<pb::MasterPublicKeyId> for NiDkgMasterPublicKeyId {
             KeyId::Ecdsa(_) | KeyId::Schnorr(_) => {
                 return Err(ProxyDecodeError::ValueOutOfRange {
                     typ: "NiDkgMasterPublicKeyId",
-                    err: format!(
-                        "Unable to convert {key_id_pb:?} to a NiDkgMasterPublicKeyId"
-                    ),
+                    err: format!("Unable to convert {key_id_pb:?} to a NiDkgMasterPublicKeyId"),
                 });
             }
         })

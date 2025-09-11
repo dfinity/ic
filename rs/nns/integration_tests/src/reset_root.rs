@@ -59,9 +59,9 @@ fn test_reset_root_with_governance_proposal() {
 
     let proposal_id = match response.command.unwrap() {
         Command::MakeProposal(response) => response.proposal_id.unwrap(),
-        other_response => panic!(
-            "Response not expected MakeProposal, instead: {other_response:?} "
-        ),
+        other_response => {
+            panic!("Response not expected MakeProposal, instead: {other_response:?} ")
+        }
     };
 
     nns_wait_for_proposal_execution(&state_machine, proposal_id.id);

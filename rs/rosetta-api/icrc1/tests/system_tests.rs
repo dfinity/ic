@@ -160,9 +160,7 @@ impl SetupBuilder {
         let canister_id = create_and_install_icrc_ledger(&pocket_ic, init_args.clone(), None);
 
         let subnet_id = pocket_ic.get_subnet(canister_id).unwrap();
-        println!(
-            "Installed the ICRC1 ledger canister ({canister_id}) onto {subnet_id:?}"
-        );
+        println!("Installed the ICRC1 ledger canister ({canister_id}) onto {subnet_id:?}");
         let sns_subnet_id = pocket_ic.topology().get_sns().unwrap();
         assert_eq!(
             subnet_id, sns_subnet_id,
@@ -340,9 +338,7 @@ async fn assert_rosetta_balance(
     rosetta_client: &RosettaClient,
     network_identifier: NetworkIdentifier,
 ) {
-    println!(
-        "Checking balance for account: {account:?} at block index {block_index}"
-    );
+    println!("Checking balance for account: {account:?} at block index {block_index}");
     let start = Instant::now();
     let timeout = Duration::from_secs(30);
     loop {
@@ -358,9 +354,7 @@ async fn assert_rosetta_balance(
             );
         }
         if start.elapsed() > timeout {
-            panic!(
-                "Failed to get block index {block_index} within {timeout:?}"
-            );
+            panic!("Failed to get block index {block_index} within {timeout:?}");
         }
     }
     let rosetta_balance = rosetta_client
