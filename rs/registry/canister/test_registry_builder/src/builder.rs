@@ -236,7 +236,9 @@ impl CompliantRegistryMutationsBuilder {
             mutations.extend(threshold_pk_and_cup);
         }
 
-        // TODO: don't rely on invariant_compliant_mutation
+        // TODO: don't rely on invariant_compliant_mutation as it adds unexpected
+        // data. This should eventually be gone and this utility should know how
+        // to create fully compliant mutation on its own.
         let invariant_compliant_mutation = invariant_compliant_mutation(0);
         let initial_subnets = invariant_compliant_mutation
             .iter()
