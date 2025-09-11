@@ -1,6 +1,48 @@
 use ic_interfaces::p2p::state_sync::{ChunkId, StateSyncArtifactId};
+use ic_protobuf::{p2p::v1 as pb, proxy::ProxyDecodeError};
 use ic_types::NodeId;
 use sha2::{Digest, Sha256};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Advert {
+    id: StateSyncArtifactId,
+    partial_state: Option<XorDistance>,
+}
+
+impl From<Advert> for pb::Advert {
+    fn from(advert: Advert) -> Self {
+        pb::Advert {
+            id: Some(advert.id.into()),
+            partial_state: advert
+                .partial_state
+                .map(|partial_state| partial_state.0.into()),
+        }
+    }
+}
+
+impl TryFrom<pb::Advert> for Advert {
+    type Error = ProxyDecodeError;
+
+    fn try_from(advert: pb::Advert) -> Result<Self, Self::Error> {
+        Ok(Advert {
+            id: advert
+                .id
+                .map(|id| StateSyncArtifactId::from(id))
+                .ok_or(ProxyDecodeError::MissingField("id"))?,
+            partial_state: match advert.partial_state {
+                Some(partial_state) => Some(
+                    <[u8; 32]>::try_from(partial_state)
+                        .map(XorDistance)
+                        .map_err(|partial_state| ProxyDecodeError::InvalidDigestLength {
+                            expected: 32,
+                            actual: partial_state.len(),
+                        })?,
+                ),
+                None => None,
+            },
+        })
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct XorDistance([u8; 32]);
@@ -27,3 +69,7 @@ impl XorDistance {
         Self(lhs_hash)
     }
 }
+
+// TODO: Test XorMetric ordering
+// TODO: Test Advert round trip
+// TODO: Test malformed advert parsing
