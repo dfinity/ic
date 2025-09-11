@@ -2,11 +2,16 @@
 
 set -e
 
-readonly EXPECTED_RECOVERY_HASH_FILE="/opt/ic/share/expected_recovery_hash"
 readonly MAX_ATTEMPTS=10
 readonly RETRY_DELAY=5
 
 # Completes the recovery process by downloading and applying the recovery artifacts
+
+# Helper function to extract a value from /proc/cmdline
+get_cmdline_var() {
+    local var="$1"
+    grep -oP "${var}=[^ ]*" /proc/cmdline | head -n1 | cut -d= -f2-
+}
 
 echo "Starting GuestOS recovery engine with retry logic (max attempts: $MAX_ATTEMPTS, delay: ${RETRY_DELAY}s)..."
 
@@ -36,7 +41,8 @@ perform_recovery() {
 
     download_recovery_artifact() {
         local base_url="$1"
-        local recovery_url="${base_url}/recovery/${EXPECTED_RECOVERY_HASH}/recovery.tar.zst"
+        local expected_recovery_hash="$2"
+        local recovery_url="${base_url}/recovery/${expected_recovery_hash}/recovery.tar.zst"
 
         echo "Attempting to download recovery artifact from $recovery_url"
 
@@ -50,19 +56,14 @@ perform_recovery() {
         fi
     }
 
-    if [ ! -f "$EXPECTED_RECOVERY_HASH_FILE" ]; then
-        echo "ERROR: Expected recovery hash file not found: $EXPECTED_RECOVERY_HASH_FILE"
+    expected_recovery_hash="$(get_cmdline_var recovery-hash)"
+
+    if [ -z "$expected_recovery_hash" ]; then
+        echo "ERROR: recovery-hash boot parameter is required"
         return 1
     fi
 
-    EXPECTED_RECOVERY_HASH="$(cat "$EXPECTED_RECOVERY_HASH_FILE" | tr -d '\n\r')"
-
-    if [ -z "$EXPECTED_RECOVERY_HASH" ]; then
-        echo "ERROR: Expected recovery hash file is empty"
-        return 1
-    fi
-
-    echo "Using expected recovery hash: $EXPECTED_RECOVERY_HASH"
+    echo "Using expected recovery hash: $expected_recovery_hash"
 
     echo "Downloading recovery artifact..."
     base_urls=(
@@ -72,7 +73,7 @@ perform_recovery() {
 
     download_successful=false
     for base_url in "${base_urls[@]}"; do
-        if download_recovery_artifact "$base_url"; then
+        if download_recovery_artifact "$base_url" "$expected_recovery_hash"; then
             download_successful=true
             break
         fi
@@ -84,7 +85,7 @@ perform_recovery() {
     fi
 
     echo "Verifying recovery artifact..."
-    if ! verify_file_hash "recovery.tar.zst" "$EXPECTED_RECOVERY_HASH"; then
+    if ! verify_file_hash "recovery.tar.zst" "$expected_recovery_hash"; then
         echo "ERROR: Recovery artifact hash verification failed"
         return 1
     fi
