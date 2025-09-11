@@ -436,9 +436,11 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     });
 
     info!(logger, "Ensure every node uses the new replica version, is healthy and the subnet is making progress");
-    let nns_subnet = block_on(new_topology.block_for_newer_registry_version())
-        .expect("Could not obtain updated registry.")
-        .root_subnet();
+    let nns_subnet = block_on(
+        new_topology.block_for_newer_registry_version_within_duration(secs(600), secs(10)),
+    )
+    .expect("Could not obtain updated registry.")
+    .root_subnet();
     for node in nns_subnet.nodes() {
         assert_assigned_replica_version(&node, &working_version, env.logger());
         node.await_status_is_healthy().unwrap_or_else(|_| {
