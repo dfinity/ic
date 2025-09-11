@@ -152,7 +152,9 @@ impl<T: 'static + Send> StateSyncManager<T> {
                 // `try_send` is used beacuse the ongoing state sync can be blocked. This can, for example happen because of
                 // file system operations. In that case we don't want to block the main event loop here. It is also fine
                 // to drop adverts since peers will readvertise anyway.
-                let _ = ongoing.sender.try_send(peer_id);
+                let _ = ongoing
+                    .sender
+                    .try_send((peer_id, advert.partial_state.clone()));
             }
             if ongoing.shutdown.completed() {
                 info!(self.log, "Cleaning up state sync {}", advert.id.height);
@@ -194,7 +196,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
             // Add peer that initiated this state sync to ongoing state sync.
             ongoing
                 .sender
-                .send(peer_id)
+                .send((peer_id, advert.partial_state))
                 .await
                 .expect("Receive side is not dropped");
             self.ongoing_state_sync = Some(ongoing);
