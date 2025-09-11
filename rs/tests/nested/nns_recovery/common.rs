@@ -362,6 +362,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         backup_key_file: Some(ssh_priv_key_path),
         output_dir: Some(output_dir.clone()),
         next_step: None,
+        skip: None,
     };
 
     let subnet_recovery_tool =
@@ -666,6 +667,7 @@ fn local_recovery(
         --wait-for-cup-node {node_ip} \
         {maybe_backup_key_file} \
         --output-dir {OUTPUT_DIR_REMOTE_PATH} \
+        --skip Cleanup \
         "#
     );
 
