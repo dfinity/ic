@@ -95,7 +95,7 @@ trait PerformanceBasedAlgorithm {
         Self::validate_reward_period(from_day, to_day)?;
         let mut total_rewards_per_provider = BTreeMap::new();
         let mut daily_results = BTreeMap::new();
-        let reward_period = from_day.days_until(&to_day)?;
+        let reward_period = from_day.days_until(to_day)?;
 
         for day in reward_period {
             let rewards_table = data_provider.get_rewards_table(&day)?;
@@ -113,7 +113,7 @@ trait PerformanceBasedAlgorithm {
 
             for (provider_id, provider_rewards) in &result_for_day.provider_results {
                 total_rewards_per_provider
-                    .entry(provider_id.clone())
+                    .entry(*provider_id)
                     .and_modify(|total| *total += provider_rewards.rewards_total)
                     .or_insert(provider_rewards.rewards_total);
             }

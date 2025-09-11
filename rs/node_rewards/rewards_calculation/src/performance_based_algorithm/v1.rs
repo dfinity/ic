@@ -5,7 +5,6 @@ use crate::types::DayUtc;
 use ic_base_types::PrincipalId;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use std::collections::BTreeMap;
 
 pub struct RewardsCalculationV1;
 
@@ -34,11 +33,12 @@ impl RewardsCalculationV1 {
 }
 
 mod tests {
-    use super::*;
+    #![allow(dead_code)]
     use crate::performance_based_algorithm::test_utils::{
         build_daily_metrics, create_rewards_table_for_region_test, generate_rewardable_nodes,
         test_node_id, test_subnet_id, RewardableNode,
     };
+    use crate::performance_based_algorithm::v1::RewardsCalculationV1;
     use crate::performance_based_algorithm::PerformanceBasedAlgorithm;
     use crate::performance_based_algorithm::{Step4Results, Step5Results};
     use ic_protobuf::registry::node::v1::NodeRewardType;
