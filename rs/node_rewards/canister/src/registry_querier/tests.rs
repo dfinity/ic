@@ -17,7 +17,7 @@ use ic_registry_keys::{
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use maplit::btreemap;
-use rewards_calculation::types::{DayUtc, RewardPeriod, RewardableNode};
+use rewards_calculation::types::{DayUtc, RewardableNode};
 use std::cell::RefCell;
 use std::sync::Arc;
 
@@ -167,7 +167,6 @@ fn node_rewardable_days(rewardable_nodes: &[RewardableNode], node_id: u64) -> Ve
         .find(|n| n.node_id == node_id)
         .unwrap_or_else(|| panic!("Node {} should be present", node_id))
         .clone()
-        .rewardable_days
 }
 
 #[test]

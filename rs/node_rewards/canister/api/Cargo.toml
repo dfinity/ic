@@ -11,6 +11,7 @@ path = "src/lib.rs"
 
 [dependencies]
 candid = { workspace = true }
-ic-node-rewards-canister-protobuf = { path = "../protobuf" }
+ic-base-types = { path = "../../../types/base_types" }
+ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
 rewards-calculation = { path = "../../rewards_calculation" }
 serde = { workspace = true }

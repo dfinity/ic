@@ -1,8 +1,8 @@
 use crate::metrics::{MetricsManager, UnixTsNanos};
+use crate::pb::v1::SubnetMetricsKey;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_cdk::api::call::{CallResult, RejectionCode};
 use ic_management_canister_types::{NodeMetrics, NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
-use ic_node_rewards_canister_protobuf::pb::ic_node_rewards::v1::SubnetMetricsKey;
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::DefaultMemoryImpl;
 use rewards_calculation::types::{DayUtc, NodeMetricsDailyRaw};
@@ -318,10 +318,10 @@ async fn _daily_metrics_correct_different_update_size(size: usize) {
     for _ in 0..MAX_TIMES {
         mm.update_subnets_metrics(vec![subnet_id(1)]).await;
     }
-    let daily_metrics: Vec<Vec<NodeMetricsDailyRaw>> = mm
-        .daily_metrics_by_subnet(0.into(), (4 * ONE_DAY_NANOS).into())
-        .into_values()
-        .collect();
+    let daily_metrics: Vec<Vec<NodeMetricsDailyRaw>> =
+        mm.metrics_by_subnet(0.into()).into_values().collect();
+
+    println!("{:?}", daily_metrics);
 
     // (7, 5)
     assert_eq!(daily_metrics[0][0].num_blocks_proposed, 7);
@@ -330,24 +330,39 @@ async fn _daily_metrics_correct_different_update_size(size: usize) {
     assert_eq!(daily_metrics[0][1].num_blocks_proposed, 19);
     assert_eq!(daily_metrics[0][1].num_blocks_failed, 21);
 
+    let daily_metrics: Vec<Vec<NodeMetricsDailyRaw>> = mm
+        .metrics_by_subnet((1 * ONE_DAY_NANOS).into())
+        .into_values()
+        .collect();
+
     // (10 - 7, 6 - 5) = (3, 1)
     // (32 - 19, 22 - 21) = (13, 1)
-    assert_eq!(daily_metrics[1][0].num_blocks_proposed, 3);
-    assert_eq!(daily_metrics[1][0].num_blocks_failed, 1);
+    assert_eq!(daily_metrics[0][0].num_blocks_proposed, 3);
+    assert_eq!(daily_metrics[0][0].num_blocks_failed, 1);
 
-    assert_eq!(daily_metrics[1][1].num_blocks_proposed, 13);
-    assert_eq!(daily_metrics[1][1].num_blocks_failed, 1);
+    assert_eq!(daily_metrics[0][1].num_blocks_proposed, 13);
+    assert_eq!(daily_metrics[0][1].num_blocks_failed, 1);
+
+    let daily_metrics: Vec<Vec<NodeMetricsDailyRaw>> = mm
+        .metrics_by_subnet((2 * ONE_DAY_NANOS).into())
+        .into_values()
+        .collect();
 
     // (15 - 10, 6 - 6) = (5, 0)
-    assert_eq!(daily_metrics[2][0].num_blocks_proposed, 5);
-    assert_eq!(daily_metrics[2][0].num_blocks_failed, 0);
+    assert_eq!(daily_metrics[0][0].num_blocks_proposed, 5);
+    assert_eq!(daily_metrics[0][0].num_blocks_failed, 0);
+
+    let daily_metrics: Vec<Vec<NodeMetricsDailyRaw>> = mm
+        .metrics_by_subnet((3 * ONE_DAY_NANOS).into())
+        .into_values()
+        .collect();
 
     // (25 - 15, 50 - 6) = (10, 44)
-    assert_eq!(daily_metrics[3][0].num_blocks_proposed, 10);
-    assert_eq!(daily_metrics[3][0].num_blocks_failed, 44);
+    assert_eq!(daily_metrics[0][0].num_blocks_proposed, 10);
+    assert_eq!(daily_metrics[0][0].num_blocks_failed, 44);
 
-    assert_eq!(daily_metrics[3][1].num_blocks_proposed, 10);
-    assert_eq!(daily_metrics[3][1].num_blocks_failed, 10);
+    assert_eq!(daily_metrics[0][1].num_blocks_proposed, 10);
+    assert_eq!(daily_metrics[0][1].num_blocks_failed, 10);
 }
 
 #[tokio::test]
@@ -383,18 +398,22 @@ async fn daily_metrics_correct_2_subs() {
         mm.update_subnets_metrics(vec![subnet_1, subnet_2]).await;
     }
 
-    let node_1_daily_metrics = mm
-        .daily_metrics_by_subnet(0.into(), (8 * ONE_DAY_NANOS).into())
-        .into_iter()
-        .collect::<BTreeMap<_, _>>()
-        .into_iter()
-        .filter_map(|(sub, metrics)| {
-            metrics
-                .into_iter()
-                .find(|daily_metrics| daily_metrics.node_id == node_1)
-                .map(move |metrics_node_1| (sub.subnet_id, metrics_node_1))
-        })
-        .collect::<Vec<_>>();
+    let mut node_1_daily_metrics = Vec::new();
+    for day in 0..8 {
+        let daily_metrics = mm
+            .metrics_by_subnet((day * ONE_DAY_NANOS).into())
+            .into_iter()
+            .collect::<BTreeMap<_, _>>()
+            .into_iter()
+            .filter_map(|(sub, metrics)| {
+                metrics
+                    .into_iter()
+                    .find(|daily_metrics| daily_metrics.node_id == node_1)
+                    .map(move |metrics_node_1| (sub, metrics_node_1))
+            })
+            .collect::<Vec<_>>();
+        node_1_daily_metrics.extend(daily_metrics);
+    }
 
     for (day, (subnet, metrics)) in node_1_daily_metrics.into_iter().enumerate() {
         match day {
@@ -476,18 +495,23 @@ async fn daily_metrics_correct_overlapping_days() {
             .await;
     }
 
-    let daily_metrics = mm
-        .daily_metrics_by_subnet(0.into(), (4 * ONE_DAY_NANOS).into())
-        .into_iter()
-        .collect::<BTreeMap<_, _>>()
-        .into_iter()
-        .filter_map(|(sub, metrics)| {
-            metrics
-                .into_iter()
-                .find(|daily_metrics| daily_metrics.node_id == node_1)
-                .map(move |metrics_node_1| (sub.subnet_id, sub.day, metrics_node_1))
-        })
-        .collect::<Vec<_>>();
+    let mut daily_metrics = Vec::new();
+    for idx in 0..4 {
+        let day = (idx * ONE_DAY_NANOS).into();
+        let metrics = mm
+            .metrics_by_subnet(day)
+            .into_iter()
+            .collect::<BTreeMap<_, _>>()
+            .into_iter()
+            .filter_map(|(sub, metrics)| {
+                metrics
+                    .into_iter()
+                    .find(|daily_metrics| daily_metrics.node_id == node_1)
+                    .map(move |metrics_node_1| (sub, day, metrics_node_1))
+            })
+            .collect::<Vec<_>>();
+        daily_metrics.extend(metrics);
+    }
 
     let overlapping_sub_1 = daily_metrics
         .iter()

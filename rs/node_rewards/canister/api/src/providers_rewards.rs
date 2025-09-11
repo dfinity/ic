@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 
 #[derive(CandidType, Clone, Deserialize)]
 pub struct GetNodeProvidersRewardsRequest {
-    pub from_nanos: u64,
-    pub to_nanos: u64,
+    pub from_day_timestamp_nanos: u64,
+    pub to_day_timestamp_nanos: u64,
 }
 pub type GetNodeProvidersRewardsResponse = Result<NodeProvidersRewards, String>;
 

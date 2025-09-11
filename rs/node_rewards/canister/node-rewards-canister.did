@@ -13,8 +13,8 @@ type NodeProvidersMonthlyXdrRewards = record {
 };
 
 type GetNodeProvidersRewardsRequest = record {
-  from_nanos: nat64;
-  to_nanos: nat64;
+  from_day_timestamp_nanos: nat64;
+  to_day_timestamp_nanos: nat64;
 };
 
 type NodeProvidersRewards = record {
@@ -58,21 +58,16 @@ type DayUtc = record {
   value: opt nat64;
 };
 
-type DailyResults = record {
-  day: opt DayUtc;
-  node_status: opt NodeStatus;
-  performance_multiplier_percent: opt Decimal;
-  rewards_reduction_percent: opt Decimal;
-  base_rewards_xdr_permyriad: opt Decimal;
-  adjusted_rewards_xdr_permyriad: opt Decimal;
-};
-
 type NodeResults = record {
   node_id: opt principal;
   node_reward_type: opt text;
   region: opt text;
   dc_id: opt text;
-  daily_results: vec DailyResults;
+  node_status: opt NodeStatus;
+  performance_multiplier_percent: opt Decimal;
+  rewards_reduction_percent: opt Decimal;
+  base_rewards_xdr_permyriad: opt Decimal;
+  adjusted_rewards_xdr_permyriad: opt Decimal;
 };
 
 type BaseRewards = record {
@@ -82,8 +77,7 @@ type BaseRewards = record {
   region: opt text;
 };
 
-type DailyBaseRewardsType3 = record {
-  day: opt DayUtc;
+type BaseRewardsType3 = record {
   region: opt text;
   nodes_count: opt nat64;
   avg_rewards_xdr_permyriad: opt Decimal;
@@ -92,6 +86,7 @@ type DailyBaseRewardsType3 = record {
 };
 
 type NodeProviderRewards = record {
+  day_utc: opt DayUtc;
   rewards_total_xdr_permyriad: opt nat64;
   base_rewards: vec BaseRewards;
   base_rewards_type3: vec DailyBaseRewardsType3;
@@ -99,8 +94,7 @@ type NodeProviderRewards = record {
 };
 
 type GetNodeProviderRewardsCalculationRequest = record {
-  from_nanos: nat64;
-  to_nanos: nat64;
+  day_timestamp_nanos: nat64;
   provider_id: principal;
 };
 

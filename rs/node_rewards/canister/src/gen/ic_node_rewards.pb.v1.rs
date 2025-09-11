@@ -27,3 +27,30 @@ pub struct NodeMetrics {
     #[prost(uint64, tag = "3")]
     pub num_blocks_failed_total: u64,
 }
+#[derive(PartialOrd, Ord, Eq, Clone, PartialEq, ::prost::Message)]
+pub struct RewardableNodesKey {
+    #[prost(uint64, tag = "1")]
+    pub registry_version: u64,
+    #[prost(message, optional, tag = "2")]
+    pub provider_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RewardableNodesValue {
+    #[prost(message, repeated, tag = "1")]
+    pub rewardable_nodes: ::prost::alloc::vec::Vec<RewardableNode>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RewardableNode {
+    #[prost(message, optional, tag = "1")]
+    pub node_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(string, optional, tag = "2")]
+    pub region: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "3")]
+    pub dc_id: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(
+        enumeration = "::ic_protobuf::registry::node::v1::NodeRewardType",
+        optional,
+        tag = "4"
+    )]
+    pub node_reward_type: ::core::option::Option<i32>,
+}
