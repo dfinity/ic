@@ -9,7 +9,7 @@ Runbook::
 . Break the subnet by replacing the replica binary on f+1 nodes.
 . Run ic-recovery to replay consensus artifacts until the highest certification share height, manually inject a message upgrading the replica to a known working version, produce a CUP and registry local store corresponding to the new state and bundle them in a tarball.
 . Upload the tarball to a local web server acting as DFINITY's upstreams, as well as a recovery GuestOS image (containing guestos-recovery-engine).
-. Reboot nodes' HostOSes into recovery mode to trigger guestos-recovery-upgrader and download the recovery GuestOS iamge.
+. Reboot 2f+1 nodes' HostOSes into recovery mode to trigger guestos-recovery-upgrader and download the recovery GuestOS iamge.
 . This recovery GuestOS image will download the recovery artifacts from the local web server and launch the orchestrator, which will detect the upgrade message and upgrade to it.
   . It will also state sync the state indicated by the CUP.
 . Observe that NNS subnet continues functioning.
@@ -18,7 +18,7 @@ Success::
 . NNS subnet is functional after the recovery.
 
 Variant::
-. This test variant performs the recovery remotely, i.e. downloads/uploads state and artifacts from a remote node instead of running the recovery tool directly on the node.
+. This test variant performs the recovery locally, i.e. SSHs into the DFINITY-owned node and runs the recovery tool there.
 
 end::catalog[] */
 
@@ -43,7 +43,7 @@ fn main() -> Result<()> {
         })
         .add_test(systest!(test; TestConfig {
             subnet_size: SUBNET_SIZE,
-            local_recovery: false,
+            local_recovery: true,
         }))
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .with_overall_timeout(Duration::from_secs(35 * 60))

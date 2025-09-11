@@ -314,7 +314,9 @@ pub fn read_and_maybe_update_state<T: Serialize + DeserializeOwned + Clone + Par
             serde_json::to_string_pretty(&state).expect("Failed to stringify the recovery state"),
         );
 
-        if consent_given(logger, "Resume previously started recovery?") {
+        if !recovery_args.skip_prompts
+            && consent_given(logger, "Resume previously started recovery?")
+        {
             let state = maybe_update_state(logger, state, &recovery_args, &subcommand_args);
             // Immediately save the state with potentially new arguments
             if let Err(e) = state.save() {
