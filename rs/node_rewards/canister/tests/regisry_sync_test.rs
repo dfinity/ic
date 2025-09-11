@@ -46,7 +46,7 @@ async fn test_registry_value_syncing() {
     assert_eq!(decoded, Ok(None));
 
     // Advance time and tick so the sync will run
-    for _ in 0..10 {
+    for _ in 0..40 {
         pocket_ic.advance_time(Duration::from_secs(60 * 60)).await;
         pocket_ic.tick().await;
     }
