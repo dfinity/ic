@@ -75,18 +75,18 @@ fn get_node_gen() -> Result<HardwareGen> {
 /// node_hardware_generation{gen="Gen1"} 0
 /// """
 pub fn get_node_gen_metric() -> PrometheusMetric {
-    let r#gen = match get_node_gen() {
-        Ok(r#gen) => r#gen,
+    let node_gen = match get_node_gen() {
+        Ok(node_gen) => node_gen,
         Err(e) => {
             eprintln!("Error getting node gen: {e}");
             HardwareGen::Unknown
         }
     };
 
-    let gen_string = r#gen.to_string();
+    let gen_string = node_gen.to_string();
     println!("Determined node generation: {gen_string}");
 
-    let metric_value = match r#gen {
+    let metric_value = match node_gen {
         HardwareGen::Unknown => 0.0,
         _ => 1.0,
     };
