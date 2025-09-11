@@ -69,7 +69,7 @@ pub const MAX_ENV_VAR_NAME_SIZE: usize = 100;
 
 // This macro is used in system calls for tracing.
 macro_rules! trace_syscall {
-    ($self:ident, $name:ident, $result:expr $( , $args:expr )*) => {{
+    ($self:ident, $name:ident, $result:expr_2021 $( , $args:expr_2021 )*) => {{
         if TRACE_SYSCALLS {
             // Output to both logger and stderr to simplify debugging.
             error!(
@@ -1338,7 +1338,7 @@ impl SystemApiImpl {
             | ApiType::CompositeRejectCallback {
                 response_status, ..
             } => match response_status {
-                ResponseStatus::JustRepliedWith(ref mut result) => Ok(result.take()),
+                ResponseStatus::JustRepliedWith(result) => Ok(result.take()),
                 _ => Ok(None),
             },
         }

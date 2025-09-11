@@ -896,31 +896,33 @@ mod random_ops {
 
     impl RegisteredHandler {
         unsafe fn new(tracker: SigsegvMemoryTracker) -> Self {
-            TRACKER.with(|cell| {
-                let previous = cell.replace(Some(tracker));
-                assert!(previous.is_none());
-            });
+            unsafe {
+                TRACKER.with(|cell| {
+                    let previous = cell.replace(Some(tracker));
+                    assert!(previous.is_none());
+                });
 
-            let mut handler: libc::sigaction = mem::zeroed();
+                let mut handler: libc::sigaction = mem::zeroed();
 
-            // Flags copied from wasmtime:
-            // https://github.com/bytecodealliance/wasmtime/blob/0e9ce4c231b4b88ce79a1639fbbb5e8bd672d3c3/crates/runtime/src/traphandlers/unix.rs#LL35C1-L35C1
-            handler.sa_flags = libc::SA_SIGINFO | libc::SA_NODEFER | libc::SA_ONSTACK;
-            handler.sa_sigaction = sigsegv_handler as usize;
-            libc::sigemptyset(&mut handler.sa_mask);
-            if libc::sigaction(
-                libc::SIGSEGV,
-                &handler,
-                PREV_SIGSEGV.lock().unwrap().deref_mut(),
-            ) != 0
-            {
-                panic!(
-                    "unable to install signal handler: {}",
-                    io::Error::last_os_error(),
-                );
+                // Flags copied from wasmtime:
+                // https://github.com/bytecodealliance/wasmtime/blob/0e9ce4c231b4b88ce79a1639fbbb5e8bd672d3c3/crates/runtime/src/traphandlers/unix.rs#LL35C1-L35C1
+                handler.sa_flags = libc::SA_SIGINFO | libc::SA_NODEFER | libc::SA_ONSTACK;
+                handler.sa_sigaction = sigsegv_handler as usize;
+                libc::sigemptyset(&mut handler.sa_mask);
+                if libc::sigaction(
+                    libc::SIGSEGV,
+                    &handler,
+                    PREV_SIGSEGV.lock().unwrap().deref_mut(),
+                ) != 0
+                {
+                    panic!(
+                        "unable to install signal handler: {}",
+                        io::Error::last_os_error(),
+                    );
+                }
+
+                RegisteredHandler()
             }
-
-            RegisteredHandler()
         }
 
         fn take_tracker(&mut self) -> Option<SigsegvMemoryTracker> {
