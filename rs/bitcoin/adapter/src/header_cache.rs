@@ -17,6 +17,10 @@ use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 use thiserror::Error;
 
+/// The max size (in bytes) of a LMDB cache, also know as the LMDB map
+/// size. It is a constant because it cannot be changed once DB is created.
+const MAX_LMDB_CACHE_SIZE: usize = 0x2_0000_0000; // 8GB
+
 /// Block header with its height in the blockchain and other info.
 #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub struct HeaderData<Header> {
@@ -236,6 +240,8 @@ fn create_db_env(path: &Path) -> Environment {
     builder.set_flags(builder_flags);
     // 3 databases: 1 for headers, 1 for tips, 1 for parent-child relation.
     builder.set_max_dbs(3);
+    builder.set_map_size(MAX_LMDB_CACHE_SIZE);
+
     let db_env = builder
         .open_with_permissions(path, permission)
         .unwrap_or_else(|err| {
