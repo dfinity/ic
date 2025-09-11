@@ -761,7 +761,7 @@ mod test {
     #[test]
     fn test_cast_vote_and_cascade_works() {
         let now = 1000;
-        let topic = Topic::NetworkCanisterManagement;
+        let topic = Topic::ApplicationCanisterManagement;
 
         let make_neuron = |id: u64, followees: Vec<u64>| {
             make_neuron(

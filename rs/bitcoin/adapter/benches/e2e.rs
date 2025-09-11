@@ -128,30 +128,57 @@ fn e2e(criterion: &mut Criterion) {
 /// Gives a baseline on the runtime needed to verify a proof of work which involves hashing some amount of data (the block header).
 /// For simplification, the block header is modeled as a random bytes array.
 ///
-/// * In case of Bitcoin, a block header is always 80 bytes.
-/// * In case of Dogecoin, a block header may have a variable size due to the auxiliary proof of work.
-///   The current mainnet block height of 6M blocks takes around 1.4 GB so that the average block header size is around 250 bytes.
-///   However, and contrary to SHA2-256, the runtime of scrypt (as used in Dogecoin) is little impacted by the input size.
+/// * In case of Bitcoin, a block header is always 80 bytes and hashed twice with SHA2-256.
+/// * In case of Dogecoin, a block header may have a variable size due to the auxiliary proof of work, but scrypt is always used to hash 80 bytes:
+///     1. If there is no auxiliary proof of work the block header is 80 bytes.
+///     2. If there is an auxiliary proof of work, part of the verification involves hashing with scrypt the parent block header, which is also 80 bytes.
+///
+///   Note that contrary to SHA2-256, the runtime of scrypt (as used in Dogecoin) is little impacted by the input size.
 fn hash_block_header(criterion: &mut Criterion) {
     let rng = &mut ic_crypto_test_utils_reproducible_rng::reproducible_rng();
     let params = scrypt::Params::new(10, 1, 1, 32).expect("invalid scrypt params");
     {
         let mut bench = criterion.benchmark_group("hash_block_header_80");
         let header: [u8; 80] = random_header(rng);
-        scrypt_vs_sha256(&mut bench, &params, &header);
+        scrypt_vs_double_sha256(&mut bench, &params, &header);
     }
 
     {
         let mut bench = criterion.benchmark_group("hash_block_header_500");
         let header: [u8; 500] = random_header(rng);
-        scrypt_vs_sha256(&mut bench, &params, &header);
+        scrypt_vs_double_sha256(&mut bench, &params, &header);
     }
 
     {
         let mut bench = criterion.benchmark_group("hash_block_header_1000");
         let header: [u8; 1_000] = random_header(rng);
-        scrypt_vs_sha256(&mut bench, &params, &header);
+        scrypt_vs_double_sha256(&mut bench, &params, &header);
     }
+}
+
+fn scrypt_vs_double_sha256<M: Measurement>(
+    group: &mut BenchmarkGroup<'_, M>,
+    scrypt_params: &scrypt::Params,
+    header: &[u8],
+) {
+    group.bench_function("scrypt", |bench| {
+        bench.iter(|| {
+            let mut hash = [0u8; 32];
+            scrypt::scrypt(header, header, scrypt_params, &mut hash).unwrap();
+        })
+    });
+
+    group.bench_function("double-SHA2-256", |bench| {
+        bench.iter(|| {
+            let _hash = sha2::Sha256::digest(sha2::Sha256::digest(header));
+        })
+    });
+}
+
+fn random_header<const N: usize, R: Rng + CryptoRng>(rng: &mut R) -> [u8; N] {
+    let mut header = [0u8; N];
+    rng.fill_bytes(&mut header);
+    header
 }
 
 fn ingest_block_header(criterion: &mut Criterion) {
@@ -180,31 +207,6 @@ fn create_blockchain_manager<Network: BlockchainNetwork>(
             RouterMetrics::new(&MetricsRegistry::default()),
         ),
     )
-}
-
-fn scrypt_vs_sha256<M: Measurement>(
-    group: &mut BenchmarkGroup<'_, M>,
-    scrypt_params: &scrypt::Params,
-    header: &[u8],
-) {
-    group.bench_function("scrypt", |bench| {
-        bench.iter(|| {
-            let mut hash = [0u8; 32];
-            scrypt::scrypt(header, header, scrypt_params, &mut hash).unwrap();
-        })
-    });
-
-    group.bench_function("SHA2-256", |bench| {
-        bench.iter(|| {
-            let _hash = sha2::Sha256::digest(header);
-        })
-    });
-}
-
-fn random_header<const N: usize, R: Rng + CryptoRng>(rng: &mut R) -> [u8; N] {
-    let mut header = [0u8; N];
-    rng.fill_bytes(&mut header);
-    header
 }
 
 // This simulation constructs a blockchain comprising four forks, each of 2000 blocks.

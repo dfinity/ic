@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
-## 10.0.0 - 2025-09-05
+## 10.0.0 - 2025-09-12
 
 ### Added
 - The function `start_server` and its input type `StartServerParams` to manually start a PocketIC server.
@@ -22,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - The field `node_ids` from `SubnetConfig`. Node ids can always be retrieved from the registry.
+- The deprecated function `PocketIc::make_deterministic`.
+
+### Changed
+- Renamed `PocketIcBuilder::with_nonmainnet_features` to `PocketIcBuilder::with_icp_config` and changed the argument type
+  from a simple Boolean to a record with separate settings for the individual configuration options.
 
 
 

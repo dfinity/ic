@@ -529,6 +529,7 @@ impl CallOrTaskHelper {
             );
         }
 
+        let is_composite_query = matches!(original.method, WasmMethod::CompositeQuery(_));
         let heap_delta = match original.call_or_task {
             // Update methods and tasks can persist changes to the canister's state.
             CanisterCallOrTask::Update(_) | CanisterCallOrTask::Task(_) => {
@@ -545,6 +546,7 @@ impl CallOrTaskHelper {
                     round.counters.state_changes_error,
                     call_tree_metrics,
                     original.time,
+                    is_composite_query,
                     &|system_state| self.deallocation_sender.send(Box::new(system_state)),
                 );
 
@@ -563,6 +565,7 @@ impl CallOrTaskHelper {
                         &mut self.canister.system_state,
                         round.network_topology,
                         round.hypervisor.subnet_id(),
+                        is_composite_query,
                         round.log,
                     )
                 {
