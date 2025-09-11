@@ -55,7 +55,7 @@ pub const NNS_CANISTER_WASMS: [&str; 13] = [
     "registry-canister",
     "governance-canister",
     "governance-canister_test",
-    "ledger-canister_notify-method",
+    "ledger-canister",
     "root-canister",
     "cycles-minting-canister",
     // The lifeline is built differently, which explains why its wasm has a different name pattern.

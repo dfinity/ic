@@ -49,7 +49,6 @@ jobs:
             "ic-ckbtc-minter.wasm"
             "identity-canister.wasm"
             "ledger-canister.wasm"
-            "ledger-canister_notify-method.wasm"
             "lifeline_canister.wasm"
             "nns-ui-canister.wasm"
             "registry-canister.wasm"
@@ -68,6 +67,9 @@ jobs:
           tar -cf canisters.tar *.gz *.did
           mv canisters.tar ..
           popd
+
+          # Temporarily make a copy of the ledger canister, until all consumers have migrated to the new filename.
+          cp ledger-canister.wasm.gz ledger-canister_notify-method.wasm.gz
 
           sha256sum *.tar >> sha256sums.txt
 
