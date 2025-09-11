@@ -286,13 +286,19 @@ pub fn setup_nested_vm_group(env: TestEnv, names: &[&str]) {
             .expect("Unable to write nested VM.");
     }
 
-    let ic_gateway = env
+    let ic_gateway_url = env
         .get_deployed_ic_gateway(IC_GATEWAY_VM_NAME)
-        .expect("No HTTP gateway found");
-    let ic_gateway_url = ic_gateway.get_public_url();
+        .map(|v| v.get_public_url())
+        .unwrap_or_else(|_| {
+            info!(logger, "No gateway found, using dummy URL");
+            url::Url::parse("http://localhost:8080").unwrap()
+        });
 
-    let nns_public_key =
-        std::fs::read_to_string(env.prep_dir("").unwrap().root_public_key_path()).unwrap();
+    let nns_public_key = std::fs::read_to_string(env.prep_dir("").unwrap().root_public_key_path())
+        .unwrap_or_else(|_| {
+            info!(logger, "No NNS public key found, using dummy key");
+            "dummy_public_key_for_recovery_test".to_string()
+        });
 
     setup_nested_vms(
         &nodes,
@@ -331,52 +337,6 @@ pub fn setup_vector_targets_for_vm(env: &TestEnv, vm_name: &str) {
         )
         .unwrap();
     }
-}
-
-/// Simplified nested VM setup that bypasses IC Gateway and NNS requirements.
-pub(crate) fn simple_setup_nested_vm_group(env: TestEnv, names: &[&str]) {
-    let logger = env.logger();
-    info!(
-        logger,
-        "Setting up minimal nested VM(s) without IC infrastructure..."
-    );
-
-    let farm_url = env.get_farm_url().expect("Unable to get Farm url.");
-    let farm = Farm::new(farm_url, logger.clone());
-    let group_setup = GroupSetup::read_attribute(&env);
-    let group_name: String = group_setup.infra_group_name;
-
-    let nodes: Vec<NestedNode> = names
-        .iter()
-        .map(|name| NestedNode::new(name.to_string()))
-        .collect();
-
-    // Allocate VM resources
-    let res_request = get_resource_request_for_nested_nodes(&nodes, &env, &group_name)
-        .expect("Failed to build resource request for nested test.");
-    let res_group = allocate_resources(&farm, &res_request, &env)
-        .expect("Failed to allocate resources for nested test.");
-
-    for (name, vm) in res_group.vms.iter() {
-        env.write_nested_vm(name, vm)
-            .expect("Unable to write nested VM.");
-    }
-
-    // Use dummy values for IC Gateway URL and NNS public key
-    let dummy_ic_gateway_url = url::Url::parse("http://localhost:8080").unwrap();
-    let dummy_nns_public_key = "dummy_public_key_for_recovery_test";
-
-    setup_nested_vms(
-        &nodes,
-        &env,
-        &farm,
-        &group_name,
-        &dummy_ic_gateway_url,
-        dummy_nns_public_key,
-    )
-    .expect("Unable to setup nested VMs with minimal config.");
-
-    info!(logger, "Minimal nested VM(s) setup complete!");
 }
 
 pub fn start_nested_vm_group(env: TestEnv) {

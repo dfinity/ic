@@ -14,7 +14,7 @@ use util::{
     check_hostos_version, elect_guestos_version, elect_hostos_version,
     get_blessed_guestos_versions, get_host_boot_id, get_unassigned_nodes_config,
     setup_ic_infrastructure, setup_nested_vm_group, setup_vector_targets_for_vm,
-    simple_setup_nested_vm_group, start_nested_vm_group, update_nodes_hostos_version,
+    start_nested_vm_group, update_nodes_hostos_version,
     update_unassigned_nodes, wait_for_expected_guest_version, wait_for_guest_version,
     NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT,
 };
@@ -34,8 +34,8 @@ pub fn setup(env: TestEnv) {
 
 /// Minimal setup that only creates a nested VM without any IC infrastructure.
 /// This is much faster than the full config() setup.
-pub fn simple_config(env: TestEnv) {
-    simple_setup_nested_vm_group(env.clone(), &[HOST_VM_NAME]);
+pub fn simple_setup(env: TestEnv) {
+    setup_nested_vm_group(env.clone(), &[HOST_VM_NAME]);
 }
 
 /// Allow the nested GuestOS to install and launch, and check that it can
