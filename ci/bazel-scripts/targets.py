@@ -109,7 +109,9 @@ def load_explicit_targets() -> dict[str, Set[str]]:
     return explicit_targets_dict
 
 
-def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -> str:
+def diff_only_query(
+    command: str, base: str, head: str, skip_long_tests: bool, skip_didc_checks: bool, skip_buf_checks: bool
+) -> str:
     """
     Return a bazel query for all targets that have modified inputs in the specified git commit range. Taking into account:
     * To return all targets in case files matching ALL_TARGETS_BLOBS are modified.
@@ -144,7 +146,12 @@ def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -
         query = f'kind(".*_test", {query})'
 
     # Exclude the long_tests if requested:
-    query = f"({query})" + (" except attr(tags, long_test, //...)" if skip_long_tests else "")
+    query = (
+        f"({query})"
+        + (" except attr(tags, long_test, //...)" if skip_long_tests else "")
+        + (" except attr(tags, didc, //...)" if skip_didc_checks else "")
+        + (" except attr(tags, buf, //...)" if skip_buf_checks else "")
+    )
 
     # Include all long_tests of which a "direct" source file has been modified.
     # We specify a depth of 2 since a system-test depends on the test binary (1st degree) which depends
@@ -166,16 +173,31 @@ def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -
     return query
 
 
-def targets(command: str, skip_long_tests: bool, base: str | None, head: str | None):
+def targets(
+    command: str,
+    skip_long_tests: bool,
+    skip_didc_checks: bool,
+    skip_buf_checks: bool,
+    base: str | None,
+    head: str | None,
+):
     """Print the bazel targets to build or test to stdout."""
     # If no base is specified, form a query to return all targets
-    # but exclude those tagged with 'long_test' (in case --skip_long_tests was specified).
+    # but exclude those tagged with 'long_test' (in case --skip_long_tests was specified)
+    # and exclude those tagged with 'didc' (in case --skip_didc_checks was specified)
+    # and exclude those tagged with 'buf' (in case --skip_buf_checks was specified).
     # Otherwise return a query for all targets that have modified inputs in the specified
     # git commit range taking several factors into account:
     query = (
-        ("//..." + (" except attr(tags, long_test, //...)" if skip_long_tests else ""))
+        (
+            "//..."(" except attr(tags, long_test, //...)" if skip_long_tests else "")(
+                " except attr(tags, didc, //...)" if skip_didc_checks else ""
+            )(" except attr(tags, buf, //...)" if skip_buf_checks else "")
+        )
         if base is None
-        else diff_only_query(command, base, "HEAD" if head is None else head, skip_long_tests)
+        else diff_only_query(
+            command, base, "HEAD" if head is None else head, skip_long_tests, skip_didc_checks, skip_buf_checks
+        )
     )
 
     # Finally, exclude targets that have any of the excluded tags:
@@ -260,6 +282,8 @@ def main():
         help="Bazel command to generate targets for. If 'check' then check PULL_REQUEST_BAZEL_TARGETS for correctness",
     )
     parser.add_argument("--skip_long_tests", action="store_true", help="Exclude tests tagged as 'long_test'")
+    parser.add_argument("--skip_didc_checks", action="store_true", help="Exclude tests tagged as 'didc'")
+    parser.add_argument("--skip_buf_checks", action="store_true", help="Exclude tests tagged as 'buf'")
     parser.add_argument(
         "--base",
         help="Only include targets with modified inputs in `git diff --name-only --merge-base $BASE $HEAD`. When --head is not provided defaults to HEAD.",
@@ -270,7 +294,7 @@ def main():
     if args.command == "check":
         check()
 
-    targets(args.command, args.skip_long_tests, args.base, args.head)
+    targets(args.command, args.skip_long_tests, args.skip_didc_checks, args.skip_buf_checks, args.base, args.head)
 
 
 if __name__ == "__main__":

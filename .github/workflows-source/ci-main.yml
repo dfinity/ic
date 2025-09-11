@@ -125,6 +125,20 @@ jobs:
           fi
 
 
+          if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}' == 'true' ]]; then
+              override_didc_check="true"
+          else
+              override_didc_check="false"
+          fi
+
+
+          if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}' == 'true' ]]; then
+              override_buf_breaking="true"
+          else
+              override_buf_breaking="false"
+          fi
+
+
           echo "| config | value |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
 
@@ -144,15 +158,19 @@ jobs:
           echo "full_macos_build=$full_macos_build" >> "$GITHUB_OUTPUT"
           echo "| \`full_macos_build\` | \`$full_macos_build\` |" >> "$GITHUB_STEP_SUMMARY"
 
+          echo "override_didc_check: $override_didc_check"
+          echo "override_didc_check=$override_didc_check" >> "$GITHUB_OUTPUT"
+          echo "| \`override_didc_check\` | \`$override_didc_check\` |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "override_buf_breaking: $override_buf_breaking"
+          echo "override_buf_breaking=$override_buf_breaking" >> "$GITHUB_OUTPUT"
+          echo "| \`override_buf_breaking\` | \`$override_buf_breaking\` |" >> "$GITHUB_STEP_SUMMARY"
+
   bazel-test-all:
     name: Bazel Test All
     needs: [ config ]
     <<: *dind-large-setup
     timeout-minutes: 150
-    env:
-      # Only run ci/bazel-scripts/diff.sh on PRs that are not labeled with "CI_ALL_BAZEL_TARGETS".
-      OVERRIDE_DIDC_CHECK: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
-      CI_OVERRIDE_BUF_BREAKING: ${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}
     steps:
       - <<: *checkout
       - name: "Node Name"
