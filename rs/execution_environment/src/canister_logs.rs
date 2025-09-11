@@ -21,14 +21,27 @@ pub(crate) fn fetch_canister_logs(
     // Check if the sender has permission to access logs
     check_log_visibility_permission(&sender, canister.log_visibility(), canister.controllers())?;
 
+    let records = canister.system_state.canister_log.records();
+
+    let canister_log_records = match args.filter_by_idx {
+        None => records.iter().cloned().collect(),
+        Some(IndexRange { start, end }) => {
+            if start > end {
+                // Invalid range — return empty result.
+                Vec::new()
+            } else {
+                // TODO: optimize filtering.
+                records
+                    .iter()
+                    .filter(|r| start <= r.idx && r.idx <= end)
+                    .cloned()
+                    .collect()
+            }
+        }
+    };
+
     Ok(FetchCanisterLogsResponse {
-        canister_log_records: canister
-            .system_state
-            .canister_log
-            .records()
-            .iter()
-            .cloned()
-            .collect(),
+        canister_log_records,
     })
 }
 
