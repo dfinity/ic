@@ -1,6 +1,12 @@
 #[allow(clippy::all)]
 #[path = "../gen/ic_registry_transport.pb.v1.rs"]
-pub mod v1;
+mod generated_by_prost;
+mod non_high_capacity_legacy_types;
+
+pub mod v1 {
+    pub use super::generated_by_prost::*;
+    pub use super::non_high_capacity_legacy_types::*;
+}
 
 use ic_base_types::PrincipalId;
 use std::fmt;
