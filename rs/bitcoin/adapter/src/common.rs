@@ -261,7 +261,7 @@ pub trait BlockchainHeader: Decodable + Encodable + Clone {
     fn block_hash(&self) -> BlockHash;
     /// Return previous block hash.
     fn prev_block_hash(&self) -> BlockHash;
-    /// Check if the merkle root in block header matches what is computed.
+    /// Return the total work of the block.
     fn work(&self) -> Work;
     /// Return the 80-byte header.
     fn into_pure_header(self) -> PureHeader;
