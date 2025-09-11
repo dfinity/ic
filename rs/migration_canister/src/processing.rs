@@ -180,6 +180,7 @@ pub async fn process_stopped(
         request.source,
         canister_version,
         request.target,
+        request.target_subnet,
         canister_history_total_num,
     )
     .await

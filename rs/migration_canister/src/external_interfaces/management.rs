@@ -227,19 +227,20 @@ pub async fn rename_canister(
     source: Principal,
     source_version: u64,
     target: Principal,
+    target_subnet: Principal,
     total_num_changes: u64,
 ) -> ProcessingResult<(), Infallible> {
     let args = RenameCanisterArgs {
-        canister_id: source,
+        canister_id: target,
         rename_to: RenameToArgs {
-            canister_id: target,
+            canister_id: source,
             version: source_version,
             total_num_changes,
         },
         sender_canister_version: canister_version(),
     };
 
-    match Call::bounded_wait(target, "rename_canister")
+    match Call::bounded_wait(target_subnet, "rename_canister")
         .with_arg(args)
         .await
     {
