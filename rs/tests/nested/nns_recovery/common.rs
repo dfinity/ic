@@ -396,48 +396,44 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     // The DFINITY-owned node is already recovered as part of the recovery tool, so we only need to
     // trigger the recovery on 2f other nodes.
     info!(logger, "Simulate node provider action on 2f nodes");
-    tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap()
-        .block_on(async {
-            let mut handles = JoinSet::new();
+    block_on(async {
+        let mut handles = JoinSet::new();
 
-            for vm_name in get_host_vm_names(cfg.subnet_size)
-                .iter()
-                .filter(|&vm_name| {
-                    env.get_nested_vm(vm_name)
-                        .unwrap()
-                        .get_nested_network()
-                        .unwrap()
-                        .guest_ip
-                        != dfinity_owned_node.get_ip_addr()
-                })
-                .cloned()
-                .collect::<Vec<_>>()
-                .choose_multiple(&mut rand::thread_rng(), 2 * f)
-            {
-                let logger = logger.clone();
-                let env = env.clone();
-                let vm_name = vm_name.clone();
-                let recovery_img_hash = recovery_img_hash.clone();
-                let artifacts_hash = artifacts_hash.clone();
+        for vm_name in get_host_vm_names(cfg.subnet_size)
+            .iter()
+            .filter(|&vm_name| {
+                env.get_nested_vm(vm_name)
+                    .unwrap()
+                    .get_nested_network()
+                    .unwrap()
+                    .guest_ip
+                    != dfinity_owned_node.get_ip_addr()
+            })
+            .cloned()
+            .collect::<Vec<_>>()
+            .choose_multiple(&mut rand::thread_rng(), 2 * f)
+        {
+            let logger = logger.clone();
+            let env = env.clone();
+            let vm_name = vm_name.clone();
+            let recovery_img_hash = recovery_img_hash.clone();
+            let artifacts_hash = artifacts_hash.clone();
 
-                handles.spawn(async move {
-                    simulate_node_provider_action(
-                        &logger,
-                        &env,
-                        &vm_name,
-                        RECOVERY_GUESTOS_IMG_VERSION,
-                        &recovery_img_hash[..6],
-                        &artifacts_hash,
-                    )
-                    .await
-                });
-            }
+            handles.spawn(async move {
+                simulate_node_provider_action(
+                    &logger,
+                    &env,
+                    &vm_name,
+                    RECOVERY_GUESTOS_IMG_VERSION,
+                    &recovery_img_hash[..6],
+                    &artifacts_hash,
+                )
+                .await
+            });
+        }
 
-            handles.join_all().await;
-        });
+        handles.join_all().await;
+    });
 
     info!(logger, "Ensure every node uses the new replica version, is healthy and the subnet is making progress");
     let nns_subnet = block_on(new_topology.block_for_newer_registry_version())
