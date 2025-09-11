@@ -1,8 +1,16 @@
 //! The DKG public interface.
-use crate::validation::ValidationError;
+use crate::{
+    consensus_pool::ConsensusPool,
+    validation::{ValidationError, ValidationResult},
+};
 use ic_types::{
-    consensus::dkg::{
-        self, DkgPayloadCreationError, DkgPayloadValidationFailure, InvalidDkgPayloadReason,
+    batch::ValidationContext,
+    consensus::{
+        dkg::{
+            self, DkgPayload, DkgPayloadCreationError, DkgPayloadValidationFailure,
+            InvalidDkgPayloadReason,
+        },
+        Block, BlockPayload,
     },
     Height,
 };
@@ -29,6 +37,25 @@ impl From<DkgPayloadCreationError> for DkgPayloadValidationError {
             DkgPayloadValidationFailure::PayloadCreationFailed(err),
         )
     }
+}
+
+// TODO: Document trait
+pub trait DkgPayloadBuilder: Send + Sync {
+    fn create_payload(
+        &self,
+        pool: &dyn ConsensusPool,
+        parent: &Block,
+        context: &ValidationContext,
+        max_dealings_per_block: usize,
+    ) -> Result<DkgPayload, DkgPayloadCreationError>;
+
+    fn validate_payload(
+        &self,
+        payload: &BlockPayload,
+        pool: &dyn ConsensusPool,
+        parent: &Block,
+        context: &ValidationContext,
+    ) -> ValidationResult<DkgPayloadValidationError>;
 }
 
 /// The DkgPool is used to store messages that are exchanged between nodes in
