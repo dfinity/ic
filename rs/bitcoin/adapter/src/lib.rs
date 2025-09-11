@@ -51,12 +51,10 @@ mod transaction_store;
 // malicious fork can be prioritized by a DFS, thus potentially ignoring honest forks).
 mod get_successors_handler;
 
-pub use blockchainmanager::BlockchainManager;
+pub use blockchainmanager::MAX_HEADERS_SIZE;
 pub use blockchainstate::BlockchainState;
 pub use common::{AdapterNetwork, BlockchainBlock, BlockchainHeader, BlockchainNetwork};
 pub use config::{address_limits, Config, IncomingSource};
-pub use connectionmanager::ConnectionManager;
-pub use metrics::RouterMetrics;
 
 use crate::{
     get_successors_handler::GetSuccessorsHandler, router::start_main_event_loop,
@@ -66,7 +64,7 @@ use crate::{
 /// This struct is used to represent commands given to the adapter in order to interact
 /// with BTC nodes.
 #[derive(Clone, Eq, PartialEq, Debug)]
-pub struct Command<Header, Block> {
+struct Command<Header, Block> {
     /// This is the address of the Bitcoin node to which the message is supposed to be sent.
     /// If the address is None, then the message will be sent to all the peers.
     address: Option<SocketAddr>,
@@ -77,7 +75,7 @@ pub struct Command<Header, Block> {
 /// This enum is used to represent errors that could occur while dispatching an
 /// event.
 #[derive(Debug)]
-pub enum ProcessNetworkMessageError {
+enum ProcessNetworkMessageError {
     /// This variant is used to represent when an invalid message has been
     /// received from a peer node.
     InvalidMessage,
@@ -85,10 +83,10 @@ pub enum ProcessNetworkMessageError {
 
 /// This enum is used to represent errors that
 #[derive(Debug)]
-pub enum ChannelError {}
+enum ChannelError {}
 
 /// This trait is to provide an interface so that managers can communicate to BTC nodes.
-pub trait Channel<Header, Block> {
+trait Channel<Header, Block> {
     /// This method is used to send a message to a specific connection
     /// or to all connections based on the [Command](Command)'s fields.
     fn send(&mut self, command: Command<Header, Block>) -> Result<(), ChannelError>;

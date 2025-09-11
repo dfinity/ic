@@ -34,7 +34,7 @@ const GETHEADERS_REQUEST_TIMEOUT_SECS: u64 = 30;
 
 /// This constant represents the maximum size of `headers` messages.
 /// https://developer.bitcoin.org/reference/p2p_networking.html#headers
-const MAX_HEADERS_SIZE: usize = 2_000;
+pub const MAX_HEADERS_SIZE: usize = 2_000;
 
 /// This constant stores the maximum number of headers allowed in an unsolicited `headers` message
 /// (`headers message for which a `getheaders` request was not sent before.)
