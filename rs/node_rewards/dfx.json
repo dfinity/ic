@@ -1,0 +1,17 @@
+{
+  "canisters": {
+    "node-rewards": {
+      "candid": "canister/node-rewards-canister.did",
+      "package": "ic-node-rewards-canister",
+      "type": "rust"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}
