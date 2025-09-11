@@ -952,7 +952,7 @@ mod random_ops {
         }
     }
 
-    extern "C" fn sigsegv_handler(
+    unsafe extern "C" fn sigsegv_handler(
         signum: libc::c_int,
         siginfo_ptr: *mut libc::siginfo_t,
         ucontext_ptr: *mut libc::c_void,

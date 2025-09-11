@@ -135,7 +135,7 @@ trait DiskEncryption {
     fn format(&mut self, device_path: &Path, partition: Partition) -> Result<()>;
 }
 
-extern "C" fn cryptsetup_log(_level: c_int, msg: *const c_char, _usrptr: *mut c_void) {
+unsafe extern "C" fn cryptsetup_log(_level: c_int, msg: *const c_char, _usrptr: *mut c_void) {
     eprintln!(
         "libcryptsetup: {}",
         unsafe { CStr::from_ptr(msg) }.to_string_lossy()
