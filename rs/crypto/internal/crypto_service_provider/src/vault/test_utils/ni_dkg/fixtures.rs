@@ -11,16 +11,16 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
+use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
 use ic_types::crypto::threshold_sig::ni_dkg::config::dealers::NiDkgDealers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
-use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
 use ic_types::crypto::threshold_sig::ni_dkg::{
     NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet,
 };
-use ic_types::crypto::AlgorithmId;
 use ic_types::{Height, NodeId, NodeIndex, NumberOfNodes, SubnetId};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
-use rand::{distributions::Alphanumeric, seq::IteratorRandom, Rng};
+use rand::{Rng, distributions::Alphanumeric, seq::IteratorRandom};
 use rand_chacha::ChaCha20Rng;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -252,7 +252,7 @@ impl MockDkgConfig {
         let threshold = rng.gen_range(min_threshold..=num_receivers); // threshold <= num_receivers
         let max_corrupt_receivers =
             rng.gen_range(0..std::cmp::min(num_receivers + 1 - threshold, threshold)); // (max_corrupt_receivers <= num_receivers - threshold) &&
-                                                                                       // (max_corrupt_receivers < threshold)
+        // (max_corrupt_receivers < threshold)
         let epoch = Epoch::from(rng.r#gen::<u32>());
 
         let receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey> = receivers

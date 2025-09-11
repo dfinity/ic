@@ -679,7 +679,7 @@ where
                         "Length divergence: {} != {}",
                         self.len(),
                         rhs.len()
-                    ))
+                    ));
                 }
             }
         }

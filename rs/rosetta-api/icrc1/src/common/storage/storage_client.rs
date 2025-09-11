@@ -1,6 +1,6 @@
 use super::storage_operations;
 use crate::common::storage::types::{MetadataEntry, RosettaBlock};
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use candid::Nat;
 use ic_base_types::CanisterId;
 use icrc_ledger_types::icrc1::account::Account;
@@ -131,10 +131,10 @@ impl StorageClient {
             Ordering::Equal => Ok(false),
             Ordering::Less => {
                 warn!(
-                "block_count ({}) is less than highest_block_idx.saturating_add(1) ({}), indicating one of more gaps in the blockchain.",
-                block_count,
-                highest_block_idx.saturating_add(1)
-            );
+                    "block_count ({}) is less than highest_block_idx.saturating_add(1) ({}), indicating one of more gaps in the blockchain.",
+                    block_count,
+                    highest_block_idx.saturating_add(1)
+                );
                 Ok(true)
             }
             Ordering::Greater => {
@@ -339,14 +339,14 @@ impl StorageClient {
 mod tests {
     use super::*;
     use crate::Metadata;
+    use ic_icrc1::Block;
     use ic_icrc1::blocks::encoded_block_to_generic_block;
     use ic_icrc1::blocks::generic_block_to_encoded_block;
-    use ic_icrc1::Block;
     use ic_icrc1_test_utils::{
         arb_amount, blocks_strategy, metadata_strategy, valid_blockchain_with_gaps_strategy,
     };
-    use ic_icrc1_tokens_u256::U256;
     use ic_icrc1_tokens_u64::U64;
+    use ic_icrc1_tokens_u256::U256;
     use ic_ledger_canister_core::ledger::LedgerTransaction;
     use ic_ledger_core::block::BlockType;
     use proptest::prelude::*;

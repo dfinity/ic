@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use ic_http_utils::file_downloader::FileDownloader;
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, warn};
 use std::str::FromStr;
 use std::{
     fmt::Debug,

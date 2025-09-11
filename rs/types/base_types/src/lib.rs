@@ -2,8 +2,8 @@
 //! writing Rust canisters.
 
 use candid::CandidType;
-use ic_protobuf::proxy::try_from_option_field;
 use ic_protobuf::proxy::ProxyDecodeError;
+use ic_protobuf::proxy::try_from_option_field;
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, DisplayerOf, Id};
 use serde::Deserialize;

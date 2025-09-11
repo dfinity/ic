@@ -35,16 +35,16 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::InternetComputer;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer,
-    IcNodeSnapshot, SubnetSnapshot,
+    HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, IcNodeSnapshot, SubnetSnapshot,
+    get_dependency_path,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    assert_nodes_health_statuses, assert_subnet_can_make_progress, block_on, runtime_from_url,
-    EndpointsStatus,
+    EndpointsStatus, assert_nodes_health_statuses, assert_subnet_can_make_progress, block_on,
+    runtime_from_url,
 };
 use itertools::Itertools;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::env;
 use std::time::Duration;
 use tokio::time::sleep;

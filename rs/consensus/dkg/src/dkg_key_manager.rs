@@ -5,22 +5,22 @@
 //! thread-handles.
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::crypto::{ErrorReproducibility, LoadTranscriptResult, NiDkgAlgorithm};
-use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_logger::{ReplicaLogger, error, info, warn};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_types::{
-    consensus::{dkg::DkgSummary, HasHeight},
-    crypto::threshold_sig::ni_dkg::{
-        errors::load_transcript_error::DkgLoadTranscriptError, NiDkgId, NiDkgTag,
-        NiDkgTargetSubnet, NiDkgTranscript,
-    },
     Height,
+    consensus::{HasHeight, dkg::DkgSummary},
+    crypto::threshold_sig::ni_dkg::{
+        NiDkgId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript,
+        errors::load_transcript_error::DkgLoadTranscriptError,
+    },
 };
 use prometheus::{HistogramVec, IntCounterVec, IntGauge, IntGaugeVec};
 use std::{
     collections::{HashMap, HashSet},
     sync::{
-        mpsc::{sync_channel, Receiver},
         Arc,
+        mpsc::{Receiver, sync_channel},
     },
     time::Instant,
 };
@@ -557,7 +557,7 @@ fn dkg_id_log_msg(id: &NiDkgId) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_logger::with_test_replica_logger;

@@ -145,7 +145,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
 
     #[test]
     fn test_implemented_interface_matches_declared_interface_exactly() {

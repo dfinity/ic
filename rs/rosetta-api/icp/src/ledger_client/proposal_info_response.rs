@@ -11,8 +11,14 @@ impl TryFrom<ProposalInfoResponse> for ObjectMap {
     fn try_from(d: ProposalInfoResponse) -> Result<ObjectMap, Self::Error> {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => Ok(o),
-            Ok(o) => Err(ApiError::internal_error(format!("Could not convert ProposalInfoResponse to ObjectMap. Expected type Object but received: {:?}",o))),
-            Err(err) => Err(ApiError::internal_error(format!("Could not convert ProposalInfoResponse to ObjectMap: {:?}",err))),
+            Ok(o) => Err(ApiError::internal_error(format!(
+                "Could not convert ProposalInfoResponse to ObjectMap. Expected type Object but received: {:?}",
+                o
+            ))),
+            Err(err) => Err(ApiError::internal_error(format!(
+                "Could not convert ProposalInfoResponse to ObjectMap: {:?}",
+                err
+            ))),
         }
     }
 }

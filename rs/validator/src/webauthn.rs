@@ -64,7 +64,7 @@ fn basic_sig_from_webauthn_sig(
         _ => Err(format!(
             "Only ECDSA on curve P-256 and RSA PKCS #1 v1.5 are supported for WebAuthn, given: {:?}",
             algorithm_id
-        ))
+        )),
     }
 }
 
@@ -151,10 +151,12 @@ mod tests {
 
             let result = validate_webauthn_sig(&verifier, &sig, &SignableMock::new(vec![]), &pk);
 
-            assert!(result
-                .err()
-                .unwrap()
-                .contains("Failed to parse EcdsaP256 signature"));
+            assert!(
+                result
+                    .err()
+                    .unwrap()
+                    .contains("Failed to parse EcdsaP256 signature")
+            );
         }
 
         #[test]
@@ -169,10 +171,12 @@ mod tests {
             let result =
                 validate_webauthn_sig(&verifier, &sig, &SignableMock::new(vec![]), &wrong_pk);
 
-            assert!(result
-                .err()
-                .unwrap()
-                .contains("Verifying signature failed."));
+            assert!(
+                result
+                    .err()
+                    .unwrap()
+                    .contains("Verifying signature failed.")
+            );
         }
     }
 
@@ -264,10 +268,12 @@ mod tests {
             let result =
                 validate_webauthn_sig(&verifier, &sig, &SignableMock::new(vec![]), &wrong_pk);
 
-            assert!(result
-                .err()
-                .unwrap()
-                .contains("Verifying signature failed."));
+            assert!(
+                result
+                    .err()
+                    .unwrap()
+                    .contains("Verifying signature failed.")
+            );
         }
     }
 

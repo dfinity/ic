@@ -14,8 +14,15 @@ impl TryFrom<QueryBlockRangeRequest> for ObjectMap {
         match serde_json::to_value(d) {
             Ok(v) => match v {
                 serde_json::Value::Object(ob) => Ok(ob),
-                _ => anyhow::bail!("Could not convert QueryBlockRangeRequest to ObjectMap. Expected type Object but received: {:?}",v)
-            },Err(err) => anyhow::bail!("Could not convert QueryBlockRangeRequest to ObjectMap: {:?}",err),
+                _ => anyhow::bail!(
+                    "Could not convert QueryBlockRangeRequest to ObjectMap. Expected type Object but received: {:?}",
+                    v
+                ),
+            },
+            Err(err) => anyhow::bail!(
+                "Could not convert QueryBlockRangeRequest to ObjectMap: {:?}",
+                err
+            ),
         }
     }
 }
@@ -43,8 +50,15 @@ impl TryFrom<QueryBlockRangeResponse> for ObjectMap {
         match serde_json::to_value(d) {
             Ok(v) => match v {
                 serde_json::Value::Object(ob) => Ok(ob),
-                _ => anyhow::bail!("Could not convert QueryBlockRangeResponse to ObjectMap. Expected type Object but received: {:?}",v)
-            },Err(err) => anyhow::bail!("Could not convert QueryBlockRangeResponse to ObjectMap: {:?}",err),
+                _ => anyhow::bail!(
+                    "Could not convert QueryBlockRangeResponse to ObjectMap. Expected type Object but received: {:?}",
+                    v
+                ),
+            },
+            Err(err) => anyhow::bail!(
+                "Could not convert QueryBlockRangeResponse to ObjectMap: {:?}",
+                err
+            ),
         }
     }
 }

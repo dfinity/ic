@@ -1,37 +1,37 @@
 //! Conversion from `ReplicatedState` to `LazyTree`.
 
 use crate::{
+    CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION, MIN_SUPPORTED_CERTIFICATION_VERSION,
     encoding::{
         encode_controllers, encode_message, encode_metadata, encode_stream_header,
         encode_subnet_canister_ranges, encode_subnet_metrics,
     },
-    CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION, MIN_SUPPORTED_CERTIFICATION_VERSION,
 };
-use ic_canonical_state_tree_hash::lazy_tree::{blob, fork, num, string, Lazy, LazyFork, LazyTree};
+use LazyTree::Blob;
+use ic_canonical_state_tree_hash::lazy_tree::{Lazy, LazyFork, LazyTree, blob, fork, num, string};
 use ic_crypto_tree_hash::Label;
 use ic_error_types::ErrorCode;
 use ic_error_types::RejectCode;
 use ic_registry_routing_table::RoutingTable;
 use ic_replicated_state::{
+    ExecutionState, ReplicatedState, Stream,
     canister_state::CanisterState,
     metadata_state::{
         ApiBoundaryNodeEntry, IngressHistoryState, StreamMap, SubnetMetrics, SubnetTopology,
         SystemMetadata,
     },
     replicated_state::ReplicatedStateMessageRouting,
-    ExecutionState, ReplicatedState, Stream,
 };
 use ic_types::{
-    ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{MessageId, EXPECTED_MESSAGE_ID_LENGTH},
-    xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
     CanisterId, NodeId, PrincipalId, SubnetId,
+    ingress::{IngressState, IngressStatus, WasmResult},
+    messages::{EXPECTED_MESSAGE_ID_LENGTH, MessageId},
+    xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
 };
 use std::convert::{AsRef, TryFrom, TryInto};
 use std::iter::once;
 use std::sync::Arc;
 use std::{collections::BTreeMap, marker::PhantomData};
-use LazyTree::Blob;
 
 /// The maximum number of disjoint ranges a single leaf of the routing table can contain.
 /// Changes to this constant require a new certification version.
@@ -420,7 +420,8 @@ fn split_inverted_routing_table(
 pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
     let certification_version = state.metadata.certification_version;
     assert!(
-        MIN_SUPPORTED_CERTIFICATION_VERSION <= certification_version && certification_version <= MAX_SUPPORTED_CERTIFICATION_VERSION,
+        MIN_SUPPORTED_CERTIFICATION_VERSION <= certification_version
+            && certification_version <= MAX_SUPPORTED_CERTIFICATION_VERSION,
         "Unable to certify state with version {:?}. Supported certification versions are {:?}..={:?}",
         certification_version,
         MIN_SUPPORTED_CERTIFICATION_VERSION,

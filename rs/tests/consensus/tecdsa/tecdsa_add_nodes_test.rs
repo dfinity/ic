@@ -29,8 +29,8 @@ use ic_consensus_system_test_utils::{
     rw_message::cert_state_makes_progress_with_retries,
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    enable_chain_key_signing, get_public_key_and_test_signature, get_public_key_with_logger,
-    make_key_ids_for_all_schemes, DKG_INTERVAL,
+    DKG_INTERVAL, enable_chain_key_signing, get_public_key_and_test_signature,
+    get_public_key_with_logger, make_key_ids_for_all_schemes,
 };
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -42,8 +42,8 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            secs, HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
-            NnsInstallationBuilder, SubnetSnapshot,
+            HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
+            NnsInstallationBuilder, SubnetSnapshot, secs,
         },
     },
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
@@ -52,7 +52,7 @@ use ic_system_test_driver::{
 };
 use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::collections::BTreeMap;
 
 const NODES_COUNT: usize = 4;

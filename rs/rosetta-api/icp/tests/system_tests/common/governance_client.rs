@@ -3,9 +3,9 @@ use ic_agent::Agent;
 use ic_base_types::PrincipalId;
 use ic_nns_common::{pb::v1::ProposalId, types::NeuronId};
 use ic_nns_governance_api::{
+    MakeProposalRequest, ManageNeuronResponse, Motion, ProposalActionRequest, ProposalInfo,
     manage_neuron_response, manage_neuron_response::MakeProposalResponse,
-    proposal_submission_helpers::create_make_proposal_payload, MakeProposalRequest,
-    ManageNeuronResponse, Motion, ProposalActionRequest, ProposalInfo,
+    proposal_submission_helpers::create_make_proposal_payload,
 };
 
 pub struct GovernanceClient {

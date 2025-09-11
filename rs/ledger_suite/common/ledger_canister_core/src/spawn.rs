@@ -1,7 +1,7 @@
 use crate::runtime::Runtime;
 use ic_base_types::CanisterId;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, IC_00,
+    CanisterIdRecord, CanisterInstallMode, IC_00, InstallCodeArgs,
 };
 
 pub async fn install_code<Rt>(

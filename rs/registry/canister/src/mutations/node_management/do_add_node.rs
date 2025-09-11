@@ -744,12 +744,14 @@ mod tests {
         let node_record_2 = registry.get_node_or_panic(node_id_2);
         assert_eq!(node_record_2, node_record_expected_2);
         // Assert first node record is removed from the registry because of the IP conflict
-        assert!(registry
-            .get(
-                make_node_record_key(node_id_1).as_bytes(),
-                registry.latest_version()
-            )
-            .is_none());
+        assert!(
+            registry
+                .get(
+                    make_node_record_key(node_id_1).as_bytes(),
+                    registry.latest_version()
+                )
+                .is_none()
+        );
         // Assert node allowance counter has decremented by one (as only one node record was effectively added)
         let node_operator_record = get_node_operator_record(&registry, node_operator_id)
             .expect("failed to get node operator");
@@ -790,7 +792,9 @@ mod tests {
         let e = registry
             .do_add_node_(payload_2.clone(), node_operator_id)
             .unwrap_err();
-        assert!(e.contains("do_add_node: There is already another node with the same IPv4 address"));
+        assert!(
+            e.contains("do_add_node: There is already another node with the same IPv4 address")
+        );
     }
 
     // This test is disabled until it becomes possible to directly replace nodes that are active in a subnet.
@@ -923,12 +927,14 @@ mod tests {
             .expect("failed to add a node");
 
         // Verify that there is an API boundary node record for the new node
-        assert!(registry
-            .get(
-                make_api_boundary_node_record_key(new_node_id).as_bytes(),
-                registry.latest_version()
-            )
-            .is_some());
+        assert!(
+            registry
+                .get(
+                    make_api_boundary_node_record_key(new_node_id).as_bytes(),
+                    registry.latest_version()
+                )
+                .is_some()
+        );
 
         // Verify the old node is removed from the registry
         assert!(registry.get_node(old_node_id).is_none());

@@ -60,7 +60,8 @@ impl TaskQueue {
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_)
             | ExecutionTask::AbortedExecution { .. } => unreachable!(
-                "Unsuccessful removal of the task {:?}. Removal of task from TaskQueue is only supported for OnLowWasmMemory type.", task
+                "Unsuccessful removal of the task {:?}. Removal of task from TaskQueue is only supported for OnLowWasmMemory type.",
+                task
             ),
         };
     }
@@ -128,12 +129,12 @@ impl TaskQueue {
             match paused_or_aborted_task {
                 ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
                     assert_eq!(
-                    current_round_type,
-                    ExecutionRoundType::OrdinaryRound,
-                    "Unexpected paused execution {:?} after a checkpoint round in canister {:?}",
-                    paused_or_aborted_task,
-                    id
-                );
+                        current_round_type,
+                        ExecutionRoundType::OrdinaryRound,
+                        "Unexpected paused execution {:?} after a checkpoint round in canister {:?}",
+                        paused_or_aborted_task,
+                        id
+                    );
 
                     assert_eq!(
                         deterministic_time_slicing,
@@ -149,7 +150,8 @@ impl TaskQueue {
                 | ExecutionTask::GlobalTimer
                 | ExecutionTask::OnLowWasmMemory => {
                     unreachable!(
-                        "Unexpected on task type {:?} in TaskQueue::paused_or_aborted_task in canister {:?} .", paused_or_aborted_task, id
+                        "Unexpected on task type {:?} in TaskQueue::paused_or_aborted_task in canister {:?} .",
+                        paused_or_aborted_task, id
                     )
                 }
             }
@@ -175,7 +177,8 @@ impl TaskQueue {
                 | ExecutionTask::PausedExecution { .. }
                 | ExecutionTask::PausedInstallCode(_) => {
                     unreachable!(
-                        "Unexpected task type {:?} in TaskQueue::queue, after a round in canister {:?}", task, id
+                        "Unexpected task type {:?} in TaskQueue::queue, after a round in canister {:?}",
+                        task, id
                     );
                 }
             }
@@ -316,15 +319,15 @@ pub fn is_low_wasm_memory_hook_condition_satisfied(
 mod tests {
     use std::sync::Arc;
 
-    use crate::{metadata_state::subnet_call_context_manager::InstallCodeCallId, ExecutionTask};
+    use crate::{ExecutionTask, metadata_state::subnet_call_context_manager::InstallCodeCallId};
 
     use super::TaskQueue;
     use crate::canister_state::system_state::PausedExecutionId;
     use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
     use ic_test_utilities_types::messages::IngressBuilder;
     use ic_types::{
-        messages::{CanisterCall, CanisterMessageOrTask, CanisterTask},
         Cycles,
+        messages::{CanisterCall, CanisterMessageOrTask, CanisterTask},
     };
 
     #[test]

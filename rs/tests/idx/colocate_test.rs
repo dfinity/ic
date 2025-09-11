@@ -5,13 +5,13 @@ use ic_system_test_driver::driver::driver_setup::{
 };
 use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::group::{
-    CliArguments, SystemTestGroup, COLOCATE_CONTAINER_NAME,
+    COLOCATE_CONTAINER_NAME, CliArguments, SystemTestGroup,
 };
 use ic_system_test_driver::driver::ic::VmResources;
 use ic_system_test_driver::driver::test_env::RequiredHostFeaturesFromCmdLine;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::{
-    get_dependency_path, scp_recv_from, scp_send_to, FarmBaseUrl, SshSession,
+    FarmBaseUrl, SshSession, get_dependency_path, scp_recv_from, scp_send_to,
 };
 use ic_system_test_driver::driver::test_setup::GroupSetup;
 use ic_system_test_driver::driver::universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms};
@@ -419,21 +419,26 @@ fn receive_test_exit_code_async(
     session: Session,
     log: slog::Logger,
 ) -> std::thread::JoinHandle<i32> {
-    std::thread::spawn(move || loop {
-        match check_test_exit_code(&session) {
-            Ok(result) => {
-                if let Some(exit_code) = result {
-                    info!(log, "Test execution finished with exit code {exit_code}.");
-                    return exit_code;
-                } else {
-                    // Test execution hasn't finished yet, wait a bit and retry.
+    std::thread::spawn(move || {
+        loop {
+            match check_test_exit_code(&session) {
+                Ok(result) => {
+                    if let Some(exit_code) = result {
+                        info!(log, "Test execution finished with exit code {exit_code}.");
+                        return exit_code;
+                    } else {
+                        // Test execution hasn't finished yet, wait a bit and retry.
+                        std::thread::sleep(TEST_STATUS_CHECK_RETRY);
+                    }
+                }
+                Err(err) => {
+                    error!(
+                        log,
+                        "Reading test exit code failed unexpectedly with err={err:?}. Retrying in {} sec",
+                        TEST_STATUS_CHECK_RETRY.as_secs()
+                    );
                     std::thread::sleep(TEST_STATUS_CHECK_RETRY);
                 }
-            }
-            Err(err) => {
-                error!(log, "Reading test exit code failed unexpectedly with err={err:?}. Retrying in {} sec",
-                TEST_STATUS_CHECK_RETRY.as_secs());
-                std::thread::sleep(TEST_STATUS_CHECK_RETRY);
             }
         }
     })

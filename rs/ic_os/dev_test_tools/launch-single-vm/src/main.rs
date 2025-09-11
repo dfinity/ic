@@ -1,6 +1,6 @@
 use clap::Parser;
 use config::generate_testnet_config::{
-    generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
+    GenerateTestnetConfigArgs, Ipv6ConfigType, generate_testnet_config,
 };
 use config::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config_types::DeploymentEnvironment;
@@ -20,7 +20,7 @@ use ic_system_test_driver::driver::{
 use ic_types::ReplicaVersion;
 use reqwest::blocking::Client;
 use serde::Serialize;
-use slog::{o, Drain};
+use slog::{Drain, o};
 use std::collections::BTreeMap;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;

@@ -1,6 +1,6 @@
 use crate::{
     errors::ApiError,
-    ledger_client::{neuron_response::NeuronResponse, OperationOutput},
+    ledger_client::{OperationOutput, neuron_response::NeuronResponse},
     models,
 };
 use ic_nns_governance_api::{GovernanceError, Neuron, NeuronState};

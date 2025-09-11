@@ -10,8 +10,8 @@ use ic_sys::PAGE_SIZE;
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
-    ingress::WasmResult, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, time::expiry_time_from_now,
-    CanisterId, NumBytes, RegistryVersion,
+    CanisterId, NumBytes, RegistryVersion, ingress::WasmResult,
+    messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, time::expiry_time_from_now,
 };
 use std::sync::Arc;
 

@@ -188,9 +188,11 @@ fn mega_should_reject_invalid_pop() -> Result<(), CanisterThresholdError> {
             ad,
         )?;
 
-        assert!(ctext
-            .decrypt(alg, ad, dealer_index, 1, &b_sk, &b_pk)
-            .is_ok());
+        assert!(
+            ctext
+                .decrypt(alg, ad, dealer_index, 1, &b_sk, &b_pk)
+                .is_ok()
+        );
         assert_eq!(
             ctext.verify_pop(alg, b"wrong_ad", dealer_index),
             Err(CanisterThresholdError::InvalidProof)

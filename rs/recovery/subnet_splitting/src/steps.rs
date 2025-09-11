@@ -10,19 +10,19 @@ use crate::{
 use ic_base_types::SubnetId;
 use ic_metrics::MetricsRegistry;
 use ic_recovery::{
+    CUPS_DIR, IC_REGISTRY_LOCAL_STORE, Recovery,
     cli::consent_given,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::rsync,
     registry_helper::VersionedRecoveryResult,
     steps::Step,
     util::parse_hex_str,
-    Recovery, CUPS_DIR, IC_REGISTRY_LOCAL_STORE,
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::split::resolve_ranges_and_split;
 use ic_types::Height;
-use slog::{error, info, Logger};
+use slog::{Logger, error, info};
 use url::Url;
 
 use std::net::IpAddr;

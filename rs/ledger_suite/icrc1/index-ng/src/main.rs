@@ -1,7 +1,7 @@
 #![allow(deprecated)]
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_canister_log::{export as export_logs, log};
-use ic_canister_profiler::{measure_span, SpanName, SpanStats};
+use ic_canister_profiler::{SpanName, SpanStats, measure_span};
 use ic_cdk::trap;
 use ic_cdk::{init, post_upgrade, query};
 use ic_cdk_timers::TimerId;
@@ -11,9 +11,9 @@ use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_
 use ic_icrc1::endpoints::StandardRecord;
 use ic_icrc1::{Block, Operation};
 use ic_icrc1_index_ng::{
-    FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
-    GetAccountTransactionsResult, GetBlocksMethod, IndexArg, InitArg, ListSubaccountsArgs, Log,
-    LogEntry, Status, TransactionWithId, UpgradeArg, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+    DEFAULT_MAX_BLOCKS_PER_RESPONSE, FeeCollectorRanges, GetAccountTransactionsArgs,
+    GetAccountTransactionsResponse, GetAccountTransactionsResult, GetBlocksMethod, IndexArg,
+    InitArg, ListSubaccountsArgs, Log, LogEntry, Status, TransactionWithId, UpgradeArg,
 };
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex as BlockIndex64, BlockType, EncodedBlock};
@@ -21,8 +21,8 @@ use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, Zero};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::storable::{Blob, Bound};
 use ic_stable_structures::{
-    memory_manager::MemoryManager, DefaultMemoryImpl, StableBTreeMap, StableCell, StableLog,
-    Storable,
+    DefaultMemoryImpl, StableBTreeMap, StableCell, StableLog, Storable,
+    memory_manager::MemoryManager,
 };
 use icrc_ledger_types::icrc::generic_value::Value;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
@@ -415,7 +415,9 @@ async fn get_supported_standards_from_ledger() -> Vec<String> {
             log!(
                 P0,
                 "[get_supported_standards_from_ledger]: failed to call get_supported_standards_from_ledger on ledger {}. Error code: {:?} message: {}",
-                ledger_id, code, msg
+                ledger_id,
+                code,
+                msg
             );
             vec![]
         }
@@ -673,7 +675,10 @@ async fn fetch_blocks_via_icrc3() -> Option<u64> {
     append_icrc3_blocks(res.blocks)?;
     let num_blocks = with_blocks(|blocks| blocks.len());
     match num_blocks.checked_sub(previous_num_blocks) {
-        None => panic!("The number of blocks {} is smaller than the number of blocks before indexing {}. This is impossible. I'm trapping to reset the state", num_blocks, previous_num_blocks),
+        None => panic!(
+            "The number of blocks {} is smaller than the number of blocks before indexing {}. This is impossible. I'm trapping to reset the state",
+            num_blocks, previous_num_blocks
+        ),
         Some(new_blocks_indexed) => Some(new_blocks_indexed),
     }
 }
@@ -829,8 +834,10 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                             );
                             last_fee
                         }
-                        None => ic_cdk::trap(format!("bug: index is stuck because block with index {block_index} doesn't contain a fee and no fee has been recorded before")),
-                    }
+                        None => ic_cdk::trap(format!(
+                            "bug: index is stuck because block with index {block_index} doesn't contain a fee and no fee has been recorded before"
+                        )),
+                    },
                 };
 
                 // It is possible that the spender account has not existed prior to this approve transaction.
@@ -901,7 +908,10 @@ fn get_fee_collector(block_index: BlockIndex64, block: &Block<Tokens>) -> Option
             .unwrap_or_else(||
                 ic_cdk::trap(format!("Block at index {} has fee_collector_block_index {} but there is no block at that index", block_index, fee_collector_block_index)));
         if block.fee_collector.is_none() {
-            ic_cdk::trap(format!("Block at index {} has fee_collector_block_index {} but that block has no fee_collector set", block_index, fee_collector_block_index))
+            ic_cdk::trap(format!(
+                "Block at index {} has fee_collector_block_index {} but that block has no fee_collector set",
+                block_index, fee_collector_block_index
+            ))
         } else {
             block.fee_collector
         }
@@ -974,9 +984,9 @@ fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransa
             .range(key..)
             // old txs of the requested account and skip the start index
             .take_while(|(k, _)| k.0 == key.0)
-            .filter(|(k, _)| k.1 .0 < start)
+            .filter(|(k, _)| k.1.0 < start)
             .take(length)
-            .map(|(k, _)| k.1 .0)
+            .map(|(k, _)| k.1.0)
             .collect::<Vec<BlockIndex64>>()
     });
     for id in indices {
@@ -1030,7 +1040,7 @@ fn get_oldest_tx_id(account: Account) -> Option<BlockIndex64> {
                 .iter_upper_bound(&last_key)
                 .take_while(|(k, _)| k.0 == account_sha256(account))
                 .next()
-                .map(|(key, _)| key.1 .0)
+                .map(|(key, _)| key.1.0)
         })
     })
 }
@@ -1183,7 +1193,7 @@ candid::export_service!();
 
 #[test]
 fn check_candid_interface() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
     use std::path::PathBuf;
 
     let new_interface = __export_service();

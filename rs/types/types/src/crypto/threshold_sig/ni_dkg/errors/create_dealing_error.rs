@@ -30,7 +30,11 @@ impl fmt::Display for DkgCreateDealingError {
                 write!(f, "{}{}", prefix, error)
             }
             DkgCreateDealingError::ThresholdSigningKeyNotInSecretKeyStore(error) => {
-                write!(f, "{}{}. `NiDkgAlgorithm::load_transcript` must be called prior to calling this method", prefix, error)
+                write!(
+                    f,
+                    "{}{}. `NiDkgAlgorithm::load_transcript` must be called prior to calling this method",
+                    prefix, error
+                )
             }
             DkgCreateDealingError::TransientInternalError(error) => {
                 write!(f, "{}{}", prefix, error)

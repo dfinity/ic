@@ -1,4 +1,4 @@
-use candid::{encode_args, Decode};
+use candid::{Decode, encode_args};
 use canister_test::Project;
 use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;

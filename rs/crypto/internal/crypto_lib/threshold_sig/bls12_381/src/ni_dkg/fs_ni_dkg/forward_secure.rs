@@ -13,9 +13,9 @@ use crate::ni_dkg::fs_ni_dkg::dlog_recovery::{
     CheatingDealerDlogSolver, HonestDealerDlogLookupTable,
 };
 use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::{
-    prove_pop, verify_pop, EncryptionKeyInstance, EncryptionKeyPop,
+    EncryptionKeyInstance, EncryptionKeyPop, prove_pop, verify_pop,
 };
-use crate::ni_dkg::fs_ni_dkg::random_oracles::{random_oracle, HashedMap};
+use crate::ni_dkg::fs_ni_dkg::random_oracles::{HashedMap, random_oracle};
 
 use crate::ni_dkg::fs_ni_dkg::forward_secure::CiphertextIntegrityError::{
     CrszVectorsLengthMismatch, InvalidNidkgCiphertext,
@@ -25,10 +25,10 @@ use ic_crypto_internal_bls12_381_type::{
     G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Gt, Scalar,
 };
 pub use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     FsEncryptionCiphertextBytes, FsEncryptionPop, FsEncryptionPublicKey,
 };
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use rand::{CryptoRng, RngCore};
 use std::collections::LinkedList;
 use std::sync::LazyLock;
@@ -63,11 +63,7 @@ pub(crate) enum Bit {
 
 impl From<u8> for Bit {
     fn from(i: u8) -> Self {
-        if i == 0 {
-            Bit::Zero
-        } else {
-            Bit::One
-        }
+        if i == 0 { Bit::Zero } else { Bit::One }
     }
 }
 

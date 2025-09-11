@@ -5,12 +5,12 @@ use crate::{
 };
 use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus_mocks::{dependencies, Dependencies};
+use ic_consensus_mocks::{Dependencies, dependencies};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    dummy_values::dummy_idkg_dealing_for_tests, setup_masked_random_params,
     CanisterThresholdSigTestEnvironment, IDkgParticipants, IntoBuilder,
+    dummy_values::dummy_idkg_dealing_for_tests, setup_masked_random_params,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::idkg::{IDkgChangeAction, IDkgPool};
@@ -22,36 +22,35 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::{
 };
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::state_manager::RefMockStateManager;
-use ic_test_utilities_consensus::{fake::*, idkg::*, IDkgStatsNoOp};
-use ic_test_utilities_types::ids::{node_test_id, NODE_1, NODE_2};
+use ic_test_utilities_consensus::{IDkgStatsNoOp, fake::*, idkg::*};
+use ic_test_utilities_types::ids::{NODE_1, NODE_2, node_test_id};
 use ic_types::{
+    Height, NodeId, RegistryVersion, SubnetId,
     artifact::IDkgMessageId,
     consensus::idkg::{
-        self,
-        common::{CombinedSignature, PreSignatureRef},
-        EcdsaSigShare, IDkgArtifactId, IDkgBlockReader, IDkgComplaintContent,
+        self, EcdsaSigShare, IDkgArtifactId, IDkgBlockReader, IDkgComplaintContent,
         IDkgMasterPublicKeyId, IDkgMessage, IDkgOpeningContent, IDkgPayload, IDkgReshareRequest,
         IDkgTranscriptAttributes, IDkgTranscriptOperationRef, IDkgTranscriptParamsRef,
         MaskedTranscript, MasterKeyTranscript, PreSigId, RequestId, ReshareOfMaskedParams,
         SchnorrSigShare, SignedIDkgComplaint, SignedIDkgOpening, TranscriptAttributes,
         TranscriptLookupError, TranscriptRef, UnmaskedTranscript, VetKdKeyShare,
+        common::{CombinedSignature, PreSignatureRef},
     },
     crypto::{
+        AlgorithmId,
         canister_threshold_sig::{
+            ThresholdEcdsaSigShare, ThresholdSchnorrSigShare,
             idkg::{
                 IDkgComplaint, IDkgDealing, IDkgDealingSupport, IDkgMaskedTranscriptOrigin,
                 IDkgOpening, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
                 IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
                 SignedIDkgDealing,
             },
-            ThresholdEcdsaSigShare, ThresholdSchnorrSigShare,
         },
         vetkd::{VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent},
-        AlgorithmId,
     },
     messages::CallbackId,
     signature::*,
-    Height, NodeId, RegistryVersion, SubnetId,
 };
 use rand::{CryptoRng, Rng};
 use std::{

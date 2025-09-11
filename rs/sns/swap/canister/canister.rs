@@ -35,7 +35,7 @@ use ic_sns_swap::{
         NotifyPaymentFailureResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Swap,
     },
 };
-use ic_stable_structures::{writer::Writer, Memory};
+use ic_stable_structures::{Memory, writer::Writer};
 use prost::Message;
 use std::{
     cell::RefCell,

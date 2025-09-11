@@ -1,14 +1,14 @@
 #![allow(deprecated)]
 use crate::{
     pb::v1::{
-        add_wasm_response, get_deployed_sns_by_proposal_id_response, AddWasmResponse, DeployedSns,
-        GetDeployedSnsByProposalIdResponse, GetNextSnsVersionResponse,
-        InsertUpgradePathEntriesResponse, ListUpgradeStep, PrettySnsVersion, SnsCanisterIds,
-        SnsCanisterType, SnsSpecificSnsUpgrade, SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError,
-        StableCanisterState, UpdateSnsSubnetListResponse, UpgradePath as StableUpgradePath,
-        UpgradePath as UpgradePathPb,
+        AddWasmResponse, DeployedSns, GetDeployedSnsByProposalIdResponse,
+        GetNextSnsVersionResponse, InsertUpgradePathEntriesResponse, ListUpgradeStep,
+        PrettySnsVersion, SnsCanisterIds, SnsCanisterType, SnsSpecificSnsUpgrade, SnsUpgrade,
+        SnsVersion, SnsWasm, SnsWasmError, StableCanisterState, UpdateSnsSubnetListResponse,
+        UpgradePath as StableUpgradePath, UpgradePath as UpgradePathPb, add_wasm_response,
+        get_deployed_sns_by_proposal_id_response,
     },
-    sns_wasm::{vec_to_hash, SnsWasmCanister, UpgradePath},
+    sns_wasm::{SnsWasmCanister, UpgradePath, vec_to_hash},
     stable_memory::SnsWasmStableMemory,
 };
 use ic_base_types::CanisterId;

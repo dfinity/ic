@@ -195,12 +195,12 @@ use std::collections::BTreeMap;
 use strum::EnumIter;
 
 pub use ic_crypto_internal_seed::Seed;
+pub use ic_types::NodeIndex;
+pub use ic_types::crypto::canister_threshold_sig::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgVerifyComplaintError, IDkgVerifyDealingPrivateError,
     IDkgVerifyTranscriptError,
 };
-pub use ic_types::crypto::canister_threshold_sig::PublicKey;
-pub use ic_types::NodeIndex;
 
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CanisterThresholdError {
@@ -742,8 +742,11 @@ pub fn create_ecdsa_signature_share(
     })?;
 
     if hashed_message.len() != hash_len {
-        return Err(ThresholdEcdsaGenerateSigShareInternalError::InvalidArguments(
-            format!("length of hashed_message ({}) not matching expected length ({hash_len}) for algorithm_id ({algorithm_id:?})", hashed_message.len()))
+        return Err(
+            ThresholdEcdsaGenerateSigShareInternalError::InvalidArguments(format!(
+                "length of hashed_message ({}) not matching expected length ({hash_len}) for algorithm_id ({algorithm_id:?})",
+                hashed_message.len()
+            )),
         );
     }
 
@@ -806,8 +809,11 @@ pub fn verify_ecdsa_signature_share(
 
     if hashed_message.len() != hash_len {
         return Err(ThresholdEcdsaVerifySigShareInternalError::InvalidArguments(
-            format!("length of hashed_message ({}) not matching expected length ({hash_len}) for algorithm_id ({algorithm_id:?})", hashed_message.len()))
-        );
+            format!(
+                "length of hashed_message ({}) not matching expected length ({hash_len}) for algorithm_id ({algorithm_id:?})",
+                hashed_message.len()
+            ),
+        ));
     }
 
     sig_share
@@ -921,9 +927,12 @@ pub fn verify_ecdsa_threshold_signature(
     })?;
 
     if hashed_message.len() != hash_len {
-        return Err(ThresholdEcdsaVerifySignatureInternalError::InvalidArguments(
-            format!("length of hashed_message ({}) not matching expected length ({hash_len}) for algorithm_id ({algorithm_id:?})", hashed_message.len())
-        ));
+        return Err(
+            ThresholdEcdsaVerifySignatureInternalError::InvalidArguments(format!(
+                "length of hashed_message ({}) not matching expected length ({hash_len}) for algorithm_id ({algorithm_id:?})",
+                hashed_message.len()
+            )),
+        );
     }
 
     signature
@@ -1372,7 +1381,7 @@ pub fn derive_threshold_public_key(
             return Err(DeriveThresholdPublicKeyError::InvalidArgument(format!(
                 "Not a known signature algo related to threshold signatures {:?}",
                 x
-            )))
+            )));
         }
     };
 

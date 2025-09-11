@@ -1,9 +1,9 @@
 use super::services::{self, initial_sync_is_completed};
 use crate::{
-    common::{types::Error, utils::utils::get_state_from_network_id},
     MultiTokenAppState,
+    common::{types::Error, utils::utils::get_state_from_network_id},
 };
-use axum::{extract::State, http::StatusCode, response::Result, Json};
+use axum::{Json, extract::State, http::StatusCode, response::Result};
 use ic_rosetta_api::models::MempoolResponse;
 use rosetta_core::{request_types::*, response_types::*};
 use std::sync::Arc;

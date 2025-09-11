@@ -43,8 +43,8 @@ use ic_system_test_driver::{
     },
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
     util::{
-        assert_create_agent, block_on, get_app_subnet_and_node, get_nns_node, runtime_from_url,
-        MessageCanister,
+        MessageCanister, assert_create_agent, block_on, get_app_subnet_and_node, get_nns_node,
+        runtime_from_url,
     },
 };
 use ic_types::Height;

@@ -32,7 +32,7 @@ use ic_system_test_driver::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot,
 };
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{block_on, runtime_from_url, MetricsFetcher};
+use ic_system_test_driver::util::{MetricsFetcher, block_on, runtime_from_url};
 use ic_types::malicious_behavior::MaliciousBehavior;
 use slog::info;
 use std::time::Duration;

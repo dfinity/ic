@@ -1,7 +1,7 @@
 use ic_certification::verify_certified_data;
 use ic_ledger_core::block::EncodedBlock;
 use ic_ledger_hash_of::HashOf;
-use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, CanisterId};
+use ic_types::{CanisterId, crypto::threshold_sig::ThresholdSigPublicKey};
 
 pub struct VerificationInfo {
     pub root_key: ThresholdSigPublicKey,

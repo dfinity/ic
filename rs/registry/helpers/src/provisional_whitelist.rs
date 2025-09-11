@@ -3,7 +3,7 @@ use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::provisional_whitelist::v1 as pb;
 use ic_registry_keys::make_provisional_whitelist_record_key;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_types::{registry::RegistryClientError::DecodeError, RegistryVersion};
+use ic_types::{RegistryVersion, registry::RegistryClientError::DecodeError};
 use std::convert::TryFrom;
 
 /// A trait that allows access to `ProvisionalWhitelist`.

@@ -103,7 +103,10 @@ impl Display for RequestValidationError {
                 "At least one path in read state request is too deep: got {} labels, but at most {} are allowed",
                 length, maximum
             ),
-            RequestValidationError::NonceTooBigError { num_bytes: length, maximum } => write!(
+            RequestValidationError::NonceTooBigError {
+                num_bytes: length,
+                maximum,
+            } => write!(
                 f,
                 "Nonce in request is too big: got {} bytes, but at most {} are allowed",
                 length, maximum

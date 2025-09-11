@@ -1,5 +1,5 @@
 use anyhow::Context;
-use axum::{http::StatusCode, response::IntoResponse, Json};
+use axum::{Json, http::StatusCode, response::IntoResponse};
 use candid::Deserialize;
 use num_bigint::BigInt;
 use rosetta_core::identifiers::*;
@@ -221,9 +221,12 @@ impl TryFrom<ApproveMetadata> for ObjectMap {
         match serde_json::to_value(d) {
             Ok(v) => match v {
                 serde_json::Value::Object(ob) => Ok(ob),
-                _ => anyhow::bail!("Could not convert ApproveMetadata to ObjectMap. Expected type Object but received: {:?}",v)
+                _ => anyhow::bail!(
+                    "Could not convert ApproveMetadata to ObjectMap. Expected type Object but received: {:?}",
+                    v
+                ),
             },
-            Err(err) => anyhow::bail!("Could not convert ApproveMetadata to ObjectMap: {:?}",err),
+            Err(err) => anyhow::bail!("Could not convert ApproveMetadata to ObjectMap: {:?}", err),
         }
     }
 }
@@ -265,8 +268,15 @@ impl TryFrom<TransactionMetadata> for ObjectMap {
         match serde_json::to_value(d) {
             Ok(v) => match v {
                 serde_json::Value::Object(ob) => Ok(ob),
-                _ => anyhow::bail!("Could not convert TransactionMetadata to ObjectMap. Expected type Object but received: {:?}",v)
-            },Err(err) => anyhow::bail!("Could not convert TransactionMetadata to ObjectMap: {:?}",err),
+                _ => anyhow::bail!(
+                    "Could not convert TransactionMetadata to ObjectMap. Expected type Object but received: {:?}",
+                    v
+                ),
+            },
+            Err(err) => anyhow::bail!(
+                "Could not convert TransactionMetadata to ObjectMap: {:?}",
+                err
+            ),
         }
     }
 }
@@ -309,9 +319,12 @@ impl TryFrom<BlockMetadata> for ObjectMap {
         match serde_json::to_value(d) {
             Ok(v) => match v {
                 serde_json::Value::Object(ob) => Ok(ob),
-                _ => anyhow::bail!("Could not convert BlockMetadata to ObjectMap. Expected type Object but received: {:?}",v)
-            }
-            Err(err) => anyhow::bail!("Could not convert BlockMetadata to ObjectMap: {:?}",err),
+                _ => anyhow::bail!(
+                    "Could not convert BlockMetadata to ObjectMap. Expected type Object but received: {:?}",
+                    v
+                ),
+            },
+            Err(err) => anyhow::bail!("Could not convert BlockMetadata to ObjectMap: {:?}", err),
         }
     }
 }
@@ -360,8 +373,12 @@ impl TryFrom<FeeMetadata> for ObjectMap {
         match serde_json::to_value(d) {
             Ok(v) => match v {
                 serde_json::Value::Object(ob) => Ok(ob),
-                _ => anyhow::bail!("Could not convert FeeMetadata to ObjectMap. Expected type Object but received: {:?}",v)
-            },Err(err) => anyhow::bail!("Could not convert FeeMetadata to ObjectMap: {:?}",err),
+                _ => anyhow::bail!(
+                    "Could not convert FeeMetadata to ObjectMap. Expected type Object but received: {:?}",
+                    v
+                ),
+            },
+            Err(err) => anyhow::bail!("Could not convert FeeMetadata to ObjectMap: {:?}", err),
         }
     }
 }

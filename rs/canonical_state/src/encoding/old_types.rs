@@ -15,7 +15,7 @@ use crate::CertificationVersion;
 
 use super::types;
 use crate::encoding::types::{
-    Bytes, Cycles, Funds, Payload, RejectSignals, StreamFlagBits, STREAM_SUPPORTED_FLAGS,
+    Bytes, Cycles, Funds, Payload, RejectSignals, STREAM_SUPPORTED_FLAGS, StreamFlagBits,
 };
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::time::CoarseTime;
@@ -68,7 +68,7 @@ impl TryFrom<RequestOrResponseV19> for ic_types::messages::RequestOrResponse {
             other => Err(ProxyDecodeError::Other(format!(
                 "RequestOrResponse: expected exactly one of `request` or `response` to be `Some(_)`, got `{:?}`",
                 other
-            )))
+            ))),
         }
     }
 }

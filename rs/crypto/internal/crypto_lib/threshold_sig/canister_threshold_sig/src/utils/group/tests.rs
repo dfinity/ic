@@ -116,8 +116,8 @@ fn non_adjacent_form_transformation_is_correct_u64_random_samples() -> CanisterT
 }
 
 #[test]
-fn non_adjacent_form_transformation_is_correct_ecc_scalar_random_samples(
-) -> CanisterThresholdResult<()> {
+fn non_adjacent_form_transformation_is_correct_ecc_scalar_random_samples()
+-> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
     for curve_type in EccCurveType::all() {
         let scalars: Vec<EccScalar> = (0..1000)

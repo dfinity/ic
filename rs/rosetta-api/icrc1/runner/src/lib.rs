@@ -5,7 +5,7 @@ use std::default::Default;
 use std::path::Path;
 use std::process::{Child, Command};
 use std::str::FromStr;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 
 pub const DEFAULT_DECIMAL_PLACES: u8 = 8;
 pub const DEFAULT_TOKEN_SYMBOL: &str = "XTST";

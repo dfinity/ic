@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
@@ -13,9 +13,9 @@ use ic_system_test_driver::{
     },
     util::runtime_from_url,
 };
-use ic_types::{messages::ReplicaHealthStatus, ReplicaVersion, SubnetId};
+use ic_types::{ReplicaVersion, SubnetId, messages::ReplicaHealthStatus};
 use prost::Message;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::{convert::TryFrom, io::Read, path::Path};
 
 pub async fn get_blessed_replica_versions(

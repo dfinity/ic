@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{Context, Error, anyhow};
 use async_trait::async_trait;
 use instant_acme::{
     Account, Authorization, Challenge, ChallengeType, Identifier, NewOrder, OrderStatus,

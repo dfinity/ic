@@ -3,8 +3,8 @@ mod tests;
 
 use crate::canister::TargetCanister;
 use crate::git::ArgsHash;
-use candid::types::{Type, TypeInner};
 use candid::TypeEnv;
+use candid::types::{Type, TypeInner};
 use std::path::Path;
 
 const EMPTY_UPGRADE_ARGS: &str = "()";

@@ -4,17 +4,10 @@ use crate::common::utils::{get_rosetta_blocks_from_icrc1_ledger, wait_for_rosett
 use candid::Nat;
 use candid::Principal;
 use common::local_replica::get_custom_agent;
-use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
+use ic_agent::identity::BasicIdentity;
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
-use ic_icrc1_ledger::{InitArgs, InitArgsBuilder};
-use ic_icrc1_test_utils::KeyPairGenerator;
-use ic_icrc1_test_utils::{
-    minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
-    DEFAULT_TRANSFER_FEE,
-};
-use ic_icrc1_tokens_u256::U256;
 use ic_icrc_rosetta::common::constants::STATUS_COMPLETED;
 use ic_icrc_rosetta::common::types::Error;
 use ic_icrc_rosetta::common::types::OperationType;
@@ -26,10 +19,17 @@ use ic_icrc_rosetta::construction_api::types::ConstructionMetadataRequestOptions
 use ic_icrc_rosetta::data_api::types::{QueryBlockRangeRequest, QueryBlockRangeResponse};
 use ic_icrc_rosetta_client::RosettaClient;
 use ic_icrc_rosetta_runner::RosettaClientArgsBuilder;
-use ic_icrc_rosetta_runner::{make_transaction_with_rosetta_client_binary, DEFAULT_TOKEN_SYMBOL};
 use ic_icrc_rosetta_runner::{
-    start_rosetta, RosettaContext, RosettaOptions, DEFAULT_DECIMAL_PLACES,
+    DEFAULT_DECIMAL_PLACES, RosettaContext, RosettaOptions, start_rosetta,
 };
+use ic_icrc_rosetta_runner::{DEFAULT_TOKEN_SYMBOL, make_transaction_with_rosetta_client_binary};
+use ic_icrc1_ledger::{InitArgs, InitArgsBuilder};
+use ic_icrc1_test_utils::KeyPairGenerator;
+use ic_icrc1_test_utils::{
+    ArgWithCaller, DEFAULT_TRANSFER_FEE, LedgerEndpointArg, minter_identity,
+    valid_transactions_strategy,
+};
+use ic_icrc1_tokens_u256::U256;
 use ic_rosetta_api::DEFAULT_BLOCKCHAIN;
 use icrc_ledger_agent::CallMode;
 use icrc_ledger_agent::Icrc1Agent;
@@ -393,11 +393,13 @@ fn test_ledger_symbol_check() {
         });
     });
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .downcast_ref::<String>()
-        .unwrap()
-        .contains("Provided symbol does not match symbol retrieved in online mode."));
+    assert!(
+        result
+            .unwrap_err()
+            .downcast_ref::<String>()
+            .unwrap()
+            .contains("Provided symbol does not match symbol retrieved in online mode.")
+    );
 }
 
 #[test]
@@ -1763,10 +1765,12 @@ fn test_query_blocks_range() {
                             .try_into()
                             .unwrap();
                         assert!(query_block_range_response.blocks.len() == num_blocks);
-                        assert!(query_block_range_response
-                            .blocks
-                            .iter()
-                            .all(|block| block.block_identifier.index <= highest_block_index));
+                        assert!(
+                            query_block_range_response
+                                .blocks
+                                .iter()
+                                .all(|block| block.block_identifier.index <= highest_block_index)
+                        );
                     }
                 });
 

@@ -1,10 +1,10 @@
 use std::time::Duration;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 use canister_test::Canister;
-use ic_agent::agent::{RejectCode, RejectResponse};
 use ic_agent::AgentError;
+use ic_agent::agent::{RejectCode, RejectResponse};
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_consensus_threshold_sig_system_test_utils::{
     create_new_subnet_with_keys, empty_subnet_update, enable_chain_key_signing,
@@ -27,7 +27,7 @@ use ic_system_test_driver::{
     },
     nns::{self, get_subnet_list_from_registry},
     systest,
-    util::{block_on, runtime_from_url, MessageCanister, MetricsFetcher},
+    util::{MessageCanister, MetricsFetcher, block_on, runtime_from_url},
 };
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use slog::info;

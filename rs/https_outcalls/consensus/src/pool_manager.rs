@@ -21,8 +21,8 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    canister_http::*, consensus::HasHeight, crypto::Signed, messages::CallbackId,
-    replica_config::ReplicaConfig, Height, ReplicaVersion,
+    Height, ReplicaVersion, canister_http::*, consensus::HasHeight, crypto::Signed,
+    messages::CallbackId, replica_config::ReplicaConfig,
 };
 use std::{
     cell::RefCell,
@@ -528,7 +528,7 @@ pub mod test {
     use super::*;
     use assert_matches::assert_matches;
     use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_consensus_utils::crypto::SignVerify;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_interfaces_state_manager::Labeled;
@@ -538,10 +538,10 @@ pub mod test {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
+        Height, RegistryVersion, Time,
         crypto::{CryptoHash, CryptoHashOf},
         messages::CallbackId,
         time::UNIX_EPOCH,
-        Height, RegistryVersion, Time,
     };
     use mockall::predicate::*;
     use mockall::*;

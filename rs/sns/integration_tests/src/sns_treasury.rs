@@ -1,10 +1,10 @@
 use candid::{Decode, Encode, Principal};
 use cycles_minting_canister::DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ledger_core::{tokens::CheckedSub, Tokens};
+use ic_ledger_core::{Tokens, tokens::CheckedSub};
 use ic_nervous_system_common::{
-    ledger::compute_distribution_subaccount, ExplosiveTokens, DEFAULT_TRANSFER_FEE, E8,
-    ONE_DAY_SECONDS,
+    DEFAULT_TRANSFER_FEE, E8, ExplosiveTokens, ONE_DAY_SECONDS,
+    ledger::compute_distribution_subaccount,
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
@@ -23,11 +23,10 @@ use ic_nns_test_utils::{
 use ic_sns_governance::{
     governance::TREASURY_SUBACCOUNT_NONCE,
     pb::v1::{
-        governance_error::ErrorType as SnsErrorType, proposal::Action,
-        transfer_sns_treasury_funds::TransferFrom, GovernanceError as SnsGovernanceError,
-        MintSnsTokens, Motion, NervousSystemParameters, NeuronId as SnsNeuronId,
-        NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
-        TransferSnsTreasuryFunds, Vote,
+        GovernanceError as SnsGovernanceError, MintSnsTokens, Motion, NervousSystemParameters,
+        NeuronId as SnsNeuronId, NeuronPermissionList, NeuronPermissionType, Proposal,
+        ProposalData, TransferSnsTreasuryFunds, Vote, governance_error::ErrorType as SnsErrorType,
+        proposal::Action, transfer_sns_treasury_funds::TransferFrom,
     },
     types::E8S_PER_TOKEN,
 };
@@ -35,14 +34,14 @@ use ic_sns_swap::pb::v1::{Init as SwapInit, NeuronBasketConstructionParameters};
 use ic_sns_test_utils::{
     itest_helpers::SnsTestsInitPayloadBuilder,
     state_test_helpers::{
-        participate_in_swap, setup_sns_canisters, sns_cast_vote,
-        state_machine_builder_for_sns_tests, SnsTestCanisterIds,
+        SnsTestCanisterIds, participate_in_swap, setup_sns_canisters, sns_cast_vote,
+        state_machine_builder_for_sns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
-    AccountIdentifier, BinaryAccountBalanceArgs, Subaccount as IcpSubaccount,
-    DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, BinaryAccountBalanceArgs, DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE,
+    Subaccount as IcpSubaccount,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
@@ -178,7 +177,7 @@ fn new_treasury_scenario(
         .build();
     sns_init_payload.swap = SwapInit {
         fallback_controller_principal_ids: vec![
-            PrincipalId::new_user_test_id(803_233_237).to_string()
+            PrincipalId::new_user_test_id(803_233_237).to_string(),
         ],
 
         // This is abnormal, but we do this, because this makes it easier to see that only

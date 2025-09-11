@@ -1,5 +1,5 @@
 use crate::allowances::list_allowances;
-use crate::in_memory_ledger::{verify_ledger_state, AllowancesRecentlyPurged, InMemoryLedger};
+use crate::in_memory_ledger::{AllowancesRecentlyPurged, InMemoryLedger, verify_ledger_state};
 use crate::metrics::{parse_metric, retrieve_metrics};
 use assert_matches::assert_matches;
 use candid::{CandidType, Decode, Encode, Int, Nat, Principal};
@@ -9,14 +9,14 @@ use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_error_types::UserError;
 use ic_icrc1::blocks::encoded_block_to_generic_block;
-use ic_icrc1::{endpoints::StandardRecord, hash::Hash, Block, Operation, Transaction};
+use ic_icrc1::{Block, Operation, Transaction, endpoints::StandardRecord, hash::Hash};
 use ic_icrc1_ledger::FeatureFlags;
-use ic_icrc1_test_utils::{valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg};
+use ic_icrc1_test_utils::{ArgWithCaller, LedgerEndpointArg, valid_transactions_strategy};
 use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_ledger_core::Tokens;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::TokensType;
-use ic_ledger_core::Tokens;
 use ic_ledger_hash_of::HashOf;
 use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
 use ic_management_canister_types_private::{
@@ -26,26 +26,15 @@ use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_test_utils::test_http_request_decoding_quota;
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig, WasmResult};
 use ic_types::Cycles;
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, IcpAllowanceArgs};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
-use icrc_ledger_types::icrc1::account::{Account, Subaccount, DEFAULT_SUBACCOUNT};
+use icrc_ledger_types::icrc1::account::{Account, DEFAULT_SUBACCOUNT, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
-use icrc_ledger_types::icrc103::get_allowances::{Allowances, GetAllowancesArgs};
-use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
-use icrc_ledger_types::icrc21::errors::ErrorInfo;
-use icrc_ledger_types::icrc21::errors::Icrc21Error;
-use icrc_ledger_types::icrc21::requests::ConsentMessageMetadata;
-use icrc_ledger_types::icrc21::requests::{
-    ConsentMessageRequest, ConsentMessageSpec, DisplayMessageType,
-};
-use icrc_ledger_types::icrc21::responses::{
-    ConsentInfo, ConsentMessage, FieldsDisplay, Value as Icrc21Value,
-};
 use icrc_ledger_types::icrc3;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::{
@@ -57,6 +46,17 @@ use icrc_ledger_types::icrc3::transactions::GetTransactionsResponse;
 use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
 use icrc_ledger_types::icrc3::transactions::TransactionRange;
 use icrc_ledger_types::icrc3::transactions::Transfer;
+use icrc_ledger_types::icrc21::errors::ErrorInfo;
+use icrc_ledger_types::icrc21::errors::Icrc21Error;
+use icrc_ledger_types::icrc21::requests::ConsentMessageMetadata;
+use icrc_ledger_types::icrc21::requests::{
+    ConsentMessageRequest, ConsentMessageSpec, DisplayMessageType,
+};
+use icrc_ledger_types::icrc21::responses::{
+    ConsentInfo, ConsentMessage, FieldsDisplay, Value as Icrc21Value,
+};
+use icrc_ledger_types::icrc103::get_allowances::{Allowances, GetAllowancesArgs};
+use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
@@ -1107,7 +1107,9 @@ where
     standards.sort();
     assert_eq!(
         standards,
-        vec!["ICRC-1", "ICRC-10", "ICRC-103", "ICRC-106", "ICRC-2", "ICRC-21", "ICRC-3"]
+        vec![
+            "ICRC-1", "ICRC-10", "ICRC-103", "ICRC-106", "ICRC-2", "ICRC-21", "ICRC-3"
+        ]
     );
 }
 
@@ -2538,9 +2540,10 @@ pub fn test_upgrade_serialization<Tokens>(
                     }
                     Err(e) => {
                         if mainnet_on_prev_version {
-                            assert!(e
-                                .description()
-                                .contains("Trying to downgrade from incompatible version"))
+                            assert!(
+                                e.description()
+                                    .contains("Trying to downgrade from incompatible version")
+                            )
                         } else {
                             panic!("Upgrade to mainnet should succeed!")
                         }
@@ -2763,9 +2766,10 @@ pub fn test_downgrade_from_incompatible_version<T>(
             if downgrade_to_mainnet_possible {
                 panic!("Downgrade to mainnet should be possible!")
             } else {
-                assert!(e
-                    .description()
-                    .contains("Trying to downgrade from incompatible version"))
+                assert!(
+                    e.description()
+                        .contains("Trying to downgrade from incompatible version")
+                )
             }
         }
     };
@@ -2788,9 +2792,10 @@ pub fn test_downgrade_from_incompatible_version<T>(
             panic!("Downgrade from future ledger version should fail!")
         }
         Err(e) => {
-            assert!(e
-                .description()
-                .contains("Trying to downgrade from incompatible version"))
+            assert!(
+                e.description()
+                    .contains("Trying to downgrade from incompatible version")
+            )
         }
     };
 
@@ -4473,11 +4478,11 @@ pub fn test_icrc1_test_suite<T: candid::CandidType>(
 ) {
     use anyhow::Context;
     use async_trait::async_trait;
-    use candid::utils::{decode_args, encode_args, ArgumentDecoder, ArgumentEncoder};
+    use candid::utils::{ArgumentDecoder, ArgumentEncoder, decode_args, encode_args};
     use futures::FutureExt;
     use icrc1_test_env::LedgerEnv;
-    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     #[derive(Clone)]
     pub struct SMLedger {
@@ -4732,8 +4737,14 @@ Charged for processing the transfer.
     );
 
     // Make sure the accounts are formatted correctly.
-    assert_eq!(from_account.to_string(), "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101");
-    assert_eq!(receiver_account.to_string(), "6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202");
+    assert_eq!(
+        from_account.to_string(),
+        "d2zjj-uyaaa-aaaaa-aaaap-4ai-qmfzyha.101010101010101010101010101010101010101010101010101010101010101"
+    );
+    assert_eq!(
+        receiver_account.to_string(),
+        "6fyp7-3ibaa-aaaaa-aaaap-4ai-v57emui.202020202020202020202020202020202020202020202020202020202020202"
+    );
     // If we do not set the Memo we expect it to not be included in the resulting message.
     args.arg = Encode!(&TransferArg {
         memo: None,
@@ -4877,7 +4888,10 @@ fn test_icrc21_approve_message(
         fee: Some(Nat::from(FEE)),
         memo: Some(Memo::from(b"test_bytes".to_vec())),
     };
-    assert_eq!(spender_account.to_string(), "djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303");
+    assert_eq!(
+        spender_account.to_string(),
+        "djduj-3qcaa-aaaaa-aaaap-4ai-5r7aoqy.303030303030303030303030303030303030303030303030303030303030303"
+    );
     let expected_approve_message = "# Approve spending
 
 You are authorizing another address to withdraw funds from your account.
@@ -6739,7 +6753,9 @@ pub fn test_setting_fee_collector_to_minting_account<T>(
     let args = Encode!(&args).unwrap();
     match env.install_canister(ledger_wasm.clone(), args, None) {
         Ok(_) => {
-            panic!("should not install ledger with minting account and fee collector set to the same account")
+            panic!(
+                "should not install ledger with minting account and fee collector set to the same account"
+            )
         }
         Err(err) => {
             err.assert_contains(

@@ -16,7 +16,7 @@ use ic_system_test_driver::{
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
     systest,
-    util::{block_on, runtime_from_url, MessageCanister, MetricsFetcher},
+    util::{MessageCanister, MetricsFetcher, block_on, runtime_from_url},
 };
 use slog::info;
 

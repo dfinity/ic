@@ -68,11 +68,9 @@ impl std::fmt::Debug for TlaCheckError {
                 self.apalache_error,
             )
         )?;
-        f.debug_map()
-            .entries(self.pair.start.0 .0.iter())
-            .finish()?;
+        f.debug_map().entries(self.pair.start.0.0.iter()).finish()?;
         f.write_str("\nand\n")?;
-        f.debug_map().entries(self.pair.end.0 .0.iter()).finish()?;
+        f.debug_map().entries(self.pair.end.0.0.iter()).finish()?;
         f.write_str(&format!(
             "\nThe start and end locations in the code are:\n{}\nand\n{}",
             self.pair.start_source_location, self.pair.end_source_location
@@ -211,14 +209,14 @@ pub fn check_tla_code_link(
         state_pair
             .start
             .0
-             .0
+            .0
             .iter()
             .map(|(k, v)| (k.clone(), v.to_string()))
             .collect(),
         state_pair
             .end
             .0
-             .0
+            .0
             .iter()
             .map(|(k, v)| (k.clone(), v.to_string()))
             .collect(),

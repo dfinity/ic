@@ -1,14 +1,14 @@
 use candid::{Decode, Encode};
 use clap::Parser;
-use ic_agent::{export::Principal, Agent};
+use ic_agent::{Agent, export::Principal};
 use ic_identity_hsm::HardwareIdentity;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::{
+    ManageNeuron, ManageNeuronResponse, Motion, Proposal,
     manage_neuron::{Command, NeuronIdOrSubaccount},
     manage_neuron_response::{self, MakeProposalResponse},
     proposal::Action,
-    ManageNeuron, ManageNeuronResponse, Motion, Proposal,
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path;

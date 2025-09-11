@@ -1,6 +1,6 @@
 use super::*;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     registry::subnet::v1 as pb_subnet,
     state::queues::v1 as pb_queues,
     state::system_metadata::v1 as pb_metadata,
@@ -613,7 +613,7 @@ impl TryFrom<(Time, pb_metadata::ReshareChainKeyContext)> for ReshareChainKeyCon
                 match ni_dkg_target_id(context.target_id.as_slice()) {
                     Ok(target_id) => target_id,
                     Err(_) => {
-                        return Err(Self::Error::Other("target_id is not 32 bytes.".to_string()))
+                        return Err(Self::Error::Other("target_id is not 32 bytes.".to_string()));
                     }
                 }
             },

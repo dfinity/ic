@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use ic_registry_client_helpers::node::NodeRecord;
 use ic_types::{PrincipalId, SubnetId};
-use slog::{o, Drain, Logger};
+use slog::{Drain, Logger, o};
 use std::str::FromStr;
 use url::Url;
 

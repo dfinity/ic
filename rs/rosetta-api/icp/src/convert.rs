@@ -6,21 +6,21 @@ use crate::{
     errors,
     errors::ApiError,
     models::{
-        self,
+        self, AccountIdentifier, BlockIdentifier, Operation,
         amount::{from_amount, ledgeramount_from_amount},
         operation::OperationType,
-        AccountIdentifier, BlockIdentifier, Operation,
     },
     request::{
-        request_result::RequestResult, transaction_operation_results::TransactionOperationResults,
-        transaction_results::TransactionResults, Request,
+        Request, request_result::RequestResult,
+        transaction_operation_results::TransactionOperationResults,
+        transaction_results::TransactionResults,
     },
     request_types::{
         ChangeAutoStakeMaturityMetadata, DisburseMaturityMetadata, DisburseMetadata,
         FollowMetadata, KeyMetadata, ListNeuronsMetadata, NeuronIdentifierMetadata,
         NeuronInfoMetadata, PublicKeyOrPrincipal, RegisterVoteMetadata, RequestResultMetadata,
-        SetDissolveTimestampMetadata, SpawnMetadata, StakeMaturityMetadata, Status,
-        STATUS_COMPLETED,
+        STATUS_COMPLETED, SetDissolveTimestampMetadata, SpawnMetadata, StakeMaturityMetadata,
+        Status,
     },
     transaction_id::TransactionIdentifier,
 };
@@ -30,8 +30,8 @@ use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_hash_of::HashOf;
 use ic_types::{
-    messages::{HttpCanisterUpdate, HttpReadState},
     CanisterId, PrincipalId,
+    messages::{HttpCanisterUpdate, HttpReadState},
 };
 use icp_ledger::{
     Block, BlockIndex, Operation as LedgerOperation, SendArgs, Subaccount, TimeStamp, Tokens,
@@ -40,7 +40,7 @@ use icp_ledger::{
 use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire};
 use rosetta_core::convert::principal_id_from_public_key;
-use serde_json::{from_value, map::Map, Number, Value};
+use serde_json::{Number, Value, from_value, map::Map};
 use std::convert::{TryFrom, TryInto};
 
 /// This module converts from ledger_canister data structures to Rosetta data
@@ -149,7 +149,7 @@ pub fn operations_to_requests(
                 return Err(ApiError::InvalidRequest(
                     false,
                     "OperationType Approve is not supported for Requests".into(),
-                ))
+                ));
             }
             OperationType::Fee => {
                 let amount = o
@@ -504,7 +504,7 @@ pub fn from_transaction_operation_results(
             (_, []) => {
                 return Err(ApiError::internal_error(
                     "Too few Operations, could not match Operations with Requests",
-                ))
+                ));
             }
         };
 
@@ -549,7 +549,7 @@ pub fn from_account_or_account_identifier(
                 None => {
                     return Err(ApiError::invalid_request(
                         "Invalid Account, the owner needs to be specified",
-                    ))
+                    ));
                 }
                 Some(owner) => owner.0,
             };
@@ -576,7 +576,7 @@ pub fn from_account_or_account_identifier(
         (Some(_), Some(_)) => {
             return Err(ApiError::invalid_request(
                 "Cannot specify both account and account_identifier",
-            ))
+            ));
         }
     };
     Ok(result)

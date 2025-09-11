@@ -78,7 +78,7 @@ mod tests {
         },
     };
     use ic_registry_keys::make_node_operator_record_key;
-    use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+    use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
     use ic_types::PrincipalId;
     use maplit::btreemap;
     use std::collections::BTreeMap;

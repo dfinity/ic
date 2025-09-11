@@ -9,14 +9,14 @@ use ic_nervous_system_agent::{
     pocketic_impl::PocketIcAgent,
 };
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
+use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::sns::{
     self,
     governance::{
-        redact_human_readable, set_automatically_advance_target_version_flag,
         EXPECTED_UPGRADE_DURATION_MAX_SECONDS, EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
+        redact_human_readable, set_automatically_advance_target_version_flag,
     },
 };
-use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{add_wasms_to_sns_wasm, nns},
@@ -36,7 +36,7 @@ use ic_sns_governance_api::{
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_wasm::pb::v1::{SnsCanisterType, SnsUpgrade, SnsVersion, SnsWasm};
 use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
-use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
+use pocket_ic::{PocketIcBuilder, nonblocking::PocketIc};
 
 /// Wraps `pocket_ic` into an agent to use when more authority is required (e.g., making proposals).
 ///

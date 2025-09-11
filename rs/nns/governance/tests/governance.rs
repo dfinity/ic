@@ -11,7 +11,7 @@ use assert_matches::assert_matches;
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use common::increase_dissolve_delay_raw;
-use fixtures::{account, new_motion_proposal, principal, NNSBuilder, NeuronBuilder};
+use fixtures::{NNSBuilder, NeuronBuilder, account, new_motion_proposal, principal};
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_crypto_sha2::Sha256;
@@ -19,8 +19,8 @@ use ic_nervous_system_clients::canister_status::{
     CanisterStatusResultV2, CanisterStatusType, MemoryMetricsFromManagementCanister,
 };
 use ic_nervous_system_common::{
-    ledger, ledger::compute_neuron_staking_subaccount_bytes, NervousSystemError, E8,
-    ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
+    E8, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS, ledger,
+    ledger::compute_neuron_staking_subaccount_bytes,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
@@ -38,43 +38,19 @@ use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance::{
-    canister_state::{governance_mut, set_governance_for_tests},
-    pb::v1::{manage_neuron::DisburseMaturity, Account, Subaccount as GovernanceSubaccount},
-};
-use ic_nns_governance::{governance::RandomnessGenerator, pb::v1::manage_neuron::Follow};
-use ic_nns_governance::{
+    DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
     governance::{
-        get_node_provider_reward,
-        test_data::{
-            CREATE_SERVICE_NERVOUS_SYSTEM, CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
-        },
         Environment, Governance, HeapGrowthPotential, INITIAL_NEURON_DISSOLVE_DELAY,
         MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NEURON_CREATION_SPIKE,
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
         REWARD_DISTRIBUTION_PERIOD_SECONDS, WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
+        get_node_provider_reward,
+        test_data::{
+            CREATE_SERVICE_NERVOUS_SYSTEM, CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING,
+        },
     },
     governance_proto_builder::GovernanceProtoBuilder,
     pb::v1::{
-        add_or_remove_node_provider::Change,
-        governance::GovernanceCachedMetrics,
-        governance_error::ErrorType::{
-            self, InsufficientFunds, NotAuthorized, NotFound, ResourceExhausted,
-        },
-        install_code::CanisterInstallMode,
-        manage_neuron::{
-            self,
-            claim_or_refresh::{By, MemoAndController},
-            configure::Operation,
-            disburse::Amount,
-            ChangeAutoStakeMaturity, ClaimOrRefresh, Command, Configure, Disburse,
-            DisburseToNeuron, IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund,
-            MergeMaturity, NeuronIdOrSubaccount, RefreshVotingPower, SetVisibility, Spawn, Split,
-            StartDissolving,
-        },
-        neurons_fund_snapshot::NeuronsFundNeuronPortion,
-        proposal::{self, Action},
-        reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
-        settle_neurons_fund_participation_request, swap_background_information,
         AddOrRemoveNodeProvider, Ballot, BallotInfo, CreateServiceNervousSystem, Empty,
         ExecuteNnsFunction, Followees, GovernanceError, IdealMatchedParticipationFunction,
         InstallCode, KnownNeuron, KnownNeuronData, ManageNeuron, MonthlyNodeProviderRewards,
@@ -87,16 +63,38 @@ use ic_nns_governance::{
         SettleNeuronsFundParticipationRequest, SwapBackgroundInformation, SwapParticipationLimits,
         Tally, Topic, UpdateNodeProvider, Visibility, Vote, VotingPowerEconomics,
         WaitForQuietState,
+        add_or_remove_node_provider::Change,
+        governance::GovernanceCachedMetrics,
+        governance_error::ErrorType::{
+            self, InsufficientFunds, NotAuthorized, NotFound, ResourceExhausted,
+        },
+        install_code::CanisterInstallMode,
+        manage_neuron::{
+            self, ChangeAutoStakeMaturity, ClaimOrRefresh, Command, Configure, Disburse,
+            DisburseToNeuron, IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund,
+            MergeMaturity, NeuronIdOrSubaccount, RefreshVotingPower, SetVisibility, Spawn, Split,
+            StartDissolving,
+            claim_or_refresh::{By, MemoAndController},
+            configure::Operation,
+            disburse::Amount,
+        },
+        neurons_fund_snapshot::NeuronsFundNeuronPortion,
+        proposal::{self, Action},
+        reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
+        settle_neurons_fund_participation_request, swap_background_information,
     },
-    DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
 };
+use ic_nns_governance::{
+    canister_state::{governance_mut, set_governance_for_tests},
+    pb::v1::{Account, Subaccount as GovernanceSubaccount, manage_neuron::DisburseMaturity},
+};
+use ic_nns_governance::{governance::RandomnessGenerator, pb::v1::manage_neuron::Follow};
 use ic_nns_governance_api::{
-    self as api,
+    self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons,
+    ListNeuronsResponse, ManageNeuronResponse, NeuronState,
     manage_neuron_response::{self, Command as CommandResponse, ConfigureResponse},
     proposal::Action as ApiAction,
     proposal_validation::validate_proposal_title,
-    CreateServiceNervousSystem as ApiCreateServiceNervousSystem, ListNeurons, ListNeuronsResponse,
-    ManageNeuronResponse, NeuronState,
 };
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -111,14 +109,14 @@ use ic_sns_wasm::pb::v1::{
     ListDeployedSnsesResponse, SnsWasmError,
 };
 use icp_ledger::{
-    protobuf::AccountIdentifier as AccountIdentifierProto, AccountIdentifier, Memo, Subaccount,
-    Tokens,
+    AccountIdentifier, Memo, Subaccount, Tokens,
+    protobuf::AccountIdentifier as AccountIdentifierProto,
 };
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset, hashmap};
 use pretty_assertions::{assert_eq, assert_ne};
-use proptest::prelude::{proptest, ProptestConfig};
-use rand::{prelude::IteratorRandom, rngs::StdRng, Rng, SeedableRng};
+use proptest::prelude::{ProptestConfig, proptest};
+use rand::{Rng, SeedableRng, prelude::IteratorRandom, rngs::StdRng};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal_macros::dec;
 use std::{
@@ -132,7 +130,7 @@ use std::{
 };
 
 #[cfg(feature = "tla")]
-use ic_nns_governance::governance::tla::{check_traces as tla_check_traces, TLA_TRACES_LKEY};
+use ic_nns_governance::governance::tla::{TLA_TRACES_LKEY, check_traces as tla_check_traces};
 use ic_nns_governance::storage::reset_stable_memory;
 use ic_nns_governance::timer_tasks::schedule_tasks;
 #[cfg(feature = "tla")]
@@ -334,8 +332,8 @@ fn test_two_neuron_disagree_identical_voting_power_proposal_should_be_rejected()
 // Tests that, upon proposal expiration, proposals are rejected if they have not
 // reached absolute majority, counting the eligible neurons that did not vote.
 #[test]
-fn test_two_neuron_disagree_identical_voting_power_one_does_not_vote_proposal_should_rejected_at_expiration(
-) {
+fn test_two_neuron_disagree_identical_voting_power_one_does_not_vote_proposal_should_rejected_at_expiration()
+ {
     check_proposal_status_after_voting_and_after_expiration(
         vec![
             api::Neuron {
@@ -4067,41 +4065,49 @@ fn test_approve_kyc() {
         "Neuron is not kyc verified: 2"
     );
 
-    assert!(!gov
-        .neuron_store
-        .with_neuron(&NeuronId::from_u64(1), |n| n.kyc_verified)
-        .expect("Neuron not found"));
-    assert!(!gov
-        .neuron_store
-        .with_neuron(&NeuronId::from_u64(2), |n| n.kyc_verified)
-        .expect("Neuron not found"));
-    assert!(!gov
-        .neuron_store
-        .with_neuron(&NeuronId::from_u64(3), |n| n.kyc_verified)
-        .expect("Neuron not found"));
-    assert!(!gov
-        .neuron_store
-        .with_neuron(&NeuronId::from_u64(4), |n| n.kyc_verified)
-        .expect("Neuron not found"));
+    assert!(
+        !gov.neuron_store
+            .with_neuron(&NeuronId::from_u64(1), |n| n.kyc_verified)
+            .expect("Neuron not found")
+    );
+    assert!(
+        !gov.neuron_store
+            .with_neuron(&NeuronId::from_u64(2), |n| n.kyc_verified)
+            .expect("Neuron not found")
+    );
+    assert!(
+        !gov.neuron_store
+            .with_neuron(&NeuronId::from_u64(3), |n| n.kyc_verified)
+            .expect("Neuron not found")
+    );
+    assert!(
+        !gov.neuron_store
+            .with_neuron(&NeuronId::from_u64(4), |n| n.kyc_verified)
+            .expect("Neuron not found")
+    );
 
     gov.approve_genesis_kyc(&[principal1, principal2]).unwrap();
 
-    assert!(gov
-        .neuron_store
-        .with_neuron(&NeuronId::from_u64(1), |n| n.kyc_verified)
-        .expect("Neuron not found"));
-    assert!(gov
-        .neuron_store
-        .with_neuron(&NeuronId::from_u64(2), |n| n.kyc_verified)
-        .expect("Neuron not found"));
-    assert!(gov
-        .neuron_store
-        .with_neuron(&NeuronId::from_u64(3), |n| n.kyc_verified)
-        .expect("Neuron not found"));
-    assert!(!gov
-        .neuron_store
-        .with_neuron(&NeuronId::from_u64(4), |n| n.kyc_verified)
-        .expect("Neuron not found"));
+    assert!(
+        gov.neuron_store
+            .with_neuron(&NeuronId::from_u64(1), |n| n.kyc_verified)
+            .expect("Neuron not found")
+    );
+    assert!(
+        gov.neuron_store
+            .with_neuron(&NeuronId::from_u64(2), |n| n.kyc_verified)
+            .expect("Neuron not found")
+    );
+    assert!(
+        gov.neuron_store
+            .with_neuron(&NeuronId::from_u64(3), |n| n.kyc_verified)
+            .expect("Neuron not found")
+    );
+    assert!(
+        !gov.neuron_store
+            .with_neuron(&NeuronId::from_u64(4), |n| n.kyc_verified)
+            .expect("Neuron not found")
+    );
 
     // Disbursing should now work.
     let _ = gov
@@ -6898,10 +6904,11 @@ fn test_add_and_remove_hot_key() {
     let neuron = init_neurons[&25].clone();
     let new_controller = init_neurons[&42].controller.unwrap();
 
-    assert!(!gov
-        .neuron_store
-        .get_neuron_ids_readable_by_caller(new_controller)
-        .contains(neuron.id.as_ref().unwrap()));
+    assert!(
+        !gov.neuron_store
+            .get_neuron_ids_readable_by_caller(new_controller)
+            .contains(neuron.id.as_ref().unwrap())
+    );
     // Add a hot key to the neuron and make sure that gets reflected in the
     // principal to neuron ids index.
     let result = gov
@@ -6925,10 +6932,11 @@ fn test_add_and_remove_hot_key() {
         .unwrap();
 
     assert!(result.is_ok());
-    assert!(gov
-        .neuron_store
-        .get_neuron_ids_readable_by_caller(new_controller)
-        .contains(neuron.id.as_ref().unwrap()));
+    assert!(
+        gov.neuron_store
+            .get_neuron_ids_readable_by_caller(new_controller)
+            .contains(neuron.id.as_ref().unwrap())
+    );
 
     // Remove a hot key from that neuron and make sure that gets reflected in
     // the principal to neuron ids index.
@@ -6953,10 +6961,11 @@ fn test_add_and_remove_hot_key() {
         .unwrap();
 
     assert!(result.is_ok());
-    assert!(!gov
-        .neuron_store
-        .get_neuron_ids_readable_by_caller(new_controller)
-        .contains(neuron.id.as_ref().unwrap()));
+    assert!(
+        !gov.neuron_store
+            .get_neuron_ids_readable_by_caller(new_controller)
+            .contains(neuron.id.as_ref().unwrap())
+    );
 }
 
 #[test]
@@ -7092,8 +7101,8 @@ fn test_manage_and_reward_node_providers() {
     );
 
     // Adding the same node provider again should fail.
-    assert!(gov
-        .manage_neuron(
+    assert!(
+        gov.manage_neuron(
             &voter_pid,
             &ManageNeuron {
                 id: None,
@@ -7118,7 +7127,8 @@ fn test_manage_and_reward_node_providers() {
         .err()
         .unwrap()
         .error_message
-        .contains("cannot add already existing Node Provider"));
+        .contains("cannot add already existing Node Provider")
+    );
 
     // Rewarding the node provider to the default account should now work.
     let pid = match gov
@@ -7445,8 +7455,8 @@ fn test_manage_and_reward_multiple_node_providers() {
 
     // Adding any of the same node providers again should fail
     for np_pid in np_pid_vec {
-        assert!(gov
-            .manage_neuron(
+        assert!(
+            gov.manage_neuron(
                 &voter_pid,
                 &ManageNeuron {
                     id: None,
@@ -7471,7 +7481,8 @@ fn test_manage_and_reward_multiple_node_providers() {
             .err()
             .unwrap()
             .error_message
-            .contains("cannot add already existing Node Provider"));
+            .contains("cannot add already existing Node Provider")
+        );
     }
 
     let to_subaccount = Subaccount({
@@ -8679,9 +8690,10 @@ fn test_update_node_provider() {
     };
 
     // Updating an existing Node Provider with a valid reward account should succeed
-    assert!(gov
-        .update_node_provider(&controller, update_np.clone())
-        .is_ok());
+    assert!(
+        gov.update_node_provider(&controller, update_np.clone())
+            .is_ok()
+    );
     assert_eq!(
         gov.heap_data
             .node_providers

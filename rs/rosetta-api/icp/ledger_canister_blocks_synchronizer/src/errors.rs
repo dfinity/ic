@@ -11,8 +11,10 @@ pub enum Error {
 
 impl Error {
     pub fn invalid_tip_of_chain(index: BlockIndex, expected: Block, found: Block) -> Error {
-        let msg = format!("The tip of the chain at index {} is different from the expected one. Expected: {:?}, found: {:?}",
-                        index, expected, found);
+        let msg = format!(
+            "The tip of the chain at index {} is different from the expected one. Expected: {:?}, found: {:?}",
+            index, expected, found
+        );
         Error::InvalidTipOfChain(msg)
     }
 }

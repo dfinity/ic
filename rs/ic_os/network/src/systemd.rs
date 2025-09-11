@@ -6,7 +6,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result};
 
-use crate::interfaces::{get_interfaces, has_ipv6_connectivity, Interface};
+use crate::interfaces::{Interface, get_interfaces, has_ipv6_connectivity};
 use config_types::DeterministicIpv6Config;
 use macaddr::MacAddr6;
 

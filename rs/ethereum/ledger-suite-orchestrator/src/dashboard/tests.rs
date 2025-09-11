@@ -1,19 +1,19 @@
+use crate::dashboard::DashboardTemplate;
 use crate::dashboard::tests::assertions::DashboardAssert;
 use crate::dashboard::tests::fixtures::{
     cketh_ledger_suite, usdc_metadata, usdc_token_id, usdt_token_id,
 };
-use crate::dashboard::DashboardTemplate;
 use candid::Principal;
-use fixtures::{usdc, usdt, USDC_ADDRESS, USDT_ADDRESS};
+use fixtures::{USDC_ADDRESS, USDT_ADDRESS, usdc, usdt};
 use ic_ledger_suite_orchestrator::candid::InitArg;
 use ic_ledger_suite_orchestrator::scheduler::Erc20Token;
 use ic_ledger_suite_orchestrator::state::{
     ArchiveWasm, CanistersMetadata, GitCommitHash, Index, IndexWasm, Ledger, LedgerWasm, State,
     WasmHash,
 };
-use ic_ledger_suite_orchestrator::storage::{wasm_store_try_insert, WasmStore};
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
+use ic_ledger_suite_orchestrator::storage::{WasmStore, wasm_store_try_insert};
 use ic_stable_structures::DefaultMemoryImpl;
+use ic_stable_structures::memory_manager::{MemoryId, MemoryManager};
 use std::str::FromStr;
 
 #[test]
@@ -293,8 +293,8 @@ pub fn empty_wasm_store() -> WasmStore {
 }
 
 mod assertions {
-    use crate::dashboard::tests::{empty_wasm_store, initial_state};
     use crate::dashboard::DashboardTemplate;
+    use crate::dashboard::tests::{empty_wasm_store, initial_state};
     use ic_ledger_suite_orchestrator::state::State;
     use ic_ledger_suite_orchestrator::storage::WasmStore;
     use scraper::{Html, Selector};

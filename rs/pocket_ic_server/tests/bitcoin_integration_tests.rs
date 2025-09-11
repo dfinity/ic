@@ -7,7 +7,7 @@ use ic_btc_adapter_test_utils::{
 use ic_btc_interface::{Config, Network};
 use ic_config::execution_environment::BITCOIN_TESTNET_CANISTER_ID;
 use ic_nns_constants::ROOT_CANISTER_ID;
-use pocket_ic::{update_candid, PocketIc, PocketIcBuilder};
+use pocket_ic::{PocketIc, PocketIcBuilder, update_candid};
 use std::str::FromStr;
 use std::time::SystemTime;
 

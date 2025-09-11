@@ -2,14 +2,14 @@ use crate::sns::root::get_sns_canisters_summary;
 use assert_matches::assert_matches;
 use candid::{Nat, Principal};
 use canister_test::Wasm;
-use futures::{stream, StreamExt};
+use futures::{StreamExt, stream};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_agent::{
     helpers::sns::SnsProposalError, sns::governance::ProposalSubmissionError,
 };
 use ic_nervous_system_common::{
-    assert_is_ok, i2d, ledger::compute_distribution_subaccount_bytes, E8, ONE_DAY_SECONDS,
+    E8, ONE_DAY_SECONDS, assert_is_ok, i2d, ledger::compute_distribution_subaccount_bytes,
 };
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::NnsInstaller;
@@ -24,9 +24,9 @@ use ic_nervous_system_proto::pb::v1::{Duration as DurationPb, Tokens as TokensPb
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys;
 use ic_nns_governance_api::{
+    CreateServiceNervousSystem, Neuron as NnsNeuron,
     create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution,
     get_neurons_fund_audit_info_response, neurons_fund_snapshot::NeuronsFundNeuronPortion,
-    CreateServiceNervousSystem, Neuron as NnsNeuron,
 };
 use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
 use ic_sns_governance_api::pb::v1::{self as sns_pb, NeuronPermissionType};
@@ -34,11 +34,11 @@ use ic_sns_init::distributions::MAX_DEVELOPER_DISTRIBUTION_COUNT;
 use ic_sns_root::CanisterSummary;
 use ic_sns_swap::{
     pb::v1::{
+        BuyerState, FinalizeSwapResponse, GetDerivedStateResponse, Lifecycle,
+        RefreshBuyerTokensResponse, SetDappControllersCallResult, SetDappControllersResponse,
+        SetModeCallResult, SettleNeuronsFundParticipationResult, SweepResult,
         new_sale_ticket_response, set_dapp_controllers_call_result, set_mode_call_result,
-        settle_neurons_fund_participation_result, BuyerState, FinalizeSwapResponse,
-        GetDerivedStateResponse, Lifecycle, RefreshBuyerTokensResponse,
-        SetDappControllersCallResult, SetDappControllersResponse, SetModeCallResult,
-        SettleNeuronsFundParticipationResult, SweepResult,
+        settle_neurons_fund_participation_result,
     },
     swap::principal_to_subaccount,
 };
@@ -48,8 +48,8 @@ use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use maplit::btreemap;
 use pocket_ic::PocketIcBuilder;
 use rust_decimal::{
-    prelude::{FromPrimitive, ToPrimitive},
     Decimal,
+    prelude::{FromPrimitive, ToPrimitive},
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -2075,8 +2075,8 @@ async fn test_sns_lifecycle_happy_scenario_with_neurons_fund_participation() {
 }
 
 #[tokio::test]
-async fn test_sns_lifecycle_happy_scenario_direct_participation_with_and_without_ticketing_with_neurons_fund_participation(
-) {
+async fn test_sns_lifecycle_happy_scenario_direct_participation_with_and_without_ticketing_with_neurons_fund_participation()
+ {
     test_sns_lifecycle(
         false,
         CreateServiceNervousSystemBuilder::default()

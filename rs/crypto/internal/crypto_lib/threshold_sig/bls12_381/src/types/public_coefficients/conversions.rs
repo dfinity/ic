@@ -4,8 +4,8 @@ use crate::crypto::public_key_from_secret_key;
 use crate::types::{Polynomial, PublicCoefficients, PublicKey};
 use ic_crypto_internal_bls12_381_type::G2Projective;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
-pub use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes as InternalPublicCoefficients;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
+pub use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes as InternalPublicCoefficients;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::{
     PublicKeyBytes, ThresholdSigPublicKeyBytesConversionError,
 };

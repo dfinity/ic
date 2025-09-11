@@ -1,9 +1,9 @@
 use crate::deserialize_registry_value;
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::routing_table::v1 as pb;
-use ic_registry_keys::{make_canister_migrations_record_key, CANISTER_RANGES_PREFIX};
+use ic_registry_keys::{CANISTER_RANGES_PREFIX, make_canister_migrations_record_key};
 use ic_registry_routing_table::{CanisterIdRange, CanisterMigrations, RoutingTable};
-use ic_types::{registry::RegistryClientError::DecodeError, RegistryVersion, SubnetId};
+use ic_types::{RegistryVersion, SubnetId, registry::RegistryClientError::DecodeError};
 use std::convert::TryFrom;
 
 /// A trait that allows access to `RoutingTable`.  The expectation for the

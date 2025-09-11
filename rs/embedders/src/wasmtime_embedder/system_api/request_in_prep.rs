@@ -4,10 +4,10 @@ use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::ReplicaLogger;
 use ic_types::Time;
 use ic_types::{
-    messages::{CallContextId, Request, NO_DEADLINE},
+    CanisterId, Cycles, NumBytes, PrincipalId,
+    messages::{CallContextId, NO_DEADLINE, Request},
     methods::{Callback, WasmClosure},
     time::CoarseTime,
-    CanisterId, Cycles, NumBytes, PrincipalId,
 };
 use ic_wasm_types::doc_ref;
 use serde::{Deserialize, Serialize};
@@ -169,12 +169,12 @@ impl RequestInPrep {
         if size as u64 > max_size_local_subnet.get() - current_size as u64 {
             Err(HypervisorError::UserContractViolation {
                 error: format!(
-                "Request to {}:{} has a payload size of {}, which exceeds the allowed limit of {}.",
-                self.callee,
-                self.method_name,
-                current_size + size,
-                max_size_local_subnet
-            ),
+                    "Request to {}:{} has a payload size of {}, which exceeds the allowed limit of {}.",
+                    self.callee,
+                    self.method_name,
+                    current_size + size,
+                    max_size_local_subnet
+                ),
                 suggestion: PAYLOAD_SIZE_SUGGESTION.to_string(),
                 doc_link: doc_ref(PAYLOAD_SIZE_LINK),
             })
@@ -238,11 +238,9 @@ pub(crate) fn into_request(
         if payload_size > max_size_local_subnet.get() {
             return Err(HypervisorError::UserContractViolation {
                 error: format!(
-                "Request to {}:{} has a payload size of {}, which exceeds the allowed limit of {}.",
-                destination_canister,
-                method_name,
-                payload_size, max_size_remote_subnet
-            ),
+                    "Request to {}:{} has a payload size of {}, which exceeds the allowed limit of {}.",
+                    destination_canister, method_name, payload_size, max_size_remote_subnet
+                ),
                 suggestion: PAYLOAD_SIZE_SUGGESTION.to_string(),
                 doc_link: doc_ref(PAYLOAD_SIZE_LINK),
             });

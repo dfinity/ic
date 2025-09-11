@@ -28,14 +28,16 @@ fn plain_authentication_correct_signature_passes() {
         sender_delegation: None,
     };
 
-    assert!(validate_signature(
-        &sig_verifier,
-        &message_id,
-        &user_signature,
-        UNIX_EPOCH,
-        &MockRootOfTrustProvider::new()
-    )
-    .is_ok());
+    assert!(
+        validate_signature(
+            &sig_verifier,
+            &message_id,
+            &user_signature,
+            UNIX_EPOCH,
+            &MockRootOfTrustProvider::new()
+        )
+        .is_ok()
+    );
 
     // Same signature as above with empty delegations specified. Should also pass.
     let user_signature = UserSignature {
@@ -44,14 +46,16 @@ fn plain_authentication_correct_signature_passes() {
         sender_delegation: Some(Vec::new()),
     };
 
-    assert!(validate_signature(
-        &sig_verifier,
-        &message_id,
-        &user_signature,
-        UNIX_EPOCH,
-        &MockRootOfTrustProvider::new()
-    )
-    .is_ok());
+    assert!(
+        validate_signature(
+            &sig_verifier,
+            &message_id,
+            &user_signature,
+            UNIX_EPOCH,
+            &MockRootOfTrustProvider::new()
+        )
+        .is_ok()
+    );
 }
 
 #[test]

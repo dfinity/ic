@@ -9,13 +9,14 @@ use ic_canister_client::{Agent, Sender};
 use ic_interfaces_registry::RegistryRecord;
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_transport::{
-    dechunkify_delta, dechunkify_get_value_response_content, deserialize_atomic_mutate_response,
-    deserialize_get_changes_since_response, deserialize_get_value_response,
+    Error, GetChunk, dechunkify_delta, dechunkify_get_value_response_content,
+    deserialize_atomic_mutate_response, deserialize_get_changes_since_response,
+    deserialize_get_value_response,
     pb::v1::{Precondition, RegistryDelta, RegistryGetLatestVersionResponse, RegistryMutation},
     serialize_atomic_mutate_request, serialize_get_changes_since_request,
-    serialize_get_value_request, Error, GetChunk,
+    serialize_get_value_request,
 };
-use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, RegistryVersion, Time};
+use ic_types::{CanisterId, RegistryVersion, Time, crypto::threshold_sig::ThresholdSigPublicKey};
 
 pub const MAX_NUM_SSH_KEYS: usize = 50;
 

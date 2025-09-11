@@ -1,6 +1,6 @@
 pub use crate::objects::CurveType;
-use anyhow::anyhow;
 use anyhow::Context;
+use anyhow::anyhow;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::identity::Identity;
 use ic_ed25519::{

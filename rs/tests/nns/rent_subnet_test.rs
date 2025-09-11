@@ -27,7 +27,7 @@ use cycles_minting_canister::{
     IcpXdrConversionRateCertifiedResponse, NotifyError, SubnetSelection,
 };
 use dfn_candid::{candid, candid_one};
-use ic_agent::{identity::BasicIdentity, Agent};
+use ic_agent::{Agent, identity::BasicIdentity};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_canister_client::{Ed25519KeyPair, Sender};
 use ic_ledger_core::Tokens;
@@ -49,9 +49,9 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            find_subnet_that_hosts_canister_id, new_subnet_runtime, HasPublicApiUrl,
-            HasRegistryVersion, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-            SubnetSnapshot, TopologySnapshot,
+            HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
+            NnsInstallationBuilder, SubnetSnapshot, TopologySnapshot,
+            find_subnet_that_hosts_canister_id, new_subnet_runtime,
         },
     },
     nns::{
@@ -60,7 +60,7 @@ use ic_system_test_driver::{
     },
     systest,
     types::{CanisterIdRecord, CanisterStatusResult},
-    util::{assert_create_agent, block_on, UniversalCanister, UNIVERSAL_CANISTER_WASM},
+    util::{UNIVERSAL_CANISTER_WASM, UniversalCanister, assert_create_agent, block_on},
 };
 use ic_types::RegistryVersion;
 use ic_universal_canister::wasm as universal_canister_argument_builder;
@@ -69,7 +69,7 @@ use icp_ledger::{AccountIdentifier, Subaccount};
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use registry_canister::pb::v1::{GetSubnetForCanisterRequest, SubnetForCanister};
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::{
     collections::HashSet,
     iter::FromIterator,
@@ -176,12 +176,14 @@ pub fn test(env: TestEnv) {
         // Fetch the original set of subnets. This will be used later to detect
         // which subnet is the new one.
         let registry_canister = RegistryCanister::new_with_query_timeout(
-            vec![topology_snapshot
-                .root_subnet()
-                .nodes()
-                .next()
-                .unwrap()
-                .get_public_url()],
+            vec![
+                topology_snapshot
+                    .root_subnet()
+                    .nodes()
+                    .next()
+                    .unwrap()
+                    .get_public_url(),
+            ],
             Duration::from_secs(10),
         );
         let original_subnets = get_subnet_list_from_registry(&registry_canister)

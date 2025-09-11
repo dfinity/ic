@@ -1,7 +1,7 @@
 use anyhow::Result;
 use cycles_minting_canister::{
-    create_canister_txn, top_up_canister_txn, CreateCanisterResult, NotifyCreateCanister,
-    NotifyError, NotifyTopUp, SubnetSelection, TopUpCanisterResult,
+    CreateCanisterResult, NotifyCreateCanister, NotifyError, NotifyTopUp, SubnetSelection,
+    TopUpCanisterResult, create_canister_txn, top_up_canister_txn,
 };
 use dfn_candid::CandidOne;
 use dfn_protobuf::{ProtoBuf, ToProto};
@@ -10,12 +10,12 @@ use ic_ledger_core::{block::BlockType, tokens::CheckedAdd};
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use icp_ledger::{
-    protobuf::TipOfChainRequest, tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Block,
-    BlockArg, BlockIndex, BlockRes, CyclesResponse, Memo, NotifyCanisterArgs, Operation,
-    Subaccount, TipOfChainRes, Tokens, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
+    AccountBalanceArgs, AccountIdentifier, Block, BlockArg, BlockIndex, BlockRes, CyclesResponse,
+    DEFAULT_TRANSFER_FEE, Memo, NotifyCanisterArgs, Operation, Subaccount, TipOfChainRes, Tokens,
+    TransferArgs, TransferError, protobuf::TipOfChainRequest, tokens_from_proto,
 };
 use on_wire::{FromWire, IntoWire};
-use rand::{rngs::StdRng, SeedableRng};
+use rand::{SeedableRng, rngs::StdRng};
 use std::sync::atomic::{AtomicU64, Ordering};
 use url::Url;
 

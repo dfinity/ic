@@ -3,8 +3,8 @@
 
 use super::encryption::{encrypt_and_prove, verify_zk_proofs};
 use crate::api::ni_dkg_errors::{
-    dealing::InvalidDealingError, CspDkgCreateReshareDealingError, CspDkgVerifyDealingError,
-    InvalidArgumentError, MalformedSecretKeyError, MisnumberedReceiverError, SizeError,
+    CspDkgCreateReshareDealingError, CspDkgVerifyDealingError, InvalidArgumentError,
+    MalformedSecretKeyError, MisnumberedReceiverError, SizeError, dealing::InvalidDealingError,
 };
 use crate::{
     api::individual_public_key,
@@ -20,10 +20,10 @@ use crate::types::{SecretKey as ThresholdSecretKey, SecretKeyBytes as ThresholdS
 
 // "New style" internal types, used for the NiDKG:
 use super::ALGORITHM_ID;
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
     Dealing, FsEncryptionPublicKey, PublicCoefficientsBytes,
 };
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
 
 /// Creates a new dealing, i.e. generates threshold keys.
 ///

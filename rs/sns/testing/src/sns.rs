@@ -570,7 +570,7 @@ pub mod pocket_ic {
     use ic_nervous_system_integration_tests::pocket_ic_helpers::nns::ledger::mint_icp;
     use ic_nns_common::pb::v1::NeuronId;
     use ic_sns_governance_api::pb::v1::ProposalId;
-    use icp_ledger::{Tokens, DEFAULT_TRANSFER_FEE};
+    use icp_ledger::{DEFAULT_TRANSFER_FEE, Tokens};
 
     /// PocketIC-specific version of 'create_sns' function:
     /// 1) pocket_ic - PocketIC instance.

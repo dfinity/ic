@@ -1,5 +1,5 @@
-use anyhow::{anyhow, Result};
-use futures::{stream, StreamExt};
+use anyhow::{Result, anyhow};
+use futures::{StreamExt, stream};
 use ic_agent::Agent;
 use ic_base_types::CanisterId;
 use ic_nervous_system_agent::nns::sns_wasm;

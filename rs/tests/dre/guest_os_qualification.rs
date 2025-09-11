@@ -10,6 +10,8 @@ use ic_system_test_driver::driver::{
 };
 use ic_types::ReplicaVersion;
 use os_qualification_utils::{
+    ConfigurableApiBoundaryNodes, ConfigurableSubnet, ConfigurableUnassignedNodes, IcConfig,
+    SubnetSimple,
     defs::QualificationExecutor,
     mock_env_variables,
     steps::{
@@ -19,8 +21,6 @@ use os_qualification_utils::{
         workload::{ApiBoundaryNodeWorkload, Workload},
         xnet::XNet,
     },
-    ConfigurableApiBoundaryNodes, ConfigurableSubnet, ConfigurableUnassignedNodes, IcConfig,
-    SubnetSimple,
 };
 use std::time::Duration;
 

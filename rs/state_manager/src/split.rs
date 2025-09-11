@@ -1,11 +1,11 @@
 //! Prunes a replicated state, as part of a subnet split.
 use crate::{
+    NUMBER_OF_CHECKPOINT_THREADS, StateManagerMetrics,
     checkpoint::{
         flush_canister_snapshots_and_page_maps, load_checkpoint, make_unvalidated_checkpoint,
         validate_and_finalize_checkpoint_and_remove_unverified_marker,
     },
     tip::spawn_tip_thread,
-    StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
 };
 
 use ic_base_types::CanisterId;
@@ -13,15 +13,15 @@ use ic_config::state_manager::Config;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{
-    difference, CanisterIdRange, CanisterIdRanges, RoutingTable, WellFormedError,
+    CanisterIdRange, CanisterIdRanges, RoutingTable, WellFormedError, difference,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    page_map::PageAllocatorFileDescriptor, page_map::TestPageAllocatorFileDescriptorImpl,
-    ReplicatedState,
+    ReplicatedState, page_map::PageAllocatorFileDescriptor,
+    page_map::TestPageAllocatorFileDescriptorImpl,
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout};
-use ic_types::{malicious_flags::MaliciousFlags, PrincipalId, SubnetId, Time};
+use ic_types::{PrincipalId, SubnetId, Time, malicious_flags::MaliciousFlags};
 use scoped_threadpool::Pool;
 use std::{iter::once, path::PathBuf, sync::Arc};
 

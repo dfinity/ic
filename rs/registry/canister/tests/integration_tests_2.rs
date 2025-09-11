@@ -2,22 +2,21 @@ mod common;
 
 use candid::Encode;
 use canister_test::{Canister, Project, Runtime};
-use ic_crypto_tree_hash::{lookup_path, LabeledTree, MixedHashTree};
+use ic_crypto_tree_hash::{LabeledTree, MixedHashTree, lookup_path};
 use ic_interfaces_registry::RegistryRecord;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, set_up_universal_canister,
 };
 use ic_nns_test_utils::{
-    itest_helpers::{local_test_on_nns_subnet, maybe_upgrade_to_self, UpgradeTestingScenario},
+    itest_helpers::{UpgradeTestingScenario, local_test_on_nns_subnet, maybe_upgrade_to_self},
     registry::invariant_compliant_mutation_as_atomic_req,
 };
 use ic_nns_test_utils_macros::parameterized_upgrades;
 use ic_registry_nns_data_provider::certification::decode_hash_tree;
 use ic_registry_transport::{
-    insert,
+    MockGetChunk, insert,
     pb::v1::{CertifiedResponse, RegistryAtomicMutateRequest, RegistryGetChangesSinceRequest},
-    MockGetChunk,
 };
 use ic_types::RegistryVersion;
 use prost::Message;

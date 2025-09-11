@@ -1,7 +1,7 @@
 use crate::{errors::ApiError, ledger_client::OperationOutput};
 use ic_nns_governance_api::{
-    manage_neuron_response::{Command, StakeMaturityResponse},
     ManageNeuronResponse,
+    manage_neuron_response::{Command, StakeMaturityResponse},
 };
 
 pub fn handle_stake_maturity(

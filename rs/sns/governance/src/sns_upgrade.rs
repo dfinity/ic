@@ -35,7 +35,7 @@ pub(crate) async fn get_upgrade_params(
             return Err(format!(
                 "There is no next version found for the current SNS version: {}",
                 render_version(current_version)
-            ))
+            ));
         }
     };
 
@@ -183,11 +183,10 @@ pub(crate) fn canister_type_and_wasm_hash_for_upgrade(
 
     // This should be impossible due to upstream constraints.
     if differences.is_empty() {
-        return Err(
-            format!("No difference was found between the current SNS version {:?} and the next SNS version {:?}",
-                current_version, next_version
-            )
-        );
+        return Err(format!(
+            "No difference was found between the current SNS version {:?} and the next SNS version {:?}",
+            current_version, next_version
+        ));
     }
 
     // This should also be impossible due to upstream constraints.

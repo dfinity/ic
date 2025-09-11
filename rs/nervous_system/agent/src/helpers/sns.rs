@@ -8,7 +8,7 @@ use crate::sns::swap::SwapCanister;
 use crate::{CallCanisters, CallCanistersWithStoppedCanisterError, ProgressNetwork};
 use candid::Nat;
 use ic_sns_governance_api::pb::v1::{
-    get_proposal_response, ListNeurons, NeuronId, Proposal, ProposalData, ProposalId,
+    ListNeurons, NeuronId, Proposal, ProposalData, ProposalId, get_proposal_response,
 };
 use ic_sns_swap::{
     pb::v1::{BuyerState, Lifecycle, RefreshBuyerTokensResponse},

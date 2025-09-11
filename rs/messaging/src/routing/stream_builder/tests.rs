@@ -8,27 +8,27 @@ use ic_management_canister_types_private::Method;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
     CanisterState, InputQueueType, ReplicatedState, Stream, SubnetTopology,
+    testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    fetch_histogram_stats, fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec, nonzero_values,
-    MetricVec,
+    MetricVec, fetch_histogram_stats, fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec,
+    nonzero_values,
 };
 use ic_test_utilities_state::{new_canister_state, register_callback};
 use ic_test_utilities_types::{
-    ids::{canister_test_id, user_test_id, SUBNET_27, SUBNET_42},
+    ids::{SUBNET_27, SUBNET_42, canister_test_id, user_test_id},
     messages::RequestBuilder,
 };
 use ic_types::{
+    CanisterId, Cycles, SubnetId, Time,
     messages::{
-        CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE,
+        CallbackId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE, Payload, RejectContext,
+        Request, RequestOrResponse, Response,
     },
     time::{CoarseTime, UNIX_EPOCH},
     xnet::{StreamIndex, StreamIndexedQueue},
-    CanisterId, Cycles, SubnetId, Time,
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
@@ -1168,14 +1168,16 @@ fn consume_output_queues(state: &ReplicatedState) -> ReplicatedState {
 /// Pushes the message into the given canister's corresponding input queue.
 fn push_input(canister_state: &mut CanisterState, msg: RequestOrResponse) {
     let mut subnet_available_memory = 1 << 30;
-    assert!(canister_state
-        .push_input(
-            msg,
-            &mut subnet_available_memory,
-            SubnetType::Application,
-            InputQueueType::RemoteSubnet,
-        )
-        .unwrap());
+    assert!(
+        canister_state
+            .push_input(
+                msg,
+                &mut subnet_available_memory,
+                SubnetType::Application,
+                InputQueueType::RemoteSubnet,
+            )
+            .unwrap()
+    );
 }
 
 /// Asserts that the values of the `METRIC_ROUTED_MESSAGES` metric

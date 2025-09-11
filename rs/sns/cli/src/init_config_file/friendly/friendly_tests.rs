@@ -248,10 +248,9 @@ fn test_convert_to_create_service_nervous_system() {
             description: Some("The best software engineer you ever did saw.\n".to_string()),
             url: Some("https://some-link-to-a-project.org".to_string()),
 
-            fallback_controller_principal_ids: vec![PrincipalId::from_str(
-                "5zxxw-63ouu-faaaa-aaaap-4ai"
-            )
-            .unwrap(),],
+            fallback_controller_principal_ids: vec![
+                PrincipalId::from_str("5zxxw-63ouu-faaaa-aaaap-4ai").unwrap(),
+            ],
 
             dapp_canisters: vec![
                 nervous_system_pb::Canister {

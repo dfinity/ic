@@ -4,13 +4,13 @@ use std::{
 };
 
 use crate::invariants::common::{
-    get_subnet_ids_from_snapshot, InvariantCheckError, RegistrySnapshot,
+    InvariantCheckError, RegistrySnapshot, get_subnet_ids_from_snapshot,
 };
 
 use ic_base_types::{NodeId, PrincipalId};
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType};
-use ic_registry_keys::{make_node_record_key, make_subnet_record_key, SUBNET_RECORD_KEY_PREFIX};
+use ic_registry_keys::{SUBNET_RECORD_KEY_PREFIX, make_node_record_key, make_subnet_record_key};
 use prost::Message;
 
 /// Subnet invariants hold iff:

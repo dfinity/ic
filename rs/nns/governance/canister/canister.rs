@@ -14,7 +14,7 @@ use ic_nns_common::{
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
-    canister_state::{governance, governance_mut, set_governance, CanisterEnv},
+    canister_state::{CanisterEnv, governance, governance_mut, set_governance},
     encode_metrics,
     governance::Governance,
     neuron_data_validation::NeuronDataValidationSummary,
@@ -25,23 +25,24 @@ use ic_nns_governance::{
 #[cfg(feature = "test")]
 use ic_nns_governance_api::test_api::TimeWarp;
 use ic_nns_governance_api::{
+    ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse,
+    GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+    Governance as ApiGovernanceProto, GovernanceError, ListKnownNeuronsResponse, ListNeurons,
+    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
+    ListNodeProvidersResponse, ListProposalInfo, ListProposalInfoResponse,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
+    MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo, NodeProvider, Proposal,
+    ProposalInfo, RestoreAgingSummary, RewardEvent, SettleCommunityFundParticipation,
+    SettleNeuronsFundParticipationRequest, SettleNeuronsFundParticipationResponse,
+    UpdateNodeProvider, Vote,
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
     governance::GovernanceCachedMetrics,
     governance_error::ErrorType,
     manage_neuron::{
-        claim_or_refresh::{By, MemoAndController},
         ClaimOrRefresh, NeuronIdOrSubaccount, RegisterVote,
+        claim_or_refresh::{By, MemoAndController},
     },
-    manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
-    ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
-    GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
-    ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProviderRewardsRequest,
-    ListNodeProviderRewardsResponse, ListNodeProvidersResponse, ListProposalInfo,
-    ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo,
-    NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
-    SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
-    SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
+    manage_neuron_response,
 };
 use std::sync::Arc;
 use std::{boxed::Box, time::Duration};
@@ -49,7 +50,7 @@ use std::{boxed::Box, time::Duration};
 #[cfg(feature = "test")]
 use ic_nns_governance::governance::TimeWarp as GovTimeWarp;
 
-use ic_nns_governance::canister_state::{with_governance, CanisterRandomnessGenerator};
+use ic_nns_governance::canister_state::{CanisterRandomnessGenerator, with_governance};
 
 #[cfg(feature = "tla")]
 mod tla_ledger;

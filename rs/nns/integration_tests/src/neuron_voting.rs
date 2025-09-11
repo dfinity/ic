@@ -3,11 +3,10 @@ use ic_base_types::PrincipalId;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_governance_api::{
-    self as api,
+    self as api, BallotInfo, ListNeurons, Topic, Vote,
     governance_error::ErrorType,
     manage_neuron_response::{Command, RegisterVoteResponse},
     neuron::{DissolveState, Followees},
-    BallotInfo, ListNeurons, Topic, Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,

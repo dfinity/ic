@@ -1,8 +1,8 @@
 use candid::Encode;
 use candid::Principal;
 use ic_icp_rosetta_client::RosettaClient;
-use ic_icp_rosetta_runner::start_rosetta;
 use ic_icp_rosetta_runner::RosettaOptions;
+use ic_icp_rosetta_runner::start_rosetta;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
 use ic_rosetta_test_utils::path_from_env;
 use icp_ledger::LedgerCanisterInitPayload;
@@ -27,17 +27,19 @@ fn smoke_test() {
     pocket_ic.install_canister(
         ledger_canister_id,
         ledger_wasm_bytes,
-        Encode!(&LedgerCanisterInitPayload::builder()
-            .minting_account(Principal::anonymous().into())
-            .initial_values(
-                [(
-                    Principal::from_slice(&[1]).into(),
-                    icp_ledger::Tokens::from_tokens(1_000_000_000).unwrap(),
-                )]
-                .into()
-            )
-            .build()
-            .unwrap())
+        Encode!(
+            &LedgerCanisterInitPayload::builder()
+                .minting_account(Principal::anonymous().into())
+                .initial_values(
+                    [(
+                        Principal::from_slice(&[1]).into(),
+                        icp_ledger::Tokens::from_tokens(1_000_000_000).unwrap(),
+                    )]
+                    .into()
+                )
+                .build()
+                .unwrap()
+        )
         .unwrap(),
         None,
     );

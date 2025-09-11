@@ -144,8 +144,8 @@ impl fmt::Display for CspFsEncryptionPopFromPublicKeyProtoError {
 pub mod groth20_bls12_381 {
     //! The forward secure encryption keys used in Groth20.
 
-    use crate::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
     use crate::NodeIndex;
+    use crate::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
     use serde::{Deserialize, Serialize};
     use std::convert::TryFrom;
 

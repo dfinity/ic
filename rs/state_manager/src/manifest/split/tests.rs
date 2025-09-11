@@ -4,7 +4,7 @@ use ic_base_types::{CanisterId, SnapshotId};
 use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges};
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1};
-use ic_types::{state_sync::CURRENT_STATE_SYNC_VERSION, Height};
+use ic_types::{Height, state_sync::CURRENT_STATE_SYNC_VERSION};
 
 /// Expected hash of a zero length file.
 const EMPTY_FILE_HASH: [u8; 32] = [

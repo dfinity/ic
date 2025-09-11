@@ -2,8 +2,8 @@ use crate::backup::Backup;
 use crate::height_index::HeightIndexedInstants;
 use crate::{
     consensus_pool_cache::{
-        get_highest_finalized_block, update_summary_block, ConsensusBlockChainImpl,
-        ConsensusCacheImpl,
+        ConsensusBlockChainImpl, ConsensusCacheImpl, get_highest_finalized_block,
+        update_summary_block,
     },
     inmemory_pool::InMemoryPoolSection,
     metrics::{LABEL_POOL_TYPE, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
@@ -19,13 +19,13 @@ use ic_interfaces::{
     p2p::consensus::{ArtifactTransmit, ArtifactTransmits, MutablePool, ValidatedPoolReader},
     time_source::TimeSource,
 };
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::buckets::linear_buckets;
 use ic_protobuf::types::v1 as pb;
-use ic_types::crypto::CryptoHashOf;
 use ic_types::NodeId;
-use ic_types::{artifact::ConsensusMessageId, consensus::*, Height, SubnetId, Time};
-use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
+use ic_types::crypto::CryptoHashOf;
+use ic_types::{Height, SubnetId, Time, artifact::ConsensusMessageId, consensus::*};
+use prometheus::{Histogram, IntCounter, IntGauge, histogram_opts, labels, opts};
 use std::time::Instant;
 use std::{marker::PhantomData, sync::Arc, time::Duration};
 
@@ -1053,16 +1053,16 @@ mod tests {
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::FakeStateManager};
     use ic_test_utilities_consensus::{fake::*, make_genesis};
-    use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
+    use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry};
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
+        RegistryVersion, ReplicaVersion,
         artifact::IdentifiableArtifact,
         batch::ValidationContext,
-        consensus::{dkg::DkgSummary, BlockProposal, RandomBeacon},
-        crypto::{crypto_hash, CryptoHash, CryptoHashOf},
+        consensus::{BlockProposal, RandomBeacon, dkg::DkgSummary},
+        crypto::{CryptoHash, CryptoHashOf, crypto_hash},
         time::UNIX_EPOCH,
-        RegistryVersion, ReplicaVersion,
     };
     use prost::Message;
     use std::{collections::HashMap, convert::TryFrom, fs, io::Read, path::Path, sync::RwLock};
@@ -1224,10 +1224,12 @@ mod tests {
                 &result.transmits[1], ArtifactTransmit::Deliver(x) if x.artifact.id() == random_beacon_3.get_id()));
 
             let result = pool.apply(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
-            assert!(!result
-                .transmits
-                .iter()
-                .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
+            assert!(
+                !result
+                    .transmits
+                    .iter()
+                    .any(|x| matches!(x, ArtifactTransmit::Deliver(_)))
+            );
             // purging genesis CUP & beacon + validated beacon at height 2
             assert_eq!(result.transmits.len(), 3);
             assert!(result.transmits.iter().any(
@@ -1302,10 +1304,12 @@ mod tests {
             ));
 
             let result = pool.apply(vec![ChangeAction::PurgeValidatedBelow(Height::from(3))]);
-            assert!(!result
-                .transmits
-                .iter()
-                .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
+            assert!(
+                !result
+                    .transmits
+                    .iter()
+                    .any(|x| matches!(x, ArtifactTransmit::Deliver(_)))
+            );
             // purging genesis CUP & beacon + 2 validated beacon shares
             assert_eq!(result.transmits.len(), 4);
             assert!(result.transmits.iter().any(|x| matches!(x, ArtifactTransmit::Abort(id) if *id == random_beacon_share_2.get_id())));

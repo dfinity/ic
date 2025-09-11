@@ -1,7 +1,7 @@
 //! The certified stream store public interface.
 use ic_types::{
-    xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
     RegistryVersion, SubnetId,
+    xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
 };
 use std::fmt;
 

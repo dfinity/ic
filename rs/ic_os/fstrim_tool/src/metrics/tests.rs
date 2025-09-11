@@ -21,8 +21,7 @@ fn compare_f64() {
 fn parse_valid_metrics_file() {
     let temp_dir = tempdir().expect("failed to create a temporary directory");
     let test_file = temp_dir.as_ref().join("test_file");
-    let metrics_file_content =
-        "# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds\n\
+    let metrics_file_content = "# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds\n\
         # TYPE fstrim_last_run_duration_milliseconds gauge\n\
         fstrim_last_run_duration_milliseconds 6\n\
         # HELP fstrim_last_run_success Success status of last run of fstrim (success: 1, failure: 0)\n\
@@ -49,8 +48,7 @@ fn parse_valid_metrics_file() {
 fn ignore_subsequent_values_for_same_metric() {
     let temp_dir = tempdir().expect("failed to create a temporary directory");
     let test_file = temp_dir.as_ref().join("test_file");
-    let metrics_file_content =
-        "# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds\n\
+    let metrics_file_content = "# HELP fstrim_last_run_duration_milliseconds Duration of last run of fstrim in milliseconds\n\
         # TYPE fstrim_last_run_duration_milliseconds gauge\n\
         fstrim_last_run_duration_milliseconds 6\n\
         fstrim_last_run_duration_milliseconds 97\n\

@@ -61,7 +61,7 @@ mod tests {
     use super::*;
     use hex::FromHex;
     use ic_base_types::{NumBytes, NumSeconds};
-    use ic_canonical_state::{all_supported_versions, CertificationVersion};
+    use ic_canonical_state::{CertificationVersion, all_supported_versions};
     use ic_crypto_tree_hash::Digest;
     use ic_error_types::{ErrorCode, UserError};
     use ic_management_canister_types_private::{
@@ -70,14 +70,14 @@ mod tests {
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
+        ExecutionState, ExportedFunctions, Memory, NumWasmPages, PageMap, ReplicatedState,
         canister_state::{
             execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
             system_state::CyclesUseCase,
         },
         metadata_state::{ApiBoundaryNodeEntry, Stream, SubnetMetrics},
-        page_map::{PageIndex, PAGE_SIZE},
+        page_map::{PAGE_SIZE, PageIndex},
         testing::ReplicatedStateTesting,
-        ExecutionState, ExportedFunctions, Memory, NumWasmPages, PageMap, ReplicatedState,
     };
     use ic_test_utilities_state::new_canister_state;
     use ic_test_utilities_types::ids::{
@@ -85,13 +85,13 @@ mod tests {
     };
     use ic_test_utilities_types::messages::{RequestBuilder, ResponseBuilder};
     use ic_types::{
+        CanisterId, CryptoHashOfPartialState, Cycles, Time,
         crypto::CryptoHash,
         ingress::{IngressState, IngressStatus},
-        messages::{RequestMetadata, NO_DEADLINE},
+        messages::{NO_DEADLINE, RequestMetadata},
         nominal_cycles::NominalCycles,
         time::CoarseTime,
         xnet::{RejectReason, StreamFlags, StreamIndex, StreamIndexedQueue},
-        CanisterId, CryptoHashOfPartialState, Cycles, Time,
     };
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
@@ -123,7 +123,8 @@ mod tests {
         assert!(
             hash_of_empty_state != hash_of_state_with_streams,
             "Expected the hash tree of the empty state {:?} to different from the hash tree with streams {:?}",
-            hash_of_empty_state, hash_of_state_with_streams
+            hash_of_empty_state,
+            hash_of_state_with_streams
         );
     }
 
@@ -158,7 +159,8 @@ mod tests {
         assert!(
             hash_of_state_one != hash_of_state_two,
             "Expected the hash tree of one stream {:?} to different from the hash tree with two streams {:?}",
-            hash_of_state_one, hash_of_state_two
+            hash_of_state_one,
+            hash_of_state_two
         );
     }
 

@@ -1,6 +1,6 @@
+use super::Csp;
 use super::api::CspSigner;
 use super::types::{CspPop, CspPublicKey, CspSignature};
-use super::Csp;
 use crate::key_id::KeyId;
 use crate::types::MultiBls12_381_Signature;
 use crate::vault::api::{CspBasicSignatureError, CspMultiSignatureError};

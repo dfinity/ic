@@ -1,6 +1,6 @@
 use crate::invariants::common::{
-    assert_valid_urls_and_hash, get_all_hostos_version_records, get_node_records_from_snapshot,
-    get_value_from_snapshot, InvariantCheckError, RegistrySnapshot,
+    InvariantCheckError, RegistrySnapshot, assert_valid_urls_and_hash,
+    get_all_hostos_version_records, get_node_records_from_snapshot, get_value_from_snapshot,
 };
 
 use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;

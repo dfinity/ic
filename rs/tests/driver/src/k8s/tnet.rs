@@ -16,12 +16,12 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
 use k8s_openapi::chrono::DateTime;
 use k8s_openapi::chrono::Duration;
 use k8s_openapi::chrono::Utc;
+use kube::ResourceExt;
 use kube::api::{DeleteParams, PostParams};
 use kube::core::ObjectMeta;
-use kube::ResourceExt;
 use kube::{
-    api::{Api, DynamicObject, GroupVersionKind},
     Client,
+    api::{Api, DynamicObject, GroupVersionKind},
 };
 use serde::{Deserialize, Serialize};
 use tokio;

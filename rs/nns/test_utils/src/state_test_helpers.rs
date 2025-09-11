@@ -1,7 +1,7 @@
 use crate::common::{
-    build_cmc_wasm, build_genesis_token_wasm, build_governance_wasm_with_features,
+    NnsInitPayloads, build_cmc_wasm, build_genesis_token_wasm, build_governance_wasm_with_features,
     build_ledger_wasm, build_lifeline_wasm, build_node_rewards_wasm,
-    build_registry_wasm_with_features, build_root_wasm, build_sns_wasms_wasm, NnsInitPayloads,
+    build_registry_wasm_with_features, build_root_wasm, build_sns_wasms_wasm,
 };
 use candid::{CandidType, Decode, Encode, Nat};
 use canister_test::Wasm;
@@ -21,43 +21,41 @@ use ic_nervous_system_clients::{
     canister_status::{CanisterStatusResult, CanisterStatusType},
 };
 use ic_nervous_system_common::{
-    ledger::{compute_neuron_staking_subaccount, compute_neuron_staking_subaccount_bytes},
     DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS,
+    ledger::{compute_neuron_staking_subaccount, compute_neuron_staking_subaccount_bytes},
 };
 use ic_nns_common::init::LifelineCanisterInitPayload;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
-    canister_id_to_nns_canister_name, memory_allocation_of, CYCLES_LEDGER_CANISTER_ID,
-    CYCLES_MINTING_CANISTER_ID, CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET,
-    GENESIS_TOKEN_CANISTER_INDEX_IN_NNS_SUBNET, GOVERNANCE_CANISTER_ID,
-    GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_CANISTER_ID,
+    CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET, GENESIS_TOKEN_CANISTER_INDEX_IN_NNS_SUBNET,
+    GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, LEDGER_CANISTER_ID,
     LEDGER_CANISTER_INDEX_IN_NNS_SUBNET, LIFELINE_CANISTER_ID,
     LIFELINE_CANISTER_INDEX_IN_NNS_SUBNET, NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET,
     REGISTRY_CANISTER_ID, REGISTRY_CANISTER_INDEX_IN_NNS_SUBNET, ROOT_CANISTER_ID,
     ROOT_CANISTER_INDEX_IN_NNS_SUBNET, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
     SUBNET_RENTAL_CANISTER_ID, SUBNET_RENTAL_CANISTER_INDEX_IN_NNS_SUBNET,
+    canister_id_to_nns_canister_name, memory_allocation_of,
 };
 use ic_nns_governance_api::{
-    self as nns_governance_pb,
+    self as nns_governance_pb, Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
+    GetNeuronsFundAuditInfoResponse, Governance, GovernanceError, InstallCodeRequest, ListNeurons,
+    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
+    ListProposalInfo, ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest,
+    ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
+    NnsFunction, ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
     manage_neuron::{
-        self,
+        self, AddHotKey, ChangeAutoStakeMaturity, ClaimOrRefresh, Configure, Disburse,
+        DisburseMaturity, Follow, IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund,
+        RegisterVote, RemoveHotKey, Split, StakeMaturity,
         claim_or_refresh::{self, MemoAndController},
         configure::Operation,
-        AddHotKey, ChangeAutoStakeMaturity, ClaimOrRefresh, Configure, Disburse, DisburseMaturity,
-        Follow, IncreaseDissolveDelay, JoinCommunityFund, LeaveCommunityFund, RegisterVote,
-        RemoveHotKey, Split, StakeMaturity,
     },
     manage_neuron_response::{self, ClaimOrRefreshResponse},
-    Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-    Governance, GovernanceError, InstallCodeRequest, ListNeurons, ListNeuronsResponse,
-    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfo,
-    ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
-    ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
 };
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
-use ic_registry_canister_api::{mutate_test_high_capacity_records, GetChunkRequest};
+use ic_registry_canister_api::{GetChunkRequest, mutate_test_high_capacity_records};
 use ic_registry_transport::{
     deserialize_get_latest_version_response,
     pb::v1::{
@@ -66,7 +64,7 @@ use ic_registry_transport::{
     },
 };
 use ic_sns_governance::pb::v1::{
-    self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
+    self as sns_pb, GetModeResponse, manage_neuron_response::Command as SnsCommandResponse,
 };
 use ic_sns_swap::pb::v1::{GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse};
 use ic_sns_wasm::{
@@ -75,9 +73,9 @@ use ic_sns_wasm::{
 };
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities::universal_canister::{
-    call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
+    UNIVERSAL_CANISTER_WASM, call_args, wasm as universal_canister_argument_builder,
 };
-use ic_types::{ingress::WasmResult, Cycles};
+use ic_types::{Cycles, ingress::WasmResult};
 use icp_ledger::{
     AccountIdentifier, BinaryAccountBalanceArgs, BlockIndex, LedgerCanisterInitPayload, Memo,
     SendArgs, Tokens,

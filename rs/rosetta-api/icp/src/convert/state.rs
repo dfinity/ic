@@ -9,7 +9,7 @@ use crate::{
     },
 };
 use ic_types::PrincipalId;
-use icp_ledger::{Operation, Tokens, DEFAULT_TRANSFER_FEE};
+use icp_ledger::{DEFAULT_TRANSFER_FEE, Operation, Tokens};
 
 /// Helper for `from_operations` that creates `Transfer`s from related
 /// debit/credit/fee operations.

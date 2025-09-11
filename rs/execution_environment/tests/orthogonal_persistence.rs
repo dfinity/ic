@@ -1,5 +1,5 @@
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
-use ic_types::{ingress::WasmResult, CanisterId};
+use ic_types::{CanisterId, ingress::WasmResult};
 use proptest::{
     prelude::*,
     test_runner::{TestRng, TestRunner},

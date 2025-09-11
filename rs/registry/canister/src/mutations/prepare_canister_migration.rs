@@ -3,7 +3,7 @@ use candid::CandidType;
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType};
 use ic_registry_routing_table::{
-    are_disjoint, is_subset_of, CanisterIdRange, CanisterIdRanges, WellFormedError,
+    CanisterIdRange, CanisterIdRanges, WellFormedError, are_disjoint, is_subset_of,
 };
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};

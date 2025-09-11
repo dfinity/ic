@@ -1,11 +1,11 @@
 use super::RawHttpRequestVal;
-use crate::{crypto::SignedBytesWithoutDomainSeparator, CountBytes};
+use crate::{CountBytes, crypto::SignedBytesWithoutDomainSeparator};
 use ic_base_types::hash_of_map;
 use ic_crypto_sha2::Sha256;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::proxy::ProxyDecodeError;
-use serde::{de::Deserializer, ser::Serializer, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::Deserializer, ser::Serializer};
 use std::{
     convert::{AsRef, TryFrom},
     error::Error,
@@ -229,15 +229,15 @@ mod tests {
         SignedIngress,
     };
     use super::*;
-    use crate::{time::expiry_time_from_now, CanisterId, PrincipalId, Time};
+    use crate::{CanisterId, PrincipalId, Time, time::expiry_time_from_now};
     use hex_literal::hex;
 
     #[test]
     /// The test covers all the supported values of `RawHttpRequestVal` and calculates the `hash_of_map` for a nested map.
     /// The expected hash serves as a guard against any future changes to the `hash_of_map` function, ensuring its stability.
     fn test_hash_of_map() {
-        use maplit::btreemap;
         use RawHttpRequestVal::*;
+        use maplit::btreemap;
 
         let inner_map_0 = btreemap! {
             "key_string_0".to_string() => String("test_string_0".to_string()),

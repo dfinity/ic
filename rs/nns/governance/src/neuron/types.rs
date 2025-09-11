@@ -1,4 +1,5 @@
 use crate::{
+    DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
     governance::{
         LOG_PREFIX, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
         MAX_NUM_HOT_KEYS_PER_NEURON,
@@ -6,15 +7,13 @@ use crate::{
     neuron::{combine_aged_stakes, dissolve_state_and_age::DissolveStateAndAge, neuron_stake_e8s},
     neuron_store::NeuronStoreError,
     pb::v1::{
-        self as pb,
+        self as pb, AbridgedNeuron, Ballot, BallotInfo, Followees, GovernanceError,
+        KnownNeuronData, MaturityDisbursement, NeuronStakeTransfer, NeuronState, NeuronType, Topic,
+        Vote, VotingPowerEconomics,
         abridged_neuron::DissolveState,
         governance_error::ErrorType,
-        manage_neuron::{configure::Operation, Configure},
-        AbridgedNeuron, Ballot, BallotInfo, Followees, GovernanceError, KnownNeuronData,
-        MaturityDisbursement, NeuronStakeTransfer, NeuronState, NeuronType, Topic, Vote,
-        VotingPowerEconomics,
+        manage_neuron::{Configure, configure::Operation},
     },
-    DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS,
 };
 use ic_base_types::PrincipalId;
 use ic_cdk::println;
@@ -724,8 +723,7 @@ impl Neuron {
                         ErrorType::NotAuthorized,
                         format!(
                             "Caller '{:?}' must be the controller of the neuron to perform this operation:\n{:#?}",
-                            caller,
-                            configure,
+                            caller, configure,
                         ),
                     ))
                 }
@@ -775,7 +773,7 @@ impl Neuron {
                 if current_dd > desired_dd {
                     return Err(GovernanceError::new_with_message(
                         ErrorType::InvalidCommand,
-                        "Can't set a dissolve delay that is smaller than the current dissolve delay."
+                        "Can't set a dissolve delay that is smaller than the current dissolve delay.",
                     ));
                 }
 

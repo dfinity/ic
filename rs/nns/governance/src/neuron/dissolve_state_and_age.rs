@@ -88,10 +88,10 @@ impl DissolveStateAndAge {
             .map_err(|e| format!("Invalid dissolve state and age: {}", e))?;
 
         if validated_dissolve_state_and_age != original {
-            return Err( format!(
-                    "Dissolve state and age is not valid, as roundtrip conversion did not result in same value. In: {:?}, Out: {:?}",
-                    original, validated_dissolve_state_and_age
-                ));
+            return Err(format!(
+                "Dissolve state and age is not valid, as roundtrip conversion did not result in same value. In: {:?}, Out: {:?}",
+                original, validated_dissolve_state_and_age
+            ));
         }
         Ok(self)
     }

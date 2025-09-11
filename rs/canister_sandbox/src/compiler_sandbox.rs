@@ -5,9 +5,9 @@ use std::sync::Arc;
 use crate::launcher_service::LauncherService;
 use crate::protocol::transport::{Message, WireMessage};
 use crate::{rpc, transport, transport::UnixStreamMuxWriter};
-use ic_embedders::{wasm_utils, CompilationResult, SerializedModule, WasmtimeEmbedder};
+use ic_embedders::{CompilationResult, SerializedModule, WasmtimeEmbedder, wasm_utils};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
-use ic_logger::{error, trace, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, trace};
 use ic_wasm_types::WasmEngineError;
 
 // A helper used for actual compilation in the compiler sandbox

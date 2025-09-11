@@ -5,8 +5,8 @@
 //! This file translates to and from an external library that does the
 //! mathematics.
 
-use super::types::FsEncryptionKeySetWithPop;
 use super::ALGORITHM_ID;
+use super::types::FsEncryptionKeySetWithPop;
 use crate::api::ni_dkg_errors::{
     CspDkgVerifyDealingError, DecryptError, EncryptAndZKProveError, MalformedPublicKeyError,
     SizeError,
@@ -14,13 +14,13 @@ use crate::api::ni_dkg_errors::{
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::{
+    ni_dkg::Epoch,
     ni_dkg::ni_dkg_groth20_bls12_381::{
         FsEncryptionCiphertextBytes, FsEncryptionPublicKey, NodeIndex, ZKProofDec, ZKProofShare,
     },
-    ni_dkg::Epoch,
     public_coefficients::bls12_381::PublicCoefficientsBytes,
 };
-use ic_types::{crypto::error::InvalidArgumentError, crypto::AlgorithmId, NumberOfNodes};
+use ic_types::{NumberOfNodes, crypto::AlgorithmId, crypto::error::InvalidArgumentError};
 use rand::{CryptoRng, RngCore};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -28,14 +28,14 @@ use std::convert::TryFrom;
 mod crypto {
 
     pub use crate::ni_dkg::fs_ni_dkg::forward_secure::{
-        dec_chunks, enc_chunks, kgen, verify_ciphertext_integrity, EncryptionWitness,
-        FsEncryptionCiphertext, PlaintextChunks, SecretKey, SysParam,
+        EncryptionWitness, FsEncryptionCiphertext, PlaintextChunks, SecretKey, SysParam,
+        dec_chunks, enc_chunks, kgen, verify_ciphertext_integrity,
     };
     pub use crate::ni_dkg::fs_ni_dkg::nizk_chunking::{
-        prove_chunking, verify_chunking, ChunkingInstance, ChunkingWitness, ProofChunking,
+        ChunkingInstance, ChunkingWitness, ProofChunking, prove_chunking, verify_chunking,
     };
     pub use crate::ni_dkg::fs_ni_dkg::nizk_sharing::{
-        prove_sharing, verify_sharing, ProofSharing, SharingInstance, SharingWitness,
+        ProofSharing, SharingInstance, SharingWitness, prove_sharing, verify_sharing,
     };
 }
 

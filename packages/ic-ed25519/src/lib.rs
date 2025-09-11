@@ -5,7 +5,7 @@
 
 //! A crate for creating and verifying Ed25519 signatures
 
-use curve25519_dalek::{edwards::CompressedEdwardsY, EdwardsPoint, Scalar};
+use curve25519_dalek::{EdwardsPoint, Scalar, edwards::CompressedEdwardsY};
 use ed25519_dalek::pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey, EncodePublicKey};
 use ed25519_dalek::{Digest, Sha512};
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};

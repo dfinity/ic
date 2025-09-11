@@ -4,15 +4,15 @@ use ic_config::{
 };
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
+    WasmtimeEmbedder,
     wasm_utils::compile,
     wasmtime_embedder::system_api::{
-        sandbox_safe_system_state::SandboxSafeSystemState, ApiType,
-        DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits, SystemApiImpl,
+        ApiType, DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits,
+        SystemApiImpl, sandbox_safe_system_state::SandboxSafeSystemState,
     },
-    WasmtimeEmbedder,
 };
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages};
 use ic_sys::PAGE_SIZE;
@@ -20,12 +20,12 @@ use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
-use ic_types::{batch::CanisterCyclesCostSchedule, MemoryAllocation};
 use ic_types::{
+    ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
     methods::{FuncRef, WasmMethod},
     time::UNIX_EPOCH,
-    ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
 };
+use ic_types::{MemoryAllocation, batch::CanisterCyclesCostSchedule};
 use ic_wasm_types::BinaryEncodedWasm;
 use lazy_static::lazy_static;
 use proptest::prelude::*;
@@ -485,9 +485,9 @@ mod tests {
     use super::*;
 
     use ic_embedders::{
-        wasm_executor::compute_page_delta, wasm_utils::instrumentation::instruction_to_cost,
-        wasm_utils::instrumentation::WasmMemoryType,
-        wasmtime_embedder::system_api::ModificationTracking, wasmtime_embedder::CanisterMemoryType,
+        wasm_executor::compute_page_delta, wasm_utils::instrumentation::WasmMemoryType,
+        wasm_utils::instrumentation::instruction_to_cost, wasmtime_embedder::CanisterMemoryType,
+        wasmtime_embedder::system_api::ModificationTracking,
     };
     // Get .current() trait method
     use ic_interfaces::execution_environment::{HypervisorError, SystemApi};
@@ -633,10 +633,9 @@ mod tests {
 
                 // Check SIGSEGV against expected.
                 assert_eq!(
-                sigsegv_dirty_pages,
-                writes_pages,
-                "dirty pages returned by SIGSEGV tracking (left) don't match the expected value (right)"
-            );
+                    sigsegv_dirty_pages, writes_pages,
+                    "dirty pages returned by SIGSEGV tracking (left) don't match the expected value (right)"
+                );
             }
         });
     }
@@ -779,11 +778,11 @@ mod tests {
         //! or write, in addition to 7 instructions required for setup.
 
         use super::{
-            get_num_instructions_consumed, SubnetType, MAX_NUM_INSTRUCTIONS, STABLE_OP_BYTES,
+            MAX_NUM_INSTRUCTIONS, STABLE_OP_BYTES, SubnetType, get_num_instructions_consumed,
         };
         use ic_config::subnet_config::SchedulerConfig;
-        use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
         use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
+        use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
         use ic_logger::replica_logger::no_op_logger;
 
         // (drop (call $ic0_stable_grow (i32.const 1)))

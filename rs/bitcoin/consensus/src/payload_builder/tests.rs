@@ -1,4 +1,4 @@
-use crate::{payload_builder::parse, BitcoinPayloadBuilder};
+use crate::{BitcoinPayloadBuilder, payload_builder::parse};
 use ic_btc_replica_types::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
     BitcoinReject, GetSuccessorsRequestInitial, GetSuccessorsResponseComplete, Network,
@@ -21,10 +21,10 @@ use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{
+    Height, NumBytes, RegistryVersion, SubnetId,
     batch::ValidationContext,
     crypto::{CryptoHash, CryptoHashOf},
     time::UNIX_EPOCH,
-    Height, NumBytes, RegistryVersion, SubnetId,
 };
 use mockall::mock;
 use std::sync::Arc;

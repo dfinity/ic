@@ -508,7 +508,7 @@ impl RosettaApiHandle {
         const TIMEOUT: Duration = Duration::from_secs(10 * 60); // 10 minutes
         const WAIT_BETWEEN_ATTEMPTS: Duration = Duration::from_secs(1);
 
-        use nix::sys::signal::{kill, Signal::SIGTERM};
+        use nix::sys::signal::{Signal::SIGTERM, kill};
         use nix::unistd::Pid;
         kill(Pid::from_raw(self.process.id() as i32), SIGTERM).ok();
 

@@ -1,7 +1,7 @@
 use candid::Principal;
 use ic_icrc_rosetta_client::RosettaClient;
-use ic_icrc_rosetta_runner::start_rosetta;
 use ic_icrc_rosetta_runner::RosettaOptions;
+use ic_icrc_rosetta_runner::start_rosetta;
 use icrc_ledger_types::icrc1::account::Account;
 use pocket_ic::PocketIcBuilder;
 use rosetta_core::identifiers::{AccountIdentifier, NetworkIdentifier, PartialBlockIdentifier};

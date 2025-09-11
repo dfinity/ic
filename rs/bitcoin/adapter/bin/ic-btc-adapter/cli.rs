@@ -1,7 +1,7 @@
 //! A parser for the command line flags and configuration file.
 use clap::Parser;
 use http::Uri;
-use ic_btc_adapter::{address_limits, AdapterNetwork, Config};
+use ic_btc_adapter::{AdapterNetwork, Config, address_limits};
 use std::{fs::File, io, path::PathBuf};
 use thiserror::Error;
 

@@ -57,13 +57,15 @@ fn test_next_message_if_over_instructions() {
         PrincipalId::new_anonymous(),
     )
     .unwrap_err();
-    assert!(err.contains(
-        format!(
-            "Canister exceeded the limit of {} instructions",
-            instructions_limit
+    assert!(
+        err.contains(
+            format!(
+                "Canister exceeded the limit of {} instructions",
+                instructions_limit
+            )
+            .as_str()
         )
-        .as_str()
-    ));
+    );
 
     update_with_sender::<BreakMessageParams, ()>(
         &state_machine,

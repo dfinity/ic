@@ -1,10 +1,10 @@
 use ic_state_manager::manifest::validate_manifest;
 use ic_state_manager::state_sync::types::{
-    ChunkInfo, FileInfo, Manifest, MAX_SUPPORTED_STATE_SYNC_VERSION,
+    ChunkInfo, FileInfo, MAX_SUPPORTED_STATE_SYNC_VERSION, Manifest,
 };
+use ic_types::CryptoHashOfState;
 use ic_types::crypto::CryptoHash;
 use ic_types::state_sync::StateSyncVersion;
-use ic_types::CryptoHashOfState;
 use std::{
     convert::TryInto,
     fs::File,
@@ -155,7 +155,7 @@ mod tests {
         manifest_hash,
     };
     use ic_state_manager::state_sync::types::{ChunkInfo, FileInfo, Manifest};
-    use ic_types::state_sync::{StateSyncVersion, CURRENT_STATE_SYNC_VERSION};
+    use ic_types::state_sync::{CURRENT_STATE_SYNC_VERSION, StateSyncVersion};
 
     use super::verify_manifest;
 

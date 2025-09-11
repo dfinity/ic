@@ -267,10 +267,13 @@ fn add_registry_content(
     registry_local_store_dir: Option<&PathBuf>,
 ) {
     let mutate_reqs = match (ic_prep_path, registry_local_store_dir) {
-        (Some(_), Some(_)) => panic!("{} --initial-registry and --registry-local-store-dir are incompatible, gotta make up your mind!", LOG_PREFIX),
+        (Some(_), Some(_)) => panic!(
+            "{} --initial-registry and --registry-local-store-dir are incompatible, gotta make up your mind!",
+            LOG_PREFIX
+        ),
         (None, None) => vec![],
         (Some(p), None) => ic_nns_init::read_initial_mutations_from_ic_prep(p),
-        (None, Some(d)) => ic_nns_init::read_initial_mutations_from_local_store_dir(d)
+        (None, Some(d)) => ic_nns_init::read_initial_mutations_from_local_store_dir(d),
     };
     if mutate_reqs.is_empty() {
         eprintln!(
@@ -280,10 +283,15 @@ fn add_registry_content(
             LOG_PREFIX
         );
     } else {
-        eprintln!("{}The registry will be initialized with {} transactions for a total of {} key-value pair mutations.",
-        LOG_PREFIX,
-        mutate_reqs.len(),
-        mutate_reqs.iter().map(|mr| mr.mutations.len()).sum::<usize>());
+        eprintln!(
+            "{}The registry will be initialized with {} transactions for a total of {} key-value pair mutations.",
+            LOG_PREFIX,
+            mutate_reqs.len(),
+            mutate_reqs
+                .iter()
+                .map(|mr| mr.mutations.len())
+                .sum::<usize>()
+        );
     }
     for mutate_req in mutate_reqs {
         init_payloads_builder

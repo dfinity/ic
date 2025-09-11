@@ -4,9 +4,10 @@ use super::*;
 
 #[test]
 fn signatures_should_have_a_nice_debug_representation() {
-    let test_vectors = vec![
-        (SignatureBytes([0u8;SignatureBytes::SIZE]), "SignatureBytes(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\")"),
-    ];
+    let test_vectors = vec![(
+        SignatureBytes([0u8; SignatureBytes::SIZE]),
+        "SignatureBytes(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\")",
+    )];
     for (value, formatted) in test_vectors {
         assert_eq!(format!("{:?}", value), *formatted);
     }

@@ -341,7 +341,7 @@ pub fn len(p: ValuePredicate) -> ValuePredicate {
             Value::Nat(_) | Value::Nat64(_) | Value::Int(_) => {
                 return Err(Fail::new(
                     "expected a collection (blob, text, array or map)",
-                ))
+                ));
             }
             Value::Blob(bs) => Value::Nat64(bs.len() as u64),
             Value::Text(s) => Value::Nat64(s.len() as u64),

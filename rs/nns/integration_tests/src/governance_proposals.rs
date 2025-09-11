@@ -3,7 +3,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance_api::{
-    manage_neuron_response::Command, MakeProposalRequest, Motion, ProposalActionRequest,
+    MakeProposalRequest, Motion, ProposalActionRequest, manage_neuron_response::Command,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,

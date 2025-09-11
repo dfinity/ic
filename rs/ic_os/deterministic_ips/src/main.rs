@@ -1,7 +1,7 @@
 use clap::Parser;
 use config_types::DeploymentEnvironment;
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
+use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
 use macaddr::MacAddr6;
 use std::net::Ipv6Addr;
 

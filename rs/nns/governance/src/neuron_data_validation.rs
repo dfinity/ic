@@ -14,7 +14,7 @@ use serde::Serialize;
 use std::{
     collections::{HashMap, VecDeque},
     marker::PhantomData,
-    mem::{discriminant, Discriminant},
+    mem::{Discriminant, discriminant},
 };
 
 const MAX_VALIDATION_AGE_SECONDS: u64 = 60 * 60 * 24;

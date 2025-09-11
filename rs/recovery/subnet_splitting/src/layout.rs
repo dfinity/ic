@@ -1,7 +1,7 @@
 use crate::target_subnet::TargetSubnet;
 
 use ic_base_types::SubnetId;
-use ic_recovery::{error::RecoveryResult, Recovery, CHECKPOINTS, CUPS_DIR, IC_STATE};
+use ic_recovery::{CHECKPOINTS, CUPS_DIR, IC_STATE, Recovery, error::RecoveryResult};
 
 use std::path::{Path, PathBuf};
 

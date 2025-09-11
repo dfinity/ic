@@ -9,7 +9,7 @@ use ic_management_canister_types_private::{
 };
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
-    canister_status::{canister_status, CanisterStatusResultV2, CanisterStatusType},
+    canister_status::{CanisterStatusResultV2, CanisterStatusType, canister_status},
 };
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -19,17 +19,17 @@ use ic_sns_wasm::{
     canister_stable_memory::CanisterStableMemory,
     init::SnsWasmCanisterInitPayload,
     pb::v1::{
-        update_allowed_principals_response::UpdateAllowedPrincipalsResult, AddWasmRequest,
-        AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse, GetAllowedPrincipalsRequest,
-        GetAllowedPrincipalsResponse, GetDeployedSnsByProposalIdRequest,
-        GetDeployedSnsByProposalIdResponse, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
-        GetProposalIdThatAddedWasmRequest, GetProposalIdThatAddedWasmResponse,
-        GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, GetWasmMetadataRequest,
-        GetWasmMetadataResponse, GetWasmRequest, GetWasmResponse, InsertUpgradePathEntriesRequest,
-        InsertUpgradePathEntriesResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
-        ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsWasmError,
-        UpdateAllowedPrincipalsRequest, UpdateAllowedPrincipalsResponse,
-        UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
+        AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
+        GetAllowedPrincipalsRequest, GetAllowedPrincipalsResponse,
+        GetDeployedSnsByProposalIdRequest, GetDeployedSnsByProposalIdResponse,
+        GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetProposalIdThatAddedWasmRequest,
+        GetProposalIdThatAddedWasmResponse, GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse,
+        GetWasmMetadataRequest, GetWasmMetadataResponse, GetWasmRequest, GetWasmResponse,
+        InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
+        ListDeployedSnsesRequest, ListDeployedSnsesResponse, ListUpgradeStepsRequest,
+        ListUpgradeStepsResponse, SnsWasmError, UpdateAllowedPrincipalsRequest,
+        UpdateAllowedPrincipalsResponse, UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
+        update_allowed_principals_response::UpdateAllowedPrincipalsResult,
     },
     sns_wasm::SnsWasmCanister,
 };

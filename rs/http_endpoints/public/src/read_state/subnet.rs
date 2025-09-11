@@ -1,28 +1,28 @@
 use super::{parse_principal_id, verify_principal_ids};
 use crate::{
-    common::{into_cbor, Cbor, WithTimeout},
     HttpError, ReplicaHealthStatus,
+    common::{Cbor, WithTimeout, into_cbor},
 };
 
 use axum::{
+    Router,
     body::Body,
     extract::State,
     response::{IntoResponse, Response},
-    Router,
 };
 use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::StatusCode;
-use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
+use ic_crypto_tree_hash::{Label, Path, TooLongPathError, sparse_labeled_tree_from_paths};
 use ic_interfaces_state_manager::StateReader;
 use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    CanisterId, PrincipalId,
     messages::{
         Blob, Certificate, HttpReadStateContent, HttpReadStateResponse, HttpRequest,
         HttpRequestEnvelope, ReadState,
     },
-    CanisterId, PrincipalId,
 };
 use std::{
     convert::{Infallible, TryFrom},
@@ -207,10 +207,18 @@ fn verify_paths(paths: &[Path], effective_principal_id: PrincipalId) -> Result<(
             [b"time"] => {}
             [b"api_boundary_nodes"] => {}
             [b"api_boundary_nodes", _node_id]
-            | [b"api_boundary_nodes", _node_id, b"domain" | b"ipv4_address" | b"ipv6_address"] => {}
+            | [
+                b"api_boundary_nodes",
+                _node_id,
+                b"domain" | b"ipv4_address" | b"ipv6_address",
+            ] => {}
             [b"subnet"] => {}
             [b"subnet", _subnet_id]
-            | [b"subnet", _subnet_id, b"public_key" | b"canister_ranges" | b"node"] => {}
+            | [
+                b"subnet",
+                _subnet_id,
+                b"public_key" | b"canister_ranges" | b"node",
+            ] => {}
             [b"subnet", _subnet_id, b"node", _node_id]
             | [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {}
             [b"canister_ranges", _subnet_id] => {}
@@ -280,44 +288,50 @@ mod test {
             Ok(())
         );
 
-        assert!(verify_paths(
-            &[
-                Path::new(vec![
-                    Label::from("request_status"),
-                    [0; 32].into(),
-                    Label::from("status")
-                ]),
-                Path::new(vec![
-                    Label::from("request_status"),
-                    [0; 32].into(),
-                    Label::from("reply")
-                ])
-            ],
-            subnet_test_id(1).get(),
-        )
-        .is_err());
+        assert!(
+            verify_paths(
+                &[
+                    Path::new(vec![
+                        Label::from("request_status"),
+                        [0; 32].into(),
+                        Label::from("status")
+                    ]),
+                    Path::new(vec![
+                        Label::from("request_status"),
+                        [0; 32].into(),
+                        Label::from("reply")
+                    ])
+                ],
+                subnet_test_id(1).get(),
+            )
+            .is_err()
+        );
 
-        assert!(verify_paths(
-            &[
-                Path::new(vec![
-                    Label::from("canister"),
-                    ByteBuf::from(canister_test_id(1).get().to_vec()).into(),
-                    Label::from("controllers")
-                ]),
-                Path::new(vec![
-                    Label::from("request_status"),
-                    ByteBuf::from(canister_test_id(1).get().to_vec()).into(),
-                    Label::from("module_hash")
-                ])
-            ],
-            subnet_test_id(1).get(),
-        )
-        .is_err());
+        assert!(
+            verify_paths(
+                &[
+                    Path::new(vec![
+                        Label::from("canister"),
+                        ByteBuf::from(canister_test_id(1).get().to_vec()).into(),
+                        Label::from("controllers")
+                    ]),
+                    Path::new(vec![
+                        Label::from("request_status"),
+                        ByteBuf::from(canister_test_id(1).get().to_vec()).into(),
+                        Label::from("module_hash")
+                    ])
+                ],
+                subnet_test_id(1).get(),
+            )
+            .is_err()
+        );
 
-        assert!(verify_paths(
-            &[Path::new(vec![Label::from("canister_ranges"),]),],
-            subnet_test_id(1).get(),
-        )
-        .is_err());
+        assert!(
+            verify_paths(
+                &[Path::new(vec![Label::from("canister_ranges"),]),],
+                subnet_test_id(1).get(),
+            )
+            .is_err()
+        );
     }
 }

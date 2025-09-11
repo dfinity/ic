@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use colored::*;
 use core::result::Result::Ok;
 use std::io::{self, Write};
@@ -110,7 +110,9 @@ pub(crate) fn ensure_coreutils_setup() -> Result<()> {
     // If they do have brew installed, let's make sure coreutils is installed.
     let stdout = String::from_utf8(output.stdout)?;
     if !stdout.contains("coreutils") {
-        bail!("'coreutils' is not installed. This is not necessarily a problem, but you may encounter issues running some of the bash scripts which are written by developers that generally will have coreutils installed. Try running `brew install coreutils`.")
+        bail!(
+            "'coreutils' is not installed. This is not necessarily a problem, but you may encounter issues running some of the bash scripts which are written by developers that generally will have coreutils installed. Try running `brew install coreutils`."
+        )
     }
 
     println!("{}", "brew and coreutils installed ✓".bright_green());
@@ -120,10 +122,14 @@ pub(crate) fn ensure_coreutils_setup() -> Result<()> {
 
 pub(crate) fn ensure_code_setup() -> Result<()> {
     let Ok(output) = Command::new("code").arg("--version").output() else {
-        bail!("'code' is not installed. Try by pressing cmd-shift-p in VSCode and searching for `Install 'code' command in path`.")
+        bail!(
+            "'code' is not installed. Try by pressing cmd-shift-p in VSCode and searching for `Install 'code' command in path`."
+        )
     };
     if !output.status.success() {
-        bail!("'code' is not installed. Try by pressing cmd-shift-p in VSCode and searching for `Install 'code' command in path`.")
+        bail!(
+            "'code' is not installed. Try by pressing cmd-shift-p in VSCode and searching for `Install 'code' command in path`."
+        )
     }
 
     println!("{}", "VSCode 'code' command installed ✓".bright_green());

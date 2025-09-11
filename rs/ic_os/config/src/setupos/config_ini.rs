@@ -3,8 +3,8 @@ use std::path::Path;
 
 use config_types::ConfigMap;
 
-use anyhow::{anyhow, bail};
 use anyhow::{Context, Result};
+use anyhow::{anyhow, bail};
 use ini::Ini;
 
 pub struct ConfigIniSettings {

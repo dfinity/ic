@@ -1,6 +1,6 @@
 //! Convert DKG error types to and from other error types.
 use ic_types::crypto::threshold_sig::ni_dkg::errors::{
-    create_transcript_error::DkgCreateTranscriptError, MalformedFsEncryptionPublicKeyError,
+    MalformedFsEncryptionPublicKeyError, create_transcript_error::DkgCreateTranscriptError,
 };
 
 use crate::api::ni_dkg_errors::{
@@ -102,9 +102,9 @@ impl From<CspDkgCreateReshareTranscriptError> for DkgCreateTranscriptError {
                 // This is a violation of the precondition that the dealings must be verified,
                 // so we panic:
                 panic!(
-                        "{}Precondition violated: dealings have not been verified. InvalidDealingError for dealing with index {}: {:?}",
-                        panic_prefix, dealer_index, error
-                    );
+                    "{}Precondition violated: dealings have not been verified. InvalidDealingError for dealing with index {}: {:?}",
+                    panic_prefix, dealer_index, error
+                );
             }
             CspDkgCreateReshareTranscriptError::UnsupportedAlgorithmId(algorithm_id) => {
                 // This would be an IDKM implementation error, so we panic:
@@ -125,7 +125,10 @@ impl From<CspDkgCreateReshareTranscriptError> for DkgCreateTranscriptError {
             }
             CspDkgCreateReshareTranscriptError::ResharingFailed(_) => {
                 // This is impossible if dealings are verified properly, thus we panic:
-                panic!("{}Precondition violated: dealings have not been verified. ResharingFailed: {:?}", panic_prefix, error);
+                panic!(
+                    "{}Precondition violated: dealings have not been verified. ResharingFailed: {:?}",
+                    panic_prefix, error
+                );
             }
             CspDkgCreateReshareTranscriptError::SizeError(error) => {
                 // Will not happen in practice, so we panic:

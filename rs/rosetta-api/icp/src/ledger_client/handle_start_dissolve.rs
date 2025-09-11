@@ -4,7 +4,7 @@ use crate::{
     request_types::{RequestType, START_DISSOLVE},
 };
 use ic_nns_governance_api::{
-    governance_error, manage_neuron_response::Command, ManageNeuronResponse,
+    ManageNeuronResponse, governance_error, manage_neuron_response::Command,
 };
 
 pub fn handle_start_dissolve(

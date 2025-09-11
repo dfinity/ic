@@ -3,7 +3,7 @@ use crate::{
     registry_lifecycle::canister_post_upgrade,
 };
 
-use canbench_rs::{bench, bench_fn, bench_scope, BenchResult};
+use canbench_rs::{BenchResult, bench, bench_fn, bench_scope};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_registry_routing_table::CANISTER_IDS_PER_SUBNET;
 use prost::Message;

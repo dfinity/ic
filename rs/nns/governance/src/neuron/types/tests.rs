@@ -2,9 +2,8 @@ use super::*;
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
-        self as pb,
+        self as pb, VotingPowerEconomics,
         manage_neuron::{SetDissolveTimestamp, StartDissolving},
-        VotingPowerEconomics,
     },
 };
 use ic_cdk::println;
@@ -466,17 +465,19 @@ fn test_neuron_configure_dissolve_delay() {
     let controller = neuron.controller();
 
     // Step 1: try to set the dissolve delay to the past, expecting to fail.
-    assert!(neuron
-        .configure(
-            &controller,
-            now,
-            &Configure {
-                operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
-                    dissolve_timestamp_seconds: now - 1,
-                })),
-            },
-        )
-        .is_err());
+    assert!(
+        neuron
+            .configure(
+                &controller,
+                now,
+                &Configure {
+                    operation: Some(Operation::SetDissolveTimestamp(SetDissolveTimestamp {
+                        dissolve_timestamp_seconds: now - 1,
+                    })),
+                },
+            )
+            .is_err()
+    );
 
     // Step 2: set the dissolve delay to a value in the future, and verify that the neuron is
     // now non-dissolving.
@@ -716,41 +717,49 @@ fn test_ready_to_unstake_maturity() {
         };
 
     // Ready to unstake maturity since it's both dissolved and has staked maturity.
-    assert!(create_neuron_with_state_and_staked_maturity(
-        DissolveStateAndAge::DissolvingOrDissolved {
-            when_dissolved_timestamp_seconds: now,
-        },
-        1
-    )
-    .ready_to_unstake_maturity(now));
+    assert!(
+        create_neuron_with_state_and_staked_maturity(
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: now,
+            },
+            1
+        )
+        .ready_to_unstake_maturity(now)
+    );
 
     // Not ready to unstake maturity since it's not dissolved yet.
-    assert!(!create_neuron_with_state_and_staked_maturity(
-        DissolveStateAndAge::DissolvingOrDissolved {
-            when_dissolved_timestamp_seconds: now + 1,
-        },
-        1
-    )
-    .ready_to_unstake_maturity(now));
+    assert!(
+        !create_neuron_with_state_and_staked_maturity(
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: now + 1,
+            },
+            1
+        )
+        .ready_to_unstake_maturity(now)
+    );
 
     // Not ready to unstake maturity since it is non-dissolving.
-    assert!(!create_neuron_with_state_and_staked_maturity(
-        DissolveStateAndAge::NotDissolving {
-            dissolve_delay_seconds: 1,
-            aging_since_timestamp_seconds: now,
-        },
-        1
-    )
-    .ready_to_unstake_maturity(now));
+    assert!(
+        !create_neuron_with_state_and_staked_maturity(
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds: 1,
+                aging_since_timestamp_seconds: now,
+            },
+            1
+        )
+        .ready_to_unstake_maturity(now)
+    );
 
     // Not ready to unstake maturity since it has no staked maturity.
-    assert!(!create_neuron_with_state_and_staked_maturity(
-        DissolveStateAndAge::DissolvingOrDissolved {
-            when_dissolved_timestamp_seconds: now,
-        },
-        0
-    )
-    .ready_to_unstake_maturity(now));
+    assert!(
+        !create_neuron_with_state_and_staked_maturity(
+            DissolveStateAndAge::DissolvingOrDissolved {
+                when_dissolved_timestamp_seconds: now,
+            },
+            0
+        )
+        .ready_to_unstake_maturity(now)
+    );
 }
 
 #[test]

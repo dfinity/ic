@@ -2,8 +2,8 @@ use candid::{Decode, Encode, Principal};
 use colored::{ColoredString, Colorize};
 use ic_agent::Agent;
 use ic_neurons_fund::{
-    rescale_to_icp, rescale_to_icp_e8s, InvertibleFunction, MatchedParticipationFunction,
-    MatchingFunction, PolynomialNeuronsFundParticipation,
+    InvertibleFunction, MatchedParticipationFunction, MatchingFunction,
+    PolynomialNeuronsFundParticipation, rescale_to_icp, rescale_to_icp_e8s,
 };
 use ic_sns_governance::pb::v1::{GetMetadataRequest, GetMetadataResponse};
 use ic_sns_swap::pb::v1::{
@@ -11,8 +11,8 @@ use ic_sns_swap::pb::v1::{
 };
 use rgb::RGB8;
 use rust_decimal::{
-    prelude::{FromPrimitive, ToPrimitive},
     Decimal,
+    prelude::{FromPrimitive, ToPrimitive},
 };
 use textplots::{Chart, ColorPlot, Shape};
 
@@ -120,8 +120,7 @@ async fn main() -> Result<(), String> {
 
     println!(
         "+----------------------- {} SNS Swap: neurons_fund_participation_icp = {} -----------------------+",
-        sns_name,
-        neurons_fund_participation_icp,
+        sns_name, neurons_fund_participation_icp,
     );
     println!(
         "| {}                         {}",

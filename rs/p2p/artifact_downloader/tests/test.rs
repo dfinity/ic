@@ -1,8 +1,8 @@
 use std::{
     backtrace::Backtrace,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc, Mutex, RwLock,
+        atomic::{AtomicBool, Ordering},
     },
 };
 

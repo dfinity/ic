@@ -2,8 +2,9 @@ use crate::{
     governance::{Governance, UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS},
     logs::ERROR,
     pb::v1::{
+        Governance as GovernancePb,
         governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Version, Versions},
-        upgrade_journal_entry, Governance as GovernancePb,
+        upgrade_journal_entry,
     },
     sns_upgrade::{ListUpgradeStep, ListUpgradeStepsResponse, SnsCanisterType},
 };

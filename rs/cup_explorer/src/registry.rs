@@ -7,7 +7,7 @@ use ic_registry_client_helpers::node::NodeRecord;
 use ic_registry_keys::{make_node_record_key, make_subnet_record_key};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{
-    registry::RegistryClientError, NodeId, PrincipalId, RegistryVersion, SubnetId, Time,
+    NodeId, PrincipalId, RegistryVersion, SubnetId, Time, registry::RegistryClientError,
 };
 use prost::Message;
 use std::{io::Write, path::PathBuf, sync::Arc, thread};

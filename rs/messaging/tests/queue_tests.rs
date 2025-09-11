@@ -3,16 +3,16 @@ use candid::{Decode, Encode};
 use canister_test::Project;
 use ic_base_types::{CanisterId, SubnetId};
 use ic_interfaces_certified_stream_store::EncodeStreamError;
-use ic_registry_routing_table::{routing_table_insert_subnet, RoutingTable};
+use ic_registry_routing_table::{RoutingTable, routing_table_insert_subnet};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{testing::CanisterQueuesTesting, ReplicatedState};
+use ic_replicated_state::{ReplicatedState, testing::CanisterQueuesTesting};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, SUBNET_2};
 use ic_types::{
+    Cycles,
     messages::{CallbackId, Payload, RequestOrResponse},
     xnet::{StreamHeader, StreamIndexedQueue},
-    Cycles,
 };
 use maplit::btreemap;
 use std::sync::Arc;

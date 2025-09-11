@@ -11,11 +11,11 @@ use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_types::{ReplicaVersion, SubnetId};
 use rand::{seq::SliceRandom, thread_rng};
-use slog::{debug, error, info, warn, Logger};
+use slog::{Logger, debug, error, info, warn};
 use std::{
     collections::BTreeMap,
     ffi::OsStr,
-    fs::{create_dir_all, read_dir, remove_dir_all, DirEntry, File},
+    fs::{DirEntry, File, create_dir_all, read_dir, remove_dir_all},
     io::Write,
     net::IpAddr,
     path::{Path, PathBuf},

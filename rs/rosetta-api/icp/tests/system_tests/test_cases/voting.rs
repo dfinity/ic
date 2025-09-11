@@ -4,13 +4,13 @@ use crate::common::{
 };
 use candid::Principal;
 use futures::future::join_all;
-use ic_agent::{identity::BasicIdentity, Identity};
+use ic_agent::{Identity, identity::BasicIdentity};
 use ic_icp_rosetta_client::{
     RosettaCreateNeuronArgs, RosettaRegisterVoteArgs, RosettaSetNeuronDissolveDelayArgs,
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance_api::{proposal::Action, Motion, Proposal, ProposalInfo, Vote};
+use ic_nns_governance_api::{Motion, Proposal, ProposalInfo, Vote, proposal::Action};
 use ic_rosetta_api::models::ConstructionSubmitResponse;
 use icp_ledger::AccountIdentifier;
 use lazy_static::lazy_static;
@@ -83,12 +83,13 @@ fn test_neuron_voting() {
         assert!(error_string.contains("Neuron's dissolve delay is too short."));
 
         // Ensure no proposals exist initially
-        assert!(env
-            .rosetta_client
-            .get_pending_proposals(env.network_identifier.clone())
-            .await
-            .unwrap()
-            .is_empty());
+        assert!(
+            env.rosetta_client
+                .get_pending_proposals(env.network_identifier.clone())
+                .await
+                .unwrap()
+                .is_empty()
+        );
 
         // Submit multiple proposals
         for i in 0..3 {
@@ -265,10 +266,12 @@ fn test_neuron_voting() {
         // Try to vote again on the same proposal with the same neuron and verify the error
         let invalid_vote_result =
             register_vote(&env, proposal_ids[2], NEURON_INDEX[3], Vote::No).await;
-        assert!(invalid_vote_result
-            .unwrap_err()
-            .to_string()
-            .contains("NeuronAlreadyVoted"));
+        assert!(
+            invalid_vote_result
+                .unwrap_err()
+                .to_string()
+                .contains("NeuronAlreadyVoted")
+        );
 
         // Register remaining votes for the third proposal and verify the proposal is no longer pending
         register_vote(&env, proposal_ids[2], NEURON_INDEX[1], Vote::Yes)

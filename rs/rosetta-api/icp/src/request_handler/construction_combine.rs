@@ -4,7 +4,7 @@ use crate::models::{
     ConstructionCombineResponse, EnvelopePair, SignatureType, SignedTransaction,
     UnsignedTransaction,
 };
-use crate::request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler};
+use crate::request_handler::{RosettaRequestHandler, make_sig_data, verify_network_id};
 use crate::{convert, models};
 use ic_types::messages::{
     Blob, HttpCallContent, HttpReadStateContent, HttpRequestEnvelope, MessageId,

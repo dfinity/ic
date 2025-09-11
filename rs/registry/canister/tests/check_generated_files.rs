@@ -1,5 +1,5 @@
-use ic_test_utilities_compare_dirs::{compare, CompareError};
-use registry_canister_protobuf_generator::{generate_prost_files, ProtoPaths};
+use ic_test_utilities_compare_dirs::{CompareError, compare};
+use registry_canister_protobuf_generator::{ProtoPaths, generate_prost_files};
 use std::path::PathBuf;
 
 #[test]

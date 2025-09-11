@@ -26,7 +26,7 @@ use ic_system_test_driver::{
         },
     },
     systest,
-    util::{assert_create_agent, block_on, MessageCanister},
+    util::{MessageCanister, assert_create_agent, block_on},
 };
 use ic_types::Height;
 use slog::info;

@@ -182,12 +182,12 @@
 
 use crate::{
     complaints::{IDkgComplaintHandler, IDkgComplaintHandlerImpl},
-    metrics::{timed_call, IDkgClientMetrics, CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS},
+    metrics::{CRITICAL_ERROR_IDKG_RETAIN_ACTIVE_TRANSCRIPTS, IDkgClientMetrics, timed_call},
     pre_signer::{IDkgPreSigner, IDkgPreSignerImpl},
     signer::{ThresholdSigner, ThresholdSignerImpl},
     utils::IDkgBlockReaderImpl,
 };
-use ic_consensus_utils::{bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto, RoundRobin};
+use ic_consensus_utils::{RoundRobin, bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto};
 use ic_interfaces::{
     consensus_pool::{ConsensusBlockCache, ConsensusPoolCache},
     crypto::IDkgProtocol,
@@ -195,15 +195,15 @@ use ic_interfaces::{
     p2p::consensus::{Bouncer, BouncerFactory, BouncerValue, PoolMutationsProducer},
 };
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    Height, NodeId, SubnetId,
     artifact::IDkgMessageId,
-    consensus::{idkg::IDkgBlockReader, HasHeight},
+    consensus::{HasHeight, idkg::IDkgBlockReader},
     crypto::canister_threshold_sig::{error::IDkgRetainKeysError, idkg::IDkgTranscript},
     malicious_flags::MaliciousFlags,
-    Height, NodeId, SubnetId,
 };
 use std::{
     cell::RefCell,
@@ -230,7 +230,7 @@ pub use payload_builder::{
     make_bootstrap_summary_with_initial_dealings,
 };
 pub use payload_verifier::{
-    validate_payload, IDkgPayloadValidationFailure, InvalidIDkgPayloadReason,
+    IDkgPayloadValidationFailure, InvalidIDkgPayloadReason, validate_payload,
 };
 pub use stats::IDkgStatsImpl;
 
@@ -604,25 +604,26 @@ mod tests {
     use self::test_utils::TestIDkgBlockReader;
 
     use super::*;
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_logger::no_op_logger;
     use ic_management_canister_types_private::MasterPublicKeyId;
     use ic_test_utilities::state_manager::RefMockStateManager;
     use ic_test_utilities_consensus::idkg::{
-        fake_ecdsa_idkg_master_public_key_id, fake_master_public_key_ids_for_all_algorithms,
+        FakeCertifiedStateSnapshot, fake_ecdsa_idkg_master_public_key_id,
+        fake_master_public_key_ids_for_all_algorithms,
         fake_master_public_key_ids_for_all_idkg_algorithms, fake_pre_signature_stash,
-        fake_signature_request_context_from_id, request_id, FakeCertifiedStateSnapshot,
+        fake_signature_request_context_from_id, request_id,
     };
     use ic_types::{
         consensus::idkg::{
+            IDkgArtifactIdData, PreSigId, RequestId, SigShareIdData, TranscriptRef,
             complaint_prefix, dealing_prefix, dealing_support_prefix, ecdsa_sig_share_prefix,
-            opening_prefix, schnorr_sig_share_prefix, vetkd_key_share_prefix, IDkgArtifactIdData,
-            PreSigId, RequestId, SigShareIdData, TranscriptRef,
+            opening_prefix, schnorr_sig_share_prefix, vetkd_key_share_prefix,
         },
-        crypto::{canister_threshold_sig::idkg::IDkgTranscriptId, CryptoHash},
+        crypto::{CryptoHash, canister_threshold_sig::idkg::IDkgTranscriptId},
         messages::CallbackId,
     };
-    use ic_types_test_utils::ids::{subnet_test_id, NODE_1, NODE_2, SUBNET_1, SUBNET_2};
+    use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_1, SUBNET_2, subnet_test_id};
 
     #[test]
     fn test_get_active_transcripts() {

@@ -1,13 +1,13 @@
-use crate::nns::governance::requests::{GetNetworkEconomicsParameters, GetProposalInfo};
 use crate::CallCanisters;
+use crate::nns::governance::requests::{GetNetworkEconomicsParameters, GetProposalInfo};
 use ic_base_types::CanisterId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::{
-    manage_neuron_response, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
-    GetNeuronsFundAuditInfoResponse, ListNeurons, ListNeuronsResponse, MakeProposalRequest,
-    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NnsFunction,
-    ProposalActionRequest, ProposalInfo,
+    ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+    ListNeurons, ListNeuronsResponse, MakeProposalRequest, ManageNeuronCommandRequest,
+    ManageNeuronRequest, ManageNeuronResponse, NnsFunction, ProposalActionRequest, ProposalInfo,
+    manage_neuron_response,
 };
 use ic_sns_governance_api::format_full_hash;
 use ic_sns_wasm::pb::v1::{

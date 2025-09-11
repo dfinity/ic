@@ -6,7 +6,7 @@
 /// deterministically update the PocketIc state machine.
 ///
 use super::state::{
-    ApiState, OpOut, PocketIcError, StateLabel, UpdateReply, DEFAULT_SYNC_WAIT_DURATION,
+    ApiState, DEFAULT_SYNC_WAIT_DURATION, OpOut, PocketIcError, StateLabel, UpdateReply,
 };
 use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
@@ -15,20 +15,20 @@ use crate::pocket_ic::{
     QueryRequest, SetCertifiedTime, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
     SubnetReadStateRequest, Tick,
 };
-use crate::{async_trait, pocket_ic::PocketIc, BlobStore, InstanceId, OpId, Operation};
+use crate::{BlobStore, InstanceId, OpId, Operation, async_trait, pocket_ic::PocketIc};
 use aide::{
-    axum::routing::{delete, get, post, ApiMethodRouter},
-    axum::ApiRouter,
     NoApi,
+    axum::ApiRouter,
+    axum::routing::{ApiMethodRouter, delete, get, post},
 };
 
 use axum::{
+    Json,
     body::{Body, Bytes},
     extract::{self, Path, Request, State},
     http::{self, HeaderMap, HeaderName, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
-    Json,
 };
 use axum_extra::headers;
 use axum_extra::headers::HeaderMapExt;
@@ -37,6 +37,7 @@ use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use ic_boundary::{ErrorClientFacing, MAX_REQUEST_BODY_SIZE};
 use ic_http_endpoints_public::{cors_layer, make_plaintext_response, query, read_state};
 use ic_types::{CanisterId, SubnetId};
+use pocket_ic::RejectResponse;
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
     HttpGatewayDetails, IcpConfig, IcpFeatures, InitialTime, InstanceConfig,
@@ -45,11 +46,10 @@ use pocket_ic::common::rest::{
     RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, TickConfigs,
     Topology,
 };
-use pocket_ic::RejectResponse;
 use serde::Serialize;
 use slog::Level;
 use std::str::FromStr;
-use std::{collections::BTreeMap, fs::File, sync::atomic::AtomicU64, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, fs::File, sync::Arc, sync::atomic::AtomicU64, time::Duration};
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::trace;
@@ -302,7 +302,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
                     ApiResponse::Error {
                         message: format!("{:?}", e),
                     },
-                )
+                );
             }
             Ok(update_reply) => {
                 match update_reply {
@@ -319,7 +319,10 @@ async fn run_operation<T: Serialize + FromOpOut>(
                     // Otherwise, the instance is busy with a different computation, so we retry (if appliacable) or return 409.
                     UpdateReply::Busy { state_label, op_id } => {
                         if retry_if_busy {
-                            trace!("run_operation::retry_busy instance_id={} state_label={:?} op_id={}", instance_id, state_label, op_id.0);
+                            trace!(
+                                "run_operation::retry_busy instance_id={} state_label={:?} op_id={}",
+                                instance_id, state_label, op_id.0
+                            );
                             match retry_policy.next_backoff() {
                                 Some(duration) => tokio::time::sleep(duration).await,
                                 None => {
@@ -329,7 +332,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
                                             message: "Service is overloaded, try again later."
                                                 .to_string(),
                                         },
-                                    )
+                                    );
                                 }
                             }
                         } else {
@@ -1319,7 +1322,7 @@ pub async fn create_instance(
                     Json(rest::CreateInstanceResponse::Error {
                         message: format!("Failed to parse log level: {:?}", e),
                     }),
-                )
+                );
             }
         }
     } else {
@@ -1373,7 +1376,10 @@ pub async fn create_instance(
                     return (
                         StatusCode::BAD_REQUEST,
                         Json(rest::CreateInstanceResponse::Error {
-                            message: format!("The `nns_ui` feature requires the `{}` feature to be enabled, too.", icp_feature_str),
+                            message: format!(
+                                "The `nns_ui` feature requires the `{}` feature to be enabled, too.",
+                                icp_feature_str
+                            ),
                         }),
                     );
                 }

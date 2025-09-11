@@ -6,11 +6,11 @@ use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_canister_client::{
-    get_decoded_value, CanisterRegistryClient, RegistryDataStableMemory, StorableRegistryKey,
+    CanisterRegistryClient, RegistryDataStableMemory, StorableRegistryKey, get_decoded_value,
 };
 use ic_registry_keys::{
-    make_data_center_record_key, make_node_operator_record_key, make_subnet_list_record_key,
-    NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
+    NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, make_data_center_record_key,
+    make_node_operator_record_key, make_subnet_list_record_key,
 };
 use ic_types::registry::RegistryClientError;
 use itertools::Itertools;

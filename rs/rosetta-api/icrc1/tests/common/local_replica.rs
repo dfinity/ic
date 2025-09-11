@@ -1,8 +1,8 @@
 // The Local Replica is running the binary of a replica of the IC locally and thus allows for local testing
 use candid::{Encode, Principal};
-use ic_agent::identity::BasicIdentity;
 use ic_agent::Agent;
 use ic_agent::Identity;
+use ic_agent::identity::BasicIdentity;
 use ic_base_types::PrincipalId;
 use ic_icrc1_ledger::FeatureFlags;
 use ic_icrc1_ledger::{InitArgs, InitArgsBuilder, LedgerArgument};

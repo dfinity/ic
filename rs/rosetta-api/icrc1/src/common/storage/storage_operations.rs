@@ -1,6 +1,6 @@
-use crate::common::storage::types::{RosettaBlock, RosettaCounter};
 use crate::MetadataEntry;
-use anyhow::{bail, Context};
+use crate::common::storage::types::{RosettaBlock, RosettaCounter};
+use anyhow::{Context, bail};
 use candid::Nat;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::tokens::Zero;
@@ -8,7 +8,7 @@ use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use icrc_ledger_types::icrc1::account::Account;
 use num_bigint::BigUint;
 use rusqlite::Connection;
-use rusqlite::{named_params, params, CachedStatement, Params};
+use rusqlite::{CachedStatement, Params, named_params, params};
 use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
@@ -131,7 +131,8 @@ pub fn get_fee_collector_from_block(
         } else {
             bail!(
                 "Block at index {} has fee_collector_block_index {} but that block has no fee_collector set",
-                rosetta_block.index, fee_collector_block_index
+                rosetta_block.index,
+                fee_collector_block_index
             );
         }
     }
@@ -206,7 +207,11 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                 )
             })?)
         } else {
-            bail!("Trying to debit an account {} that has not yet been allocated any tokens (index: {})", account, index)
+            bail!(
+                "Trying to debit an account {} that has not yet been allocated any tokens (index: {})",
+                account,
+                index
+            )
         };
         account_balances_cache
             .entry(account)

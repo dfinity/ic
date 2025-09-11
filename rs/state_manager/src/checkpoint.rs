@@ -1,5 +1,5 @@
-use crossbeam_channel::{unbounded, Sender};
-use ic_base_types::{subnet_id_try_from_protobuf, CanisterId, SnapshotId};
+use crossbeam_channel::{Sender, unbounded};
+use ic_base_types::{CanisterId, SnapshotId, subnet_id_try_from_protobuf};
 use ic_logger::error;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_snapshots::{
@@ -7,30 +7,30 @@ use ic_replicated_state::canister_snapshots::{
 };
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::WasmChunkStore;
 use ic_replicated_state::metadata_state::UnflushedCheckpointOp;
-use ic_replicated_state::page_map::{storage::validate, PageAllocatorFileDescriptor};
+use ic_replicated_state::page_map::{PageAllocatorFileDescriptor, storage::validate};
 use ic_replicated_state::{
+    CanisterMetrics, CanisterState, ExecutionState, ReplicatedState, SchedulerState, SystemState,
     canister_state::execution_state::{SandboxMemory, WasmBinary, WasmExecutionMode},
     page_map::PageMap,
-    CanisterMetrics, CanisterState, ExecutionState, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_replicated_state::{CheckpointLoadingMetrics, Memory};
 use ic_state_layout::{
-    error::LayoutError, try_mmap_wasm_file, AccessPolicy, CanisterLayout, CanisterSnapshotBits,
-    CanisterStateBits, CheckpointLayout, PageMapLayout, ReadOnly, SnapshotLayout,
+    AccessPolicy, CanisterLayout, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout,
+    PageMapLayout, ReadOnly, SnapshotLayout, error::LayoutError, try_mmap_wasm_file,
 };
 use ic_types::batch::RawQueryStats;
 use ic_types::{CanisterTimer, Height, Time};
 use ic_utils::thread::maybe_parallel_map;
 use ic_validate_eq::ValidateEq;
 use std::collections::{BTreeMap, HashSet};
-use std::convert::{identity, TryFrom};
+use std::convert::{TryFrom, identity};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::{
-    CheckpointError, CheckpointMetrics, PageMapToFlush, TipRequest,
     CRITICAL_ERROR_CHECKPOINT_SOFT_INVARIANT_BROKEN,
-    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT, NUMBER_OF_CHECKPOINT_THREADS,
+    CRITICAL_ERROR_REPLICATED_STATE_ALTERED_AFTER_CHECKPOINT, CheckpointError, CheckpointMetrics,
+    NUMBER_OF_CHECKPOINT_THREADS, PageMapToFlush, TipRequest,
 };
 
 #[cfg(test)]

@@ -1,14 +1,14 @@
 use crate::common::storage::types::{IcrcOperation, RosettaBlock};
 use crate::common::types::{FeeMetadata, FeeSetter};
 use crate::{
+    AppState, MultiTokenAppState,
     common::{
         constants::{DEFAULT_BLOCKCHAIN, MIN_PROGRESS_BAR},
         storage::storage_client::StorageClient,
         types::{ApproveMetadata, BlockMetadata, OperationType, TransactionMetadata},
     },
-    AppState, MultiTokenAppState,
 };
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use candid::Nat;
 use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use num_bigint::BigInt;
@@ -101,7 +101,13 @@ pub fn get_rosetta_block_from_partial_block_identifier(
                     .with_context(|| format!("Unable to retrieve block with idx: {}", block_idx))?
                     .with_context(|| format!("Block at index {} could not be found", block_idx))?;
                 if &hex::encode(rosetta_block.clone().get_block_hash()) != hash {
-                    bail!("Both index {} and hash {} were provided but they do not match the same block. Actual index {} and hash {}",block_idx,hash,rosetta_block.index,hex::encode(rosetta_block.clone().get_block_hash()));
+                    bail!(
+                        "Both index {} and hash {} were provided but they do not match the same block. Actual index {} and hash {}",
+                        block_idx,
+                        hash,
+                        rosetta_block.index,
+                        hex::encode(rosetta_block.clone().get_block_hash())
+                    );
                 }
                 rosetta_block
             }
@@ -702,8 +708,8 @@ mod tests {
     use ic_icrc1_test_utils::account_strategy;
     use ic_icrc1_test_utils::arb_amount;
     use ic_icrc1_test_utils::blocks_strategy;
-    use ic_icrc1_tokens_u256::U256;
     use ic_icrc1_tokens_u64::U64;
+    use ic_icrc1_tokens_u256::U256;
     use ic_ledger_core::{block::BlockType, tokens::TokensType};
     use proptest::prelude::ProptestConfig;
     use proptest::proptest;

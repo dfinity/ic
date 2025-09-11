@@ -475,7 +475,7 @@ pub fn build_icrc21_consent_info(
                 None => {
                     return Err(Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
                         description: "transfer args should be provided".to_string(),
-                    }))
+                    }));
                 }
             };
             display_message_builder = display_message_builder

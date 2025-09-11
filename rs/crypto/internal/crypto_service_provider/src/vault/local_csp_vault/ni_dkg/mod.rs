@@ -1,3 +1,4 @@
+use crate::KeyId;
 use crate::key_id::KeyIdInstantiationError;
 use crate::keygen::utils::dkg_dealing_encryption_pk_to_proto;
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
@@ -7,7 +8,6 @@ use crate::threshold::ni_dkg::{NIDKG_FS_SCOPE, NIDKG_THRESHOLD_SCOPE};
 use crate::types::{CspPublicCoefficients, CspSecretKey};
 use crate::vault::api::NiDkgCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
-use crate::KeyId;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
@@ -15,16 +15,16 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateFsKeyError, CspDkgLoadPrivateKeyError, InternalError,
 };
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381 as ni_dkg_clib;
-use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::FsEncryptionKeySetWithPop;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::SecretKey;
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::FsEncryptionKeySetWithPop;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
+use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
-use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_node_key_validation::ValidDkgDealingEncryptionPublicKey;
 use ic_logger::debug;
 use ic_protobuf::registry::crypto::v1::PublicKey;
@@ -458,18 +458,22 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 match result {
                     Ok(()) => Ok(()),
                     Err(SecretKeyStoreInsertionError::DuplicateKeyId(_key_id)) => Ok(()),
-                    Err(SecretKeyStoreInsertionError::TransientError(e)) => Err(CspDkgLoadPrivateKeyError::TransientInternalError(InternalError {
-                        internal_error: format!(
-                            "error persisting secret key store while loading threshold signing key: {}",
-                            e
-                        )
-                    })),
-                    Err(SecretKeyStoreInsertionError::SerializationError(e)) => Err(CspDkgLoadPrivateKeyError::InternalError(InternalError {
-                        internal_error: format!(
-                            "error serializing secret key store while loading threshold signing key: {}",
-                            e
-                        )
-                    }))
+                    Err(SecretKeyStoreInsertionError::TransientError(e)) => Err(
+                        CspDkgLoadPrivateKeyError::TransientInternalError(InternalError {
+                            internal_error: format!(
+                                "error persisting secret key store while loading threshold signing key: {}",
+                                e
+                            ),
+                        }),
+                    ),
+                    Err(SecretKeyStoreInsertionError::SerializationError(e)) => {
+                        Err(CspDkgLoadPrivateKeyError::InternalError(InternalError {
+                            internal_error: format!(
+                                "error serializing secret key store while loading threshold signing key: {}",
+                                e
+                            ),
+                        }))
+                    }
                 }
             }
             other => Err(ni_dkg_errors::CspDkgLoadPrivateKeyError::UnsupportedAlgorithmId(other)),

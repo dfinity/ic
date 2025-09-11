@@ -2,22 +2,23 @@ use crate::cmd::{
     AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, WithLedgerAccountCmd, WithNeuronCmd,
     WithTrustedNeuronsFollowingNeuronCmd,
 };
-use candid::{decode_one, Encode};
+use candid::{Encode, decode_one};
 use ic_agent::{
-    agent::{signed::SignedUpdate, EnvelopeContent},
-    export::Principal,
     Agent, Identity, Signature,
+    agent::{EnvelopeContent, signed::SignedUpdate},
+    export::Principal,
 };
 use ic_nervous_system_common::ledger;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_governance_api::{
+    ManageNeuron, ManageNeuronResponse, Topic,
     manage_neuron::{
+        ClaimOrRefresh, Command, Configure, Follow, IncreaseDissolveDelay, NeuronIdOrSubaccount,
         claim_or_refresh::{By, MemoAndController},
         configure::Operation,
-        ClaimOrRefresh, Command, Configure, Follow, IncreaseDissolveDelay, NeuronIdOrSubaccount,
     },
-    manage_neuron_response, ManageNeuron, ManageNeuronResponse, Topic,
+    manage_neuron_response,
 };
 use ic_protobuf::registry::{
     replica_version::v1::ReplicaVersionRecord,
@@ -28,12 +29,12 @@ use ic_registry_keys::{
     make_blessed_replica_versions_key, make_replica_version_key, make_subnet_record_key,
 };
 use ic_registry_transport::{
-    pb::v1::{registry_mutation, Precondition, RegistryMutation},
+    pb::v1::{Precondition, RegistryMutation, registry_mutation},
     serialize_atomic_mutate_request,
 };
 use ic_types::{
-    messages::{SignedIngress, SignedRequestBytes},
     CanisterId, PrincipalId, SubnetId, Time,
+    messages::{SignedIngress, SignedRequestBytes},
 };
 use icp_ledger::{AccountIdentifier, Memo, SendArgs, Tokens};
 use prost::Message;
@@ -283,16 +284,16 @@ pub fn cmd_add_ledger_account(
 
     let governance_agent = &agent_with_principal_as_sender(&GOVERNANCE_CANISTER_ID.get())?;
 
-    Ok(vec![make_signed_ingress(
-        governance_agent,
-        LEDGER_CANISTER_ID,
-        "send_dfx",
-        payload,
-        time,
-    )
-    .expect(
-        "Couldn't create message to mint tokens to neuron account",
-    )])
+    Ok(vec![
+        make_signed_ingress(
+            governance_agent,
+            LEDGER_CANISTER_ID,
+            "send_dfx",
+            payload,
+            time,
+        )
+        .expect("Couldn't create message to mint tokens to neuron account"),
+    ])
 }
 
 /// Creates signed ingress messages to add a new blessed replica version and

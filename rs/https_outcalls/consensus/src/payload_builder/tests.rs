@@ -3,13 +3,13 @@
 //!
 //! Some tests are run over a range of subnet configurations to check for corner cases.
 
-use super::{parse, CanisterHttpPayloadBuilderImpl};
+use super::{CanisterHttpPayloadBuilderImpl, parse};
 use crate::payload_builder::{
     divergence_response_into_reject,
     parse::{bytes_to_payload, payload_to_bytes},
 };
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
-use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
 use ic_error_types::RejectCode;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
@@ -31,23 +31,23 @@ use ic_test_utilities_types::{
     messages::RequestBuilder,
 };
 use ic_types::{
-    batch::{CanisterHttpPayload, ValidationContext, MAX_CANISTER_HTTP_PAYLOAD_SIZE},
+    Height, NumBytes, RegistryVersion, ReplicaVersion, Time,
+    batch::{CanisterHttpPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE, ValidationContext},
     canister_http::{
-        CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpResponse,
-        CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseMetadata,
-        CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
-        CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
+        CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL, CanisterHttpMethod,
+        CanisterHttpRequestContext, CanisterHttpResponse, CanisterHttpResponseContent,
+        CanisterHttpResponseDivergence, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
+        CanisterHttpResponseWithConsensus,
     },
     consensus::get_faults_tolerated,
-    crypto::{crypto_hash, BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed},
+    crypto::{BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed, crypto_hash},
     messages::{CallbackId, Payload, RejectContext},
     registry::RegistryClientError,
     signature::{BasicSignature, BasicSignatureBatch},
     time::UNIX_EPOCH,
-    Height, NumBytes, RegistryVersion, ReplicaVersion, Time,
 };
 use rand::Rng;
-use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
+use rand_chacha::{ChaCha20Rng, rand_core::SeedableRng};
 use std::{
     collections::BTreeMap,
     ops::DerefMut,
@@ -60,11 +60,13 @@ const MAX_SUBNET_SIZE: usize = 40;
 
 #[test]
 fn default_payload_serializes_to_empty_vec() {
-    assert!(parse::payload_to_bytes(
-        &CanisterHttpPayload::default(),
-        NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64)
-    )
-    .is_empty());
+    assert!(
+        parse::payload_to_bytes(
+            &CanisterHttpPayload::default(),
+            NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64)
+        )
+        .is_empty()
+    );
 }
 
 /// Check that a single well formed request with shares makes it through the block maker
@@ -101,14 +103,16 @@ fn single_request_test() {
             assert_eq!(parsed_payload.num_responses(), 1);
             assert_eq!(parsed_payload.responses[0].content, response);
 
-            assert!(payload_builder
-                .validate_payload(
-                    Height::new(1),
-                    &test_proposal_context(&context),
-                    &payload,
-                    &[],
-                )
-                .is_ok());
+            assert!(
+                payload_builder
+                    .validate_payload(
+                        Height::new(1),
+                        &test_proposal_context(&context),
+                        &payload,
+                        &[],
+                    )
+                    .is_ok()
+            );
         });
 
         // TODO: Test that the payload building fails, if the use threshold -1 many shares.

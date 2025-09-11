@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Deserialize, Encode, Nat, Principal};
 use ic_agent::Agent;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::collections::BTreeMap;
 use std::env;
 use tokio::task;

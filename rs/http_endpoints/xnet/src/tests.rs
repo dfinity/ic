@@ -4,17 +4,17 @@ use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_protobuf::{messaging::xnet::v1 as pb, proxy::ProtoProxy};
-use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState, Stream};
+use ic_replicated_state::{ReplicatedState, Stream, testing::ReplicatedStateTesting};
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    fetch_histogram_stats, fetch_histogram_vec_count, metric_vec, HistogramStats, MetricVec,
+    HistogramStats, MetricVec, fetch_histogram_stats, fetch_histogram_vec_count, metric_vec,
 };
 use ic_test_utilities_types::{
-    ids::{canister_test_id, SUBNET_6, SUBNET_7},
+    ids::{SUBNET_6, SUBNET_7, canister_test_id},
     messages::RequestBuilder,
 };
-use ic_types::{messages::CallbackId, xnet::StreamIndexedQueue, Height, SubnetId};
+use ic_types::{Height, SubnetId, messages::CallbackId, xnet::StreamIndexedQueue};
 use maplit::btreemap;
 use std::sync::Barrier;
 use url::Url;

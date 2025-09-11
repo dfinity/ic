@@ -1,11 +1,11 @@
 use crate::{
     neurons_fund::*,
     pb::v1::{
-        neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
         IdealMatchedParticipationFunction as IdealMatchedParticipationFunctionPb,
         NeuronsFundParticipation as NeuronsFundParticipationPb,
         NeuronsFundSnapshot as NeuronsFundSnapshotPb,
         SwapParticipationLimits as SwapParticipationLimitsPb,
+        neurons_fund_snapshot::NeuronsFundNeuronPortion as NeuronsFundNeuronPortionPb,
     },
 };
 use ic_base_types::PrincipalId;

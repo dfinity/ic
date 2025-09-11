@@ -13,19 +13,19 @@ use ic_rosetta_api::models::{
     SignedTransaction,
 };
 use ic_rosetta_api::models::{ConstructionSubmitResponse, Error as RosettaError};
+use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::transaction_operation_results::TransactionOperationResults;
 use ic_rosetta_api::request::transaction_results::TransactionResults;
-use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{
     AddHotKey, ChangeAutoStakeMaturity, Disburse, DisburseMaturity, Follow, ListNeurons,
     NeuronInfo, RefreshVotingPower, RegisterVote, RemoveHotKey, SetDissolveTimestamp, Spawn, Stake,
     StakeMaturity, StartDissolve, StopDissolve,
 };
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
-use ic_rosetta_api::{convert, errors, errors::ApiError, DEFAULT_TOKEN_SYMBOL};
+use ic_rosetta_api::{DEFAULT_TOKEN_SYMBOL, convert, errors, errors::ApiError};
 use ic_state_machine_tests::{StateMachine, WasmResult};
-use ic_types::{messages::Blob, time, CanisterId, PrincipalId};
+use ic_types::{CanisterId, PrincipalId, messages::Blob, time};
 use icp_ledger::{AccountIdentifier, BlockIndex, Operation, Tokens};
 use rand::{seq::SliceRandom, thread_rng};
 use rosetta_api_serv::RosettaApiHandle;

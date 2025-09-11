@@ -24,8 +24,8 @@ mod keygen {
 mod serialization {
     use crate::types::{PublicKeyBytes, SecretKeyBytes};
     use crate::{
-        public_key_from_der, secret_key_from_pkcs8_v1_der, secret_key_to_pkcs8_v1_der,
-        secret_key_to_pkcs8_v2_der, KeyDecodingError,
+        KeyDecodingError, public_key_from_der, secret_key_from_pkcs8_v1_der,
+        secret_key_to_pkcs8_v1_der, secret_key_to_pkcs8_v2_der,
     };
     use assert_matches::assert_matches;
     use ic_crypto_internal_test_vectors::unhex::hex_to_32_bytes;
@@ -39,7 +39,7 @@ mod serialization {
     const SK_RAW_HEX: &str = "D4EE72DBF913584AD5B6D8F1F769F8AD3AFE7C28CBF1D4FBE097A88F44755842";
 
     // Example ECDSA DER-encoded key, for testing.
-    const ECDSA_P256_PK_1_DER_HEX : &str = "3059301306072a8648ce3d020106082a8648ce3d03010703420004485c32997ce7c6d38ca82c821185c689d424fac7c9695bb97786c4248aab6428949bcd163e2bcf3eeeac4f200b38fbd053f82c4e1776dc9c6dc8db9b7c35e06f";
+    const ECDSA_P256_PK_1_DER_HEX: &str = "3059301306072a8648ce3d020106082a8648ce3d03010703420004485c32997ce7c6d38ca82c821185c689d424fac7c9695bb97786c4248aab6428949bcd163e2bcf3eeeac4f200b38fbd053f82c4e1776dc9c6dc8db9b7c35e06f";
 
     #[test]
     fn should_correctly_parse_der_encoded_pk() {
@@ -65,9 +65,10 @@ mod serialization {
         assert!(pk_result.is_err());
         let err = pk_result.unwrap_err();
         assert!(err.is_malformed_public_key());
-        assert!(err
-            .to_string()
-            .contains("Wrong algorithm identifier for Ed25519"));
+        assert!(
+            err.to_string()
+                .contains("Wrong algorithm identifier for Ed25519")
+        );
     }
 
     #[test]
@@ -156,7 +157,7 @@ mod ed25519_cr_yp_to {
     use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_byte_vec};
     use ic_crypto_secrets_containers::SecretArray;
     use std::fs::File;
-    use std::io::{prelude::*, BufReader};
+    use std::io::{BufReader, prelude::*};
     use std::path::PathBuf;
 
     /// Performs a subset of the regression tests done in http://ed25519.cr.yp.to/python/sign.py
@@ -214,7 +215,7 @@ mod sign {
 
     use crate::sign;
     use crate::types::{SecretKeyBytes, SignatureBytes};
-    use ic_crypto_internal_test_vectors::ed25519::{crypto_lib_testvec, Ed25519TestVector};
+    use ic_crypto_internal_test_vectors::ed25519::{Ed25519TestVector, crypto_lib_testvec};
     use ic_crypto_secrets_containers::SecretArray;
     use strum::IntoEnumIterator;
 
@@ -295,7 +296,7 @@ mod verify {
     use crate::{public_key_from_der, public_key_to_der, sign, verify};
     use ic_crypto_internal_test_vectors::ed25519::Ed25519TestVector::RFC8032_ED25519_1;
     use ic_crypto_internal_test_vectors::ed25519::Ed25519TestVector::RFC8032_ED25519_SHA_ABC;
-    use ic_crypto_internal_test_vectors::ed25519::{crypto_lib_testvec, Ed25519TestVector};
+    use ic_crypto_internal_test_vectors::ed25519::{Ed25519TestVector, crypto_lib_testvec};
     use ic_crypto_secrets_containers::SecretArray;
     use strum::IntoEnumIterator;
 
@@ -431,10 +432,12 @@ mod verify_public_key {
     fn should_fail_public_key_verification_if_point_has_small_order() {
         let pubkey_with_small_order = {
             let pubkey_with_order_8 = PublicKeyBytes([0; 32]);
-            assert!(CompressedEdwardsY(pubkey_with_order_8.0)
-                .decompress()
-                .expect("pubkey cannot be decompressed")
-                .is_small_order());
+            assert!(
+                CompressedEdwardsY(pubkey_with_order_8.0)
+                    .decompress()
+                    .expect("pubkey cannot be decompressed")
+                    .is_small_order()
+            );
             pubkey_with_order_8
         };
 
@@ -460,7 +463,7 @@ mod non_malleability {
     use crate::types::{PublicKeyBytes, SignatureBytes};
     use crate::verify;
     use assert_matches::assert_matches;
-    use ic_crypto_internal_test_vectors::ed25519::{crypto_lib_testvec, Ed25519TestVector};
+    use ic_crypto_internal_test_vectors::ed25519::{Ed25519TestVector, crypto_lib_testvec};
     use ic_types::crypto::CryptoError;
     use num_bigint::BigUint;
     use strum::IntoEnumIterator;

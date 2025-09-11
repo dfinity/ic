@@ -70,7 +70,7 @@ impl UtilityCommand {
             None => {
                 return Err(UtilityCommandError::IoError(
                     "Could not fetch stdin of child process.".to_string(),
-                ))
+                ));
             }
         };
 

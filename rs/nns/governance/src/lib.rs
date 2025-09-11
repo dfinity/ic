@@ -123,11 +123,11 @@
 use crate::{
     governance::{Governance, TimeWarp},
     pb::v1::{
-        governance::{
-            governance_cached_metrics::NeuronSubsetMetrics as NeuronSubsetMetricsPb,
-            GovernanceCachedMetrics,
-        },
         ProposalStatus,
+        governance::{
+            GovernanceCachedMetrics,
+            governance_cached_metrics::NeuronSubsetMetrics as NeuronSubsetMetricsPb,
+        },
     },
 };
 use candid::DecoderConfig;
@@ -1129,15 +1129,17 @@ impl NeuronSubsetMetricsPb {
             staked_maturity_e8s_equivalent_buckets,
         );
         encode_dissolve_delay_buckets(
-            w
-                .gauge_vec(
-                    &format!("governance_{}_neurons_maturity_e8s_equivalent_buckets", neuron_subset_name),
-                    &format!(
-                        "The total amount of unstaked maturity (in e8s equivalent) in neurons that {}, \
+            w.gauge_vec(
+                &format!(
+                    "governance_{}_neurons_maturity_e8s_equivalent_buckets",
+                    neuron_subset_name
+                ),
+                &format!(
+                    "The total amount of unstaked maturity (in e8s equivalent) in neurons that {}, \
                          grouped by dissolve delay.",
-                        neuron_subset_description,
-                    ),
-                )?,
+                    neuron_subset_description,
+                ),
+            )?,
             maturity_e8s_equivalent_buckets,
         );
 

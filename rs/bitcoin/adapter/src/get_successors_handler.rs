@@ -3,17 +3,17 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use bitcoin::{consensus::Encodable, BlockHash};
+use bitcoin::{BlockHash, consensus::Encodable};
 use ic_metrics::MetricsRegistry;
 use static_assertions::const_assert_eq;
 use tokio::sync::mpsc::Sender;
 use tonic::Status;
 
 use crate::{
+    BlockchainManagerRequest, BlockchainState,
     blockchainstate::SerializedBlock,
     common::{BlockHeight, BlockchainHeader, BlockchainNetwork},
     metrics::GetSuccessorMetrics,
-    BlockchainManagerRequest, BlockchainState,
 };
 
 // Max size of the `GetSuccessorsResponse` message.
@@ -313,7 +313,7 @@ mod test {
 
     use std::sync::{Arc, Mutex};
 
-    use bitcoin::{consensus::Decodable, Block};
+    use bitcoin::{Block, consensus::Decodable};
     use ic_metrics::MetricsRegistry;
     use tokio::sync::mpsc::channel;
 

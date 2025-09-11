@@ -1,5 +1,5 @@
 use crate::lifecycle::init::InitArgs;
-use crate::{lifecycle, ECDSAPublicKey, GetUtxosResponse, Network, Timestamp};
+use crate::{ECDSAPublicKey, GetUtxosResponse, Network, Timestamp, lifecycle};
 use candid::Principal;
 use ic_base_types::CanisterId;
 use ic_btc_interface::{OutPoint, Utxo};
@@ -139,7 +139,7 @@ pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
 pub mod mock {
     use crate::management::CallError;
     use crate::updates::update_balance::UpdateBalanceError;
-    use crate::{tx, CanisterRuntime, GetUtxosRequest, GetUtxosResponse, Network};
+    use crate::{CanisterRuntime, GetUtxosRequest, GetUtxosResponse, Network, tx};
     use async_trait::async_trait;
     use candid::Principal;
     use ic_btc_checker::CheckTransactionResponse;
@@ -170,16 +170,16 @@ pub mod mock {
 
 pub mod arbitrary {
     use crate::{
+        WithdrawalFee,
         address::BitcoinAddress,
         reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason},
         signature::EncodedSignature,
         state::{
-            eventlog::{Event, EventType, ReplacedReason},
             ChangeOutput, Mode, ReimbursementReason, RetrieveBtcRequest, SuspendedReason,
+            eventlog::{Event, EventType, ReplacedReason},
         },
         tx,
         tx::{SignedInput, TxOut, UnsignedInput},
-        WithdrawalFee,
     };
     use candid::Principal;
     pub use event::event_type;
@@ -189,9 +189,9 @@ pub mod arbitrary {
     use proptest::{
         array::uniform20,
         array::uniform32,
-        collection::{vec as pvec, SizeRange},
+        collection::{SizeRange, vec as pvec},
         option,
-        prelude::{any, Just, Strategy},
+        prelude::{Just, Strategy, any},
         prop_oneof,
     };
     use serde_bytes::ByteBuf;
@@ -382,8 +382,8 @@ pub mod arbitrary {
     #[allow(deprecated)]
     mod event {
         use super::*;
-        use crate::lifecycle::{init::InitArgs, upgrade::UpgradeArgs};
         use crate::Network;
+        use crate::lifecycle::{init::InitArgs, upgrade::UpgradeArgs};
 
         fn btc_network() -> impl Strategy<Value = Network> {
             prop_oneof![

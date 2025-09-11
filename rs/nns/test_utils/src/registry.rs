@@ -9,7 +9,7 @@ use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_test_utils_ni_dkg::{
-    dummy_initial_dkg_transcript, initial_dkg_transcript, InitialNiDkgConfig,
+    InitialNiDkgConfig, dummy_initial_dkg_transcript, initial_dkg_transcript,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_crypto_utils_ni_dkg::extract_threshold_sig_public_key;
@@ -43,20 +43,20 @@ use ic_registry_keys::{
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
-    dechunkify_get_value_response_content, deserialize_get_value_response, insert,
+    Error, GetChunk, dechunkify_get_value_response_content, deserialize_get_value_response, insert,
     pb::v1::{
-        registry_mutation::Type, HighCapacityRegistryGetValueResponse, RegistryAtomicMutateRequest,
-        RegistryAtomicMutateResponse, RegistryMutation,
+        HighCapacityRegistryGetValueResponse, RegistryAtomicMutateRequest,
+        RegistryAtomicMutateResponse, RegistryMutation, registry_mutation::Type,
     },
-    serialize_get_value_request, Error, GetChunk,
+    serialize_get_value_request,
 };
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
-    crypto::{
-        threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript},
-        CurrentNodePublicKeys, KeyPurpose,
-    },
     NodeId, ReplicaVersion,
+    crypto::{
+        CurrentNodePublicKeys, KeyPurpose,
+        threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript},
+    },
 };
 use maplit::btreemap;
 use on_wire::bytes;

@@ -1,8 +1,8 @@
+use crate::GetUtxosResponse;
 use crate::logs::{P0, P1};
 use crate::memo::MintMemo;
-use crate::state::{mutate_state, read_state, SuspendedReason, UtxoCheckStatus};
-use crate::tasks::{schedule_now, TaskType};
-use crate::GetUtxosResponse;
+use crate::state::{SuspendedReason, UtxoCheckStatus, mutate_state, read_state};
+use crate::tasks::{TaskType, schedule_now};
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_interface::{GetUtxosError, OutPoint, Utxo};
@@ -21,13 +21,13 @@ const MAX_CHECK_TRANSACTION_RETRY: usize = 10;
 use super::get_btc_address::init_ecdsa_public_key;
 
 use crate::{
-    guard::{balance_update_guard, GuardError},
-    management::{get_utxos, CallError, CallSource},
+    CanisterRuntime, Timestamp,
+    guard::{GuardError, balance_update_guard},
+    management::{CallError, CallSource, get_utxos},
     metrics::observe_update_call_latency,
     state,
     tx::{DisplayAmount, DisplayOutpoint},
     updates::get_btc_address,
-    CanisterRuntime, Timestamp,
 };
 
 /// The argument of the [update_balance] endpoint.
@@ -356,7 +356,7 @@ async fn check_utxo<R: CanisterRuntime>(
     args: &UpdateBalanceArgs,
     runtime: &R,
 ) -> Result<UtxoCheckStatus, UpdateBalanceError> {
-    use ic_btc_checker::{CheckTransactionStatus, CHECK_TRANSACTION_CYCLES_REQUIRED};
+    use ic_btc_checker::{CHECK_TRANSACTION_CYCLES_REQUIRED, CheckTransactionStatus};
 
     let btc_checker_principal = read_state(|s| {
         s.btc_checker_principal

@@ -2,11 +2,11 @@ use crate::{
     error::{OrchestratorError, OrchestratorResult},
     registry_helper::RegistryHelper,
 };
-use backoff::{backoff::Backoff, ExponentialBackoff};
-use ic_logger::{info, warn, ReplicaLogger};
+use backoff::{ExponentialBackoff, backoff::Backoff};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
 use ic_sys::utility_command::UtilityCommand;
-use ic_types::{hostos_version::HostosVersion, NodeId};
+use ic_types::{NodeId, hostos_version::HostosVersion};
 use std::{sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
 

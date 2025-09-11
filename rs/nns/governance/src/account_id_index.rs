@@ -1,5 +1,5 @@
 use crate::{
-    pb::v1::{governance_error::ErrorType, GovernanceError},
+    pb::v1::{GovernanceError, governance_error::ErrorType},
     storage::validate_stable_btree_map,
 };
 use ic_nns_common::pb::v1::NeuronId;
@@ -65,7 +65,7 @@ impl<M: Memory> NeuronAccountIdIndex<M> {
                         format!(
                             "AccountIdentifier ({}) exists in the index with a different neuron id {}",
                             account_identifier, previous_neuron_id
-                        )
+                        ),
                     ))
                 }
             }

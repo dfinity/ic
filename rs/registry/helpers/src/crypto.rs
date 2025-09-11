@@ -13,16 +13,16 @@ use ic_registry_keys::{
     make_crypto_tls_cert_key,
 };
 use ic_types::crypto::threshold_sig::{
-    ni_dkg::{
-        config::{receivers::NiDkgReceivers, NiDkgThreshold},
-        NiDkgId, NiDkgTranscript,
-    },
     ThresholdSigPublicKey,
+    ni_dkg::{
+        NiDkgId, NiDkgTranscript,
+        config::{NiDkgThreshold, receivers::NiDkgReceivers},
+    },
 };
 use ic_types::{
+    NodeId, NumberOfNodes, PrincipalId, RegistryVersion, SubnetId,
     crypto::KeyPurpose,
     registry::{RegistryClientError, RegistryClientError::DecodeError},
-    NodeId, NumberOfNodes, PrincipalId, RegistryVersion, SubnetId,
 };
 use std::collections::BTreeSet;
 use std::convert::TryFrom;

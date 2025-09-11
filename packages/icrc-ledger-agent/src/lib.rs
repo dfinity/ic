@@ -1,12 +1,12 @@
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::{
-    hash_tree::{Label, LookupResult},
     Agent,
+    hash_tree::{Label, LookupResult},
 };
 use ic_cbor::CertificateToCbor;
 use ic_certification::{
-    hash_tree::{HashTreeNode, SubtreeLookupResult},
     Certificate, HashTree,
+    hash_tree::{HashTreeNode, SubtreeLookupResult},
 };
 use icrc_ledger_types::icrc::generic_value::Hash;
 use icrc_ledger_types::icrc1::account::Account;
@@ -297,7 +297,7 @@ impl Icrc1Agent {
                 return Err(Icrc1AgentError::VerificationFailed(format!(
                     "could not find certified_data for canister: {}",
                     self.ledger_canister_id
-                )))
+                )));
             }
         };
 
@@ -334,7 +334,7 @@ impl Icrc1Agent {
                 return Err(Icrc1AgentError::VerificationFailed(format!(
                     "Unable to deserialize CBOR encoded hash_tree: {}",
                     e
-                )))
+                )));
             }
         };
         self.verify_root_hash(&certificate, &hash_tree.digest())
@@ -362,16 +362,18 @@ impl Icrc1Agent {
             lookup_leaf(&hash_tree, "last_block_hash")?,
         ) {
             (Some(tip_hash), _) => {
-                let last_block_index_bytes: [u8; 8] =
-                    match last_block_index_encoded.clone().try_into() {
-                        Ok(last_block_index_bytes) => last_block_index_bytes,
-                        Err(_) => {
-                            return Err(Icrc1AgentError::VerificationFailed(format!(
-                    "DataCertificate hash_tree bytes: {}, cannot be decoded as last_block_index",
-                    hex::encode(last_block_index_encoded)
-                )))
-                        }
-                    };
+                let last_block_index_bytes: [u8; 8] = match last_block_index_encoded
+                    .clone()
+                    .try_into()
+                {
+                    Ok(last_block_index_bytes) => last_block_index_bytes,
+                    Err(_) => {
+                        return Err(Icrc1AgentError::VerificationFailed(format!(
+                            "DataCertificate hash_tree bytes: {}, cannot be decoded as last_block_index",
+                            hex::encode(last_block_index_encoded)
+                        )));
+                    }
+                };
                 let last_block_index = u64::from_be_bytes(last_block_index_bytes);
                 Ok(Some((
                     convert_block_hash(tip_hash)?,

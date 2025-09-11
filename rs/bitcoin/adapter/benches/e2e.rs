@@ -1,7 +1,7 @@
-use bitcoin::{block::Header as BlockHeader, BlockHash, Network};
+use bitcoin::{BlockHash, Network, block::Header as BlockHeader};
 use criterion::measurement::Measurement;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
-use ic_btc_adapter::{start_server, BlockchainNetwork, Config, IncomingSource};
+use criterion::{BenchmarkGroup, Criterion, criterion_group, criterion_main};
+use ic_btc_adapter::{BlockchainNetwork, Config, IncomingSource, start_server};
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::generate_headers;
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;

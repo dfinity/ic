@@ -3,7 +3,7 @@ use std::{net::Ipv6Addr, path::Path};
 use anyhow::Result;
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
-    test_env_api::{get_dependency_path, scp_send_to, SshSession},
+    test_env_api::{SshSession, get_dependency_path, scp_send_to},
     universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
 };
 

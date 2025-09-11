@@ -3,8 +3,8 @@ use crate::{
     benches_util::check_projected_instructions,
     governance::{
         KNOWN_NEURON_DESCRIPTION_MAX_LEN, KNOWN_NEURON_NAME_MAX_LEN, MAX_FOLLOWEES_PER_TOPIC,
-        MAX_NEURONS_FUND_PARTICIPANTS, MAX_NEURON_RECENT_BALLOTS, MAX_NUMBER_OF_NEURONS,
-        MAX_NUM_HOT_KEYS_PER_NEURON,
+        MAX_NEURON_RECENT_BALLOTS, MAX_NEURONS_FUND_PARTICIPANTS, MAX_NUM_HOT_KEYS_PER_NEURON,
+        MAX_NUMBER_OF_NEURONS,
     },
     neuron::{DissolveStateAndAge, NeuronBuilder},
     neuron_data_validation::NeuronDataValidator,
@@ -14,11 +14,11 @@ use crate::{
     temporarily_disable_known_neuron_voting_history,
     temporarily_enable_known_neuron_voting_history,
 };
-use canbench_rs::{bench, bench_fn, BenchResult};
+use canbench_rs::{BenchResult, bench, bench_fn};
 use ic_nervous_system_common::E8;
 use ic_nns_common::pb::v1::ProposalId;
 use maplit::hashmap;
-use rand::{rngs::StdRng, RngCore, SeedableRng};
+use rand::{RngCore, SeedableRng, rngs::StdRng};
 use std::collections::BTreeSet;
 
 /// Whether the neuron should be stored in heap or stable storage.

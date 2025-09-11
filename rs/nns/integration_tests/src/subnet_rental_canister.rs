@@ -7,8 +7,8 @@ use ic_nns_constants::{
     SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_governance_api::{
-    manage_neuron_response::{Command as CommandResponse, RegisterVoteResponse},
     ExecuteNnsFunction, MakeProposalRequest, NnsFunction, ProposalActionRequest, Vote,
+    manage_neuron_response::{Command as CommandResponse, RegisterVoteResponse},
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -24,8 +24,8 @@ use ic_state_machine_tests::{StateMachine, WasmResult};
 use ic_types::Time;
 use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
 use icp_ledger::{
-    AccountIdentifier, BinaryAccountBalanceArgs, Memo, Subaccount, Tokens, TransferArgs,
-    DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, BinaryAccountBalanceArgs, DEFAULT_TRANSFER_FEE, Memo, Subaccount, Tokens,
+    TransferArgs,
 };
 use std::time::Duration;
 use xrc_mock::{ExchangeRate, Response, XrcMockInitPayload};
@@ -414,11 +414,13 @@ fn test_renting_a_subnet_without_paying_fails() {
     nns_wait_for_proposal_failure(&state_machine, proposal_id.id);
     let proposal_info =
         nns_governance_get_proposal_info_as_anonymous(&state_machine, proposal_id.id);
-    assert!(proposal_info
-        .failure_reason
-        .unwrap()
-        .error_message
-        .contains("Subnet rental request proposal failed: InsufficientFunds"));
+    assert!(
+        proposal_info
+            .failure_reason
+            .unwrap()
+            .error_message
+            .contains("Subnet rental request proposal failed: InsufficientFunds")
+    );
 
     // check that the rental request has NOT been created
     let raw_rental_requests = state_machine

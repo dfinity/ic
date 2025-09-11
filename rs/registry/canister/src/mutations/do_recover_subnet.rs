@@ -11,7 +11,7 @@ use crate::{
     registry::{Registry, Version},
 };
 use candid::{CandidType, Deserialize, Encode};
-use dfn_core::api::{call, CanisterId};
+use dfn_core::api::{CanisterId, call};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
@@ -25,7 +25,7 @@ use ic_registry_keys::{
 };
 use ic_registry_subnet_features::KeyConfig as KeyConfigInternal;
 use ic_registry_transport::{
-    pb::v1::{registry_mutation, RegistryMutation},
+    pb::v1::{RegistryMutation, registry_mutation},
     upsert,
 };
 use on_wire::bytes;
@@ -488,7 +488,7 @@ mod test {
             prepare_registry_with_nodes,
         },
         mutations::do_recover_subnet::{
-            panic_if_record_changed_across_versions, RecoverSubnetPayload,
+            RecoverSubnetPayload, panic_if_record_changed_across_versions,
         },
         registry::Registry,
     };

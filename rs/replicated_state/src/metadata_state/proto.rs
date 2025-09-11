@@ -2,7 +2,7 @@ use super::*;
 use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto;
 use ic_protobuf::state::system_metadata::v1::ThresholdSignatureAgreementsEntry;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     registry::subnet::v1 as pb_subnet,
     state::{
         canister_state_bits::v1::{ConsumedCyclesByUseCase, CyclesUseCase as pbCyclesUseCase},
@@ -369,10 +369,12 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
             match canister_allocation_ranges.iter().next() {
                 Some(first_allocation_range)
                     if first_allocation_range.contains(&last_generated_canister_id) => {}
-                _ => return Err(ProxyDecodeError::Other(format!(
-                    "SystemMetadata::last_generated_canister_id ({}) not in the first SystemMetadata::canister_allocation_ranges range ({:?})",
-                    last_generated_canister_id, canister_allocation_ranges
-                ))),
+                _ => {
+                    return Err(ProxyDecodeError::Other(format!(
+                        "SystemMetadata::last_generated_canister_id ({}) not in the first SystemMetadata::canister_allocation_ranges range ({:?})",
+                        last_generated_canister_id, canister_allocation_ranges
+                    )));
+                }
             }
         }
 

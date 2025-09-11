@@ -1,8 +1,8 @@
 use candid::{CandidType, Nat};
-use ic_stable_structures::{storable::Bound, Storable};
+use ic_stable_structures::{Storable, storable::Bound};
 use minicbor::{Decode, Encode};
 use num_traits::{Bounded, ToPrimitive};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Debug;

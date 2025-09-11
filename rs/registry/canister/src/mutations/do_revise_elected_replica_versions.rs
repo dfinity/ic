@@ -16,7 +16,7 @@ use ic_registry_keys::{
     make_blessed_replica_versions_key, make_replica_version_key, make_subnet_list_record_key,
     make_subnet_record_key, make_unassigned_nodes_config_record_key,
 };
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
 use prost::Message;
 use serde::Serialize;
 

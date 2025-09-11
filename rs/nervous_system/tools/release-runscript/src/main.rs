@@ -2,7 +2,7 @@ mod commands;
 mod commit_switcher;
 mod utils;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
 use colored::*;
 use commands::{run_script, run_script_in_current_process};
@@ -149,7 +149,9 @@ fn run_pick_commit() -> Result<()> {
 
     let commit = if output.status.success() {
         let commit = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        println!("A commit with prebuilt artifacts was found with the following command: `./testnet/tools/nns-tools/cmd.sh latest_commit_with_prebuilt_artifacts`.");
+        println!(
+            "A commit with prebuilt artifacts was found with the following command: `./testnet/tools/nns-tools/cmd.sh latest_commit_with_prebuilt_artifacts`."
+        );
         input_with_default("Commit to release", &commit)?
     } else {
         println!(
@@ -157,7 +159,9 @@ fn run_pick_commit() -> Result<()> {
             String::from_utf8_lossy(&output.stderr)
         );
         // get input from user for the commit
-        input("Enter the commit hash, which you can find by running `./testnet/tools/nns-tools/cmd.sh latest_commit_with_prebuilt_artifacts`")?
+        input(
+            "Enter the commit hash, which you can find by running `./testnet/tools/nns-tools/cmd.sh latest_commit_with_prebuilt_artifacts`",
+        )?
     };
 
     print_step(
@@ -172,7 +176,9 @@ fn run_pick_commit() -> Result<()> {
 
 fn run_determine_targets(cmd: DetermineTargets) -> Result<()> {
     let DetermineTargets { commit } = cmd;
-    println!("Now choose which canisters to upgrade. You can run ./testnet/tools/nns-tools/list-new-commits.sh to see the changes for each canister.");
+    println!(
+        "Now choose which canisters to upgrade. You can run ./testnet/tools/nns-tools/list-new-commits.sh to see the changes for each canister."
+    );
 
     // Define the candidate canisters.
     let nns_candidates = [
@@ -317,11 +323,11 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
             };
             if !output.status.success() {
                 bail!(
-                "Failed to create proposal text for NNS canister {} due to error: stdout: {}, stderr: {}",
-                canister,
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
+                    "Failed to create proposal text for NNS canister {} due to error: stdout: {}, stderr: {}",
+                    canister,
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                );
             }
             let file_path = proposals_dir.join(format!("nns-{}.md", canister));
             std::fs::write(&file_path, output.stdout).expect("Failed to write NNS proposal file");
@@ -361,7 +367,9 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
             break;
         }
 
-        println!("The following proposals have TODOs. Please review them and remove the TODOs before submitting.");
+        println!(
+            "The following proposals have TODOs. Please review them and remove the TODOs before submitting."
+        );
         for proposal_text_path in &proposals_with_todos {
             println!("  - {}", proposal_text_path.display());
             let mut cmd = std::process::Command::new("code");
@@ -412,7 +420,9 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
     println!();
 
     // Ask the user for the SUBMITTING_NEURON_ID (example: 51)
-    println!("We are now going to submit the proposals. For this step, we need your neuron ID. If you are submitting on behalf of DFINITY, your neuron ID is written at this notion page: <https://www.notion.so/dfinityorg/3a1856c603704d51a6fcd2a57c98f92f?v=fc597afede904e499744f3528cad6682>.");
+    println!(
+        "We are now going to submit the proposals. For this step, we need your neuron ID. If you are submitting on behalf of DFINITY, your neuron ID is written at this notion page: <https://www.notion.so/dfinityorg/3a1856c603704d51a6fcd2a57c98f92f?v=fc597afede904e499744f3528cad6682>."
+    );
     let neuron_id = input("Enter your neuron ID (e.g. 51)")?;
 
     println!("Plug in your HSM key. Unplug your Ubikey.");
@@ -661,7 +671,9 @@ SNS: {}",
     println!("Copying instructions for Trusted Neurons to clipboard...");
     copy(instructions.as_bytes())?;
     input("Press Enter to open the calendar event...")?;
-    open_webpage(&Url::parse("https://calendar.google.com/calendar/u/0/r/eventedit/duplicate/MjJvMTdva2xtdGJuZDhoYjRjN2poZzNwM2ogY182NGYwZDdmZDYzYjNlMDYxZjE1Zjk2MTU1NWYzMmFiN2EyZmY3M2NjMWJmM2Q3ZTRkNGI3NGVjYjk1ZWVhM2M0QGc")?)?;
+    open_webpage(&Url::parse(
+        "https://calendar.google.com/calendar/u/0/r/eventedit/duplicate/MjJvMTdva2xtdGJuZDhoYjRjN2poZzNwM2ogY182NGYwZDdmZDYzYjNlMDYxZjE1Zjk2MTU1NWYzMmFiN2EyZmY3M2NjMWJmM2Q3ZTRkNGI3NGVjYjk1ZWVhM2M0QGc",
+    )?)?;
 
     print_step(7,
         "Schedule Trusted Neurons Vote",
@@ -739,7 +751,9 @@ SNS: {}",
             }
         }
 
-        println!("Changelogs updated. Now I'm going to create a branch, commit, push it, then create a PR using `gh`.");
+        println!(
+            "Changelogs updated. Now I'm going to create a branch, commit, push it, then create a PR using `gh`."
+        );
         press_enter_to_continue()?;
 
         // Create branch with today's date
@@ -775,7 +789,9 @@ SNS: {}",
         );
         let pr_url = create_pr(&title, body)?;
         open_webpage(&pr_url)?;
-        println!("PR created. Please share it with the team. It can be merged before the proposals are executed.");
+        println!(
+            "PR created. Please share it with the team. It can be merged before the proposals are executed."
+        );
     }
 
     println!("{}", "\nRelease process complete!".bright_green().bold());

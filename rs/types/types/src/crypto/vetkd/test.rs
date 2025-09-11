@@ -1,8 +1,8 @@
+use crate::Height;
 use crate::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet};
 use crate::crypto::vetkd::{
     VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent,
 };
-use crate::Height;
 use ic_base_types::PrincipalId;
 use ic_base_types::SubnetId;
 

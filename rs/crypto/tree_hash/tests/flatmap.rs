@@ -1,5 +1,5 @@
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_crypto_tree_hash::{flatmap, FlatMap};
+use ic_crypto_tree_hash::{FlatMap, flatmap};
 use maplit::*;
 use rand::Rng;
 use std::collections::BTreeMap;

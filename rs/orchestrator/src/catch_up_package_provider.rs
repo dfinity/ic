@@ -36,21 +36,21 @@ use crate::{
     utils::https_endpoint_to_url,
 };
 use http_body_util::{BodyExt, Full};
-use hyper::{body::Bytes, Method, Request, StatusCode};
+use hyper::{Method, Request, StatusCode, body::Bytes};
 use hyper_rustls::HttpsConnectorBuilder;
 use hyper_util::{client::legacy::Client, rt::TokioExecutor};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_protobuf::{registry::node::v1::NodeRecord, types::v1 as pb};
 use ic_sys::fs::write_protobuf_using_tmp_file;
 use ic_types::{
+    Height, NodeId, RegistryVersion, SubnetId,
     consensus::{
-        catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
         HasHeight,
+        catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
     },
     crypto::*,
-    Height, NodeId, RegistryVersion, SubnetId,
 };
 use prost::Message;
 use std::{convert::TryFrom, fs::File, path::PathBuf, sync::Arc, time::Duration};
@@ -507,12 +507,12 @@ mod tests {
         catch_up_package_provider::CatchUpPackageProvider, registry_helper::RegistryHelper,
     };
     use assert_matches::assert_matches;
-    use http_body_util::{combinators::BoxBody, StreamBody};
+    use http_body_util::{StreamBody, combinators::BoxBody};
     use hyper::{
+        Response,
         body::{Bytes, Frame},
         server::conn::http2,
         service::service_fn,
-        Response,
     };
     use hyper_util::rt::{TokioExecutor, TokioIo};
     use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
@@ -521,13 +521,13 @@ mod tests {
     use ic_registry_keys::make_node_record_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_test_utilities::crypto::CryptoReturningOk;
-    use ic_test_utilities_registry::{add_single_subnet_record, SubnetRecordBuilder};
-    use ic_test_utilities_types::ids::{node_test_id, SUBNET_0};
+    use ic_test_utilities_registry::{SubnetRecordBuilder, add_single_subnet_record};
+    use ic_test_utilities_types::ids::{SUBNET_0, node_test_id};
     use rcgen::{CertificateParams, KeyPair};
     use rustls::{
+        ClientConfig, DigitallySignedStruct, ServerConfig, SignatureScheme,
         client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
         pki_types::{CertificateDer, PrivatePkcs8KeyDer, ServerName, UnixTime},
-        ClientConfig, DigitallySignedStruct, ServerConfig, SignatureScheme,
     };
     use std::{
         convert::Infallible,

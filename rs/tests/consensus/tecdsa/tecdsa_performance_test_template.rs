@@ -59,7 +59,7 @@ use ic_consensus_system_test_utils::{
     subnet::enable_chain_key_signing_on_subnet,
 };
 use ic_consensus_threshold_sig_system_test_utils::{
-    run_chain_key_signature_test, ChainSignatureRequest,
+    ChainSignatureRequest, run_chain_key_signature_test,
 };
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
@@ -82,7 +82,7 @@ use ic_system_test_driver::generic_workload_engine::metrics::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    block_on, get_app_subnet_and_node, get_nns_node, MessageCanister, SignerCanister,
+    MessageCanister, SignerCanister, block_on, get_app_subnet_and_node, get_nns_node,
 };
 use ic_types::Height;
 use slog::{error, info};

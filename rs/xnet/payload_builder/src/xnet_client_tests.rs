@@ -4,19 +4,19 @@
 use super::test_fixtures::*;
 use super::*;
 use axum::{
-    http::{header::CONTENT_TYPE, HeaderMap, StatusCode},
-    response::IntoResponse,
-    routing::{get, MethodRouter},
     Router,
+    http::{HeaderMap, StatusCode, header::CONTENT_TYPE},
+    response::IntoResponse,
+    routing::{MethodRouter, get},
 };
 use hyper::Uri;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec, MetricVec};
+use ic_test_utilities_metrics::{MetricVec, fetch_histogram_vec_count, metric_vec};
 use ic_test_utilities_types::ids::SUBNET_6;
-use ic_types::{xnet::CertifiedStreamSlice, SubnetId};
+use ic_types::{SubnetId, xnet::CertifiedStreamSlice};
 use std::{net::SocketAddr, sync::Arc};
 
 const DST_SUBNET: SubnetId = SUBNET_6;
@@ -216,7 +216,7 @@ async fn query_request_timeout() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn query_request_failed() {
     use nix::sys::socket::{
-        bind, getsockname, socket, AddressFamily, SockFlag, SockType, SockaddrIn,
+        AddressFamily, SockFlag, SockType, SockaddrIn, bind, getsockname, socket,
     };
 
     let metrics = &MetricsRegistry::new();

@@ -11,7 +11,7 @@ use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::task::{spawn, JoinHandle};
+use tokio::task::{JoinHandle, spawn};
 use tracing::{debug, trace, warn};
 use url::Url;
 

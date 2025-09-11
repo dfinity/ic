@@ -1,6 +1,6 @@
-use darling::{ast::Data, FromDeriveInput, FromField, FromVariant};
+use darling::{FromDeriveInput, FromField, FromVariant, ast::Data};
 use quote::quote;
-use syn::{parse_macro_input, spanned::Spanned, DeriveInput, Expr, Ident};
+use syn::{DeriveInput, Expr, Ident, parse_macro_input, spanned::Spanned};
 
 #[derive(FromDeriveInput)]
 struct DeriveInputReceiver {

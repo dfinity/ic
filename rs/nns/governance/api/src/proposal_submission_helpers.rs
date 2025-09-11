@@ -1,8 +1,8 @@
 use crate::types::{
-    manage_neuron::Command, manage_neuron_response::Command as CommandResponse, proposal::Action,
     ExecuteNnsFunction, InstallCode, InstallCodeRequest, MakeProposalRequest, ManageNeuron,
     ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NnsFunction, Proposal,
-    ProposalActionRequest,
+    ProposalActionRequest, manage_neuron::Command,
+    manage_neuron_response::Command as CommandResponse, proposal::Action,
 };
 use candid::{CandidType, Decode, Encode};
 use ic_crypto_sha2::Sha256;

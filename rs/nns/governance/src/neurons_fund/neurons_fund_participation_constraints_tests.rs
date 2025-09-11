@@ -2,7 +2,7 @@ use super::*;
 use assert_matches::assert_matches;
 use ic_nervous_system_common::E8;
 use ic_neurons_fund::{
-    rescale_to_icp, MatchingFunction, SerializableFunction, ValidatedLinearScalingCoefficient,
+    MatchingFunction, SerializableFunction, ValidatedLinearScalingCoefficient, rescale_to_icp,
 };
 use maplit::{btreemap, btreeset};
 

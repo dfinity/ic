@@ -1,5 +1,5 @@
 //! Various helper methods enabling execution and piping of system commands.
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 use crate::{
     cli::wait_for_confirmation,

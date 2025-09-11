@@ -2,13 +2,13 @@ use crate::{
     governance::MAX_FOLLOWEES_PER_TOPIC,
     neuron::Neuron,
     pb::v1::{
-        manage_neuron::{set_following::FolloweesForTopic, SetFollowing},
         ArchivedMonthlyNodeProviderRewards, Topic,
+        manage_neuron::{SetFollowing, set_following::FolloweesForTopic},
     },
 };
 use ic_base_types::PrincipalId;
-use ic_nns_governance_api::{governance_error::ErrorType, GovernanceError};
-use ic_stable_structures::{storable::Bound, Storable};
+use ic_nns_governance_api::{GovernanceError, governance_error::ErrorType};
+use ic_stable_structures::{Storable, storable::Bound};
 use prost::Message;
 use std::{borrow::Cow, collections::HashSet};
 
@@ -114,7 +114,9 @@ impl SetFollowing {
                     ErrorType::InvalidCommand,
                     format!(
                         "Too many followees (on topic {:?}): {} followees vs. at most {} is allowed.",
-                        topic.map(Topic::try_from), followees.len(), MAX_FOLLOWEES_PER_TOPIC,
+                        topic.map(Topic::try_from),
+                        followees.len(),
+                        MAX_FOLLOWEES_PER_TOPIC,
                     ),
                 ));
             }
@@ -146,7 +148,8 @@ impl SetFollowing {
                 ErrorType::NotAuthorized,
                 format!(
                     "Caller ({}) is not authorized to make such changes to the following of neuron {}.",
-                    caller, neuron.id().id,
+                    caller,
+                    neuron.id().id,
                 ),
             ));
         }

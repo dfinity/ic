@@ -8,23 +8,23 @@ use exchange_rate_canister::{
     RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
 };
 use ic_cdk::{
-    api::call::{reply_raw, CallResult, ManualReply},
+    api::call::{CallResult, ManualReply, reply_raw},
     heartbeat, init, post_upgrade, pre_upgrade, println, query, update,
 };
 use ic_crypto_tree_hash::{
-    flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
-    WitnessGeneratorImpl,
+    HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
+    WitnessGeneratorImpl, flatmap,
 };
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ledger_core::{block::BlockType, tokens::CheckedSub};
 // TODO(EXC-1687): remove temporary aliases `Ic00CanisterSettingsArgs` and `Ic00CanisterSettingsArgsBuilder`.
 use ic_management_canister_types_private::{
     BoundedVec, CanisterIdRecord, CanisterSettingsArgs as Ic00CanisterSettingsArgs,
-    CanisterSettingsArgsBuilder as Ic00CanisterSettingsArgsBuilder, CreateCanisterArgs, Method,
-    IC_00,
+    CanisterSettingsArgsBuilder as Ic00CanisterSettingsArgsBuilder, CreateCanisterArgs, IC_00,
+    Method,
 };
 use ic_nervous_system_common::{
-    serve_metrics, NNS_DAPP_BACKEND_CANISTER_ID, ONE_HOUR_SECONDS, ONE_MONTH_SECONDS,
+    NNS_DAPP_BACKEND_CANISTER_ID, ONE_HOUR_SECONDS, ONE_MONTH_SECONDS, serve_metrics,
 };
 use ic_nervous_system_governance::maturity_modulation::{
     MAX_MATURITY_MODULATION_PERMYRIAD, MIN_MATURITY_MODULATION_PERMYRIAD,
@@ -37,17 +37,17 @@ use ic_nns_constants::{
 };
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use icp_ledger::{
-    AccountIdentifier, Block, BlockIndex, BlockRes, Memo, Operation, SendArgs, Subaccount, Tokens,
-    Transaction, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, Block, BlockIndex, BlockRes, DEFAULT_TRANSFER_FEE, Memo, Operation,
+    SendArgs, Subaccount, Tokens, Transaction,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use on_wire::IntoWire;
-use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
+use rand::{SeedableRng, rngs::StdRng, seq::SliceRandom};
 use serde::{Deserialize, Serialize};
 use std::{
     cell::{Cell, RefCell},
-    collections::{btree_map::Entry, BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, btree_map::Entry},
     convert::TryInto,
     thread::LocalKey,
     time::{Duration, SystemTime},
@@ -311,7 +311,7 @@ impl State {
                      version {:?}!  This likely means a rollback happened. This is not supported. \
                      Please upgrade to a hotfix instead.",
                     stored_state_version, current_state_version
-                ))
+                ));
             }
             Ordering::Less => {
                 // This is where you would put a function to do the migration, which would look something like this:
@@ -443,18 +443,26 @@ fn init(maybe_args: Option<CyclesCanisterInitPayload>) {
         maybe_args.expect("Payload is expected to initialization the cycles minting canister.");
     print(format!(
         "[cycles] init() with ledger canister {}, governance canister {}, exchange rate canister {}, minting account {}, and cycles ledger canister {}",
-        args.ledger_canister_id.as_ref().map(|x| x.to_string()).unwrap_or_else(|| "<none>".to_string()),
-        args.governance_canister_id.as_ref().map(|x| x.to_string()).unwrap_or_else(|| "<none>".to_string()),
-        args.exchange_rate_canister.as_ref()
+        args.ledger_canister_id
+            .as_ref()
+            .map(|x| x.to_string())
+            .unwrap_or_else(|| "<none>".to_string()),
+        args.governance_canister_id
+            .as_ref()
+            .map(|x| x.to_string())
+            .unwrap_or_else(|| "<none>".to_string()),
+        args.exchange_rate_canister
+            .as_ref()
             .map(|x| match x {
                 ExchangeRateCanister::Set(id) => id.to_string(),
-                ExchangeRateCanister::Unset => "<unset>".to_string()
+                ExchangeRateCanister::Unset => "<unset>".to_string(),
             })
             .unwrap_or_else(|| "<none>".to_string()),
         args.minting_account_id
             .map(|x| x.to_string())
             .unwrap_or_else(|| "<none>".to_string()),
-        args.cycles_ledger_canister_id.as_ref()
+        args.cycles_ledger_canister_id
+            .as_ref()
             .map(|x| x.to_string())
             .unwrap_or_else(|| "<none>".to_string()),
     ));
@@ -1535,7 +1543,7 @@ async fn query_block(block_index: BlockIndex, ledger_id: CanisterId) -> Result<B
             return Err(NotifyError::InvalidTransaction(format!(
                 "Block {} not found",
                 block_index
-            )))
+            )));
         }
         Some(Ok(block)) => block,
         Some(Err(canister_id)) => {
@@ -1617,7 +1625,7 @@ async fn fetch_transaction(
         _ => {
             return Err(NotifyError::InvalidTransaction(
                 "Notification transaction must be of type Transfer".into(),
-            ))
+            ));
         }
     };
 
@@ -2239,7 +2247,10 @@ async fn do_create_canister(
                 {
                     Ok(vec![subnet])
                 } else {
-                    Err(format!("Subnet {} does not exist or {} is not authorized to deploy to that subnet.", subnet, controller_id))
+                    Err(format!(
+                        "Subnet {} does not exist or {} is not authorized to deploy to that subnet.",
+                        subnet, controller_id
+                    ))
                 }
             }),
         },
@@ -3180,7 +3191,7 @@ mod tests {
 
     #[test]
     fn test_candid_interface_compatibility() {
-        use candid_parser::utils::{service_equal, CandidSource};
+        use candid_parser::utils::{CandidSource, service_equal};
         use std::path::PathBuf;
 
         candid::export_service!();

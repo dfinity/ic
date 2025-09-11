@@ -2,7 +2,7 @@
 
 use crate::driver::constants;
 use anyhow::Result;
-use slog::{o, Drain, Key, Logger, OwnedKVList, Record, KV};
+use slog::{Drain, KV, Key, Logger, OwnedKVList, Record, o};
 use slog_term::Decorator;
 use std::{fmt, fs::File, io};
 use std::{os::unix::prelude::AsRawFd, path::Path};

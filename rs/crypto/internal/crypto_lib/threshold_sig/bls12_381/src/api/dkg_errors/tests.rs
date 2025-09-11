@@ -3,8 +3,8 @@ mod create_transcript_error_conversions {
         CspDkgCreateReshareTranscriptError, InvalidArgumentError, MalformedPublicKeyError,
         SizeError,
     };
-    use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
     use ic_types::crypto::AlgorithmId;
+    use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
 
     #[test]
     #[should_panic(

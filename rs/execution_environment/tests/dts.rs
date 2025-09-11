@@ -14,21 +14,21 @@ use ic_error_types::UserError;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInfoRequest, CanisterInstallMode, CanisterInstallModeV2,
     CanisterSettingsArgsBuilder, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
-    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, EmptyBlob, GlobalTimer,
+    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, EmptyBlob, GlobalTimer, IC_00,
     InstallChunkedCodeArgs, InstallCodeArgs, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
     Method, OnLowWasmMemoryHookStatus, Payload, ReadCanisterSnapshotDataArgs,
     ReadCanisterSnapshotMetadataArgs, StoredChunksArgs, TakeCanisterSnapshotArgs,
     UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, IC_00,
+    UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::{execution_state::NextScheduledMethod, NextExecution};
+use ic_replicated_state::canister_state::{NextExecution, execution_state::NextScheduledMethod};
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig};
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::MessageId;
 use ic_types::{CryptoHashOfState, Cycles, NumInstructions};
 use ic_universal_canister::{
-    call_args, wasm, CallArgs, UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM,
+    CallArgs, UNIVERSAL_CANISTER_NO_HEARTBEAT_WASM, UNIVERSAL_CANISTER_WASM, call_args, wasm,
 };
 use more_asserts::assert_ge;
 use std::sync::OnceLock;

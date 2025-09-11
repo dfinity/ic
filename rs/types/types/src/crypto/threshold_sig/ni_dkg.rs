@@ -1,9 +1,9 @@
 //! Types for non-interactive distributed key generation (NI-DKG).
-pub use crate::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
-use crate::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
 #[cfg(test)]
 use crate::NodeId;
 use crate::NumberOfNodes;
+use crate::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
+pub use crate::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use crate::{Height, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, SubnetId};
 use core::fmt;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{CspNiDkgDealing, CspNiDkgTranscript};

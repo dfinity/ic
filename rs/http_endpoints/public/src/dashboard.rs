@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use askama::Template;
 use axum::{
+    Router,
     extract::State,
     response::{Html, IntoResponse},
-    Router,
 };
 use hyper::StatusCode;
 use ic_config::http_handler::Config;

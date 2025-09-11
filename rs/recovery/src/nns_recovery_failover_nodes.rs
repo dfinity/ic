@@ -1,4 +1,5 @@
 use crate::{
+    CUPS_DIR, IC_REGISTRY_LOCAL_STORE, NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step,
     admin_helper::RegistryParams,
     cli::{
         print_height_info, read_optional, read_optional_data_location, read_optional_node_ids,
@@ -9,7 +10,6 @@ use crate::{
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
     util::{DataLocation, SshUser},
-    NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, CUPS_DIR, IC_REGISTRY_LOCAL_STORE,
 };
 use clap::Parser;
 use ic_base_types::SubnetId;

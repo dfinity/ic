@@ -6,8 +6,8 @@ mod ingress_watcher;
 pub use ingress_watcher::{IngressWatcher, IngressWatcherHandle};
 
 use crate::{
-    common::{build_validator, validation_error_to_http_error},
     HttpError, IngressFilterService,
+    common::{build_validator, validation_error_to_http_error},
 };
 use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
@@ -15,7 +15,7 @@ use ic_error_types::UserError;
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_registry_client_helpers::{
     crypto::root_of_trust::RegistryRootOfTrustProvider,
     provisional_whitelist::ProvisionalWhitelistRegistry,
@@ -23,18 +23,18 @@ use ic_registry_client_helpers::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_types::{
+    CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     malicious_flags::MaliciousFlags,
     messages::{
         HttpCallContent, HttpRequestEnvelope, MessageId, SignedIngress, SignedIngressContent,
     },
-    CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId,
 };
 use ic_validator::HttpRequestVerifier;
 use std::convert::TryInto;
 use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
-use tokio::sync::mpsc::{error::TrySendError, Sender};
+use tokio::sync::mpsc::{Sender, error::TrySendError};
 use tower::ServiceExt;
 
 pub struct IngressValidatorBuilder {
@@ -153,13 +153,20 @@ fn get_registry_data(
     let provisional_whitelist = match registry_client.get_provisional_whitelist(registry_version) {
         Ok(Some(list)) => list,
         Ok(None) => {
-            error!(log, "At registry version {}, get_provisional_whitelist() returned Ok(None). Using empty list.",
-                       registry_version);
+            error!(
+                log,
+                "At registry version {}, get_provisional_whitelist() returned Ok(None). Using empty list.",
+                registry_version
+            );
             ProvisionalWhitelist::new_empty()
         }
         Err(err) => {
-            error!(log, "At registry version {}, get_provisional_whitelist() failed with {}.  Using empty list.",
-                       registry_version, err);
+            error!(
+                log,
+                "At registry version {}, get_provisional_whitelist() failed with {}.  Using empty list.",
+                registry_version,
+                err
+            );
             ProvisionalWhitelist::new_empty()
         }
     };
@@ -247,11 +254,11 @@ impl IngressValidator {
             Err(HttpError {
                 status: StatusCode::PAYLOAD_TOO_LARGE,
                 message: format!(
-                "Request {} is too large. Message byte size {} is larger than the max allowed {}.",
-                message_id,
-                msg.count_bytes(),
-                ingress_registry_settings.max_ingress_bytes_per_message
-            ),
+                    "Request {} is too large. Message byte size {} is larger than the max allowed {}.",
+                    message_id,
+                    msg.count_bytes(),
+                    ingress_registry_settings.max_ingress_bytes_per_message
+                ),
             })?;
         }
 

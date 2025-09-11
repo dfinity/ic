@@ -1,14 +1,11 @@
 use super::{
-    test_utilities::{ingress, instructions, SchedulerTest, SchedulerTestBuilder, TestInstallCode},
+    test_utilities::{SchedulerTest, SchedulerTestBuilder, TestInstallCode, ingress, instructions},
     *,
 };
 #[cfg(test)]
 use crate::scheduler::test_utilities::{on_response, other_side};
 use assert_matches::assert_matches;
 use candid::Encode;
-use ic00::{
-    CanisterHttpRequestArgs, HttpMethod, SignWithECDSAArgs, TransformContext, TransformFunc,
-};
 use ic_base_types::PrincipalId;
 use ic_config::{
     execution_environment::STOP_CANISTER_TIMEOUT_DURATION,
@@ -31,24 +28,27 @@ use ic_replicated_state::{
 use ic_state_machine_tests::{PayloadBuilder, StateMachineBuilder};
 use ic_test_utilities_consensus::idkg::{key_transcript_for_tests, pre_signature_for_tests};
 use ic_test_utilities_metrics::{
-    fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats, fetch_histogram_vec_stats,
-    fetch_int_gauge, fetch_int_gauge_vec, metric_vec, HistogramStats,
+    HistogramStats, fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_histogram_stats,
+    fetch_histogram_vec_stats, fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
 };
 use ic_test_utilities_state::{get_running_canister, get_stopped_canister, get_stopping_canister};
 use ic_test_utilities_types::messages::RequestBuilder;
 use ic_types::{
+    ComputeAllocation, Cycles, Height, LongExecutionMode, NumBytes,
     batch::{AvailablePreSignatures, ConsensusResponse},
     consensus::idkg::{IDkgMasterPublicKeyId, PreSigId},
     ingress::IngressStatus,
     messages::{
-        CallbackId, CanisterMessageOrTask, CanisterTask, Payload, RejectContext,
-        StopCanisterCallId, StopCanisterContext, MAX_RESPONSE_COUNT_BYTES,
+        CallbackId, CanisterMessageOrTask, CanisterTask, MAX_RESPONSE_COUNT_BYTES, Payload,
+        RejectContext, StopCanisterCallId, StopCanisterContext,
     },
     methods::SystemMethod,
-    time::{expiry_time_from_now, CoarseTime, UNIX_EPOCH},
-    ComputeAllocation, Cycles, Height, LongExecutionMode, NumBytes,
+    time::{CoarseTime, UNIX_EPOCH, expiry_time_from_now},
 };
 use ic_types_test_utils::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id};
+use ic00::{
+    CanisterHttpRequestArgs, HttpMethod, SignWithECDSAArgs, TransformContext, TransformFunc,
+};
 use proptest::prelude::*;
 use std::collections::HashMap;
 use std::{cmp::min, ops::Range};
@@ -1398,12 +1398,13 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
             .get(),
         0
     );
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .execution_state
-        .is_some());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .is_some()
+    );
 
     // Uninstall canister due to `out_of_cycles`.
     test.set_time(
@@ -1429,12 +1430,13 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
             .len(),
         0
     );
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .execution_state
-        .is_none());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .is_none()
+    );
 }
 
 #[test]
@@ -1459,12 +1461,13 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
             .len(),
         0
     );
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .execution_state
-        .is_some());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .is_some()
+    );
 
     // Taking a snapshot of the canister will decrease the balance.
     // Increase the canister balance to be able to take a new snapshot.
@@ -1508,12 +1511,13 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
             .get(),
         0
     );
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .execution_state
-        .is_some());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .is_some()
+    );
 
     // Uninstall canister.
     let args: UninstallCodeArgs = UninstallCodeArgs::new(canister_id, None);
@@ -1525,12 +1529,13 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
         InputQueueType::LocalSubnet,
     );
     test.execute_round(ExecutionRoundType::OrdinaryRound);
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .execution_state
-        .is_none());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .is_none()
+    );
 
     // Trigger canister `out_of_cycles`.
     test.set_time(
@@ -1556,12 +1561,13 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
             .len(),
         0
     );
-    assert!(test
-        .state()
-        .canister_state(&canister_id)
-        .unwrap()
-        .execution_state
-        .is_none());
+    assert!(
+        test.state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .execution_state
+            .is_none()
+    );
 }
 
 #[test]
@@ -3018,7 +3024,7 @@ fn stopping_canisters_are_not_stopped_if_not_ready() {
 
 #[test]
 fn canister_is_stopped_if_timeout_occurs_and_ready_to_stop() {
-    use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+    use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 
     let test = StateMachineBuilder::new().build();
 
@@ -5636,11 +5642,13 @@ fn test_is_next_method_added_to_task_queue() {
     let may_schedule_global_timer = false;
 
     let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
-    assert!(!test
-        .canister_state_mut(canister)
-        .system_state
-        .queues_mut()
-        .has_input());
+    assert!(
+        !test
+            .canister_state_mut(canister)
+            .system_state
+            .queues_mut()
+            .has_input()
+    );
 
     for _ in 0..3 {
         // The timer did not reach the deadline and the canister does not have
@@ -5674,11 +5682,12 @@ fn test_is_next_method_added_to_task_queue() {
             expiry_time: expiry_time_from_now(),
         });
 
-    assert!(test
-        .canister_state_mut(canister)
-        .system_state
-        .queues_mut()
-        .has_input());
+    assert!(
+        test.canister_state_mut(canister)
+            .system_state
+            .queues_mut()
+            .has_input()
+    );
 
     while test
         .canister_state_mut(canister)
@@ -5698,11 +5707,12 @@ fn test_is_next_method_added_to_task_queue() {
 
     // Since NextScheduledMethod is Message it is not expected that Heartbeat
     // and GlobalTimer are added to the queue.
-    assert!(test
-        .canister_state_mut(canister)
-        .system_state
-        .task_queue
-        .is_empty());
+    assert!(
+        test.canister_state_mut(canister)
+            .system_state
+            .task_queue
+            .is_empty()
+    );
 
     assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::new());
 
@@ -5915,9 +5925,11 @@ fn test_sign_with_ecdsa_contexts_are_updated_with_quadruples(
 
         let stashes = test.state().pre_signature_stashes();
         assert_eq!(stashes.len(), 1);
-        assert!(stashes[&master_key_id]
-            .pre_signatures
-            .contains_key(&pre_sig_id),);
+        assert!(
+            stashes[&master_key_id]
+                .pre_signatures
+                .contains_key(&pre_sig_id),
+        );
     }
 
     inject_ecdsa_signing_request(&mut test, &key_id);
@@ -6093,9 +6105,11 @@ fn test_sign_with_ecdsa_contexts_are_matched_under_multiple_keys(
             let stashes = test.state().pre_signature_stashes();
             assert_eq!(stashes.len(), 2);
             assert_eq!(stashes[&master_key_ids[0]].pre_signatures.len(), 1);
-            assert!(stashes[&master_key_ids[0]]
-                .pre_signatures
-                .contains_key(&PreSigId(1)));
+            assert!(
+                stashes[&master_key_ids[0]]
+                    .pre_signatures
+                    .contains_key(&PreSigId(1))
+            );
             assert!(stashes[&master_key_ids[1]].pre_signatures.is_empty());
         }
     }

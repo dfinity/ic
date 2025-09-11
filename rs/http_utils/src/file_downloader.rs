@@ -1,7 +1,7 @@
 use flate2::read::GzDecoder;
 use http::Method;
 use ic_crypto_sha2::Sha256;
-use ic_logger::{info, log, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, log};
 use reqwest::{Client, Response};
 use slog::Level;
 use std::error::Error;
@@ -412,32 +412,31 @@ impl FileDownloadError {
 impl fmt::Display for FileDownloadError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FileDownloadError::IoError(msg, e) => write!(
-                f,
-                "IO error, message: {}, error: {:?}",
-                msg, e
-            ),
-            FileDownloadError::ReqwestError(e) => write!(
-                f,
-                "Encountered error when making Http request: {}",
-                e
-            ),
+            FileDownloadError::IoError(msg, e) => {
+                write!(f, "IO error, message: {}, error: {:?}", msg, e)
+            }
+            FileDownloadError::ReqwestError(e) => {
+                write!(f, "Encountered error when making Http request: {}", e)
+            }
             FileDownloadError::NonSuccessResponse(method, response) => write!(
                 f,
                 "Received non-success response from endpoint: method: {}, uri: {}, remote_addr: {:?}, status_code: {}, headers: {:?}",
-                method.as_str(), response.url(), response.remote_addr(), response.status(), response.headers()
+                method.as_str(),
+                response.url(),
+                response.remote_addr(),
+                response.status(),
+                response.headers()
             ),
-            FileDownloadError::FileHashMismatchError { computed_hash, expected_hash, file_path } =>
-                write!(
-                    f,
-                    "File failed hash validation: computed_hash: {}, expected_hash: {}, file: {:?}",
-                    computed_hash, expected_hash, file_path
-                ),
-            FileDownloadError::TimeoutError =>
-                write!(
-                    f,
-                    "File downloader timed out."
-                )
+            FileDownloadError::FileHashMismatchError {
+                computed_hash,
+                expected_hash,
+                file_path,
+            } => write!(
+                f,
+                "File failed hash validation: computed_hash: {}, expected_hash: {}, file: {:?}",
+                computed_hash, expected_hash, file_path
+            ),
+            FileDownloadError::TimeoutError => write!(f, "File downloader timed out."),
         }
     }
 }
@@ -453,9 +452,9 @@ impl Error for FileDownloadError {}
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use flate2::write::GzEncoder;
     use flate2::Compression;
-    use ic_test_utilities_in_memory_logger::{assertions::LogEntriesAssert, InMemoryReplicaLogger};
+    use flate2::write::GzEncoder;
+    use ic_test_utilities_in_memory_logger::{InMemoryReplicaLogger, assertions::LogEntriesAssert};
     use mockito::{Mock, Request, ServerGuard};
     use slog::Level;
     use tar::Builder;

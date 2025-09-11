@@ -8,12 +8,13 @@ use crate::sign::canister_threshold_sig::idkg::utils::{
 use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::vault::api::{CspVault, IDkgTranscriptInternalBytes};
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    create_transcript as idkg_create_transcript,
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    IDkgTranscriptOperationInternal, create_transcript as idkg_create_transcript,
     verify_dealing_opening as idkg_verify_dealing_opening,
-    verify_transcript as idkg_verify_transcript, CommitmentOpening, IDkgComplaintInternal,
-    IDkgDealingInternal, IDkgTranscriptInternal, IDkgTranscriptOperationInternal,
+    verify_transcript as idkg_verify_transcript,
 };
 use ic_interfaces_registry::RegistryClient;
+use ic_types::crypto::CryptoError;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateTranscriptError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
     IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
@@ -22,7 +23,6 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, BatchSignedIDkgDealings, IDkgComplaint, IDkgOpening, IDkgTranscript,
     IDkgTranscriptParams, IDkgTranscriptType,
 };
-use ic_types::crypto::CryptoError;
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, RegistryVersion};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -277,7 +277,7 @@ pub fn open_transcript(
         None => {
             return Err(IDkgOpenTranscriptError::InternalError {
                 internal_error: "This node is not a receiver of the given transcript".to_string(),
-            })
+            });
         }
         Some(index) => index,
     };

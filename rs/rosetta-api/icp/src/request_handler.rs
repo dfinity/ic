@@ -8,24 +8,24 @@ mod construction_preprocess;
 mod construction_submit;
 
 use crate::{
+    API_VERSION, MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST, NODE_VERSION,
     convert::{self, neuron_account_from_public_key},
     errors::{ApiError, Details},
     ledger_client::{
-        list_known_neurons_response::ListKnownNeuronsResponse,
+        LedgerAccess, list_known_neurons_response::ListKnownNeuronsResponse,
         minimum_dissolve_delay_response::MinimumDissolveDelayResponse,
         pending_proposals_response::PendingProposalsResponse,
-        proposal_info_response::ProposalInfoResponse, LedgerAccess,
+        proposal_info_response::ProposalInfoResponse,
     },
     models::{
-        self, amount::tokens_to_amount, AccountBalanceMetadata, AccountBalanceRequest,
-        AccountBalanceResponse, Allow, BalanceAccountType, BlockIdentifier, BlockResponse,
-        BlockTransaction, BlockTransactionResponse, CallResponse, Error, NetworkIdentifier,
-        NetworkOptionsResponse, NetworkStatusResponse, NeuronInfoResponse, NeuronState,
-        NeuronSubaccountComponents, OperationStatus, PartialBlockIdentifier,
-        QueryBlockRangeRequest, QueryBlockRangeResponse, SearchTransactionsResponse, Version,
+        self, AccountBalanceMetadata, AccountBalanceRequest, AccountBalanceResponse, Allow,
+        BalanceAccountType, BlockIdentifier, BlockResponse, BlockTransaction,
+        BlockTransactionResponse, CallResponse, Error, NetworkIdentifier, NetworkOptionsResponse,
+        NetworkStatusResponse, NeuronInfoResponse, NeuronState, NeuronSubaccountComponents,
+        OperationStatus, PartialBlockIdentifier, QueryBlockRangeRequest, QueryBlockRangeResponse,
+        SearchTransactionsResponse, Version, amount::tokens_to_amount,
     },
     request_types::{GetProposalInfo, STATUS_COMPLETED},
-    API_VERSION, MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST, NODE_VERSION,
 };
 use ic_ledger_canister_blocks_synchronizer::{
     blocks::{HashedBlock, RosettaBlocksMode},
@@ -34,7 +34,7 @@ use ic_ledger_canister_blocks_synchronizer::{
 use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance_api::manage_neuron::NeuronIdOrSubaccount;
-use ic_types::{crypto::DOMAIN_IC_REQUEST, messages::MessageId, CanisterId};
+use ic_types::{CanisterId, crypto::DOMAIN_IC_REQUEST, messages::MessageId};
 use icp_ledger::{Block, BlockIndex};
 use rosetta_core::{
     objects::ObjectMap,
@@ -898,7 +898,7 @@ impl RosettaRequestHandler {
                 return Err(ApiError::internal_error(format!(
                     "unsupported neuron state code: {}",
                     res.state
-                )))
+                )));
             }
         };
 

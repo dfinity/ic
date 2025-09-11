@@ -1,15 +1,15 @@
 use super::query_call_graph::evaluate_query_call_graph;
 use crate::{
+    NonReplicatedQueryKind, RoundInstructions,
     execution::common::{self, validate_method},
     execution::nonreplicated_query::execute_non_replicated_query,
-    execution_environment::{as_round_instructions, RoundLimits},
+    execution_environment::{RoundLimits, as_round_instructions},
     hypervisor::Hypervisor,
     metrics::{
-        CallTreeMetricsNoOp, MeasurementScope, QueryHandlerMetrics, QUERY_HANDLER_CRITICAL_ERROR,
+        CallTreeMetricsNoOp, MeasurementScope, QUERY_HANDLER_CRITICAL_ERROR, QueryHandlerMetrics,
         SYSTEM_API_CANISTER_CYCLE_BALANCE, SYSTEM_API_CANISTER_CYCLE_BALANCE128,
         SYSTEM_API_DATA_CERTIFICATE_COPY, SYSTEM_API_TIME,
     },
-    NonReplicatedQueryKind, RoundInstructions,
 };
 use ic_base_types::NumBytes;
 use ic_config::flag_status::FlagStatus;
@@ -23,7 +23,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_interfaces_state_manager::Labeled;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -31,14 +31,14 @@ use ic_replicated_state::{
     ReplicatedState,
 };
 use ic_types::{
+    CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, Time,
     batch::{CanisterCyclesCostSchedule, QueryStats},
     ingress::WasmResult,
     messages::{
-        CallContextId, CallbackId, Payload, Query, QuerySource, RejectContext, Request,
-        RequestOrResponse, Response, NO_DEADLINE,
+        CallContextId, CallbackId, NO_DEADLINE, Payload, Query, QuerySource, RejectContext,
+        Request, RequestOrResponse, Response,
     },
     methods::{FuncRef, WasmClosure, WasmMethod},
-    CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, Time,
 };
 use prometheus::IntCounter;
 use std::{
@@ -302,23 +302,21 @@ impl<'a> QueryContext<'a> {
         let canister_id = canister.canister_id();
 
         let outgoing_messages: Vec<_> = canister.output_into_iter().collect();
-        let call_context_manager =
-            canister
-                .system_state
-                .call_context_manager()
-                .ok_or_else(|| {
-                    error!(
+        let call_context_manager = canister.system_state.call_context_manager().ok_or_else(
+            || {
+                error!(
                     self.log,
                     "[EXC-BUG] Canister {} does not have a call context manager. This is a bug @{}",
                     canister_id,
                     QUERY_HANDLER_CRITICAL_ERROR,
                 );
-                    self.query_critical_error.inc();
-                    UserError::new(
-                        ErrorCode::QueryCallGraphInternal,
-                        "Composite query: canister does not have a call context manager",
-                    )
-                })?;
+                self.query_critical_error.inc();
+                UserError::new(
+                    ErrorCode::QueryCallGraphInternal,
+                    "Composite query: canister does not have a call context manager",
+                )
+            },
+        )?;
 
         // When we deserialize the canister state from the replicated state, it
         // is possible that it already had some messages in its output queues.
@@ -404,10 +402,16 @@ impl<'a> QueryContext<'a> {
         ) > canister.system_state.balance()
         {
             let canister_id = canister.canister_id();
-            return (canister, Err(UserError::new(
-                ErrorCode::CanisterOutOfCycles,
-                format!("Canister {} is unable to process query calls because it's frozen. Please top up the canister with cycles and try again.", canister_id))
-            ));
+            return (
+                canister,
+                Err(UserError::new(
+                    ErrorCode::CanisterOutOfCycles,
+                    format!(
+                        "Canister {} is unable to process query calls because it's frozen. Please top up the canister with cycles and try again.",
+                        canister_id
+                    ),
+                )),
+            );
         }
 
         let instruction_limit = self.max_instructions_per_query.min(NumInstructions::new(

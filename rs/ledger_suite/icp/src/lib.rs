@@ -11,8 +11,8 @@ use ic_ledger_core::{
     block::{BlockType, EncodedBlock, FeeCollector},
     tokens::CheckedAdd,
 };
-use ic_ledger_hash_of::HashOf;
 use ic_ledger_hash_of::HASH_LENGTH;
+use ic_ledger_hash_of::HashOf;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire};
@@ -29,7 +29,7 @@ use strum_macros::IntoStaticStr;
 pub use ic_ledger_core::{
     block::BlockIndex,
     timestamp::TimeStamp,
-    tokens::{Tokens, TOKEN_SUBDIVIDABLE_BY},
+    tokens::{TOKEN_SUBDIVIDABLE_BY, Tokens},
 };
 
 pub mod account_identifier;
@@ -1175,8 +1175,10 @@ pub fn get_blocks(
     // [100 .. 109] then requesting blocks at BlockIndex < 100 or BlockIndex
     // > 109 is an error
     if range_from < range_from_offset || requested_range_to > range_to {
-        return GetBlocksRes(Err(format!("Requested blocks outside the range stored in the archive node. Requested [{} .. {}]. Available [{} .. {}].",
-            range_from, requested_range_to, range_from_offset, range_to)));
+        return GetBlocksRes(Err(format!(
+            "Requested blocks outside the range stored in the archive node. Requested [{} .. {}]. Available [{} .. {}].",
+            range_from, requested_range_to, range_from_offset, range_to
+        )));
     }
     // Example: If the node stores blocks [100 .. 109] then BLOCK_HEIGHT_OFFSET
     // is 100 and the Block with BlockIndex 100 is at index 0

@@ -1,9 +1,9 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use clap::{Parser, Subcommand};
-use config::{deserialize_config, DEFAULT_HOSTOS_CONFIG_OBJECT_PATH};
+use config::{DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
+use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
 use network::generate_network_config;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use std::path::Path;

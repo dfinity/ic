@@ -1,7 +1,7 @@
 use num_bigint_dig::{BigUint, ModInverse};
 use num_traits::{
-    identities::{One, Zero},
     ToPrimitive,
+    identities::{One, Zero},
 };
 use quote::quote;
 use std::collections::BTreeMap;

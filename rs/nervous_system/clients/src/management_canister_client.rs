@@ -1,7 +1,7 @@
 use crate::{
     canister_id_record::CanisterIdRecord,
-    canister_status::{canister_status, CanisterStatusResultFromManagementCanister},
-    update_settings::{update_settings, UpdateSettings},
+    canister_status::{CanisterStatusResultFromManagementCanister, canister_status},
+    update_settings::{UpdateSettings, update_settings},
 };
 use async_trait::async_trait;
 use candid::Encode;

@@ -159,12 +159,14 @@ mod tests {
         };
         registry.do_remove_nodes(payload);
         // Verify node is removed
-        assert!(registry
-            .get(
-                make_node_record_key(node_id).as_bytes(),
-                registry.latest_version()
-            )
-            .is_none());
+        assert!(
+            registry
+                .get(
+                    make_node_record_key(node_id).as_bytes(),
+                    registry.latest_version()
+                )
+                .is_none()
+        );
 
         // Verify node operator allowance was incremented
         let updated_operator = get_node_operator_record(&registry, node_operator_id).unwrap();
@@ -204,12 +206,14 @@ mod tests {
 
         // Verify the two nodes are removed
         for node_id in &node_ids[..2] {
-            assert!(registry
-                .get(
-                    make_node_record_key(*node_id).as_bytes(),
-                    registry.latest_version()
-                )
-                .is_none());
+            assert!(
+                registry
+                    .get(
+                        make_node_record_key(*node_id).as_bytes(),
+                        registry.latest_version()
+                    )
+                    .is_none()
+            );
         }
 
         // Verify the third node is still present
@@ -258,12 +262,14 @@ mod tests {
         registry.do_remove_nodes(payload);
 
         // Verify node is removed
-        assert!(registry
-            .get(
-                make_node_record_key(node_id).as_bytes(),
-                registry.latest_version()
-            )
-            .is_none());
+        assert!(
+            registry
+                .get(
+                    make_node_record_key(node_id).as_bytes(),
+                    registry.latest_version()
+                )
+                .is_none()
+        );
 
         // Verify other node_ids are still in the registry
         for other_node_id in node_ids.keys().skip(1) {

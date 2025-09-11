@@ -15,10 +15,10 @@ mod tls;
 mod tschnorr;
 mod vetkd;
 
-use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::PublicKeyStore;
-use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
+use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::secret_key_store::SecretKeyStore;
+use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
 use crate::types::CspSecretKey;
 use crate::vault::api::ThresholdSchnorrCreateSigShareVaultError;
 use crate::{CspRwLock, KeyId};
@@ -28,7 +28,7 @@ use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     CombinedCommitment, CommitmentOpening,
 };
 use ic_interfaces::time_source::{SysTimeSource, TimeSource};
-use ic_logger::{new_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, new_logger};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCreateSigShareError;
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};

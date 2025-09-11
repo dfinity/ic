@@ -8,8 +8,8 @@ use ic_nervous_system_clients::{
     canister_status::CanisterStatusResultFromManagementCanister,
 };
 use ic_nervous_system_root::{
-    change_canister::{change_canister, ChangeCanisterRequest},
     LOG_PREFIX,
+    change_canister::{ChangeCanisterRequest, change_canister},
 };
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_common::registry::get_value;
@@ -464,8 +464,8 @@ fn get_proposal_clone(proposer: &PrincipalId) -> Result<GovernanceUpgradeRootPro
     Ok(proposal.unwrap())
 }
 
-pub fn get_pending_root_proposals_to_upgrade_governance_canister(
-) -> Vec<GovernanceUpgradeRootProposal> {
+pub fn get_pending_root_proposals_to_upgrade_governance_canister()
+-> Vec<GovernanceUpgradeRootProposal> {
     // Return the pending proposals, but strip the wasm so that the response stays
     // small.
     PROPOSALS.with(|proposals| {

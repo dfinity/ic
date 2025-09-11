@@ -3,22 +3,22 @@ use futures_util::FutureExt;
 use ic_certification_test_utils::{CertificateBuilder, CertificateData};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_tree_hash::{
-    flatmap, Digest, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree,
-    WitnessGenerator,
+    Digest, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
+    flatmap,
 };
 use ic_interfaces_registry::RegistryRecord;
 use ic_registry_transport::{
-    delete,
+    MockGetChunk, delete,
     pb::v1::{
-        high_capacity_registry_mutation, registry_mutation, CertifiedResponse,
-        HighCapacityRegistryMutation, LargeValueChunkKeys, RegistryAtomicMutateRequest,
-        RegistryMutation,
+        CertifiedResponse, HighCapacityRegistryMutation, LargeValueChunkKeys,
+        RegistryAtomicMutateRequest, RegistryMutation, high_capacity_registry_mutation,
+        registry_mutation,
     },
-    upsert, MockGetChunk,
+    upsert,
 };
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, crypto::CombinedThresholdSig, CanisterId,
-    RegistryVersion, Time,
+    CanisterId, RegistryVersion, Time, crypto::CombinedThresholdSig,
+    crypto::threshold_sig::ThresholdSigPublicKey,
 };
 use pretty_assertions::assert_eq;
 use prost::Message;

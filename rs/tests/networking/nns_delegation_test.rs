@@ -34,8 +34,8 @@ use std::{
 use anyhow::Result;
 use candid::{CandidType, Encode};
 use ic_agent::{
-    agent::{Envelope, EnvelopeContent},
     Agent, Identity,
+    agent::{Envelope, EnvelopeContent},
 };
 use ic_certification::verify_delegation_certificate;
 use ic_consensus_system_test_utils::{
@@ -44,7 +44,7 @@ use ic_consensus_system_test_utils::{
         assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
     },
 };
-use ic_crypto_tree_hash::{lookup_path, LabeledTree};
+use ic_crypto_tree_hash::{LabeledTree, lookup_path};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -53,20 +53,20 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Subnet},
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::{
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SubnetSnapshot,
             get_guestos_img_version, get_guestos_update_img_sha256, get_guestos_update_img_url,
-            get_guestos_update_img_version, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            IcNodeSnapshot, SubnetSnapshot,
+            get_guestos_update_img_version,
         },
     },
     systest,
-    util::{block_on, get_identity, get_nns_node, UniversalCanister},
+    util::{UniversalCanister, block_on, get_identity, get_nns_node},
 };
 use ic_types::{
+    CanisterId, Height, PrincipalId, SubnetId,
     messages::{
         Blob, Certificate, CertificateDelegation, CertificateDelegationFormat,
         HttpQueryResponseReply, HttpReadStateResponse, NodeSignature,
     },
-    CanisterId, Height, PrincipalId, SubnetId,
 };
 use ic_universal_canister::wasm;
 use reqwest::StatusCode;

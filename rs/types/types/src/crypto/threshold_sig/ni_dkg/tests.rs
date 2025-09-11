@@ -1,11 +1,11 @@
 use super::*;
-use crate::crypto::tests::set_of;
 use crate::NumberOfNodes;
+use crate::crypto::tests::set_of;
 use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes, G2Bytes};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
-    Dealing, EncryptedShares, PublicCoefficientsBytes, ZKProofDec, ZKProofShare, NUM_CHUNKS,
-    NUM_ZK_REPETITIONS,
+    Dealing, EncryptedShares, NUM_CHUNKS, NUM_ZK_REPETITIONS, PublicCoefficientsBytes, ZKProofDec,
+    ZKProofShare,
 };
 use ic_management_canister_types_private::VetKdCurve;
 use std::str::FromStr;
@@ -52,8 +52,7 @@ fn should_correctly_format_dealing_display_message() {
 
     let display_text = format!("{}", dealing);
 
-    let expected_text =
-        "NiDkgDealing { internal_dealing: Groth20_Bls12_381(Dealing { \
+    let expected_text = "NiDkgDealing { internal_dealing: Groth20_Bls12_381(Dealing { \
         public_coefficients: PublicCoefficientsBytes { coefficients: [] }, ciphertexts: FsEncryptionCiphertextBytes { \
          rand_r: [G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \
           G1(0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000), \

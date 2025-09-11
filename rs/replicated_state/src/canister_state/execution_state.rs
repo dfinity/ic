@@ -1,12 +1,12 @@
 pub mod proto;
 
 use crate::hash::ic_hashtree_leaf_hash;
-use crate::{canister_state::WASM_PAGE_SIZE_IN_BYTES, num_bytes_try_from, NumWasmPages, PageMap};
+use crate::{NumWasmPages, PageMap, canister_state::WASM_PAGE_SIZE_IN_BYTES, num_bytes_try_from};
 use ic_management_canister_types_private::Global;
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    methods::{SystemMethod, WasmMethod},
     CountBytes, ExecutionRound, NumBytes,
+    methods::{SystemMethod, WasmMethod},
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;

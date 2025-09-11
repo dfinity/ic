@@ -1,6 +1,6 @@
 use crate::{
-    default_approve_args, init_args, send_approval, setup, transfer, InitArgs,
-    ARCHIVE_TRIGGER_THRESHOLD, DECIMAL_PLACES, MINTER, NUM_BLOCKS_TO_ARCHIVE,
+    ARCHIVE_TRIGGER_THRESHOLD, DECIMAL_PLACES, InitArgs, MINTER, NUM_BLOCKS_TO_ARCHIVE,
+    default_approve_args, init_args, send_approval, setup, transfer,
 };
 use candid::{CandidType, Decode, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};

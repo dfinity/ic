@@ -13,15 +13,15 @@ use ic_config::{
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
+    CompilationCache, CompilationResult, WasmExecutionInput,
     wasm_executor::{
         CanisterStateChanges, ExecutionStateChanges, PausedWasmExecution, SliceExecutionOutput,
         WasmExecutionResult, WasmExecutor,
     },
     wasmtime_embedder::system_api::{
-        sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
         ApiType, ExecutionParameters,
+        sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
     },
-    CompilationCache, CompilationResult, WasmExecutionInput,
 };
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{
@@ -29,20 +29,20 @@ use ic_interfaces::execution_environment::{
     IngressHistoryWriter, InstanceStats, RegistryExecutionSettings, Scheduler,
     SystemApiCallCounters, WasmExecutionOutput,
 };
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_management_canister_types_private::{
-    CanisterInstallMode, CanisterStatusType, InstallCodeArgs, MasterPublicKeyId, Method, Payload,
-    IC_00,
+    CanisterInstallMode, CanisterStatusType, IC_00, InstallCodeArgs, MasterPublicKeyId, Method,
+    Payload,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, MessageMemoryUsage,
+    ReplicatedState,
     canister_state::execution_state::{self, WasmExecutionMode, WasmMetadata},
     page_map::TestPageAllocatorFileDescriptorImpl,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
-    CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, MessageMemoryUsage,
-    ReplicatedState,
 };
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_execution_environment::{generate_subnets, test_registry_settings};
@@ -52,23 +52,23 @@ use ic_test_utilities_types::{
     messages::{RequestBuilder, SignedIngressBuilder},
 };
 use ic_types::{
-    batch::{AvailablePreSignatures, CanisterCyclesCostSchedule, ChainKeyData},
-    consensus::idkg::IDkgMasterPublicKeyId,
-    crypto::{canister_threshold_sig::MasterPublicKey, AlgorithmId},
-    ingress::{IngressState, IngressStatus},
-    messages::{
-        CallContextId, Ingress, MessageId, Request, RequestOrResponse, Response, NO_DEADLINE,
-    },
-    methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
     CanisterTimer, ComputeAllocation, Cycles, ExecutionRound, MemoryAllocation, NumInstructions,
     Randomness, ReplicaVersion, Time, UserId,
+    batch::{AvailablePreSignatures, CanisterCyclesCostSchedule, ChainKeyData},
+    consensus::idkg::IDkgMasterPublicKeyId,
+    crypto::{AlgorithmId, canister_threshold_sig::MasterPublicKey},
+    ingress::{IngressState, IngressStatus},
+    messages::{
+        CallContextId, Ingress, MessageId, NO_DEADLINE, Request, RequestOrResponse, Response,
+    },
+    methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
 };
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 use std::time::Duration;
 
 use crate::{
-    as_round_instructions, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl, RoundLimits,
+    ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl, RoundLimits, as_round_instructions,
 };
 
 use super::{RoundSchedule, SchedulerImpl};

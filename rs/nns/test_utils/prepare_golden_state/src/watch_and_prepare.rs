@@ -25,7 +25,7 @@
 
 use clap::Parser;
 use ic_nns_test_utils_prepare_golden_state::{
-    download_golden_state_or_panic, untar_state_archive_or_panic, StateSource,
+    StateSource, download_golden_state_or_panic, untar_state_archive_or_panic,
 };
 use std::{path::PathBuf, str::FromStr, thread::sleep, time::Duration};
 use tempfile::TempDir;

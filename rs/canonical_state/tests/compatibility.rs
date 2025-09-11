@@ -1,24 +1,24 @@
 use ic_base_types::PrincipalId;
 use ic_canonical_state::{
+    CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION, MIN_SUPPORTED_CERTIFICATION_VERSION,
     encoding::{
+        CborProxyDecoder, CborProxyEncoder,
         old_types::{RequestOrResponseV19, StreamHeaderV19},
         types::{
             RequestOrResponse as RequestOrResponseV21, StreamHeader as StreamHeaderV21,
             SubnetMetrics as SubnetMetricsV21, SystemMetadata as SystemMetadataV21,
         },
-        CborProxyDecoder, CborProxyEncoder,
     },
-    CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION, MIN_SUPPORTED_CERTIFICATION_VERSION,
 };
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_replicated_state::{metadata_state::SubnetMetrics, SystemMetadata};
+use ic_replicated_state::{SystemMetadata, metadata_state::SubnetMetrics};
 use ic_test_utilities_state::{arb_invalid_stream_header, arb_stream_header, arb_subnet_metrics};
 use ic_test_utilities_types::arbitrary;
 use ic_types::{
+    CryptoHashOfPartialState,
     crypto::CryptoHash,
     messages::RequestOrResponse,
     xnet::{RejectReason, StreamHeader},
-    CryptoHashOfPartialState,
 };
 use lazy_static::lazy_static;
 use proptest::prelude::*;
@@ -222,8 +222,8 @@ fn stream_header_encoding_panic_on_invalid(
 }
 
 /// Produces a `RequestOrResponse` valid at all certification versions in the range.
-pub(crate) fn arb_valid_versioned_message(
-) -> impl Strategy<Value = (RequestOrResponse, RangeInclusive<CertificationVersion>)> {
+pub(crate) fn arb_valid_versioned_message()
+-> impl Strategy<Value = (RequestOrResponse, RangeInclusive<CertificationVersion>)> {
     prop_oneof![(
         arbitrary::request_or_response_with_config(true),
         Just(CertificationVersion::V19..=MAX_SUPPORTED_CERTIFICATION_VERSION)
@@ -356,8 +356,8 @@ prop_compose! {
 /// Returns one of two disjoint version ranges, because the encoding of the same
 /// `SystemMetadata` is different between the two version ranges.
 ///
-pub(crate) fn arb_valid_system_metadata(
-) -> impl Strategy<Value = (SystemMetadata, RangeInclusive<CertificationVersion>)> {
+pub(crate) fn arb_valid_system_metadata()
+-> impl Strategy<Value = (SystemMetadata, RangeInclusive<CertificationVersion>)> {
     prop_oneof![
         // `SystemMetadata` `V10` and later have an optional `id_counter` field for
         // backwards compatibility, but it is no longer populated.
@@ -425,8 +425,8 @@ lazy_static! {
 }
 
 /// Produces a `SubnetMetrics` valid at all certification versions in the range.
-pub(crate) fn arb_valid_subnet_metrics(
-) -> impl Strategy<Value = (SubnetMetrics, RangeInclusive<CertificationVersion>)> {
+pub(crate) fn arb_valid_subnet_metrics()
+-> impl Strategy<Value = (SubnetMetrics, RangeInclusive<CertificationVersion>)> {
     prop_oneof![(
         arb_subnet_metrics(),
         Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION)

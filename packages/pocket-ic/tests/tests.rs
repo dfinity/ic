@@ -1,4 +1,4 @@
-use candid::{decode_one, encode_one, CandidType, Decode, Deserialize, Encode, Principal};
+use candid::{CandidType, Decode, Deserialize, Encode, Principal, decode_one, encode_one};
 #[cfg(not(windows))]
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_certification::Label;
@@ -25,15 +25,15 @@ use pocket_ic::common::rest::{
 #[cfg(not(windows))]
 use pocket_ic::nonblocking::PocketIc as PocketIcAsync;
 use pocket_ic::{
+    DefaultEffectiveCanisterIdError, ErrorCode, IngressStatusResult, PocketIc, PocketIcBuilder,
+    PocketIcState, RejectCode, StartServerParams, Time,
     common::rest::{
         AutoProgressConfig, BlobCompression, CanisterHttpReply, CanisterHttpResponse,
         CreateInstanceResponse, HttpGatewayDetails, HttpsConfig, IcpFeatures, IcpFeaturesConfig,
         InitialTime, InstanceConfig, InstanceHttpGatewayConfig, MockCanisterHttpResponse,
         RawEffectivePrincipal, RawMessageId, SubnetConfigSet, SubnetKind,
     },
-    query_candid, start_server, update_candid, DefaultEffectiveCanisterIdError, ErrorCode,
-    IngressStatusResult, PocketIc, PocketIcBuilder, PocketIcState, RejectCode, StartServerParams,
-    Time,
+    query_candid, start_server, update_candid,
 };
 use reqwest::blocking::Client;
 use reqwest::header::CONTENT_LENGTH;
@@ -52,8 +52,8 @@ use std::{
     io::Write,
     net::{TcpListener, TcpStream},
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
     thread::JoinHandle,
     time::Instant,
@@ -1899,9 +1899,10 @@ fn subnet_metrics() {
     let topology = pic.topology();
     let app_subnet = topology.get_app_subnets()[0];
 
-    assert!(pic
-        .get_subnet_metrics(Principal::management_canister())
-        .is_none());
+    assert!(
+        pic.get_subnet_metrics(Principal::management_canister())
+            .is_none()
+    );
 
     deploy_counter_canister(&pic);
 
@@ -2750,9 +2751,10 @@ fn test_reject_response_type() {
                     assert_eq!(err.reject_code, RejectCode::CanisterError);
                     assert_eq!(err.error_code, ErrorCode::CanisterCalledTrap);
                 }
-                assert!(err
-                    .reject_message
-                    .contains(&format!("{} in {} method", action, method)));
+                assert!(
+                    err.reject_message
+                        .contains(&format!("{} in {} method", action, method))
+                );
                 assert_eq!(err.certified, certified);
             }
         }
@@ -3098,9 +3100,10 @@ fn stack_overflow() {
             encode_one(()).unwrap(),
         )
         .unwrap_err();
-    assert!(err
-        .reject_message
-        .contains("Canister trapped: stack overflow"));
+    assert!(
+        err.reject_message
+            .contains("Canister trapped: stack overflow")
+    );
 }
 
 fn test_specified_id(pic: &PocketIc) {
@@ -3187,7 +3190,10 @@ fn test_invalid_specified_id() {
     let err = pic
         .create_canister_with_id(None, None, specified_id)
         .unwrap_err();
-    let expected_err = format!("The `specified_id` {} is invalid because it belongs to the canister allocation ranges of the test environment.\\nUse a `specified_id` that matches a canister ID on the ICP mainnet and a test environment that supports canister creation with `specified_id` (e.g., PocketIC).", specified_id);
+    let expected_err = format!(
+        "The `specified_id` {} is invalid because it belongs to the canister allocation ranges of the test environment.\\nUse a `specified_id` that matches a canister ID on the ICP mainnet and a test environment that supports canister creation with `specified_id` (e.g., PocketIC).",
+        specified_id
+    );
     assert!(err.contains(&expected_err));
 }
 

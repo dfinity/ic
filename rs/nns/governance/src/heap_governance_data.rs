@@ -1,10 +1,10 @@
 use crate::{
     neuron::Neuron,
     pb::v1::{
-        governance::{GovernanceCachedMetrics, NeuronInFlightCommand},
         Followees, Governance as GovernanceProto, MonthlyNodeProviderRewards, NetworkEconomics,
         NeuronStakeTransfer, NodeProvider, ProposalData, RestoreAgingSummary, RewardEvent,
         XdrConversionRate as XdrConversionRatePb,
+        governance::{GovernanceCachedMetrics, NeuronInFlightCommand},
     },
 };
 use ic_nns_governance_api::{

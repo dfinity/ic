@@ -10,11 +10,11 @@ use ic_nervous_system_clients::{
 };
 use ic_nervous_system_common::serve_metrics;
 use ic_nervous_system_root::{
-    change_canister::{
-        change_canister, AddCanisterRequest, CanisterAction, ChangeCanisterRequest,
-        StopOrStartCanisterRequest,
-    },
     LOG_PREFIX,
+    change_canister::{
+        AddCanisterRequest, CanisterAction, ChangeCanisterRequest, StopOrStartCanisterRequest,
+        change_canister,
+    },
 };
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_common::{
@@ -25,9 +25,8 @@ use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID,
 };
 use ic_nns_handler_root::{
-    canister_management, encode_metrics,
+    PROXIED_CANISTER_CALLS_TRACKER, canister_management, encode_metrics,
     root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot},
-    PROXIED_CANISTER_CALLS_TRACKER,
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,

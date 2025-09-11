@@ -5,7 +5,7 @@ use std::{
 };
 
 use candid::{Decode, Nat, Principal};
-use ic_agent::{agent::EnvelopeContent, Agent, Identity, Signature};
+use ic_agent::{Agent, Identity, Signature, agent::EnvelopeContent};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::ed25519_public_key_to_der;
 use ic_icrc1_test_utils::KeyPairGenerator;
@@ -42,7 +42,7 @@ use rosetta_core::models::RosettaSupportedKeyPair;
 
 use ic_sns_governance::pb::v1::governance::Mode;
 use ic_sns_swap::{
-    pb::v1::{new_sale_ticket_response, Lifecycle},
+    pb::v1::{Lifecycle, new_sale_ticket_response},
     swap::principal_to_subaccount,
 };
 use ic_types::{Cycles, Height};
@@ -56,7 +56,7 @@ use tokio::runtime::Builder;
 
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_system_test_driver::{
-    sns_client::{SnsClient, SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S},
+    sns_client::{SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S, SnsClient},
     util::{assert_create_agent_with_identity, block_on},
 };
 
@@ -864,7 +864,10 @@ pub fn add_one_participant(env: TestEnv) {
         start_time.elapsed()
     );
 
-    info!(log, "Checking that buyer identity is correctly set up by calling `sns_sale.refresh_buyer_tokens` in two different ways ...");
+    info!(
+        log,
+        "Checking that buyer identity is correctly set up by calling `sns_sale.refresh_buyer_tokens` in two different ways ..."
+    );
     // Use the default identity to call refresh_buyer_tokens for the wealthy user
     let res_1 = {
         let request = sns_request_provider
@@ -935,7 +938,11 @@ pub fn add_one_participant(env: TestEnv) {
         let block_idx = block_on(wealthy_ledger_agent.transfer(transfer_arg))
             .unwrap()
             .unwrap();
-        info!(log, "Transaction 1: from {:?} to {sns_sale_canister_id:?} (subaccount {sns_subaccount:?}) returned block_idx={block_idx:?}", wealthy_user_identity.principal_id);
+        info!(
+            log,
+            "Transaction 1: from {:?} to {sns_sale_canister_id:?} (subaccount {sns_subaccount:?}) returned block_idx={block_idx:?}",
+            wealthy_user_identity.principal_id
+        );
         block_idx
     };
     info!(
@@ -955,7 +962,11 @@ pub fn add_one_participant(env: TestEnv) {
         let block_idx = block_on(wealthy_ledger_agent.transfer(transfer_arg))
             .unwrap()
             .unwrap();
-        info!(log, "Transaction 2: from {:?} to {sns_sale_canister_id:?} (subaccount {sns_subaccount:?}) returned block_idx={block_idx:?}", wealthy_user_identity.principal_id);
+        info!(
+            log,
+            "Transaction 2: from {:?} to {sns_sale_canister_id:?} (subaccount {sns_subaccount:?}) returned block_idx={block_idx:?}",
+            wealthy_user_identity.principal_id
+        );
         block_idx
     };
     info!(
@@ -965,7 +976,10 @@ pub fn add_one_participant(env: TestEnv) {
     );
     assert_eq!(block_idx_1 + 1u8, block_idx_2);
 
-    info!(log, "Validating the participation setup by calling `sns_sale.refresh_buyer_tokens` in two different ways ...");
+    info!(
+        log,
+        "Validating the participation setup by calling `sns_sale.refresh_buyer_tokens` in two different ways ..."
+    );
     // Use the default identity to call refresh_buyer_tokens for the wealthy user
     let res_4 = {
         let request = sns_request_provider
@@ -991,8 +1005,15 @@ pub fn add_one_participant(env: TestEnv) {
         "Fourth update call to `sns_sale.refresh_buyer_tokens` returned {res_5:?} (elapsed {:?})",
         start_time.elapsed()
     );
-    assert_eq!(res_4, res_5, "sns_sale.refresh_buyer_tokens(Some({:?}), None) = {res_4:?}, but sns_sale.refresh_buyer_tokens(None, None) = {res_5:?}", wealthy_user_identity.principal_id);
-    info!(log, "After setting up sale participation, the response from `sns_sale.refresh_buyer_tokens` is {res_4:?}");
+    assert_eq!(
+        res_4, res_5,
+        "sns_sale.refresh_buyer_tokens(Some({:?}), None) = {res_4:?}, but sns_sale.refresh_buyer_tokens(None, None) = {res_5:?}",
+        wealthy_user_identity.principal_id
+    );
+    info!(
+        log,
+        "After setting up sale participation, the response from `sns_sale.refresh_buyer_tokens` is {res_4:?}"
+    );
 
     info!(
         log,

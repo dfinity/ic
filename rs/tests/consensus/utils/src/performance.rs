@@ -4,7 +4,7 @@ use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
 use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources};
-use ic_system_test_driver::driver::test_env_api::{get_dependency_path, IcNodeSnapshot};
+use ic_system_test_driver::driver::test_env_api::{IcNodeSnapshot, get_dependency_path};
 use ic_system_test_driver::driver::universal_vm::{UniversalVm, UniversalVms};
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
@@ -14,11 +14,11 @@ use ic_system_test_driver::generic_workload_engine;
 use ic_system_test_driver::generic_workload_engine::metrics::{
     LoadTestMetrics, LoadTestMetricsProvider, RequestOutcome,
 };
-use ic_system_test_driver::util::{assert_canister_counter_with_retries, MetricsFetcher};
+use ic_system_test_driver::util::{MetricsFetcher, assert_canister_counter_with_retries};
 use ic_types::ReplicaVersion;
 
 use futures::future::join_all;
-use slog::{error, info, Logger};
+use slog::{Logger, error, info};
 use std::time::{Duration, Instant};
 use tokio::runtime::Handle;
 

@@ -5,7 +5,7 @@ use crate::{
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use serde::{Deserialize, Serialize};
-use slog::{o, Drain, Logger};
+use slog::{Drain, Logger, o};
 use std::{
     fmt,
     net::{IpAddr, Ipv6Addr},

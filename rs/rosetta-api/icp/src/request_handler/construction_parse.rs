@@ -2,7 +2,7 @@ use crate::{
     convert::{self, from_account_or_account_identifier, from_arg, to_model_account_identifier},
     errors::ApiError,
     models::{ConstructionParseRequest, ConstructionParseResponse, ParsedTransaction},
-    request_handler::{verify_network_id, RosettaRequestHandler},
+    request_handler::{RosettaRequestHandler, verify_network_id},
     request_types::{
         AddHotKey, ChangeAutoStakeMaturity, Disburse, DisburseMaturity, Follow, ListNeurons,
         NeuronInfo, PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey,
@@ -13,14 +13,14 @@ use crate::{
 use rosetta_core::objects::ObjectMap;
 
 use ic_nns_governance_api::{
-    manage_neuron::{self, Command, NeuronIdOrSubaccount},
     ClaimOrRefreshNeuronFromAccount, ManageNeuron,
+    manage_neuron::{self, Command, NeuronIdOrSubaccount},
 };
 
 use crate::{models::seconds::Seconds, request::Request};
 use ic_types::{
-    messages::{Blob, HttpCallContent, HttpCanisterUpdate},
     PrincipalId,
+    messages::{Blob, HttpCallContent, HttpCanisterUpdate},
 };
 use icp_ledger::{AccountIdentifier, Operation, SendArgs};
 use std::convert::TryFrom;
@@ -662,10 +662,10 @@ mod tests {
     use crate::{
         ledger_client::LedgerClient,
         models::{
-            operation::OperationType, Amount, ConstructionCombineRequest,
-            ConstructionDeriveRequest, ConstructionParseRequest, ConstructionPayloadsRequest,
+            Amount, ConstructionCombineRequest, ConstructionDeriveRequest,
+            ConstructionParseRequest, ConstructionPayloadsRequest,
             ConstructionPayloadsRequestMetadata, Currency, CurveType, Operation,
-            OperationIdentifier, PublicKey, Signature, SignatureType,
+            OperationIdentifier, PublicKey, Signature, SignatureType, operation::OperationType,
         },
         request_handler::RosettaRequestHandler,
     };

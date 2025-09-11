@@ -14,7 +14,7 @@ use ic_cdk::api::management_canister::bitcoin;
 use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
-use scopeguard::{guard, ScopeGuard};
+use scopeguard::{ScopeGuard, guard};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 use std::cmp::max;
@@ -432,10 +432,15 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                 None
             }
             Err(BuildTxError::AmountTooLow) => {
-                log!(P0,
+                log!(
+                    P0,
                     "[submit_pending_requests]: dropping requests for total BTC amount {} to addresses {} (too low to cover the fees)",
                     tx::DisplayAmount(batch.iter().map(|req| req.amount).sum::<u64>()),
-                    batch.iter().map(|req| req.address.display(s.btc_network)).collect::<Vec<_>>().join(",")
+                    batch
+                        .iter()
+                        .map(|req| req.address.display(s.btc_network))
+                        .collect::<Vec<_>>()
+                        .join(",")
                 );
 
                 // There is no point in retrying the request because the
@@ -451,9 +456,11 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                 None
             }
             Err(BuildTxError::DustOutput { address, amount }) => {
-                log!(P0,
+                log!(
+                    P0,
                     "[submit_pending_requests]: dropping a request for BTC amount {} to {} (too low to cover the fees)",
-                     tx::DisplayAmount(amount), address.display(s.btc_network)
+                    tx::DisplayAmount(amount),
+                    address.display(s.btc_network)
                 );
 
                 let mut requests_to_put_back = BTreeSet::new();
@@ -478,9 +485,14 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                 None
             }
             Err(BuildTxError::NotEnoughFunds) => {
-                log!(P0,
+                log!(
+                    P0,
                     "[submit_pending_requests]: not enough funds to unsigned transaction for requests at block indexes [{}]",
-                    batch.iter().map(|req| req.block_index.to_string()).collect::<Vec<_>>().join(",")
+                    batch
+                        .iter()
+                        .map(|req| req.block_index.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
                 );
 
                 s.push_from_in_flight_to_pending_requests(batch);
@@ -899,14 +911,16 @@ pub async fn resubmit_transactions<
                     // replacement transactions with each resubmission. However, since replacing a
                     // transaction with itself is not allowed, we still handle the transaction
                     // equality in case the fee computation rules change in the future.
-                    log!(P0,
+                    log!(
+                        P0,
                         "[finalize_requests]: resent transaction {} with a new signature. TX bytes: {}",
                         &new_txid,
                         hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                     );
                     continue;
                 }
-                log!(P0,
+                log!(
+                    P0,
                     "[finalize_requests]: sent transaction {} to replace stuck transaction {}. TX bytes: {}",
                     &new_txid,
                     &old_txid,
@@ -924,7 +938,9 @@ pub async fn resubmit_transactions<
                 replace_transaction(old_txid, new_tx, replaced_reason);
             }
             Err(err) => {
-                log!(P0, "[finalize_requests]: failed to send transaction bytes {} to replace stuck transaction {}: {}",
+                log!(
+                    P0,
+                    "[finalize_requests]: failed to send transaction bytes {} to replace stuck transaction {}: {}",
                     hex::encode(tx::encode_into(&signed_tx, Vec::new())),
                     &old_txid,
                     err,

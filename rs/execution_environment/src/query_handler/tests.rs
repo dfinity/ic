@@ -6,9 +6,9 @@ use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
+    Cycles, NumInstructions,
     ingress::WasmResult,
     messages::{Query, QuerySource},
-    Cycles, NumInstructions,
 };
 use std::sync::Arc;
 

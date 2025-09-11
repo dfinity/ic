@@ -12,8 +12,8 @@ use ic_limits::MAX_INGRESS_TTL;
 use ic_logger::debug;
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
 use ic_types::{
-    artifact::IngressMessageId, ingress::IngressStatus, messages::MessageId, CountBytes,
-    RegistryVersion, Time,
+    CountBytes, RegistryVersion, Time, artifact::IngressMessageId, ingress::IngressStatus,
+    messages::MessageId,
 };
 use ic_validator::RequestValidationError;
 

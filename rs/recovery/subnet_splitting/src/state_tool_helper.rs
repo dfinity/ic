@@ -10,7 +10,7 @@ use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_tool::commands::{manifest::compute_manifest, verify_manifest::verify_manifest};
 use ic_types::{ReplicaVersion, Time};
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 use std::{
     fs::File,

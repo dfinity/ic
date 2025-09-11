@@ -12,8 +12,9 @@ use ic_nervous_system_clients::{
     management_canister_client::ManagementCanisterClientImpl,
 };
 use ic_nervous_system_common::{
+    NANO_SECONDS_PER_SECOND,
     dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
-    serve_logs, serve_logs_v2, serve_metrics, NANO_SECONDS_PER_SECOND,
+    serve_logs, serve_logs_v2, serve_metrics,
 };
 use ic_nervous_system_proto::pb::v1::{
     GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
@@ -22,6 +23,7 @@ use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_sns_root::pb::v1::{RegisterExtensionRequest, RegisterExtensionResponse};
 use ic_sns_root::{
+    GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, LedgerCanisterClient,
     logs::{ERROR, INFO},
     pb::v1::{
         CanisterCallError, ListSnsCanistersRequest, ListSnsCanistersResponse,
@@ -31,7 +33,6 @@ use ic_sns_root::{
         SnsRootCanister,
     },
     types::Environment,
-    GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, LedgerCanisterClient,
 };
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use prost::Message;

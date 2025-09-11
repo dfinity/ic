@@ -1,8 +1,8 @@
-use candid::types::internal::{Type, TypeInner};
 use candid::CandidType;
+use candid::types::internal::{Type, TypeInner};
 use serde::{
-    de::{Deserializer, Visitor},
     Deserialize, Serialize, Serializer,
+    de::{Deserializer, Visitor},
 };
 use std::convert::TryInto;
 use std::{fmt, marker::PhantomData, str::FromStr};

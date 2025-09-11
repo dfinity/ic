@@ -5,7 +5,7 @@ use crate::canister_status::{
 };
 use candid::Nat;
 use ic_base_types::{CanisterId, PrincipalId};
-use rand::{thread_rng, Rng};
+use rand::{Rng, thread_rng};
 use std::time::Duration;
 
 /// Five canister_status calls are made via LimitedOutstandingCallsManagementCanisterClient with a

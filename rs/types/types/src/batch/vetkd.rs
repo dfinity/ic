@@ -2,17 +2,17 @@ use ic_base_types::NumBytes;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     types::v1::{
-        vet_kd_agreement::Agreement as VetKdInternalAgreementProto,
         VetKdAgreement as VetKdAgreementProto, VetKdErrorCode as VetKdErrorCodeProto,
+        vet_kd_agreement::Agreement as VetKdInternalAgreementProto,
     },
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryFrom};
 use strum_macros::EnumCount;
 
-use crate::{messages::CallbackId, CountBytes};
+use crate::{CountBytes, messages::CallbackId};
 
 use super::{iterator_to_bytes, slice_to_messages};
 

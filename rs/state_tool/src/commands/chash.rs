@@ -3,7 +3,7 @@
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_state_layout::CompleteCheckpointLayout;
-use ic_state_manager::{checkpoint::load_checkpoint, tree_hash::hash_state, CheckpointMetrics};
+use ic_state_manager::{CheckpointMetrics, checkpoint::load_checkpoint, tree_hash::hash_state};
 use ic_types::Height;
 use std::path::PathBuf;
 use std::sync::Arc;

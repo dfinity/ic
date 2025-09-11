@@ -64,7 +64,7 @@ impl<'a> ICRCLedgerHelper<'a> {
                      got {} blocks.",
                     self.ledger.canister_id(),
                     blocks.len(),
-                ))
+                ));
             }
         };
 

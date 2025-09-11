@@ -11,16 +11,16 @@ use cycles_minting_canister::{CanisterSettingsArgs, CreateCanister, SubnetSelect
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_management_canister_types_private::{BoundedVec, CanisterInstallMode};
 use ic_nervous_system_agent::{
+    CallCanisters, CanisterInfo, Request,
     management_canister::{self, delete_canister, stop_canister},
     nns,
-    sns::{self, governance::SubmittedProposal, root::SnsCanisters, Sns},
-    CallCanisters, CanisterInfo, Request,
+    sns::{self, Sns, governance::SubmittedProposal, root::SnsCanisters},
 };
 use ic_nns_constants::CYCLES_LEDGER_CANISTER_ID;
 use ic_sns_governance_api::pb::v1::{
+    ChunkedCanisterWasm, Proposal, ProposalData, ProposalId, UpgradeSnsControlledCanister,
     get_proposal_response,
     proposal::{self, Action},
-    ChunkedCanisterWasm, Proposal, ProposalData, ProposalId, UpgradeSnsControlledCanister,
 };
 use ic_wasm::{metadata, utils::parse_wasm};
 use itertools::{Either, Itertools};

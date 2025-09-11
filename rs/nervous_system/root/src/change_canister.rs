@@ -6,8 +6,8 @@ use dfn_core::api::CanisterId;
 use dfn_core::println;
 use ic_crypto_sha2::Sha256;
 use ic_management_canister_types_private::{
-    CanisterInstallMode, CanisterInstallModeV2, ChunkHash, InstallChunkedCodeArgs, InstallCodeArgs,
-    IC_00,
+    CanisterInstallMode, CanisterInstallModeV2, ChunkHash, IC_00, InstallChunkedCodeArgs,
+    InstallCodeArgs,
 };
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_lock::acquire_for;
@@ -249,12 +249,14 @@ where
                 LOG_PREFIX
             );
             return match start_canister::<Rt>(canister_id).await {
-                Ok(_) => {
-                    Err(format!("Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and succeeded in that."))
-                }
+                Ok(_) => Err(format!(
+                    "Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and succeeded in that."
+                )),
                 Err(_) => {
                     println!("{}change_canister: Failed to restart canister.", LOG_PREFIX);
-                    Err(format!("Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and failed in that."))
+                    Err(format!(
+                        "Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and failed in that."
+                    ))
                 }
             };
         }

@@ -4,17 +4,17 @@ pub mod pb;
 mod high_capacity;
 
 pub use high_capacity::{
-    dechunkify_delta, dechunkify_get_value_response_content, dechunkify_mutation_value, GetChunk,
-    MockGetChunk,
+    GetChunk, MockGetChunk, dechunkify_delta, dechunkify_get_value_response_content,
+    dechunkify_mutation_value,
 };
 
 use std::{fmt, str};
 
 use crate::pb::v1::{
-    registry_error::Code,
-    registry_mutation::{self, Type},
     HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
     HighCapacityRegistryGetValueResponse, Precondition, RegistryError, RegistryMutation,
+    registry_error::Code,
+    registry_mutation::{self, Type},
 };
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -442,12 +442,12 @@ pub fn precondition(key: impl AsRef<[u8]>, version: u64) -> Precondition {
 mod tests {
     use super::*;
     use crate::pb::v1::{
+        HighCapacityRegistryAtomicMutateRequest, HighCapacityRegistryDelta,
+        HighCapacityRegistryGetChangesSinceResponse, HighCapacityRegistryGetValueResponse,
+        HighCapacityRegistryMutation, HighCapacityRegistryValue, RegistryAtomicMutateRequest,
+        RegistryDelta, RegistryGetChangesSinceResponse, RegistryGetValueResponse, RegistryValue,
         high_capacity_registry_get_value_response, high_capacity_registry_mutation,
-        high_capacity_registry_value, registry_mutation, HighCapacityRegistryAtomicMutateRequest,
-        HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
-        HighCapacityRegistryGetValueResponse, HighCapacityRegistryMutation,
-        HighCapacityRegistryValue, RegistryAtomicMutateRequest, RegistryDelta,
-        RegistryGetChangesSinceResponse, RegistryGetValueResponse, RegistryValue,
+        high_capacity_registry_value, registry_mutation,
     };
     use pretty_assertions::assert_eq;
 

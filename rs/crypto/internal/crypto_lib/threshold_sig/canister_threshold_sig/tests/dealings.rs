@@ -1,7 +1,7 @@
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_types::crypto::AlgorithmId;
 use ic_types::NumberOfNodes;
+use ic_types::crypto::AlgorithmId;
 use rand::{CryptoRng, RngCore};
 use strum::IntoEnumIterator;
 
@@ -261,28 +261,32 @@ fn invalid_create_dealing_requests() -> Result<(), IdkgCreateDealingInternalErro
         let shares = SecretShares::Random;
 
         // invalid threshold
-        assert!(create_dealing(
-            alg_for_curve(curve),
-            &associated_data,
-            dealer_index,
-            NumberOfNodes::from(private_keys.len() as u32 + 1),
-            &public_keys,
-            &shares,
-            Seed::from_rng(rng),
-        )
-        .is_err());
+        assert!(
+            create_dealing(
+                alg_for_curve(curve),
+                &associated_data,
+                dealer_index,
+                NumberOfNodes::from(private_keys.len() as u32 + 1),
+                &public_keys,
+                &shares,
+                Seed::from_rng(rng),
+            )
+            .is_err()
+        );
 
         // wrong algorithm id
-        assert!(create_dealing(
-            AlgorithmId::Groth20_Bls12_381,
-            &associated_data,
-            dealer_index,
-            NumberOfNodes::from(threshold),
-            &public_keys,
-            &shares,
-            Seed::from_rng(rng),
-        )
-        .is_err());
+        assert!(
+            create_dealing(
+                AlgorithmId::Groth20_Bls12_381,
+                &associated_data,
+                dealer_index,
+                NumberOfNodes::from(threshold),
+                &public_keys,
+                &shares,
+                Seed::from_rng(rng),
+            )
+            .is_err()
+        );
     }
 
     Ok(())

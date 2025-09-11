@@ -2,21 +2,21 @@
 use super::MasterPublicKeyExtractionError;
 use ic_crypto_internal_csp::vault::api::{CspVault, IDkgTranscriptInternalBytes};
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    combine_ecdsa_signature_shares, verify_ecdsa_signature_share, verify_ecdsa_threshold_signature,
     CanisterThresholdSerializationError, DerivationPath, EccCurveType, IDkgTranscriptInternal,
     ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal,
     ThresholdEcdsaVerifySigShareInternalError, ThresholdEcdsaVerifySignatureInternalError,
+    combine_ecdsa_signature_shares, verify_ecdsa_signature_share, verify_ecdsa_threshold_signature,
 };
+use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaCreateSigShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgReceivers;
-use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
 };
-use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeId, NodeIndex};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -32,7 +32,7 @@ pub(crate) fn get_tecdsa_master_public_key_from_internal_transcript(
         x => {
             return Err(MasterPublicKeyExtractionError::UnsupportedAlgorithm(
                 format!("ECDSA does not support curve {:?}", x),
-            ))
+            ));
         }
     };
 

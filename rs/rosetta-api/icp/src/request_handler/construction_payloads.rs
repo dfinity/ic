@@ -1,8 +1,8 @@
 use candid::Encode;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_types::{
-    messages::{Blob, HttpCanisterUpdate, MessageId},
     PrincipalId,
+    messages::{Blob, HttpCanisterUpdate, MessageId},
 };
 use icp_ledger::{Memo, Operation, SendArgs, Tokens};
 use rand::Rng;
@@ -20,7 +20,7 @@ use crate::{
         UnsignedTransaction,
     },
     request::Request,
-    request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler},
+    request_handler::{RosettaRequestHandler, make_sig_data, verify_network_id},
     request_types::{
         AddHotKey, ChangeAutoStakeMaturity, Disburse, DisburseMaturity, Follow, ListNeurons,
         NeuronInfo, PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey,
@@ -29,8 +29,8 @@ use crate::{
     },
 };
 use ic_nns_governance_api::{
-    manage_neuron::{self, configure, Command, NeuronIdOrSubaccount},
     ClaimOrRefreshNeuronFromAccount, ManageNeuron,
+    manage_neuron::{self, Command, NeuronIdOrSubaccount, configure},
 };
 use rosetta_core::convert::principal_id_from_public_key;
 

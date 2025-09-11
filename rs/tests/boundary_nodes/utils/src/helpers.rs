@@ -1,8 +1,8 @@
 use std::time::Duration;
 
-use anyhow::{anyhow, bail, Context, Error};
+use anyhow::{Context, Error, anyhow, bail};
 use futures::future::join_all;
-use ic_agent::{export::Principal, Agent};
+use ic_agent::{Agent, export::Principal};
 use ic_base_types::PrincipalId;
 use ic_system_test_driver::{
     driver::{

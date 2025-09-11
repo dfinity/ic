@@ -1,17 +1,16 @@
 use candid::Principal;
 use colored::{ColoredString, Colorize};
 use ic_nervous_system_agent::{
-    nns,
+    CallCanisters, nns,
     sns::{governance::GovernanceCanister, swap::SwapCanister},
-    CallCanisters,
 };
 use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_governance_api::{
-    get_neurons_fund_audit_info_response, GovernanceError, NeuronsFundAuditInfo,
+    GovernanceError, NeuronsFundAuditInfo, get_neurons_fund_audit_info_response,
 };
 use ic_sns_swap::pb::v1::sns_neuron_recipe::Investor;
 use rgb::RGB8;
-use rust_decimal::{prelude::FromPrimitive, Decimal};
+use rust_decimal::{Decimal, prelude::FromPrimitive};
 use std::collections::BTreeMap;
 use thiserror::Error;
 
@@ -20,10 +19,14 @@ pub enum AuditError<CallCanistersError: std::error::Error + 'static> {
     #[error(transparent)]
     CanisterCallError(#[from] CallCanistersError),
 
-    #[error("sns was created before 1-proposal and cannot be audited using this tool; please audit this swap manually.")]
+    #[error(
+        "sns was created before 1-proposal and cannot be audited using this tool; please audit this swap manually."
+    )]
     CreatedBeforeOneProposal,
 
-    #[error("sns was created before matched funding and cannot be audited using this tool; please audit this swap manually.")]
+    #[error(
+        "sns was created before matched funding and cannot be audited using this tool; please audit this swap manually."
+    )]
     CreatedBeforeMatchedFunding,
 
     #[error(
@@ -36,7 +39,9 @@ pub enum AuditError<CallCanistersError: std::error::Error + 'static> {
     #[error("cannot convert value {0} to Decimal: {1}")]
     DecimalConversionError(u64, String),
 
-    #[error("swap is not in the final state yet, so `initial_neurons_fund_participation` is not specified.")]
+    #[error(
+        "swap is not in the final state yet, so `initial_neurons_fund_participation` is not specified."
+    )]
     SwapNotInFinalState,
 }
 
@@ -306,7 +311,13 @@ pub async fn validate_sns_swap<C: CallCanisters>(
             .join(", ");
         let msg = format!(
             "Neurons' Fund controller {:?} participated with {} ICP e8s ({}), receiving {} SNS token e8s ({}). Error = {}% = {} SNS e8s",
-            controller, amount_icp_e8s, nns_neurons_str, amount_sns_e8s, sns_neurons_str, error_per_cent, absolute_error_sns_e8s,
+            controller,
+            amount_icp_e8s,
+            nns_neurons_str,
+            amount_sns_e8s,
+            sns_neurons_str,
+            error_per_cent,
+            absolute_error_sns_e8s,
         );
         let cummulative_error_tolerance =
             ERROR_TOLERANCE_ICP_E8S * Decimal::from_usize(nns_neurons.len()).unwrap();

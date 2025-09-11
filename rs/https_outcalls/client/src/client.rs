@@ -3,35 +3,34 @@ use candid::Encode;
 use futures::future::TryFutureExt;
 use ic_error_types::{RejectCode, UserError};
 use ic_https_outcalls_service::{
-    https_outcalls_service_client::HttpsOutcallsServiceClient, HttpHeader, HttpMethod,
-    HttpsOutcallRequest, HttpsOutcallResponse,
+    HttpHeader, HttpMethod, HttpsOutcallRequest, HttpsOutcallResponse,
+    https_outcalls_service_client::HttpsOutcallsServiceClient,
 };
 use ic_interfaces::execution_environment::{QueryExecutionInput, QueryExecutionService};
 use ic_interfaces_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
 use ic_metrics::MetricsRegistry;
 use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_types::{
+    CanisterId, NumBytes,
     canister_http::{
-        validate_http_headers_and_body, CanisterHttpMethod, CanisterHttpReject,
-        CanisterHttpRequest, CanisterHttpRequestContext, CanisterHttpResponse,
-        CanisterHttpResponseContent, Transform, MAX_CANISTER_HTTP_RESPONSE_BYTES,
+        CanisterHttpMethod, CanisterHttpReject, CanisterHttpRequest, CanisterHttpRequestContext,
+        CanisterHttpResponse, CanisterHttpResponseContent, MAX_CANISTER_HTTP_RESPONSE_BYTES,
+        Transform, validate_http_headers_and_body,
     },
     ingress::WasmResult,
     messages::{CertificateDelegation, CertificateDelegationMetadata, Query, QuerySource, Request},
-    CanisterId, NumBytes,
 };
 use std::time::Instant;
 use tokio::{
     runtime::Handle,
     sync::mpsc::{
-        channel,
+        Receiver, Sender, channel,
         error::{TryRecvError, TrySendError},
-        Receiver, Sender,
     },
 };
-use tonic::{transport::Channel, Code};
+use tonic::{Code, transport::Channel};
 use tower::util::Oneshot;
 use tracing::instrument;
 
@@ -396,25 +395,25 @@ pub fn grpc_status_code_to_reject(code: Code) -> RejectCode {
 mod tests {
     use super::*;
     use ic_https_outcalls_service::{
-        https_outcalls_service_server::{HttpsOutcallsService, HttpsOutcallsServiceServer},
         HttpsOutcallRequest, HttpsOutcallResponse,
+        https_outcalls_service_server::{HttpsOutcallsService, HttpsOutcallsServiceServer},
     };
     use ic_interfaces::execution_environment::{QueryExecutionError, QueryExecutionResponse};
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_types::messages::RequestBuilder;
     use ic_types::canister_http::{Replication, Transform};
     use ic_types::{
-        canister_http::CanisterHttpMethod, messages::CallbackId, time::current_time,
-        time::UNIX_EPOCH, Time,
+        Time, canister_http::CanisterHttpMethod, messages::CallbackId, time::UNIX_EPOCH,
+        time::current_time,
     };
     use std::convert::TryFrom;
     use std::time::Duration;
     use tokio::sync::watch;
     use tonic::{
-        transport::{Channel, Endpoint, Server, Uri},
         Request, Response, Status,
+        transport::{Channel, Endpoint, Server, Uri},
     };
-    use tower::{service_fn, util::BoxCloneService, Service, ServiceExt};
+    use tower::{Service, ServiceExt, service_fn, util::BoxCloneService};
     use tower_test::mock::Handle;
 
     #[derive(Clone)]

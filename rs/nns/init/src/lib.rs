@@ -10,7 +10,7 @@ use ic_registry_local_store::{ChangelogEntry, KeyMutation, LocalStoreImpl, Local
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_transport::{
     delete,
-    pb::v1::{registry_mutation, RegistryAtomicMutateRequest, RegistryMutation},
+    pb::v1::{RegistryAtomicMutateRequest, RegistryMutation, registry_mutation},
     upsert,
 };
 use ic_sys::utility_command::{UtilityCommand, UtilityCommandError};

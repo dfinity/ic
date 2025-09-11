@@ -134,7 +134,10 @@ impl StateWithConfig {
                     .map(CspPublicCoefficients::from),
             );
             match dealing {
-                Ok(_) => panic!("Dealing should fail with incorrect threshold.\n  Threshold: {}\n  Num receivers: {}", incorrect_threshold, num_receivers),
+                Ok(_) => panic!(
+                    "Dealing should fail with incorrect threshold.\n  Threshold: {}\n  Num receivers: {}",
+                    incorrect_threshold, num_receivers
+                ),
                 Err(CspDkgCreateReshareDealingError::InvalidThresholdError(_)) => (),
                 Err(error) => panic!("Incorrect error: {:?}", error),
             }

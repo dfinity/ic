@@ -1,4 +1,6 @@
 use crate::{
+    CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS, CheckpointError, NUMBER_OF_CHECKPOINT_THREADS,
+    PageMapType, SharedState, StateManagerMetrics,
     checkpoint::validate_and_finalize_checkpoint_and_remove_unverified_marker,
     compute_bundled_manifest,
     manifest::{ManifestDelta, RehashManifest},
@@ -6,13 +8,11 @@ use crate::{
     state_sync::types::{
         FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
     },
-    CheckpointError, PageMapType, SharedState, StateManagerMetrics,
-    CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS, NUMBER_OF_CHECKPOINT_THREADS,
 };
-use crossbeam_channel::{bounded, unbounded, Sender};
+use crossbeam_channel::{Sender, bounded, unbounded};
 use ic_base_types::subnet_id_into_protobuf;
 use ic_config::state_manager::LsmtConfig;
-use ic_logger::{error, fatal, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, fatal, info, warn};
 use ic_protobuf::state::{
     stats::v1::Stats,
     system_metadata::v1::{SplitFrom, SystemMetadata},
@@ -20,21 +20,21 @@ use ic_protobuf::state::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::SandboxMemory;
 use ic_replicated_state::{
+    CanisterState, NumWasmPages, PageMap, ReplicatedState,
+    page_map::{PAGE_SIZE, StorageLayout},
+};
+use ic_replicated_state::{
     canister_snapshots::CanisterSnapshot,
-    page_map::{MergeCandidate, StorageMetrics, StorageResult, MAX_NUMBER_OF_FILES},
+    page_map::{MAX_NUMBER_OF_FILES, MergeCandidate, StorageMetrics, StorageResult},
 };
 use ic_replicated_state::{
     metadata_state::UnflushedCheckpointOp, page_map::PageAllocatorFileDescriptor,
 };
-use ic_replicated_state::{
-    page_map::{StorageLayout, PAGE_SIZE},
-    CanisterState, NumWasmPages, PageMap, ReplicatedState,
-};
 use ic_state_layout::{
-    error::LayoutError, CanisterSnapshotBits, CanisterStateBits, CheckpointLayout,
-    ExecutionStateBits, PageMapLayout, ReadOnly, RwPolicy, StateLayout, TipHandler, WasmFile,
+    CanisterSnapshotBits, CanisterStateBits, CheckpointLayout, ExecutionStateBits, PageMapLayout,
+    ReadOnly, RwPolicy, StateLayout, TipHandler, WasmFile, error::LayoutError,
 };
-use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height, SnapshotId};
+use ic_types::{CanisterId, Height, SnapshotId, malicious_flags::MaliciousFlags};
 use ic_utils::thread::parallel_map;
 use ic_utils_thread::JoinOnDrop;
 use ic_wasm_types::{CanisterModule, ModuleLoadingStatus};

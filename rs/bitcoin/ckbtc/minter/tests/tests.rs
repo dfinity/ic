@@ -27,9 +27,9 @@ use ic_ckbtc_minter::updates::update_balance::{
     PendingUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
 };
 use ic_ckbtc_minter::{
-    Log, MinterInfo, Network, CKBTC_LEDGER_MEMO_SIZE, MAX_NUM_INPUTS_IN_TRANSACTION,
-    MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY,
-    REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS, UTXOS_COUNT_THRESHOLD,
+    CKBTC_LEDGER_MEMO_SIZE, Log, MAX_NUM_INPUTS_IN_TRANSACTION, MIN_RELAY_FEE_PER_VBYTE,
+    MIN_RESUBMISSION_DELAY, MinterInfo, Network, REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS,
+    UTXOS_COUNT_THRESHOLD,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
@@ -1413,7 +1413,9 @@ impl CkBtcSetup {
         if res.transactions.len() != 1 {
             self.print_minter_logs();
             self.print_minter_events();
-            panic!("Reimbursement transaction {reimbursement_block_index} for withdrawal {burn_index} not found!");
+            panic!(
+                "Reimbursement transaction {reimbursement_block_index} for withdrawal {burn_index} not found!"
+            );
         }
         let memo = res.transactions[0].mint.clone().unwrap().memo.unwrap();
         use ic_ckbtc_minter::memo::MintMemo;

@@ -7,7 +7,7 @@ use crate::vault::api::{
 use ic_adapter_metrics_client::AdapterMetrics;
 use ic_config::crypto::{CryptoConfig, CspVaultType};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use ic_types::crypto::CryptoError;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

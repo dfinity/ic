@@ -1,54 +1,54 @@
 use assert_matches::assert_matches;
 use async_trait::async_trait;
-use candid::{types::number::Nat, Encode};
+use candid::{Encode, types::number::Nat};
 use canister_test::{Canister, Runtime};
 use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_crypto_sha2::Sha256;
 use ic_ledger_core::{
-    tokens::{CheckedAdd, TOKEN_SUBDIVIDABLE_BY},
     Tokens,
+    tokens::{CheckedAdd, TOKEN_SUBDIVIDABLE_BY},
 };
 use ic_nervous_system_canisters::cmc::FakeCmc;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
-use ic_nervous_system_common::{i2d, NervousSystemError, DEFAULT_TRANSFER_FEE, ONE_YEAR_SECONDS};
+use ic_nervous_system_common::{DEFAULT_TRANSFER_FEE, NervousSystemError, ONE_YEAR_SECONDS, i2d};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{forward_call_via_universal_canister, set_up_universal_canister, NnsCanisters},
+    itest_helpers::{NnsCanisters, forward_call_via_universal_canister, set_up_universal_canister},
 };
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 
 use ic_sns_governance::{
     governance::Governance,
-    neuron::{NeuronState, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER},
+    neuron::{DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER, NeuronState},
     pb::v1::{
-        governance::{self, GovernanceCachedMetrics, SnsMetadata},
-        governance_error::ErrorType,
-        manage_neuron::{
-            claim_or_refresh::{By, MemoAndController},
-            configure::Operation,
-            AddNeuronPermissions, ClaimOrRefresh, Command, Configure, DisburseMaturity,
-            IncreaseDissolveDelay, RemoveNeuronPermissions, StakeMaturity,
-        },
-        manage_neuron_response::Command as CommandResponse,
-        neuron::DissolveState::{self, DissolveDelaySeconds},
-        proposal::Action,
         Account as AccountProto, Ballot, Empty, Governance as GovernanceProto, GovernanceError,
         ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Motion,
         NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
         NeuronPermissionType, Proposal, ProposalData, ProposalId, ProposalRewardStatus,
         RewardEvent, Vote, VotingRewardsParameters, WaitForQuietState,
+        governance::{self, GovernanceCachedMetrics, SnsMetadata},
+        governance_error::ErrorType,
+        manage_neuron::{
+            AddNeuronPermissions, ClaimOrRefresh, Command, Configure, DisburseMaturity,
+            IncreaseDissolveDelay, RemoveNeuronPermissions, StakeMaturity,
+            claim_or_refresh::{By, MemoAndController},
+            configure::Operation,
+        },
+        manage_neuron_response::Command as CommandResponse,
+        neuron::DissolveState::{self, DissolveDelaySeconds},
+        proposal::Action,
     },
-    types::{test_helpers::NativeEnvironment, Environment},
+    types::{Environment, test_helpers::NativeEnvironment},
 };
 use ic_sns_test_utils::{
     icrc1,
     itest_helpers::{
-        local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo, NONCE,
+        NONCE, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo, local_test_on_sns_subnet,
     },
     now_seconds,
 };
@@ -62,7 +62,7 @@ use rust_decimal_macros::dec;
 use std::{
     collections::HashSet,
     convert::TryInto,
-    iter::{zip, FromIterator},
+    iter::{FromIterator, zip},
     time::SystemTime,
 };
 
@@ -495,7 +495,9 @@ fn test_claim_neuron_fails_when_max_number_of_neurons_is_reached() {
         let error = match response.command.unwrap() {
             CommandResponse::Error(error) => error,
             CommandResponse::ClaimOrRefresh(_) => {
-                panic!("User should not have been able to claim a neuron due to reaching max_number_of_neurons")
+                panic!(
+                    "User should not have been able to claim a neuron due to reaching max_number_of_neurons"
+                )
             }
             _ => panic!("Unexpected command response when claiming neuron."),
         };
@@ -1616,7 +1618,9 @@ async fn couple_of_neurons_who_voted_get_rewards() {
         reward_rate_per_round_range.contains(&observed_reward_rate_per_round),
         "Observed reward rate not between the initial and final reward \
          rate: rewards_e8s = {}, which gives an effective rate of {} vs. reward_rate_per_round_range = {:?}",
-        rewards_e8s, observed_reward_rate_per_round, reward_rate_per_round_range,
+        rewards_e8s,
+        observed_reward_rate_per_round,
+        reward_rate_per_round_range,
     );
 
     // Step 3.2: Inspect the neurons. In particular, look at their maturity to
@@ -1644,7 +1648,11 @@ async fn couple_of_neurons_who_voted_get_rewards() {
         assert!(
             delta < epsilon,
             "neuron = {:#?}, weight = {:#?} (out of 5), rewards_e8s = {:#?}, delta = {:#?}, epsilon = {:#?}",
-            neuron, weight, rewards_e8s, delta, epsilon,
+            neuron,
+            weight,
+            rewards_e8s,
+            delta,
+            epsilon,
         );
 
         total_observed_rewards_e8s += observed_reward;
@@ -2114,7 +2122,9 @@ fn test_exceeding_max_principals_for_neuron_fails() {
                 .expect("Error calling manage_neuron");
 
             if let CommandResponse::Error(error) = manage_neuron_response.command.unwrap() {
-                panic!("Adding permission should have succeeded, but encountered {error:?} on iteration {i}");
+                panic!(
+                    "Adding permission should have succeeded, but encountered {error:?} on iteration {i}"
+                );
             }
         }
 

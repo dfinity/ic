@@ -3,14 +3,14 @@ use crate::{
     environment::{CanisterClients, CanisterEnvironment},
     logs::{ERROR, INFO},
     pb::v1::{
-        error_refund_icp_response, set_dapp_controllers_call_result, set_mode_call_result,
-        set_mode_call_result::SetModeResult,
-        settle_neurons_fund_participation_result,
-        sns_neuron_recipe::{ClaimedStatus, Investor},
         BuyerState, CfInvestment, CfNeuron, CfParticipant, DirectInvestment,
         ErrorRefundIcpResponse, FinalizeSwapResponse, Init, Lifecycle, NeuronId as SwapNeuronId,
         Params, SetDappControllersCallResult, SetModeCallResult,
         SettleNeuronsFundParticipationResult, SnsNeuronRecipe, SweepResult, TransferableAmount,
+        error_refund_icp_response, set_dapp_controllers_call_result, set_mode_call_result,
+        set_mode_call_result::SetModeResult,
+        settle_neurons_fund_participation_result,
+        sns_neuron_recipe::{ClaimedStatus, Investor},
     },
     swap::is_valid_principal,
 };
@@ -402,10 +402,11 @@ impl Params {
         }
 
         // 100 * 1B * E8S should fit in a u64.
-        assert!(self
-            .max_icp_e8s
-            .checked_mul(self.min_participants as u64)
-            .is_some());
+        assert!(
+            self.max_icp_e8s
+                .checked_mul(self.min_participants as u64)
+                .is_some()
+        );
 
         if self.max_icp_e8s
             < (self.min_participants as u64).saturating_mul(self.min_participant_icp_e8s)
@@ -585,13 +586,19 @@ impl TransferableAmount {
         if self.transfer_start_timestamp_seconds == 0 && self.transfer_success_timestamp_seconds > 0
         {
             // Successful transfer without start time.
-            return Err(format!("Invariant violation: transfer_start_timestamp_seconds is zero but transfer_success_timestamp_seconds ({}) is non-zero", self.transfer_success_timestamp_seconds));
+            return Err(format!(
+                "Invariant violation: transfer_start_timestamp_seconds is zero but transfer_success_timestamp_seconds ({}) is non-zero",
+                self.transfer_success_timestamp_seconds
+            ));
         }
         if self.transfer_start_timestamp_seconds > self.transfer_success_timestamp_seconds
             && self.transfer_success_timestamp_seconds > 0
         {
             // Successful transfer before the transfer started.
-            return Err(format!("Invariant violation: transfer_start_timestamp_seconds ({}) > transfer_success_timestamp_seconds ({}) > 0", self.transfer_start_timestamp_seconds, self.transfer_success_timestamp_seconds));
+            return Err(format!(
+                "Invariant violation: transfer_start_timestamp_seconds ({}) > transfer_success_timestamp_seconds ({}) > 0",
+                self.transfer_start_timestamp_seconds, self.transfer_success_timestamp_seconds
+            ));
         }
         Ok(())
     }
@@ -1178,7 +1185,7 @@ mod tests {
         swap::MAX_LIST_DIRECT_PARTICIPANTS_LIMIT,
     };
     use ic_nervous_system_common::{
-        assert_is_err, assert_is_ok, E8, ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
+        E8, ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS, assert_is_err, assert_is_ok,
     };
     use lazy_static::lazy_static;
     use std::mem;
@@ -1335,9 +1342,11 @@ mod tests {
             sale_delay_seconds: Some(0),
             ..PARAMS
         };
-        assert!(params
-            .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)
-            .is_err());
+        assert!(
+            params
+                .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)
+                .is_err()
+        );
     }
 
     #[test]
@@ -1400,9 +1409,11 @@ mod tests {
             sale_delay_seconds: Some(0),
             ..PARAMS
         };
-        assert!(params
-            .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)
-            .is_err());
+        assert!(
+            params
+                .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)
+                .is_err()
+        );
     }
 
     #[test]
@@ -1443,9 +1454,11 @@ mod tests {
             sale_delay_seconds: Some(1),
             ..PARAMS
         };
-        assert!(params
-            .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)
-            .is_err());
+        assert!(
+            params
+                .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)
+                .is_err()
+        );
     }
 
     #[test]

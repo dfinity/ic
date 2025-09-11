@@ -5,7 +5,7 @@ use crate::common::{
     utils::{account_balance, get_custom_agent, get_test_agent, list_neurons, test_identity},
 };
 use core::convert::TryFrom;
-use ic_agent::{identity::BasicIdentity, Identity};
+use ic_agent::{Identity, identity::BasicIdentity};
 use ic_icp_rosetta_client::RosettaChangeAutoStakeMaturityArgs;
 use ic_icp_rosetta_client::RosettaDisburseMaturityArgs;
 use ic_icp_rosetta_client::RosettaHotKeyArgs;
@@ -17,7 +17,7 @@ use ic_icp_rosetta_client::{
     RosettaStakeMaturityArgs,
 };
 use ic_icrc1_test_utils::basic_identity_strategy;
-use ic_nns_governance_api::{neuron::DissolveState, KnownNeuronData};
+use ic_nns_governance_api::{KnownNeuronData, neuron::DissolveState};
 use ic_rosetta_api::ledger_client::list_known_neurons_response::ListKnownNeuronsResponse;
 use ic_rosetta_api::ledger_client::list_neurons_response::ListNeuronsResponse;
 use ic_rosetta_api::ledger_client::neuron_response::NeuronResponse;
@@ -829,18 +829,19 @@ fn test_get_neuron_info() {
         assert_eq!(neuron_info.neuron_id, neuron.id.unwrap().id);
         assert_eq!(neuron_info.controller.0, TEST_IDENTITY.sender().unwrap());
 
-        assert!(env
-            .rosetta_client
-            .get_neuron_info(
-                env.network_identifier.clone(),
-                // Ask for a neuron that does not exist
-                RosettaNeuronInfoArgs::builder(neuron_index + 1)
-                    .with_public_key((&Arc::new(test_identity())).into())
-                    .build(),
-                &(*TEST_IDENTITY).clone(),
-            )
-            .await
-            .is_err());
+        assert!(
+            env.rosetta_client
+                .get_neuron_info(
+                    env.network_identifier.clone(),
+                    // Ask for a neuron that does not exist
+                    RosettaNeuronInfoArgs::builder(neuron_index + 1)
+                        .with_public_key((&Arc::new(test_identity())).into())
+                        .build(),
+                    &(*TEST_IDENTITY).clone(),
+                )
+                .await
+                .is_err()
+        );
     });
 }
 
@@ -1058,17 +1059,18 @@ fn test_stake_maturity() {
 
         // First we try an invalid amount to be staked
         let stake_percentage_invalid = 101;
-        assert!(env
-            .rosetta_client
-            .stake_maturity(
-                env.network_identifier.clone(),
-                &(*TEST_IDENTITY).clone(),
-                RosettaStakeMaturityArgs::builder(neuron_index)
-                    .with_percentage_to_stake(stake_percentage_invalid)
-                    .build()
-            )
-            .await
-            .is_err());
+        assert!(
+            env.rosetta_client
+                .stake_maturity(
+                    env.network_identifier.clone(),
+                    &(*TEST_IDENTITY).clone(),
+                    RosettaStakeMaturityArgs::builder(neuron_index)
+                        .with_percentage_to_stake(stake_percentage_invalid)
+                        .build()
+                )
+                .await
+                .is_err()
+        );
 
         // Now we try a valid amount
         let stake_percentage = 50;

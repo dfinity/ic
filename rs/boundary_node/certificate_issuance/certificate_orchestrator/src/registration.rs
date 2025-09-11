@@ -20,10 +20,10 @@ cfg_if::cfg_if! {
 }
 
 use crate::{
+    LocalRef, REGISTRATION_EXPIRATION_TTL, StableMap, StorableId, WithMetrics,
     acl::{Authorize, AuthorizeError, WithAuthorize},
     ic_certification::{add_cert, remove_cert},
     id::Generate,
-    LocalRef, StableMap, StorableId, WithMetrics, REGISTRATION_EXPIRATION_TTL,
 };
 
 #[derive(Debug, thiserror::Error)]

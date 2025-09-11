@@ -3,8 +3,8 @@ end::catalog[] */
 use anyhow::Result;
 use ic_agent::export::Principal;
 use ic_agent::{
-    identity::{AnonymousIdentity, Secp256k1Identity},
     Identity,
+    identity::{AnonymousIdentity, Secp256k1Identity},
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_registry_subnet_type::SubnetType;
@@ -14,8 +14,8 @@ use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    agent_with_identity, block_on, expiry_time, random_ed25519_identity, sign_query, sign_update,
-    UniversalCanister,
+    UniversalCanister, agent_with_identity, block_on, expiry_time, random_ed25519_identity,
+    sign_query, sign_update,
 };
 use ic_types::messages::{
     Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery,

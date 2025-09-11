@@ -2,8 +2,8 @@ use candid::{Decode, Encode, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cbor::CertificateToCbor;
 use ic_certification::{
-    hash_tree::{empty, HashTreeNode, Label, LookupResult, SubtreeLookupResult},
     Certificate, HashTree,
+    hash_tree::{HashTreeNode, Label, LookupResult, SubtreeLookupResult, empty},
 };
 use ic_icrc1_ledger::Tokens;
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
@@ -408,8 +408,8 @@ fn production_ledger_wasm() -> Vec<u8> {
 
 #[test]
 fn test_icrc3_blocks_compatibility_with_production_ledger() {
-    use ic_ledger_suite_state_machine_tests::test_icrc3_blocks_compatibility_with_production_ledger;
     use ic_ledger_suite_state_machine_tests::InitArgs;
+    use ic_ledger_suite_state_machine_tests::test_icrc3_blocks_compatibility_with_production_ledger;
 
     fn encode_init_args(args: InitArgs) -> ic_icrc1_ledger::LedgerArgument {
         use ic_icrc1_ledger::{

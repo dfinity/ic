@@ -19,11 +19,11 @@ pub struct BoundedVec<
 >(Vec<T>);
 
 impl<
-        const MAX_ALLOWED_LEN: usize,
-        const MAX_ALLOWED_TOTAL_DATA_SIZE: usize,
-        const MAX_ALLOWED_ELEMENT_DATA_SIZE: usize,
-        T,
-    > BoundedVec<MAX_ALLOWED_LEN, MAX_ALLOWED_TOTAL_DATA_SIZE, MAX_ALLOWED_ELEMENT_DATA_SIZE, T>
+    const MAX_ALLOWED_LEN: usize,
+    const MAX_ALLOWED_TOTAL_DATA_SIZE: usize,
+    const MAX_ALLOWED_ELEMENT_DATA_SIZE: usize,
+    T,
+> BoundedVec<MAX_ALLOWED_LEN, MAX_ALLOWED_TOTAL_DATA_SIZE, MAX_ALLOWED_ELEMENT_DATA_SIZE, T>
 {
     pub fn new(data: Vec<T>) -> Self {
         assert!(
@@ -42,12 +42,12 @@ impl<
 }
 
 impl<
-        'de,
-        const MAX_ALLOWED_LEN: usize,
-        const MAX_ALLOWED_TOTAL_DATA_SIZE: usize,
-        const MAX_ALLOWED_ELEMENT_DATA_SIZE: usize,
-        T: Deserialize<'de> + DataSize,
-    > Deserialize<'de>
+    'de,
+    const MAX_ALLOWED_LEN: usize,
+    const MAX_ALLOWED_TOTAL_DATA_SIZE: usize,
+    const MAX_ALLOWED_ELEMENT_DATA_SIZE: usize,
+    T: Deserialize<'de> + DataSize,
+> Deserialize<'de>
     for BoundedVec<MAX_ALLOWED_LEN, MAX_ALLOWED_TOTAL_DATA_SIZE, MAX_ALLOWED_ELEMENT_DATA_SIZE, T>
 {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -63,12 +63,12 @@ impl<
         use serde::de::{SeqAccess, Visitor};
 
         impl<
-                'de,
-                const MAX_ALLOWED_LEN: usize,
-                const MAX_ALLOWED_TOTAL_DATA_SIZE: usize,
-                const MAX_ALLOWED_ELEMENT_DATA_SIZE: usize,
-                T: Deserialize<'de> + DataSize,
-            > Visitor<'de>
+            'de,
+            const MAX_ALLOWED_LEN: usize,
+            const MAX_ALLOWED_TOTAL_DATA_SIZE: usize,
+            const MAX_ALLOWED_ELEMENT_DATA_SIZE: usize,
+            T: Deserialize<'de> + DataSize,
+        > Visitor<'de>
             for SeqVisitor<
                 MAX_ALLOWED_LEN,
                 MAX_ALLOWED_TOTAL_DATA_SIZE,

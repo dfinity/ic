@@ -3,16 +3,16 @@ use std::time::Duration;
 use assert_matches::assert_matches;
 use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes as Ed25519PublicKeyBytes;
 use ic_crypto_internal_basic_sig_ed25519::types::SignatureBytes as Ed25519SignatureBytes;
-use ic_crypto_internal_tls::generate_tls_key_pair_der;
 use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_internal_tls::TlsKeyPairAndCertGenerationError;
+use ic_crypto_internal_tls::generate_tls_key_pair_der;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_types::time::{Time, GENESIS};
+use ic_types::time::{GENESIS, Time};
 use ic_types::{NodeId, PrincipalId};
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
-use time::macros::datetime;
 use time::OffsetDateTime;
+use time::macros::datetime;
 use x509_parser::certificate::X509Certificate;
 use x509_parser::prelude::FromDer;
 use x509_parser::x509::{X509Name, X509Version};
@@ -59,8 +59,10 @@ fn should_have_stable_representation_of_private_key() {
 
     let serialized_sk = serde_cbor::to_vec(&secret_key).unwrap();
 
-    assert_eq!(hex::encode(serialized_sk),
-               "a16562797465735830302e020100300506032b657004220420ff2fa8b8bea7a4d9aa95a41cffcd0fd54cb020cf83af28ea5ad80335ea48a959");
+    assert_eq!(
+        hex::encode(serialized_sk),
+        "a16562797465735830302e020100300506032b657004220420ff2fa8b8bea7a4d9aa95a41cffcd0fd54cb020cf83af28ea5ad80335ea48a959"
+    );
 }
 
 #[test]

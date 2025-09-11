@@ -10,7 +10,7 @@
 //!   in the past payloads, and the user signature is checked eventually, and
 //!   the message validates successfully
 
-use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
+use criterion::{BatchSize, Criterion, black_box, criterion_group, criterion_main};
 use dkg::DkgDataPayload;
 use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, ingress_pool::IngressPoolImpl};
 use ic_config::state_manager::Config as StateManagerConfig;
@@ -44,7 +44,7 @@ use ic_test_utilities::{
     xnet_payload_builder::FakeXNetPayloadBuilder,
 };
 use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, fake::*, make_genesis};
-use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
+use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry};
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_test_utilities_types::{
@@ -52,13 +52,13 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
+    Height, NumBytes, PrincipalId, RegistryVersion, Time, UserId,
     batch::{BatchPayload, IngressPayload, ValidationContext},
     consensus::{certification::*, dkg::DkgSummary, *},
     crypto::Signed,
     ingress::{IngressState, IngressStatus},
     signature::*,
     time::UNIX_EPOCH,
-    Height, NumBytes, PrincipalId, RegistryVersion, Time, UserId,
 };
 use std::{
     sync::{Arc, RwLock},

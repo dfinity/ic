@@ -3,15 +3,15 @@
 //! background when start_polling() is called.
 use crossbeam_channel::{RecvTimeoutError, Sender, TrySendError};
 pub use ic_interfaces_registry::{
-    empty_zero_registry_record, RegistryClient, RegistryClientVersionedResult,
-    RegistryDataProvider, RegistryRecord, POLLING_PERIOD, ZERO_REGISTRY_VERSION,
+    POLLING_PERIOD, RegistryClient, RegistryClientVersionedResult, RegistryDataProvider,
+    RegistryRecord, ZERO_REGISTRY_VERSION, empty_zero_registry_record,
 };
 use ic_metrics::MetricsRegistry;
 pub use ic_types::{
+    RegistryVersion, Time,
     crypto::threshold_sig::ThresholdSigPublicKey,
     registry::{RegistryClientError, RegistryDataProviderError},
     time::current_time,
-    RegistryVersion, Time,
 };
 use ic_utils_thread::JoinOnDrop;
 use std::sync::{Arc, RwLock, RwLockReadGuard};
@@ -374,10 +374,12 @@ mod tests {
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
         let registry = RegistryClientImpl::new(data_provider, None);
 
-        assert!(registry
-            .get_test_proto("any_key", RegistryVersion::new(0))
-            .unwrap()
-            .is_none());
+        assert!(
+            registry
+                .get_test_proto("any_key", RegistryVersion::new(0))
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]

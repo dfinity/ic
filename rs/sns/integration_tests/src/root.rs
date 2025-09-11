@@ -13,16 +13,16 @@ use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_test_utils::state_test_helpers::{get_controllers, set_controllers, update_with_sender};
 use ic_sns_root::{
-    pb::v1::{Extensions, SnsRootCanister},
     GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
+    pb::v1::{Extensions, SnsRootCanister},
 };
 use ic_sns_test_utils::{
     itest_helpers::{
-        local_test_on_sns_subnet, set_up_root_canister, SnsCanisters, SnsTestsInitPayloadBuilder,
+        SnsCanisters, SnsTestsInitPayloadBuilder, local_test_on_sns_subnet, set_up_root_canister,
     },
     state_test_helpers::{
-        sns_root_register_dapp_canister, sns_root_register_dapp_canisters,
-        state_machine_builder_for_sns_tests, Scenario,
+        Scenario, sns_root_register_dapp_canister, sns_root_register_dapp_canisters,
+        state_machine_builder_for_sns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;

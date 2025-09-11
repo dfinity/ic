@@ -148,7 +148,9 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         }),
         (None, None, None) => None,
         _ => {
-            anyhow::bail!("Incomplete IPv4 configuration provided. All parameters (ipv4_address, ipv4_gateway, ipv4_prefix_length) are required for IPv4 configuration.");
+            anyhow::bail!(
+                "Incomplete IPv4 configuration provided. All parameters (ipv4_address, ipv4_gateway, ipv4_prefix_length) are required for IPv4 configuration."
+            );
         }
     };
 

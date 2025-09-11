@@ -6,9 +6,9 @@ use ic_stable_structures::storable::{Bound, Storable};
 use minicbor::{Decode, Encode};
 use num_traits::Bounded;
 use serde::{
+    Deserialize, Serialize,
     de::{self, Deserializer},
     ser::Serializer,
-    Deserialize, Serialize,
 };
 use std::borrow::Cow;
 use std::fmt;

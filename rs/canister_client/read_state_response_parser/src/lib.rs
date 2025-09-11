@@ -1,9 +1,9 @@
 use ic_canonical_state::encoding::types::SubnetMetrics;
 use ic_crypto_tree_hash::{LabeledTree, LookupStatus, MixedHashTree};
 use ic_types::{
+    CanisterId, SubnetId,
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{HttpReadStateResponse, MessageId},
-    CanisterId, SubnetId,
 };
 use serde::Deserialize;
 use serde_cbor::value::Value as CBOR;
@@ -127,8 +127,8 @@ mod tests {
     use ic_certification_test_utils::CertificateData;
     use ic_crypto_tree_hash::Digest;
     use ic_crypto_tree_hash::Label;
-    use ic_types::messages::Blob;
     use ic_types::CanisterId;
+    use ic_types::messages::Blob;
     use serde::Serialize;
 
     fn to_self_describing_cbor<T: Serialize>(e: &T) -> serde_cbor::Result<Vec<u8>> {

@@ -1,8 +1,9 @@
-use crate::sign::{get_log_id, log_err, log_ok_content};
 use crate::CryptoComponentImpl;
+use crate::sign::{get_log_id, log_err, log_ok_content};
 use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_interfaces::crypto::IDkgProtocol;
 use ic_logger::{debug, new_logger, warn};
+use ic_types::NodeId;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
     IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
@@ -13,7 +14,6 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealings, IDkgComplaint, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
     IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
 };
-use ic_types::NodeId;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 mod complaint;
@@ -26,7 +26,7 @@ mod utils;
 mod tests;
 
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
-pub use utils::{retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError};
+pub use utils::{MegaKeyFromRegistryError, retrieve_mega_public_key_from_registry};
 
 /// Implementation of the [`IDkgProtocol`] for the crypto component.
 ///

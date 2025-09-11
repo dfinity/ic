@@ -4,8 +4,8 @@ use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
 };
 use ic_sns_root::{
-    pb::v1::{ListSnsCanistersRequest, ListSnsCanistersResponse},
     GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
+    pb::v1::{ListSnsCanistersRequest, ListSnsCanistersResponse},
 };
 
 impl Request for GetSnsCanistersSummaryRequest {

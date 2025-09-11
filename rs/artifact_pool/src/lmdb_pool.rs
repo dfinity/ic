@@ -9,15 +9,21 @@ use ic_interfaces::{
     },
     idkg::{IDkgPoolSection, IDkgPoolSectionOp, IDkgPoolSectionOps, MutableIDkgPoolSection},
 };
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
 use ic_types::consensus::dkg::DkgSummary;
 use ic_types::{
+    Height, Time,
     artifact::{CertificationMessageId, ConsensusMessageId, IDkgMessageId},
     batch::BatchPayload,
     consensus::{
+        BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
+        ConsensusMessageHash, ConsensusMessageHashable, DataPayload, EquivocationProof,
+        Finalization, FinalizationShare, HasHash, HasHeight, Notarization, NotarizationShare,
+        Payload, PayloadType, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
+        SummaryPayload,
         certification::{
             Certification, CertificationMessage, CertificationMessageHash, CertificationShare,
         },
@@ -28,17 +34,11 @@ use ic_types::{
             SigShareIdData, SigShareIdDataOf, SignedIDkgComplaint, SignedIDkgOpening,
             VetKdKeyShare,
         },
-        BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
-        ConsensusMessageHash, ConsensusMessageHashable, DataPayload, EquivocationProof,
-        Finalization, FinalizationShare, HasHash, HasHeight, Notarization, NotarizationShare,
-        Payload, PayloadType, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
-        SummaryPayload,
     },
     crypto::canister_threshold_sig::idkg::{
         IDkgDealingSupport, IDkgTranscriptId, SignedIDkgDealing,
     },
     crypto::{CryptoHash, CryptoHashOf, CryptoHashable},
-    Height, Time,
 };
 use lmdb::{
     Cursor, Database, DatabaseFlags, Environment, EnvironmentFlags, RoTransaction, RwTransaction,
@@ -978,13 +978,13 @@ impl TryFrom<ArtifactKey> for ConsensusMessageId {
             TypeKey::CatchUpPackageShare => ConsensusMessageHash::CatchUpPackageShare(h.into()),
             TypeKey::EquivocationProof => ConsensusMessageHash::EquivocationProof(h.into()),
             TypeKey::BlockPayload => {
-                return Err("Block payloads do not have a ConsensusMessageId".into())
+                return Err("Block payloads do not have a ConsensusMessageId".into());
             }
             other => {
                 return Err(format!(
                     "{:?} is not a valid ConsensusMessage TypeKey.",
                     other
-                ))
+                ));
             }
         };
         Ok(ConsensusMessageId {
@@ -1418,7 +1418,7 @@ impl TryFrom<ArtifactKey> for CertificationMessageId {
                 return Err(format!(
                     "{:?} is not a valid CertificationMessage TypeKey.",
                     other
-                ))
+                ));
             }
         };
         Ok(CertificationMessageId {
@@ -2222,12 +2222,12 @@ mod tests {
     use crate::{
         consensus_pool::MutablePoolSection,
         test_utils::{
-            block_proposal_ops, fake_block_proposal_with_rank, fake_random_beacon,
-            finalization_share_ops, notarization_share_ops, random_beacon_ops, PoolTestHelper,
+            PoolTestHelper, block_proposal_ops, fake_block_proposal_with_rank, fake_random_beacon,
+            finalization_share_ops, notarization_share_ops, random_beacon_ops,
         },
     };
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::{consensus::Rank, PrincipalId, SubnetId};
+    use ic_types::{PrincipalId, SubnetId, consensus::Rank};
     use std::{panic, path::PathBuf};
 
     #[test]

@@ -4,7 +4,7 @@ use super::types::{
 use crate::common::utils::utils::{
     icrc1_operation_to_rosetta_core_operations, rosetta_core_operations_to_icrc1_operation,
 };
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use candid::{Decode, Encode, Principal};
 use ic_agent::agent::{Envelope, EnvelopeContent};
 use ic_rosetta_api::models::ConstructionParseResponse;
@@ -321,7 +321,9 @@ pub fn handle_construction_hash(
 
     // We expect only one icrc1 ledger transaction in the signed transaction
     if tx_hashes.len() > 1 {
-        bail!("Only one icrc1 ledger transaction is supported per signed transaction. Found more than one icrc1 ledger transaction.");
+        bail!(
+            "Only one icrc1 ledger transaction is supported per signed transaction. Found more than one icrc1 ledger transaction."
+        );
     }
 
     Ok(ConstructionHashResponse {
@@ -536,10 +538,10 @@ pub fn handle_construction_parse(
 mod test {
     use super::*;
     use ic_agent::Identity;
+    use ic_icrc1_test_utils::DEFAULT_TRANSFER_FEE;
+    use ic_icrc1_test_utils::LedgerEndpointArg;
     use ic_icrc1_test_utils::minter_identity;
     use ic_icrc1_test_utils::valid_transactions_strategy;
-    use ic_icrc1_test_utils::LedgerEndpointArg;
-    use ic_icrc1_test_utils::DEFAULT_TRANSFER_FEE;
     use proptest::strategy::Strategy;
     use proptest::test_runner::Config as TestRunnerConfig;
     use proptest::test_runner::TestRunner;

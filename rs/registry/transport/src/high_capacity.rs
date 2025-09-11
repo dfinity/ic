@@ -15,15 +15,15 @@
 //! (publicly) re-exported by the root module.
 
 use crate::{
-    pb::v1::{
-        high_capacity_registry_get_value_response, high_capacity_registry_mutation,
-        high_capacity_registry_value, registry_mutation, HighCapacityRegistryAtomicMutateRequest,
-        HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
-        HighCapacityRegistryMutation, HighCapacityRegistryValue, LargeValueChunkKeys,
-        RegistryAtomicMutateRequest, RegistryDelta, RegistryGetChangesSinceResponse,
-        RegistryMutation, RegistryValue,
-    },
     Error,
+    pb::v1::{
+        HighCapacityRegistryAtomicMutateRequest, HighCapacityRegistryDelta,
+        HighCapacityRegistryGetChangesSinceResponse, HighCapacityRegistryMutation,
+        HighCapacityRegistryValue, LargeValueChunkKeys, RegistryAtomicMutateRequest, RegistryDelta,
+        RegistryGetChangesSinceResponse, RegistryMutation, RegistryValue,
+        high_capacity_registry_get_value_response, high_capacity_registry_mutation,
+        high_capacity_registry_value, registry_mutation,
+    },
 };
 use async_trait::async_trait;
 use ic_crypto_sha2::Sha256;

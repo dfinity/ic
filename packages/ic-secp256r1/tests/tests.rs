@@ -109,8 +109,8 @@ fn should_accept_signatures_that_we_generate() {
 }
 
 #[test]
-fn should_serialization_and_deserialization_round_trip_for_private_keys(
-) -> Result<(), KeyDecodingError> {
+fn should_serialization_and_deserialization_round_trip_for_private_keys()
+-> Result<(), KeyDecodingError> {
     let rng = &mut test_rng();
 
     for _ in 0..200 {
@@ -154,8 +154,8 @@ fn test_sign_prehash_works_with_any_size_input_gte_16() {
 }
 
 #[test]
-fn should_serialization_and_deserialization_round_trip_for_public_keys(
-) -> Result<(), KeyDecodingError> {
+fn should_serialization_and_deserialization_round_trip_for_public_keys()
+-> Result<(), KeyDecodingError> {
     let rng = &mut test_rng();
 
     for _ in 0..200 {
@@ -210,11 +210,11 @@ fn should_reject_invalid_public_keys() {
         ),
         InvalidKey::new(
             "valid uncompressed point with header 02",
-            "02EB2D21CD969E68C767B091E91900863E7699826C3466F15B956BBB6CBAEDB09A5A16ED621975EC1BCB81A41EE5DCF719021B12A95CC858A735A266135EFD2E4E"
+            "02EB2D21CD969E68C767B091E91900863E7699826C3466F15B956BBB6CBAEDB09A5A16ED621975EC1BCB81A41EE5DCF719021B12A95CC858A735A266135EFD2E4E",
         ),
         InvalidKey::new(
             "valid uncompressed point with header 03",
-            "03EB2D21CD969E68C767B091E91900863E7699826C3466F15B956BBB6CBAEDB09A5A16ED621975EC1BCB81A41EE5DCF719021B12A95CC858A735A266135EFD2E4E"
+            "03EB2D21CD969E68C767B091E91900863E7699826C3466F15B956BBB6CBAEDB09A5A16ED621975EC1BCB81A41EE5DCF719021B12A95CC858A735A266135EFD2E4E",
         ),
         InvalidKey::new(
             "invalid uncompressed point (y off by one)",
@@ -222,7 +222,7 @@ fn should_reject_invalid_public_keys() {
         ),
         InvalidKey::new(
             "valid secp256k1 point",
-            "04F599CDA3A05987498A716E820651AC96A4EEAA3AD9B7D6F244A83CC3381CABC4C300A1369821A5A86D4D9BA74FF68817C4CAEA4BAC737A7B00A48C4835F28DB4"
+            "04F599CDA3A05987498A716E820651AC96A4EEAA3AD9B7D6F244A83CC3381CABC4C300A1369821A5A86D4D9BA74FF68817C4CAEA4BAC737A7B00A48C4835F28DB4",
         ),
     ];
 

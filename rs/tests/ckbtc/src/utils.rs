@@ -19,7 +19,7 @@ Runbook::
 
 end::catalog[] */
 
-use crate::{IcRpcClientType, ADDRESS_LENGTH};
+use crate::{ADDRESS_LENGTH, IcRpcClientType};
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat};
 use canister_test::Canister;
@@ -44,7 +44,7 @@ use icrc_ledger_types::{
     icrc1::transfer::BlockIndex,
     icrc3::transactions::{GetTransactionsRequest, GetTransactionsResponse},
 };
-use slog::{debug, info, Logger};
+use slog::{Logger, debug, info};
 use std::time::{Duration, Instant};
 
 pub const UNIVERSAL_VM_NAME: &str = "btc-node";

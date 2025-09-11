@@ -1,7 +1,7 @@
 //! Implements `BufferedStableMemWriter` and `BufferedStableMemReader` types for
 //! buffered serialization and deserialization to/from stable memory.
 
-use bytes::{buf::UninitSlice, Buf, BufMut};
+use bytes::{Buf, BufMut, buf::UninitSlice};
 use dfn_core::stable;
 #[cfg(test)]
 use std::sync::{Arc, Mutex};

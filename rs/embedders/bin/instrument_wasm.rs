@@ -5,13 +5,13 @@ use std::{
 };
 
 use clap::{Parser, ValueEnum};
-use slog::{slog_o, Drain};
+use slog::{Drain, slog_o};
 
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
+    WasmtimeEmbedder,
     wasm_utils::compile,
     wasm_utils::{decoding::decode_wasm, validate_and_instrument_for_testing},
-    WasmtimeEmbedder,
 };
 
 #[derive(Debug, Copy, Clone, ValueEnum)]

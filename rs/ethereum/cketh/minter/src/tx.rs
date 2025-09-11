@@ -7,7 +7,7 @@ use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, GasAmount, TransactionNonce, Wei, WeiPerGas};
-use crate::state::{lazy_call_ecdsa_public_key, mutate_state, read_state, TaskType};
+use crate::state::{TaskType, lazy_call_ecdsa_public_key, mutate_state, read_state};
 use ethnum::u256;
 use evm_rpc_client::{BlockTag, FeeHistory, FeeHistoryArgs};
 use ic_canister_log::log;

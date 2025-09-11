@@ -23,12 +23,12 @@ impl fmt::Display for ThresholdSignError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let prefix = "Error in threshold signing: ";
         match self {
-            ThresholdSignError::ThresholdSigDataNotFound ( error )=> write!(
-                f,
-                "{}{}", prefix,
-                error
-            ),
-            ThresholdSignError::SecretKeyNotFound { dkg_id, algorithm, key_id } => write!(
+            ThresholdSignError::ThresholdSigDataNotFound(error) => write!(f, "{}{}", prefix, error),
+            ThresholdSignError::SecretKeyNotFound {
+                dkg_id,
+                algorithm,
+                key_id,
+            } => write!(
                 f,
                 "{}Cannot find threshold signing {:?} secret key for DKG ID {} with key id {} in the secret key store. \
                 Reloading the transcript does not help since the transcript has been loaded already.",
@@ -37,12 +37,13 @@ impl fmt::Display for ThresholdSignError {
             ThresholdSignError::TransientInternalError { internal_error } => write!(
                 f,
                 "Transient internal error in threshold signing: {}",
-                internal_error),
-            ThresholdSignError::KeyIdInstantiationError(internal_error) => write!{
+                internal_error
+            ),
+            ThresholdSignError::KeyIdInstantiationError(internal_error) => write! {
                 f,
                 "Error instantiating KeyId from public coefficients: {}",
                 internal_error
-            }
+            },
         }
     }
 }

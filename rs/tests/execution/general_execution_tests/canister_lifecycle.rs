@@ -42,14 +42,14 @@ use ic_system_test_driver::types::*;
 use ic_system_test_driver::util::*;
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{Cycles, PrincipalId};
-use ic_universal_canister::{call_args, management, wasm, CallInterface, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{CallInterface, UNIVERSAL_CANISTER_WASM, call_args, management, wasm};
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::{
-    management_canister::{
-        builders::{CanisterUpgradeOptions, InstallMode},
-        UpdateCanisterBuilder,
-    },
     ManagementCanister,
+    management_canister::{
+        UpdateCanisterBuilder,
+        builders::{CanisterUpgradeOptions, InstallMode},
+    },
 };
 use slog::info;
 

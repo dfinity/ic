@@ -2,7 +2,7 @@ use crate::{
     governance::{governance_minting_account, neuron_subaccount},
     neuron::Neuron,
     neuron_store::NeuronStore,
-    pb::v1::{governance_error::ErrorType, GovernanceError},
+    pb::v1::{GovernanceError, governance_error::ErrorType},
 };
 
 use ic_nervous_system_canisters::ledger::IcpLedger;

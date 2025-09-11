@@ -2,11 +2,11 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
 use canister_test::Canister;
 use cycles_minting_canister::{
-    AuthorizedSubnetsResponse, CanisterSettingsArgs, ChangeSubnetTypeAssignmentArgs,
-    CreateCanister, CreateCanisterError, NotifyCreateCanister, NotifyError, NotifyErrorCode,
-    NotifyMintCyclesArg, NotifyMintCyclesSuccess, NotifyTopUp, SubnetListWithType,
-    SubnetTypesToSubnetsResponse, UpdateSubnetTypeArgs, BAD_REQUEST_CYCLES_PENALTY,
-    MEANINGFUL_MEMOS, MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES, MEMO_TOP_UP_CANISTER,
+    AuthorizedSubnetsResponse, BAD_REQUEST_CYCLES_PENALTY, CanisterSettingsArgs,
+    ChangeSubnetTypeAssignmentArgs, CreateCanister, CreateCanisterError, MEANINGFUL_MEMOS,
+    MEMO_CREATE_CANISTER, MEMO_MINT_CYCLES, MEMO_TOP_UP_CANISTER, NotifyCreateCanister,
+    NotifyError, NotifyErrorCode, NotifyMintCyclesArg, NotifyMintCyclesSuccess, NotifyTopUp,
+    SubnetListWithType, SubnetTypesToSubnetsResponse, UpdateSubnetTypeArgs,
 };
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
@@ -34,7 +34,7 @@ use ic_nns_test_utils::state_test_helpers::cmc_set_authorized_subnetworks_for_pr
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{submit_external_update_proposal, wait_for_final_state},
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
     neuron_helpers::get_neuron_1,
     state_test_helpers::{
         cmc_set_default_authorized_subnetworks, icrc1_balance, icrc1_transfer,
@@ -48,8 +48,8 @@ use ic_test_utilities_metrics::fetch_int_gauge_vec;
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::{
-    tokens_from_proto, AccountBalanceArgs, AccountIdentifier, BlockIndex, Memo, SendArgs,
-    Subaccount, Tokens, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
+    AccountBalanceArgs, AccountIdentifier, BlockIndex, DEFAULT_TRANSFER_FEE, Memo, SendArgs,
+    Subaccount, Tokens, TransferArgs, TransferError, tokens_from_proto,
 };
 use icrc_ledger_types::icrc1::{self, account::Account};
 use maplit::btreemap;
@@ -351,9 +351,11 @@ fn test_cmc_notify_create_with_settings() {
     //specify compute allocation
     let canister = notify_create_canister(
         &state_machine,
-        Some(dbg!(CanisterSettingsArgsBuilder::new()
-            .with_compute_allocation(7)
-            .build())),
+        Some(dbg!(
+            CanisterSettingsArgsBuilder::new()
+                .with_compute_allocation(7)
+                .build()
+        )),
     );
     let status = dbg!(canister_status(&state_machine, *TEST_USER1_PRINCIPAL, canister).unwrap());
     assert_eq!(status.controllers(), vec![*TEST_USER1_PRINCIPAL]);

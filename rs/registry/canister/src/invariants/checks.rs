@@ -23,7 +23,7 @@ use dfn_core::println;
 use ic_nervous_system_string::clamp_debug_len;
 use ic_registry_canister_chunkify::dechunkify;
 use ic_registry_transport::pb::v1::{
-    high_capacity_registry_value, registry_mutation::Type, RegistryMutation,
+    RegistryMutation, high_capacity_registry_value, registry_mutation::Type,
 };
 
 impl Registry {

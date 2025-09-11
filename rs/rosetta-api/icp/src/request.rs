@@ -3,7 +3,7 @@ use crate::{
     models::seconds::Seconds, request_types::*,
 };
 use candid::Decode;
-use ic_nns_governance_api::manage_neuron::{self, configure, Command, Configure};
+use ic_nns_governance_api::manage_neuron::{self, Command, Configure, configure};
 use ic_types::PrincipalId;
 use icp_ledger::Tokens;
 use std::convert::{TryFrom, TryInto};

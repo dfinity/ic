@@ -1,26 +1,26 @@
 //! This module contains various definitions related to Ingress messages
 
-use super::{MessageId, EXPECTED_MESSAGE_ID_LENGTH};
+use super::{EXPECTED_MESSAGE_ID_LENGTH, MessageId};
 use crate::{
+    CanisterId, CountBytes, PrincipalId, Time, UserId,
     artifact::{IdentifiableArtifact, IngressMessageId, PbArtifact},
     messages::{
-        http::{representation_independent_hash_call_or_query, CallOrQuery},
         Authentication, HasCanisterId, HttpCallContent, HttpCanisterUpdate, HttpRequest,
         HttpRequestContent, HttpRequestEnvelope, HttpRequestError, SignedRequestBytes,
+        http::{CallOrQuery, representation_independent_hash_call_or_query},
     },
-    CanisterId, CountBytes, PrincipalId, Time, UserId,
 };
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs,
+    CanisterIdRecord, CanisterInfoRequest, ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, IC_00,
     InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
     Method, Payload, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
     RenameCanisterArgs, StoredChunksArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
-    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs, IC_00,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, UploadChunkArgs,
 };
 use ic_protobuf::{
     log::ingress_message_log_entry::v1::IngressMessageLogEntry,
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     state::ingress::v1 as pb_ingress,
     types::v1 as pb_types,
 };
@@ -609,10 +609,10 @@ pub fn extract_effective_canister_id(
 
 #[cfg(test)]
 mod test {
-    use crate::messages::ingress_messages::{
-        extract_effective_canister_id, ParseIngressError, SignedIngressContent,
-    };
     use crate::UserId;
+    use crate::messages::ingress_messages::{
+        ParseIngressError, SignedIngressContent, extract_effective_canister_id,
+    };
     use ic_base_types::PrincipalId;
     use ic_management_canister_types_private::IC_00;
     use std::convert::From;

@@ -2,18 +2,18 @@
 mod tests;
 
 use axum::{body::Body, extract::State, response::IntoResponse, routing::any};
-use hyper::{body::Incoming, Request, Response, StatusCode};
+use hyper::{Request, Response, StatusCode, body::Incoming};
 use hyper_util::{rt::TokioIo, server::graceful::GracefulShutdown};
 use ic_config::message_routing::Config;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_http_endpoints_async_utils::start_tcp_listener;
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{info, warn, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_logger::{ReplicaLogger, info, warn};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::ProtoProxy;
-use ic_types::{xnet::StreamIndex, PrincipalId, SubnetId};
+use ic_types::{PrincipalId, SubnetId, xnet::StreamIndex};
 use prometheus::{Histogram, HistogramVec, IntCounter};
 use serde::Serialize;
 use std::convert::Infallible;
@@ -377,7 +377,7 @@ fn route_request(
                     return bad_request(format!(
                         "Invalid subnet ID: {} in {}",
                         subnet_id_str, stream_url
-                    ))
+                    ));
                 }
             };
 

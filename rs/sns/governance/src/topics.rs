@@ -1,9 +1,9 @@
 use crate::{
     extensions,
-    extensions::{get_extension_operation_spec_from_cache, ExtensionOperationSpec},
+    extensions::{ExtensionOperationSpec, get_extension_operation_spec_from_cache},
     governance::Governance,
     logs::ERROR,
-    pb::v1::{self as pb, nervous_system_function::FunctionType, NervousSystemFunction},
+    pb::v1::{self as pb, NervousSystemFunction, nervous_system_function::FunctionType},
     storage::list_registered_extensions_from_cache,
     types::native_action_ids::{self, SET_TOPICS_FOR_CUSTOM_PROPOSALS_ACTION},
 };

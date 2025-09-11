@@ -16,20 +16,20 @@
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_management_canister_types_private::Method;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{execution_state::WasmExecutionMode, system_state::CyclesUseCase},
     CanisterState, MessageMemoryUsage, SystemState,
+    canister_state::{execution_state::WasmExecutionMode, system_state::CyclesUseCase},
 };
 use ic_types::{
-    batch::CanisterCyclesCostSchedule,
-    canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
-    messages::{Request, Response, SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     PrincipalId, SubnetId,
+    batch::CanisterCyclesCostSchedule,
+    canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
+    messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Request, Response, SignedIngressContent},
 };
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};

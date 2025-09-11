@@ -7,12 +7,12 @@ use ic_management_canister_types_private::{
     InstallCodeArgs, InstallCodeArgsV2, Method, Payload, UploadChunkArgs, UploadChunkReply,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store;
-use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::{ExecutionTask, MessageMemoryUsage, ReplicatedState};
 use ic_test_utilities_execution_environment::{
-    check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
+    ExecutionTest, ExecutionTestBuilder, check_ingress_status, get_reply,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::batch::CanisterCyclesCostSchedule;
@@ -22,7 +22,7 @@ use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
 };
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id, user_test_id};
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
 use std::mem::size_of;
 
@@ -247,9 +247,10 @@ fn install_code_validates_execution_state() {
     };
 
     // Install code on empty canister.
-    assert!(test
-        .subnet_message(Method::InstallCode, payload.encode())
-        .is_ok());
+    assert!(
+        test.subnet_message(Method::InstallCode, payload.encode())
+            .is_ok()
+    );
     assert_eq!(
         test.canister_state(canister_id).next_execution(),
         NextExecution::None,
@@ -319,9 +320,10 @@ fn install_code_succeeds_with_enough_wasm_custom_sections_memory() {
     };
 
     // Install code on canister with Wasm sections that fit in the available memory on the subnet.
-    assert!(test
-        .subnet_message(Method::InstallCode, payload.encode())
-        .is_ok());
+    assert!(
+        test.subnet_message(Method::InstallCode, payload.encode())
+            .is_ok()
+    );
     assert_eq!(
         test.canister_state(canister_id).next_execution(),
         NextExecution::None,
@@ -1251,10 +1253,10 @@ fn assert_consistent_install_code_calls(state: &ReplicatedState, expected_calls:
 
     // And ensure that no `InstallCodeCalls` are left over in the `SubnetCallContextManager`.
     assert!(
-            subnet_call_context_manager.install_code_calls_len() == 0,
-            "InstallCodeCalls in SubnetCallContextManager without matching canister AbortedInstallCode task: {:?}",
-            subnet_call_context_manager.remove_non_local_install_code_calls(|_| false)
-        );
+        subnet_call_context_manager.install_code_calls_len() == 0,
+        "InstallCodeCalls in SubnetCallContextManager without matching canister AbortedInstallCode task: {:?}",
+        subnet_call_context_manager.remove_non_local_install_code_calls(|_| false)
+    );
 }
 
 fn install_code_args(canister_id: CanisterId) -> InstallCodeArgs {
@@ -1810,11 +1812,13 @@ fn install_chunked_succeeds_from_store_canister() {
 
     // Install UC wasm on target canister from store canister should succeed
     // even though the store canister isn't its own controller.
-    assert!(!test
-        .canister_state(store_canister)
-        .system_state
-        .controllers
-        .contains(&store_canister.get()));
+    assert!(
+        !test
+            .canister_state(store_canister)
+            .system_state
+            .controllers
+            .contains(&store_canister.get())
+    );
 
     let install = wasm()
         .call_with_cycles(
@@ -1889,12 +1893,13 @@ fn install_with_dts_correctly_updates_system_state() {
         vec![42]
     );
 
-    assert!(test
-        .canister_state(canister_id)
-        .system_state
-        .global_timer
-        .to_nanos_since_unix_epoch()
-        .is_some());
+    assert!(
+        test.canister_state(canister_id)
+            .system_state
+            .global_timer
+            .to_nanos_since_unix_epoch()
+            .is_some()
+    );
 
     let version_before = test
         .canister_state(canister_id)
@@ -1939,12 +1944,13 @@ fn install_with_dts_correctly_updates_system_state() {
         vec![] as Vec<u8>
     );
 
-    assert!(test
-        .canister_state(canister_id)
-        .system_state
-        .global_timer
-        .to_nanos_since_unix_epoch()
-        .is_none());
+    assert!(
+        test.canister_state(canister_id)
+            .system_state
+            .global_timer
+            .to_nanos_since_unix_epoch()
+            .is_none()
+    );
 
     let version_after = test
         .canister_state(canister_id)
@@ -2012,12 +2018,13 @@ fn upgrade_with_dts_correctly_updates_system_state() {
         vec![42]
     );
 
-    assert!(test
-        .canister_state(canister_id)
-        .system_state
-        .global_timer
-        .to_nanos_since_unix_epoch()
-        .is_some());
+    assert!(
+        test.canister_state(canister_id)
+            .system_state
+            .global_timer
+            .to_nanos_since_unix_epoch()
+            .is_some()
+    );
 
     let version_before = test
         .canister_state(canister_id)
@@ -2064,12 +2071,13 @@ fn upgrade_with_dts_correctly_updates_system_state() {
         vec![42]
     );
 
-    assert!(test
-        .canister_state(canister_id)
-        .system_state
-        .global_timer
-        .to_nanos_since_unix_epoch()
-        .is_none());
+    assert!(
+        test.canister_state(canister_id)
+            .system_state
+            .global_timer
+            .to_nanos_since_unix_epoch()
+            .is_none()
+    );
 
     let version_after = test
         .canister_state(canister_id)

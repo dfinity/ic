@@ -18,12 +18,12 @@ end::catalog[] */
 
 use anyhow::Result;
 use assert_matches::assert_matches;
-use candid::{decode_one, CandidType, Deserialize, Encode, Principal};
+use candid::{CandidType, Deserialize, Encode, Principal, decode_one};
 use canister_http::*;
 use canister_test::{Canister, Runtime};
 use ic_agent::{
-    agent::{RejectCode, RejectResponse},
     Agent, AgentError,
+    agent::{RejectCode, RejectResponse},
 };
 use ic_base_types::{CanisterId, NumBytes};
 use ic_cdk::api::call::RejectionCode;
@@ -345,9 +345,10 @@ fn test_composite_transform_function_is_not_allowed(env: TestEnv) {
 
     let err = response.unwrap_err();
     assert_eq!(err.reject_code, RejectCode::CanisterError);
-    assert!(err
-        .reject_message
-        .contains("Composite query cannot be used as transform in canister http outcalls."));
+    assert!(
+        err.reject_message
+            .contains("Composite query cannot be used as transform in canister http outcalls.")
+    );
 }
 
 fn test_no_cycles_attached(env: TestEnv) {
@@ -2284,8 +2285,7 @@ fn assert_http_json_response(
     assert!(
         http_bin_server_received_all_outcall_headers,
         "1. HTTP bin server did not receive all headers specified in the outcall. Specified headers: {:?}, received headers: {:?}",
-        request_headers,
-        http_bin_server_received_headers
+        request_headers, http_bin_server_received_headers
     );
 
     // Rule 2: Check that all headers received by the server was specified in outcall.
@@ -2303,10 +2303,11 @@ fn assert_http_json_response(
             })
             .all(|(name, value)| request_headers.contains(&(name.clone(), value.clone())));
 
-    assert!(http_bin_server_only_received_headers_specified_by_outcall,
+    assert!(
+        http_bin_server_only_received_headers_specified_by_outcall,
         "2. Http bin server received headers that were not specified in the outcall. Specified headers: {:?}, received headers: {:?}",
-        request_headers,
-        http_bin_server_received_headers);
+        request_headers, http_bin_server_received_headers
+    );
 
     let request_method = match request.method {
         HttpMethod::GET => "GET",

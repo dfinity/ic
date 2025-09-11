@@ -1,6 +1,6 @@
 use candid::Encode;
 use canister_test::{Canister, Runtime};
-use ic_base_types::{subnet_id_into_protobuf, NodeId, PrincipalId, SubnetId};
+use ic_base_types::{NodeId, PrincipalId, SubnetId, subnet_id_into_protobuf};
 use ic_config::Config;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces_registry::RegistryClient;
@@ -28,22 +28,22 @@ use ic_registry_keys::{
     make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_subnet_features::{
-    ChainKeyConfig, KeyConfig as KeyConfigInternal, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+    ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig as KeyConfigInternal,
 };
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest, upsert};
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
+    Height, RegistryVersion, ReplicaVersion,
     crypto::{
+        AlgorithmId, BasicSig, BasicSigOf,
         canister_threshold_sig::idkg::{
             IDkgDealing, IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation,
             IDkgTranscriptParams, IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
             InitialIDkgDealings, SignedIDkgDealing,
         },
-        AlgorithmId, BasicSig, BasicSigOf,
     },
     signature::BasicSignature,
-    Height, RegistryVersion, ReplicaVersion,
 };
 use prost::Message;
 use rand::{CryptoRng, Rng, RngCore};

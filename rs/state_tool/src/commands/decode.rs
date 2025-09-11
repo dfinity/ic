@@ -6,10 +6,10 @@ use ic_protobuf::state::{
 };
 use ic_replicated_state::CheckpointLoadingMetrics;
 use ic_replicated_state::{
-    canister_state::CanisterQueues, metadata_state::IngressHistoryState, SystemMetadata,
+    SystemMetadata, canister_state::CanisterQueues, metadata_state::IngressHistoryState,
 };
 use ic_state_layout::{
-    CanisterStateBits, ProtoFileWith, ReadOnly, CANISTER_FILE, INGRESS_HISTORY_FILE, QUEUES_FILE,
+    CANISTER_FILE, CanisterStateBits, INGRESS_HISTORY_FILE, ProtoFileWith, QUEUES_FILE, ReadOnly,
     SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE,
 };
 use ic_state_manager::CheckpointMetrics;

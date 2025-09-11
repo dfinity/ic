@@ -30,8 +30,8 @@ use crate::{
     signer::ThresholdSignatureBuilder,
     utils::build_signature_inputs,
     utils::{
-        block_chain_cache, get_idkg_chain_key_config_if_enabled, IDkgBlockReaderImpl,
-        InvalidChainCacheError,
+        IDkgBlockReaderImpl, InvalidChainCacheError, block_chain_cache,
+        get_idkg_chain_key_config_if_enabled,
     },
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
@@ -45,33 +45,32 @@ use ic_management_canister_types_private::{
     Payload, ReshareChainKeyResponse, SignWithECDSAReply, SignWithSchnorrReply,
 };
 use ic_replicated_state::{
+    ReplicatedState,
     metadata_state::subnet_call_context_manager::{
         IDkgSignWithThresholdContext, SignWithThresholdContext,
     },
-    ReplicatedState,
 };
 use ic_types::{
+    Height, SubnetId,
     batch::ValidationContext,
     consensus::{
-        idkg::{
-            self,
-            common::{BuildSignatureInputsError, CombinedSignature, ThresholdSigInputs},
-            IDkgBlockReader, TranscriptRef,
-        },
         Block, BlockPayload, HasHeight,
+        idkg::{
+            self, IDkgBlockReader, TranscriptRef,
+            common::{BuildSignatureInputsError, CombinedSignature, ThresholdSigInputs},
+        },
     },
     crypto::canister_threshold_sig::{
+        ThresholdEcdsaCombinedSignature, ThresholdSchnorrCombinedSignature,
         error::{
             IDkgVerifyInitialDealingsError, IDkgVerifyTranscriptError,
             ThresholdEcdsaVerifyCombinedSignatureError, ThresholdSchnorrVerifyCombinedSigError,
         },
         idkg::{IDkgTranscript, IDkgTranscriptId, InitialIDkgDealings, SignedIDkgDealing},
-        ThresholdEcdsaCombinedSignature, ThresholdSchnorrCombinedSignature,
     },
     messages::CallbackId,
     registry::RegistryClientError,
     state_manager::StateManagerError,
-    Height, SubnetId,
 };
 use prometheus::HistogramVec;
 use std::{collections::BTreeMap, convert::TryFrom};
@@ -598,7 +597,7 @@ fn decode_initial_dealings(data: &[u8]) -> Result<InitialIDkgDealings, InvalidID
         ReshareChainKeyResponse::NiDkg(_) => {
             return Err(InvalidIDkgPayloadReason::DecodingError(
                 "Found an NiDkg response".to_string(),
-            ))
+            ));
         }
     };
 
@@ -680,7 +679,7 @@ mod test {
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        dummy_values::dummy_dealings, CanisterThresholdSigTestEnvironment,
+        CanisterThresholdSigTestEnvironment, dummy_values::dummy_dealings,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces_state_manager::CertifiedStateSnapshot;
@@ -690,13 +689,13 @@ mod test {
     use ic_test_utilities_consensus::idkg::*;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{
+        Height,
         consensus::idkg::{
-            common::PreSignatureRef, ecdsa::PreSignatureQuadrupleRef, CompletedSignature,
-            IDkgMasterPublicKeyId,
+            CompletedSignature, IDkgMasterPublicKeyId, common::PreSignatureRef,
+            ecdsa::PreSignatureQuadrupleRef,
         },
         crypto::AlgorithmId,
         messages::CallbackId,
-        Height,
     };
     use idkg::RequestId;
     use std::collections::BTreeSet;
@@ -721,14 +720,16 @@ mod test {
         let mut curr_payload = prev_payload.clone();
 
         // Empty payload verifies
-        assert!(validate_transcript_refs(
-            crypto,
-            &block_reader,
-            &prev_payload,
-            &curr_payload,
-            Height::from(0)
-        )
-        .is_ok());
+        assert!(
+            validate_transcript_refs(
+                crypto,
+                &block_reader,
+                &prev_payload,
+                &curr_payload,
+                Height::from(0)
+            )
+            .is_ok()
+        );
 
         // Add a transcript
         let height_100 = Height::new(100);
@@ -806,14 +807,16 @@ mod test {
 
         curr_payload.idkg_transcripts = BTreeMap::new();
         block_reader.add_transcript(*transcript_ref_1.as_ref(), transcript_1);
-        assert!(validate_transcript_refs(
-            crypto,
-            &block_reader,
-            &prev_payload,
-            &curr_payload,
-            Height::from(101),
-        )
-        .is_ok());
+        assert!(
+            validate_transcript_refs(
+                crypto,
+                &block_reader,
+                &prev_payload,
+                &curr_payload,
+                Height::from(101),
+            )
+            .is_ok()
+        );
     }
 
     #[test]

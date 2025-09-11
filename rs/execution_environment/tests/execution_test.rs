@@ -9,9 +9,9 @@ use ic_config::{
 use ic_embedders::wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
-    CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, LoadCanisterSnapshotArgs,
+    CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, IC_00, LoadCanisterSnapshotArgs,
     MasterPublicKeyId, Method, Payload, SignWithECDSAArgs, TakeCanisterSnapshotArgs,
-    UpdateSettingsArgs, IC_00,
+    UpdateSettingsArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
@@ -21,8 +21,8 @@ use ic_state_machine_tests::{
 use ic_test_utilities_metrics::{fetch_gauge, fetch_int_counter};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::MessageId;
-use ic_types::{ingress::WasmResult, messages::NO_DEADLINE, CanisterId, Cycles, NumBytes, Time};
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_types::{CanisterId, Cycles, NumBytes, Time, ingress::WasmResult, messages::NO_DEADLINE};
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::{assert_gt, assert_le, assert_lt};
 use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
 
@@ -2498,7 +2498,8 @@ fn helper_tests_for_illegal_data_buffer_access(env: &StateMachine, canister_id: 
 
     assert!(
         ret_val.description().contains(containing_str),
-        "Should return error if input data is copied to out of bound internal buffer. Instead, it returns unexpected message: {}.", ret_val.description()
+        "Should return error if input data is copied to out of bound internal buffer. Instead, it returns unexpected message: {}.",
+        ret_val.description()
     );
 }
 
@@ -3015,8 +3016,10 @@ fn large_ipc_call_fails() {
     let err = env
         .execute_ingress(canister_id, "send_calls", Encode!(&(2 * 1024_u32)).unwrap())
         .unwrap_err();
-    let expected_error = format!("Error from Canister \
+    let expected_error = format!(
+        "Error from Canister \
         rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister exceeded the limit of {instruction_limit} instructions \
-        for single message execution.");
+        for single message execution."
+    );
     err.assert_contains(ErrorCode::CanisterInstructionLimitExceeded, &expected_error);
 }

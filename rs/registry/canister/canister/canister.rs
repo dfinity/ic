@@ -1,4 +1,4 @@
-use candid::{candid_method, Decode};
+use candid::{Decode, candid_method};
 use dfn_candid::{candid, candid_one};
 use dfn_core::{
     api::{arg_data, data_certificate, reply, trap_with},
@@ -21,10 +21,11 @@ use ic_registry_transport::{
     deserialize_atomic_mutate_request, deserialize_get_changes_since_request,
     deserialize_get_value_request,
     pb::v1::{
-        high_capacity_registry_get_value_response, registry_error::Code, CertifiedResponse,
-        HighCapacityRegistryGetChangesSinceResponse, HighCapacityRegistryGetValueResponse,
-        HighCapacityRegistryValue, RegistryAtomicMutateResponse, RegistryError,
-        RegistryGetChangesSinceRequest, RegistryGetLatestVersionResponse,
+        CertifiedResponse, HighCapacityRegistryGetChangesSinceResponse,
+        HighCapacityRegistryGetValueResponse, HighCapacityRegistryValue,
+        RegistryAtomicMutateResponse, RegistryError, RegistryGetChangesSinceRequest,
+        RegistryGetLatestVersionResponse, high_capacity_registry_get_value_response,
+        registry_error::Code,
     },
     serialize_atomic_mutate_response, serialize_get_changes_since_response,
     serialize_get_value_response,
@@ -80,7 +81,7 @@ use registry_canister::{
         NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage, SubnetForCanister,
     },
     proto_on_wire::protobuf,
-    registry::{EncodedVersion, Registry, MAX_REGISTRY_DELTAS_SIZE},
+    registry::{EncodedVersion, MAX_REGISTRY_DELTAS_SIZE, Registry},
     registry_lifecycle,
 };
 use std::ptr::addr_of_mut;

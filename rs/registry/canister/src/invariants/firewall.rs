@@ -1,6 +1,6 @@
 use crate::invariants::common::{
-    get_node_records_from_snapshot, get_subnet_ids_from_snapshot, get_value_from_snapshot,
-    InvariantCheckError, RegistrySnapshot,
+    InvariantCheckError, RegistrySnapshot, get_node_records_from_snapshot,
+    get_subnet_ids_from_snapshot, get_value_from_snapshot,
 };
 
 use std::{
@@ -16,7 +16,7 @@ use ic_protobuf::registry::firewall::v1::{
     FirewallAction, FirewallRule, FirewallRuleDirection, FirewallRuleSet,
 };
 use ic_registry_keys::{
-    get_firewall_rules_record_principal_id, make_firewall_rules_record_key, FirewallRulesScope,
+    FirewallRulesScope, get_firewall_rules_record_principal_id, make_firewall_rules_record_key,
 };
 
 const COMMENT_SIZE: usize = 255;

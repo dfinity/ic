@@ -1,14 +1,14 @@
 use nix::{
-    sys::signal::{kill, Signal},
+    sys::signal::{Signal, kill},
     unistd::Pid,
 };
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::process::{Command, ExitStatus, Stdio};
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, BufReader},
     process::{Child, Command as AsyncCommand},
     select,
-    sync::watch::{channel, Receiver},
+    sync::watch::{Receiver, channel},
     task::{self, JoinHandle},
 };
 

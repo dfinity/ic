@@ -1,6 +1,6 @@
-use crate::governance::test_helpers::basic_governance_proto;
 use crate::governance::ValidGovernanceProto;
-use crate::governance::{test_helpers::DoNothingLedger, Governance};
+use crate::governance::test_helpers::basic_governance_proto;
+use crate::governance::{Governance, test_helpers::DoNothingLedger};
 use crate::pb::v1::{self as pb, ProposalData};
 use crate::types::test_helpers::NativeEnvironment;
 use ic_nervous_system_canisters::cmc::FakeCmc;

@@ -5,7 +5,7 @@ use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_ledger_hash_of::HashOf;
 use icp_ledger::{AccountIdentifier, Block, TimeStamp, Tokens, Transaction};
-use rusqlite::{named_params, params, CachedStatement, OptionalExtension, Row};
+use rusqlite::{CachedStatement, OptionalExtension, Row, named_params, params};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
@@ -22,12 +22,12 @@ mod database_access {
     };
     use ic_ledger_canister_core::ledger::LedgerTransaction;
     use ic_ledger_core::{
-        block::{BlockType, EncodedBlock},
         Tokens,
+        block::{BlockType, EncodedBlock},
     };
     use ic_ledger_hash_of::HashOf;
     use icp_ledger::{AccountIdentifier, Block, Operation};
-    use rusqlite::{named_params, params, Connection, Params, Statement};
+    use rusqlite::{Connection, Params, Statement, named_params, params};
 
     pub fn get_blocks_by_custom_query<P>(
         connection: &Connection,
@@ -393,7 +393,11 @@ mod database_access {
                             balance.1 -= amount.get_e8s();
                             new_balances.push(balance);
                         } else {
-                            return Err(BlockStoreError::Other(format!("Trying to brun tokens from an account that has not enough tokens. Current balance is {}, burn amount is {}.",balance.1,amount.get_e8s())));
+                            return Err(BlockStoreError::Other(format!(
+                                "Trying to brun tokens from an account that has not enough tokens. Current balance is {}, burn amount is {}.",
+                                balance.1,
+                                amount.get_e8s()
+                            )));
                         }
                     }
                     None => {
@@ -467,7 +471,10 @@ mod database_access {
                                 balance.1 -= payable;
                                 new_balances.push(balance);
                             } else {
-                                return Err(BlockStoreError::Other(format!("Trying to transfer tokens from an account that has not enough tokens. Current balance is {}, payable amount is {}.",balance.1,payable)));
+                                return Err(BlockStoreError::Other(format!(
+                                    "Trying to transfer tokens from an account that has not enough tokens. Current balance is {}, payable amount is {}.",
+                                    balance.1, payable
+                                )));
                             }
                         }
                         None => {
@@ -578,20 +585,30 @@ mod database_access {
         let command = match max_block {
             Some(limit) => match first_idx {
                 0 => {
-                    format!( "SELECT block_idx,tokens from account_balances where account = ? AND block_idx<= {} ORDER BY block_idx DESC",limit)
+                    format!(
+                        "SELECT block_idx,tokens from account_balances where account = ? AND block_idx<= {} ORDER BY block_idx DESC",
+                        limit
+                    )
                 }
                 _ => {
-                    format!( "SELECT block_idx,tokens from account_balances where account = ? AND block_idx<= {} AND block_idx > {} ORDER BY block_idx DESC",limit,first_idx)
+                    format!(
+                        "SELECT block_idx,tokens from account_balances where account = ? AND block_idx<= {} AND block_idx > {} ORDER BY block_idx DESC",
+                        limit, first_idx
+                    )
                 }
             },
             None => match first_idx {
-                0 => {
-                    String::from("SELECT block_idx,tokens from account_balances where account = ? ORDER BY block_idx DESC")}
+                0 => String::from(
+                    "SELECT block_idx,tokens from account_balances where account = ? ORDER BY block_idx DESC",
+                ),
 
                 _ => {
-                    format!("SELECT block_idx,tokens from account_balances where account = ? AND block_idx > {} ORDER BY block_idx DESC",first_idx)
+                    format!(
+                        "SELECT block_idx,tokens from account_balances where account = ? AND block_idx > {} ORDER BY block_idx DESC",
+                        first_idx
+                    )
                 }
-                }
+            },
         };
         let account = acc.to_hex();
         let mut result = Vec::new();
@@ -1543,7 +1560,11 @@ impl Blocks {
         sql_tx.commit().unwrap();
 
         tracing::debug!(
-           "Created {} Rosetta Blocks. Ledger blocks indices {:?} added to Rosetta Blocks. Last Rosetta Block was at index {}",num_rosetta_blocks_created.into_inner(), next_block_indices.first_block_index..=certified_tip_index,current_rosetta_block_index.into_inner().saturating_sub(1));
+            "Created {} Rosetta Blocks. Ledger blocks indices {:?} added to Rosetta Blocks. Last Rosetta Block was at index {}",
+            num_rosetta_blocks_created.into_inner(),
+            next_block_indices.first_block_index..=certified_tip_index,
+            current_rosetta_block_index.into_inner().saturating_sub(1)
+        );
 
         Ok(())
     }

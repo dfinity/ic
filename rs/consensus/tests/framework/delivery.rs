@@ -2,7 +2,7 @@
 
 use super::types::*;
 use ic_logger::trace;
-use rand::{seq::SliceRandom, Rng};
+use rand::{Rng, seq::SliceRandom};
 use std::time::Duration;
 
 fn get_instance_with_least_outgoing_message_timestamp<'a, 'b>(
@@ -215,11 +215,7 @@ fn distance_vector(distances: &mut [Vec<usize>]) -> Option<usize> {
         .iter()
         .fold(0, |max, v| std::cmp::max(max, *v.iter().max().unwrap()));
     let connected = distances.iter().all(|v| v.iter().all(|x| *x < n));
-    if connected {
-        Some(max_distance)
-    } else {
-        None
-    }
+    if connected { Some(max_distance) } else { None }
 }
 
 #[allow(clippy::needless_range_loop)]
@@ -227,7 +223,7 @@ fn distance_vector(distances: &mut [Vec<usize>]) -> Option<usize> {
 mod test {
     use super::*;
     use rand::thread_rng;
-    use rand_chacha::{rand_core::SeedableRng, ChaChaRng};
+    use rand_chacha::{ChaChaRng, rand_core::SeedableRng};
 
     fn check_distance(graph: &[Vec<usize>], degree: usize) {
         let n = graph.len();

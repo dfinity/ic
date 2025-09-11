@@ -2,8 +2,8 @@ use crate::{
     governance::log_prefix,
     logs::{ERROR, INFO},
     pb::v1::{
-        governance_error::ErrorType, ExecuteGenericNervousSystemFunction, GovernanceError,
-        NervousSystemFunction,
+        ExecuteGenericNervousSystemFunction, GovernanceError, NervousSystemFunction,
+        governance_error::ErrorType,
     },
     proposal::ValidGenericNervousSystemFunction,
     types::Environment,

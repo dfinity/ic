@@ -1,4 +1,4 @@
-use super::{get_all_ledger_and_archive_blocks, AllowanceProvider, BalanceProvider};
+use super::{AllowanceProvider, BalanceProvider, get_all_ledger_and_archive_blocks};
 use crate::metrics::parse_metric;
 use candid::{CandidType, Principal};
 use ic_agent::identity::Identity;
@@ -393,10 +393,11 @@ where
             match self.allowances.get(&key) {
                 None => {
                     // No in-memory allowance, so the expected allowance should be zero
-                    assert!(expected_allowance.is_zero(),
+                    assert!(
+                        expected_allowance.is_zero(),
                         "Expected allowance of ({:?}) for key {:?} does not match in-memory allowance (None, interpreted as 0)",
-                            expected_allowance,
-                            key
+                        expected_allowance,
+                        key
                     );
                 }
                 Some(in_memory_allowance) => {
@@ -415,8 +416,7 @@ where
                         }
                     };
                     assert_eq!(
-                        in_memory_allowance_amount,
-                        expected_allowance,
+                        in_memory_allowance_amount, expected_allowance,
                         "Expected allowance of ({:?}) for key {:?} does not match in-memory allowance ({:?})",
                         expected_allowance, key, in_memory_allowance_amount
                     );

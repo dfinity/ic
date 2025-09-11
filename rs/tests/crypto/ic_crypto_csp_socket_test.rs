@@ -32,7 +32,7 @@ use ic_system_test_driver::driver::test_env_api::{
     GetFirstHealthyNodeSnapshot, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession,
 };
 use ic_system_test_driver::systest;
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 fn main() -> Result<()> {
     SystemTestGroup::new()

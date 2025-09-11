@@ -4,7 +4,7 @@ use crate::{
     common::{BlockHeight, BlockchainBlock, BlockchainHeader, BlockchainNetwork},
     metrics::BlockchainStateMetrics,
 };
-use bitcoin::{block::Header as PureHeader, consensus::Encodable, BlockHash, Work};
+use bitcoin::{BlockHash, Work, block::Header as PureHeader, consensus::Encodable};
 use ic_btc_validation::{HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
 use std::{collections::HashMap, sync::Arc};
@@ -378,7 +378,7 @@ impl<Network: BlockchainNetwork> HeaderStore<Network::Header> for BlockchainStat
 
 #[cfg(test)]
 mod test {
-    use bitcoin::{consensus::Decodable, Block, Network, TxMerkleNode};
+    use bitcoin::{Block, Network, TxMerkleNode, consensus::Decodable};
     use ic_metrics::MetricsRegistry;
 
     use super::*;

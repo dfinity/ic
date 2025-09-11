@@ -9,7 +9,7 @@ use ic_nervous_system_clients::{
 use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nns_handler_root::{
-    encode_metrics, init::RootCanisterInitPayloadBuilder, PROXIED_CANISTER_CALLS_TRACKER,
+    PROXIED_CANISTER_CALLS_TRACKER, encode_metrics, init::RootCanisterInitPayloadBuilder,
 };
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_root_canister,

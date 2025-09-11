@@ -1,17 +1,17 @@
-use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, SamplingMode};
+use criterion::measurement::Measurement;
+use criterion::{BenchmarkGroup, Criterion, SamplingMode, criterion_group, criterion_main};
 use ic_base_types::PrincipalId;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    generate_key_transcript, generate_tschnorr_protocol_inputs,
-    random_crypto_component_not_in_receivers, schnorr_sig_share_from_each_receiver,
-    CanisterThresholdSigTestEnvironment, IDkgParticipants,
+    CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
+    generate_tschnorr_protocol_inputs, random_crypto_component_not_in_receivers,
+    schnorr_sig_share_from_each_receiver,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::{ThresholdSchnorrSigVerifier, ThresholdSchnorrSigner};
+use ic_types::Randomness;
 use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::ExtendedDerivationPath;
-use ic_types::Randomness;
 use rand::{CryptoRng, Rng, RngCore};
 use strum::IntoEnumIterator;
 

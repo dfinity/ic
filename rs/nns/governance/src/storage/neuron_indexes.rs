@@ -10,11 +10,11 @@ use crate::{
 use ic_base_types::PrincipalId;
 use ic_nervous_system_governance::index::{
     neuron_following::{
-        add_neuron_followees, remove_neuron_followees, HeapNeuronFollowingIndex,
-        NeuronFollowingIndex, StableNeuronFollowingIndex,
+        HeapNeuronFollowingIndex, NeuronFollowingIndex, StableNeuronFollowingIndex,
+        add_neuron_followees, remove_neuron_followees,
     },
     neuron_principal::{
-        add_neuron_id_principal_ids, remove_neuron_id_principal_ids, StableNeuronPrincipalIndex,
+        StableNeuronPrincipalIndex, add_neuron_id_principal_ids, remove_neuron_id_principal_ids,
     },
 };
 use ic_nns_common::pb::v1::NeuronId;

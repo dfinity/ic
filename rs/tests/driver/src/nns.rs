@@ -24,10 +24,11 @@ use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_K
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance_api::{
+    FulfillSubnetRentalRequest, MakeProposalRequest, ManageNeuron, ManageNeuronCommandRequest,
+    ManageNeuronRequest, ManageNeuronResponse, NnsFunction, ProposalActionRequest, ProposalInfo,
+    ProposalStatus, Vote,
     manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
-    manage_neuron_response, FulfillSubnetRentalRequest, MakeProposalRequest, ManageNeuron,
-    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, NnsFunction,
-    ProposalActionRequest, ProposalInfo, ProposalStatus, Vote,
+    manage_neuron_response,
 };
 use ic_nns_test_utils::governance::{
     get_proposal_info, submit_external_update_proposal,
@@ -53,7 +54,7 @@ use registry_canister::mutations::{
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
     do_update_api_boundary_nodes_version::UpdateApiBoundaryNodesVersionPayload,
 };
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::{convert::TryFrom, time::Duration};
 use tokio::time::sleep;
 use url::Url;
@@ -370,7 +371,7 @@ pub async fn vote_execute_proposal_assert_failed(
     assert_eq!(proposal_info.status, ProposalStatus::Failed as i32);
     let reason = proposal_info.failure_reason.unwrap_or_default();
     assert!(
-       reason
+        reason
             .error_message
             .to_lowercase()
             .contains(expected_message_substring.to_lowercase().as_str()),

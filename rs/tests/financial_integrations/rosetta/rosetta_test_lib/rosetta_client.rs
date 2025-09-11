@@ -27,7 +27,7 @@ use rosetta_core::{
     identifiers::NetworkIdentifier, objects::ObjectMap, request_types::MetadataRequest,
     response_types::NetworkListResponse,
 };
-use slog::{debug, info, Logger};
+use slog::{Logger, debug, info};
 use std::time::Duration;
 use tokio::time::sleep;
 

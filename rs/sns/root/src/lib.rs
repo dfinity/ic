@@ -1,10 +1,10 @@
 use crate::{
     logs::{ERROR, INFO},
     pb::v1::{
-        set_dapp_controllers_response, CanisterCallError, Extensions, ListSnsCanistersResponse,
-        ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
-        RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
-        SetDappControllersResponse, SnsRootCanister,
+        CanisterCallError, Extensions, ListSnsCanistersResponse, ManageDappCanisterSettingsRequest,
+        ManageDappCanisterSettingsResponse, RegisterDappCanistersRequest,
+        RegisterDappCanistersResponse, SetDappControllersRequest, SetDappControllersResponse,
+        SnsRootCanister, set_dapp_controllers_response,
     },
     types::{Environment, RejectCode},
 };
@@ -640,9 +640,9 @@ impl SnsRootCanister {
         // Do nothing if canister_to_register is already registered.
         if dapps.contains(&canister_to_register) {
             log!(
-                    INFO,
-                    "Attempting to register {canister_to_register} as a dapp canister, but it is already registered."
-                );
+                INFO,
+                "Attempting to register {canister_to_register} as a dapp canister, but it is already registered."
+            );
             return Ok(());
         }
         let canister_to_register = CanisterId::unchecked_from_principal(canister_to_register);
@@ -848,7 +848,7 @@ impl SnsRootCanister {
             Err(failure_reason) => {
                 return ManageDappCanisterSettingsResponse {
                     failure_reason: Some(failure_reason),
-                }
+                };
             }
         };
 
@@ -1008,7 +1008,7 @@ async fn get_owned_canister_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pb::v1::{set_dapp_controllers_request::CanisterIds, ListSnsCanistersResponse};
+    use crate::pb::v1::{ListSnsCanistersResponse, set_dapp_controllers_request::CanisterIds};
     use ic_nervous_system_clients::{
         canister_status::CanisterStatusResultFromManagementCanister,
         management_canister_client::{

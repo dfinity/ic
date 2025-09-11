@@ -9,10 +9,6 @@ use ic_nns_common::pb::v1::{self as nns_common_pb, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance::governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
 use ic_nns_governance_api::{
-    governance_error::ErrorType,
-    manage_neuron::{self, RegisterVote},
-    manage_neuron_response,
-    proposal::Action,
     ListProposalInfo,
     MakeProposalRequest,
     // Perhaps surprisingly, CreateServiceNervousSystem is not needed by
@@ -22,14 +18,18 @@ use ic_nns_governance_api::{
     ProposalActionRequest,
     ProposalStatus,
     Vote,
+    governance_error::ErrorType,
+    manage_neuron::{self, RegisterVote},
+    manage_neuron_response,
+    proposal::Action,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     sns_wasm::add_real_wasms_to_sns_wasms,
     state_test_helpers::{
-        list_deployed_snses, nns_governance_make_proposal, nns_list_proposals,
-        nns_wait_for_proposal_execution, set_controllers, setup_nns_canisters_with_features,
-        state_machine_builder_for_nns_tests, SPECIFIED_CANISTER_ID,
+        SPECIFIED_CANISTER_ID, list_deployed_snses, nns_governance_make_proposal,
+        nns_list_proposals, nns_wait_for_proposal_execution, set_controllers,
+        setup_nns_canisters_with_features, state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;

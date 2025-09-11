@@ -5,10 +5,10 @@ use crate::{
     registry_helper::RegistryHelper,
 };
 use ic_config::firewall::{
-    BoundaryNodeConfig as BoundaryNodeFirewallConfig, ReplicaConfig as ReplicaFirewallConfig,
-    FIREWALL_FILE_DEFAULT_PATH,
+    BoundaryNodeConfig as BoundaryNodeFirewallConfig, FIREWALL_FILE_DEFAULT_PATH,
+    ReplicaConfig as ReplicaFirewallConfig,
 };
-use ic_logger::{debug, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, info, warn};
 use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection};
 use ic_registry_keys::FirewallRulesScope;
 use ic_sys::fs::write_string_using_tmp_file;
@@ -726,7 +726,7 @@ mod tests {
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_registry::{
-        add_single_subnet_record, add_subnet_list_record, SubnetRecordBuilder,
+        SubnetRecordBuilder, add_single_subnet_record, add_subnet_list_record,
     };
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 

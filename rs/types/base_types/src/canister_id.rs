@@ -3,7 +3,7 @@ use candid::types::principal::PrincipalError;
 use candid::{CandidType, Principal};
 use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
-use serde::{de::Error, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::Error};
 use std::{convert::TryFrom, fmt};
 
 /// A type representing a canister's [`PrincipalId`].

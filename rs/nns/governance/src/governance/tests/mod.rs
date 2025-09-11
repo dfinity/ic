@@ -5,7 +5,7 @@ use crate::{
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
+use ic_nervous_system_common::{E8, assert_is_err, assert_is_ok};
 #[cfg(feature = "test")]
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::pb::v1::NeuronId;
@@ -40,8 +40,8 @@ fn test_time_warp() {
 }
 
 mod settle_neurons_fund_participation_request_tests {
-    use settle_neurons_fund_participation_request::{Aborted, Committed, Result};
     use SettleNeuronsFundParticipationRequest;
+    use settle_neurons_fund_participation_request::{Aborted, Committed, Result};
 
     use super::*;
 
@@ -140,8 +140,8 @@ mod settle_neurons_fund_participation_mem_tests {
     use crate::{
         governance::MAX_NEURONS_FUND_PARTICIPANTS,
         neurons_fund::{
-            neurons_fund_neuron::MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON, NeuronsFundNeuronPortion,
-            NeuronsFundSnapshot,
+            NeuronsFundNeuronPortion, NeuronsFundSnapshot,
+            neurons_fund_neuron::MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON,
         },
         pb::v1 as gov_pb,
     };
@@ -857,7 +857,7 @@ mod metrics_tests {
     use crate::{
         encode_metrics,
         governance::Governance,
-        pb::v1::{proposal, Motion, Proposal, ProposalData, Tally, Topic},
+        pb::v1::{Motion, Proposal, ProposalData, Tally, Topic, proposal},
         test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
     };
 

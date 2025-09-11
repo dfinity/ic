@@ -6,24 +6,24 @@ use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_core::block::BlockIndex;
-use ic_ledger_core::{block::BlockType, Tokens};
+use ic_ledger_core::{Tokens, block::BlockType};
 use ic_ledger_suite_state_machine_tests::archiving::icp_archives;
 use ic_ledger_suite_state_machine_tests::{
-    balance_of, convert_to_fields_args, default_approve_args, default_transfer_from_args,
-    expect_icrc2_disabled, extract_icrc21_fields_message, extract_icrc21_message_string,
-    icrc21_consent_message, modify_field, send_approval, send_transfer, send_transfer_from, setup,
-    supported_standards, total_supply, transfer, AllowanceProvider, FEE, MINTER,
+    AllowanceProvider, FEE, MINTER, balance_of, convert_to_fields_args, default_approve_args,
+    default_transfer_from_args, expect_icrc2_disabled, extract_icrc21_fields_message,
+    extract_icrc21_message_string, icrc21_consent_message, modify_field, send_approval,
+    send_transfer, send_transfer_from, setup, supported_standards, total_supply, transfer,
 };
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, Allowances, ArchiveOptions,
-    ArchivedBlocksRange, Block, CandidBlock, CandidOperation, CandidTransaction, FeatureFlags,
-    GetAllowancesArgs, GetBlocksArgs, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult,
-    IcpAllowanceArgs, InitArgs, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
-    LedgerCanisterPayload, LedgerCanisterUpgradePayload, Operation, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, RemoveApprovalArgs, TimeStamp, TipOfChainRes, TransferArgs,
-    UpgradeArgs, DEFAULT_TRANSFER_FEE, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST,
-    MAX_BLOCKS_PER_REQUEST,
+    ArchivedBlocksRange, Block, CandidBlock, CandidOperation, CandidTransaction,
+    DEFAULT_TRANSFER_FEE, FeatureFlags, GetAllowancesArgs, GetBlocksArgs, GetBlocksRes,
+    GetBlocksResult, GetEncodedBlocksResult, IcpAllowanceArgs, InitArgs, IterBlocksArgs,
+    IterBlocksRes, LedgerCanisterInitPayload, LedgerCanisterPayload, LedgerCanisterUpgradePayload,
+    MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST, Operation,
+    QueryBlocksResponse, QueryEncodedBlocksResponse, RemoveApprovalArgs, TimeStamp, TipOfChainRes,
+    TransferArgs, UpgradeArgs,
 };
 use icrc_ledger_types::icrc1::{
     account::{Account, Subaccount},
@@ -1960,9 +1960,11 @@ fn test_notify_caller_logging() {
         )
         .expect_err("notify call should panic");
     assert_eq!(user_error.code(), ErrorCode::CanisterCalledTrap);
-    assert!(user_error
-        .description()
-        .contains("Please migrate to the CMC notify"));
+    assert!(
+        user_error
+            .description()
+            .contains("Please migrate to the CMC notify")
+    );
 
     // Verify that the ledger logged the caller of the notify method.
     let log = env.canister_log(canister_id);

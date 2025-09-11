@@ -25,8 +25,8 @@ use crate::reimbursement::{
 use crate::state::invariants::{CheckInvariants, CheckInvariantsImpl};
 use crate::updates::update_balance::SuspendedUtxo;
 use crate::{
-    address::BitcoinAddress, compute_min_withdrawal_amount, ECDSAPublicKey, GetUtxosCache, Network,
-    Timestamp, WithdrawalFee,
+    ECDSAPublicKey, GetUtxosCache, Network, Timestamp, WithdrawalFee, address::BitcoinAddress,
+    compute_min_withdrawal_amount,
 };
 use candid::{CandidType, Deserialize, Principal};
 use ic_base_types::CanisterId;
@@ -1333,8 +1333,8 @@ impl CkBtcMinterState {
         if let Some(tx_status) = self.requests_in_flight.get(&ledger_burn_index) {
             panic!(
                 "BUG: Cannot reimburse withdrawal request {} since there is a transaction for that withdrawal with status: {:?}",
-                ledger_burn_index,
-                tx_status)
+                ledger_burn_index, tx_status
+            )
         }
 
         for submitted_tx in self
@@ -1349,8 +1349,8 @@ impl CkBtcMinterState {
             {
                 panic!(
                     "BUG: Cannot reimburse withdrawal request {} since there is a submitted transaction for that withdrawal: {:?}",
-                    ledger_burn_index,
-                    submitted_tx);
+                    ledger_burn_index, submitted_tx
+                );
             }
         }
         self.pending_withdrawal_reimbursements

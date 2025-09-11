@@ -2,8 +2,9 @@ use ic_nervous_system_common::{
     DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
 };
 use ic_sns_governance_api::pb::v1::{
-    governance_error::ErrorType, DefaultFollowees, GovernanceError, NervousSystemParameters,
-    Neuron, NeuronId, NeuronPermissionList, NeuronPermissionType, VotingRewardsParameters,
+    DefaultFollowees, GovernanceError, NervousSystemParameters, Neuron, NeuronId,
+    NeuronPermissionList, NeuronPermissionType, VotingRewardsParameters,
+    governance_error::ErrorType,
 };
 use icrc_ledger_types::icrc1::account::Subaccount;
 use maplit::btreemap;

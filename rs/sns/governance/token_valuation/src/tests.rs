@@ -7,12 +7,12 @@
 
 use super::*;
 use candid::{
+    Encode,
     de::IDLDeserialize,
     decode_args, encode_args,
     ser::IDLBuilder,
     types::principal::Principal,
     utils::{ArgumentDecoder, ArgumentEncoder},
-    Encode,
 };
 use cycles_minting_canister::IcpXdrConversionRate;
 use ic_base_types::PrincipalId;

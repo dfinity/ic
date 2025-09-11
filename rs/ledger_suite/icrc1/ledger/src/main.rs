@@ -2,8 +2,8 @@
 #[cfg(feature = "canbench-rs")]
 mod benches;
 
-use candid::types::number::Nat;
 use candid::Principal;
+use candid::types::number::Nat;
 use ic_canister_log::{declare_log_buffer, export, log};
 use ic_cdk::api::stable::StableReader;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
@@ -13,18 +13,18 @@ use ic_cdk::api::instruction_counter;
 use ic_cdk::init;
 use ic_cdk::{post_upgrade, pre_upgrade, query, update};
 use ic_icrc1::{
-    endpoints::{convert_transfer_error, StandardRecord},
     Operation, Transaction,
-};
-use ic_icrc1_ledger::{
-    balances_len, clear_stable_allowance_data, clear_stable_balances_data,
-    clear_stable_blocks_data, get_allowances, is_ready, ledger_state, panic_if_not_ready,
-    read_first_balance, set_ledger_state, wasm_token_type, LEDGER_VERSION, UPGRADES_MEMORY,
+    endpoints::{StandardRecord, convert_transfer_error},
 };
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
+use ic_icrc1_ledger::{
+    LEDGER_VERSION, UPGRADES_MEMORY, balances_len, clear_stable_allowance_data,
+    clear_stable_balances_data, clear_stable_blocks_data, get_allowances, is_ready, ledger_state,
+    panic_if_not_ready, read_first_balance, set_ledger_state, wasm_token_type,
+};
 use ic_ledger_canister_core::ledger::{
-    apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
-    TransferError as CoreTransferError,
+    LedgerAccess, LedgerContext, LedgerData, TransferError as CoreTransferError, apply_transaction,
+    archive_blocks,
 };
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::BlockIndex;
@@ -32,19 +32,19 @@ use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Zero;
 use ic_stable_structures::reader::{BufferedReader, Reader};
 use ic_stable_structures::writer::{BufferedWriter, Writer};
-use icrc_ledger_types::icrc103::get_allowances::{
-    Allowances, GetAllowancesArgs, GetAllowancesError,
-};
-use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
-use icrc_ledger_types::icrc21::{
-    errors::Icrc21Error, lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
-    requests::ConsentMessageRequest, responses::ConsentInfo,
-};
 use icrc_ledger_types::icrc3::blocks::DataCertificate;
 #[cfg(not(feature = "get-blocks-disabled"))]
 use icrc_ledger_types::icrc3::blocks::GetBlocksResponse;
 use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
+use icrc_ledger_types::icrc21::{
+    errors::Icrc21Error, lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
+    requests::ConsentMessageRequest, responses::ConsentInfo,
+};
+use icrc_ledger_types::icrc103::get_allowances::{
+    Allowances, GetAllowancesArgs, GetAllowancesError,
+};
+use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc3::{
@@ -68,7 +68,7 @@ use icrc_ledger_types::{
     icrc1::transfer::{TransferArg, TransferError},
     icrc2::transfer_from::{TransferFromArgs, TransferFromError},
 };
-use num_traits::{bounds::Bounded, ToPrimitive};
+use num_traits::{ToPrimitive, bounds::Bounded};
 use serde_bytes::ByteBuf;
 use std::{
     cell::RefCell,
@@ -125,7 +125,9 @@ fn init(args: LedgerArgument) {
     match args {
         LedgerArgument::Init(init_args) => init_state(init_args),
         LedgerArgument::Upgrade(_) => {
-            panic!("Cannot initialize the canister with an Upgrade argument. Please provide an Init argument.");
+            panic!(
+                "Cannot initialize the canister with an Upgrade argument. Please provide an Init argument."
+            );
         }
     }
     ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
@@ -233,7 +235,11 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
     ic_cdk::println!("Successfully read state from memory manager managed stable structures");
 
     if state.token_type != wasm_token_type() {
-        panic!("Incompatible token type, the upgraded ledger token type is {}, current wasm token type is {}", state.token_type, wasm_token_type());
+        panic!(
+            "Incompatible token type, the upgraded ledger token type is {}, current wasm token type is {}",
+            state.token_type,
+            wasm_token_type()
+        );
     }
 
     LEDGER.with_borrow_mut(|ledger| *ledger = Some(state));
@@ -252,7 +258,9 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
 
     if let Some(args) = args {
         match args {
-            LedgerArgument::Init(_) => panic!("Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."),
+            LedgerArgument::Init(_) => panic!(
+                "Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."
+            ),
             LedgerArgument::Upgrade(upgrade_args) => {
                 if let Some(upgrade_args) = upgrade_args {
                     Access::with_ledger_mut(|ledger| ledger.upgrade(&LOG, upgrade_args));
@@ -280,7 +288,9 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
     }
     if upgrade_from_version == 0 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
-        log_message("Upgrading from version 0 which does not use stable structures, clearing stable allowance data.");
+        log_message(
+            "Upgrading from version 0 which does not use stable structures, clearing stable allowance data.",
+        );
         clear_stable_allowance_data();
         Access::with_ledger_mut(|ledger| {
             ledger.clear_arrivals();
@@ -363,8 +373,10 @@ fn migrate_next_part(instruction_limit: u64) {
             }
         }
         let instructions_migration = instruction_counter() - instructions_migration_start;
-        let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances} blocks: {migrated_blocks}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
-            instruction_counter());
+        let msg = format!(
+            "Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances} blocks: {migrated_blocks}. Migration step instructions: {instructions_migration}, total instructions used in message: {}.",
+            instruction_counter()
+        );
         if !is_ready() {
             log_message(
                 format!("Migration partially done. Scheduling the next part. {msg}").as_str(),
@@ -1148,7 +1160,7 @@ fn main() {}
 
 #[test]
 fn check_candid_interface() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
 
     let new_interface = __export_service();
     let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());

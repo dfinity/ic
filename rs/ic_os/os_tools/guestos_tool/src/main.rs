@@ -14,7 +14,7 @@ use generate_network_config::{generate_networkd_config, validate_and_construct_i
 
 use config::deserialize_config;
 use config_types::GuestOSConfig;
-use network::systemd::{restart_systemd_networkd, DEFAULT_SYSTEMD_NETWORK_DIR};
+use network::systemd::{DEFAULT_SYSTEMD_NETWORK_DIR, restart_systemd_networkd};
 
 #[derive(Subcommand)]
 pub enum Commands {

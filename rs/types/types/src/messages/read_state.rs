@@ -1,9 +1,9 @@
 use crate::{
-    messages::{
-        http::representation_independent_hash_read_state, HttpReadState, HttpRequestError,
-        MessageId,
-    },
     PrincipalId, UserId,
+    messages::{
+        HttpReadState, HttpRequestError, MessageId,
+        http::representation_independent_hash_read_state,
+    },
 };
 use ic_crypto_tree_hash::Path;
 use std::convert::TryFrom;

@@ -4,22 +4,22 @@ use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusType, CanisterUpgradeOptions,
-    OnLowWasmMemoryHookStatus, Payload, WasmMemoryPersistence, IC_00,
+    IC_00, OnLowWasmMemoryHookStatus, Payload, WasmMemoryPersistence,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
+use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
+use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
 use ic_replicated_state::page_map::PAGE_SIZE;
-use ic_replicated_state::NumWasmPages;
 use ic_state_machine_tests::StateMachine;
 use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig, WasmResult};
-use ic_test_utilities_execution_environment::{wat_compilation_cost, ExecutionTestBuilder};
+use ic_test_utilities_execution_environment::{ExecutionTestBuilder, wat_compilation_cost};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
-use ic_types::messages::CanisterTask;
 use ic_types::Cycles;
+use ic_types::messages::CanisterTask;
 use ic_types::{CanisterId, NumBytes};
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
 use std::time::{Duration, UNIX_EPOCH};
 use strum::IntoEnumIterator;
@@ -1662,8 +1662,8 @@ fn upgrade_changes_hook_status_to_not_satisfied() {
     );
 
     // Canister upgrade.
-    assert!(test
-        .upgrade_canister_v2(
+    assert!(
+        test.upgrade_canister_v2(
             canister_id,
             wat::parse_str(wat).unwrap(),
             CanisterUpgradeOptions {
@@ -1671,7 +1671,8 @@ fn upgrade_changes_hook_status_to_not_satisfied() {
                 wasm_memory_persistence: None,
             },
         )
-        .is_ok());
+        .is_ok()
+    );
 
     // Upgrade is executed, and the wasm_memory size reset to 1.
     // wasm_capacity - used_wasm_memory > self.wasm_memory_threshold
@@ -1824,8 +1825,8 @@ fn upgrade_changes_hook_status_to_ready() {
     )"#;
 
     // Canister upgrade.
-    assert!(test
-        .upgrade_canister_v2(
+    assert!(
+        test.upgrade_canister_v2(
             canister_id,
             wat::parse_str(wat2).unwrap(),
             CanisterUpgradeOptions {
@@ -1833,7 +1834,8 @@ fn upgrade_changes_hook_status_to_ready() {
                 wasm_memory_persistence: None,
             },
         )
-        .is_ok());
+        .is_ok()
+    );
 
     // Upgrade is executed, and the used_wasm_memory size is 2.
     // wasm_capacity - used_wasm_memory < self.wasm_memory_threshold

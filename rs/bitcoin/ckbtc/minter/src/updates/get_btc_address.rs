@@ -1,7 +1,7 @@
 use crate::{
-    logs::P1,
-    state::{mutate_state, read_state, CkBtcMinterState},
     ECDSAPublicKey,
+    logs::P1,
+    state::{CkBtcMinterState, mutate_state, read_state},
 };
 use candid::{CandidType, Deserialize, Principal};
 use ic_canister_log::log;
@@ -73,8 +73,8 @@ pub async fn init_ecdsa_public_key() -> ECDSAPublicKey {
 
 #[cfg(test)]
 mod tests {
-    use crate::address::network_and_public_key_to_p2wpkh;
     use crate::Network;
+    use crate::address::network_and_public_key_to_p2wpkh;
 
     fn check_network_and_public_key_result(network: Network, pk_hex: &str, expected: &str) {
         assert_eq!(

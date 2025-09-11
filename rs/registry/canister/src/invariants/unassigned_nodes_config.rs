@@ -1,6 +1,6 @@
 use crate::{
     common::LOG_PREFIX,
-    invariants::common::{get_value_from_snapshot, InvariantCheckError, RegistrySnapshot},
+    invariants::common::{InvariantCheckError, RegistrySnapshot, get_value_from_snapshot},
 };
 
 #[cfg(target_arch = "wasm32")]

@@ -5,11 +5,6 @@ use crate::{
     logs::{ERROR, INFO},
     memory,
     pb::v1::{
-        get_open_ticket_response, new_sale_ticket_response, set_dapp_controllers_call_result,
-        set_mode_call_result,
-        set_mode_call_result::SetModeResult,
-        settle_neurons_fund_participation_request, settle_neurons_fund_participation_response,
-        sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
         BuyerState, CanisterCallError, CfInvestment, CfNeuron, CfParticipant, DerivedState,
         DirectInvestment, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse,
         GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse, GetBuyerStateRequest,
@@ -24,7 +19,11 @@ use crate::{
         RefreshBuyerTokensResponse, SetDappControllersCallResult, SetDappControllersRequest,
         SetDappControllersResponse, SetModeCallResult, SettleNeuronsFundParticipationRequest,
         SettleNeuronsFundParticipationResponse, SettleNeuronsFundParticipationResult,
-        SnsNeuronRecipe, Swap, SweepResult, Ticket, TransferableAmount,
+        SnsNeuronRecipe, Swap, SweepResult, Ticket, TransferableAmount, get_open_ticket_response,
+        new_sale_ticket_response, set_dapp_controllers_call_result, set_mode_call_result,
+        set_mode_call_result::SetModeResult,
+        settle_neurons_fund_participation_request, settle_neurons_fund_participation_response,
+        sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
     },
     types::{NeuronsFundNeuron, ScheduledVestingEvent, TransferResult},
 };
@@ -34,19 +33,20 @@ use ic_cdk::api::call::RejectionCode;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
 use ic_nervous_system_common::{
-    i2d, ledger::compute_neuron_staking_subaccount_bytes, MAX_NEURONS_FOR_DIRECT_PARTICIPANTS,
+    MAX_NEURONS_FOR_DIRECT_PARTICIPANTS, i2d, ledger::compute_neuron_staking_subaccount_bytes,
 };
 use ic_nervous_system_proto::pb::v1::Principals;
 use ic_neurons_fund::{MatchedParticipationFunction, PolynomialNeuronsFundParticipation};
 use ic_sns_governance::pb::v1::{
-    claim_swap_neurons_request::{neuron_recipe, NeuronRecipe, NeuronRecipes},
+    ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus, NeuronId, NeuronIds,
+    SetMode, SetModeResponse,
+    claim_swap_neurons_request::{NeuronRecipe, NeuronRecipes, neuron_recipe},
     claim_swap_neurons_response::{ClaimSwapNeuronsResult, SwapNeuron},
-    governance, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus, NeuronId,
-    NeuronIds, SetMode, SetModeResponse,
+    governance,
 };
 use ic_stable_structures::{
-    storable::{Blob, Bound},
     GrowFailed, Storable,
+    storable::{Blob, Bound},
 };
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
@@ -59,7 +59,7 @@ use std::{
     cmp::Ordering,
     collections::BTreeMap,
     fmt,
-    num::{NonZeroU128, NonZeroU64},
+    num::{NonZeroU64, NonZeroU128},
     ops::{
         Bound::{Included, Unbounded},
         Div,
@@ -357,12 +357,10 @@ mod swap_participation {
             if lifecycle == Lifecycle::Open {
                 Ok(())
             } else {
-                Err(
-                    format!(
-                        "Participation is possible only when the Swap is in the OPEN state. Current state is {:?}.",
-                        lifecycle,
-                    ),
-                )
+                Err(format!(
+                    "Participation is possible only when the Swap is in the OPEN state. Current state is {:?}.",
+                    lifecycle,
+                ))
             }
         }
 
@@ -1101,7 +1099,10 @@ impl Swap {
                         // The current time is now probably different than the time when
                         // auto-finalization began, due to the `await`.
                         let auto_finalization_finish_seconds = now_fn(true);
-                        log!(INFO, "Swap auto-finalization finished at timestamp {auto_finalization_finish_seconds} (started at timestamp {auto_finalization_start_seconds})");
+                        log!(
+                            INFO,
+                            "Swap auto-finalization finished at timestamp {auto_finalization_finish_seconds} (started at timestamp {auto_finalization_start_seconds})"
+                        );
                     }
                 }
             }
@@ -1809,7 +1810,8 @@ impl Swap {
                     ERROR,
                     "ClaimSwapNeuronsResponse's count of claimed_neurons is different than the count provided in the request. \
                     Request count {}. Response count {}.",
-                    batch_count, claimed_neurons.len(),
+                    batch_count,
+                    claimed_neurons.len(),
                 );
                 sweep_result.global_failures += 1;
             }
@@ -2478,7 +2480,8 @@ impl Swap {
         // Collect all errors into an error
         if !defects.is_empty() {
             return SettleNeuronsFundParticipationResult::new_error(format!(
-                "NNS Governance returned invalid NeuronsFundNeurons. Could not settle_neurons_fund_participation. Defects: {:?}", defects
+                "NNS Governance returned invalid NeuronsFundNeurons. Could not settle_neurons_fund_participation. Defects: {:?}",
+                defects
             ));
         }
 
@@ -3506,9 +3509,10 @@ impl SnsNeuronRecipe {
                 (
                     ConversionError::Invalid,
                     format!(
-                    "Error interpreting claimed_status `{}` as ClaimedStatus for neuron recipe \
-                    {:?}: {}", claimed_status, self, err
-                ),
+                        "Error interpreting claimed_status `{}` as ClaimedStatus for neuron recipe \
+                    {:?}: {}",
+                        claimed_status, self, err
+                    ),
                 )
             })?;
             match claimed_status {
@@ -3529,9 +3533,10 @@ impl SnsNeuronRecipe {
                     return Err((
                         ConversionError::Invalid,
                         format!(
-                        "Recipe {:?} was invalid in a previous invocation of claim_swap_neurons(). \
-                        Skipping", self
-                    ),
+                            "Recipe {:?} was invalid in a previous invocation of claim_swap_neurons(). \
+                        Skipping",
+                            self
+                        ),
                     ));
                 }
                 // Remaining cases are tolerable:
@@ -3874,8 +3879,8 @@ mod tests {
     use super::*;
     use crate::{
         pb::v1::{
-            new_sale_ticket_response::Ok, CfNeuron, CfParticipant,
-            NeuronBasketConstructionParameters, Params,
+            CfNeuron, CfParticipant, NeuronBasketConstructionParameters, Params,
+            new_sale_ticket_response::Ok,
         },
         swap_builder::SwapBuilder,
     };
@@ -4785,8 +4790,8 @@ mod tests {
 
         // add the first batch of tickets at the beginning of time
         for principal in &principals1 {
-            assert!(swap
-                .new_sale_ticket(
+            assert!(
+                swap.new_sale_ticket(
                     &NewSaleTicketRequest {
                         amount_icp_e8s: min_participant_icp_e8s,
                         subaccount: None
@@ -4795,7 +4800,8 @@ mod tests {
                     0
                 )
                 .ticket()
-                .is_ok());
+                .is_ok()
+            );
         }
 
         // try to purge old tickets without advancing time. None of the tickets should be removed
@@ -4803,17 +4809,18 @@ mod tests {
 
         // not purged because 0 days old
         for principal in &principals1 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_some());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_some()
+            );
         }
 
         // add the second batch of tickets after one day
         for principal in &principals2 {
-            assert!(swap
-                .new_sale_ticket(
+            assert!(
+                swap.new_sale_ticket(
                     &NewSaleTicketRequest {
                         amount_icp_e8s: min_participant_icp_e8s,
                         subaccount: None
@@ -4822,7 +4829,8 @@ mod tests {
                     ONE_DAY
                 )
                 .ticket()
-                .is_ok());
+                .is_ok()
+            );
         }
 
         // try to purge old tickets after one day. None of the tickets should be removed
@@ -4830,20 +4838,22 @@ mod tests {
 
         // not purged because 1 day old
         for principal in &principals1 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_some());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_some()
+            );
         }
 
         // not purged because 0 days old
         for principal in &principals2 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_some());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_some()
+            );
         }
 
         // try to purge old tickets after two days minus 1 second.
@@ -4853,20 +4863,22 @@ mod tests {
 
         // not purged because 2 day - 1 second old
         for principal in &principals1 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_some());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_some()
+            );
         }
 
         // not purged because 1 days - 1 second old
         for principal in &principals2 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_some());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_some()
+            );
         }
 
         // try to purge old tickets after two days.
@@ -4876,26 +4888,28 @@ mod tests {
 
         // purged because 2 days old
         for principal in &principals1 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_none());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_none()
+            );
         }
 
         // not purged because 1 days old
         for principal in &principals2 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_some());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_some()
+            );
         }
 
         // add the third batch of tickets at two days
         for principal in &principals3 {
-            assert!(swap
-                .new_sale_ticket(
+            assert!(
+                swap.new_sale_ticket(
                     &NewSaleTicketRequest {
                         amount_icp_e8s: min_participant_icp_e8s,
                         subaccount: None
@@ -4904,7 +4918,8 @@ mod tests {
                     ONE_DAY * 2 + TEN_MINUTES
                 )
                 .ticket()
-                .is_ok());
+                .is_ok()
+            );
         }
 
         // try to purge old tickets after three days - 1 second.
@@ -4913,11 +4928,12 @@ mod tests {
 
         // not purged because 2 days old - 1 second
         for principal in &principals2 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_some());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_some()
+            );
         }
 
         // try to purge old tickets after three days.
@@ -4927,20 +4943,22 @@ mod tests {
 
         // purged because 2 days old
         for principal in &principals2 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_none());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_none()
+            );
         }
 
         // not purged because 1 days old
         for principal in &principals3 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_some());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_some()
+            );
         }
 
         // try to purge old tickets after 4 days but
@@ -4960,11 +4978,12 @@ mod tests {
 
         // not purged because threshold was not met
         for principal in &principals3 {
-            assert!(swap
-                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
-                .ticket()
-                .unwrap()
-                .is_some());
+            assert!(
+                swap.get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                    .ticket()
+                    .unwrap()
+                    .is_some()
+            );
         }
     }
 

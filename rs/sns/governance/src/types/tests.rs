@@ -1,9 +1,9 @@
 use super::*;
 use crate::pb::v1::{
+    ExecuteGenericNervousSystemFunction, Proposal, ProposalData, VotingRewardsParameters,
     claim_swap_neurons_request::neuron_recipe,
     governance::Mode::PreInitializationSwap,
     nervous_system_function::{FunctionType, GenericNervousSystemFunction},
-    ExecuteGenericNervousSystemFunction, Proposal, ProposalData, VotingRewardsParameters,
 };
 use candid::Nat;
 use futures::FutureExt;
@@ -521,8 +521,8 @@ fn test_mode_allows_proposal_action_or_err_pre_initialization_swap_sad() {
 }
 
 #[test]
-fn test_mode_allows_proposal_action_or_err_pre_initialization_swap_disallows_targeting_an_sns_canister(
-) {
+fn test_mode_allows_proposal_action_or_err_pre_initialization_swap_disallows_targeting_an_sns_canister()
+ {
     for action in &PROPOSAL_ACTIONS.2 {
         let result = PreInitializationSwap.allows_proposal_action_or_err(
             action,
@@ -534,8 +534,8 @@ fn test_mode_allows_proposal_action_or_err_pre_initialization_swap_disallows_tar
 }
 
 #[test]
-fn test_mode_allows_proposal_action_or_err_pre_initialization_swap_allows_targeting_a_random_canister(
-) {
+fn test_mode_allows_proposal_action_or_err_pre_initialization_swap_allows_targeting_a_random_canister()
+ {
     let action = &PROPOSAL_ACTIONS.3;
     let result = PreInitializationSwap.allows_proposal_action_or_err(
         action,
@@ -1027,7 +1027,9 @@ fn test_neuron_permission_list_display_impl() {
     let neuron_permission_list = NeuronPermissionList::all();
     assert_eq!(
         format!("permissions: {neuron_permission_list}"),
-        format!("permissions: [Unspecified, ConfigureDissolveState, ManagePrincipals, SubmitProposal, Vote, Disburse, Split, MergeMaturity, DisburseMaturity, StakeMaturity, ManageVotingPermission]")
+        format!(
+            "permissions: [Unspecified, ConfigureDissolveState, ManagePrincipals, SubmitProposal, Vote, Disburse, Split, MergeMaturity, DisburseMaturity, StakeMaturity, ManageVotingPermission]"
+        )
     );
 }
 
@@ -1041,7 +1043,9 @@ fn test_neuron_permission_list_display_impl_doesnt_panic_unknown_permission() {
     };
     assert_eq!(
         format!("permissions: {neuron_permission_list}"),
-        format!("permissions: [Unspecified, ConfigureDissolveState, ManagePrincipals, SubmitProposal, Vote, Disburse, Split, MergeMaturity, DisburseMaturity, StakeMaturity, ManageVotingPermission, <Invalid permission ({invalid_permission})>]")
+        format!(
+            "permissions: [Unspecified, ConfigureDissolveState, ManagePrincipals, SubmitProposal, Vote, Disburse, Split, MergeMaturity, DisburseMaturity, StakeMaturity, ManageVotingPermission, <Invalid permission ({invalid_permission})>]"
+        )
     );
 }
 

@@ -1,25 +1,25 @@
 use crate::manifest::{
+    ChunkValidationError, DEFAULT_CHUNK_SIZE, DiffScript, MAX_FILE_SIZE_TO_GROUP, ManifestDelta,
+    ManifestMetrics, ManifestValidationError, RehashManifest, StateSyncVersion,
     build_file_group_chunks, build_meta_manifest, compute_manifest, diff_manifest,
     dirty_pages_to_dirty_chunks, file_chunk_range, files_with_sizes, filter_out_zero_chunks,
     hash::ManifestHash, manifest_hash, manifest_hash_v1, manifest_hash_v2, meta_manifest_hash,
     validate_chunk, validate_manifest, validate_manifest_internal_consistency,
-    validate_meta_manifest, validate_sub_manifest, ChunkValidationError, DiffScript, ManifestDelta,
-    ManifestMetrics, ManifestValidationError, RehashManifest, StateSyncVersion, DEFAULT_CHUNK_SIZE,
-    MAX_FILE_SIZE_TO_GROUP,
+    validate_meta_manifest, validate_sub_manifest,
 };
 use crate::state_sync::types::{
-    decode_manifest, encode_manifest, ChunkInfo, FileGroupChunks, FileInfo, Manifest, MetaManifest,
-    FILE_GROUP_CHUNK_ID_OFFSET,
+    ChunkInfo, FILE_GROUP_CHUNK_ID_OFFSET, FileGroupChunks, FileInfo, Manifest, MetaManifest,
+    decode_manifest, encode_manifest,
 };
 
 use bit_vec::BitVec;
 use ic_crypto_sha2::Sha256;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_state_layout::{CheckpointLayout, CANISTER_FILE, UNVERIFIED_CHECKPOINT_MARKER};
+use ic_state_layout::{CANISTER_FILE, CheckpointLayout, UNVERIFIED_CHECKPOINT_MARKER};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
-use ic_types::{crypto::CryptoHash, CryptoHashOfState, Height};
+use ic_types::{CryptoHashOfState, Height, crypto::CryptoHash};
 use maplit::btreemap;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
@@ -904,7 +904,7 @@ fn test_simple_manifest_encoding_roundtrip() {
 
 #[test]
 fn test_hash_plan() {
-    use crate::manifest::{build_chunk_table_parallel, files_with_sizes, hash_plan, ChunkAction};
+    use crate::manifest::{ChunkAction, build_chunk_table_parallel, files_with_sizes, hash_plan};
     use bit_vec::BitVec;
     use maplit::btreemap;
     use std::path::PathBuf;
@@ -1097,7 +1097,7 @@ fn test_hash_plan() {
 
 #[test]
 fn test_dirty_pages_to_dirty_chunks_accounts_for_hardlinks() {
-    use crate::manifest::{dirty_pages_to_dirty_chunks, FileWithSize, ManifestDelta};
+    use crate::manifest::{FileWithSize, ManifestDelta, dirty_pages_to_dirty_chunks};
     use bit_vec::BitVec;
     use maplit::btreemap;
 
@@ -1354,8 +1354,8 @@ fn test_file_index_independent_file_hash() {
 
 #[test]
 fn all_same_inodes_are_detected() {
-    use std::fs::hard_link;
     use std::fs::File;
+    use std::fs::hard_link;
 
     let base = tmpdir("base");
     let target = tmpdir("target");

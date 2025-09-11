@@ -1,6 +1,6 @@
 use std::net::Ipv6Addr;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use config_types::DeploymentEnvironment;
 use ic_crypto_sha2::Sha256;
 use macaddr::MacAddr6;
