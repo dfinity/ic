@@ -109,6 +109,7 @@ rust_test(
         # Keep sorted.
         "//rs/bitcoin/adapter/test_utils",
         "//rs/bitcoin/replica_types",
+        "//rs/test_utilities/logger",
         "@crate_index//:tempfile",
     ],
 )
