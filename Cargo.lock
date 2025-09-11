@@ -20510,7 +20510,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
- "test-registry-builder",
  "tokio",
  "url",
 ]
@@ -23178,20 +23177,6 @@ dependencies = [
  "futures",
  "ic-cdk",
  "serde",
-]
-
-[[package]]
-name = "test-registry-builder"
-version = "0.9.0"
-dependencies = [
- "ic-base-types",
- "ic-crypto-node-key-validation",
- "ic-nns-test-utils",
- "ic-protobuf",
- "ic-registry-keys",
- "ic-registry-transport",
- "ic-types",
- "prost 0.13.4",
 ]
 
 [[package]]
