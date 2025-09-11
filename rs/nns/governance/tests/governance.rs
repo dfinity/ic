@@ -13509,7 +13509,7 @@ fn voting_period_seconds_topic_dependency() {
     assert_eq!(voting_period_fun(Topic::NeuronManagement), 2);
 
     assert_eq!(voting_period_fun(Topic::Governance), 3); // any other topic should be 3
-    assert_eq!(voting_period_fun(Topic::NetworkCanisterManagement), 3);
+    assert_eq!(voting_period_fun(Topic::ApplicationCanisterManagement), 3);
 }
 
 /// Our cast of characters in this scenario consists of a bunch of neurons, each
