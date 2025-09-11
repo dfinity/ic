@@ -212,7 +212,7 @@ fn start_server_helper<Network>(
     let blockchain_state = if let Some(cache_dir) = &config.cache_dir {
         BlockchainState::new_with_cache_dir(
             config.network,
-            cache_dir,
+            cache_dir.clone(),
             metrics_registry,
             log.clone(),
         )

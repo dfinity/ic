@@ -12,7 +12,7 @@ use bitcoin::{block::Header as PureHeader, consensus::Encodable, BlockHash};
 use ic_btc_validation::HeaderStore;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use thiserror::Error;
 
 /// The limit at which we should stop making additional requests for new blocks as the block cache
@@ -71,7 +71,7 @@ where
     /// Create a new BlockChainState with on-disk cache.
     pub fn new_with_cache_dir(
         network: Network,
-        cache_dir: &str,
+        cache_dir: PathBuf,
         metrics_registry: &MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
@@ -97,7 +97,7 @@ where
 
     /// Returns the header for the given block hash.
     pub fn get_cached_header(&self, hash: &BlockHash) -> Option<HeaderNode<Network::Header>> {
-        self.header_cache.get_header(hash)
+        self.header_cache.get_header(*hash)
     }
 
     /// Returns the hashes of all cached blocks.
@@ -145,7 +145,7 @@ where
 
         // If the header already exists in the cache,
         // then don't insert the header again, and return HeaderAlreadyExistsError
-        if self.header_cache.get_header(&block_hash).is_some() {
+        if self.header_cache.get_header(block_hash).is_some() {
             return Ok(AddHeaderResult::HeaderAlreadyExists);
         }
 
@@ -234,7 +234,7 @@ where
             for _j in 0..step {
                 let prev_hash = current_header.prev_block_hash();
                 //If the prev header does not exist, then simply return the `hashes` vector.
-                if let Some(cached) = self.header_cache.get_header(&prev_hash) {
+                if let Some(cached) = self.header_cache.get_header(prev_hash) {
                     current_header = cached.data.header.clone();
                 } else {
                     if last_hash != genesis_hash {
@@ -314,7 +314,7 @@ mod test {
         let dir = tempdir().unwrap();
         f(BlockchainState::new_with_cache_dir(
             network,
-            dir.path().to_str().unwrap(),
+            dir.path().to_path_buf(),
             &MetricsRegistry::default(),
             no_op_logger(),
         ))

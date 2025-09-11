@@ -38,7 +38,7 @@ pub struct HeaderData<Header> {
 pub struct HeaderNode<Header> {
     /// Header data.
     pub data: HeaderData<Header>,
-    /// Headers of the the successors of this node.
+    /// Headers of the successors of this node.
     pub children: Vec<BlockHash>,
 }
 
@@ -117,7 +117,7 @@ pub trait HeaderCache: Send + Sync {
     fn get_genesis(&self) -> PureHeader;
 
     /// Return the header for the given block hash.
-    fn get_header(&self, hash: &BlockHash) -> Option<HeaderNode<Self::Header>>;
+    fn get_header(&self, hash: BlockHash) -> Option<HeaderNode<Self::Header>>;
 
     /// Add the input header to cache.
     fn add_header(
@@ -168,8 +168,8 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for RwLock<InMemoryHead
         self.read().unwrap().genesis
     }
 
-    fn get_header(&self, hash: &BlockHash) -> Option<HeaderNode<Header>> {
-        self.read().unwrap().cache.get(hash).cloned()
+    fn get_header(&self, hash: BlockHash) -> Option<HeaderNode<Header>> {
+        self.read().unwrap().cache.get(&hash).cloned()
     }
 
     fn add_header(
@@ -178,25 +178,25 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for RwLock<InMemoryHead
         header: Header,
     ) -> Result<AddHeaderResult, AddHeaderError> {
         let mut this = self.write().unwrap();
-        let parent_hash = header.prev_block_hash();
-        let parent = this
+        let prev_hash = header.prev_block_hash();
+        let prev_node = this
             .cache
-            .get_mut(&parent_hash)
-            .ok_or(AddHeaderError::PrevHeaderNotCached(parent_hash))?;
+            .get_mut(&prev_hash)
+            .ok_or(AddHeaderError::PrevHeaderNotCached(prev_hash))?;
 
         let tip = HeaderData {
             header: header.clone(),
-            height: parent.data.height + 1,
-            work: parent.data.work + header.work(),
+            height: prev_node.data.height + 1,
+            work: prev_node.data.work + header.work(),
         };
-        parent.children.push(block_hash);
+        prev_node.children.push(block_hash);
 
         // Update the tip headers.
         // If the previous header already exists in `tips`, then update it with the new tip.
         let maybe_node_idx = this
             .tips
             .iter()
-            .position(|tip| tip.header.block_hash() == parent_hash);
+            .position(|tip| tip.header.block_hash() == prev_hash);
 
         match maybe_node_idx {
             Some(idx) => {
@@ -304,10 +304,9 @@ pub struct LMDBHeaderCache<Header> {
 
 impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
     /// Load the cache with a genesis header and cache directory.
-    pub fn new(genesis: Header, cache_dir: &str, log: ReplicaLogger) -> Self {
-        let mut path = PathBuf::from(cache_dir);
-        path.push("headers");
-        let path = path.as_path();
+    pub fn new(genesis: Header, mut cache_dir: PathBuf, log: ReplicaLogger) -> Self {
+        cache_dir.push("headers");
+        let path = cache_dir.as_path();
         std::fs::create_dir_all(path).ok();
         let db_env = create_db_env(path);
         let headers = db_env
@@ -336,6 +335,18 @@ impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
         cache
     }
 
+    fn tx_is_tip<Tx: Transaction>(
+        &self,
+        tx: &mut Tx,
+        block_hash: BlockHash,
+    ) -> Result<bool, LMDBCacheError> {
+        match tx.get(self.tips, &block_hash) {
+            Ok(_) => Ok(true),
+            Err(lmdb::Error::NotFound) => Ok(false),
+            Err(err) => Err(err.into()),
+        }
+    }
+
     fn tx_get_tips<Tx: Transaction>(
         &self,
         tx: &mut Tx,
@@ -359,7 +370,7 @@ impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
     fn tx_get_children<Tx: Transaction>(
         &self,
         tx: &mut Tx,
-        hash: &BlockHash,
+        hash: BlockHash,
     ) -> Result<Vec<BlockHash>, LMDBCacheError> {
         let mut cursor = tx.open_ro_cursor(self.children)?;
         let children = cursor
@@ -376,9 +387,9 @@ impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
     fn tx_get_header<Tx: Transaction>(
         &self,
         tx: &mut Tx,
-        hash: &BlockHash,
+        hash: BlockHash,
     ) -> Result<HeaderNode<Header>, LMDBCacheError> {
-        let mut bytes = tx.get(self.headers, hash)?;
+        let mut bytes = tx.get(self.headers, &hash)?;
         let data = <HeaderData<Header>>::consensus_decode(&mut bytes)?;
         let children = self.tx_get_children(tx, hash)?;
         Ok(HeaderNode { data, children })
@@ -387,23 +398,23 @@ impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
     fn tx_add_child(
         &self,
         tx: &mut RwTransaction,
-        parent: &BlockHash,
-        child: &BlockHash,
+        prev_hash: BlockHash,
+        block_hash: BlockHash,
     ) -> Result<(), LMDBCacheError> {
-        Ok(tx.put(self.children, parent, child, WriteFlags::empty())?)
+        Ok(tx.put(self.children, &prev_hash, &block_hash, WriteFlags::empty())?)
     }
 
     fn tx_add_header(
         &self,
         tx: &mut RwTransaction,
-        parent: Option<&HeaderNode<Header>>,
+        prev_node: Option<&HeaderNode<Header>>,
         block_hash: BlockHash,
         header: Header,
     ) -> Result<AddHeaderResult, LMDBCacheError> {
         let tip = Tip {
             header: header.clone(),
-            height: parent.map(|p| p.data.height + 1).unwrap_or_default(),
-            work: parent
+            height: prev_node.map(|p| p.data.height + 1).unwrap_or_default(),
+            work: prev_node
                 .map(|p| p.data.work + header.work())
                 .unwrap_or(header.work()),
         };
@@ -412,15 +423,12 @@ impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
         tx.put(self.headers, &block_hash, &bytes, WriteFlags::empty())?;
         tx.put(self.tips, &block_hash, &bytes, WriteFlags::empty())?;
 
-        if let Some(parent) = parent {
-            let parent_hash = parent.data.header.block_hash();
-            self.tx_add_child(tx, &parent_hash, &block_hash)?;
+        if let Some(prev_node) = prev_node {
+            let prev_hash = prev_node.data.header.block_hash();
+            self.tx_add_child(tx, prev_hash, block_hash)?;
             // If the previous header already exists in `tips`, then remove it
-            for tip in self.tx_get_tips(tx)?.iter() {
-                let block_hash = tip.header.block_hash();
-                if block_hash == parent_hash {
-                    tx.del(self.tips, &block_hash, None)?;
-                }
+            if self.tx_is_tip(tx, prev_hash)? {
+                tx.del(self.tips, &prev_hash, None)?;
             }
         }
         Ok(AddHeaderResult::HeaderAdded(block_hash))
@@ -454,7 +462,7 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for LMDBHeaderCache<Hea
         self.genesis.clone().into_pure_header()
     }
 
-    fn get_header(&self, hash: &BlockHash) -> Option<HeaderNode<Header>> {
+    fn get_header(&self, hash: BlockHash) -> Option<HeaderNode<Header>> {
         log_err_except!(
             self.run_ro_txn(|tx| self.tx_get_header(tx, hash)),
             self.log,
@@ -468,13 +476,13 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for LMDBHeaderCache<Hea
         block_hash: BlockHash,
         header: Header,
     ) -> Result<AddHeaderResult, AddHeaderError> {
-        let parent_hash = header.prev_block_hash();
-        let parent = self
-            .get_header(&parent_hash)
-            .ok_or(AddHeaderError::PrevHeaderNotCached(parent_hash))?;
+        let prev_hash = header.prev_block_hash();
+        let prev_node = self
+            .get_header(prev_hash)
+            .ok_or(AddHeaderError::PrevHeaderNotCached(prev_hash))?;
 
         log_err!(
-            self.run_rw_txn(move |tx| self.tx_add_header(tx, Some(&parent), block_hash, header)),
+            self.run_rw_txn(move |tx| self.tx_add_header(tx, Some(&prev_node), block_hash, header)),
             self.log,
             format!("tx_add_header({block_hash})")
         )
@@ -519,7 +527,7 @@ mod test {
     use super::*;
     use crate::BlockchainNetwork;
     use ic_btc_adapter_test_utils::generate_headers;
-    use ic_logger::no_op_logger;
+    use ic_test_utilities_logger::with_test_replica_logger;
     use std::collections::BTreeSet;
     use tempfile::tempdir;
 
@@ -530,8 +538,8 @@ mod test {
         let genesis_block_hash = genesis_block_header.block_hash();
         {
             let cache = <InMemoryHeaderCache<bitcoin::block::Header>>::new(genesis_block_header);
-            assert!(cache.get_header(&genesis_block_hash).is_some());
-            let node = cache.get_header(&genesis_block_hash).unwrap();
+            assert!(cache.get_header(genesis_block_hash).is_some());
+            let node = cache.get_header(genesis_block_hash).unwrap();
             assert_eq!(node.data.height, 0);
             assert_eq!(node.data.header, genesis_block_header);
             assert_eq!(cache.get_active_chain_tip().header, genesis_block_header);
@@ -548,7 +556,7 @@ mod test {
                         header.prev_block_hash()
                     );
                     cache.add_header(header.block_hash(), header).unwrap();
-                    let next_node = cache.get_header(&header.block_hash()).unwrap();
+                    let next_node = cache.get_header(header.block_hash()).unwrap();
                     assert_eq!(next_node.data.header, header);
                     next_headers.insert(header);
                 }
@@ -558,7 +566,7 @@ mod test {
             assert_eq!(
                 next_headers
                     .iter()
-                    .map(|x| cache.get_header(&x.block_hash()).unwrap().data.work)
+                    .map(|x| cache.get_header(x.block_hash()).unwrap().data.work)
                     .max(),
                 Some(tip.work)
             );
@@ -567,7 +575,7 @@ mod test {
 
     fn get_tips_of<Header: Ord>(
         cache: &impl HeaderCache<Header = Header>,
-        block_hash: &BlockHash,
+        block_hash: BlockHash,
     ) -> BTreeSet<HeaderNode<Header>> {
         let mut set = BTreeSet::new();
         let node = cache.get_header(block_hash).unwrap();
@@ -575,7 +583,7 @@ mod test {
             set.insert(node);
         } else {
             for hash in node.children {
-                set.append(&mut get_tips_of(cache, &hash))
+                set.append(&mut get_tips_of(cache, hash))
             }
         }
         set
@@ -587,14 +595,14 @@ mod test {
         let network = bitcoin::Network::Bitcoin;
         let genesis_block_header = network.genesis_block_header();
         let genesis_block_hash = genesis_block_header.block_hash();
-        {
+        with_test_replica_logger(|logger| {
             let cache = <LMDBHeaderCache<bitcoin::block::Header>>::new(
                 genesis_block_header,
-                dir.path().to_str().unwrap(),
-                no_op_logger(),
+                dir.path().to_path_buf(),
+                logger,
             );
-            assert!(cache.get_header(&genesis_block_hash).is_some());
-            let node = cache.get_header(&genesis_block_hash).unwrap();
+            assert!(cache.get_header(genesis_block_hash).is_some());
+            let node = cache.get_header(genesis_block_hash).unwrap();
             assert_eq!(node.data.height, 0);
             assert_eq!(node.data.header, genesis_block_header);
             assert_eq!(cache.get_active_chain_tip().header, genesis_block_header);
@@ -611,7 +619,7 @@ mod test {
                         header.prev_block_hash()
                     );
                     cache.add_header(header.block_hash(), header).unwrap();
-                    let next_node = cache.get_header(&header.block_hash()).unwrap();
+                    let next_node = cache.get_header(header.block_hash()).unwrap();
                     assert_eq!(next_node.data.header, header);
                     next_headers.insert(header);
                 }
@@ -621,33 +629,33 @@ mod test {
             assert_eq!(
                 next_headers
                     .iter()
-                    .map(|x| cache.get_header(&x.block_hash()).unwrap().data.work)
+                    .map(|x| cache.get_header(x.block_hash()).unwrap().data.work)
                     .max(),
                 Some(tip.work)
             );
-        }
+        });
 
         // Re-open the cache and check to see if data still exists
-        {
+        with_test_replica_logger(|logger| {
             let cache = <LMDBHeaderCache<bitcoin::block::Header>>::new(
                 genesis_block_header,
-                dir.path().to_str().unwrap(),
-                no_op_logger(),
+                dir.path().to_path_buf(),
+                logger,
             );
-            assert!(cache.get_header(&genesis_block_hash).is_some());
-            let node = cache.get_header(&genesis_block_hash).unwrap();
+            assert!(cache.get_header(genesis_block_hash).is_some());
+            let node = cache.get_header(genesis_block_hash).unwrap();
             assert_eq!(node.data.height, 0);
             assert_eq!(node.data.header, genesis_block_header);
             assert_eq!(node.children.len(), 3);
-            let tips = get_tips_of(&cache, &genesis_block_hash)
+            let tips = get_tips_of(&cache, genesis_block_hash)
                 .iter()
                 .map(|node| node.data.header.block_hash())
                 .collect::<BTreeSet<_>>();
             let tip = cache.get_active_chain_tip();
             assert!(tips.contains(&tip.header.block_hash()));
             for hash in tips.iter() {
-                assert!(cache.get_header(hash).is_some());
+                assert!(cache.get_header(*hash).is_some());
             }
-        }
+        });
     }
 }

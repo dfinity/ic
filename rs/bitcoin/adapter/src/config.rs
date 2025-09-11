@@ -49,7 +49,7 @@ pub struct Config<Network> {
     #[serde(default)]
     pub address_limits: (usize, usize),
     /// Directory that stores cached data
-    pub cache_dir: Option<String>,
+    pub cache_dir: Option<PathBuf>,
 }
 
 /// Set the default idle seconds to one hour.
