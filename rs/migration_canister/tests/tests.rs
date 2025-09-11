@@ -3,11 +3,11 @@
 //! - target not controlled by user
 //! - source not controlled by MC
 //! - target not controlled by MC
+//! - source not stopped
+//! - target not stopped
 //! - not enough cycles for migration
 //! - rate-limited
 //! - disabled
-//! - source not stopped
-//! - target not stopped
 //!
 
 use std::time::Duration;
@@ -55,14 +55,37 @@ pub struct Setup {
     pub pic: PocketIc,
     pub source: Principal,
     pub target: Principal,
-    pub controllers: Vec<Principal>,
+    pub source_controllers: Vec<Principal>,
+    pub target_controllers: Vec<Principal>,
     pub source_subnet: Principal,
     pub target_subnet: Principal,
 }
 
+pub struct Settings {
+    pub mc_controls_source: bool,
+    pub mc_controls_target: bool,
+    pub enough_cycles: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            mc_controls_source: true,
+            mc_controls_target: true,
+            enough_cycles: true,
+        }
+    }
+}
+
 /// Sets up PocketIc with the registry canister, the migration canister and two canisters on different app subnets.
 /// Returns: (PocketIc, source subnet, target subnet, source canister, target canister, controllers)
-async fn setup() -> Setup {
+async fn setup(
+    Settings {
+        mc_controls_source,
+        mc_controls_target,
+        enough_cycles,
+    }: Settings,
+) -> Setup {
     let state_dir = TempDir::new().unwrap();
     let state_dir = state_dir.path().to_path_buf();
 
@@ -81,7 +104,8 @@ async fn setup() -> Setup {
     let c1 = Principal::self_authenticating(vec![1]);
     let c2 = Principal::self_authenticating(vec![2]);
     let c3 = Principal::self_authenticating(vec![3]);
-    let controllers = vec![c1, c2, c3];
+    let source_controllers = vec![c1, c2];
+    let target_controllers = vec![c1, c3];
 
     let migration_canister_wasm = Project::cargo_bin_maybe_from_env("migration-canister", &[]);
 
@@ -107,79 +131,90 @@ async fn setup() -> Setup {
     let source_subnet = subnets[0];
     let target_subnet = subnets[1];
 
+    // source canister
     let source = pic
         .create_canister_on_subnet(
             Some(c1),
             Some(CanisterSettings {
-                controllers: Some(controllers.clone()),
+                controllers: Some(source_controllers.clone()),
                 ..Default::default()
             }),
             source_subnet,
         )
         .await;
-    pic.add_cycles(source, u128::MAX / 2).await;
+    if mc_controls_source {
+        // make migration canister controller of source
+        let mut new_controllers = source_controllers.clone();
+        new_controllers.push(MIGRATION_CANISTER_ID.into());
+        pic.update_canister_settings(
+            source,
+            Some(c1),
+            CanisterSettings {
+                controllers: Some(new_controllers.clone()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    }
+    if enough_cycles {
+        pic.add_cycles(source, u128::MAX / 2).await;
+    }
+    pic.stop_canister(source, Some(c1)).await.unwrap();
+    // target canister
     let target = pic
         .create_canister_on_subnet(
             Some(c1),
             Some(CanisterSettings {
-                controllers: Some(controllers.clone()),
+                controllers: Some(target_controllers.clone()),
                 ..Default::default()
             }),
             target_subnet,
         )
         .await;
-    pic.add_cycles(target, u128::MAX / 2).await;
+    if mc_controls_target {
+        // make migration canister controller of target
+        let mut new_controllers = target_controllers.clone();
+        new_controllers.push(MIGRATION_CANISTER_ID.into());
+        pic.update_canister_settings(
+            target,
+            Some(c1),
+            CanisterSettings {
+                controllers: Some(new_controllers),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    }
+    if enough_cycles {
+        pic.add_cycles(target, u128::MAX / 2).await;
+    }
+    // stop source and target
+    pic.stop_canister(target, Some(c1)).await.unwrap();
     println!("Source canister id: {}", source.to_text());
     println!("Target canister id: {}", target.to_text());
-
     Setup {
         pic,
         source,
         target,
-        controllers,
+        source_controllers,
+        target_controllers,
         source_subnet,
         target_subnet,
     }
 }
 
 #[tokio::test]
-async fn test_validation_succeeds() {
+async fn validation_succeeds() {
     let Setup {
         pic,
         source,
         target,
-        controllers,
+        source_controllers,
         ..
-    } = setup().await;
-    let sender = controllers[0];
-
-    // make migration canister controller of source
-    let mut new_controllers = controllers.clone();
-    new_controllers.push(MIGRATION_CANISTER_ID.into());
-    pic.update_canister_settings(
-        source,
-        Some(sender),
-        CanisterSettings {
-            controllers: Some(new_controllers.clone()),
-            ..Default::default()
-        },
-    )
-    .await
-    .unwrap();
-    // make migration canister controller of target
-    pic.update_canister_settings(
-        target,
-        Some(sender),
-        CanisterSettings {
-            controllers: Some(new_controllers),
-            ..Default::default()
-        },
-    )
-    .await
-    .unwrap();
-    // stop source and target
-    pic.stop_canister(source, Some(sender)).await.unwrap();
-    pic.stop_canister(target, Some(sender)).await.unwrap();
+    } = setup(Settings::default()).await;
+    let sender = source_controllers[0];
 
     let res = pic
         .update_call(
@@ -198,4 +233,31 @@ async fn test_validation_succeeds() {
         pic.advance_time(Duration::from_millis(100)).await;
         pic.tick().await;
     }
+}
+
+#[tokio::test]
+async fn validation_fails() {
+    let Setup {
+        pic,
+        source,
+        target,
+        controllers,
+        ..
+    } = setup().await;
+    // sender not controller of source
+    let bad_sender = Principal::self_authenticating(vec![99]);
+
+    // sender not controller of target
+
+    // MC not controller of source
+
+    // MC not controller of target
+
+    // rate limited
+
+    // disabled
+
+    // source not stopped
+
+    // target not stopped
 }
