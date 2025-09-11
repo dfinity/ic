@@ -73,7 +73,7 @@ fn uninstall_canister_by_proposal() {
             proposal_id: Some(ic_nns_common::pb::v1::ProposalId { id }),
             ..
         }) => id,
-        _ => panic!("Response did not contain a proposal_id: {:#?}", response),
+        _ => panic!("Response did not contain a proposal_id: {response:#?}"),
     };
     // Verify that the canister no longer has code install (module_hash is None)
     let status = get_canister_status_from_root(&state_machine, canister_id);

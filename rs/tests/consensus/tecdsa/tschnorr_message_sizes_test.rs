@@ -127,7 +127,7 @@ async fn gen_message_and_get_signature_depending_on_limit(
 ) -> Result<(Vec<u8>, Vec<u8>), String> {
     let MasterPublicKeyId::Schnorr(key_id) = key_id else {
         // TODO(CON-1522): Create tests for ECDSA and VetKD key ids.
-        panic!("Unexpected key id type: {}", key_id);
+        panic!("Unexpected key id type: {key_id}");
     };
 
     let message = dummy_message(message_size);

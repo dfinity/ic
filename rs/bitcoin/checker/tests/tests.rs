@@ -168,8 +168,7 @@ fn test_check_address() {
     );
     assert!(
         matches!(result, Ok((CheckAddressResponse::Failed,))),
-        "result = {:?}",
-        result
+        "result = {result:?}"
     );
 
     // Satoshi's address hopefully is not in the blocklist
@@ -183,8 +182,7 @@ fn test_check_address() {
     );
     assert!(
         matches!(result, Ok((CheckAddressResponse::Passed,))),
-        "result = {:?}",
-        result
+        "result = {result:?}"
     );
 
     // Test with a malformed address
@@ -197,7 +195,7 @@ fn test_check_address() {
         },),
     );
 
-    assert!(result.is_err_and(|err| format!("{:?}", err).contains("Invalid Bitcoin address")));
+    assert!(result.is_err_and(|err| format!("{err:?}").contains("Invalid Bitcoin address")));
 
     // Test with a testnet address
     let result = query_candid::<_, (CheckAddressResponse,)>(
@@ -209,7 +207,7 @@ fn test_check_address() {
         },),
     );
     assert!(
-        result.is_err_and(|err| format!("{:?}", err).contains("Not a Bitcoin mainnet address"))
+        result.is_err_and(|err| format!("{err:?}").contains("Not a Bitcoin mainnet address"))
     );
 
     // Test CheckMode::AcceptAll
@@ -235,8 +233,7 @@ fn test_check_address() {
     );
     assert!(
         matches!(result, Ok((CheckAddressResponse::Passed,))),
-        "result = {:?}",
-        result
+        "result = {result:?}"
     );
 
     // Test a mainnet address against testnet setup
@@ -255,7 +252,7 @@ fn test_check_address() {
         },),
     );
     assert!(
-        result.is_err_and(|err| format!("{:?}", err).contains("Not a Bitcoin testnet address"))
+        result.is_err_and(|err| format!("{err:?}").contains("Not a Bitcoin testnet address"))
     );
 
     // Test CheckMode::RejectAll
@@ -281,8 +278,7 @@ fn test_check_address() {
     );
     assert!(
         matches!(result, Ok((CheckAddressResponse::Failed,))),
-        "result = {:?}",
-        result
+        "result = {result:?}"
     );
 }
 
@@ -509,8 +505,8 @@ fn mock_fetch_txids_responses(env: &PocketIc) {
                 CanisterHttpResponse::CanisterHttpReply(CanisterHttpReply {
                     status: 200,
                     headers: vec![CanisterHttpHeader {
-                        name: format!("name-{}", i),
-                        value: format!("{}", i),
+                        name: format!("name-{i}"),
+                        value: format!("{i}"),
                     }],
                     body: body.clone(),
                 })
@@ -917,9 +913,7 @@ fn tick_until_next_request(env: &PocketIc) -> Vec<CanisterHttpRequest> {
     let canister_http_requests = env.get_canister_http();
     assert!(
         !canister_http_requests.is_empty(),
-        "The canister did not produce another request in {} ticks {:?}",
-        MAX_TICKS,
-        canister_http_requests
+        "The canister did not produce another request in {MAX_TICKS} ticks {canister_http_requests:?}"
     );
     canister_http_requests
 }

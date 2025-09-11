@@ -504,6 +504,6 @@ mod tests {
         assert!(result.is_err());
         let error_msg = result.unwrap_err();
         assert!(error_msg.contains("currently locked by another change operation"));
-        assert!(error_msg.contains(&format!("{}", canister_id)));
+        assert!(error_msg.contains(&format!("{canister_id}")));
     }
 }

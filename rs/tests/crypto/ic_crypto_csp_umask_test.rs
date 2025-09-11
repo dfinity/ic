@@ -123,8 +123,7 @@ impl From<String> for SecretKeyStoreMetadata {
         let no_more_fields = field_iter.next();
         assert!(
             no_more_fields.is_none(),
-            "unexpected field: {:?}",
-            no_more_fields
+            "unexpected field: {no_more_fields:?}"
         );
 
         SecretKeyStoreMetadata {

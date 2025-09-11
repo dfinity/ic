@@ -29,9 +29,9 @@ pub fn expect_reply(result: Result<WasmResult, UserError>) -> Vec<u8> {
     match result {
         Ok(wasm_result) => match wasm_result {
             WasmResult::Reply(bytes) => bytes,
-            WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+            WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
         },
-        Err(err) => panic!("Unexpected error: {}", err),
+        Err(err) => panic!("Unexpected error: {err}"),
     }
 }
 

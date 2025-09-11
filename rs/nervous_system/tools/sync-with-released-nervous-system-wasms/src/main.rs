@@ -81,7 +81,7 @@ fn module_hash_hex(module_hash: Vec<u8>) -> String {
     use std::fmt::Write;
 
     module_hash.iter().fold(String::new(), |mut output, x| {
-        let _ = write!(output, "{:02x}", x);
+        let _ = write!(output, "{x:02x}");
         output
     })
 }
@@ -276,8 +276,7 @@ async fn get_mainnet_canister_release(
     let mut page = 1;
     loop {
         let tags_url = format!(
-            "{}/repos/{}/tags?per_page={}&page={}",
-            GITHUB_API, canister_repository, tags_per_page, page
+            "{GITHUB_API}/repos/{canister_repository}/tags?per_page={tags_per_page}&page={page}"
         );
         let tags: Vec<Tag> = client
             .get(&tags_url)

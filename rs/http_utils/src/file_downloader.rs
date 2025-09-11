@@ -476,7 +476,7 @@ mod tests {
 
     fn extract_offset(request: &Request) -> usize {
         let header = request.header("range");
-        println!("Received request for headers: {:?}", header);
+        println!("Received request for headers: {header:?}");
         match header.first() {
             Some(h) => h
                 .to_str()
@@ -606,7 +606,7 @@ mod tests {
     async fn test_invalid_file_can_be_overwritten() {
         let body = String::from("Success");
         let hash = hash(&body);
-        let invalid_hash = format!("invalid_{}", hash);
+        let invalid_hash = format!("invalid_{hash}");
         let setup = Setup::new(&body).await.expect_routes(1, 0, 0, 0);
 
         let downloader = FileDownloader::new(Some(ReplicaLogger::from(&setup.logger)));
@@ -869,7 +869,7 @@ mod tests {
             Err(FileDownloadError::IoError(message, _)) => {
                 assert_eq!(
                     message,
-                    format!("Failed to unpack tar file: {:?}", tar_path)
+                    format!("Failed to unpack tar file: {tar_path:?}")
                 );
             }
             _ => panic!("Expected FileDownloadError::IoError"),

@@ -310,14 +310,13 @@ pub fn install_large_wasm_with_other_store_fails_cross_subnet(env: TestEnv) {
             let expected_reject = RejectResponse {
                 reject_code: RejectCode::CanisterReject,
                 reject_message: format!(
-                    "InstallChunkedCode Error: Store canister {} was not found on subnet {} of target canister {}",
-                    store_canister_id, app_subnet_id, target_canister_id
+                    "InstallChunkedCode Error: Store canister {store_canister_id} was not found on subnet {app_subnet_id} of target canister {target_canister_id}"
                 ),
                 error_code: Some("IC0406".to_string()),
             };
             match err {
                 AgentError::CertifiedReject { reject, .. } => assert_eq!(reject, expected_reject),
-                _ => panic!("Unexpected error: {:?}", err),
+                _ => panic!("Unexpected error: {err:?}"),
             };
         }
     });

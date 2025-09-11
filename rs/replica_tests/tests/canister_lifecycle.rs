@@ -522,8 +522,7 @@ fn can_create_canister_with_cycles_from_another_canister() {
         let old_canister_cycles_balance_after =
             test.canister_state(&canister_id).system_state.balance();
         println!(
-            "old canister balance after: {}",
-            old_canister_cycles_balance_after
+            "old canister balance after: {old_canister_cycles_balance_after}"
         );
         let new_canister_cycles_balance =
             test.canister_state(&new_canister_id).system_state.balance();
@@ -533,8 +532,7 @@ fn can_create_canister_with_cycles_from_another_canister() {
         assert!(
             old_canister_cycles_balance_after
                 <= old_canister_cycles_balance_before - cycles_for_new_canister,
-            "Cycle balance of the creating canister should decrease by at least {}",
-            cycles_for_new_canister
+            "Cycle balance of the creating canister should decrease by at least {cycles_for_new_canister}"
         );
 
         // Check that the balance of the created canister is at most the cycles
@@ -824,7 +822,7 @@ fn cannot_run_method_on_empty_canister() {
                     to execute a message, but the canister contains no Wasm module.",
                 );
             }
-            rest => panic!("Unexpected behaviour {:?}", rest),
+            rest => panic!("Unexpected behaviour {rest:?}"),
         }
     })
 }

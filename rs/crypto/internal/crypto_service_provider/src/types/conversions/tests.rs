@@ -12,10 +12,10 @@ proptest! {
     fn csp_public_key_to_user_key(csp_public_key: CspPublicKey) {
        match (csp_public_key.clone(), UserPublicKey::try_from(csp_public_key)) {
          (CspPublicKey::EcdsaP256(_), Ok(_)) => (),
-         (CspPublicKey::EcdsaP256(_), Err(error)) => panic!("Failed to convert supported type: {:?}", error),
+         (CspPublicKey::EcdsaP256(_), Err(error)) => panic!("Failed to convert supported type: {error:?}"),
          (CspPublicKey::Ed25519(_), Ok(_)) => (),
-         (CspPublicKey::Ed25519(_), Err(error)) => panic!("Failed to convert supported type: {:?}", error),
-         (unsupported, Ok(_)) => panic!("Unsupported type was successfully converted to a UserPublicKey: {:?}", unsupported),
+         (CspPublicKey::Ed25519(_), Err(error)) => panic!("Failed to convert supported type: {error:?}"),
+         (unsupported, Ok(_)) => panic!("Unsupported type was successfully converted to a UserPublicKey: {unsupported:?}"),
          (_, Err(_)) => (),
        };
     }
@@ -233,6 +233,6 @@ fn csp_pop_from_public_key_proto_error_debug_print() {
         ),
     ];
     for (value, formatted) in test_vectors {
-        assert_eq!(format!("{:?}", value), *formatted);
+        assert_eq!(format!("{value:?}"), *formatted);
     }
 }

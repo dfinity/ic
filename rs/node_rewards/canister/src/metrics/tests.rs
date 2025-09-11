@@ -122,8 +122,7 @@ async fn multiple_subnets_metrics_added_correctly() {
             };
             assert!(
                 mm.subnets_metrics.borrow().get(&key).is_some(),
-                "Metrics missing for subnet {:?}",
-                subnet
+                "Metrics missing for subnet {subnet:?}"
             );
         }
     }
@@ -146,8 +145,7 @@ async fn retry_count_increments_on_failure() {
         assert_eq!(
             mm.subnets_to_retry.borrow().get(&subnet_1.into()),
             Some(retry_attempt),
-            "Retry count should be {}",
-            retry_attempt
+            "Retry count should be {retry_attempt}"
         );
     }
 }

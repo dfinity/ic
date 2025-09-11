@@ -221,9 +221,7 @@ pub fn test_batching(env: TestEnv) {
         // Check if we have the txid in the bitcoind mempool
         assert!(
             mempool_txids.contains(&btc_txid),
-            "The mempool does not contain the expected txid: {}, mempool contents: {:?}",
-            btc_txid,
-            mempool_txids
+            "The mempool does not contain the expected txid: {btc_txid}, mempool contents: {mempool_txids:?}"
         );
 
         // We are expecting only one transaction in mempool.

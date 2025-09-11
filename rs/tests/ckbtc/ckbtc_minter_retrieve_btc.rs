@@ -135,7 +135,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
                 )
                 .await;
             } else {
-                panic!("expected to have one minted utxo, got: {:?}", update_result);
+                panic!("expected to have one minted utxo, got: {update_result:?}");
             }
         }
 
@@ -199,8 +199,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
                 e,
                 EventType::AcceptedRetrieveBtcRequest(RetrieveBtcRequest { block_index: 4, .. })
             )),
-            "missing accepted_retrieve_btc_request event in the log: {:?}",
-            events
+            "missing accepted_retrieve_btc_request event in the log: {events:?}"
         );
 
         info!(&logger, "Call retrieve_btc with insufficient funds");

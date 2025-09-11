@@ -223,8 +223,8 @@ fn mega_private_key_should_redact_logs() -> Result<(), CanisterThresholdError> {
     for curve in EccCurveType::all() {
         let sk = MEGaPrivateKey::generate(curve, rng);
 
-        let log = format!("{:?}", sk);
-        assert_eq!(format!("MEGaPrivateKey({}) - REDACTED", curve), log);
+        let log = format!("{sk:?}");
+        assert_eq!(format!("MEGaPrivateKey({curve}) - REDACTED"), log);
     }
 
     Ok(())
@@ -240,7 +240,7 @@ fn mega_private_key_bytes_should_redact_logs() -> Result<(), CanisterThresholdEr
 
     let bytes = MEGaPrivateKeyK256Bytes::try_from(&sk).expect("Deserialization failed");
 
-    let log = format!("{:?}", bytes);
+    let log = format!("{bytes:?}");
     assert_eq!("MEGaPrivateKeyK256Bytes - REDACTED", log);
 
     Ok(())

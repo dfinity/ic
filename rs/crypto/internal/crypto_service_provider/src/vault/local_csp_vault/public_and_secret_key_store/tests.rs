@@ -1420,36 +1420,31 @@ mod validate_pks_and_sks {
         if let Some(key_id) = key_ids.node_signing_key_id {
             assert!(
                 key_ids_to_insert.insert(key_id),
-                "duplicated key ID {:?}",
-                key_id
+                "duplicated key ID {key_id:?}"
             );
         }
         if let Some(key_id) = key_ids.committee_signing_key_id {
             assert!(
                 key_ids_to_insert.insert(key_id),
-                "duplicated key ID {:?}",
-                key_id
+                "duplicated key ID {key_id:?}"
             );
         }
         if let Some(key_id) = key_ids.tls_secret_key_id {
             assert!(
                 key_ids_to_insert.insert(key_id),
-                "duplicated key ID {:?}",
-                key_id
+                "duplicated key ID {key_id:?}"
             );
         }
         if let Some(key_id) = key_ids.dkg_dealing_encryption_key_id {
             assert!(
                 key_ids_to_insert.insert(key_id),
-                "duplicated key ID {:?}",
-                key_id
+                "duplicated key ID {key_id:?}"
             );
         }
         for key_id in key_ids.idkg_dealing_encryption_key_ids {
             assert!(
                 key_ids_to_insert.insert(key_id),
-                "duplicated key ID {:?}",
-                key_id
+                "duplicated key ID {key_id:?}"
             );
         }
         for key_id in key_ids_to_insert {

@@ -40,7 +40,7 @@ impl fmt::Display for HttpsOutcallStatus {
         match self {
             Self::ResponseTooLarge => write!(f, "ResponseTooLarge"),
             Self::IcError(rejection_code) => write!(f, "IcError({})", *rejection_code as i32),
-            Self::HttpStatusCode(status_code) => write!(f, "HttpStatusCode({})", status_code),
+            Self::HttpStatusCode(status_code) => write!(f, "HttpStatusCode({status_code})"),
         }
     }
 }
@@ -69,10 +69,10 @@ fn check_address(args: CheckAddressArgs) -> CheckAddressResponse {
     let config = get_config();
     let btc_network = config.btc_network();
     let address = Address::from_str(args.address.trim())
-        .unwrap_or_else(|err| ic_cdk::trap(format!("Invalid Bitcoin address: {}", err)))
+        .unwrap_or_else(|err| ic_cdk::trap(format!("Invalid Bitcoin address: {err}")))
         .require_network(btc_network.clone().into())
         .unwrap_or_else(|err| {
-            ic_cdk::trap(format!("Not a Bitcoin {} address: {}", btc_network, err))
+            ic_cdk::trap(format!("Not a Bitcoin {btc_network} address: {err}"))
         });
 
     match config.check_mode {
@@ -121,7 +121,7 @@ async fn check_transaction_str(args: CheckTransactionStrArgs) -> CheckTransactio
 async fn check_transaction_query(args: CheckTransactionQueryArgs) -> CheckTransactionQueryResponse {
     match Txid::try_from(args) {
         Ok(txid) => check_fetched_transaction_inputs(txid).await,
-        Err(err) => panic!("Invalid transaction ID: {}", err),
+        Err(err) => panic!("Invalid transaction ID: {err}"),
     }
 }
 
@@ -169,7 +169,7 @@ fn init(arg: Option<CheckArg>) {
                 init_arg.check_mode,
                 init_arg.num_subnet_nodes,
             )
-            .unwrap_or_else(|err| ic_cdk::trap(format!("error creating config: {}", err))),
+            .unwrap_or_else(|err| ic_cdk::trap(format!("error creating config: {err}"))),
         ),
         _ => {
             ic_cdk::trap("cannot init canister state without init args");
@@ -192,7 +192,7 @@ fn post_upgrade(arg: Option<CheckArg>) {
                 .unwrap_or(old_config.check_mode);
             let config =
                 Config::new_and_validate(old_config.btc_network(), check_mode, num_subnet_nodes)
-                    .unwrap_or_else(|err| ic_cdk::trap(format!("error creating config: {}", err)));
+                    .unwrap_or_else(|err| ic_cdk::trap(format!("error creating config: {err}")));
             set_config(config);
         }
         Some(CheckArg::InitArg(_)) => {
@@ -420,7 +420,7 @@ impl FetchEnv for BtcCheckerCanisterEnv {
                     BtcNetwork::Regtest { .. } => {
                         use serde_json::{Value, from_slice, from_value};
                         let json: Value = from_slice(response.body.as_slice()).map_err(|err| {
-                            HttpGetTxError::TxEncoding(format!("JSON parsing error {}", err))
+                            HttpGetTxError::TxEncoding(format!("JSON parsing error {err}"))
                         })?;
                         let hex: String =
                             from_value(json["result"]["hex"].clone()).map_err(|_| {
@@ -429,10 +429,10 @@ impl FetchEnv for BtcCheckerCanisterEnv {
                                 )
                             })?;
                         let raw = hex::decode(&hex).map_err(|err| {
-                            HttpGetTxError::TxEncoding(format!("decode hex error: {}", err))
+                            HttpGetTxError::TxEncoding(format!("decode hex error: {err}"))
                         })?;
                         Transaction::consensus_decode(&mut raw.as_slice()).map_err(|err| {
-                            HttpGetTxError::TxEncoding(format!("decode tx error: {}", err))
+                            HttpGetTxError::TxEncoding(format!("decode tx error: {err}"))
                         })?
                     }
                     _ => Transaction::consensus_decode(&mut response.body.as_slice())

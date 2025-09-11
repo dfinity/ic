@@ -255,8 +255,7 @@ fn should_correctly_verify_nist_fips_test_vectors() {
         assert_eq!(
             verify_result.is_ok(),
             v.is_valid,
-            "Unexpected verification result for test vector {:?}",
-            v
+            "Unexpected verification result for test vector {v:?}"
         );
         if verify_result.is_err() {
             assert!(verify_result.unwrap_err().is_signature_verification_error());

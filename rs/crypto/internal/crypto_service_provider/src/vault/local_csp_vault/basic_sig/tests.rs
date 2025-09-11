@@ -229,7 +229,7 @@ fn should_fail_to_sign_with_unsupported_algorithm_id() {
             let err = sign_result.expect_err("Expected an error.");
             match err {
                 CspBasicSignatureError::UnsupportedAlgorithm { .. } => {}
-                _ => panic!("Expected UnsupportedAlgorithm, got {:?}", err),
+                _ => panic!("Expected UnsupportedAlgorithm, got {err:?}"),
             }
         }
     }
@@ -285,7 +285,7 @@ pub fn generate_key_pair_and_sign_and_verify_message(csp_vault: Arc<dyn CspVault
     let signature = sign_result.expect("Failed to extract the signature");
     let signature_bytes = match signature {
         CspSignature::Ed25519(signature_bytes) => signature_bytes,
-        _ => panic!("Wrong CspSignature: {:?}", signature),
+        _ => panic!("Wrong CspSignature: {signature:?}"),
     };
     assert!(ed25519::verify(&signature_bytes, message, &pk_bytes).is_ok());
 }
@@ -299,7 +299,7 @@ pub fn generate_key_pair_and_sign_message(
         .expect("failed to generate keys");
     let pk_bytes = match csp_pk {
         CspPublicKey::Ed25519(pk_bytes) => pk_bytes,
-        _ => panic!("Wrong CspPublicKey: {:?}", csp_pk),
+        _ => panic!("Wrong CspPublicKey: {csp_pk:?}"),
     };
     let sign_result = csp_vault.sign(AlgorithmId::Ed25519, message, KeyId::from(&csp_pk));
     (pk_bytes, sign_result)

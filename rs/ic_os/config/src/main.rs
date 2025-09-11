@@ -237,7 +237,7 @@ pub fn main() -> Result<()> {
                 guestos_settings,
             };
             // SetupOSConfig is safe to log; it does not contain any secret material
-            println!("SetupOSConfig: {:?}", setupos_config);
+            println!("SetupOSConfig: {setupos_config:?}");
 
             let setupos_config_json_path = Path::new(&setupos_config_json_path);
             serialize_and_write_config(setupos_config_json_path, &setupos_config)?;

@@ -34,7 +34,7 @@ fn from_key_values() {
     let mut iter = map.iter();
     match iter.next() {
         Some((1, 10)) | Some((1, 11)) => {}
-        other => panic!("Expecting `Ok((1, 10))` or `Ok((1, 11)`, got {:?})", other),
+        other => panic!("Expecting `Ok((1, 10))` or `Ok((1, 11)`, got {other:?})"),
     }
     assert_eq!(Some((&2, &20)), iter.next());
     assert_eq!(Some((&3, &30)), iter.next());
@@ -51,7 +51,7 @@ fn flatmap_macro() {
     let mut iter = map.iter();
     match iter.next() {
         Some((1, 10)) | Some((1, 11)) => {}
-        other => panic!("Expecting `Ok((1, 10))` or `Ok((1, 11)`, got {:?})", other),
+        other => panic!("Expecting `Ok((1, 10))` or `Ok((1, 11)`, got {other:?})"),
     }
     assert_eq!(Some((&2, &20)), iter.next());
     assert_eq!(Some((&3, &30)), iter.next());

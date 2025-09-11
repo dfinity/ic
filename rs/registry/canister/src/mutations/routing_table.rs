@@ -500,14 +500,12 @@ mod tests {
     fn assert_subnet_for_canister(registry: &Registry, canister_id: u64, expected_subnet_idx: u64) {
         let result = registry
             .get_subnet_for_canister(&CanisterId::from(canister_id).get())
-            .unwrap_or_else(|_| panic!("No subnet found for canister {}", canister_id));
+            .unwrap_or_else(|_| panic!("No subnet found for canister {canister_id}"));
 
         assert_eq!(
             result.subnet_id.unwrap(),
             PrincipalId::new_subnet_test_id(expected_subnet_idx),
-            "Canister {} should be on subnet with index {}",
-            canister_id,
-            expected_subnet_idx
+            "Canister {canister_id} should be on subnet with index {expected_subnet_idx}"
         );
     }
 
@@ -799,8 +797,7 @@ mod tests {
                 .expect("Failed to decode actual routing table");
             assert_eq!(
                 e_routing_table, a_routing_table,
-                "Comparison of tables for key {} failed",
-                actual_key
+                "Comparison of tables for key {actual_key} failed"
             );
 
             assert_eq!(e.mutation_type, a.mutation_type);

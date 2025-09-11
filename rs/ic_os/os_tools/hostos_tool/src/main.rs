@@ -82,7 +82,7 @@ pub fn main() -> Result<()> {
                 node_type,
             );
 
-            eprintln!("Using generated mac address {}", generated_mac);
+            eprintln!("Using generated mac address {generated_mac}");
 
             let Ipv6Config::Deterministic(ipv6_config) =
                 &hostos_config.network_settings.ipv6_config
@@ -111,7 +111,7 @@ pub fn main() -> Result<()> {
                 IpVariant::V6,
                 node_type,
             );
-            println!("{}", generated_mac);
+            println!("{generated_mac}");
             Ok(())
         }
         None => Err(anyhow!(

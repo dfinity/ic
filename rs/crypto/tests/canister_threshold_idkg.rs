@@ -1675,7 +1675,7 @@ mod verify_transcript {
                 Err(IDkgVerifyTranscriptError::SerializationError(msg)) => {
                     assert!(msg.starts_with("failed to deserialize internal transcript"))
                 }
-                Err(e) => panic!("Unexpected error {:?}", e),
+                Err(e) => panic!("Unexpected error {e:?}"),
                 Ok(()) => panic!("Unexpected success"),
             }
         }

@@ -55,7 +55,7 @@ fn should_redact_csp_secret_key_ed25519_debug() {
     ));
     assert_eq!(
         "CspSecretKey::Ed25519 - REDACTED",
-        format!("{:?}", cspsk_ed25519)
+        format!("{cspsk_ed25519:?}")
     );
 }
 
@@ -66,7 +66,7 @@ fn should_redact_csp_secret_key_multi_debug() {
     ));
     assert_eq!(
         "CspSecretKey::MultiBls12_381 - REDACTED",
-        format!("{:?}", cspsk_multi)
+        format!("{cspsk_multi:?}")
     );
 }
 
@@ -77,7 +77,7 @@ fn should_redact_csp_secret_key_thres_debug() {
     ));
     assert_eq!(
         "CspSecretKey::ThresBls12_381 - REDACTED",
-        format!("{:?}", cspsk_thresh)
+        format!("{cspsk_thresh:?}")
     );
 }
 
@@ -86,7 +86,7 @@ fn should_redact_csp_secret_key_tls_ed25519_debug() {
     let cspsk_tls = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes::new(vec![1u8; 3]));
     assert_eq!(
         "CspSecretKey::TlsEd25519 - REDACTED",
-        format!("{:?}", cspsk_tls)
+        format!("{cspsk_tls:?}")
     );
 }
 
@@ -117,7 +117,7 @@ fn should_redact_csp_secret_key_fs_encryption_debug() {
     ));
     assert_eq!(
         "CspSecretKey::FsEncryption - REDACTED",
-        format!("{:?}", cspsk_fs)
+        format!("{cspsk_fs:?}")
     );
 }
 
@@ -340,6 +340,6 @@ fn csp_signatures_should_have_a_nice_debug_representation() {
         ),
     ];
     for (value, formatted) in test_vectors {
-        assert_eq!(format!("{:?}", value), *formatted);
+        assert_eq!(format!("{value:?}"), *formatted);
     }
 }

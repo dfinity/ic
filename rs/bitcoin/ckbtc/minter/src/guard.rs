@@ -165,12 +165,12 @@ mod tests {
         let guards: Vec<_> = (0..MAX_CONCURRENT / 2)
             .map(|id| {
                 balance_update_guard(test_account(0, Some(id as u8))).unwrap_or_else(|e| {
-                    panic!("Could not create guard for subaccount num {}: {:#?}", id, e)
+                    panic!("Could not create guard for subaccount num {id}: {e:#?}")
                 })
             })
             .chain((MAX_CONCURRENT / 2..MAX_CONCURRENT).map(|id| {
                 balance_update_guard(test_account(id as u64, None)).unwrap_or_else(|e| {
-                    panic!("Could not create guard for principal num {}: {:#?}", id, e)
+                    panic!("Could not create guard for principal num {id}: {e:#?}")
                 })
             }))
             .collect();

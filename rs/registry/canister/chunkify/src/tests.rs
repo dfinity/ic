@@ -114,8 +114,7 @@ fn test_dechunkify_mutation_chunked() {
     assert_eq!(
         chunk_content_sha256s.len(),
         1,
-        "{:?}",
-        chunk_content_sha256s
+        "{chunk_content_sha256s:?}"
     );
 
     let mutation = HighCapacityRegistryMutation {
@@ -276,7 +275,7 @@ fn test_chunkify_composite_mutation() {
             chunk_content_sha256s,
         }) => chunk_content_sha256s.clone(),
 
-        _ => panic!("{:?}", upgraded_mutation),
+        _ => panic!("{upgraded_mutation:?}"),
     };
 
     // Assert that Chunks was populated, and we can reconstruct the original

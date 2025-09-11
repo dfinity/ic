@@ -662,8 +662,7 @@ mod ecdsa_sign_share {
                 .expect("add_points failed");
             assert!(
                 serialized_points.insert(current_point.serialize()),
-                "Duplicate point {:?} generated",
-                current_point
+                "Duplicate point {current_point:?} generated"
             );
             points.push(current_point.clone());
         }

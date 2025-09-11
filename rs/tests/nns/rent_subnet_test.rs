@@ -285,7 +285,7 @@ async fn assert_new_subnet(
         .difference(original_subnets)
         .cloned()
         .collect::<HashSet<SubnetId>>();
-    assert_eq!(new_subnet_ids.len(), 1, "{:#?}", new_subnet_ids);
+    assert_eq!(new_subnet_ids.len(), 1, "{new_subnet_ids:#?}");
 
     // Return the ID of the new subnet.
     new_subnet_ids.into_iter().next().unwrap()
@@ -426,8 +426,7 @@ async fn assert_subnet_type(
     assert_eq!(
         SubnetType::try_from(subnet_record.subnet_type).unwrap(),
         expected_canister_type,
-        "{:#?}",
-        subnet_record,
+        "{subnet_record:#?}",
     );
 }
 
@@ -517,19 +516,16 @@ async fn assert_that_non_subnet_user_gets_blocked_if_they_try_to_create_a_canist
         } => {
             for key_word in [
                 "not authorized".to_string(),
-                format!("{}", rented_subnet_id).to_lowercase(),
+                format!("{rented_subnet_id}").to_lowercase(),
                 format!("{}", *NON_SUBNET_USER_PRINCIPAL_ID).to_lowercase(),
             ] {
                 assert!(
                     reason.contains(&key_word),
-                    "({:?}) {:?} not in {:?}",
-                    block_index,
-                    key_word,
-                    reason,
+                    "({block_index:?}) {key_word:?} not in {reason:?}",
                 );
             }
         }
-        _ => panic!("{:?}", err),
+        _ => panic!("{err:?}"),
     }
 }
 
@@ -622,8 +618,7 @@ fn wait_for_cycles_minting_to_get_price_of_icp(
             Err(err) => {
                 if err_budget == 0 {
                     panic!(
-                        "Giving up on calling the Cycles Minting canister: {:?}",
-                        err
+                        "Giving up on calling the Cycles Minting canister: {err:?}"
                     );
                 }
 

@@ -167,7 +167,7 @@ fn run_pick_commit() -> Result<()> {
     print_step(
         1,
         "Pick Release Candidate Commit",
-        &format!("Chosen commit: {}", commit),
+        &format!("Chosen commit: {commit}"),
     )?;
 
     // Continue to next step.
@@ -200,7 +200,7 @@ fn run_determine_targets(cmd: DetermineTargets) -> Result<()> {
     // Ask about NNS canisters.
     println!("NNS canisters:");
     for &canister in nns_candidates.iter() {
-        if input_yes_or_no(&format!("   Release {}?", canister), false)? {
+        if input_yes_or_no(&format!("   Release {canister}?"), false)? {
             nns_canisters.push(canister.to_string().to_lowercase());
         }
     }
@@ -208,7 +208,7 @@ fn run_determine_targets(cmd: DetermineTargets) -> Result<()> {
     // Ask about SNS canisters.
     println!("SNS canisters:");
     for &canister in sns_candidates.iter() {
-        if input_yes_or_no(&format!("   Release {}?", canister), false)? {
+        if input_yes_or_no(&format!("   Release {canister}?"), false)? {
             sns_canisters.push(canister.to_string().to_lowercase());
         }
     }
@@ -285,7 +285,7 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
     let proposals_dir = ic
         .join("..")
         .join("proposals")
-        .join(format!("release-{}", today));
+        .join(format!("release-{today}"));
 
     // ensure the directory is empty
     // check if the directory exists
@@ -310,7 +310,7 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
 
         // For each NNS canister, run the prepare-nns-upgrade-proposal-text.sh script and write its output to a file.
         for canister in &nns_canisters {
-            println!("Creating proposal text for NNS canister: {}", canister);
+            println!("Creating proposal text for NNS canister: {canister}");
             let script = ic.join("testnet/tools/nns-tools/prepare-nns-upgrade-proposal-text.sh");
             // cycles minting requires an upgrade arg, usually '()'
             let output = if canister != "cycles-minting" {
@@ -329,18 +329,18 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
                     String::from_utf8_lossy(&output.stderr)
                 );
             }
-            let file_path = proposals_dir.join(format!("nns-{}.md", canister));
+            let file_path = proposals_dir.join(format!("nns-{canister}.md"));
             std::fs::write(&file_path, output.stdout).expect("Failed to write NNS proposal file");
             nns_proposal_text_paths.push(file_path);
         }
 
         // For each SNS canister, run the prepare-publish-sns-wasm-proposal-text.sh script.
         for canister in &sns_canisters {
-            println!("Creating proposal text for SNS canister: {}", canister);
+            println!("Creating proposal text for SNS canister: {canister}");
             let script =
                 ic.join("testnet/tools/nns-tools/prepare-publish-sns-wasm-proposal-text.sh");
             // The SNS script is expected to write directly to the file provided as an argument.
-            let file_path = proposals_dir.join(format!("sns-{}.md", canister));
+            let file_path = proposals_dir.join(format!("sns-{canister}.md"));
             let file_path_str = file_path.to_str().expect("Invalid file path");
             let output = run_script(script, &[canister, &commit, file_path_str], &ic)
                 .expect("Failed to run SNS proposal text script");
@@ -498,16 +498,14 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
             nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
                 let _ = write!(
                     acc,
-                    "\n  - https://dashboard.internetcomputer.org/proposal/{}",
-                    id
+                    "\n  - https://dashboard.internetcomputer.org/proposal/{id}"
                 );
                 acc
             }),
             sns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
                 let _ = write!(
                     acc,
-                    "\n  - https://dashboard.internetcomputer.org/proposal/{}",
-                    id
+                    "\n  - https://dashboard.internetcomputer.org/proposal/{id}"
                 );
                 acc
             })
@@ -653,16 +651,14 @@ SNS: {}",
         nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
             let _ = write!(
                 acc,
-                "\n  - http://dashboard.internetcomputer.org/proposal/{}",
-                id
+                "\n  - http://dashboard.internetcomputer.org/proposal/{id}"
             );
             acc
         }),
         sns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
             let _ = write!(
                 acc,
-                "\n  - http://dashboard.internetcomputer.org/proposal/{}",
-                id
+                "\n  - http://dashboard.internetcomputer.org/proposal/{id}"
             );
             acc
         }),
@@ -725,11 +721,11 @@ fn run_update_changelog(cmd: UpdateChangelog) -> Result<()> {
 NNS: {}
 SNS: {}",
             nns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
-                let _ = write!(acc, "\n  - {}", id);
+                let _ = write!(acc, "\n  - {id}");
                 acc
             }),
             sns_proposal_ids.iter().fold(String::new(), |mut acc, id| {
-                let _ = write!(acc, "\n  - {}", id);
+                let _ = write!(acc, "\n  - {id}");
                 acc
             }),
         ),
@@ -741,13 +737,13 @@ SNS: {}",
 
         // update the changelog for each proposal
         for proposal_id in nns_proposal_ids.iter().chain(sns_proposal_ids.iter()) {
-            println!("Updating changelog for proposal {}", proposal_id);
+            println!("Updating changelog for proposal {proposal_id}");
             let script = ic.join("testnet/tools/nns-tools/add-release-to-changelog.sh");
             let output = run_script(script, &[proposal_id], &ic)?;
 
             if !output.status.success() {
                 println!("{}", String::from_utf8_lossy(&output.stderr));
-                println!("Failed to update changelog for proposal {}", proposal_id);
+                println!("Failed to update changelog for proposal {proposal_id}");
             }
         }
 
@@ -758,13 +754,12 @@ SNS: {}",
 
         // Create branch with today's date
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
-        let branch_name = format!("changelog-update-{}", today);
+        let branch_name = format!("changelog-update-{today}");
         commit_all_into_branch(&branch_name)?;
 
         // Create PR
         let title = format!(
-            "chore(nervous-system): Update changelog for release {}",
-            today
+            "chore(nervous-system): Update changelog for release {today}"
         );
         let body = &format!(
             "Update CHANGELOG.md for today's release.

@@ -101,7 +101,7 @@ async fn test_icps_per_sns_token_client() {
             return "sns_token_ledger".to_string();
         }
 
-        format!("{}", canister_id)
+        format!("{canister_id}")
     }
 
     const INITIAL_ICPS_PER_SNS_TOKEN: f64 = 12.34;

@@ -28,9 +28,7 @@ fn prop_well_formed_trees_are_convertible(
     let r: Result<TreeOfBlobs, _> = t.clone().try_into();
     assert!(
         r.is_ok(),
-        "Failed to convert a well-formed mixed hash tree {:?} into a labeled tree: {:?}",
-        t,
-        r
+        "Failed to convert a well-formed mixed hash tree {t:?} into a labeled tree: {r:?}"
     );
 }
 

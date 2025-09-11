@@ -423,8 +423,7 @@ mod tests {
         for field in field_names {
             assert!(
                 !reserved_field_names.contains(field.as_str()),
-                "Field name '{}' is reserved and should not be used.",
-                field
+                "Field name '{field}' is reserved and should not be used."
             );
         }
 

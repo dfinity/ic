@@ -85,7 +85,7 @@ fn add_nns_canister_via_governance_proposal() {
             )
             .await
             .unwrap();
-        assert_eq!(status.status, Running, "{:?}", status);
+        assert_eq!(status.status, Running, "{status:?}");
 
         Ok(())
     })

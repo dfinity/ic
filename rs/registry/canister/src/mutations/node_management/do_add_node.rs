@@ -814,8 +814,7 @@ mod tests {
         let expected_remove_node = registry.get_node(subnet_membership[1]).unwrap();
 
         println!(
-            "Original subnet membership (node ids): {:?}",
-            subnet_membership
+            "Original subnet membership (node ids): {subnet_membership:?}"
         );
 
         // Add a new node with the same IP address and port as an existing node, which should replace the existing node
@@ -1037,8 +1036,7 @@ mod tests {
         // Assert
         assert!(
             result.is_ok(),
-            "Could not create node with no node reward type: {:?}",
-            result
+            "Could not create node with no node reward type: {result:?}"
         );
     }
 

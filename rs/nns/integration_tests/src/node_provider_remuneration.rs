@@ -426,25 +426,19 @@ fn test_automated_node_provider_remuneration() {
         monthly_node_provider_rewards
             .rewards
             .contains(&expected_node_provider_reward_1),
-        "Expected reward 1: {:?} not found in monthly rewards: {:?}",
-        expected_node_provider_reward_2,
-        monthly_node_provider_rewards
+        "Expected reward 1: {expected_node_provider_reward_2:?} not found in monthly rewards: {monthly_node_provider_rewards:?}"
     );
     assert!(
         monthly_node_provider_rewards
             .rewards
             .contains(&expected_node_provider_reward_2),
-        "Expected reward 2: {:?} not found in monthly rewards: {:?}",
-        expected_node_provider_reward_1,
-        monthly_node_provider_rewards
+        "Expected reward 2: {expected_node_provider_reward_1:?} not found in monthly rewards: {monthly_node_provider_rewards:?}"
     );
     assert!(
         monthly_node_provider_rewards
             .rewards
             .contains(&expected_node_provider_reward_3),
-        "Expected reward 3: {:?} not found in monthly rewards: {:?}",
-        expected_node_provider_reward_3,
-        monthly_node_provider_rewards
+        "Expected reward 3: {expected_node_provider_reward_3:?} not found in monthly rewards: {monthly_node_provider_rewards:?}"
     );
 
     // Assert account balances are 0
@@ -735,8 +729,7 @@ fn submit_nns_proposal(state_machine: &StateMachine, action: ProposalActionReque
     let proposal_id = match response.command.unwrap() {
         CommandResponse::MakeProposal(x) => x.proposal_id.unwrap(),
         response => panic!(
-            "Unexpected response returned from NNS governance: {:?}",
-            response
+            "Unexpected response returned from NNS governance: {response:?}"
         ),
     };
 

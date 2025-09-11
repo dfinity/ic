@@ -446,9 +446,7 @@ fn build_streams_impl_respects_limits(
 
         assert!(
             msg_count > expected_messages as usize,
-            "Invalid test setup: msg_count ({}) must be greater than routed_messages ({})",
-            msg_count,
-            expected_messages
+            "Invalid test setup: msg_count ({msg_count}) must be greater than routed_messages ({expected_messages})"
         );
 
         // Set up the provided_canister_states.
@@ -554,7 +552,7 @@ fn build_streams_reject_response_on_unknown_destination_subnet() {
                 &mut expected_state,
                 &msg,
                 RejectCode::DestinationInvalid,
-                format!("No route to canister {}", receiver),
+                format!("No route to canister {receiver}"),
             );
         }
 
@@ -718,9 +716,7 @@ fn build_streams_with_best_effort_messages_impl(
                 .unwrap()
                 .messages()
                 .is_empty(),
-            "Local subnet type: {:?}, Remote subnet type: {:?}",
-            local_subnet_type,
-            remote_subnet_type,
+            "Local subnet type: {local_subnet_type:?}, Remote subnet type: {remote_subnet_type:?}",
         );
 
         // Remote best-effort request was routed.
@@ -731,9 +727,7 @@ fn build_streams_with_best_effort_messages_impl(
                 .unwrap()
                 .messages()
                 .is_empty(),
-            "Local subnet type: {:?}, Remote subnet type: {:?}",
-            local_subnet_type,
-            remote_subnet_type,
+            "Local subnet type: {local_subnet_type:?}, Remote subnet type: {remote_subnet_type:?}",
         );
 
         // No reject response was enqueued.
@@ -744,9 +738,7 @@ fn build_streams_with_best_effort_messages_impl(
             .pop_input();
         assert!(
             maybe_reject_response.is_none(),
-            "Local subnet type: {:?}, Remote subnet type: {:?}",
-            local_subnet_type,
-            remote_subnet_type,
+            "Local subnet type: {local_subnet_type:?}, Remote subnet type: {remote_subnet_type:?}",
         );
     });
 }
@@ -1080,7 +1072,7 @@ fn generate_messages_for_test(senders: u64, receivers: u64) -> Vec<Request> {
                     sender,
                     receiver,
                     CallbackId::from(next_callback_id),
-                    format!("req_{}_{}_{}", snd, rcv, i),
+                    format!("req_{snd}_{rcv}_{i}"),
                     payment,
                     NO_DEADLINE,
                 ));
@@ -1195,7 +1187,7 @@ fn assert_routed_messages_eq(expected: MetricVec<u64>, metrics_registry: &Metric
 /// Retrieves the `METRIC_ROUTED_PAYLOAD_SIZES` histogram's count.
 fn fetch_routed_payload_count(metrics_registry: &MetricsRegistry) -> u64 {
     fetch_histogram_stats(metrics_registry, METRIC_ROUTED_PAYLOAD_SIZES)
-        .unwrap_or_else(|| panic!("Histogram not found: {}", METRIC_ROUTED_PAYLOAD_SIZES))
+        .unwrap_or_else(|| panic!("Histogram not found: {METRIC_ROUTED_PAYLOAD_SIZES}"))
         .count
 }
 

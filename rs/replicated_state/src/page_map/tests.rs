@@ -64,7 +64,7 @@ fn duplicate_file_descriptors(
 #[test]
 fn can_debug_display_a_page_map() {
     let page_map = PageMap::new_for_testing();
-    assert_eq!(format!("{:?}", page_map), "{}");
+    assert_eq!(format!("{page_map:?}"), "{}");
 }
 
 #[test]

@@ -1703,8 +1703,7 @@ fn check_stream_handler_locally_generated_reject_response_out_of_memory() {
         RejectReason::OutOfMemory,
         RejectCode::CanisterError,
         format!(
-            "Cannot induct request. Out of memory: requested {}",
-            MAX_RESPONSE_COUNT_BYTES,
+            "Cannot induct request. Out of memory: requested {MAX_RESPONSE_COUNT_BYTES}",
         ),
     );
 }
@@ -3506,8 +3505,7 @@ impl MetricsFixture {
         fetch_histogram_stats(&self.registry, METRIC_INDUCTED_XNET_PAYLOAD_SIZES).unwrap_or_else(
             || {
                 panic!(
-                    "Histogram not found: {}",
-                    METRIC_INDUCTED_XNET_PAYLOAD_SIZES
+                    "Histogram not found: {METRIC_INDUCTED_XNET_PAYLOAD_SIZES}"
                 )
             },
         )

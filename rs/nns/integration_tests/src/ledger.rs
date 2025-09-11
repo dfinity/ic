@@ -125,7 +125,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
                 .expect("Error calling the manage_neuron api.");
 
             let neuron_id = match manage_neuron_response.command.unwrap() {
-                CommandResponse::Error(error) => panic!("Unexpected error: {}", error),
+                CommandResponse::Error(error) => panic!("Unexpected error: {error}"),
                 CommandResponse::ClaimOrRefresh(claim_or_refresh_response) => {
                     claim_or_refresh_response.refreshed_neuron_id.unwrap()
                 }
@@ -337,21 +337,18 @@ fn test_stake_and_disburse_neuron_with_account() {
             assert_eq!(
                 full_neuron.id.as_ref().unwrap(),
                 &neuron_id,
-                "Neuron: {:?}",
-                full_neuron
+                "Neuron: {full_neuron:?}"
             );
             assert_eq!(
                 full_neuron.cached_neuron_stake_e8s,
                 stake.get_e8s(),
-                "Neuron: {:?}",
-                full_neuron
+                "Neuron: {full_neuron:?}"
             );
-            assert_eq!(full_neuron.neuron_fees_e8s, 0, "Neuron: {:?}", full_neuron);
+            assert_eq!(full_neuron.neuron_fees_e8s, 0, "Neuron: {full_neuron:?}");
             assert_eq!(
                 full_neuron.controller.as_ref().unwrap(),
                 &user.get_principal_id(),
-                "Neuron: {:?}",
-                full_neuron
+                "Neuron: {full_neuron:?}"
             );
             nns_start_dissolving(state_machine, user.get_principal_id(), neuron_id)
                 .expect("Failed to start dissolving neuron");

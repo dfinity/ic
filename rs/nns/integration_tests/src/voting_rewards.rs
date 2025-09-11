@@ -92,7 +92,7 @@ fn test_increase_maturity_just_after_init() {
             .query_("get_latest_reward_event", candid, ())
             .await
             .unwrap();
-        eprintln!("{:?}", latest_reward_event);
+        eprintln!("{latest_reward_event:?}");
         while latest_reward_event.day_after_genesis == 0 {
             match &runtime {
                 Runtime::Remote(_) | Runtime::Local(_) => {
@@ -119,8 +119,7 @@ fn test_increase_maturity_just_after_init() {
         assert_eq!(latest_reward_event.day_after_genesis, 1);
         assert!(
             latest_reward_event.distributed_e8s_equivalent > 0,
-            "latest_reward_event: {:?}",
-            latest_reward_event
+            "latest_reward_event: {latest_reward_event:?}"
         );
 
         let sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
@@ -141,8 +140,7 @@ fn test_increase_maturity_just_after_init() {
         // distributed.
         assert_eq!(
             neuron.maturity_e8s_equivalent, latest_reward_event.distributed_e8s_equivalent,
-            "Neuron: {:?}",
-            neuron
+            "Neuron: {neuron:?}"
         );
 
         Ok(())

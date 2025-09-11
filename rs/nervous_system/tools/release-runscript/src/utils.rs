@@ -21,18 +21,18 @@ pub(crate) fn print_header() {
 pub(crate) fn print_step(number: usize, title: &str, description: &str) -> Result<()> {
     println!(
         "{} {}",
-        format!("Step {}:", number).bright_blue().bold(),
+        format!("Step {number}:").bright_blue().bold(),
         title.white().bold()
     );
     println!("{}", "---".bright_blue());
-    println!("{}\n", description);
+    println!("{description}\n");
     press_enter_to_continue()?;
     print!("\x1B[2J\x1B[1;1H");
     Ok(())
 }
 
 pub(crate) fn input(text: &str) -> Result<String> {
-    print!("{}: ", text);
+    print!("{text}: ");
     std::io::stdout().flush()?;
     let mut input = String::new();
     io::stdin().read_line(&mut input)?;
@@ -40,7 +40,7 @@ pub(crate) fn input(text: &str) -> Result<String> {
 }
 
 pub(crate) fn input_with_default(text: &str, default: &str) -> Result<String> {
-    let input = input(&format!("{} (default: {})", text, default))?;
+    let input = input(&format!("{text} (default: {default})"))?;
     if input.is_empty() {
         Ok(default.to_string())
     } else {
@@ -49,7 +49,7 @@ pub(crate) fn input_with_default(text: &str, default: &str) -> Result<String> {
 }
 
 pub(crate) fn open_webpage(url: &Url) -> Result<()> {
-    println!("Opening webpage: {}", url);
+    println!("Opening webpage: {url}");
 
     let command = "open";
     Command::new(command).arg(url.to_string()).spawn()?.wait()?;
@@ -176,7 +176,7 @@ pub(crate) fn commit_all_into_branch(branch: &str) -> Result<()> {
         let branch_exists = !String::from_utf8_lossy(&output.stdout).trim().is_empty();
         if branch_exists {
             if input_yes_or_no(
-                &format!("Branch '{}' already exists. Delete it?", branch),
+                &format!("Branch '{branch}' already exists. Delete it?"),
                 false,
             )? {
                 // Delete the branch
@@ -192,7 +192,7 @@ pub(crate) fn commit_all_into_branch(branch: &str) -> Result<()> {
                 }
                 println!(
                     "{}",
-                    format!("Deleted existing branch '{}'", branch).bright_blue()
+                    format!("Deleted existing branch '{branch}'").bright_blue()
                 );
             } else {
                 bail!("Cannot continue with existing branch");

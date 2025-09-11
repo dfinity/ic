@@ -237,8 +237,8 @@ mod test {
             };
             let record = NodeRecord {
                 node_operator_id: PrincipalId::new_user_test_id(test_id).to_vec(),
-                hostos_version_id: Some(format!("dummy_version_{}", test_id)),
-                domain: Some(format!("dummy_domain_{}", test_id)),
+                hostos_version_id: Some(format!("dummy_version_{test_id}")),
+                domain: Some(format!("dummy_domain_{test_id}")),
                 node_reward_type: Some(node_reward_type as i32),
                 ..NodeRecord::default()
             };
@@ -264,16 +264,15 @@ mod test {
                 http: None,
                 node_operator_id: PrincipalId::new_user_test_id(test_id).to_vec(),
                 chip_id: None,
-                hostos_version_id: Some(format!("dummy_version_{}", test_id)),
+                hostos_version_id: Some(format!("dummy_version_{test_id}")),
                 public_ipv4_config: None,
-                domain: Some(format!("dummy_domain_{}", test_id)),
+                domain: Some(format!("dummy_domain_{test_id}")),
                 node_reward_type: Some(NodeRewardType::Type1dot1 as i32),
             };
 
             assert_eq!(
                 record, expected_record,
-                "Assertion for Node {} failed",
-                test_id
+                "Assertion for Node {test_id} failed"
             );
         }
     }

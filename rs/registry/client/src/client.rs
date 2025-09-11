@@ -525,7 +525,7 @@ mod tests {
         let registry = RegistryClientImpl::new(data_provider.clone(), None);
 
         if let Err(e) = registry.fetch_and_start_polling() {
-            panic!("fetch_and_start_polling failed: {}", e);
+            panic!("fetch_and_start_polling failed: {e}");
         }
         std::thread::sleep(Duration::from_secs(1));
         std::mem::drop(registry);

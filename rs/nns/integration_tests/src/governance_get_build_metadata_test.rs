@@ -56,9 +56,7 @@ fn get_build_metadata_test() {
         ] {
             assert!(
                 response.contains(phrase),
-                "Failed to find {} in response:\n{}",
-                phrase,
-                response
+                "Failed to find {phrase} in response:\n{response}"
             );
         }
 

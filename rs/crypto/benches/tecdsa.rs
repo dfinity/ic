@@ -309,7 +309,7 @@ impl TestCase {
         let curve = match self.alg {
             AlgorithmId::ThresholdEcdsaSecp256k1 => "secp256k1",
             AlgorithmId::ThresholdEcdsaSecp256r1 => "secp256r1",
-            unexpected => panic!("Unexpected testcase algorithm {}", unexpected),
+            unexpected => panic!("Unexpected testcase algorithm {unexpected}"),
         };
         format!("crypto_tecdsa_{}_{}_nodes", curve, self.num_of_nodes)
     }

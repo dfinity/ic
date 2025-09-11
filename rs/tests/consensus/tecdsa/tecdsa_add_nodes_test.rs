@@ -206,8 +206,7 @@ async fn assert_metric_sum(
 ) {
     let mut count = 0;
     let metric_with_label = format!(
-        "{}{{key_id=\"{}\"}}",
-        MASTER_KEY_TRANSCRIPTS_CREATED, key_id
+        "{MASTER_KEY_TRANSCRIPTS_CREATED}{{key_id=\"{key_id}\"}}"
     );
     let metrics = MetricsFetcher::new(subnet.nodes(), vec![metric_with_label.clone()]);
     loop {
@@ -235,7 +234,7 @@ async fn assert_metric_sum(
         count += 1;
         // Abort after 30 tries
         if count > 30 {
-            panic!("Failed to find key rotation of {}", key_id);
+            panic!("Failed to find key rotation of {key_id}");
         }
         tokio::time::sleep(std::time::Duration::from_secs(3)).await;
     }

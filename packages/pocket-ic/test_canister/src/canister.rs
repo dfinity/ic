@@ -198,7 +198,7 @@ async fn ecdsa_public_key(
     };
     Ok(ic_cdk_ecdsa_public_key(arg)
         .await
-        .map_err(|(code, msg)| format!("Reject code: {:?}; Reject message: {}", code, msg))?
+        .map_err(|(code, msg)| format!("Reject code: {code:?}; Reject message: {msg}"))?
         .0)
 }
 
@@ -218,7 +218,7 @@ async fn sign_with_ecdsa(
     };
     Ok(ic_cdk_sign_with_ecdsa(arg)
         .await
-        .map_err(|(code, msg)| format!("Reject code: {:?}; Reject message: {}", code, msg))?
+        .map_err(|(code, msg)| format!("Reject code: {code:?}; Reject message: {msg}"))?
         .0
         .signature)
 }

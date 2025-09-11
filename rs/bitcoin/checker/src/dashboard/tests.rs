@@ -196,7 +196,7 @@ mod assertions {
         pub fn has_btc_network_in_title(&self, btc_network: BtcNetwork) -> &Self {
             self.has_string_value(
                 "title",
-                &format!("Bitcoin Checker Canister Dashboard for ({})", btc_network),
+                &format!("Bitcoin Checker Canister Dashboard for ({btc_network})"),
                 "wrong btc_network",
             )
         }
@@ -204,7 +204,7 @@ mod assertions {
         pub fn has_check_mode(&self, check_mode: CheckMode) -> &Self {
             self.has_string_value(
                 "#check-mode > td > code",
-                &format!("{}", check_mode),
+                &format!("{check_mode}"),
                 "wrong check mode",
             )
         }
@@ -212,7 +212,7 @@ mod assertions {
         pub fn has_outcall_capacity(&self, outcall_capacity: u32) -> &Self {
             self.has_string_value(
                 "#outcall-capacity > td > code",
-                &format!("{}", outcall_capacity),
+                &format!("{outcall_capacity}"),
                 "wrong outcall capacity",
             )
         }
@@ -220,7 +220,7 @@ mod assertions {
         pub fn has_cached_entries(&self, cached_entries: usize) -> &Self {
             self.has_string_value(
                 "#cached-entries > td > code",
-                &format!("{}", cached_entries),
+                &format!("{cached_entries}"),
                 "wrong cached entries",
             )
         }

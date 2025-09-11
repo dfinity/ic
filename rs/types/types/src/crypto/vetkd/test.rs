@@ -37,8 +37,8 @@ mod display_and_debug {
         }"
         .to_string();
 
-        assert_eq!(output, format!("{:?}", input));
-        assert_eq!(output, format!("{}", input));
+        assert_eq!(output, format!("{input:?}"));
+        assert_eq!(output, format!("{input}"));
     }
 
     #[test]
@@ -53,8 +53,8 @@ mod display_and_debug {
         }"
         .to_string();
 
-        assert_eq!(output, format!("{:?}", input));
-        assert_eq!(output, format!("{}", input));
+        assert_eq!(output, format!("{input:?}"));
+        assert_eq!(output, format!("{input}"));
     }
 
     #[test]
@@ -67,7 +67,7 @@ mod display_and_debug {
         }"
         .to_string();
 
-        assert_eq!(output, format!("{:?}", input));
-        assert_eq!(output, format!("{}", input));
+        assert_eq!(output, format!("{input:?}"));
+        assert_eq!(output, format!("{input}"));
     }
 }

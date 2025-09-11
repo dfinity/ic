@@ -58,7 +58,7 @@ pub fn stack_overflow(env: TestEnv) {
                             .contains("Canister trapped: stack overflow")
                     );
                 }
-                _ => panic!("Unexpected error: {:?}", err),
+                _ => panic!("Unexpected error: {err:?}"),
             };
         }
     })

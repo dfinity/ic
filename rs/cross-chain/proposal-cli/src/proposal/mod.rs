@@ -21,7 +21,7 @@ pub struct UpgradeProposalTemplate {
 impl UpgradeProposalTemplate {
     pub fn previous_upgrade_proposal_url(&self) -> String {
         self.last_upgrade_proposal_id
-            .map(|id| format!("https://dashboard.internetcomputer.org/proposal/{}", id))
+            .map(|id| format!("https://dashboard.internetcomputer.org/proposal/{id}"))
             .unwrap_or_else(|| "None".to_string())
     }
 }

@@ -126,11 +126,11 @@ fn bitcoin_integration_test() {
             Ok(_) => break,
             Err(RpcError::JsonRpc(err)) => {
                 if start.elapsed() > std::time::Duration::from_secs(30) {
-                    panic!("Timed out when waiting for bitcoind; last error: {}", err);
+                    panic!("Timed out when waiting for bitcoind; last error: {err}");
                 }
                 std::thread::sleep(std::time::Duration::from_millis(100));
             }
-            Err(err) => panic!("Unexpected error when talking to bitcoind: {:?}", err),
+            Err(err) => panic!("Unexpected error when talking to bitcoind: {err:?}"),
         }
     }
 

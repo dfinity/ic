@@ -65,7 +65,7 @@ fn setup_env(total_canisters: usize) -> StateMachine {
             PrincipalId::new_anonymous(),
             *canister_id,
             "create_canisters",
-            format!("{}", CANISTERS_PER_CREATOR).as_bytes().to_vec(),
+            format!("{CANISTERS_PER_CREATOR}").as_bytes().to_vec(),
         );
         ingress_ids.push(ingress_id);
     }

@@ -99,8 +99,7 @@ fn test_deadline_is_extended_with_wait_for_quiet() {
         {
             CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
             some_error => panic!(
-                "Cannot find proposal id in response. The response is: {:?}",
-                some_error
+                "Cannot find proposal id in response. The response is: {some_error:?}"
             ),
         };
 
@@ -155,9 +154,7 @@ fn test_deadline_is_extended_with_wait_for_quiet() {
 
         assert!(
             final_deadline > initial_deadline,
-            "{:?}\n{:#?}",
-            initial_deadline,
-            final_proposal_info,
+            "{initial_deadline:?}\n{final_proposal_info:#?}",
         );
 
         Ok(())

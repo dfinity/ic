@@ -1094,7 +1094,7 @@ pub fn provisional_create_canister_with_no_settings(env: TestEnv) {
                 .call_and_wait()
                 .await
                 .unwrap_or_else(|err| {
-                    panic!("Couldn't create canister with provisional API: {}", err)
+                    panic!("Couldn't create canister with provisional API: {err}")
                 });
         }
     })

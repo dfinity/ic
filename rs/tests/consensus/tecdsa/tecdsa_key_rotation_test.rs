@@ -61,8 +61,7 @@ fn test(test_env: TestEnv) {
             let mut count = 0;
             let mut created = 0;
             let metric_with_label = format!(
-                "{}{{key_id=\"{}\"}}",
-                MASTER_KEY_TRANSCRIPTS_CREATED, key_id
+                "{MASTER_KEY_TRANSCRIPTS_CREATED}{{key_id=\"{key_id}\"}}"
             );
             let metrics = MetricsFetcher::new(app_subnet.nodes(), vec![metric_with_label.clone()]);
             loop {

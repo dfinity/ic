@@ -19,8 +19,7 @@ fn test_round_trip() {
         expected_formatted_str: &str,
     ) {
         let yaml = format!(
-            "lunchtime: {}\nmeaning_of_life: 42\n",
-            original_time_of_day_str
+            "lunchtime: {original_time_of_day_str}\nmeaning_of_life: 42\n"
         );
         let t: T = serde_yaml::from_str(&yaml).unwrap();
 
@@ -32,15 +31,13 @@ fn test_round_trip() {
                 }),
                 meaning_of_life: 42,
             },
-            "original_time_of_day_str = {:?}",
-            original_time_of_day_str,
+            "original_time_of_day_str = {original_time_of_day_str:?}",
         );
 
         assert_eq!(
             serde_yaml::to_string(&t).unwrap(),
             format!(
-                "lunchtime: {}\nmeaning_of_life: 42\n",
-                expected_formatted_str
+                "lunchtime: {expected_formatted_str}\nmeaning_of_life: 42\n"
             ),
             "original_time_of_day_str = {:?}",
             original_time_of_day_str,

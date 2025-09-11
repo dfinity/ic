@@ -366,8 +366,7 @@ mod tests {
         assert!(
             err.to_string()
                 .contains("Failed to parse deterministic_gateway"),
-            "Expected parsing error, got: {}",
-            err
+            "Expected parsing error, got: {err}"
         );
     }
 
@@ -421,8 +420,7 @@ mod tests {
 
         assert!(
             err.to_string().contains("Failed to parse fixed_gateway"),
-            "Expected parsing error, got: {}",
-            err
+            "Expected parsing error, got: {err}"
         );
     }
 
@@ -458,8 +456,7 @@ mod tests {
 
         assert!(
             err.to_string().contains("Failed to parse ipv4_address"),
-            "Expected parsing error, got: {}",
-            err
+            "Expected parsing error, got: {err}"
         );
     }
 
@@ -477,8 +474,7 @@ mod tests {
 
         assert!(
             err.to_string().contains("Failed to parse ipv4_gateway"),
-            "Expected parsing error, got: {}",
-            err
+            "Expected parsing error, got: {err}"
         );
     }
 }

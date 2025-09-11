@@ -154,15 +154,14 @@ impl MockNetwork {
         let forward_secure_keys: BTreeMap<NodeId, CspFsEncryptionPublicKey> = nodes_by_node_id
             .iter_mut()
             .map(|(node_id, node)| {
-                println!("Creating fs keys for {}", node_id);
+                println!("Creating fs keys for {node_id}");
                 let (id, (pubkey, _pop)) = (
                     *node_id,
                     node.csp_vault
                         .gen_dealing_encryption_key_pair(*node_id)
                         .unwrap_or_else(|_| {
                             panic!(
-                                "Failed to create forward secure encryption key for NodeId {}",
-                                node_id
+                                "Failed to create forward secure encryption key for NodeId {node_id}"
                             )
                         }),
                 );
@@ -212,15 +211,11 @@ impl MockDkgConfig {
         let min_dealers = 1;
         assert!(
             min_receivers <= num_nodes,
-            "min_receivers({}) !<= num_nodes({})",
-            min_receivers,
-            num_nodes
+            "min_receivers({min_receivers}) !<= num_nodes({num_nodes})"
         );
         assert!(
             min_dealers <= num_nodes,
-            "min_dealers({}) !<= num_nodes({})",
-            min_dealers,
-            num_nodes
+            "min_dealers({min_dealers}) !<= num_nodes({num_nodes})"
         );
 
         // Node IDs

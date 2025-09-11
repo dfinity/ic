@@ -111,18 +111,15 @@ fn test_non_existence_proof() {
 
     assert!(
         ht_witness.lookup(&[b"Z"]).is_absent(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
     assert!(
         ht_witness.lookup(&[b"a"]).is_found(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
     assert!(
         ht_witness.lookup(&[b"c"]).is_unknown(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
 
     let ht_witness = hash_tree
@@ -135,18 +132,15 @@ fn test_non_existence_proof() {
 
     assert!(
         ht_witness.lookup(&[b"a"]).is_found(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
     assert!(
         ht_witness.lookup(&[b"b"]).is_absent(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
     assert!(
         ht_witness.lookup(&[b"c"]).is_found(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
 
     let ht_witness = hash_tree
@@ -159,18 +153,15 @@ fn test_non_existence_proof() {
 
     assert!(
         ht_witness.lookup(&[b"a"]).is_unknown(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
     assert!(
         ht_witness.lookup(&[b"c"]).is_found(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
     assert!(
         ht_witness.lookup(&[b"d"]).is_absent(),
-        "witness: {:?}",
-        ht_witness
+        "witness: {ht_witness:?}"
     );
 }
 

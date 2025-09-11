@@ -143,7 +143,7 @@ fn get_todays_price(machine: &StateMachine) -> Tokens {
         .unwrap();
     match rental_price_icp {
         WasmResult::Reply(bytes) => Decode!(&bytes, Result<Tokens, String>).unwrap().unwrap(),
-        WasmResult::Reject(reason) => panic!("canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("canister call rejected: {reason}"),
     }
 }
 
@@ -268,7 +268,7 @@ fn subnet_rental_request_lifecycle() {
     .expect("Making NNS proposal failed");
     let proposal_id = match cmd {
         CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
-        other => panic!("Unexpected response: {:?}", other),
+        other => panic!("Unexpected response: {other:?}"),
     };
     let proposal_time = state_machine.get_time();
 
@@ -318,7 +318,7 @@ fn subnet_rental_request_lifecycle() {
         .unwrap();
     let rental_requests = match raw_rental_requests {
         WasmResult::Reply(bytes) => Decode!(&bytes, Vec<RentalRequest>).unwrap(),
-        WasmResult::Reject(reason) => panic!("canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("canister call rejected: {reason}"),
     };
     assert_eq!(rental_requests.len(), 1);
     let RentalRequest {
@@ -367,7 +367,7 @@ fn subnet_rental_request_lifecycle() {
         .unwrap();
     let remaining_rental_requests = match raw_rental_requests {
         WasmResult::Reply(bytes) => Decode!(&bytes, Vec<RentalRequest>).unwrap(),
-        WasmResult::Reject(reason) => panic!("canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("canister call rejected: {reason}"),
     };
     assert!(remaining_rental_requests.is_empty());
 }
@@ -407,7 +407,7 @@ fn test_renting_a_subnet_without_paying_fails() {
     .expect("Making NNS proposal failed");
     let proposal_id = match cmd {
         CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
-        other => panic!("Unexpected response: {:?}", other),
+        other => panic!("Unexpected response: {other:?}"),
     };
 
     // the proposal is expected to fail since the user did not make the initial transfer
@@ -432,7 +432,7 @@ fn test_renting_a_subnet_without_paying_fails() {
         .unwrap();
     let rental_requests = match raw_rental_requests {
         WasmResult::Reply(bytes) => Decode!(&bytes, Vec<RentalRequest>).unwrap(),
-        WasmResult::Reject(reason) => panic!("canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("canister call rejected: {reason}"),
     };
     assert!(rental_requests.is_empty());
 }

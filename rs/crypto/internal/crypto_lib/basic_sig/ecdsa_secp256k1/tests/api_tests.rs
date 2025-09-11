@@ -222,8 +222,7 @@ mod verify {
             assert_eq!(
                 verify_result.is_ok(),
                 tv.is_valid,
-                "Unexpected verification result for test vector {:?}",
-                tv,
+                "Unexpected verification result for test vector {tv:?}",
             );
             if verify_result.is_err() {
                 assert!(verify_result.unwrap_err().is_signature_verification_error());

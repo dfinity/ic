@@ -229,8 +229,7 @@ mod sign {
             assert_eq!(
                 sign(&msg, &sk).unwrap(),
                 sig,
-                "Unexpected signature for test vector {:?}",
-                test_vec
+                "Unexpected signature for test vector {test_vec:?}"
             );
         }
     }
@@ -309,8 +308,7 @@ mod verify {
 
             assert!(
                 verify(&sig, &msg, &pk).is_ok(),
-                "Cannot verify signature for test vector {:?}",
-                test_vec
+                "Cannot verify signature for test vector {test_vec:?}"
             );
         }
     }

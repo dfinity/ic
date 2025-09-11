@@ -59,8 +59,7 @@ fn test_invalid_public_key_fails_to_parse() {
     match PublicKey::try_from(&invalid_public_key) {
         Err(ThresholdSigPublicKeyBytesConversionError::Malformed { .. }) => (),
         other => panic!(
-            "Expected a ThresholdSigPublicKeyBytes::Malformed error.  Got: {:?}",
-            other
+            "Expected a ThresholdSigPublicKeyBytes::Malformed error.  Got: {other:?}"
         ),
     }
 }
@@ -80,10 +79,9 @@ fn test_invalid_secret_key_fails_to_parse() {
             (false, Err(ClibThresholdSignError::MalformedSecretKey { .. })) => (),
             (true, Ok(_)) => (),
             (false, other) => panic!(
-                "Expected a MalformedSecretKey error for {}.  Got: {:?}",
-                name, other
+                "Expected a MalformedSecretKey error for {name}.  Got: {other:?}"
             ),
-            (true, other) => panic!("Failed to parse valid secret key {}: {:?}", name, other),
+            (true, other) => panic!("Failed to parse valid secret key {name}: {other:?}"),
         }
     }
 }
@@ -98,7 +96,7 @@ fn test_invalid_individual_signature_fails_to_parse() {
     let invalid_individual_signature = IndividualSignatureBytes([0xCC; 48]);
     match IndividualSignature::try_from(&invalid_individual_signature) {
         Err(CryptoError::MalformedSignature { .. }) => (),
-        other => panic!("Expected a MalformedSignature error.  Got: {:?}", other),
+        other => panic!("Expected a MalformedSignature error.  Got: {other:?}"),
     }
 }
 
@@ -112,6 +110,6 @@ fn test_invalid_combined_signature_fails_to_parse() {
     let invalid_combined_signature = CombinedSignatureBytes([0xCC; 48]);
     match CombinedSignature::try_from(&invalid_combined_signature) {
         Err(CryptoError::MalformedSignature { .. }) => (),
-        other => panic!("Expected a MalformedSignature error.  Got: {:?}", other),
+        other => panic!("Expected a MalformedSignature error.  Got: {other:?}"),
     }
 }

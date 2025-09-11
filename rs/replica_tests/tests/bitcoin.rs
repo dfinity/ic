@@ -336,7 +336,7 @@ fn bitcoin_get_successors_reject() {
             // Expect the reject message to be received.
             assert_eq!(
                 response,
-                WasmResult::Reject(format!("Unavailable({})", err_message))
+                WasmResult::Reject(format!("Unavailable({err_message})"))
             );
         },
     );
@@ -396,7 +396,7 @@ fn bitcoin_send_transaction_internal_reject() {
             // Expect the reject message to be received.
             assert_eq!(
                 response,
-                WasmResult::Reject(format!("Unavailable({})", err_message))
+                WasmResult::Reject(format!("Unavailable({err_message})"))
             );
         },
     );
@@ -472,14 +472,13 @@ fn mock_bitcoin_canister_wat(network: BitcoinNetwork) -> String {
 
               (memory $memory 1)
               (export "memory" (memory $memory))
-              (data (i32.const 0) "Hello from {}!")
+              (data (i32.const 0) "Hello from {network}!")
               (export "canister_update bitcoin_get_balance" (func $ping))
               (export "canister_update bitcoin_get_utxos" (func $ping))
               (export "canister_update bitcoin_get_block_headers" (func $ping))
               (export "canister_update bitcoin_send_transaction" (func $ping))
               (export "canister_update bitcoin_get_current_fee_percentiles" (func $ping))
-            )"#,
-        network
+            )"#
     )
 }
 
@@ -536,7 +535,7 @@ fn test_canister_routing(env: StateMachine, networks: Vec<BitcoinNetwork>) {
                     method,
                     call_args().other_side(payload),
                 )),
-                format!("Hello from {}!", network).as_bytes(),
+                format!("Hello from {network}!").as_bytes(),
             );
         }
     }

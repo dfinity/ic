@@ -79,7 +79,7 @@ fn main() {
         .expect("Falied to retrieve unix epoch")
         .as_millis();
     // Group name is now unique, so not deleting old ones
-    let group_name = format!("{}--{:?}", test_name, timestamp);
+    let group_name = format!("{test_name}--{timestamp:?}");
 
     // Create a new group
     create_group(

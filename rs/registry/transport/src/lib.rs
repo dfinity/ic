@@ -801,8 +801,8 @@ mod tests {
                     .iter()
                     .map(|mutation_type| {
                         let mutation_type = *mutation_type as i32;
-                        let key = format!("key_{}", mutation_type).into_bytes();
-                        let value = format!("value {}", mutation_type).into_bytes();
+                        let key = format!("key_{mutation_type}").into_bytes();
+                        let value = format!("value {mutation_type}").into_bytes();
 
                         RegistryMutation {
                             mutation_type,
@@ -820,8 +820,8 @@ mod tests {
                 .iter()
                 .map(|mutation_type| {
                     let mutation_type = *mutation_type as i32;
-                    let key = format!("key_{}", mutation_type).into_bytes();
-                    let value = format!("value {}", mutation_type).into_bytes();
+                    let key = format!("key_{mutation_type}").into_bytes();
+                    let value = format!("value {mutation_type}").into_bytes();
                     let content = Some(high_capacity_registry_mutation::Content::Value(value));
 
                     HighCapacityRegistryMutation {

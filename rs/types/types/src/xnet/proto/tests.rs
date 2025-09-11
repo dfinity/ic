@@ -76,7 +76,7 @@ fn certified_stream_slice_roundtrip() {
 fn error_decode_error() {
     match <pb_types::NiDkgId as ProtoProxy<NiDkgId>>::proxy_decode(&b"garbage"[..]) {
         Err(ProxyDecodeError::DecodeError(_)) => {}
-        other => panic!("Expected Err(DecodeError(_)), got {:?}", other),
+        other => panic!("Expected Err(DecodeError(_)), got {other:?}"),
     }
 }
 

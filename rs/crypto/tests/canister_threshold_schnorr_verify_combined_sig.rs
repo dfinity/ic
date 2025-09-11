@@ -74,9 +74,9 @@ fn should_verify_combined_signature_with_usual_basic_sig_verification() {
                 ))
             }
             alg if alg.is_threshold_schnorr() => {
-                panic!("this test is not implemented for {:?}", alg)
+                panic!("this test is not implemented for {alg:?}")
             }
-            _ => panic!("unexpected algorithm {:?}", alg),
+            _ => panic!("unexpected algorithm {alg:?}"),
         }
     }
 }

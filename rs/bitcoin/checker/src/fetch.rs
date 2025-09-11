@@ -249,8 +249,7 @@ pub trait FetchEnv {
                     } else {
                         // This error shouldn't happen unless blockdata is corrupted.
                         let msg = format!(
-                            "Tx {} vout {} has no address, but is vin {} of tx {}",
-                            input_txid, vout, index, txid
+                            "Tx {input_txid} vout {vout} has no address, but is vin {index} of tx {txid}"
                         );
                         log!(WARN, "{msg}");
                         error = Some(

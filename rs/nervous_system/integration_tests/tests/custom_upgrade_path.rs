@@ -391,7 +391,7 @@ async fn test_custom_upgrade_path_for_sns(automatically_advance_target_version: 
             sns::governance::try_get_upgrade_journal(pocket_ic, sns.governance.canister_id)
                 .await
                 .map(|upgrade_journal| upgrade_journal.deployed_version)
-                .map_err(|err| format!("{:?}", err))
+                .map_err(|err| format!("{err:?}"))
         },
         &Ok(Some(expected_ultimate_version)),
     )

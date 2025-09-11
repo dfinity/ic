@@ -81,7 +81,7 @@ fn test(env: TestEnv) {
             };
             match error {
                 AgentError::CertifiedReject { reject, .. } => assert_eq!(reject, expected_reject),
-                _ => panic!("Unexpected error: {:?}", error),
+                _ => panic!("Unexpected error: {error:?}"),
             };
         }
     });

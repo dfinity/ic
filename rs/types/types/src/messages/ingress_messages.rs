@@ -626,8 +626,7 @@ mod test {
         let result = extract_effective_canister_id(&msg);
         assert!(
             matches!(result, Err(ParseIngressError::InvalidSubnetPayload(_))),
-            "Expected InvalidSubnetPayload error, got: {:?}",
-            result
+            "Expected InvalidSubnetPayload error, got: {result:?}"
         );
     }
 

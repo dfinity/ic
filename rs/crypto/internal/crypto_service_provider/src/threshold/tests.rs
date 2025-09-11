@@ -76,8 +76,7 @@ pub mod util {
                             csp.csp_vault
                                 .threshold_sign(algorithm_id, message.to_vec(), *key_id)
                                 .is_err(),
-                            "Managed to threshold sign with algorithm ID {:?}",
-                            algorithm_id
+                            "Managed to threshold sign with algorithm ID {algorithm_id:?}"
                         )
                     }
                 }
@@ -109,7 +108,7 @@ pub mod util {
                 (*public_coefficients).clone(),
             ) {
                 Ok(public_key) => public_key,
-                Err(error) => panic!("Could not calculate individual public key: {:?}", error),
+                Err(error) => panic!("Could not calculate individual public key: {error:?}"),
             };
 
             // Correct values validate:
@@ -248,9 +247,7 @@ pub mod util {
                         public_coefficients.clone()
                     )
                     .is_err(),
-                "Combined signature verification passed with an individual signature: Used signature: {:?} Correct signature: {:?}",
-                some_individual_signature,
-                signature
+                "Combined signature verification passed with an individual signature: Used signature: {some_individual_signature:?} Correct signature: {signature:?}"
             );
         }
     }

@@ -579,7 +579,7 @@ fn get_gtc_account(
         .unwrap();
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to get_account failed: {:#?}", s),
+        WasmResult::Reject(s) => panic!("Call to get_account failed: {s:#?}"),
     };
 
     Decode!(&result, Result<AccountState, String>).unwrap()
@@ -600,8 +600,7 @@ fn forward_whitelisted_unclaimed_accounts(
     let result = match result {
         WasmResult::Reply(result) => result,
         WasmResult::Reject(s) => panic!(
-            "Call to forward_whitelisted_unclaimed_accounts failed: {:#?}",
-            s
+            "Call to forward_whitelisted_unclaimed_accounts failed: {s:#?}"
         ),
     };
 
@@ -623,7 +622,7 @@ fn donate_accounts(
         .unwrap();
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to donate_account failed: {:#?}", s),
+        WasmResult::Reject(s) => panic!("Call to donate_account failed: {s:#?}"),
     };
 
     Decode!(&result,Result<(), String>).unwrap()
@@ -644,7 +643,7 @@ fn claim_neurons(
         .unwrap();
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to claim_neurons failed: {:#?}", s),
+        WasmResult::Reject(s) => panic!("Call to claim_neurons failed: {s:#?}"),
     };
 
     Decode!(&result, Result<Vec<NeuronId>, String>).unwrap()

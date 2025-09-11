@@ -180,7 +180,7 @@ mod test {
 
         for prefix in invalid_prefixes {
             let result = mac.calculate_slaac(prefix);
-            assert!(result.is_err(), "Prefix '{}' should be invalid", prefix);
+            assert!(result.is_err(), "Prefix '{prefix}' should be invalid");
         }
     }
 

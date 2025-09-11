@@ -68,8 +68,7 @@ async fn test_limit_outstanding_calls() {
                 assert_eq!(
                     *self.observed_call_count.lock().unwrap(),
                     self.expected_call_count,
-                    "{:#?}",
-                    self
+                    "{self:#?}"
                 );
             }
         }
@@ -222,24 +221,24 @@ async fn test_limit_outstanding_calls() {
     assert_eq!(&results[5], &Ok(base_canister_status_result.clone()));
 
     match &results[6] {
-        Ok(ok) => panic!("{:#?}", ok),
+        Ok(ok) => panic!("{ok:#?}"),
         Err((reject_code, message)) => {
             assert_eq!(*reject_code, RejectCode::SysTransient as i32);
 
             let message = message.to_lowercase();
-            assert!(message.contains("unavailable"), "{:?}", message);
+            assert!(message.contains("unavailable"), "{message:?}");
         }
     }
 
     assert_eq!(&results[7], &Ok(base_canister_status_result.clone()));
 
     match &results[8] {
-        Ok(ok) => panic!("{:#?}", ok),
+        Ok(ok) => panic!("{ok:#?}"),
         Err((reject_code, message)) => {
             assert_eq!(*reject_code, RejectCode::SysTransient as i32);
 
             let message = message.to_lowercase();
-            assert!(message.contains("unavailable"), "{:?}", message);
+            assert!(message.contains("unavailable"), "{message:?}");
         }
     }
 }

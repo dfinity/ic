@@ -318,8 +318,7 @@ impl CallContextManagerStats {
                 Entry::Vacant(_) => {
                     debug_assert!(
                         false,
-                        "Aborted or paused DTS response with no matching callback: {:?}",
-                        response
+                        "Aborted or paused DTS response with no matching callback: {response:?}"
                     )
                 }
             }
@@ -647,7 +646,7 @@ impl CallContextManager {
         let mut call_context = self
             .call_contexts
             .remove(&call_context_id)
-            .ok_or(format!("Call context not found: {}", call_context_id))?;
+            .ok_or(format!("Call context not found: {call_context_id}"))?;
         if !call_context.responded {
             call_context.mark_responded();
 

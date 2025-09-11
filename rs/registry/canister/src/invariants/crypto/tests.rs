@@ -591,11 +591,7 @@ fn run_test_orphaned_crypto_keys(
     assert_eq!(
         err.to_string(),
         format!(
-            "InvariantCheckError: There are {} or {} entries without a corresponding {} entry: [{}]",
-            CRYPTO_RECORD_KEY_PREFIX,
-            CRYPTO_TLS_CERT_KEY_PREFIX,
-            NODE_RECORD_KEY_PREFIX,
-            missing_node_id
+            "InvariantCheckError: There are {CRYPTO_RECORD_KEY_PREFIX} or {CRYPTO_TLS_CERT_KEY_PREFIX} entries without a corresponding {NODE_RECORD_KEY_PREFIX} entry: [{missing_node_id}]"
         )
     );
 }
@@ -859,7 +855,7 @@ mod chain_key_enabled_subnet_lists {
         let key_id = "some_key1";
         let invalid_curves = vec!["bogus_curve", ""];
         for invalid_curve in invalid_curves {
-            let ecdsa_key_id_string = format!("{}:{}", invalid_curve, key_id);
+            let ecdsa_key_id_string = format!("{invalid_curve}:{key_id}");
             let setup = Setup::builder()
                 .with_custom_curve_and_key_id(ecdsa_key_id_string.clone())
                 .without_subnet_record()
@@ -869,9 +865,7 @@ mod chain_key_enabled_subnet_lists {
                 check_node_crypto_keys_invariants(&setup.snapshot),
                 Err(err) if err.to_string().contains(
                     format!(
-                        "Scheme {} in master public key id {} is not supported",
-                        invalid_curve,
-                        ecdsa_key_id_string,
+                        "Scheme {invalid_curve} in master public key id {ecdsa_key_id_string} is not supported",
                     ).as_str())
             );
         }
@@ -890,7 +884,7 @@ mod chain_key_enabled_subnet_lists {
             assert_matches!(
                 check_node_crypto_keys_invariants(&setup.snapshot),
                 Err(err) if err.to_string().contains(
-                    format!("Master public key id {} does not contain a ':'", ecdsa_key_id_string).as_str()
+                    format!("Master public key id {ecdsa_key_id_string} does not contain a ':'").as_str()
                 )
             );
         }
@@ -1034,7 +1028,7 @@ mod chain_key_enabled_subnet_lists {
                 }
             };
             let chain_key_enabled_subnet_list_key =
-                format!("{}{}", CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, key_id);
+                format!("{CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX}{key_id}");
 
             let subnet_id = subnet_test_id(1);
             let mut subnets = vec![subnet_id_into_protobuf(subnet_id)];

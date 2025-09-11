@@ -982,16 +982,14 @@ mod test {
             .now_or_never()
             .unwrap();
 
-        assert!(result.is_ok(), "{:?}", result);
+        assert!(result.is_ok(), "{result:?}");
         assert!(xrc_client.calls.lock().unwrap().is_empty());
         let icp_xdr_conversion_rate =
             read_state(&STATE, |state| state.icp_xdr_conversion_rate.clone());
         let expected_rate_timestamp = (now_timestamp_seconds / 60) * 60;
         assert!(
             matches!(icp_xdr_conversion_rate, Some(ref rate) if rate.xdr_permyriad_per_icp == 200_000 && rate.timestamp_seconds == expected_rate_timestamp),
-            "rate: {:#?} expected timestamp: {}",
-            icp_xdr_conversion_rate,
-            expected_rate_timestamp
+            "rate: {icp_xdr_conversion_rate:#?} expected timestamp: {expected_rate_timestamp}"
         );
         // Ensure the certified data has been set.
         assert!(!env.certified_data.borrow().is_empty());
@@ -1008,8 +1006,7 @@ mod test {
 
         assert!(
             matches!(average_icp_xdr_conversion_rate, Some(ref rate) if rate.xdr_permyriad_per_icp == 200_000),
-            "rate: {:#?}",
-            icp_xdr_conversion_rate
+            "rate: {icp_xdr_conversion_rate:#?}"
         );
     }
 

@@ -296,7 +296,7 @@ fn can_parse_dfx_created_private_key() {
 
     match PrivateKey::deserialize_pkcs8_pem(dfx_key) {
         Ok(_sk) => { /* success */ }
-        Err(e) => panic!("Unexpected error serializing DFX generated key {:?}", e),
+        Err(e) => panic!("Unexpected error serializing DFX generated key {e:?}"),
     }
 }
 

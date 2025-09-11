@@ -159,10 +159,8 @@ async fn nns_delegation_test(env: TestEnv, subnet_type: SubnetType) {
         assert!(
             new_delegation_timestamp >= initial_delegation_timestamp,
             "Timestamps should be (not necessarily strictly) increasing. \
-            New delegation timestamp: {}, \
-            initial delegation timestamp: {}",
-            new_delegation_timestamp,
-            initial_delegation_timestamp,
+            New delegation timestamp: {new_delegation_timestamp}, \
+            initial delegation timestamp: {initial_delegation_timestamp}",
         );
 
         if new_delegation_timestamp == initial_delegation_timestamp {

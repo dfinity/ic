@@ -22,11 +22,10 @@ fn verify_data(tag: String, expected_hash: &str, serialized: &[u8]) {
     let computed_hash = hex::encode(&hash[0..8]);
 
     if !UPDATING_TEST_VECTORS {
-        assert_eq!(computed_hash, expected_hash, "{}", tag);
+        assert_eq!(computed_hash, expected_hash, "{tag}");
     } else if computed_hash != expected_hash {
         println!(
-            "perl -pi -e s/{}/{}/g tests/serialization.rs",
-            expected_hash, computed_hash
+            "perl -pi -e s/{expected_hash}/{computed_hash}/g tests/serialization.rs"
         );
     }
 }
@@ -39,13 +38,13 @@ fn check_dealings(
     dealing_hashes: &[&'static str],
 ) -> CanisterThresholdResult<()> {
     verify_data(
-        format!("{} commitment", name),
+        format!("{name} commitment"),
         commitment_hash,
         &round.commitment.serialize().expect("Serialization failed"),
     );
 
     verify_data(
-        format!("{} transcript", name),
+        format!("{name} transcript"),
         transcript_hash,
         &round.transcript.serialize().expect("Serialization failed"),
     );
@@ -56,7 +55,7 @@ fn check_dealings(
         let dealer_index = dealer_index as u32;
         let dealing = round.dealings.get(&dealer_index).expect("Missing dealing");
         verify_data(
-            format!("{} dealing {}", name, dealer_index),
+            format!("{name} dealing {dealer_index}"),
             hash,
             &dealing.serialize().expect("Serialization failed"),
         );
@@ -75,7 +74,7 @@ fn check_ecdsa_shares(
         let index = index as u32;
         let share = shares.get(&index).expect("Unable to find signature share");
         verify_data(
-            format!("share {}", index),
+            format!("share {index}"),
             hash,
             &share.serialize().expect("Serialization failed"),
         )
@@ -94,7 +93,7 @@ fn check_bip340_shares(
         let index = index as u32;
         let share = shares.get(&index).expect("Unable to find signature share");
         verify_data(
-            format!("share {}", index),
+            format!("share {index}"),
             hash,
             &share.serialize().unwrap(),
         )
@@ -112,7 +111,7 @@ fn check_ed25519_shares(
     for (index, hash) in hashes.iter().enumerate() {
         let index = index as u32;
         let share = shares.get(&index).expect("Unable to find signature share");
-        verify_data(format!("share {}", index), hash, &share.serialize())
+        verify_data(format!("share {index}"), hash, &share.serialize())
     }
 
     Ok(())

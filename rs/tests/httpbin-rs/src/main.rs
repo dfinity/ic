@@ -117,8 +117,8 @@ async fn many_response_headers_handler(Path(size): Path<usize>) -> (HeaderMap, S
 
     for i in 0..size {
         headers.insert(
-            HeaderName::from_str(&format!("Name{:?}", i)).unwrap(),
-            format!("value{:?}", i).parse().unwrap(),
+            HeaderName::from_str(&format!("Name{i:?}")).unwrap(),
+            format!("value{i:?}").parse().unwrap(),
         );
     }
 

@@ -36,7 +36,7 @@ impl IpAddressInfo {
             eprintln!(
                 "Valid IPv4 address configuration provided:\nAddress: {address}\nPrefix length: {prefix_length}\nGateway: {gateway}"
             );
-            let address_with_prefix = format!("{}/{}", address, prefix_length);
+            let address_with_prefix = format!("{address}/{prefix_length}");
 
             Ok(IpAddressInfo {
                 address_with_prefix,
@@ -94,8 +94,8 @@ pub fn generate_networkd_config(
     systemd_network_dir: &Path,
     ipv4_info: Option<IpAddressInfo>,
 ) -> Result<()> {
-    eprintln!("IPv6 config info: {:?}", ipv6_config);
-    eprintln!("IPv4 address info: {:?}", ipv4_info);
+    eprintln!("IPv6 config info: {ipv6_config:?}");
+    eprintln!("IPv4 address info: {ipv4_info:?}");
     eprintln!(
         "Systemd network directory: {}",
         systemd_network_dir.display()
@@ -104,7 +104,7 @@ pub fn generate_networkd_config(
     std::fs::create_dir_all(systemd_network_dir)?;
 
     let network_info: NetworkInfo = create_network_info(ipv6_config, ipv4_info)?;
-    eprintln!("{:#?}", network_info);
+    eprintln!("{network_info:#?}");
 
     let network_interface_name = get_interface_name()?;
 
@@ -113,8 +113,7 @@ pub fn generate_networkd_config(
     let networkd_config_file_contents =
         generate_networkd_config_contents(network_info, &network_interface_name, disable_dad);
     eprintln!(
-        "Networkd config contents: {:#?}",
-        networkd_config_file_contents
+        "Networkd config contents: {networkd_config_file_contents:#?}"
     );
 
     let networkd_config_file_path =
@@ -186,7 +185,7 @@ fn generate_networkd_config_contents(
     let ipv6_contents = generate_network_config_ipv6_contents(network_info.ipv6_info, disable_dad);
     let ipv4_contents = generate_network_config_ipv4_contents(network_info.ipv4_info);
 
-    format!("{}{}{}", match_contents, ipv6_contents, ipv4_contents)
+    format!("{match_contents}{ipv6_contents}{ipv4_contents}")
 }
 
 fn generate_network_config_match_contents(interface_name: &str) -> String {
@@ -248,26 +247,26 @@ fn generate_network_config_ipv4_contents(ipv4_info: Option<IpAddressInfo>) -> St
 
 fn get_interface_name() -> Result<String> {
     let interfaces: Vec<PathBuf> = get_interface_paths();
-    eprintln!("Found raw network interfaces: {:?}", interfaces);
+    eprintln!("Found raw network interfaces: {interfaces:?}");
 
     let valid_interfaces: Vec<_> = interfaces
         .iter()
         .filter(is_valid_network_interface)
         .collect();
-    eprintln!("Found valid network interfaces: {:?}", valid_interfaces);
+    eprintln!("Found valid network interfaces: {valid_interfaces:?}");
 
     let first_valid_interface = valid_interfaces
         .first()
         .context("ERROR: No valid network interfaces found.")?;
 
     let interface_name = get_valid_interface_name(first_valid_interface)?;
-    eprintln!("Chosen interface name: {:?}", interface_name);
+    eprintln!("Chosen interface name: {interface_name:?}");
     Ok(interface_name)
 }
 
 fn is_valid_network_interface(path: &&PathBuf) -> bool {
     let Some(filename) = path.file_name() else {
-        eprintln!("ERROR: Invalid network interface path: {:#?}", path);
+        eprintln!("ERROR: Invalid network interface path: {path:#?}");
         return false;
     };
     let filename = filename.to_string_lossy();

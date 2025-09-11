@@ -213,8 +213,7 @@ fn should_correctly_parse_cose_encoded_der_wrapped_ecdsa_p256_pk() {
         assert_eq!(
             pk.algorithm_id,
             AlgorithmId::EcdsaP256,
-            "Failed for pk_hex: {}",
-            pk_cose_der_hex
+            "Failed for pk_hex: {pk_cose_der_hex}"
         );
         assert_eq!(
             bytes_type,
@@ -253,8 +252,7 @@ fn should_correctly_verify_sig_with_der_wrapped_cose_encoded_ecdsa_p256_pk() {
                 crypto
                     .verify_basic_sig_by_public_key(&sig, &msg, &pk)
                     .is_ok(),
-                "Failed for pk_hex: {}",
-                pk_der_hex
+                "Failed for pk_hex: {pk_der_hex}"
             );
         })
     }

@@ -116,28 +116,22 @@ fn registry_mut() -> &'static mut Registry {
 
 fn check_caller_is_governance_and_log(method_name: &str) {
     let caller = dfn_core::api::caller();
-    println!("{}call: {} from: {}", LOG_PREFIX, method_name, caller);
+    println!("{LOG_PREFIX}call: {method_name} from: {caller}");
     assert_eq!(
         caller,
         GOVERNANCE_CANISTER_ID.into(),
-        "{}Principal: {} is not authorized to call this method: {}",
-        LOG_PREFIX,
-        caller,
-        method_name
+        "{LOG_PREFIX}Principal: {caller} is not authorized to call this method: {method_name}"
     );
 }
 
 fn check_caller_is_canister_migration_orchestrator_and_log(method_name: &str) {
     let caller = dfn_core::api::caller();
-    println!("{}call: {} from: {}", LOG_PREFIX, method_name, caller);
+    println!("{LOG_PREFIX}call: {method_name} from: {caller}");
     // TODO - change GOVERNANCE_CANISTER to the new canister when the constant is available.
     assert_eq!(
         caller,
         GOVERNANCE_CANISTER_ID.into(),
-        "{}Principal: {} is not authorized to call this method: {}",
-        LOG_PREFIX,
-        caller,
-        method_name
+        "{LOG_PREFIX}Principal: {caller} is not authorized to call this method: {method_name}"
     );
 }
 
@@ -185,7 +179,7 @@ fn canister_init() {
 
 #[unsafe(export_name = "canister_pre_upgrade")]
 fn canister_pre_upgrade() {
-    println!("{}canister_pre_upgrade", LOG_PREFIX);
+    println!("{LOG_PREFIX}canister_pre_upgrade");
     let registry = registry();
     let ss = RegistryCanisterStableStorage {
         registry: Some(registry.serializable_form()),
@@ -198,7 +192,7 @@ fn canister_pre_upgrade() {
 #[unsafe(export_name = "canister_post_upgrade")]
 fn canister_post_upgrade() {
     dfn_core::printer::hook();
-    println!("{}canister_post_upgrade", LOG_PREFIX);
+    println!("{LOG_PREFIX}canister_post_upgrade");
     // call stable_storage APIs and get registry instance in canister context
     // Look for MemoryManager magic bytes
     let mut magic_bytes = [0u8; 3];
@@ -323,7 +317,7 @@ fn get_value() {
                             // that is the only case where try_from fails, we deduce
                             // that this panic cannot occur.
                             .unwrap_or_else(|err| {
-                                panic!("Unable to convert value to response type, because {}", err,)
+                                panic!("Unable to convert value to response type, because {err}",)
                             })
                     });
 
@@ -398,11 +392,9 @@ fn atomic_mutate() {
     //   recorded.
     assert!(
         caller == GOVERNANCE_CANISTER_ID.get() || caller == ROOT_CANISTER_ID.get(),
-        "{}Principal {} is not authorized to call 'atomic_mutate'.",
-        LOG_PREFIX,
-        caller
+        "{LOG_PREFIX}Principal {caller} is not authorized to call 'atomic_mutate'."
     );
-    println!("{}call 'atomic_mutate' from {}", LOG_PREFIX, caller);
+    println!("{LOG_PREFIX}call 'atomic_mutate' from {caller}");
 
     let response_pb = match deserialize_atomic_mutate_request(arg_data()) {
         Ok(request_pb) => {
@@ -414,8 +406,7 @@ fn atomic_mutate() {
         }
         Err(error) => {
             println!(
-                "{}Received a mutate call, but the request could not de deserialized due to: {}",
-                LOG_PREFIX, error
+                "{LOG_PREFIX}Received a mutate call, but the request could not de deserialized due to: {error}"
             );
             let mut response_pb = RegistryAtomicMutateResponse::default();
             let error_pb = RegistryError {
@@ -956,8 +947,7 @@ fn prepare_canister_migration_(payload: PrepareCanisterMigrationPayload) {
         .prepare_canister_migration(payload)
         .unwrap_or_else(|error_message| {
             trap_with(&format!(
-                "{} Prepare canister migration failed: {}",
-                LOG_PREFIX, error_message
+                "{LOG_PREFIX} Prepare canister migration failed: {error_message}"
             ))
         });
     recertify_registry();
@@ -975,8 +965,7 @@ fn reroute_canister_ranges_(payload: RerouteCanisterRangesPayload) {
         .reroute_canister_ranges(payload)
         .unwrap_or_else(|error_message| {
             trap_with(&format!(
-                "{} Reroute canister ranges failed: {}",
-                LOG_PREFIX, error_message
+                "{LOG_PREFIX} Reroute canister ranges failed: {error_message}"
             ))
         });
     recertify_registry();
@@ -994,8 +983,7 @@ fn complete_canister_migration_(payload: CompleteCanisterMigrationPayload) {
         .complete_canister_migration(payload)
         .unwrap_or_else(|error_message| {
             trap_with(&format!(
-                "{} Complete canister migration failed: {}",
-                LOG_PREFIX, error_message
+                "{LOG_PREFIX} Complete canister migration failed: {error_message}"
             ))
         });
     recertify_registry();
@@ -1104,8 +1092,7 @@ fn add_node_(payload: AddNodePayload) -> NodeId {
         .do_add_node(payload)
         .unwrap_or_else(|error_message| {
             trap_with(&format!(
-                "{} Add node failed: {}",
-                LOG_PREFIX, error_message
+                "{LOG_PREFIX} Add node failed: {error_message}"
             ))
         });
 
@@ -1130,8 +1117,7 @@ fn update_node_directly_(payload: UpdateNodeDirectlyPayload) {
         .do_update_node_directly(payload)
         .unwrap_or_else(|error_message| {
             trap_with(&format!(
-                "{} Update node directly failed: {}",
-                LOG_PREFIX, error_message
+                "{LOG_PREFIX} Update node directly failed: {error_message}"
             ))
         });
     recertify_registry();

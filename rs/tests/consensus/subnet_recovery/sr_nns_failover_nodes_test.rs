@@ -269,7 +269,7 @@ pub fn test(env: TestEnv) {
         info!(logger, "{}", step.descr());
 
         step.exec()
-            .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
+            .unwrap_or_else(|e| panic!("Execution of step {step_type:?} failed: {e}"));
 
         if matches!(step_type, StepType::CreateRegistryTar) {
             // and also upload it...
@@ -277,8 +277,7 @@ pub fn test(env: TestEnv) {
             let url_to_file = setup_file_server(&env, &tar);
             let url = Url::parse(&url_to_file).unwrap_or_else(|err| {
                 panic!(
-                    "Couldn't parse url {} to registry tar: {:?}",
-                    url_to_file, err
+                    "Couldn't parse url {url_to_file} to registry tar: {err:?}"
                 )
             });
             info!(logger, "URL: {}", url);

@@ -510,12 +510,12 @@ proptest! {
         lock_time in any::<u32>(),
     ) {
         let arb_tx = tx::UnsignedTransaction { inputs, outputs, lock_time };
-        println!("{:?}", arb_tx);
+        println!("{arb_tx:?}");
         let btc_tx = unsigned_tx_to_bitcoin_tx(&arb_tx);
         println!("{:?}", btc_tx.serialize());
 
         let tx_bytes = tx::encode_into(&arb_tx, Vec::<u8>::new());
-        println!("{:?}", tx_bytes);
+        println!("{tx_bytes:?}");
         let decoded_btc_tx = bitcoin::Transaction::deserialize(&tx_bytes).expect("failed to deserialize an unsigned transaction");
 
         prop_assert_eq!(btc_tx.serialize(), tx_bytes);
@@ -575,12 +575,12 @@ proptest! {
         lock_time in any::<u32>(),
     ) {
         let arb_tx = tx::SignedTransaction { inputs, outputs, lock_time };
-        println!("{:?}", arb_tx);
+        println!("{arb_tx:?}");
         let btc_tx = signed_tx_to_bitcoin_tx(&arb_tx);
         println!("{:?}", btc_tx.serialize());
 
         let tx_bytes = tx::encode_into(&arb_tx, Vec::<u8>::new());
-        println!("{:?}", tx_bytes);
+        println!("{tx_bytes:?}");
         let decoded_btc_tx = bitcoin::Transaction::deserialize(&tx_bytes).expect("failed to deserialize a signed transaction");
 
         prop_assert_eq!(btc_tx.serialize(), tx_bytes);

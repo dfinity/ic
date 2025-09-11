@@ -151,8 +151,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
                     | RetrieveBtcStatus::Sending { .. }
                     | RetrieveBtcStatus::Submitted { .. }
             ),
-            "Expected status Submitted or Pending, got {:?}",
-            retrieve_status,
+            "Expected status Submitted or Pending, got {retrieve_status:?}",
         );
 
         // Wait for tx to be signed
@@ -165,9 +164,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
         // Check if we have the txid in the bitcoind mempool
         assert!(
             mempool_txids.contains(&btc_txid),
-            "The mempool does not contain the expected txid: {}, mempool contents: {:?}",
-            btc_txid,
-            mempool_txids
+            "The mempool does not contain the expected txid: {btc_txid}, mempool contents: {mempool_txids:?}"
         );
 
         // We are expecting only one transaction in mempool.
@@ -239,24 +236,21 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
                     ..
                 }) if *block_index == retrieve_response.block_index
             )),
-            "missing the retrieve request in the event log: {:?}",
-            events
+            "missing the retrieve request in the event log: {events:?}"
         );
 
         assert!(
             events.iter().any(
                 |e| matches!(e, EventType::SentBtcTransaction { txid, .. } if txid == &finalized_txid)
             ),
-            "missing the tx submission in the event log: {:?}",
-            events
+            "missing the tx submission in the event log: {events:?}"
         );
 
         assert!(
             events.iter().any(
                 |e| matches!(e, EventType::ConfirmedBtcTransaction { txid } if txid == &finalized_txid)
             ),
-            "missing the tx confirmation in the event log: {:?}",
-            events
+            "missing the tx confirmation in the event log: {events:?}"
         );
     })
 }

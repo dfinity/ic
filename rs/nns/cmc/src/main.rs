@@ -2632,16 +2632,14 @@ mod tests {
         let on_behalf_of_self_result = authorize(creator);
         assert!(
             on_behalf_of_self_result.is_ok(),
-            "{:#?}",
-            on_behalf_of_self_result,
+            "{on_behalf_of_self_result:#?}",
         );
 
         let eve = PrincipalId::new_user_test_id(898_071_769);
         let on_behalf_of_other_result = authorize(eve);
         assert!(
             on_behalf_of_other_result.is_err(),
-            "{:#?}",
-            on_behalf_of_other_result,
+            "{on_behalf_of_other_result:#?}",
         );
         let err = on_behalf_of_other_result.unwrap_err();
         match &err {
@@ -2652,29 +2650,25 @@ mod tests {
                 assert_eq!(
                     *error_code,
                     NotifyErrorCode::Unauthorized as u64,
-                    "{:#?}",
-                    err,
+                    "{err:#?}",
                 );
 
                 let error_message = error_message.to_lowercase();
                 for key_word in ["authorize", "on behalf"] {
                     assert!(
                         error_message.contains(key_word),
-                        "{} not in {:#?}",
-                        key_word,
-                        err,
+                        "{key_word} not in {err:#?}",
                     );
                 }
             }
 
-            _ => panic!("{:#?}", err),
+            _ => panic!("{err:#?}"),
         }
 
         let caller_is_nns_dapp_result = authorize(PrincipalId::from(*NNS_DAPP_BACKEND_CANISTER_ID));
         assert!(
             caller_is_nns_dapp_result.is_ok(),
-            "{:#?}",
-            caller_is_nns_dapp_result,
+            "{caller_is_nns_dapp_result:#?}",
         );
 
         // Also allow nns-dapp backend canister ID used in test.
@@ -2682,8 +2676,7 @@ mod tests {
             authorize(PrincipalId::from_str("qsgjb-riaaa-aaaaa-aaaga-cai").unwrap());
         assert!(
             caller_is_nns_dapp_result.is_ok(),
-            "{:#?}",
-            caller_is_nns_dapp_result,
+            "{caller_is_nns_dapp_result:#?}",
         );
     }
 
@@ -3250,16 +3243,14 @@ mod tests {
 
             let original_err = match result {
                 Err(NotifyError::InvalidTransaction(err)) => err,
-                wrong => panic!("{:?}", wrong),
+                wrong => panic!("{wrong:?}"),
             };
 
             let lower_err = original_err.to_lowercase();
             for key_word in ["memo", "77", "42"] {
                 assert!(
                     lower_err.contains(key_word),
-                    "{} not in {:?}",
-                    key_word,
-                    original_err
+                    "{key_word} not in {original_err:?}"
                 );
             }
         }
@@ -3281,16 +3272,14 @@ mod tests {
 
             let original_err = match result {
                 Err(NotifyError::InvalidTransaction(err)) => err,
-                wrong => panic!("{:?}", wrong),
+                wrong => panic!("{wrong:?}"),
             };
 
             let lower_err = original_err.to_lowercase();
             for key_word in ["memo", "78", "42"] {
                 assert!(
                     lower_err.contains(key_word),
-                    "{} not in {:?}",
-                    key_word,
-                    original_err
+                    "{key_word} not in {original_err:?}"
                 );
             }
         }
@@ -3311,16 +3300,14 @@ mod tests {
 
             let original_err = match result {
                 Err(NotifyError::InvalidTransaction(err)) => err,
-                wrong => panic!("{:?}", wrong),
+                wrong => panic!("{wrong:?}"),
             };
 
             let lower_err = original_err.to_lowercase();
             for key_word in ["memo", "0", "42"] {
                 assert!(
                     lower_err.contains(key_word),
-                    "{} not in {:?}",
-                    key_word,
-                    original_err
+                    "{key_word} not in {original_err:?}"
                 );
             }
         }
@@ -3340,16 +3327,14 @@ mod tests {
 
             let original_err = match result {
                 Err(NotifyError::InvalidTransaction(err)) => err,
-                wrong => panic!("{:?}", wrong),
+                wrong => panic!("{wrong:?}"),
             };
 
             let lower_err = original_err.to_lowercase();
             for key_word in ["memo", "0", "42"] {
                 assert!(
                     lower_err.contains(key_word),
-                    "{} not in {:?}",
-                    key_word,
-                    original_err
+                    "{key_word} not in {original_err:?}"
                 );
             }
         }

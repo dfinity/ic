@@ -715,11 +715,11 @@ tz/anssmxkNaYFHKxkqYb8GWzZHcs6fgz6D13qrBrOguDHJJ0N8mKHet
         Ok(_) => panic!("Unexpectedly accepted a secp256r1 private key as secp256k1"),
         Err(KeyDecodingError::InvalidKeyEncoding(e)) => {
             assert_eq!(
-                format!("{:?}", e),
+                format!("{e:?}"),
                 "\"PublicKey(OidUnknown { oid: ObjectIdentifier(1.3.132.0.10) })\""
             );
         }
-        Err(e) => panic!("Unexpected error {:?}", e),
+        Err(e) => panic!("Unexpected error {e:?}"),
     }
 }
 
@@ -734,11 +734,11 @@ Fuih1ILwOK+Hmr2Q5yPe4k0Kz2se3NM1eQeVaTl5BtwlTTc9IOcky4I7oQ==
         Ok(_) => panic!("Unexpectedly accepted a secp256r1 public key as secp256k1"),
         Err(KeyDecodingError::InvalidKeyEncoding(e)) => {
             assert_eq!(
-                format!("{:?}", e),
+                format!("{e:?}"),
                 "\"OidUnknown { oid: ObjectIdentifier(1.3.132.0.10) }\""
             );
         }
-        Err(e) => panic!("Unexpected error {:?}", e),
+        Err(e) => panic!("Unexpected error {e:?}"),
     }
 }
 

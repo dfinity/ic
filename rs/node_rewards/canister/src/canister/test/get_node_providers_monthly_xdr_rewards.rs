@@ -535,7 +535,7 @@ fn test_get_node_providers_monthly_xdr_rewards_type3() {
     let mut np2_expected_reward_ch = 0;
     let mut node_reward_ch = 22000000.0;
     for _ in 0..14 {
-        println!("node_reward CH {}", node_reward_ch);
+        println!("node_reward CH {node_reward_ch}");
         np2_expected_reward_ch += node_reward_ch as u64;
         node_reward_ch *= 0.7;
     }
@@ -561,7 +561,7 @@ fn test_get_node_providers_monthly_xdr_rewards_type3() {
     let mut np2_expected_reward_de = 0;
     let mut node_reward_de = 22000000.0;
     for _ in 0..11 {
-        println!("node_reward DE {}", node_reward_de);
+        println!("node_reward DE {node_reward_de}");
         np2_expected_reward_de += node_reward_de as u64;
         node_reward_de *= 0.7;
     }
@@ -597,7 +597,7 @@ fn test_get_node_providers_monthly_xdr_rewards_type3() {
     );
 
     for _ in 0..10 {
-        println!("node_reward CH {}", node_reward_ch);
+        println!("node_reward CH {node_reward_ch}");
         np2_expected_reward_ch += node_reward_ch as u64;
         node_reward_ch *= 0.7;
     }

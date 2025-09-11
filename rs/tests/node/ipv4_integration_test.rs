@@ -188,7 +188,7 @@ EOT
             sudo systemctl start ic-crypto-csp
             sudo systemctl start ic-replica
             "#}) {
-            panic!("Script execution failed: {:?}", e);
+            panic!("Script execution failed: {e:?}");
         }
 
         info!(log, "Waiting for the registry to update from version {:?} ...", topology.get_registry_version());

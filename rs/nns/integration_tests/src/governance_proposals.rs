@@ -39,7 +39,7 @@ fn make_motion_proposal(
         Some(Command::MakeProposal(make_proposal_response)) => {
             make_proposal_response.proposal_id.unwrap()
         }
-        _ => panic!("Failed to make motion proposal: {:?}", response),
+        _ => panic!("Failed to make motion proposal: {response:?}"),
     }
 }
 

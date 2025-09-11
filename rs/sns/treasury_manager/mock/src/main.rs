@@ -41,7 +41,7 @@ impl TreasuryManager for MockTreasuryManager {
 declare_log_buffer!(name = LOG, capacity = 100);
 
 fn log(msg: &str) {
-    let msg = format!("[MockTreasuryManager] {}", msg);
+    let msg = format!("[MockTreasuryManager] {msg}");
     ic_cdk::api::debug_print(&msg);
     log!(LOG, "{}", msg);
 }

@@ -866,7 +866,7 @@ fn test_message_picking_round_robin_on_one_queue() {
     for _ in 0..3 {
         match fixture.pop_input().expect("could not pop a message") {
             CanisterInput::Request(msg) => assert_eq!(msg.sender, fixture.other),
-            msg => panic!("unexpected message popped: {:?}", msg),
+            msg => panic!("unexpected message popped: {msg:?}"),
         }
     }
 
@@ -900,7 +900,7 @@ fn test_message_picking_ingress_only() {
             CanisterInput::Ingress(msg) => {
                 assert_eq!(msg.method_payload, vec![expected_byte])
             }
-            msg => panic!("unexpected message popped: {:?}", msg),
+            msg => panic!("unexpected message popped: {msg:?}"),
         }
         expected_byte += 1;
     }
@@ -1822,7 +1822,7 @@ fn test_output_into_iter() {
                 assert_eq!(*expected[i].0, msg.receiver);
                 assert_eq!(vec![expected[i].1], msg.method_payload)
             }
-            msg => panic!("unexpected message popped: {:?}", msg),
+            msg => panic!("unexpected message popped: {msg:?}"),
         }
     }
 

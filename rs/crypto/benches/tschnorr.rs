@@ -253,7 +253,7 @@ impl TestCase {
         let alg = match self.alg {
             AlgorithmId::ThresholdSchnorrBip340 => "bip340",
             AlgorithmId::ThresholdEd25519 => "ed25519",
-            unexpected => panic!("Unexpected testcase algorithm {}", unexpected),
+            unexpected => panic!("Unexpected testcase algorithm {unexpected}"),
         };
         format!("crypto_tschnorr_{alg}_{}_nodes", self.num_of_nodes)
     }

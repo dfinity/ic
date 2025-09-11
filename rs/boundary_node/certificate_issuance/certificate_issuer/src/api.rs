@@ -61,8 +61,7 @@ pub async fn create_handler(
             return Response::builder()
                 .status(429)
                 .body(Body::from(format!(
-                    "rate limit exceeded for domain {}",
-                    domain
+                    "rate limit exceeded for domain {domain}"
                 )))
                 .unwrap();
         }

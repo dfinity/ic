@@ -235,7 +235,7 @@ pub fn test(env: TestEnv, config: Config) {
             .join()
             .expect("Thread execution failed.")
             .unwrap_or_else(|err| {
-                panic!("Node stressing failed err={}", err);
+                panic!("Node stressing failed err={err}");
             });
         info!(&log, "{:?}", stress_info);
     }
@@ -384,9 +384,8 @@ fn fraction_of_duration(time: Duration, fraction: f64) -> Duration {
 fn reset_tc_ssh_command() -> String {
     format!(
         r#"set -euo pipefail
-    sudo tc qdisc del dev {device} root 2> /dev/null || true
-    "#,
-        device = DEVICE_NAME
+    sudo tc qdisc del dev {DEVICE_NAME} root 2> /dev/null || true
+    "#
     )
 }
 

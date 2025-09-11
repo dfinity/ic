@@ -148,8 +148,7 @@ fn create_and_verify_key_shares_for_each<C: CryptoComponentRng>(
                 .create_encrypted_key_share(vetkd_args.clone())
                 .unwrap_or_else(|e| {
                     panic!(
-                        "vetKD encrypted key share creation by node {:?} failed: {}",
-                        creator, e
+                        "vetKD encrypted key share creation by node {creator:?} failed: {e}"
                     )
                 });
             assert_eq!(

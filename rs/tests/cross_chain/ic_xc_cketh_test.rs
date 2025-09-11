@@ -247,7 +247,7 @@ async fn eth_block_number(foundry: &DeployedUniversalVm) -> BlockNumber {
     let foundry_ip = foundry.get_vm().unwrap().ipv6;
     let client = Client::new();
 
-    let url = format!("http://[{:?}]:{:?}", foundry_ip, FOUNDRY_PORT);
+    let url = format!("http://[{foundry_ip:?}]:{FOUNDRY_PORT:?}");
 
     let response = client
         .post(&url)
@@ -739,7 +739,7 @@ fn deploy_erc20_contract(
         &EthereumAccount::Erc20Deployer,
         "ERC20.sol",
         "EXLToken",
-        &format!("0x{:x}", initial_supply),
+        &format!("0x{initial_supply:x}"),
         logger,
     );
     //deployer has initial supply, transfer some ERC-20 tokens to user to play with
@@ -966,7 +966,7 @@ impl LedgerSuiteOrchestratorCanister<'_> {
             }
         )
         .await
-        .unwrap_or_else(|e| panic!("Canisters for ERC-20 {:?} were not created: {}", arg, e));
+        .unwrap_or_else(|e| panic!("Canisters for ERC-20 {arg:?} were not created: {e}"));
         info!(
             &logger,
             "Created canister IDs: {} for ERC-20 {:?}", created_canister_ids, arg

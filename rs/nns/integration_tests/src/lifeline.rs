@@ -96,8 +96,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
         resp.proposal_id.unwrap()
     } else {
         panic!(
-            "Unexpected proposal submission response: {:?}",
-            proposal_submission_response
+            "Unexpected proposal submission response: {proposal_submission_response:?}"
         );
     };
 
@@ -123,8 +122,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
     assert_eq!(
         proposal_info.status,
         ProposalStatus::Executed as i32,
-        "{:#?}",
-        proposal_info
+        "{proposal_info:#?}"
     );
 
     // No proposals should be pending now.
@@ -198,8 +196,7 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
         resp.proposal_id.unwrap()
     } else {
         panic!(
-            "Unexpected proposal submission response: {:?}",
-            proposal_submission_response
+            "Unexpected proposal submission response: {proposal_submission_response:?}"
         );
     };
 
@@ -224,8 +221,7 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
     assert_eq!(
         proposal_info.status,
         ProposalStatus::Executed as i32,
-        "{:#?}",
-        proposal_info
+        "{proposal_info:#?}"
     );
 
     // No proposals should be pending now.

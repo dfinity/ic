@@ -100,13 +100,13 @@ fn wait_for_initial_metrics_existence(node: &IcNodeSnapshot, logger: &Logger) {
         logger.clone(),
         Duration::from_secs(500),
         Duration::from_secs(5),
-        || node.block_on_bash_script(format!("[ -f {} ]", FSTRIM_METRICS_FILE).as_str())
+        || node.block_on_bash_script(format!("[ -f {FSTRIM_METRICS_FILE} ]").as_str())
     )
     .unwrap_or_else(|e| panic!("Node didn't initialize fstrim metrics in time because {e:?}"));
 }
 
 fn retrieve_fstrim_metrics(node: &IcNodeSnapshot, logger: &Logger) -> FsTrimMetrics {
-    let cat_fstrim_metrics_cmd = format!("sudo cat {}", FSTRIM_METRICS_FILE);
+    let cat_fstrim_metrics_cmd = format!("sudo cat {FSTRIM_METRICS_FILE}");
     info!(
         logger,
         "retrieving fstrim metrics using command: {}", cat_fstrim_metrics_cmd

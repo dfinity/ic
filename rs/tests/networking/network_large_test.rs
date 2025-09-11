@@ -168,7 +168,7 @@ pub fn test(env: TestEnv) {
         )
         .await
     }) {
-        panic!("expected the update to fail, got {:?}", result);
+        panic!("expected the update to fail, got {result:?}");
     };
 
     info!(log, "Step 8: Restart one node again",);

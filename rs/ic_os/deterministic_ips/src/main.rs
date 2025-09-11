@@ -50,14 +50,14 @@ fn main() -> anyhow::Result<()> {
     if let Some(node_type) = node_type {
         let ip = calculate_ip(mac, &prefix, deployment_environment, node_type)?;
 
-        println!("IP: {}", ip);
+        println!("IP: {ip}");
     } else {
         // Otherwise, calculate and display for Guest and Host
         let guest_ip = calculate_ip(mac, &prefix, deployment_environment, NodeType::GuestOS)?;
         let host_ip = calculate_ip(mac, &prefix, deployment_environment, NodeType::HostOS)?;
 
-        println!("GuestOS IP: {}", guest_ip);
-        println!("HostOS IP:  {}", host_ip);
+        println!("GuestOS IP: {guest_ip}");
+        println!("HostOS IP:  {host_ip}");
     }
 
     Ok(())

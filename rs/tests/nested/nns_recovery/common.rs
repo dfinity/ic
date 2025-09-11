@@ -57,7 +57,7 @@ pub struct SetupConfig {
 pub struct TestConfig {}
 
 fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
-    (1..=num_hosts).map(|i| format!("host-{}", i)).collect()
+    (1..=num_hosts).map(|i| format!("host-{i}")).collect()
 }
 
 pub fn assign_unassigned_nodes_to_nns(
@@ -144,7 +144,7 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
         std::fs::read(&recovery_img_path).expect("Failed to read recovery GuestOS image");
     let recovery_img_hash = Sha256::digest(&recovery_img)
         .iter()
-        .map(|b| format!("{:02x}", b))
+        .map(|b| format!("{b:02x}"))
         .collect::<String>();
 
     let initial_topology = block_on(
@@ -363,7 +363,7 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
 
         info!(logger, "{}", step.descr());
         step.exec()
-            .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
+            .unwrap_or_else(|e| panic!("Execution of step {step_type:?} failed: {e}"));
     }
     info!(
         logger,

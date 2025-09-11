@@ -826,8 +826,7 @@ fn all_arguments_have_description() {
             if arg.get_help().is_none() && arg.get_long_help().is_none() {
                 let arg_name = arg.get_id().to_string();
                 panic!(
-                    "Argument '{}' in command '{}' doesn't have a description. Add one (probably as a doc comment of the field).",
-                    arg_name, path
+                    "Argument '{arg_name}' in command '{path}' doesn't have a description. Add one (probably as a doc comment of the field)."
                 );
             }
         }
@@ -838,7 +837,7 @@ fn all_arguments_have_description() {
             let new_path = if path.is_empty() {
                 subcmd_name.to_string()
             } else {
-                format!("{} {}", path, subcmd_name)
+                format!("{path} {subcmd_name}")
             };
             check_arg_descriptions(subcmd, &new_path);
         }

@@ -6,12 +6,11 @@ use std::str::FromStr;
 fn should_be_valid_bitcoin_address_in_canonical_format() {
     for address in BTC_ADDRESS_BLOCKLIST {
         let parsed_address = Address::from_str(address)
-            .unwrap_or_else(|e| panic!("BUG: invalid bitcoin address '{}', error '{}'", address, e))
+            .unwrap_or_else(|e| panic!("BUG: invalid bitcoin address '{address}', error '{e}'"))
             .require_network(Network::Bitcoin)
             .unwrap_or_else(|e| {
                 panic!(
-                    "BUG: invalid address '{}' for Mainnet Bitcoin, error '{}'",
-                    address, e
+                    "BUG: invalid address '{address}' for Mainnet Bitcoin, error '{e}'"
                 )
             });
 
@@ -25,6 +24,6 @@ fn blocklist_is_sorted() {
         .iter()
         .zip(BTC_ADDRESS_BLOCKLIST.iter().skip(1))
     {
-        assert!(l < r, "the block list is not sorted: {} >= {}", l, r);
+        assert!(l < r, "the block list is not sorted: {l} >= {r}");
     }
 }

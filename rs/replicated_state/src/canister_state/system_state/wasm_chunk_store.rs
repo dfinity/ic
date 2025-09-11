@@ -258,7 +258,7 @@ mod tests {
     ) -> WasmChunkHash {
         let validated_chunk = match store.can_insert_chunk(max_size, chunk) {
             ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
-            res => panic!("Unexpected chunk validation result: {:?}", res),
+            res => panic!("Unexpected chunk validation result: {res:?}"),
         };
         let hash = validated_chunk.hash;
         store.insert_chunk(validated_chunk);
@@ -293,7 +293,7 @@ mod tests {
                 err,
                 "Wasm chunk size 1048577 exceeds the maximum chunk size of 1048576".to_string()
             ),
-            res => panic!("Unexpected chunk validation result: {:?}", res),
+            res => panic!("Unexpected chunk validation result: {res:?}"),
         };
     }
 
@@ -345,7 +345,7 @@ mod tests {
             ChunkValidationResult::AlreadyExists(hash_from_validation) => {
                 assert_eq!(hash_from_validation, hash)
             }
-            res => panic!("Unexpected chunk validation result: {:?}", res),
+            res => panic!("Unexpected chunk validation result: {res:?}"),
         }
     }
 }

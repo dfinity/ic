@@ -232,8 +232,7 @@ mod tests {
         let result = json5::from_str::<Config>(&sample_config_without_csp_vault_type);
         assert!(
             result.is_ok(),
-            "JSON5 parsing failed with error: {:?}",
-            result
+            "JSON5 parsing failed with error: {result:?}"
         );
 
         let temp_dir = tempdir_deleted_at_end_of_scope().expect("Failed creating a temp file.");
@@ -245,8 +244,7 @@ mod tests {
         let result = Config::load_with_default(&source, default_config);
         assert!(
             result.is_ok(),
-            "load_with_default failed with error: {:?}",
-            result
+            "load_with_default failed with error: {result:?}"
         );
         // Check that `crypto_root` is from `SAMPLE_CONFIG`, not from `CryptoConfig::default()`.
         assert_eq!(

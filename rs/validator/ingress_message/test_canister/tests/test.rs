@@ -43,6 +43,6 @@ fn test_anonymous_http_request_validation() {
 fn is_http_request_valid(result: WasmResult) -> bool {
     match result {
         WasmResult::Reply(reply) => Decode!(&reply, bool).unwrap(),
-        WasmResult::Reject(reject) => panic!("Reject: {:?}", reject),
+        WasmResult::Reject(reject) => panic!("Reject: {reject:?}"),
     }
 }

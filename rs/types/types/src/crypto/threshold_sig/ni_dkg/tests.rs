@@ -50,7 +50,7 @@ fn should_correctly_convert_ni_dkg_transcript_to_csp_dkg_transcript() {
 fn should_correctly_format_dealing_display_message() {
     let dealing = NiDkgDealing::dummy_dealing_for_tests(0);
 
-    let display_text = format!("{}", dealing);
+    let display_text = format!("{dealing}");
 
     let expected_text = "NiDkgDealing { internal_dealing: Groth20_Bls12_381(Dealing { \
         public_coefficients: PublicCoefficientsBytes { coefficients: [] }, ciphertexts: FsEncryptionCiphertextBytes { \
@@ -240,7 +240,7 @@ fn should_correctly_format_ni_dkg_id() {
     let nidkg_mpkid = NiDkgMasterPublicKeyId::VetKd(vetkd_key_id);
 
     assert_eq!(
-        MasterPublicKeyId::from_str(&format!("{}", nidkg_mpkid)),
+        MasterPublicKeyId::from_str(&format!("{nidkg_mpkid}")),
         Ok(MasterPublicKeyId::from(nidkg_mpkid))
     );
 }

@@ -71,7 +71,7 @@ fn test_chunkify_reasonably_large_mutation() {
         chunk_content_sha256s,
     }) = first_prime_mutation
     else {
-        panic!("{:?}", result);
+        panic!("{result:?}");
     };
 
     // Step 3.2: Assert that reassembled blob is equal to the original.

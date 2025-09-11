@@ -22,8 +22,7 @@ fn to_i8_at_pos(naf: &Naf, i: usize) -> i8 {
         (false, false) => 0i8,
         (true, false) => 1i8,
         (true, true) => panic!(
-            "NAF is true for both positive and negative bit at position {}",
-            i
+            "NAF is true for both positive and negative bit at position {i}"
         ),
     }
 }

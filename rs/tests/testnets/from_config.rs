@@ -67,14 +67,14 @@ use os_qualification_utils::{IC_CONFIG, IcConfig};
 
 fn main() -> anyhow::Result<()> {
     let mut config = std::env::var(IC_CONFIG)
-        .unwrap_or_else(|_| panic!("Failed to fetch `{}` from env", IC_CONFIG));
+        .unwrap_or_else(|_| panic!("Failed to fetch `{IC_CONFIG}` from env"));
 
     if config.starts_with('\'') {
         config = config[1..config.len() - 1].to_string();
     }
 
     let parsed: IcConfig = serde_json::from_str(&config)
-        .unwrap_or_else(|_| panic!("Failed to parse json from envrionment: \n{}", config));
+        .unwrap_or_else(|_| panic!("Failed to parse json from envrionment: \n{config}"));
 
     SystemTestGroup::new()
         .with_setup(|env| os_qualification_utils::setup(env, parsed))

@@ -112,7 +112,7 @@ fn test_large_records() {
         )) => chunk_content_sha256s,
         // Because of the assert_eq directly before, this is unreachable (but
         // rustc doesn't know that).
-        _ => panic!("{:#?}", get_value_response),
+        _ => panic!("{get_value_response:#?}"),
     };
     let reconstructed_big_monolithic_blob = chunk_content_sha256s
         .iter()
@@ -424,9 +424,9 @@ fn test_get_chunk() {
 
     let err: String = match garbage_response {
         Err(ok) => ok,
-        _ => panic!("{:#?}", garbage_response),
+        _ => panic!("{garbage_response:#?}"),
     };
     for key_word in ["no chunk", "sha256"] {
-        assert!(err.to_lowercase().contains(key_word), "{:?}", err);
+        assert!(err.to_lowercase().contains(key_word), "{err:?}");
     }
 }

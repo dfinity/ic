@@ -76,7 +76,7 @@ impl Create for Cloudflare {
                 zone_identifier: zone_id,
                 params: ListDnsRecordsParams {
                     record_type: None,
-                    name: Some(format!("{}.{}", name, zone)),
+                    name: Some(format!("{name}.{zone}")),
                     page: None,
                     per_page: None,
                     order: None,
@@ -176,7 +176,7 @@ impl Delete for Cloudflare {
                 zone_identifier: zone_id,
                 params: ListDnsRecordsParams {
                     record_type: None,
-                    name: Some(format!("{}.{}", name, zone)),
+                    name: Some(format!("{name}.{zone}")),
                     page: None,
                     per_page: None,
                     order: None,

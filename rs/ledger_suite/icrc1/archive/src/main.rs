@@ -144,7 +144,7 @@ fn with_blocks<R>(f: impl FnOnce(&BlockLog) -> R) -> R {
 
 fn decode_transaction(txid: u64, bytes: Vec<u8>) -> Transaction {
     Block::<Tokens>::decode(EncodedBlock::from(bytes))
-        .unwrap_or_else(|e| ic_cdk::api::trap(format!("failed to decode block {}: {}", txid, e)))
+        .unwrap_or_else(|e| ic_cdk::api::trap(format!("failed to decode block {txid}: {e}")))
         .into()
 }
 
@@ -442,7 +442,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
-                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
                     .build()
             }
         }

@@ -586,10 +586,9 @@ mod tests {
         );
         assert!(
             long_debug.starts_with("Blob{100 bytes;"),
-            "long_debug: {}",
-            long_debug
+            "long_debug: {long_debug}"
         );
-        assert!(long_debug.ends_with("63}"), "long_debug: {}", long_debug); // 99 = 16*6 + 3
+        assert!(long_debug.ends_with("63}"), "long_debug: {long_debug}"); // 99 = 16*6 + 3
     }
 
     fn format_blob(v: Vec<u8>) -> String {
@@ -611,11 +610,10 @@ mod tests {
         );
         assert!(
             long_str.starts_with("Blob{100 bytes;"),
-            "long_str: {}",
-            long_str
+            "long_str: {long_str}"
         );
         // The last printed byte is 39, which is 16*2 + 7
-        assert!(long_str.ends_with("27…}"), "long_str: {}", long_str);
+        assert!(long_str.ends_with("27…}"), "long_str: {long_str}");
     }
 
     /// Makes sure that `val` deserializes to `obj`

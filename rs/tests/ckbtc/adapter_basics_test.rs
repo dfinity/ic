@@ -194,7 +194,7 @@ fn main() -> Result<()> {
     } else if test_name == "DOGE" {
         test::<DogeNetwork>()?;
     } else {
-        panic!("Unsupported ADAPTER_TO_TEST {}", test_name);
+        panic!("Unsupported ADAPTER_TO_TEST {test_name}");
     }
     Ok(())
 }

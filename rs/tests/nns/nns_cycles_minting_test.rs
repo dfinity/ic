@@ -180,7 +180,7 @@ pub fn test(env: TestEnv) {
                 assert_eq!(tst.get_balance(from).await, Tokens::ZERO);
                 assert_eq!(spender, None);
             }
-            _ => panic!("unexpected block {:?}", txn),
+            _ => panic!("unexpected block {txn:?}"),
         }
 
         /* Create with sufficient funds. */
@@ -220,7 +220,7 @@ pub fn test(env: TestEnv) {
                 assert_eq!(tst.get_balance(from).await, Tokens::ZERO);
                 assert_eq!(spender, None);
             }
-            _ => panic!("unexpected block {:?}", txn),
+            _ => panic!("unexpected block {txn:?}"),
         }
 
         // notification through the ledger path should fail
@@ -344,7 +344,7 @@ pub fn test(env: TestEnv) {
                 assert_eq!(tst.get_balance(from).await, Tokens::ZERO);
                 assert_eq!(spender, None);
             }
-            _ => panic!("unexpected block {:?}", txn),
+            _ => panic!("unexpected block {txn:?}"),
         }
 
         /* Override the list of subnets for a specific controller. */

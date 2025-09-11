@@ -212,8 +212,7 @@ async fn wait_for_swap_to_finalize(env: &TestEnv, max_duration: Duration) {
                 .unwrap()
         };
         panic!(
-            "The swap must be in a terminal state to finalize, was {:?}. Swap state: {:?}",
-            lifecycle, derived_swap_state
+            "The swap must be in a terminal state to finalize, was {lifecycle:?}. Swap state: {derived_swap_state:?}"
         );
     }
 
@@ -222,7 +221,7 @@ async fn wait_for_swap_to_finalize(env: &TestEnv, max_duration: Duration) {
             .duration_since(start_time)
             .unwrap();
         if time_spend_waiting > max_duration {
-            panic!("The swap did not finalize within {:?}!", max_duration);
+            panic!("The swap did not finalize within {max_duration:?}!");
         }
 
         let auto_finalization_status = {

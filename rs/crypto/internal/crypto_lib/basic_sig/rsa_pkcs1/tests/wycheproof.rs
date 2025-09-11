@@ -41,9 +41,7 @@ fn verify_signature(public_key: &RsaPublicKey, test: &Test) {
     assert_eq!(
         verification_result.is_ok(),
         expected_ok,
-        "Test failed: {:?}\nVerification result: {:?}",
-        test,
-        verification_result
+        "Test failed: {test:?}\nVerification result: {verification_result:?}"
     );
 }
 
@@ -57,6 +55,6 @@ fn public_key_of_supported_size(test_group: &TestGroup) -> Option<RsaPublicKey> 
             );
             None
         }
-        Err(e) => panic!("Unexpected error {:?}", e),
+        Err(e) => panic!("Unexpected error {e:?}"),
     }
 }

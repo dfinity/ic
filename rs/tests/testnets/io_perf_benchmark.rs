@@ -189,7 +189,7 @@ fn switch_to_ssd(log: &Logger, hostname: &str) {
 
     let ssh_status = ssh.wait().unwrap();
     if !ssh_status.success() {
-        panic!("SSH to {} failed with: {}", hostname, ssh_status);
+        panic!("SSH to {hostname} failed with: {ssh_status}");
     }
 }
 
@@ -297,7 +297,7 @@ pub fn setup(env: TestEnv, config: Config) {
 
     // deploys the ic-gateway/s
     for i in 0..NUM_IC_GATEWAYS {
-        let ic_gateway_name = format!("ic-gateway-{}", i);
+        let ic_gateway_name = format!("ic-gateway-{i}");
         IcGatewayVm::new(&ic_gateway_name)
             .with_required_host_features(vec![HostFeature::Performance])
             .start(&env)

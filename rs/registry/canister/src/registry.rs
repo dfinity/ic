@@ -1190,7 +1190,7 @@ mod tests {
             .map(|i| {
                 let i = i % (u8::MAX as u64 + 1);
                 HighCapacityRegistryMutation {
-                    key: format!("key_{}", i).into_bytes(),
+                    key: format!("key_{i}").into_bytes(),
                     mutation_type: registry_mutation::Type::Insert as i32,
                     content: Some(high_capacity_registry_mutation::Content::Value(vec![
                         i as u8;
@@ -1384,7 +1384,7 @@ mod tests {
         // Add a chunkable non-singleton composite mutation.
         let mutations = (0_u64..100)
             .map(|i| {
-                let key = format!("also_gets_chunked_{}", i);
+                let key = format!("also_gets_chunked_{i}");
                 let i = (i % (u8::MAX as u64 + 1)) as u8;
                 insert(key, vec![i; 14_000])
             })
@@ -1589,20 +1589,19 @@ Average length of the values: {} (desired: {})",
 
         // Step 1.2.1: Verify original_registry.store.
         let store = &original_registry.store;
-        assert_eq!(store.len(), 1, "{:#?}", store);
+        assert_eq!(store.len(), 1, "{store:#?}");
         let history: &VecDeque<HighCapacityRegistryValue> =
             store.get(&b"this is key".to_vec()).unwrap();
-        assert_eq!(history.len(), 1, "{:#?}", history);
+        assert_eq!(history.len(), 1, "{history:#?}");
         let registry_value = history.front().unwrap();
         let large_value_chunk_keys = match registry_value.content.as_ref().unwrap() {
             high_capacity_registry_value::Content::LargeValueChunkKeys(ok) => ok.clone(),
-            _ => panic!("{:#?}", registry_value),
+            _ => panic!("{registry_value:#?}"),
         };
         assert_eq!(
             large_value_chunk_keys.chunk_content_sha256s.len(),
             3,
-            "{:#?}",
-            large_value_chunk_keys
+            "{large_value_chunk_keys:#?}"
         );
         let reconstituted_monolithic_blob_from_store =
             with_chunks(|chunks| dechunkify(&large_value_chunk_keys, chunks));
@@ -1636,8 +1635,7 @@ Average length of the values: {} (desired: {})",
         assert_eq!(
             changelog.iter().collect::<Vec<_>>().len(),
             1,
-            "{:#?}",
-            changelog
+            "{changelog:#?}"
         );
 
         let composite_mutation = HighCapacityRegistryAtomicMutateRequest::decode(
@@ -1649,17 +1647,16 @@ Average length of the values: {} (desired: {})",
         .unwrap();
 
         let mutations = &composite_mutation.mutations;
-        assert_eq!(mutations.len(), 1, "{:#?}", composite_mutation);
+        assert_eq!(mutations.len(), 1, "{composite_mutation:#?}");
         let prime_mutation = mutations.first().unwrap();
         let large_value_chunk_keys = match &prime_mutation.content {
             Some(high_capacity_registry_mutation::Content::LargeValueChunkKeys(ok)) => ok,
-            _ => panic!("{:#?}", prime_mutation),
+            _ => panic!("{prime_mutation:#?}"),
         };
         assert_eq!(
             large_value_chunk_keys.chunk_content_sha256s.len(),
             3,
-            "{:?}",
-            large_value_chunk_keys
+            "{large_value_chunk_keys:?}"
         );
         let reconstituted_monolithic_blob =
             with_chunks(|chunks| dechunkify(large_value_chunk_keys, chunks));

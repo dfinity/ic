@@ -453,7 +453,7 @@ mod tests {
     fn ecdsa_enabled_subnet_list_bad_key_id_error_message() {
         let bad_key = "key_without_curve";
         let signing_subnet_list_key =
-            format!("{}{}", ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX, bad_key);
+            format!("{ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX}{bad_key}");
         assert_eq!(
             get_ecdsa_key_id_from_signing_subnet_list_key(&signing_subnet_list_key).unwrap_err(),
             RegistryClientError::DecodeError {
@@ -466,7 +466,7 @@ mod tests {
     fn ecdsa_enabled_subnet_list_bad_curve_error_message() {
         let bad_key = "UnknownCurve:key_name";
         let signing_subnet_list_key =
-            format!("{}{}", ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX, bad_key);
+            format!("{ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX}{bad_key}");
         assert_eq!(
             get_ecdsa_key_id_from_signing_subnet_list_key(&signing_subnet_list_key).unwrap_err(),
             RegistryClientError::DecodeError {
@@ -512,7 +512,7 @@ mod tests {
     fn chain_key_enabled_subnet_list_bad_key_id_error_message() {
         let bad_key = "key_without_curve";
         let signing_subnet_list_key =
-            format!("{}{}", CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, bad_key);
+            format!("{CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX}{bad_key}");
         assert_eq!(
             get_master_public_key_id_from_signing_subnet_list_key(&signing_subnet_list_key).unwrap_err(),
             RegistryClientError::DecodeError {
@@ -525,7 +525,7 @@ mod tests {
     fn chain_key_enabled_subnet_list_bad_curve_error_message() {
         let bad_key = "ecdsa:UnknownCurve:key_name";
         let signing_subnet_list_key =
-            format!("{}{}", CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, bad_key);
+            format!("{CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX}{bad_key}");
         assert_eq!(
             get_master_public_key_id_from_signing_subnet_list_key(&signing_subnet_list_key).unwrap_err(),
             RegistryClientError::DecodeError {
@@ -538,7 +538,7 @@ mod tests {
     fn chain_key_enabled_subnet_list_bad_scheme_error_message() {
         let bad_key = "UnknownScheme:UnknownCurve:key_name";
         let signing_subnet_list_key =
-            format!("{}{}", CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, bad_key);
+            format!("{CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX}{bad_key}");
         assert_eq!(
             get_master_public_key_id_from_signing_subnet_list_key(&signing_subnet_list_key).unwrap_err(),
             RegistryClientError::DecodeError {
@@ -585,14 +585,14 @@ mod tests {
         );
         assert_eq!(
             FirewallRulesScope::from_str(
-                format!("{}({})", FIREWALL_RULES_SCOPE_SUBNET_PREFIX, id).as_str()
+                format!("{FIREWALL_RULES_SCOPE_SUBNET_PREFIX}({id})").as_str()
             )
             .unwrap(),
             FirewallRulesScope::Subnet(SubnetId::from(id))
         );
         assert_eq!(
             FirewallRulesScope::from_str(
-                format!("{}({})", FIREWALL_RULES_SCOPE_NODE_PREFIX, id).as_str()
+                format!("{FIREWALL_RULES_SCOPE_NODE_PREFIX}({id})").as_str()
             )
             .unwrap(),
             FirewallRulesScope::Node(NodeId::from(id))

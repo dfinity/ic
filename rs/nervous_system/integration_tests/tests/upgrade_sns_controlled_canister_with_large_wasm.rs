@@ -196,7 +196,7 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
         chunked_canister_wasm,
     }) = action
     else {
-        panic!("unexpected proposal action {:?}", action);
+        panic!("unexpected proposal action {action:?}");
     };
     assert_eq!(canister_id, Some(target_canister_id.into()));
     assert_eq!(new_canister_wasm, Vec::<u8>::new()); // Deprecated field, no longer in use.

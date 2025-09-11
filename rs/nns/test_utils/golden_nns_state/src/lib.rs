@@ -265,7 +265,7 @@ mod tests {
     fn assert_routing_table_size(routing_table: RoutingTable, expected_size: usize) {
         let mut num_subnets = 0;
         for entry in routing_table.iter() {
-            println!("routing table entry: {:?}", entry);
+            println!("routing table entry: {entry:?}");
             num_subnets += 1;
         }
         assert_eq!(num_subnets, expected_size);

@@ -311,8 +311,7 @@ async fn add_erc_20_by_nns_proposal<'a>(
     .await
     .unwrap_or_else(|e| {
         panic!(
-            "Canisters for contract {:?} were not created: {}",
-            erc20_contract, e
+            "Canisters for contract {erc20_contract:?} were not created: {e}"
         )
     });
     info!(

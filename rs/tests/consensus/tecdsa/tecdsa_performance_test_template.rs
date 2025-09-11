@@ -359,7 +359,7 @@ pub fn tecdsa_performance_test(
             .await;
 
         info!(log, "Reporting workload execution results");
-        env.emit_report(format!("{}", metrics));
+        env.emit_report(format!("{metrics}"));
         info!(log, "Step 5: Assert expected number of successful requests");
         let requests_count = rps * duration.as_secs_f64();
         let min_expected_success_calls = (SUCCESS_THRESHOLD * requests_count) as usize;

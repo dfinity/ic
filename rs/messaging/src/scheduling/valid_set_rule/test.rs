@@ -83,8 +83,7 @@ fn fetch_inducted_payload_size_stats(metrics_registry: &MetricsRegistry) -> Hist
     fetch_histogram_stats(metrics_registry, METRIC_INDUCTED_INGRESS_PAYLOAD_SIZES).unwrap_or_else(
         || {
             panic!(
-                "Histogram not found: {}",
-                METRIC_INDUCTED_INGRESS_PAYLOAD_SIZES
+                "Histogram not found: {METRIC_INDUCTED_INGRESS_PAYLOAD_SIZES}"
             )
         },
     )
@@ -178,7 +177,7 @@ fn induct_message_fails_for_stopping_canister() {
                     time: UNIX_EPOCH,
                     state: IngressState::Failed(UserError::new(
                         ErrorCode::CanisterStopping,
-                        format!("Canister {} is stopping", canister_id),
+                        format!("Canister {canister_id} is stopping"),
                     )),
                 }),
             )
@@ -234,7 +233,7 @@ fn induct_message_fails_for_stopped_canister() {
                     time: UNIX_EPOCH,
                     state: IngressState::Failed(UserError::new(
                         ErrorCode::CanisterStopped,
-                        format!("Canister {} is stopped", canister_id),
+                        format!("Canister {canister_id} is stopped"),
                     )),
                 }),
             )
@@ -326,7 +325,7 @@ fn update_history_if_induction_failed() {
             time: UNIX_EPOCH,
             state: IngressState::Failed(UserError::new(
                 ErrorCode::CanisterNotFound,
-                format!("Canister {} not found", canister_id),
+                format!("Canister {canister_id} not found"),
             )),
         };
         let status_clone = status.clone();

@@ -105,8 +105,8 @@ fn bench_create_dealing<M: Measurement, R: RngCore + CryptoRng>(
                         context.setup_params(&env, test_case.alg(), rng);
                     (context, params)
                 });
-                let random_dealer = env.nodes.random_dealer(params, rng);
-                random_dealer
+                
+                env.nodes.random_dealer(params, rng)
             },
             |dealer| {
                 let (_, params) = bench_context.get().unwrap();
@@ -413,8 +413,7 @@ fn bench_retain_active_transcripts<M: Measurement, R: RngCore + CryptoRng>(
     let num_transcripts_to_delete = num_pre_sig_quadruples * 4;
     group.bench_function(
         format!(
-            "retain_active_transcripts(keep=1,delete={})",
-            num_transcripts_to_delete
+            "retain_active_transcripts(keep=1,delete={num_transcripts_to_delete})"
         ),
         |bench| {
             bench.iter_batched(
@@ -822,7 +821,7 @@ impl TestCase {
             AlgorithmId::ThresholdEcdsaSecp256k1 => "secp256k1",
             AlgorithmId::ThresholdEcdsaSecp256r1 => "secp256r1",
             AlgorithmId::ThresholdEd25519 => "ed25519",
-            unexpected => panic!("Unexpected testcase algorithm {}", unexpected),
+            unexpected => panic!("Unexpected testcase algorithm {unexpected}"),
         };
         format!("crypto_idkg_{}_{}_nodes", curve, self.num_of_nodes)
     }

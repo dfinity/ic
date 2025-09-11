@@ -62,8 +62,7 @@ pub fn test_threshold_signatures(
                         csp_vault
                             .threshold_sign(algorithm_id, message.to_vec(), *key_id)
                             .is_err(),
-                        "Managed to threshold sign with algorithm ID {:?}",
-                        algorithm_id
+                        "Managed to threshold sign with algorithm ID {algorithm_id:?}"
                     )
                 }
             }
@@ -101,7 +100,7 @@ pub fn test_threshold_signatures(
             (*public_coefficients).clone(),
         ) {
             Ok(public_key) => public_key,
-            Err(error) => panic!("Could not calculate individual public key: {:?}", error),
+            Err(error) => panic!("Could not calculate individual public key: {error:?}"),
         };
 
         // Correct values validate:
@@ -238,9 +237,7 @@ pub fn test_threshold_signatures(
                     public_coefficients.clone()
                 )
                 .is_err(),
-            "Combined signature verification passed with an individual signature: Used signature: {:?} Correct signature: {:?}",
-            some_individual_signature,
-            signature
+            "Combined signature verification passed with an individual signature: Used signature: {some_individual_signature:?} Correct signature: {signature:?}"
         );
     }
 }
@@ -265,8 +262,7 @@ pub fn test_threshold_scheme_with_basic_keygen<R, S, C, P>(
     let threshold = NumberOfNodes::from(rng.gen_range(1..10));
     let number_of_signers = NumberOfNodes::from(rng.gen_range(0..10));
     println!(
-        "--- threshold: {}, number_of_signers: {}",
-        threshold, number_of_signers
+        "--- threshold: {threshold}, number_of_signers: {number_of_signers}"
     );
     match csp_vault.threshold_keygen_for_test(
         AlgorithmId::ThresBls12_381,

@@ -57,8 +57,7 @@ async fn get_node_providers_monthly_xdr_rewards_is_only_callable_by_governance()
 
     assert!(
         error.contains("Only the governance canister can call this method"),
-        "Expected error message not found, was {}",
-        error
+        "Expected error message not found, was {error}"
     );
 
     let governance_agent = pocket_ic.agent_for(ic_nns_constants::GOVERNANCE_CANISTER_ID.get());

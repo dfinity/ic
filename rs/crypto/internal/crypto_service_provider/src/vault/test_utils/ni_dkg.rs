@@ -318,8 +318,7 @@ impl StateWithConfig {
         );
         match dealing {
             Ok(_) => panic!(
-                "Dealing should fail with AlgorithmId: {:?}",
-                incorrect_algorithm_id
+                "Dealing should fail with AlgorithmId: {incorrect_algorithm_id:?}"
             ),
             Err(CspDkgCreateReshareDealingError::UnsupportedAlgorithmId(algorithm_id)) => {
                 assert_eq!(
@@ -327,7 +326,7 @@ impl StateWithConfig {
                     "Wrong algorithm_id reported"
                 )
             }
-            Err(error) => panic!("Incorrect error: {:?}", error),
+            Err(error) => panic!("Incorrect error: {error:?}"),
         }
     }
 
@@ -367,11 +366,10 @@ impl StateWithConfig {
             );
             match dealing {
                 Ok(_) => panic!(
-                    "Dealing should fail with incorrect threshold.\n  Threshold: {}\n  Num receivers: {}",
-                    incorrect_threshold, num_receivers
+                    "Dealing should fail with incorrect threshold.\n  Threshold: {incorrect_threshold}\n  Num receivers: {num_receivers}"
                 ),
                 Err(CspDkgCreateReshareDealingError::InvalidThresholdError(_)) => (),
-                Err(error) => panic!("Incorrect error: {:?}", error),
+                Err(error) => panic!("Incorrect error: {error:?}"),
             }
         }
     }
@@ -414,9 +412,9 @@ impl StateWithConfig {
                 .map(CspPublicCoefficients::from),
         );
         match dealing {
-            Ok(_) => panic!("Dealing should fail with indices: {:?}", incorrect_indices),
+            Ok(_) => panic!("Dealing should fail with indices: {incorrect_indices:?}"),
             Err(CspDkgCreateReshareDealingError::MisnumberedReceiverError { .. }) => (),
-            Err(error) => panic!("Incorrect error: {:?}", error),
+            Err(error) => panic!("Incorrect error: {error:?}"),
         }
     }
 

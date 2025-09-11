@@ -5,8 +5,7 @@ fn main() {
     let args: Vec<_> = std::env::args().collect();
     if args.len() != 2 {
         eprintln!(
-            "Expected exactly one argument (the name of the output file), got: {:?}",
-            args
+            "Expected exactly one argument (the name of the output file), got: {args:?}"
         );
         std::process::exit(1);
     }

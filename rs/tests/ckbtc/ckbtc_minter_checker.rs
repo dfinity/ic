@@ -165,8 +165,7 @@ pub fn test_btc_checker(env: TestEnv) {
             Err(UpdateBalanceError::TemporarilyUnavailable(_)) => (),
             other => {
                 panic!(
-                    "Expected the Bitcoin checker canister to be unavailable, got {:?}",
-                    other
+                    "Expected the Bitcoin checker canister to be unavailable, got {other:?}"
                 );
             }
         }
@@ -186,8 +185,7 @@ pub fn test_btc_checker(env: TestEnv) {
         assert_eq!(
             update_balance_new_utxos.len(),
             2,
-            "BUG: should re-evaluate all UTXOs {:?}",
-            update_balance_new_utxos
+            "BUG: should re-evaluate all UTXOs {update_balance_new_utxos:?}"
         );
 
         for utxo_status in update_balance_new_utxos {

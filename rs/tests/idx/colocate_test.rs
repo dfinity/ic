@@ -195,7 +195,7 @@ fn setup(env: TestEnv) {
                 .map(|hf| serde_json::to_string(hf).unwrap())
                 .collect::<Vec<String>>()
                 .join(",");
-            format!("--set-required-host-features={}", features)
+            format!("--set-required-host-features={features}")
         } else {
             "".to_owned()
         }

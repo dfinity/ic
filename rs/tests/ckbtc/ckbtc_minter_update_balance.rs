@@ -169,7 +169,7 @@ pub fn test_update_balance(env: TestEnv) {
                 )
                 .await;
             } else {
-                panic!("expected to have one minted utxo, got: {:?}", update_result);
+                panic!("expected to have one minted utxo, got: {update_result:?}");
             }
         }
 
@@ -225,7 +225,7 @@ pub fn test_update_balance(env: TestEnv) {
                 )
                 .await;
             } else {
-                panic!("expected to have one minted utxo, got {:?}", update_result);
+                panic!("expected to have one minted utxo, got {update_result:?}");
             }
         }
 
@@ -301,7 +301,7 @@ pub fn test_update_balance(env: TestEnv) {
                 )
                 .await;
             } else {
-                panic!("expected to have one minted utxo, got: {:?}", update_result);
+                panic!("expected to have one minted utxo, got: {update_result:?}");
             }
         }
     });

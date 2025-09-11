@@ -45,7 +45,7 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
-    println!("Args: {:?}", args);
+    println!("Args: {args:?}");
 
     let state_source = StateSource::from_str(&args.state_source).expect("Invalid state source");
 

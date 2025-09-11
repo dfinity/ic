@@ -22,7 +22,7 @@ fn key_derivation(c: &mut Criterion) {
             public_key: pk.serialize(),
         };
 
-        let mut group = c.benchmark_group(format!("key_derivation_{}", curve));
+        let mut group = c.benchmark_group(format!("key_derivation_{curve}"));
 
         for path_len in [1, 10, 100, 255] {
             group.bench_with_input(

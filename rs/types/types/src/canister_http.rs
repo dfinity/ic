@@ -884,7 +884,7 @@ mod validate_http_headers_and_body_tests {
         // Create exactly the maximum allowed number of headers
         let headers = (0..MAX_CANISTER_HTTP_HEADER_NUM)
             .map(|i| HttpHeader {
-                name: format!("Header-{}", i),
+                name: format!("Header-{i}"),
                 value: "value".to_string(),
             })
             .collect::<Vec<_>>();
@@ -928,7 +928,7 @@ mod validate_http_headers_and_body_tests {
 
         let headers = (0..headers_needed)
             .map(|i| {
-                let header_name = format!("Header-{}", i);
+                let header_name = format!("Header-{i}");
                 HttpHeader {
                     name: header_name.clone(),
                     // Going over a single byte for each header value should do it.
@@ -948,7 +948,7 @@ mod validate_http_headers_and_body_tests {
         // Create more headers than allowed
         let headers = (0..=MAX_CANISTER_HTTP_HEADER_NUM)
             .map(|i| HttpHeader {
-                name: format!("Header-{}", i),
+                name: format!("Header-{i}"),
                 value: "value".to_string(),
             })
             .collect::<Vec<_>>();
@@ -1003,7 +1003,7 @@ mod validate_http_headers_and_body_tests {
 
         let headers = (0..headers_needed)
             .map(|i| {
-                let header_name = format!("Header-{}", i);
+                let header_name = format!("Header-{i}");
                 HttpHeader {
                     name: header_name.clone(),
                     // Going over a single byte for each header value should do it.

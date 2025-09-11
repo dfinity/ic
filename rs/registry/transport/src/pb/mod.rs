@@ -84,7 +84,7 @@ mod tests {
     use ic_registry_keys::make_node_operator_record_key;
 
     fn principal(i: u64) -> PrincipalId {
-        PrincipalId::try_from(format!("SID{}", i).as_bytes().to_vec()).unwrap()
+        PrincipalId::try_from(format!("SID{i}").as_bytes().to_vec()).unwrap()
     }
 
     #[test]

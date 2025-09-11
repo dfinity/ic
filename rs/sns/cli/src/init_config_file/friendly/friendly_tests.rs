@@ -276,8 +276,7 @@ fn test_convert_to_create_service_nervous_system() {
         .unwrap();
     assert!(
         observed_logo.starts_with("data:image/png;base64,"),
-        "{:?}",
-        observed_logo,
+        "{observed_logo:?}",
     );
 
     let observed_logo_content = base64::decode(

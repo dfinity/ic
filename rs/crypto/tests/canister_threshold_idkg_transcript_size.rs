@@ -28,8 +28,7 @@ fn should_have_expected_size_for_idkg_transcripts() {
 
         let tb = transcript_bytes(transcript);
         println!(
-            "{} transcript is {} bytes expected {}",
-            what, tb, expected_size
+            "{what} transcript is {tb} bytes expected {expected_size}"
         );
         assert!(tb >= expected_size);
         assert!(tb as f64 <= expected_size as f64 * allowed_overhead);

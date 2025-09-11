@@ -541,10 +541,10 @@ mod tests {
         };
         let actual_operator_record_1 =
             get_node_operator_record(&registry, operator1_id).expect("failed to get node operator");
-        println!("node_operator_1_record: {:#?}", actual_operator_record_1);
+        println!("node_operator_1_record: {actual_operator_record_1:#?}");
         let actual_operator_record_2 =
             get_node_operator_record(&registry, operator2_id).expect("failed to get node operator");
-        println!("node_operator_2_record: {:#?}", actual_operator_record_2);
+        println!("node_operator_2_record: {actual_operator_record_2:#?}");
 
         assert_eq!(actual_operator_record_1, expected_operator_record_1);
         assert_eq!(actual_operator_record_2, expected_operator_record_2);

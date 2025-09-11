@@ -51,7 +51,7 @@ async fn get_sig(options: Options) {
         1_000_000_000_000,
     )
     .await;
-    print(format!("got result {:?}", response));
+    print(format!("got result {response:?}"));
 }
 
 // When run on native this prints the candid service definition of this

@@ -388,7 +388,7 @@ mod test {
             },
         ) {
             Err(msg) if msg.contains("KeyValidationError") => {}
-            val => panic!("unexpected result: {:?}", val),
+            val => panic!("unexpected result: {val:?}"),
         };
 
         match registry.do_update_node(
@@ -399,7 +399,7 @@ mod test {
             },
         ) {
             Err(msg) if msg.contains("DecodeError") => {}
-            val => panic!("unexpected result: {:?}", val),
+            val => panic!("unexpected result: {val:?}"),
         };
     }
 

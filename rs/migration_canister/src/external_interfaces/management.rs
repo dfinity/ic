@@ -52,8 +52,7 @@ pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResul
                         .contains("Only the controllers of the canister")
                     {
                         ProcessingResult::FatalFailure(format!(
-                            "Failed to set controller of canister {:?}",
-                            canister_id
+                            "Failed to set controller of canister {canister_id:?}"
                         ))
                     } else {
                         ProcessingResult::NoProgress

@@ -17,7 +17,7 @@ fn encode(t: &PbTree) -> Vec<u8> {
     use prost::Message;
     let mut buf = Vec::new();
     t.encode(&mut buf)
-        .unwrap_or_else(|e| panic!("Failed to encode {:?} into protobuf: {}", t, e));
+        .unwrap_or_else(|e| panic!("Failed to encode {t:?} into protobuf: {e}"));
     buf
 }
 
@@ -35,8 +35,7 @@ fn decode_bad_digest_fails() {
             actual: 10,
         }) => (),
         other => panic!(
-            "Expected to get InvalidDigestLength {{ expected: 32, actual: 10 }} error, got {:?}",
-            other
+            "Expected to get InvalidDigestLength {{ expected: 32, actual: 10 }} error, got {other:?}"
         ),
     }
 }

@@ -419,7 +419,7 @@ fn test_voting_can_span_multiple_rounds() {
 
     // No recent ballots, bc ran out of instructions, should wait til next round.
     for neuron in listed_neurons.full_neurons {
-        assert_eq!(neuron.recent_ballots, vec![], "Neuron: {:?}", neuron);
+        assert_eq!(neuron.recent_ballots, vec![], "Neuron: {neuron:?}");
     }
 
     // The timer should run, which should record all the ballots.
@@ -452,8 +452,7 @@ fn test_voting_can_span_multiple_rounds() {
                 proposal_id: Some(ic_nns_common::pb::v1::ProposalId { id: 1 }),
                 vote: 1
             }],
-            "Neuron: {:?}",
-            neuron
+            "Neuron: {neuron:?}"
         );
     }
 }

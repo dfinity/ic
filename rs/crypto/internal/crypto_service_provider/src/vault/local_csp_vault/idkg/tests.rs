@@ -84,8 +84,7 @@ mod idkg_gen_dealing_encryption_key_pair {
             // MEGaPublicKey does not implement Hash so we use the serialized form
             assert!(
                 generated_keys.insert(public_key.serialize()),
-                "MEGaPublicKey {:?} was already inserted!",
-                public_key
+                "MEGaPublicKey {public_key:?} was already inserted!"
             );
         }
     }
@@ -2032,11 +2031,10 @@ mod idkg_open_dealing {
 
             let mut mnsks = MockSecretKeyStore::new();
             mnsks.expect_get().times(1).return_once(move |_key_id| {
-                let wrong_key_that_will_fail_to_decrypt_ciphertexts =
-                    tmp_vault.sks_read_lock().get(
+                
+                tmp_vault.sks_read_lock().get(
                         &KeyId::try_from(&pk).expect("failed to convert a public key to the KeyId"),
-                    );
-                wrong_key_that_will_fail_to_decrypt_ciphertexts
+                    )
             });
 
             Box::new(

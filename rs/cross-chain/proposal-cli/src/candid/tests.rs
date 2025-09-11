@@ -16,8 +16,7 @@ fn should_encode_default_upgrade_args() {
         assert_eq!(
             hex::encode(upgrade_args.upgrade_args_bin()),
             expected,
-            "failed to encode default upgrade args for: {:?}",
-            canister
+            "failed to encode default upgrade args for: {canister:?}"
         );
     }
 }

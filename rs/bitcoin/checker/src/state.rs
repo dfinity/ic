@@ -35,14 +35,13 @@ impl fmt::Display for HttpGetTxError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use HttpGetTxError::*;
         match self {
-            TxEncoding(s) => write!(f, "TxEncoding: {}", s),
+            TxEncoding(s) => write!(f, "TxEncoding: {s}"),
             TxidMismatch { expected, decoded } => write!(
                 f,
-                "TxidMismatch: expected {} but decoded {}",
-                expected, decoded
+                "TxidMismatch: expected {expected} but decoded {decoded}"
             ),
             ResponseTooLarge => write!(f, "ResponseTooLarge"),
-            Rejected { code, message } => write!(f, "Rejected: code {:?}, {}", code, message),
+            Rejected { code, message } => write!(f, "Rejected: code {code:?}, {message}"),
         }
     }
 }

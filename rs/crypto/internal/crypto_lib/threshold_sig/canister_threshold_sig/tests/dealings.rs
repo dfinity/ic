@@ -299,20 +299,20 @@ fn secret_shares_should_redact_logs() -> Result<(), CanisterThresholdError> {
 
     {
         let shares = SecretShares::Random;
-        let log = format!("{:?}", shares);
+        let log = format!("{shares:?}");
         assert_eq!("SecretShares::Random", log);
     }
 
     {
         let shares = SecretShares::RandomUnmasked;
-        let log = format!("{:?}", shares);
+        let log = format!("{shares:?}");
         assert_eq!("SecretShares::RandomUnmasked", log);
     }
 
     {
         let secret = EccScalar::random(curve, rng);
         let shares = SecretShares::ReshareOfUnmasked(secret);
-        let log = format!("{:?}", shares);
+        let log = format!("{shares:?}");
         assert_eq!("SecretShares::ReshareOfUnmasked(K256) - REDACTED", log);
     }
 
@@ -320,7 +320,7 @@ fn secret_shares_should_redact_logs() -> Result<(), CanisterThresholdError> {
         let secret = EccScalar::random(curve, rng);
         let mask = EccScalar::random(curve, rng);
         let shares = SecretShares::ReshareOfMasked(secret, mask);
-        let log = format!("{:?}", shares);
+        let log = format!("{shares:?}");
         assert_eq!("SecretShares::ReshareOfMasked(K256) - REDACTED", log);
     }
 
@@ -329,7 +329,7 @@ fn secret_shares_should_redact_logs() -> Result<(), CanisterThresholdError> {
         let rhs = EccScalar::random(curve, rng);
         let mask = EccScalar::random(curve, rng);
         let shares = SecretShares::UnmaskedTimesMasked(lhs, (rhs, mask));
-        let log = format!("{:?}", shares);
+        let log = format!("{shares:?}");
         assert_eq!("SecretShares::UnmaskedTimesMasked(K256) - REDACTED", log);
     }
 

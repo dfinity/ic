@@ -173,7 +173,7 @@ fn subnet_splitting_test(env: TestEnv) {
 
         info!(logger, "{}", step.descr());
         step.exec()
-            .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
+            .unwrap_or_else(|e| panic!("Execution of step {step_type:?} failed: {e}"));
 
         if step_type == StepType::HaltSourceSubnetAtCupHeight {
             wait_until_halted_at_cup_height(&source_subnet, &logger);

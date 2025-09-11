@@ -99,7 +99,7 @@ fn setup_and_run_ic_ref_test(
                 .trim_end()
                 .parse()
                 .expect("Failed to parse port to number");
-            break format!("localhost:{}", port);
+            break format!("localhost:{port}");
         }
         std::thread::sleep(Duration::from_millis(20));
     };

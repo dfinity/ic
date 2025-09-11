@@ -530,7 +530,7 @@ mod tests {
             );
 
         let mut f = File::create(&fake_config_path).unwrap();
-        write!(f, "{}", fake_input_config).unwrap();
+        write!(f, "{fake_input_config}").unwrap();
 
         let fake_cold_storage_path_str = fake_cold_storage_path.to_string_lossy();
         let fake_state_path_str = fake_state_path.to_string_lossy();

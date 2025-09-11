@@ -768,7 +768,7 @@ fn no_back_to_back_ranges() {
     match OverlayFile::load(path) {
         Err(e) => match e {
             PersistenceError::InvalidOverlay { .. } => (),
-            _ => panic!("Unexpected load error: {}", e),
+            _ => panic!("Unexpected load error: {e}"),
         },
         _ => panic!("Overlay load must fail"),
     }
@@ -1412,8 +1412,7 @@ fn returns_an_error_if_file_size_is_not_a_multiple_of_page_size() {
     match validate(&base_only_storage_layout(heap_file.to_path_buf())) {
         Err(err) => assert!(
             err.is_invalid_heap_file(),
-            "Expected invalid heap file error, got {:?}",
-            err
+            "Expected invalid heap file error, got {err:?}"
         ),
         Ok(_) => panic!("Expected a invalid heap file error, got Ok(_)"),
     }

@@ -835,7 +835,7 @@ mod verify_combined_sig {
                     );
                 }
                 unexpected => {
-                    panic!("Unhandled ECDSA algorithm {}", unexpected)
+                    panic!("Unhandled ECDSA algorithm {unexpected}")
                 }
             }
         }
@@ -864,7 +864,7 @@ mod get_tecdsa_master_public_key {
                 AlgorithmId::ThresholdEcdsaSecp256r1 => (1 + 32, AlgorithmId::EcdsaP256),
                 AlgorithmId::ThresholdEcdsaSecp256k1 => (1 + 32, AlgorithmId::EcdsaSecp256k1),
                 unexpected => {
-                    panic!("Unexpected ECDSA algorithm {}", unexpected);
+                    panic!("Unexpected ECDSA algorithm {unexpected}");
                 }
             };
 
@@ -944,14 +944,12 @@ mod get_tecdsa_master_public_key {
                 let derived_pk = derive_threshold_public_key(&master_public_key, derivation_path)
                     .unwrap_or_else(|_| {
                         panic!(
-                            "Public key derivation failed for derivation path {:?}",
-                            derivation_path
+                            "Public key derivation failed for derivation path {derivation_path:?}"
                         )
                     });
                 assert!(
                     derived_keys.insert(derived_pk),
-                    "Duplicate derived key for derivation path {:?}",
-                    derivation_path
+                    "Duplicate derived key for derivation path {derivation_path:?}"
                 );
             }
             assert_eq!(

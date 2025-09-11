@@ -33,7 +33,7 @@ pub fn get_apalache_path() -> PathBuf {
     let apalache = PathBuf::from(apalache);
 
     if !apalache.as_path().is_file() {
-        panic!("bad apalache bin from 'TLA_APALACHE_BIN': '{:?}'", apalache);
+        panic!("bad apalache bin from 'TLA_APALACHE_BIN': '{apalache:?}'");
     }
 
     apalache
@@ -44,9 +44,9 @@ pub fn check_tla_trace(trace: &UpdateTrace) {
     let model_name = trace.model_name.clone();
     for pair in &trace.state_pairs {
         let constants = trace.constants.clone();
-        println!("Constants: {:?}", constants);
+        println!("Constants: {constants:?}");
         // NOTE: the 'process_id" is actually the tla module name
-        let tla_module = format!("{}_Apalache.tla", model_name);
+        let tla_module = format!("{model_name}_Apalache.tla");
         let tla_module = get_tla_module_path(&tla_module);
         check_tla_code_link(
             &get_apalache_path(),

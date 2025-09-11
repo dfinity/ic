@@ -249,7 +249,7 @@ fn should_fail_if_notafter_date_is_not_after_notbefore_date() {
     );
 
     assert_matches!(result, Err(TlsKeyPairAndCertGenerationError::InvalidArguments(e))
-        if e.contains(&format!("notBefore date ({}) must be before notAfter date ({})", not_before_str, not_after_str))
+        if e.contains(&format!("notBefore date ({not_before_str}) must be before notAfter date ({not_after_str})"))
     );
 }
 
@@ -316,7 +316,7 @@ fn should_fail_if_notafter_date_is_invalid_offsetdatetime() {
 #[test]
 fn should_redact_tls_ed25519_secret_key_der_bytes_debug() {
     let sk = TlsEd25519SecretKeyDerBytes::new(vec![1u8; 5]);
-    assert_eq!(format!("{:?}", sk), "REDACTED");
+    assert_eq!(format!("{sk:?}"), "REDACTED");
 }
 
 #[test]

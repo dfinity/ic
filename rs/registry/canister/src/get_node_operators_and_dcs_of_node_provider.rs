@@ -82,7 +82,7 @@ mod tests {
     use std::hash::Hash;
 
     pub fn principal(i: u64) -> PrincipalId {
-        PrincipalId::try_from(format!("SID{}", i).as_bytes().to_vec()).unwrap()
+        PrincipalId::try_from(format!("SID{i}").as_bytes().to_vec()).unwrap()
     }
 
     // Check that two vectors have the same elements. If fails if two vectors have a different

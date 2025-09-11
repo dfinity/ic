@@ -169,8 +169,7 @@ impl Finalize for Acme {
             None => {
                 let status = order.state().status;
                 return Err(FinalizeError::OrderNotReady(format!(
-                    "Certificate unavailable despite previous Valid status, current status {:?}",
-                    status
+                    "Certificate unavailable despite previous Valid status, current status {status:?}"
                 )));
             }
         };

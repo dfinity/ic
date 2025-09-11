@@ -206,7 +206,7 @@ fn test(env: TestEnv) {
         )
         .await
     }) {
-        panic!("expected the update to fail, got {:?}", result);
+        panic!("expected the update to fail, got {result:?}");
     };
 
     // Restart node to start consensus.

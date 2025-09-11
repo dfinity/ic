@@ -772,7 +772,7 @@ mod tests {
 
         match r.remove(&Id::from("id")) {
             Err(RemoveError::NotFound) => {}
-            other => panic!("expected RemoveError::NotFound but got {:?}", other),
+            other => panic!("expected RemoveError::NotFound but got {other:?}"),
         };
 
         Ok(())
@@ -835,7 +835,7 @@ mod tests {
 
         match r.remove(&Id::from("id")) {
             Ok(()) => {}
-            other => panic!("expected Ok but got {:?}", other),
+            other => panic!("expected Ok but got {other:?}"),
         };
 
         match REGISTRATIONS.with(|regs| regs.borrow().get(&"id".to_string().into())) {
@@ -895,7 +895,7 @@ mod tests {
 
         match r.remove(&Id::from("id")) {
             Ok(()) => {}
-            other => panic!("expected Ok but got {:?}", other),
+            other => panic!("expected Ok but got {other:?}"),
         };
 
         match REGISTRATIONS.with(|regs| regs.borrow().get(&"id".to_string().into())) {

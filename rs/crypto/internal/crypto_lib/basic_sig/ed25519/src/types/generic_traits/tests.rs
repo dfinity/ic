@@ -9,7 +9,7 @@ fn signatures_should_have_a_nice_debug_representation() {
         "SignatureBytes(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\")",
     )];
     for (value, formatted) in test_vectors {
-        assert_eq!(format!("{:?}", value), *formatted);
+        assert_eq!(format!("{value:?}"), *formatted);
     }
 }
 
@@ -20,7 +20,7 @@ fn secret_keys_should_have_an_appropriate_debug_representation() {
         "SecretKeyBytes(REDACTED SecretArray<32>)",
     )];
     for (value, formatted) in test_vectors {
-        assert_eq!(format!("{:?}", value), *formatted);
+        assert_eq!(format!("{value:?}"), *formatted);
     }
 }
 
@@ -31,6 +31,6 @@ fn public_keys_should_have_a_nice_debug_representation() {
         "PublicKeyBytes(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\")",
     )];
     for (value, formatted) in test_vectors {
-        assert_eq!(format!("{:?}", value), *formatted);
+        assert_eq!(format!("{value:?}"), *formatted);
     }
 }

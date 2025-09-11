@@ -201,7 +201,7 @@ mod node_signing_public_key_validation {
 
         assert_matches!(result, Err(KeyValidationError { error })
             if error.contains("invalid node signing key")
-            && error.contains(format!("key not valid for node ID {}", wrong_node_id).as_str())
+            && error.contains(format!("key not valid for node ID {wrong_node_id}").as_str())
         );
     }
 

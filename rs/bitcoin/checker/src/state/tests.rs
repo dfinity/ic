@@ -75,7 +75,7 @@ fn test_fetch_status() {
             assert_eq!(fetched.input_addresses[0], Some(address))
         }
         _ => {
-            panic!("txid {} is not found", txid_1)
+            panic!("txid {txid_1} is not found")
         }
     }
     clear_fetch_status(txid_1);

@@ -667,7 +667,7 @@ fn test_cmc_cycles_create_with_settings() {
         refund_amount: 100,
     } = error
     else {
-        panic!("Refund failed: {:?}", error)
+        panic!("Refund failed: {error:?}")
     };
     assert!(create_error.contains("Insufficient cycles attached"));
     assert_eq!(
@@ -738,8 +738,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
                 state_machine.metrics_registry(),
                 "replicated_state_registered_canisters"
             ),
-            "{}",
-            test_phase,
+            "{test_phase}",
         );
     };
     // This will be called again later to verify that no canisters were added.
@@ -762,7 +761,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
             .unwrap()
             .checked_sub(&total_fees)
             .unwrap();
-        assert_eq!(observed_balance, expected_balance, "{}", test_phase);
+        assert_eq!(observed_balance, expected_balance, "{test_phase}");
     };
     // This is more to gain confidence that assert_balance works; there is very
     // little risk that USER1's balance is not 100.
@@ -855,7 +854,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
 
             let result = match result {
                 WasmResult::Reply(ok) => ok,
-                _ => panic!("{:?}", result),
+                _ => panic!("{result:?}"),
             };
 
             Decode!(&result, Result<CanisterId, NotifyError>).unwrap()
@@ -881,7 +880,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
         .into_iter()
         .filter_map(|result| match result {
             Err(NotifyError::Processing) => None,
-            Ok(_) => panic!("{:?}", result),
+            Ok(_) => panic!("{result:?}"),
             Err(err) => Some(err),
         })
         .collect::<Vec<NotifyError>>();
@@ -890,9 +889,7 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
     let last_err = errs.pop().unwrap();
     assert!(
         errs.iter().all(|other_err| other_err == &last_err),
-        "{:?}\nvs.\n{:#?}",
-        last_err,
-        errs,
+        "{last_err:?}\nvs.\n{errs:#?}",
     );
     assert!(
         errs.len() >= 2, // If errs is empty, then the previous assert is trivial.
@@ -922,14 +919,12 @@ fn test_cmc_automatically_refunds_when_memo_is_garbage() {
             for key_word in ["memo", "0xdeadbeef", "does not correspond", "offer"] {
                 assert!(
                     lower_reason.contains(key_word),
-                    r#""{}" not in {:?}"#,
-                    key_word,
-                    last_err
+                    r#""{key_word}" not in {last_err:?}"#
                 );
             }
         }
 
-        _ => panic!("{:?}", last_err),
+        _ => panic!("{last_err:?}"),
     };
 }
 
@@ -1329,16 +1324,14 @@ fn cmc_notify_mint_cycles() {
             reason,
             block_index: _,
         }) => reason,
-        _ => panic!("{:?}", result),
+        _ => panic!("{result:?}"),
     };
 
     let reason = reason.to_lowercase();
     for key_word in ["memo", "transfer", "correspond", "offer"] {
         assert!(
             reason.contains(key_word),
-            "{} not in reason of {:?}",
-            key_word,
-            result
+            "{key_word} not in reason of {result:?}"
         );
     }
 
@@ -1455,7 +1448,7 @@ fn cmc_notify_mint_cycles_deposit_memo_too_long() {
             assert_eq!(error_code, NotifyErrorCode::DepositMemoTooLong as u64);
             assert!(error_message.contains("exceeds the maximum length"));
         }
-        _ => panic!("Unexpected response: {:?}", response),
+        _ => panic!("Unexpected response: {response:?}"),
     }
 }
 

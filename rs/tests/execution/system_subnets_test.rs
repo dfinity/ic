@@ -93,10 +93,10 @@ pub fn ingress_message_to_subnet_id_fails(env: TestEnv) {
                     assert!(
                         reject
                             .reject_message
-                            .contains(&format!("Canister {} not found", subnet_id))
+                            .contains(&format!("Canister {subnet_id} not found"))
                     );
                 }
-                _ => panic!("Unexpected error: {:?}", err),
+                _ => panic!("Unexpected error: {err:?}"),
             };
 
             // Requesting `canister_status` using the subnet ID as the callee and the canister ID as the effective canister ID fails
@@ -106,11 +106,10 @@ pub fn ingress_message_to_subnet_id_fails(env: TestEnv) {
                 AgentError::HttpError(payload) => {
                     let error_message = String::from_utf8(payload.content).unwrap();
                     assert!(error_message.contains(&format!(
-                        "Specified CanisterId {} does not match effective canister id in URL {}",
-                        subnet_id, canister_id
+                        "Specified CanisterId {subnet_id} does not match effective canister id in URL {canister_id}"
                     )));
                 }
-                _ => panic!("Unexpected error: {:?}", err),
+                _ => panic!("Unexpected error: {err:?}"),
             };
 
             // The same call using the management canister ID as the callee and the canister ID as the effective canister ID succeeds

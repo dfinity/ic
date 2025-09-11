@@ -132,8 +132,7 @@ mod notification {
                 if let Some(ref old_value) = *guard {
                     if value != *old_value {
                         panic!(
-                            "Notified twice with different values: first {:?}, then {:?}",
-                            old_value, value
+                            "Notified twice with different values: first {old_value:?}, then {value:?}"
                         );
                     } else {
                         return;

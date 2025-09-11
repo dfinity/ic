@@ -71,7 +71,7 @@ async fn create_canisters(number_of_canisters: usize) {
             Ok(canisters) => canisters
                 .iter()
                 .for_each(|canister_id| add_canister_id(*canister_id)),
-            Err((_, err)) => api::print(format!("Failed to create a canister: {}", err)),
+            Err((_, err)) => api::print(format!("Failed to create a canister: {err}")),
         }
         remaining_canisters -= batch;
     }
