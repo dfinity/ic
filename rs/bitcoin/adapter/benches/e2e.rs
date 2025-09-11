@@ -184,7 +184,7 @@ fn add_800k_block_headers(criterion: &mut Criterion) {
         );
         retrieve_headers::<bitcoin::Network>(&headers_data_path)
     });
-    // Retrieve instance 1 before benchmarking.
+    // Call BITCOIN_HEADERS once before benchmarking to avoid biasing the first sample (lazy instantiation).
     // Genesis block header is automatically added when instantiating BlockchainState
     let bitcoin_headers_to_add = &BITCOIN_HEADERS.as_slice()[1..];
     assert_eq!(bitcoin_headers_to_add.len(), 800_000);
