@@ -157,7 +157,7 @@ fn test_execute_success() {
 
     // Execute the deregistration
     let result = request.execute(&mut neuron_store);
-    assert!(result.is_ok(), "Execute should succeed: {:?}", result);
+    assert!(result.is_ok(), "Execute should succeed: {result:?}");
 
     // Verify the known neuron data has been removed
     let has_known_data_after = neuron_store

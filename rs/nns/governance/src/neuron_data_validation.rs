@@ -704,7 +704,7 @@ mod tests {
         let mut account = [1u8; 32].to_vec();
         account.splice(24..32, id.to_le_bytes());
         let subaccount = Subaccount::try_from(&account[..]).unwrap();
-        let known_neuron_name = format!("known neuron data{}", id);
+        let known_neuron_name = format!("known neuron data{id}");
 
         NeuronBuilder::new(
             NeuronId { id },
@@ -874,8 +874,7 @@ mod tests {
                             primary: 2,
                             index: 0
                         }),
-            "{:?}",
-            issue_groups
+            "{issue_groups:?}"
         );
         assert!(
             issue_groups
@@ -885,8 +884,7 @@ mod tests {
                         issue_group.example_issues[0],
                         ValidationIssue::SubaccountMissingFromIndex { .. }
                     )),
-            "{:?}",
-            issue_groups
+            "{issue_groups:?}"
         );
         assert!(
             issue_groups
@@ -896,8 +894,7 @@ mod tests {
                         &issue_group.example_issues[0],
                         ValidationIssue::PrincipalIdMissingFromIndex { .. }
                     )),
-            "{:?}",
-            issue_groups
+            "{issue_groups:?}"
         );
         assert!(
             issue_groups
@@ -907,8 +904,7 @@ mod tests {
                         issue_group.example_issues[0],
                         ValidationIssue::TopicFolloweePairsMissingFromIndex { .. }
                     )),
-            "{:?}",
-            issue_groups
+            "{issue_groups:?}"
         );
         assert!(
             issue_groups
@@ -919,8 +915,7 @@ mod tests {
                             primary: 2,
                             index: 0
                         }),
-            "{:?}",
-            issue_groups
+            "{issue_groups:?}"
         );
         assert!(
             issue_groups
@@ -930,8 +925,7 @@ mod tests {
                         issue_group.example_issues[0],
                         ValidationIssue::KnownNeuronMissingFromIndex { .. }
                     )),
-            "{:?}",
-            issue_groups
+            "{issue_groups:?}"
         );
         assert!(
             issue_groups
@@ -941,8 +935,7 @@ mod tests {
                         issue_group.example_issues[0],
                         ValidationIssue::MaturityDisbursementMissingFromIndex { .. }
                     )),
-            "{:?}",
-            issue_groups
+            "{issue_groups:?}"
         );
     }
 
@@ -987,8 +980,7 @@ mod tests {
                             primary: 0,
                             index: 2
                         }),
-            "{:?}",
-            issue_groups
+            "{issue_groups:?}"
         );
         assert!(
             issue_groups
@@ -999,8 +991,7 @@ mod tests {
                             primary: 0,
                             index: 6
                         }),
-            "{:?}",
-            issue_groups
+            "{issue_groups:?}"
         );
         assert!(
             issue_groups
@@ -1011,8 +1002,7 @@ mod tests {
                             primary: 0,
                             index: 6
                         }),
-            "{:?}",
-            issue_groups
+            "{issue_groups:?}"
         );
         assert!(
             issue_groups
@@ -1023,8 +1013,7 @@ mod tests {
                             primary: 0,
                             index: 2
                         }),
-            "{:?}",
-            issue_groups
+            "{issue_groups:?}"
         );
         assert!(
             issue_groups
@@ -1035,8 +1024,7 @@ mod tests {
                             primary: 0,
                             index: 4
                         }),
-            "{:?}",
-            issue_groups
+            "{issue_groups:?}"
         );
     }
 

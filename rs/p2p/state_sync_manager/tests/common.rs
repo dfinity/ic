@@ -280,7 +280,7 @@ impl Chunkable<StateSyncMessage> for FakeChunkable {
             if set.remove(&chunk_id) {
                 break;
             } else {
-                panic!("Downloaded chunk {} twice", chunk_id)
+                panic!("Downloaded chunk {chunk_id} twice")
             }
         }
 

@@ -648,10 +648,7 @@ fn test_adjust_voting_power() {
         // rising is because of age bonus.
         assert!(
             current_potential_voting_power > previous_potential_voting_power,
-            "at {} months: {} vs. {}",
-            months,
-            original_potential_voting_power,
-            previous_potential_voting_power,
+            "at {months} months: {original_potential_voting_power} vs. {previous_potential_voting_power}",
         );
 
         previous_potential_voting_power = current_potential_voting_power;

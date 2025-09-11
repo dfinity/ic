@@ -175,7 +175,7 @@ impl LedgerAccess for TestLedger {
             };
 
             let from = PrincipalId::try_from(sender.0)
-                .map_err(|e| ApiError::internal_error(format!("{}", e)))?;
+                .map_err(|e| ApiError::internal_error(format!("{e}")))?;
 
             let SendArgs {
                 memo,

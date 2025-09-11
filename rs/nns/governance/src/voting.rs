@@ -1279,7 +1279,7 @@ mod test {
                 .neuron_store
                 .with_neuron(&NeuronId { id: i }, |n| n.recent_ballots.clone())
                 .unwrap();
-            assert_eq!(recent_ballots.len(), 0, "Neuron {} has recent ballots", i);
+            assert_eq!(recent_ballots.len(), 0, "Neuron {i} has recent ballots");
         }
 
         // Now let's run the "timer job" to make sure it eventually drains everything.
@@ -1304,7 +1304,7 @@ mod test {
                 .neuron_store
                 .with_neuron(&NeuronId { id: i }, |n| n.recent_ballots.clone())
                 .unwrap();
-            assert_eq!(recent_ballots.len(), 1, "Neuron {} has recent ballots", i);
+            assert_eq!(recent_ballots.len(), 1, "Neuron {i} has recent ballots");
         }
     }
 
@@ -1383,7 +1383,7 @@ mod test {
                 .neuron_store
                 .with_neuron(&NeuronId { id: i }, |n| n.recent_ballots.clone())
                 .unwrap();
-            assert_eq!(recent_ballots.len(), 1, "Neuron {} has recent ballots", i);
+            assert_eq!(recent_ballots.len(), 1, "Neuron {i} has recent ballots");
         }
 
         let proposal = governance.heap_data.proposals.get(&1).unwrap();

@@ -1874,7 +1874,7 @@ impl NeuronBuilder {
 
         #[cfg(test)]
         let visibility = if known_neuron_data.is_some() {
-            assert_eq!(visibility, Visibility::Public, "{:?}", id);
+            assert_eq!(visibility, Visibility::Public, "{id:?}");
             Visibility::Public
         } else {
             visibility

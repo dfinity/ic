@@ -2148,13 +2148,13 @@ mod test_functions_tests {
         let f = SimpleLinearFunction {};
         let run_test_for_a = |x_icp_e8s: u64| {
             let y_icp = f.apply(x_icp_e8s).unwrap();
-            println!("({}, {})", x_icp_e8s, y_icp);
+            println!("({x_icp_e8s}, {y_icp})");
             let x1_icp_e8s = f.invert(y_icp).unwrap();
             assert_eq!(x_icp_e8s, x1_icp_e8s);
         };
         let run_test_for_b = |y_icp: Decimal| {
             let x1_icp_e8s = f.invert(y_icp).unwrap();
-            println!("({}, {})", x1_icp_e8s, y_icp);
+            println!("({x1_icp_e8s}, {y_icp})");
             let y1_icp = f.apply(x1_icp_e8s).unwrap();
             assert_eq!(y_icp, y1_icp);
         };

@@ -161,9 +161,7 @@ mod tests {
                     let error_message = error.error_message.to_lowercase();
                     assert!(
                         error_message.contains(keyword),
-                        "{} not found in {:#?}",
-                        keyword,
-                        error_message
+                        "{keyword} not found in {error_message:#?}"
                     );
                 }
             };

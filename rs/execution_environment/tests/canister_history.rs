@@ -88,7 +88,7 @@ fn canister_id_from_wasm_result(wasm_result: WasmResult) -> CanisterId {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     }
 }
 
@@ -148,7 +148,7 @@ fn canister_history_tracks_create_install_reinstall() {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     };
     // check canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
@@ -269,7 +269,7 @@ fn canister_history_tracks_upgrade() {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     };
     // update reference canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
@@ -366,7 +366,7 @@ fn canister_history_tracks_uninstall() {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     };
     // update reference canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
@@ -462,7 +462,7 @@ fn canister_history_tracks_controllers_change() {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     };
     // update reference canister history
     // the list of controllers in the canister history is sorted and contains no duplicates
@@ -550,7 +550,7 @@ fn canister_history_cleared_if_canister_out_of_cycles() {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     };
     // update reference canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
@@ -666,7 +666,7 @@ fn canister_history_tracks_changes_from_canister() {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     };
     // check canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
@@ -766,7 +766,7 @@ fn canister_history_fails_with_incorrect_sender_version() {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     };
     // update reference canister history
     let reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
@@ -847,7 +847,7 @@ fn canister_info_retrieval() {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     };
     // update reference canister history
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
@@ -1063,7 +1063,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     };
 
     let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
@@ -1085,7 +1085,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
         .unwrap();
     match wasm_result {
         WasmResult::Reply(_) => {}
-        WasmResult::Reject(reason) => panic!("install_code call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("install_code call rejected: {reason}"),
     };
     // Check canister history.
     reference_change_entries.push(CanisterChange::new(
@@ -1122,7 +1122,7 @@ fn canister_history_load_snapshot_fails_incorrect_sender_version() {
         WasmResult::Reply(bytes) => {
             CanisterSnapshotResponse::decode(&bytes[..]).expect("failed to decode record")
         }
-        WasmResult::Reject(reason) => panic!("take_canister_snapshot call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("take_canister_snapshot call rejected: {reason}"),
     };
     let snapshot_id = result.snapshot_id();
 

@@ -638,8 +638,7 @@ fn test_omit_large_fields() {
     );
     assert!(
         create_service_nervous_system_has_logo(&response.proposal_info[0]),
-        "{:?}",
-        response
+        "{response:?}"
     );
 
     let response = governance.list_proposals(
@@ -651,8 +650,7 @@ fn test_omit_large_fields() {
     );
     assert!(
         create_service_nervous_system_has_logo(&response.proposal_info[0]),
-        "{:?}",
-        response
+        "{response:?}"
     );
 
     let response = governance.list_proposals(
@@ -664,7 +662,6 @@ fn test_omit_large_fields() {
     );
     assert!(
         !create_service_nervous_system_has_logo(&response.proposal_info[0]),
-        "{:?}",
-        response
+        "{response:?}"
     );
 }

@@ -234,7 +234,7 @@ fn test_remove_inactive_neuron() {
             NeuronStoreError::NeuronNotFound { neuron_id } => {
                 assert_eq!(neuron_id, inactive_neuron.id());
             }
-            _ => panic!("read returns error other than not found: {:?}", error),
+            _ => panic!("read returns error other than not found: {error:?}"),
         },
     }
 }

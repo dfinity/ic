@@ -69,8 +69,7 @@ fn test_neurons_fund_participation_anonymization() {
     let participation_validation_result = participation.validate();
     assert!(
         participation_validation_result.is_ok(),
-        "expected Ok result, got {:#?}",
-        participation_validation_result
+        "expected Ok result, got {participation_validation_result:#?}"
     );
     let anonymized_participation = participation.anonymized();
     assert_eq!(

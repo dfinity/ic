@@ -200,8 +200,7 @@ fn negative_integer_round_trip() {
         assert_eq!(
             value,
             icrc1_block_from_value(cbor_value, 0).unwrap(),
-            "round trip failed for {}",
-            text
+            "round trip failed for {text}"
         );
     }
 
@@ -222,8 +221,7 @@ fn positive_big_integer_round_trip() {
         assert_eq!(
             value,
             icrc1_block_from_value(cbor_value, 0).unwrap(),
-            "round trip failed for {}",
-            text
+            "round trip failed for {text}"
         );
     }
 

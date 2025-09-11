@@ -176,7 +176,7 @@ async fn do_test_treasury_manager() {
                 owner: extension_canister_id.0,
                 subaccount: None,
             },
-            format!("KongSwapAdaptor({})", extension_canister_id),
+            format!("KongSwapAdaptor({extension_canister_id})"),
         )
         .with_external_custodian(None, None)
         .with_fee_collector(None, None)
@@ -191,7 +191,7 @@ async fn do_test_treasury_manager() {
                 owner: extension_canister_id.0,
                 subaccount: None,
             },
-            format!("KongSwapAdaptor({})", extension_canister_id),
+            format!("KongSwapAdaptor({extension_canister_id})"),
         )
         .with_external_custodian(None, None)
         .with_fee_collector(None, None)
@@ -320,7 +320,7 @@ async fn do_test_treasury_manager() {
                 .await
                 .unwrap();
 
-            println!(">>> AuditTrail: {:#?}", response);
+            println!(">>> AuditTrail: {response:#?}");
         }
 
         // We have done 2 deposits and 1 withdrawal.
@@ -516,12 +516,12 @@ async fn dbg_print_block(pocket_ic: &PocketIc, ledger_canister_id: PrincipalId, 
     let amt = tx_details.get("amt").unwrap();
     let op = tx_details.get("op").unwrap();
 
-    println!("SNS Ledger block {} details.", block_index);
-    println!("    amt = {:?}", amt);
-    println!("     op = {:?}", op);
-    println!("   from = {:?}", from);
-    println!("     to = {:?}", to);
-    println!("spender = {:?}", spender);
+    println!("SNS Ledger block {block_index} details.");
+    println!("    amt = {amt:?}");
+    println!("     op = {op:?}");
+    println!("   from = {from:?}");
+    println!("     to = {to:?}");
+    println!("spender = {spender:?}");
 }
 
 async fn deploy_sns(pocket_ic: &PocketIc, with_mainnet_sns_canisters: bool) -> Sns {
@@ -615,8 +615,7 @@ async fn validate_treasury_balances(
 
         if observed_balance_e8s != expected_balance_e8s {
             return Err(format!(
-                "[{}] Expected treasury {} balance of {}, got {}.",
-                lebel, token_name, expected_balance_e8s, observed_balance_e8s
+                "[{lebel}] Expected treasury {token_name} balance of {expected_balance_e8s}, got {observed_balance_e8s}."
             ));
         }
     }
@@ -798,7 +797,7 @@ async fn prepare_the_world(state_dir: PathBuf) -> World {
 
     let fiduciary_subnet_id = topology.get_fiduciary().unwrap();
 
-    println!(">>> Fiduciary subnet ID: {}", fiduciary_subnet_id);
+    println!(">>> Fiduciary subnet ID: {fiduciary_subnet_id}");
 
     // Step 0: Prepare the world.
 
@@ -921,7 +920,7 @@ async fn add_fiduciary_subnet_type(pocket_ic: &PocketIc) {
 
     match result {
         Ok(_) => println!("Successfully added fiduciary subnet type to CMC"),
-        Err(e) => panic!("Failed to add fiduciary subnet type to CMC: {:?}", e),
+        Err(e) => panic!("Failed to add fiduciary subnet type to CMC: {e:?}"),
     }
 }
 
@@ -956,10 +955,9 @@ async fn add_fiduciary_subnet_to_cmc(pocket_ic: &PocketIc, fiduciary_subnet_id: 
 
     match result {
         Ok(_) => println!(
-            "Successfully registered fiduciary subnet {} with CMC",
-            fiduciary_subnet_id
+            "Successfully registered fiduciary subnet {fiduciary_subnet_id} with CMC"
         ),
-        Err(e) => panic!("Failed to register fiduciary subnet with CMC: {:?}", e),
+        Err(e) => panic!("Failed to register fiduciary subnet with CMC: {e:?}"),
     }
 }
 

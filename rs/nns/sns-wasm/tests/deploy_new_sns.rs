@@ -201,9 +201,8 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
     let error_message = response.error.clone().unwrap().message;
     let expected_error = format!(
         "Error installing Governance WASM: Failed to install WASM on canister \
-        {}: error code 5: Error from Canister {}: \
-        Canister called `ic0.trap` with message: 'did not find blob on stack",
-        governance, governance
+        {governance}: error code 5: Error from Canister {governance}: \
+        Canister called `ic0.trap` with message: 'did not find blob on stack"
     );
     assert!(
         error_message.contains(&expected_error),

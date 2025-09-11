@@ -242,8 +242,7 @@ fn test_decode_bad_root_hash() {
         Err(CertificationError::CertifiedDataMismatch { certified, .. })
             if &certified[..] == bad_digest.as_bytes() => {}
         other => panic!(
-            "Expected CertifiedDataMismatch error containing the bad digest {}, got {:?}",
-            bad_digest, other
+            "Expected CertifiedDataMismatch error containing the bad digest {bad_digest}, got {other:?}"
         ),
     }
 }
@@ -259,7 +258,7 @@ fn test_decode_bad_sig() {
     );
     match decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]) {
         Err(CertificationError::InvalidSignature(_)) => (),
-        other => panic!("Expected InvalidSignature error, got {:?}", other),
+        other => panic!("Expected InvalidSignature error, got {other:?}"),
     }
 }
 
@@ -301,7 +300,7 @@ fn test_decode_missing_version() {
     );
     match decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]) {
         Err(CertificationError::InvalidDeltas(_)) => (),
-        other => panic!("Expected InvalidDeltas error, got {:?}", other),
+        other => panic!("Expected InvalidDeltas error, got {other:?}"),
     }
 }
 
@@ -318,7 +317,7 @@ fn test_decode_missing_middle_version() {
     );
     match decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]) {
         Err(CertificationError::InvalidDeltas(_)) => (),
-        other => panic!("Expected InvalidDeltas error, got {:?}", other),
+        other => panic!("Expected InvalidDeltas error, got {other:?}"),
     }
 }
 
@@ -335,7 +334,7 @@ fn test_decode_empty_prefix() {
     );
     match decode_certified_deltas_no_chunks(0, &cid, &pk, &payload[..]) {
         Err(CertificationError::InvalidDeltas(_)) => (),
-        other => panic!("Expected InvalidDeltas error, got {:?}", other),
+        other => panic!("Expected InvalidDeltas error, got {other:?}"),
     }
 }
 
@@ -454,10 +453,10 @@ fn test_evil_chunked() {
         )) => {
             let message = err.to_lowercase();
             for key_word in ["chunk", "hash", "match"] {
-                assert!(message.contains(key_word), "{} not in {}", key_word, err);
+                assert!(message.contains(key_word), "{key_word} not in {err}");
             }
         }
 
-        _ => panic!("{:?}", result),
+        _ => panic!("{result:?}"),
     }
 }

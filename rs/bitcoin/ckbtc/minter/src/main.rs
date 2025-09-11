@@ -71,7 +71,7 @@ fn check_invariants() -> Result<(), String> {
 
         let events: Vec<_> = storage::events().collect();
         let recovered_state = replay::<CheckInvariantsImpl>(events.clone().into_iter())
-            .unwrap_or_else(|e| panic!("failed to replay log {:?}: {:?}", events, e));
+            .unwrap_or_else(|e| panic!("failed to replay log {events:?}: {e:?}"));
 
         recovered_state.check_invariants()?;
 
@@ -255,7 +255,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
-                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
                     .build()
             }
         }
@@ -368,14 +368,13 @@ fn check_candid_interface_compatibility() {
             Ok(_) => {}
             Err(e) => {
                 eprintln!(
-                    "{} is not compatible with {}!\n\n\
-            {}:\n\
-            {}\n\n\
-            {}:\n\
-            {}\n",
-                    new_name, old_name, new_name, new_str, old_name, old_str
+                    "{new_name} is not compatible with {old_name}!\n\n\
+            {new_name}:\n\
+            {new_str}\n\n\
+            {old_name}:\n\
+            {old_str}\n"
                 );
-                panic!("{:?}", e);
+                panic!("{e:?}");
             }
         }
     }

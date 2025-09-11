@@ -66,11 +66,11 @@ async fn test_gateway(server_url: Url, https: bool) {
 
     // define two domains for canister ID resolution
     let localhost = "localhost";
-    let sub_localhost = &format!("{}.{}", canister_id, localhost);
-    let sub_raw_localhost = &format!("{}.raw.{}", canister_id, localhost);
+    let sub_localhost = &format!("{canister_id}.{localhost}");
+    let sub_raw_localhost = &format!("{canister_id}.raw.{localhost}");
     let alt_domain = "example.com";
-    let sub_alt_domain = &format!("{}.{}", canister_id, alt_domain);
-    let sub_raw_alt_domain = &format!("{}.raw.{}", canister_id, alt_domain);
+    let sub_alt_domain = &format!("{canister_id}.{alt_domain}");
+    let sub_raw_alt_domain = &format!("{canister_id}.raw.{alt_domain}");
 
     // generate root TLS certificate (only used if `https` is set to `true`,
     // but defining it here unconditionally simplifies the test)
@@ -170,25 +170,24 @@ async fn test_gateway(server_url: Url, https: bool) {
 
     // perform frontend asset request for the title page at http(s)://localhost:<port>/?canisterId=<canister-id>
     let canister_url = format!(
-        "{}://{}:{}/?canisterId={}",
-        proto, localhost, port, canister_id
+        "{proto}://{localhost}:{port}/?canisterId={canister_id}"
     );
     test_urls.push(canister_url);
 
     // perform frontend asset request for the title page at http(s)://<canister-id>.localhost:<port>
-    let canister_url = format!("{}://{}.{}:{}", proto, canister_id, localhost, port);
+    let canister_url = format!("{proto}://{canister_id}.{localhost}:{port}");
     test_urls.push(canister_url);
 
     // perform frontend asset request for the title page at http(s)://<canister-id>.raw.localhost:<port>
-    let canister_url = format!("{}://{}.raw.{}:{}", proto, canister_id, localhost, port);
+    let canister_url = format!("{proto}://{canister_id}.raw.{localhost}:{port}");
     test_urls.push(canister_url);
 
     // perform frontend asset request for the title page at http(s)://<canister-id>.example.com:<port>
-    let canister_url = format!("{}://{}.{}:{}", proto, canister_id, alt_domain, port);
+    let canister_url = format!("{proto}://{canister_id}.{alt_domain}:{port}");
     test_urls.push(canister_url);
 
     // perform frontend asset request for the title page at http(s)://<canister-id>.raw.example.com:<port>
-    let canister_url = format!("{}://{}.raw.{}:{}", proto, canister_id, alt_domain, port);
+    let canister_url = format!("{proto}://{canister_id}.raw.{alt_domain}:{port}");
     test_urls.push(canister_url.clone());
 
     for url in test_urls {
@@ -201,20 +200,19 @@ async fn test_gateway(server_url: Url, https: bool) {
     let mut test_referers = vec![];
 
     // perform request where canister ID is specified in the referer header host
-    let referer_url = format!("{}://{}.{}:{}", proto, canister_id, localhost, port);
+    let referer_url = format!("{proto}://{canister_id}.{localhost}:{port}");
     test_referers.push(referer_url);
 
-    let referer_url = format!("{}://{}.raw.{}:{}", proto, canister_id, localhost, port);
+    let referer_url = format!("{proto}://{canister_id}.raw.{localhost}:{port}");
     test_referers.push(referer_url);
 
     // perform request where canister ID is specified in the referer header query parameters
     let referer_url = format!(
-        "{}://{}:{}/?canisterId={}",
-        proto, localhost, port, canister_id
+        "{proto}://{localhost}:{port}/?canisterId={canister_id}"
     );
     test_referers.push(referer_url);
 
-    let test_url = format!("{}://{}:{}", proto, localhost, port);
+    let test_url = format!("{proto}://{localhost}:{port}");
 
     for referer in test_referers {
         // perform request where canister ID is specified in the referer header
@@ -431,10 +429,10 @@ fn test_unresponsive_gateway_backend() {
     let endpoint = match res {
         CreateHttpGatewayResponse::Created(info) => {
             let port = info.port;
-            Url::parse(&format!("http://localhost:{}/", port)).unwrap()
+            Url::parse(&format!("http://localhost:{port}/")).unwrap()
         }
         CreateHttpGatewayResponse::Error { message } => {
-            panic!("Failed to crate http gateway: {}", message)
+            panic!("Failed to crate http gateway: {message}")
         }
     };
 
@@ -567,7 +565,6 @@ fn test_gateway_address_in_use() {
     )
     .unwrap_err();
     assert!(err.contains(&format!(
-        "Failed to bind to address 127.0.0.1:{}: Address already in use",
-        port
+        "Failed to bind to address 127.0.0.1:{port}: Address already in use"
     )));
 }

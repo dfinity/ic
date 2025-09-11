@@ -452,8 +452,8 @@ mod tests {
         environment.set_time_warp(crate::governance::TimeWarp { delta_s: 1_000 });
         let delta_s = environment.now() - start;
 
-        assert!(delta_s >= 1000, "delta_s = {}", delta_s);
-        assert!(delta_s < 1005, "delta_s = {}", delta_s);
+        assert!(delta_s >= 1000, "delta_s = {delta_s}");
+        assert!(delta_s < 1005, "delta_s = {delta_s}");
     }
 
     #[test]

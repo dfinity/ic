@@ -362,8 +362,7 @@ impl Setup {
             }
             (true, Err(err)) => {
                 panic!(
-                    "should successfully downgrade ledger to mainnet version: {}",
-                    err
+                    "should successfully downgrade ledger to mainnet version: {err}"
                 );
             }
         }
@@ -391,7 +390,7 @@ impl Setup {
         let metrics = retrieve_metrics(&self.state_machine, LEDGER_CANISTER_ID);
         println!("Ledger metrics:");
         for metric in metrics {
-            println!("  {}", metric);
+            println!("  {metric}");
         }
         let upgrade_instructions = parse_metric(
             &self.state_machine,
@@ -400,9 +399,7 @@ impl Setup {
         );
         assert!(
             upgrade_instructions < CANISTER_UPGRADE_INSTRUCTION_LIMIT,
-            "Upgrade instructions ({}) should be less than the instruction limit ({})",
-            upgrade_instructions,
-            CANISTER_UPGRADE_INSTRUCTION_LIMIT
+            "Upgrade instructions ({upgrade_instructions}) should be less than the instruction limit ({CANISTER_UPGRADE_INSTRUCTION_LIMIT})"
         );
     }
 

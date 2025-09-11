@@ -415,12 +415,8 @@ async fn test_sns_lifecycle(
     assert_eq!(
         original_total_supply_sns_e8s,
         developer_neuron_stake_sns_e8s + treasury_distribution_sns_e8s + swap_distribution_sns_e8s,
-        "original_total_supply_sns_e8s ({}) should = developer_neuron_stake_sns_e8s ({}) + \
-        treasury_distribution_sns_e8s ({}) + swap_distribution_sns_e8s ({})",
-        original_total_supply_sns_e8s,
-        developer_neuron_stake_sns_e8s,
-        treasury_distribution_sns_e8s,
-        swap_distribution_sns_e8s,
+        "original_total_supply_sns_e8s ({original_total_supply_sns_e8s}) should = developer_neuron_stake_sns_e8s ({developer_neuron_stake_sns_e8s}) + \
+        treasury_distribution_sns_e8s ({treasury_distribution_sns_e8s}) + swap_distribution_sns_e8s ({swap_distribution_sns_e8s})",
     );
 
     let nervous_system_parameters = sns
@@ -507,16 +503,14 @@ async fn test_sns_lifecycle(
             assert_eq!(
                 ErrorType::try_from(*error_type).unwrap(),
                 ErrorType::PreconditionFailed,
-                "{:#?}",
-                err
+                "{err:#?}"
             );
             assert!(
                 error_message.contains("PreInitializationSwap"),
-                "{:#?}",
-                err
+                "{err:#?}"
             );
         } else {
-            panic!("Unexpected error: {:?}", err);
+            panic!("Unexpected error: {err:?}");
         }
     }
 
@@ -562,17 +556,15 @@ async fn test_sns_lifecycle(
                 assert_eq!(
                     ErrorType::try_from(*error_type).unwrap(),
                     ErrorType::PreconditionFailed,
-                    "{:#?}",
-                    error
+                    "{error:#?}"
                 );
                 assert!(
                     error_message.contains("PreInitializationSwap"),
-                    "{:#?}",
-                    error
+                    "{error:#?}"
                 );
             }
             response => {
-                panic!("{:#?}", response);
+                panic!("{response:#?}");
             }
         };
     }
@@ -819,10 +811,9 @@ async fn test_sns_lifecycle(
         )
         .await
         {
-            println!("{}", err);
+            println!("{err}");
             panic!(
-                "Awaiting Swap finalization status {:?} failed.",
-                expected_swap_finalization_status
+                "Awaiting Swap finalization status {expected_swap_finalization_status:?} failed."
             );
         }
         expected_swap_finalization_status
@@ -1256,16 +1247,14 @@ async fn test_sns_lifecycle(
                 assert_eq!(
                     ErrorType::try_from(*error_type).unwrap(),
                     ErrorType::PreconditionFailed,
-                    "{:#?}",
-                    err
+                    "{err:#?}"
                 );
                 assert!(
                     error_message.contains("PreInitializationSwap"),
-                    "{:#?}",
-                    err
+                    "{err:#?}"
                 );
             } else {
-                panic!("Unexpected error: {:?}", err);
+                panic!("Unexpected error: {err:?}");
             }
         } else {
             assert_is_ok!(proposal_result);
@@ -1293,23 +1282,21 @@ async fn test_sns_lifecycle(
                     assert_eq!(
                         ErrorType::try_from(*error_type).unwrap(),
                         ErrorType::PreconditionFailed,
-                        "{:#?}",
-                        error
+                        "{error:#?}"
                     );
                     assert!(
                         error_message.contains("PreInitializationSwap"),
-                        "{:#?}",
-                        error
+                        "{error:#?}"
                     );
                 }
                 response => {
-                    panic!("{:#?}", response);
+                    panic!("{response:#?}");
                 }
             };
         } else {
             match start_dissolving_response.command {
                 Some(sns_pb::manage_neuron_response::Command::Configure(_)) => (),
-                _ => panic!("{:#?}", start_dissolving_response),
+                _ => panic!("{start_dissolving_response:#?}"),
             };
         }
     }
@@ -1373,11 +1360,8 @@ async fn test_sns_lifecycle(
         assert_eq!(
             (original_total_supply_sns_e8s - total_supply_sns_e8s) % transaction_fee_sns_e8s,
             0,
-            "original_total_supply_sns_e8s ({}) - total_supply_sns_e8s ({}) should be a multiple \
-            of transaction_fee_sns_e8s ({})",
-            original_total_supply_sns_e8s,
-            total_supply_sns_e8s,
-            transaction_fee_sns_e8s,
+            "original_total_supply_sns_e8s ({original_total_supply_sns_e8s}) - total_supply_sns_e8s ({total_supply_sns_e8s}) should be a multiple \
+            of transaction_fee_sns_e8s ({transaction_fee_sns_e8s})",
         );
     }
 
@@ -1395,8 +1379,7 @@ async fn test_sns_lifecycle(
             .result
         else {
             panic!(
-                "Proposal {:?} did not result in a successfully deployed SNS",
-                nns_proposal_id
+                "Proposal {nns_proposal_id:?} did not result in a successfully deployed SNS"
             );
         };
         neurons_fund_audit_info
@@ -1604,8 +1587,7 @@ async fn test_sns_lifecycle(
                         };
                         assert_eq!(
                             sns_neuron.auto_stake_maturity, expected_auto_stake_maturity,
-                            "{:#?}",
-                            sns_neuron
+                            "{sns_neuron:#?}"
                         );
                     }
                     // Validate `permissions`:
@@ -1635,7 +1617,7 @@ async fn test_sns_lifecycle(
                                     .unwrap_or_else(|| {
                                         panic!(
                                         "There should be an NNS neuron controlled by the Neurons' \
-                                        Fund user {}", principal_id,
+                                        Fund user {principal_id}",
                                     )
                                     })
                                     .iter()
@@ -1684,8 +1666,7 @@ async fn test_sns_lifecycle(
                         assert_eq!(
                             sorted_permissions(&sns_neuron.permissions),
                             expected_permissions,
-                            "{:#?}",
-                            sns_neuron
+                            "{sns_neuron:#?}"
                         );
                     }
                     // Validate the SNS neuron baskets' follow graph.
@@ -1693,22 +1674,21 @@ async fn test_sns_lifecycle(
                         if sns_neuron.id.as_ref().unwrap() == &longest_dissolve_delay_sns_neuron_id
                         {
                             for followees in sns_neuron.followees.values() {
-                                assert_eq!(followees.followees, vec![], "{:#?}", sns_neuron);
+                                assert_eq!(followees.followees, vec![], "{sns_neuron:#?}");
                             }
                         } else {
                             for followees in sns_neuron.followees.values() {
                                 assert_eq!(
                                     followees.followees,
                                     vec![longest_dissolve_delay_sns_neuron_id.clone()],
-                                    "{:#?}",
-                                    sns_neuron,
+                                    "{sns_neuron:#?}",
                                 );
                             }
                         }
                     }
                     // Miscellaneous checks:
-                    assert_eq!(sns_neuron.maturity_e8s_equivalent, 0, "{:#?}", sns_neuron);
-                    assert_eq!(sns_neuron.neuron_fees_e8s, 0, "{:#?}", sns_neuron);
+                    assert_eq!(sns_neuron.maturity_e8s_equivalent, 0, "{sns_neuron:#?}");
+                    assert_eq!(sns_neuron.neuron_fees_e8s, 0, "{sns_neuron:#?}");
 
                     // Finally, check that the SNS Ledger balances add up.
                     {
@@ -1863,8 +1843,7 @@ async fn test_sns_lifecycle(
             .result
         else {
             panic!(
-                "Proposal {:?} did not result in a successfully deployed SNS",
-                nns_proposal_id
+                "Proposal {nns_proposal_id:?} did not result in a successfully deployed SNS"
             );
         };
         // Maps neuron IDs to maturity equivalent ICP e8s.
@@ -1934,10 +1913,7 @@ async fn test_sns_lifecycle(
                 assert_eq!(
                     current_maturity_icp_e8s + participated_amount_icp_e8s,
                     original_maturity_icp_e8s,
-                    "current_maturity_icp_e8s ({}) + participated_amount_icp_e8s ({}) should equal original_maturity_icp_e8s ({})",
-                    current_maturity_icp_e8s,
-                    participated_amount_icp_e8s,
-                    original_maturity_icp_e8s,
+                    "current_maturity_icp_e8s ({current_maturity_icp_e8s}) + participated_amount_icp_e8s ({participated_amount_icp_e8s}) should equal original_maturity_icp_e8s ({original_maturity_icp_e8s})",
                 );
             }
         }
@@ -1962,11 +1938,8 @@ async fn test_sns_lifecycle(
             assert_eq!(
                 nns_neuron_maturities_e8s,
                 original_nns_neuron_maturities_e8s,
-                "Unexpected mismatch in maturity ICP equivalent for controller {}. \
-                nns_neuron_maturities_e8s={:?} e8s, original_nns_neuron_maturities_e8s({:?}) e8s.",
-                controller_principal_id,
-                nns_neuron_maturities_e8s,
-                original_nns_neuron_maturities_e8s,
+                "Unexpected mismatch in maturity ICP equivalent for controller {controller_principal_id}. \
+                nns_neuron_maturities_e8s={nns_neuron_maturities_e8s:?} e8s, original_nns_neuron_maturities_e8s({original_nns_neuron_maturities_e8s:?}) e8s.",
             );
         }
     }
@@ -2015,8 +1988,7 @@ async fn test_sns_lifecycle(
     let response = sns::root::get_sns_canisters_summary(&pocket_ic, sns.root.canister_id).await;
     assert!(
         !response.archives_canister_summaries().is_empty(),
-        "No archives found from get_sns_canisters_summary response: {:#?}",
-        response
+        "No archives found from get_sns_canisters_summary response: {response:#?}"
     );
 
     // Check that the SNS framework canister settings are as expected

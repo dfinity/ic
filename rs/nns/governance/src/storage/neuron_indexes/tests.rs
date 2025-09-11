@@ -171,7 +171,7 @@ fn create_model_neuron_builder(id: u64) -> NeuronBuilder {
         }
     })
     .with_known_neuron_data(Some(KnownNeuronData {
-        name: format!("known neuron data {}", id),
+        name: format!("known neuron data {id}"),
         description: None,
     }))
 }

@@ -50,7 +50,7 @@ fn test_update_node_provider_with_valid_reward_account_right_length() {
     let result = governance.update_node_provider(&node_provider_id, update);
 
     // Assert
-    assert!(result.is_ok(), "Expected update to succeed: {:?}", result);
+    assert!(result.is_ok(), "Expected update to succeed: {result:?}");
 
     // Verify the reward account was updated
     let updated_node_provider = governance.get_node_provider(&node_provider_id).unwrap();
