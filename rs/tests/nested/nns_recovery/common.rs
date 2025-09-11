@@ -461,27 +461,6 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
     ));
 }
 
-async fn overwrite_expected_recovery_hash<T>(node: &T, artifacts_hash: &str) -> Result<String>
-where
-    T: SshSession + Sync,
-{
-    let expected_recovery_hash_path = "/opt/ic/share/expected_recovery_hash";
-    // File-system is read-only, so we write the hash in a temporary file and replace the
-    // original with a bind mount.
-    let command = format!(
-        r#"
-            echo {artifacts_hash} | sudo tee -a /tmp/expected_recovery_hash > /dev/null
-
-            sudo chown --reference=/tmp/expected_recovery_hash {expected_recovery_hash_path}
-            sudo chmod --reference=/tmp/expected_recovery_hash {expected_recovery_hash_path}
-
-            sudo mount --bind /tmp/expected_recovery_hash {expected_recovery_hash_path}
-        "#,
-    );
-
-    node.block_on_bash_script_async(&command).await
-}
-
 async fn simulate_node_provider_action(
     logger: &Logger,
     env: &TestEnv,
@@ -499,8 +478,8 @@ async fn simulate_node_provider_action(
         "Remounting /boot as read-write, updating boot_args file and rebooting host {}", vm_name,
     );
     let boot_args_command = format!(
-        "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={} version-hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot && sudo reboot",
-        &img_version, &img_short_hash
+        "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={} version-hash={} recovery-hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot && sudo reboot",
+        &img_version, &img_short_hash, &artifacts_hash
     );
     host.block_on_bash_script_async(&boot_args_command)
         .await
@@ -541,16 +520,8 @@ async fn simulate_node_provider_action(
         .await
         .expect("Failed to spoof HostOS DNS");
 
-    // Once GuestOS is launched, we still need to overwrite the expected recovery hash with the
-    // correct one and spoof its DNS for the same reason as HostOS
+    // Once GuestOS is launched, we still need to spoof its DNS for the same reason as HostOS
     let guest = host.get_guest_ssh().unwrap();
-    info!(
-        logger,
-        "Manually overwriting recovery engine with artifacts expected hash {}", artifacts_hash
-    );
-    overwrite_expected_recovery_hash(&guest, artifacts_hash)
-        .await
-        .expect("Failed to overwrite expected recovery hash");
     info!(
         logger,
         "Spoofing GuestOS DNS to point the upstreams to the UVM at {}", server_ipv6
