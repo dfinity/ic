@@ -5,8 +5,8 @@ use sha2::{Digest, Sha256};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Advert {
-    id: StateSyncArtifactId,
-    partial_state: Option<XorDistance>,
+    pub(crate) id: StateSyncArtifactId,
+    pub(crate) partial_state: Option<XorDistance>,
 }
 
 impl From<Advert> for pb::Advert {

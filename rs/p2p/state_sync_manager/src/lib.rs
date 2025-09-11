@@ -227,7 +227,7 @@ impl<T: 'static + Send> StateSyncManager<T> {
         for state_id in available_states {
             // Unreliable broadcast of adverts to all current peers.
             for (peer_id, _) in transport.peers() {
-                let request = build_advert_handler_request(state_id.clone());
+                let request = build_advert_handler_request(state_id.clone(), None);
                 let transport_c = transport.clone();
                 let cancellation_c = cancellation.clone();
                 futures.push(async move {
