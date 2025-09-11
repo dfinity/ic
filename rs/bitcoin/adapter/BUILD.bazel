@@ -163,7 +163,7 @@ rust_bench(
         "@bitcoin_adapter_mainnet_headers//file",
     ],
     env = {
-        "HEADERS_DATA_PATH": "$(rootpath @bitcoin_adapter_mainnet_headers//file)",
+        "BITCOIN_MAINNET_HEADERS_DATA_PATH": "$(rootpath @bitcoin_adapter_mainnet_headers//file)",
     },
     deps = [
         # Keep sorted.

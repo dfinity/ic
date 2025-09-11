@@ -180,7 +180,8 @@ fn random_header<const N: usize, R: Rng + CryptoRng>(rng: &mut R) -> [u8; N] {
 fn add_800k_block_headers(criterion: &mut Criterion) {
     static BITCOIN_HEADERS: LazyLock<Vec<bitcoin::block::Header>> = LazyLock::new(|| {
         let headers_data_path = PathBuf::from(
-            std::env::var("HEADERS_DATA_PATH").expect("Failed to get test data path env variable"),
+            std::env::var("BITCOIN_MAINNET_HEADERS_DATA_PATH")
+                .expect("Failed to get test data path env variable"),
         );
         retrieve_headers::<bitcoin::Network>(&headers_data_path)
     });
