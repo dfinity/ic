@@ -13,9 +13,7 @@ use ic_types::{NodeId, PrincipalId, SubnetId};
 use pocket_ic::PocketIcBuilder;
 use test_registry_builder::builder::CompliantRegistryMutationsBuilder;
 
-use crate::common::{
-    test_helpers::install_registry_canister_with_payload_builder, IntoInitPayload,
-};
+use crate::common::{test_helpers::install_registry_canister_with_payload_builder, GetInitPayload};
 
 mod common;
 
@@ -39,7 +37,7 @@ async fn ensure_compliant_registry() {
         .with_node("node", "operator", Some("subnet"))
         .build();
 
-    let init_payload = compliant_registry_mutations.into_payload();
+    let init_payload = compliant_registry_mutations.get_payload();
     install_registry_canister_with_payload_builder(&pocket_ic, init_payload, false).await;
 
     // Ensure that the there are two sunbets NNS and the one we added
@@ -66,7 +64,7 @@ async fn ensure_compliant_registry() {
         .collect();
 
     assert!(
-        subnets.iter().any(|s| *s == configured_subnet_id),
+        subnets.contains(&configured_subnet_id),
         "Expected to find {configured_subnet_id} in {subnets:?}"
     );
 

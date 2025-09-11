@@ -6,11 +6,11 @@ use test_registry_builder::builder::CompliantRegistryMutations;
 
 pub mod test_helpers;
 
-pub trait IntoInitPayloadBuilder {
-    fn into_builder(&self) -> RegistryCanisterInitPayloadBuilder;
+pub trait GetInitPayloadBuilder {
+    fn get_builder(&self) -> RegistryCanisterInitPayloadBuilder;
 }
-pub trait IntoInitPayload {
-    fn into_payload(&self) -> RegistryCanisterInitPayload;
+pub trait GetInitPayload {
+    fn get_payload(&self) -> RegistryCanisterInitPayload;
 }
 
 fn build_payload_builder_from_mutations(
@@ -26,14 +26,14 @@ fn build_payload_builder_from_mutations(
     builder
 }
 
-impl IntoInitPayloadBuilder for CompliantRegistryMutations {
-    fn into_builder(&self) -> RegistryCanisterInitPayloadBuilder {
-        build_payload_builder_from_mutations(&self)
+impl GetInitPayloadBuilder for CompliantRegistryMutations {
+    fn get_builder(&self) -> RegistryCanisterInitPayloadBuilder {
+        build_payload_builder_from_mutations(self)
     }
 }
 
-impl IntoInitPayload for CompliantRegistryMutations {
-    fn into_payload(&self) -> RegistryCanisterInitPayload {
-        build_payload_builder_from_mutations(&self).build()
+impl GetInitPayload for CompliantRegistryMutations {
+    fn get_payload(&self) -> RegistryCanisterInitPayload {
+        build_payload_builder_from_mutations(self).build()
     }
 }
