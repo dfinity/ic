@@ -138,7 +138,6 @@ where
     }
 
     /// This method adds the input header to the `header_cache`.
-    #[allow(clippy::indexing_slicing)]
     fn add_header(&mut self, header: Network::Header) -> Result<AddHeaderResult, AddHeaderError> {
         let block_hash = header.block_hash();
 
