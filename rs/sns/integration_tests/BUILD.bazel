@@ -174,7 +174,6 @@ ENV = {
     "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister)",
     "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     "IC_NERVOUS_SYSTEM_COMMON_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/nervous_system/common/test_canister:test_canister)",
-    "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     "NODE_REWARDS_CANISTER_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
     "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
