@@ -1089,6 +1089,7 @@ Now please:
   - Upload {tar_file:?} to:
     - https://download.dfinity.systems/recovery/{artifacts_hash}/{tar_name}
     - https://download.dfinity.network/recovery/{artifacts_hash}/{tar_name}
+    - TODO: Update directions after recovery runbook complete
   - Run the following command and commit + push to a branch of dfinity/ic:
     echo {artifacts_hash} > ic-os/components/misc/guestos-recovery/guestos-recovery-engine/expected_recovery_hash
   - Build a recovery image from that branch.
