@@ -11,6 +11,7 @@ path = "src/lib.rs"
 
 [dependencies]
 ic-base-types = { path = "../../types/base_types" }
+ic-types = { path = "../../types/types" }
 itertools = { workspace = true }
 ic-protobuf = { path = "../../protobuf" }
 maplit = "1.0"

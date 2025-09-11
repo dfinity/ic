@@ -1,15 +1,11 @@
 use crate::performance_based_algorithm::results::RewardsCalculatorResults;
-use crate::performance_based_algorithm::{
-    InputProvider, InputProvider, PerformanceBasedAlgorithm, PerformanceBasedAlgorithmInternal,
-    RewardingAlgorithm, RewardsCalculator,
-};
-use crate::types::{DayUtc, NodeMetricsDailyRaw, RewardableNode};
-use crate::versions::{RewardsCalculation, Version};
-use ic_base_types::{NodeId, SubnetId};
-use ic_protobuf::registry::node::v1::NodeRewardType;
+use crate::performance_based_algorithm::{DataProvider, PerformanceBasedAlgorithm};
+use crate::types::{DayUtc, RewardableNode};
+use ic_base_types::PrincipalId;
+use ic_protobuf::messaging::xnet::v1::witness::Node;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 pub struct RewardsCalculationV1;
 
@@ -21,15 +17,31 @@ impl PerformanceBasedAlgorithm for RewardsCalculationV1 {
     const MAX_REWARDS_REDUCTION: Decimal = dec!(0.8);
 }
 
+impl RewardsCalculationV1 {
+    pub fn calculate_rewards(
+        from_day: &DayUtc,
+        to_day: &DayUtc,
+        node_provider_filter: Option<PrincipalId>,
+        data_provider: impl DataProvider,
+    ) -> Result<RewardsCalculatorResults, String> {
+        <RewardsCalculationV1 as PerformanceBasedAlgorithm>::calculate_rewards(
+            from_day,
+            to_day,
+            node_provider_filter,
+            data_provider,
+        )
+    }
+}
+
 mod tests {
     use super::*;
-    use crate::performance_based_algorithm::PerformanceBasedAlgorithm;
-    use crate::performance_based_algorithm::{Step4Results, Step5Results};
-    use crate::types::{Region, RewardableNode};
-    use crate::versions::test_utils::{
+    use crate::performance_based_algorithm::test_utils::{
         build_daily_metrics, create_rewards_table_for_region_test, generate_rewardable_nodes,
         test_node_id, test_subnet_id,
     };
+    use crate::performance_based_algorithm::PerformanceBasedAlgorithm;
+    use crate::performance_based_algorithm::{Step4Results, Step5Results};
+    use crate::types::RewardableNode;
     use ic_protobuf::registry::node::v1::NodeRewardType;
     use maplit::btreemap;
     use rust_decimal_macros::dec;
@@ -115,7 +127,7 @@ mod tests {
                 (s1_node2, 0, 0),  // FR = 0.0, but not in rewardable_nodes for day2 so ignored
             ],
         )]);
-        let result = step_0_subnets_nodes_fr(daily_metrics_by_subnet);
+        let result = RewardsCalculationV1::step_0_subnets_nodes_fr(daily_metrics_by_subnet);
         let subnets_fr = result.subnets_fr;
         let original_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
@@ -162,7 +174,7 @@ mod tests {
         let extrapolated_fr = dec!(0.35);
 
         // --- Execution ---
-        let result = NodeRewastep_3_performance_multiplier(
+        let result = RewardsCalculationV1::step_3_performance_multiplier(
             &rewardable_nodes,
             &relative_nodes_fr,
             &extrapolated_fr,
@@ -174,7 +186,7 @@ mod tests {
         // Good node: reduction = 0, multiplier = 1
         assert_eq!(
             reward_reduction.get(&node_good),
-            Some(&TestAlgorithm::MIN_REWARDS_REDUCTION)
+            Some(&RewardsCalculationV1::MIN_REWARDS_REDUCTION)
         );
         assert_eq!(performance_multiplier.get(&node_good), Some(&dec!(1.0)));
 
@@ -185,7 +197,7 @@ mod tests {
         // Bad node: reduction = 0.8, multiplier = 0.2
         assert_eq!(
             reward_reduction.get(&node_bad),
-            Some(&TestAlgorithm::MAX_REWARDS_REDUCTION)
+            Some(&RewardsCalculationV1::MAX_REWARDS_REDUCTION)
         );
         assert_eq!(performance_multiplier.get(&node_bad), Some(&dec!(0.2)));
 
@@ -232,7 +244,10 @@ mod tests {
         let Step4Results {
             base_rewards_per_node,
             ..
-        } = step_4_compute_base_rewards_type_region(&rewards_table, &rewardable_nodes);
+        } = RewardsCalculationV1::step_4_compute_base_rewards_type_region(
+            &rewards_table,
+            &rewardable_nodes,
+        );
 
         // --- Assertions ---
         assert_eq!(base_rewards_per_node.get(&type1_node), Some(&dec!(10000)));
@@ -269,8 +284,11 @@ mod tests {
         }
 
         // --- Execution ---
-        let Step5Results { adjusted_rewards } =
-            step_5_adjust_node_rewards(&rewardable_nodes, &base_rewards, &performance_multiplier);
+        let Step5Results { adjusted_rewards } = RewardsCalculationV1::step_5_adjust_node_rewards(
+            &rewardable_nodes,
+            &base_rewards,
+            &performance_multiplier,
+        );
 
         // --- Assertions ---
         let expected = dec!(1000) * dec!(0.5);

@@ -1,3 +1,4 @@
+use crate::types::DayUtc;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use rust_decimal::Decimal;
@@ -56,29 +57,20 @@ pub struct BaseRewardsType3 {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct NodeProviderRewards {
-    pub rewards_total_xdr_permyriad: u64,
+    pub rewards_total: XDRPermyriad,
     pub base_rewards: Vec<BaseRewards>,
     pub base_rewards_type3: Vec<BaseRewardsType3>,
     pub nodes_results: Vec<NodeResults>,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct RewardsCalculatorResults {
+pub struct DailyResults {
     pub subnets_fr: BTreeMap<SubnetId, Percent>,
     pub provider_results: BTreeMap<PrincipalId, NodeProviderRewards>,
 }
 
-impl RewardsCalculatorResults {
-    pub fn new() -> Self {
-        Self {
-            subnets_fr: BTreeMap::new(),
-            provider_results: BTreeMap::new(),
-        }
-    }
-}
-
-impl Default for RewardsCalculatorResults {
-    fn default() -> Self {
-        Self::new()
-    }
+#[derive(Serialize, Deserialize)]
+pub struct RewardsCalculatorResults {
+    pub total_rewards_xdr_permyriad: BTreeMap<PrincipalId, u64>,
+    pub daily_results: BTreeMap<DayUtc, DailyResults>,
 }
