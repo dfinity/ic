@@ -1,4 +1,4 @@
-use crate::types::{DayUtc, NodeMetricsDailyRaw, Region};
+use crate::types::{NodeMetricsDailyRaw, Region};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardRates, NodeRewardsTable};
@@ -23,6 +23,17 @@ pub struct RewardableNode {
     pub region: Region,
     pub node_reward_type: NodeRewardType,
     pub dc_id: String,
+}
+
+impl Default for RewardableNode {
+    fn default() -> Self {
+        RewardableNode {
+            node_id: NodeId::from(PrincipalId::new_node_test_id(0)),
+            region: Region::default(),
+            node_reward_type: NodeRewardType::default(),
+            dc_id: "default_dc".into(),
+        }
+    }
 }
 
 pub fn build_daily_metrics(
