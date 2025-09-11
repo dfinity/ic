@@ -74,7 +74,7 @@ impl TryFrom<VetKdInternalAgreementProto> for VetKdAgreement {
                 VetKdErrorCode::try_from(VetKdErrorCodeProto::try_from(error_code).map_err(
                     |_| ProxyDecodeError::ValueOutOfRange {
                         typ: "VetKdErrorCode",
-                        err: format!("Unexpected value for VetKd error code {}", error_code),
+                        err: format!("Unexpected value for VetKd error code {error_code}"),
                     },
                 )?)?,
             ),
@@ -99,7 +99,7 @@ impl TryFrom<VetKdErrorCodeProto> for VetKdErrorCode {
         match value {
             VetKdErrorCodeProto::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "VetKdErrorCode",
-                err: format!("Unexpected value for VetKd error code {:?}", value),
+                err: format!("Unexpected value for VetKd error code {value:?}"),
             }),
             VetKdErrorCodeProto::TimedOut => Ok(VetKdErrorCode::TimedOut),
             VetKdErrorCodeProto::InvalidKey => Ok(VetKdErrorCode::InvalidKey),

@@ -472,43 +472,37 @@ impl From<CanisterHttpRequestContextError> for UserError {
             CanisterHttpRequestContextError::UrlTooLong(url_size) => UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "url size {} exceeds {}",
-                    url_size, MAX_CANISTER_HTTP_URL_SIZE
+                    "url size {url_size} exceeds {MAX_CANISTER_HTTP_URL_SIZE}"
                 ),
             ),
             CanisterHttpRequestContextError::TooManyHeaders(num_headers) => UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "number of all http headers {} exceeds {}",
-                    num_headers, MAX_CANISTER_HTTP_HEADER_NUM
+                    "number of all http headers {num_headers} exceeds {MAX_CANISTER_HTTP_HEADER_NUM}"
                 ),
             ),
             CanisterHttpRequestContextError::TooLongHeaderName(name_size) => UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "number of bytes to represent some http header name {} exceeds {}",
-                    name_size, MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH
+                    "number of bytes to represent some http header name {name_size} exceeds {MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH}"
                 ),
             ),
             CanisterHttpRequestContextError::TooLongHeaderValue(value_size) => UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "number of bytes to represent some http header value {} exceeds {}",
-                    value_size, MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH
+                    "number of bytes to represent some http header value {value_size} exceeds {MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH}"
                 ),
             ),
             CanisterHttpRequestContextError::TooLargeHeaders(total_header_size) => UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "total number of bytes to represent all http header names and values {} exceeds {}",
-                    total_header_size, MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE
+                    "total number of bytes to represent all http header names and values {total_header_size} exceeds {MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE}"
                 ),
             ),
             CanisterHttpRequestContextError::TooLargeRequest(total_request_size) => UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "total number of bytes to represent all http header names and values and http body {} exceeds {}",
-                    total_request_size, MAX_CANISTER_HTTP_REQUEST_BYTES
+                    "total number of bytes to represent all http header names and values and http body {total_request_size} exceeds {MAX_CANISTER_HTTP_REQUEST_BYTES}"
                 ),
             ),
             CanisterHttpRequestContextError::NonReplicatedNotSupported => UserError::new(

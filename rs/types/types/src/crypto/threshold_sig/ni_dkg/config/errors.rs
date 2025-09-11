@@ -64,13 +64,11 @@ impl fmt::Display for NiDkgConfigValidationError {
             }
             NiDkgConfigValidationError::TooManyReceivers { receivers_count } => write!(
                 f,
-                "The number of receivers does not fit into NumberOfNodes. Number of receivers: {}",
-                receivers_count
+                "The number of receivers does not fit into NumberOfNodes. Number of receivers: {receivers_count}"
             ),
             NiDkgConfigValidationError::TooManyDealers { dealers_count } => write!(
                 f,
-                "The number of dealers does not fit into NumberOfNodes. Number of dealers: {}",
-                dealers_count
+                "The number of dealers does not fit into NumberOfNodes. Number of dealers: {dealers_count}"
             ),
             NiDkgConfigValidationError::InsufficientThreshold {
                 threshold,
@@ -86,8 +84,7 @@ impl fmt::Display for NiDkgConfigValidationError {
                 max_corrupt_dealers,
             } => write!(
                 f,
-                "The number of dealers (value: {}) must be greater than max_corrupt_dealers (value: {}).",
-                dealers_count, max_corrupt_dealers
+                "The number of dealers (value: {dealers_count}) must be greater than max_corrupt_dealers (value: {max_corrupt_dealers})."
             ),
             NiDkgConfigValidationError::InsufficientReceivers {
                 receiver_count: receivers_count,
@@ -106,8 +103,7 @@ impl fmt::Display for NiDkgConfigValidationError {
                 resharing_committee,
             } => write!(
                 f,
-                "The dealers must all be contained in the resharing committee. Dealers missing in committee: {:?}, dealers in committee: {:?}, resharing committee: {:?}",
-                dealers_missing, dealers_existing, resharing_committee
+                "The dealers must all be contained in the resharing committee. Dealers missing in committee: {dealers_missing:?}, dealers in committee: {dealers_existing:?}, resharing committee: {resharing_committee:?}"
             ),
             NiDkgConfigValidationError::InsufficientDealersForResharingThreshold {
                 dealer_count,
@@ -124,6 +120,6 @@ impl fmt::Display for NiDkgConfigValidationError {
 
 impl fmt::Debug for NiDkgConfigValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }

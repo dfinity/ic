@@ -926,14 +926,12 @@ impl IDkgTranscript {
         for (dealer_index, dealer_id) in dealer_index_to_dealer_id {
             let dealer_index_in_params = params.dealer_index(dealer_id).ok_or_else(|| {
                 format!(
-                    "transcript contains dealings from non-dealer with ID {}",
-                    dealer_id
+                    "transcript contains dealings from non-dealer with ID {dealer_id}"
                 )
             })?;
             if dealer_index != dealer_index_in_params {
                 return Err(format!(
-                    "mismatching dealer indexes in transcript ({}) and params ({}) for dealer {}",
-                    dealer_index, dealer_index_in_params, dealer_id
+                    "mismatching dealer indexes in transcript ({dealer_index}) and params ({dealer_index_in_params}) for dealer {dealer_id}"
                 ));
             }
         }
@@ -945,8 +943,7 @@ impl IDkgTranscript {
                 .collect();
             if !ineligible_signers.is_empty() {
                 return Err(format!(
-                    "ineligible signers (non-receivers) for dealer index {}: {:?} ",
-                    dealer_index, ineligible_signers
+                    "ineligible signers (non-receivers) for dealer index {dealer_index}: {ineligible_signers:?} "
                 ));
             }
         }

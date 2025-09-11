@@ -133,7 +133,9 @@ impl<O, T: Future<Output = O>> Future for RefCounted<T> {
     type Output = O;
     #[allow(unused_mut)]
     fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
-        unsafe { Pin::new_unchecked(&mut *self.0.borrow_mut()) }.poll(ctx)
+        let mut ptr = self.0.borrow_mut();
+        let pin = unsafe { Pin::new_unchecked(&mut *ptr) };
+        pin.poll(ctx)
     }
 }
 

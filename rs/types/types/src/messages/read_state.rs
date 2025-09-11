@@ -35,8 +35,7 @@ impl TryFrom<HttpReadState> for ReadState {
         Ok(Self {
             source: UserId::from(PrincipalId::try_from(read_state.sender.0).map_err(|err| {
                 HttpRequestError::InvalidPrincipalId(format!(
-                    "Converting sender to PrincipalId failed with {}",
-                    err
+                    "Converting sender to PrincipalId failed with {err}"
                 ))
             })?),
             paths: read_state.paths,

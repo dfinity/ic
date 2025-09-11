@@ -88,7 +88,7 @@ impl TryFrom<&InitialNiDkgTranscriptRecord> for CspNiDkgTranscript {
         initial_ni_dkg_transcript_record: &InitialNiDkgTranscriptRecord,
     ) -> Result<Self, Self::Error> {
         serde_cbor::from_slice(&initial_ni_dkg_transcript_record.internal_csp_transcript)
-            .map_err(|e| format!("Error deserializing CspNiDkgTranscript: {}", e))
+            .map_err(|e| format!("Error deserializing CspNiDkgTranscript: {e}"))
     }
 }
 

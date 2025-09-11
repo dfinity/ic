@@ -546,9 +546,7 @@ pub fn block_locations<L: LedgerData>(ledger: &L, start: u64, length: usize) -> 
             .concat()
             .as_slice()
         ),
-        "overlapping block ranges - local_blocks: {:?}, archived_blocks: {:?}",
-        local_blocks,
-        archived_blocks
+        "overlapping block ranges - local_blocks: {local_blocks:?}, archived_blocks: {archived_blocks:?}"
     );
 
     BlockLocations {

@@ -91,7 +91,7 @@ impl TryFrom<Nat> for U256 {
     fn try_from(n: Nat) -> Result<Self, Self::Error> {
         let le_bytes = n.0.to_bytes_le();
         if le_bytes.len() > 32 {
-            return Err(format!("amount {} does not fit into u256 token type", n));
+            return Err(format!("amount {n} does not fit into u256 token type"));
         }
         let mut bytes = [0u8; 32];
         bytes[0..le_bytes.len()].copy_from_slice(&le_bytes[..]);

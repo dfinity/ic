@@ -21,7 +21,7 @@ pub fn derive_log_priority(input: TokenStream) -> TokenStream {
     let buffer_declarations = variants.iter().map(|variant| {
         let variant_ident = &variant.ident;
         let info = LogLevelInfo::from_variant(variant)
-            .unwrap_or_else(|_| panic!("Invalid attributes for log level: {}", variant_ident));
+            .unwrap_or_else(|_| panic!("Invalid attributes for log level: {variant_ident}"));
 
         let buffer_ident = get_buffer_ident(variant_ident);
         let sink_ident = get_sink_ident(variant_ident);

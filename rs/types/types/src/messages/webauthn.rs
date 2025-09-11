@@ -56,7 +56,7 @@ impl TryFrom<&[u8]> for WebAuthnSignature {
 
     fn try_from(blob: &[u8]) -> Result<Self, Self::Error> {
         let signature: WebAuthnSignature = serde_cbor::from_slice(blob)
-            .map_err(|err| format!("Signature CBOR parsing failed with: {}", err))?;
+            .map_err(|err| format!("Signature CBOR parsing failed with: {err}"))?;
         Ok(signature)
     }
 }
@@ -88,12 +88,12 @@ impl TryFrom<&WebAuthnSignature> for WebAuthnEnvelope {
         let client_data: ClientData =
             match serde_json::from_slice(&signature.client_data_json.0[..]) {
                 Ok(client_data) => client_data,
-                Err(err) => return Err(format!("ClientDataJSON parsing failed with: {}", err)),
+                Err(err) => return Err(format!("ClientDataJSON parsing failed with: {err}")),
             };
 
         let challenge = match base64::decode_config(&client_data.challenge, URL_SAFE_NO_PAD) {
             Ok(challenge) => challenge,
-            Err(err) => return Err(format!("Challenge base64url parsing failed with: {}", err)),
+            Err(err) => return Err(format!("Challenge base64url parsing failed with: {err}")),
         };
 
         let mut signed_bytes = signature.authenticator_data.0.clone();

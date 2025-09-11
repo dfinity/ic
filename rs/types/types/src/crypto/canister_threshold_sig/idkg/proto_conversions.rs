@@ -441,7 +441,7 @@ fn idkg_transcript_params_struct(
     )
     .map_err(
         |e| InitialIDkgDealingsValidationError::DeserializationError {
-            error: format!("Error deserializing transcript params: {}", e),
+            error: format!("Error deserializing transcript params: {e}"),
         },
     )?;
     Ok(params)
@@ -486,13 +486,13 @@ fn idkg_transcript_struct(proto: &IDkgTranscriptProto) -> Result<IDkgTranscript,
     let receivers = BTreeSet::from_iter(receivers?.iter().cloned());
     let receivers = IDkgReceivers::new(receivers).map_err(|e| {
         InitialIDkgDealingsValidationError::DeserializationError {
-            error: format!("Error deserializing receivers: {}", e),
+            error: format!("Error deserializing receivers: {e}"),
         }
     })?;
     let transcript_type: IDkgTranscriptType = serde_cbor::from_slice(&proto.transcript_type)
         .map_err(
             |e| InitialIDkgDealingsValidationError::DeserializationError {
-                error: format!("Error deserializing IDkgTranscriptType: {}", e),
+                error: format!("Error deserializing IDkgTranscriptType: {e}"),
             },
         )?;
     let verified_dealings = verified_dealings_map(&proto.verified_dealings)?;

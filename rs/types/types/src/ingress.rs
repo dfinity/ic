@@ -217,7 +217,7 @@ impl fmt::Display for WasmResult {
         match &self {
             WasmResult::Reply(_) => write!(f, "reply"),
             WasmResult::Reject(reject_str) => {
-                write!(f, "reject with error message => [{}]", reject_str)
+                write!(f, "reject with error message => [{reject_str}]")
             }
         }
     }

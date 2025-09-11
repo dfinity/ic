@@ -69,7 +69,7 @@ fn update_metrics(
 ) -> Result<()> {
     let mut metrics = parse_existing_metrics_from_file(metrics_filename)
         .unwrap_or_else(|e| {
-            eprintln!("error parsing existing metrics: {}", e);
+            eprintln!("error parsing existing metrics: {e}");
             Some(FsTrimMetrics::default())
         })
         .unwrap_or_else(|| {
@@ -89,7 +89,7 @@ fn update_metrics(
 fn write_initialized_metrics_if_not_exist(metrics_filename: &str) -> Result<()> {
     let metrics = parse_existing_metrics_from_file(metrics_filename)
         .unwrap_or_else(|e| {
-            eprintln!("error parsing existing metrics: {}", e);
+            eprintln!("error parsing existing metrics: {e}");
             Some(FsTrimMetrics::default())
         })
         .unwrap_or_default();

@@ -659,7 +659,7 @@ impl std::fmt::Display for FileCloneError {
         match self {
             Self::OperationNotSupported => write!(f, "filesystem doesn't support reflinks"),
             Self::DifferentFileSystems => write!(f, "src and dst aren't on the same filesystem"),
-            Self::IoError(err) => write!(f, "IO error: {}", err),
+            Self::IoError(err) => write!(f, "IO error: {err}"),
         }
     }
 }
@@ -892,8 +892,7 @@ mod tests {
         assert!(!tmp.exists());
         assert!(
             result.is_err(),
-            "expected action result to be an error, got {:?}",
-            result
+            "expected action result to be an error, got {result:?}"
         );
         assert_eq!(
             fs::read(&dst).expect("failed to read destination file"),
@@ -1194,7 +1193,7 @@ mod tests {
             create_dir(&test_file).expect("error creating directory");
             assert_matches!(
                 open_existing_file_for_write(test_file),
-                Err(err) if format!("{:?}", err).contains("Is a directory")  // ErrorKind::IsADirectory is unstable
+                Err(err) if format!("{err:?}").contains("Is a directory")  // ErrorKind::IsADirectory is unstable
             );
         }
 
@@ -1255,7 +1254,7 @@ mod tests {
             #[cfg(target_os = "linux")]
             assert_matches!(
                 remove_file(test_file),
-                Err(err) if format!("{:?}", err).contains("Is a directory")
+                Err(err) if format!("{err:?}").contains("Is a directory")
             );
             #[cfg(target_os = "macos")]
             assert_matches!(

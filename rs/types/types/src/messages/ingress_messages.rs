@@ -134,14 +134,12 @@ impl TryFrom<HttpCanisterUpdate> for SignedIngressContent {
         Ok(Self {
             sender: UserId::from(PrincipalId::try_from(update.sender.0).map_err(|err| {
                 HttpRequestError::InvalidPrincipalId(format!(
-                    "Converting sender to PrincipalId failed with {}",
-                    err
+                    "Converting sender to PrincipalId failed with {err}"
                 ))
             })?),
             canister_id: CanisterId::try_from(update.canister_id.0).map_err(|err| {
                 HttpRequestError::InvalidPrincipalId(format!(
-                    "Converting canister_id to PrincipalId failed with {:?}",
-                    err
+                    "Converting canister_id to PrincipalId failed with {err:?}"
                 ))
             })?,
             method_name: update.method_name,
@@ -462,20 +460,18 @@ impl ParseIngressError {
         match self {
             ParseIngressError::UnknownSubnetMethod => UserError::new(
                 ErrorCode::CanisterMethodNotFound,
-                format!("ic00 interface does not expose method {}", method_name),
+                format!("ic00 interface does not expose method {method_name}"),
             ),
             ParseIngressError::SubnetMethodNotAllowed => UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "ic00 method {} can not be called via ingress messages",
-                    method_name
+                    "ic00 method {method_name} can not be called via ingress messages"
                 ),
             ),
             ParseIngressError::InvalidSubnetPayload(err) => UserError::new(
                 ErrorCode::InvalidManagementPayload,
                 format!(
-                    "Failed to parse payload for ic00 method {}: {}",
-                    method_name, err
+                    "Failed to parse payload for ic00 method {method_name}: {err}"
                 ),
             ),
         }

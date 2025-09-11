@@ -356,7 +356,7 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
 
     let node_canister_id: CanisterId = spawn::create_canister::<Rt>(cycles_for_archive_creation)
         .await
-        .map_err(|(code, msg)| FailedToArchiveBlocks(format!("{} {}", code, msg)))?;
+        .map_err(|(code, msg)| FailedToArchiveBlocks(format!("{code} {msg}")))?;
 
     log!(log_sink, "[archive] calling install_code()");
 
@@ -370,14 +370,13 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
             &max_transactions_per_response
         )
         .map_err(|e| {
-            FailedToArchiveBlocks(format!("Failed to encode archive init arguments: {}", e))
+            FailedToArchiveBlocks(format!("Failed to encode archive init arguments: {e}"))
         })?,
     )
     .await
     .map_err(|(reject_code, message)| {
         FailedToArchiveBlocks(format!(
-            "install_code failed; reject_code={}, message={}",
-            reject_code, message
+            "install_code failed; reject_code={reject_code}, message={message}"
         ))
     })?;
 
@@ -404,8 +403,7 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
 
     res.map_err(|(code, msg)| {
         let s = format!(
-            "Setting controller of archive node failed with code {}: {}",
-            code, msg
+            "Setting controller of archive node failed with code {code}: {msg}"
         );
         FailedToArchiveBlocks(s)
     })?;

@@ -97,7 +97,7 @@ impl TryFrom<&PublicKeyProto> for CspFsEncryptionPop {
         serde_cbor::from_slice::<CspFsEncryptionPop>(proof_bytes).map_err(|e| {
             CspFsEncryptionPopFromPublicKeyProtoError::MalformedPop {
                 pop_bytes: proof_bytes.clone(),
-                internal_error: format!("{}", e),
+                internal_error: format!("{e}"),
             }
         })
     }

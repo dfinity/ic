@@ -427,21 +427,21 @@ pub enum HttpRequestError {
 
 impl From<serde_cbor::Error> for HttpRequestError {
     fn from(err: serde_cbor::Error) -> Self {
-        HttpRequestError::InvalidEncoding(format!("{}", err))
+        HttpRequestError::InvalidEncoding(format!("{err}"))
     }
 }
 
 impl fmt::Display for HttpRequestError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            HttpRequestError::InvalidMessageId(msg) => write!(f, "invalid message ID: {}", msg),
-            HttpRequestError::InvalidIngressExpiry(msg) => write!(f, "{}", msg),
-            HttpRequestError::InvalidDelegationExpiry(msg) => write!(f, "{}", msg),
-            HttpRequestError::InvalidPrincipalId(msg) => write!(f, "invalid princial id: {}", msg),
+            HttpRequestError::InvalidMessageId(msg) => write!(f, "invalid message ID: {msg}"),
+            HttpRequestError::InvalidIngressExpiry(msg) => write!(f, "{msg}"),
+            HttpRequestError::InvalidDelegationExpiry(msg) => write!(f, "{msg}"),
+            HttpRequestError::InvalidPrincipalId(msg) => write!(f, "invalid princial id: {msg}"),
             HttpRequestError::MissingPubkeyOrSignature(msg) => {
-                write!(f, "missing pubkey or signature: {}", msg)
+                write!(f, "missing pubkey or signature: {msg}")
             }
-            HttpRequestError::InvalidEncoding(err) => write!(f, "Invalid CBOR encoding: {}", err),
+            HttpRequestError::InvalidEncoding(err) => write!(f, "Invalid CBOR encoding: {err}"),
         }
     }
 }
@@ -450,7 +450,7 @@ impl Error for HttpRequestError {}
 
 impl From<CanisterIdError> for HttpRequestError {
     fn from(err: CanisterIdError) -> Self {
-        Self::InvalidPrincipalId(format!("Converting to canister id failed with {}", err))
+        Self::InvalidPrincipalId(format!("Converting to canister id failed with {err}"))
     }
 }
 
@@ -497,7 +497,7 @@ impl Delegation {
                 for target in targets {
                     target_canister_ids.insert(CanisterId::unchecked_from_principal(
                         PrincipalId::try_from(target.0.as_slice())
-                            .map_err(|e| format!("Error parsing canister ID: {}", e))?,
+                            .map_err(|e| format!("Error parsing canister ID: {e}"))?,
                     ));
                 }
                 Ok(Some(target_canister_ids))
@@ -795,8 +795,7 @@ fn to_authentication<C>(env: &HttpRequestEnvelope<C>) -> Result<Authentication, 
         }
         (None, None, None) => Ok(Authentication::Anonymous),
         rest => Err(HttpRequestError::MissingPubkeyOrSignature(format!(
-            "Got {:?}",
-            rest
+            "Got {rest:?}"
         ))),
     }
 }

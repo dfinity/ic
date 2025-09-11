@@ -18,8 +18,7 @@ impl fmt::Display for ThresholdSigDataNotFoundError {
         match self {
             ThresholdSigDataNotFoundError::ThresholdSigDataNotFound { dkg_id } => write!(
                 f,
-                "Cannot find transcript data for DKG ID {:?} in data store",
-                dkg_id
+                "Cannot find transcript data for DKG ID {dkg_id:?} in data store"
             ),
         }
     }

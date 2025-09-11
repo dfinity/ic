@@ -7,8 +7,7 @@ fn should_hash_test_vectors() {
         let result = Keccak256::hash(&test_vector.msg);
         assert_eq!(
             result, test_vector.digest,
-            "Unexpected digest {:?} for test vector {:?}",
-            result, test_vector
+            "Unexpected digest {result:?} for test vector {test_vector:?}"
         );
     }
 }

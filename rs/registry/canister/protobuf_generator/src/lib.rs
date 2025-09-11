@@ -34,7 +34,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "SubnetForCanister",
     ] {
         config.type_attribute(
-            format!("ic_registry_canister.pb.v1.{}", type_name),
+            format!("ic_registry_canister.pb.v1.{type_name}"),
             "#[derive(candid::CandidType, candid::Deserialize)]",
         );
     }
@@ -45,7 +45,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "Chunk.content",
     ] {
         config.field_attribute(
-            format!("ic_registry_canister.pb.v1.{}", option_blob_field_name),
+            format!("ic_registry_canister.pb.v1.{option_blob_field_name}"),
             r#"#[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]"#,
         );
     }

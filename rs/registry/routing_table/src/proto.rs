@@ -95,8 +95,7 @@ impl TryFrom<pb::RoutingTable> for RoutingTable {
         if map.len() != entries_count {
             let diff = entries_count.saturating_sub(map.len());
             return Err(ProxyDecodeError::Other(format!(
-                "There were {} duplicate entries in the routing table",
-                diff
+                "There were {diff} duplicate entries in the routing table"
             )));
         }
 
@@ -149,9 +148,9 @@ impl TryFrom<pb::CanisterMigrations> for CanisterMigrations {
             }
             if let Some(prev_subnet_ids) = map.insert(range, subnet_ids.clone()) {
                 return Err(ProxyDecodeError::DuplicateEntry {
-                    key: format!("{:?}", range),
-                    v1: format!("{:?}", prev_subnet_ids),
-                    v2: format!("{:?}", subnet_ids),
+                    key: format!("{range:?}"),
+                    v1: format!("{prev_subnet_ids:?}"),
+                    v2: format!("{subnet_ids:?}"),
                 });
             }
         }

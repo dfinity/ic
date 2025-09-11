@@ -555,7 +555,7 @@ impl Display for MasterKeyTranscript {
             "Current = None".to_string()
         };
         match &self.next_in_creation {
-            KeyTranscriptCreation::Begin => write!(f, "{}, Next = Begin", current),
+            KeyTranscriptCreation::Begin => write!(f, "{current}, Next = Begin"),
             KeyTranscriptCreation::RandomTranscriptParams(x) => write!(
                 f,
                 "{}, Next = RandomTranscriptParams({:?}",
@@ -580,7 +580,7 @@ impl Display for MasterKeyTranscript {
                 current,
                 x.as_ref().transcript_id
             ),
-            KeyTranscriptCreation::Created(x) => write!(f, "{}, Next = Created({:?})", current, x),
+            KeyTranscriptCreation::Created(x) => write!(f, "{current}, Next = Created({x:?})"),
         }
     }
 }
@@ -2004,8 +2004,7 @@ impl TryFrom<&pb::IDkgPayload> for IDkgPayload {
         for proto in &payload.idkg_transcripts {
             let transcript: IDkgTranscript = proto.try_into().map_err(|err| {
                 ProxyDecodeError::Other(format!(
-                    "IDkgPayload:: Failed to convert transcript: {:?}",
-                    err
+                    "IDkgPayload:: Failed to convert transcript: {err:?}"
                 ))
             })?;
             let transcript_id = transcript.transcript_id;
@@ -2037,8 +2036,7 @@ impl TryFrom<&pb::IDkgPayload> for IDkgPayload {
                 Some(response) => {
                     let unreported = response.clone().try_into().map_err(|err| {
                         ProxyDecodeError::Other(format!(
-                            "IDkgPayload:: failed to convert initial dealing: {:?}",
-                            err
+                            "IDkgPayload:: failed to convert initial dealing: {err:?}"
                         ))
                     })?;
                     CompletedReshareRequest::Unreported(unreported)

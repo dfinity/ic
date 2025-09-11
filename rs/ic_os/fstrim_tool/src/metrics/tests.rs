@@ -124,7 +124,7 @@ fn should_error_when_metrics_file_has_timestamp() {
 fn should_error_when_metrics_file_has_non_numeric_value() {
     let temp_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let test_file = temp_dir.as_ref().join("test_file");
-    write(&test_file, format!("{} pizza", METRICS_RUNS_TOTAL).as_str())
+    write(&test_file, format!("{METRICS_RUNS_TOTAL} pizza").as_str())
         .expect("error writing to file");
     assert_matches!(
         parse_existing_metrics_from_file(&test_file.to_string_lossy()),

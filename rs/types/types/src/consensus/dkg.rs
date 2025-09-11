@@ -374,13 +374,13 @@ fn build_transcripts_vec_from_pb(
             "Missing DkgPayload::Summary::IdedNiDkgTranscript::NiDkgId".to_string()
         })?;
         let id = NiDkgId::try_from(id)
-            .map_err(|e| format!("Failed to convert NiDkgId of transcript: {:?}", e))?;
+            .map_err(|e| format!("Failed to convert NiDkgId of transcript: {e:?}"))?;
         let callback_id = CallbackId::from(transcript.callback_id);
         let transcript_result = transcript
             .transcript_result
             .ok_or("Missing DkgPayload::Summary::IdedNiDkgTranscript::NiDkgTranscriptResult")?;
         let transcript_result = build_transcript_result(&transcript_result)
-            .map_err(|e| format!("Failed to convert NiDkgTranscriptResult: {:?}", e))?;
+            .map_err(|e| format!("Failed to convert NiDkgTranscriptResult: {e:?}"))?;
         transcripts_for_remote_subnets.push((id, callback_id, transcript_result));
     }
     Ok(transcripts_for_remote_subnets)
@@ -416,7 +416,7 @@ fn build_transcript_result(
         }
         pb::ni_dkg_transcript_result::Val::ErrorString(error_string) => {
             Ok(Err(std::str::from_utf8(error_string)
-                .map_err(|e| format!("Failed to convert ErrorString: {:?}", e))?
+                .map_err(|e| format!("Failed to convert ErrorString: {e:?}"))?
                 .to_string()))
         }
     }

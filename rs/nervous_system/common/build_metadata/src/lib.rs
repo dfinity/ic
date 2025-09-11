@@ -45,10 +45,9 @@ pub fn define_get_build_metadata_candid_method(_: TokenStream) -> TokenStream {
 
             #[candid::candid_method(query, rename = "get_build_metadata")]
             fn get_build_metadata_() -> &'static str {{
-                {}
+                {BUILD_INFO_FORMAT}
             }}
         "#,
-        BUILD_INFO_FORMAT,
     )
     .parse()
     .unwrap()
@@ -62,10 +61,9 @@ pub fn define_get_build_metadata_candid_method_cdk(_: TokenStream) -> TokenStrea
             #[candid::candid_method(query)]
             #[ic_cdk::query]
             fn get_build_metadata() -> &'static str {{
-                {}
+                {BUILD_INFO_FORMAT}
             }}
         "#,
-        BUILD_INFO_FORMAT,
     )
     .parse()
     .unwrap()

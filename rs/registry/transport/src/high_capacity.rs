@@ -234,8 +234,7 @@ pub async fn dechunkify_mutation_value(
     let mutation_type =
         registry_mutation::Type::try_from(mutation.mutation_type).map_err(|err| {
             Error::MalformedMessage(format!(
-                "Unable to determine mutation's type. Cause: {}. mutation: {:#?}",
-                err, mutation,
+                "Unable to determine mutation's type. Cause: {err}. mutation: {mutation:#?}",
             ))
         })?;
 
@@ -302,7 +301,7 @@ pub async fn dechunkify_get_value_response_content(
         ) => dechunkify(get_chunk, &large_value_chunk_keys)
             .await
             .map_err(|err| {
-                Error::UnknownError(format!("Unable to dechunkify get_value response: {}", err,))
+                Error::UnknownError(format!("Unable to dechunkify get_value response: {err}",))
             }),
     }
 }
@@ -352,8 +351,7 @@ async fn dechunkify_value_content(
         high_capacity_registry_value::Content::LargeValueChunkKeys(keys) => {
             let monolithic_blob = dechunkify(get_chunk, &keys).await.map_err(|err| {
                 Error::UnknownError(format!(
-                    "Unable to reconstitute chunked/large value: {}",
-                    err,
+                    "Unable to reconstitute chunked/large value: {err}",
                 ))
             })?;
 

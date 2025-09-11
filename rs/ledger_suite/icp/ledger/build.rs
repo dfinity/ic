@@ -8,8 +8,7 @@ fn main() {
             .canonicalize()
             .expect("failed to canonicalize a path"),
         Err(VarError::NotUnicode(path)) => panic!(
-            "Ledger archive node Wasm path contains non-unicode characters: {:?}",
-            path
+            "Ledger archive node Wasm path contains non-unicode characters: {path:?}"
         ),
     };
     let ledger_did_path = PathBuf::from("../ledger.did").canonicalize().unwrap();

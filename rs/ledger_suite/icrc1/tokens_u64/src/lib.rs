@@ -34,7 +34,7 @@ impl FromStr for U64 {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(U64(s.parse().map_err(|_| {
-            format!("Could not parse string to u64: {}", s)
+            format!("Could not parse string to u64: {s}")
         })?))
     }
 }
@@ -62,7 +62,7 @@ impl TryFrom<Nat> for U64 {
 
     fn try_from(n: Nat) -> Result<Self, Self::Error> {
         Ok(Self(n.0.to_u64().ok_or_else(|| {
-            format!("amount {} does not fit into u64 token type", n)
+            format!("amount {n} does not fit into u64 token type")
         })?))
     }
 }

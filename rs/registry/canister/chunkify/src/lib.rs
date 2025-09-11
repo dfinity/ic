@@ -91,7 +91,7 @@ pub fn dechunkify_prime_mutation_value<M: Memory>(
     } = mutation;
 
     let mutation_type = registry_mutation::Type::try_from(mutation_type).unwrap_or_else(|err| {
-        panic!("Invalid mutation_type ({}): {}", mutation_type, err);
+        panic!("Invalid mutation_type ({mutation_type}): {err}");
     });
     if mutation_type.is_delete() {
         return None;

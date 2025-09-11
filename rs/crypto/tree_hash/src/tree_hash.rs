@@ -101,7 +101,7 @@ fn write_labeled_tree<T: Debug>(
     }
     let indent = " ".repeat(level as usize * INDENT_WIDTH);
     match tree {
-        LabeledTree::Leaf(t) => writeln!(f, "{}\\__ leaf:{:?}", indent, t),
+        LabeledTree::Leaf(t) => writeln!(f, "{indent}\\__ leaf:{t:?}"),
         LabeledTree::SubTree(children) => {
             for child in children.iter() {
                 writeln!(f, "{}+-- {}:", indent, child.0)?;
@@ -119,13 +119,13 @@ fn write_hash_tree(tree: &HashTree, level: u8, f: &mut fmt::Formatter<'_>) -> fm
     }
     let indent = " ".repeat(level as usize * INDENT_WIDTH);
     match tree {
-        HashTree::Leaf { digest } => writeln!(f, "{}\\__leaf:{:?}", indent, digest),
+        HashTree::Leaf { digest } => writeln!(f, "{indent}\\__leaf:{digest:?}"),
         HashTree::Fork {
             digest,
             left_tree,
             right_tree,
         } => {
-            writeln!(f, "{}+-- fork:{:?}", indent, digest)?;
+            writeln!(f, "{indent}+-- fork:{digest:?}")?;
             write_hash_tree(left_tree, level.saturating_add(1), f)?;
             write_hash_tree(right_tree, level.saturating_add(1), f)
         }
@@ -134,7 +134,7 @@ fn write_hash_tree(tree: &HashTree, level: u8, f: &mut fmt::Formatter<'_>) -> fm
             label,
             hash_tree,
         } => {
-            writeln!(f, "{}--- node: [{}], {:?}", indent, label, digest)?;
+            writeln!(f, "{indent}--- node: [{label}], {digest:?}")?;
             write_hash_tree(hash_tree, level.saturating_add(1), f)
         }
     }
@@ -379,8 +379,7 @@ pub fn prune_witness(
     if plugged_in_count != count_leaves_and_empty_subtrees(partial_tree) {
         debug_assert!(
             false,
-            "Prune witness leaf count mismatch. Labeled tree {:?}, Witness {:?}",
-            partial_tree, witness
+            "Prune witness leaf count mismatch. Labeled tree {partial_tree:?}, Witness {witness:?}"
         );
         return Err(TreeHashError::InconsistentPartialTree {
             offending_path: vec![],
@@ -1165,17 +1164,17 @@ impl fmt::Debug for HashTreeBuilderImpl {
         for (pos, node) in self.curr_path.iter().enumerate() {
             match node {
                 ActiveNode::Undefined { label } => {
-                    write!(f, "([{}]: '{}') ", pos, label)?;
+                    write!(f, "([{pos}]: '{label}') ")?;
                 }
                 ActiveNode::Leaf { label, .. } => {
-                    write!(f, "([{}]: '{}' '[hasher]') ", pos, label)?;
+                    write!(f, "([{pos}]: '{label}' '[hasher]') ")?;
                 }
                 ActiveNode::SubTree {
                     children, label, ..
                 } => {
-                    write!(f, "[{}]: {} ", pos, label)?;
+                    write!(f, "[{pos}]: {label} ")?;
                     for (label, child) in children.iter() {
-                        write!(f, " child({}, {:?}) ", label, child)?;
+                        write!(f, " child({label}, {child:?}) ")?;
                     }
                 }
             }

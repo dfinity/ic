@@ -186,7 +186,7 @@ impl Value {
             Self::Nat64(n) => Ok(Nat::from(n)),
             Self::Int(i) => match BigUint::try_from(i.0) {
                 Ok(n) => Ok(Nat(n)),
-                Err(e) => Err(format!("Failed to convert Int to Nat: {:?}", e)),
+                Err(e) => Err(format!("Failed to convert Int to Nat: {e:?}")),
             },
             _ => Err(self.variant_name()),
         }
@@ -338,10 +338,10 @@ impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Blob(bytes) => write!(f, "{}", hex::encode(bytes.as_ref())),
-            Value::Text(text) => write!(f, "{}", text),
-            Value::Nat(nat) => write!(f, "{}", nat),
-            Value::Nat64(nat64) => write!(f, "{}", nat64),
-            Value::Int(int) => write!(f, "{}", int),
+            Value::Text(text) => write!(f, "{text}"),
+            Value::Nat(nat) => write!(f, "{nat}"),
+            Value::Nat64(nat64) => write!(f, "{nat64}"),
+            Value::Int(int) => write!(f, "{int}"),
             Value::Array(array) => {
                 write!(f, "Array(")?;
                 let mut first = true;
@@ -351,7 +351,7 @@ impl std::fmt::Display for Value {
                     } else {
                         write!(f, ", ")?
                     }
-                    write!(f, "{}", e)?;
+                    write!(f, "{e}")?;
                 }
                 write!(f, ")")
             }
@@ -364,7 +364,7 @@ impl std::fmt::Display for Value {
                     } else {
                         write!(f, ", ")?
                     }
-                    write!(f, "{}: {}", k, v)?;
+                    write!(f, "{k}: {v}")?;
                 }
                 write!(f, ")")
             }

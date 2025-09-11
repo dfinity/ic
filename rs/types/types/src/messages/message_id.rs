@@ -38,8 +38,7 @@ impl<'a> Deserialize<'a> for MessageId {
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
                 write!(
                     formatter,
-                    "a message id: a blob with with {} bytes",
-                    EXPECTED_MESSAGE_ID_LENGTH
+                    "a message id: a blob with with {EXPECTED_MESSAGE_ID_LENGTH} bytes"
                 )
             }
 
@@ -199,8 +198,7 @@ impl fmt::Display for MessageIdError {
                 expected_length,
             } => write!(
                 f,
-                "Expected a message id of length {} bytes, but got {} bytes instead.",
-                expected_length, given_length
+                "Expected a message id of length {expected_length} bytes, but got {given_length} bytes instead."
             ),
         }
     }

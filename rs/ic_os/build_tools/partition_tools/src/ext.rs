@@ -60,8 +60,8 @@ impl Partition for ExtPartition {
                     &format!("if={}", image.display()),
                     &format!("of={}", output_path.display()),
                     "bs=4M",
-                    &format!("skip={}", offset_bytes),
-                    &format!("count={}", length_bytes),
+                    &format!("skip={offset_bytes}"),
+                    &format!("count={length_bytes}"),
                     "conv=sparse",
                     "iflag=skip_bytes,count_bytes"
                 ])

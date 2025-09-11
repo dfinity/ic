@@ -80,7 +80,7 @@ impl FromStr for SubnetFeatures {
                 "canister_sandboxing" => features.canister_sandboxing = true,
                 "http_requests" => features.http_requests = true,
                 "sev_enabled" => features.sev_enabled = true,
-                _ => return Err(format!("Unknown feature {:?} in {:?}", feature, string)),
+                _ => return Err(format!("Unknown feature {feature:?} in {string:?}")),
             }
         }
 

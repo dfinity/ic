@@ -62,7 +62,7 @@ impl Errors {
             let errors = self
                 .queue
                 .iter()
-                .map(|(msg, span)| format!("{}\nAt: {:?}", msg, span));
+                .map(|(msg, span)| format!("{msg}\nAt: {span:?}"));
 
             panic!("{}", errors.collect::<Vec<_>>().join("\n"))
         }
@@ -73,8 +73,7 @@ fn get_ident(arg: &FnArg, default_id: &str, method: &str) -> Result<PatIdent, (S
     match arg {
         FnArg::Receiver(r) => {
             let msg = format!(
-                "#[{}] cannot be above functions with `self` as a parameter",
-                method
+                "#[{method}] cannot be above functions with `self` as a parameter"
             );
             Err((msg, r.span()))
         }
@@ -111,7 +110,7 @@ fn function_info(
     mut errors: Errors,
 ) -> WithErrors<FunctionInfo> {
     let fun: ItemFn = syn::parse2::<syn::ItemFn>(input.clone()).map_err(|e| {
-        let msg = format!("#[{0}] must be above a function, \n{1}", method, e);
+        let msg = format!("#[{method}] must be above a function, \n{e}");
         errors.add(msg, input);
         errors.clone()
     })?;
@@ -120,8 +119,7 @@ fn function_info(
 
     if !generics.params.is_empty() {
         let msg = format!(
-            "#[{}] must be above a function with no generic parameters",
-            method
+            "#[{method}] must be above a function with no generic parameters"
         );
         errors.add(msg, generics);
     }
@@ -130,7 +128,7 @@ fn function_info(
 
     let mut elems: VecDeque<PatIdent> = VecDeque::new();
     for (i, arg) in function_args.iter().enumerate() {
-        let default = format!("arg_{}", i);
+        let default = format!("arg_{i}");
         match get_ident(arg, &default, method) {
             Ok(ident) => elems.push_back(ident),
             Err((msg, span)) => errors.add(msg, span),
@@ -207,7 +205,7 @@ fn function_info(
 fn check_attributes(attr: proc_macro::TokenStream, method: &str, mut errors: Errors) -> Errors {
     let tokens = TokenStream::from(attr).into_iter().collect::<Vec<_>>();
     if tokens.is_empty() {
-        let msg = format!("expected #[{}] to have no attributes", method);
+        let msg = format!("expected #[{method}] to have no attributes");
         for t in tokens.iter() {
             errors.add(&msg, t);
         }
@@ -235,9 +233,9 @@ fn dfn_macro(
         },
     ) = function_info(&item, method, errors)?;
 
-    let async_runner_fn = Ident::new(&format!("{}___", name), Span::call_site());
+    let async_runner_fn = Ident::new(&format!("{name}___"), Span::call_site());
 
-    let export_name = format!("canister_{0} {1}", method, name);
+    let export_name = format!("canister_{method} {name}");
 
     let function_call = if is_async {
         quote! {#function_call.await}

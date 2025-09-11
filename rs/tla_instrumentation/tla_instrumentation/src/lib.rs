@@ -207,7 +207,7 @@ pub fn log_request(
     let old_stage = mem::replace(&mut state.stage, Stage::Start);
     let start_state = match old_stage {
         Stage::End(start) => start,
-        _ => panic!("Issuing request {} to {}, but stage is start", args, to),
+        _ => panic!("Issuing request {args} to {to}, but stage is start"),
     };
     let unresolved = StatePair {
         start: start_state,
@@ -240,9 +240,7 @@ pub fn log_response(
     let stage = &mut state.stage;
     assert!(
         matches!(stage, Stage::Start),
-        "Receiving response {} from {} in end stage",
-        message,
-        from
+        "Receiving response {message} from {from} in end stage"
     );
     *stage = Stage::End(StartState {
         global,
@@ -295,7 +293,7 @@ pub fn log_label(state: &mut MessageHandlerState, label: &str) {
         .location
         .0
         .last_mut()
-        .unwrap_or_else(|| panic!("Asked to log label {}, but the location stack empty", label)) =
+        .unwrap_or_else(|| panic!("Asked to log label {label}, but the location stack empty")) =
         LocationStackElem::Label(Label::new(label));
 }
 

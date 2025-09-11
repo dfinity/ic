@@ -81,8 +81,7 @@ impl TryFrom<HttpUserQuery> for Query {
             source: QuerySource::User {
                 user_id: UserId::from(PrincipalId::try_from(query.sender.0).map_err(|err| {
                     HttpRequestError::InvalidPrincipalId(format!(
-                        "Converting sender to PrincipalId failed with {}",
-                        err
+                        "Converting sender to PrincipalId failed with {err}"
                     ))
                 })?),
                 ingress_expiry: query.ingress_expiry,
@@ -90,8 +89,7 @@ impl TryFrom<HttpUserQuery> for Query {
             },
             receiver: CanisterId::try_from(query.canister_id.0).map_err(|err| {
                 HttpRequestError::InvalidPrincipalId(format!(
-                    "Converting canister_id to PrincipalId failed with {:?}",
-                    err
+                    "Converting canister_id to PrincipalId failed with {err:?}"
                 ))
             })?,
             method_name: query.method_name,

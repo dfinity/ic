@@ -114,10 +114,10 @@ impl Display for ICRC1TextReprError {
                 write!(f, "default subaccount should be omitted")
             }
             ICRC1TextReprError::InvalidChecksum { expected } => {
-                write!(f, "invalid checksum (expected: {})", expected)
+                write!(f, "invalid checksum (expected: {expected})")
             }
-            ICRC1TextReprError::InvalidPrincipal(e) => write!(f, "invalid principal: {}", e),
-            ICRC1TextReprError::InvalidSubaccount(e) => write!(f, "invalid subaccount: {}", e),
+            ICRC1TextReprError::InvalidPrincipal(e) => write!(f, "invalid principal: {e}"),
+            ICRC1TextReprError::InvalidSubaccount(e) => write!(f, "invalid subaccount: {e}"),
             ICRC1TextReprError::LeadingZeroesInSubaccount => {
                 write!(f, "subaccount should not have leading zeroes")
             }
@@ -147,7 +147,7 @@ impl FromStr for Account {
                     return Err(Self::Err::LeadingZeroesInSubaccount);
                 }
                 let owner = Principal::from_str(principal).map_err(Self::Err::InvalidPrincipal)?;
-                let subaccount = hex::decode(format!("{:0>64}", subaccount)).map_err(|e| {
+                let subaccount = hex::decode(format!("{subaccount:0>64}")).map_err(|e| {
                     Self::Err::InvalidSubaccount(format!("subaccount is not hex-encoded: {e}"))
                 })?;
                 let subaccount: Subaccount = subaccount.try_into().map_err(|_| {

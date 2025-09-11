@@ -526,7 +526,7 @@ impl PocketIc {
                 .unwrap()
             }
             CreateHttpGatewayResponse::Error { message } => {
-                panic!("Failed to crate http gateway: {}", message)
+                panic!("Failed to crate http gateway: {message}")
             }
         }
     }
@@ -711,8 +711,7 @@ impl PocketIc {
             IngressStatusResult::NotAvailable => None,
             IngressStatusResult::Success(status) => Some(status),
             IngressStatusResult::Forbidden(err) => panic!(
-                "Retrieving ingress status was forbidden: {}. This is a bug!",
-                err
+                "Retrieving ingress status was forbidden: {err}. This is a bug!"
             ),
         }
     }
@@ -749,8 +748,7 @@ impl PocketIc {
                 assert_eq!(
                     status,
                     StatusCode::FORBIDDEN,
-                    "HTTP error code {} for /read/ingress_status is not StatusCode::FORBIDDEN. This is a bug!",
-                    status
+                    "HTTP error code {status} for /read/ingress_status is not StatusCode::FORBIDDEN. This is a bug!"
                 );
                 IngressStatusResult::Forbidden(message)
             }
@@ -962,7 +960,7 @@ impl PocketIc {
             Ok(CanisterIdRecord {
                 canister_id: actual_canister_id,
             }) => Ok(actual_canister_id),
-            Err(e) => Err(format!("{:?}", e)),
+            Err(e) => Err(format!("{e:?}")),
         }
     }
 
@@ -1572,7 +1570,7 @@ impl PocketIc {
                         let result = reqwest_client
                             .get(
                                 self.server_url
-                                    .join(&format!("/read_graph/{}/{}", state_label, op_id))
+                                    .join(&format!("/read_graph/{state_label}/{op_id}"))
                                     .unwrap(),
                             )
                             .send()

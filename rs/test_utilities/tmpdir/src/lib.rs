@@ -7,8 +7,7 @@ pub fn tmpdir(prefix: &str) -> tempfile::TempDir {
     match std::env::var_os("TEST_TMPDIR") {
         Some(path) => builder.tempdir_in(&path).unwrap_or_else(|e| {
             panic!(
-                "failed to create a temporary directory in {:?}: {}",
-                path, e
+                "failed to create a temporary directory in {path:?}: {e}"
             )
         }),
         None => builder

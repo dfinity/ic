@@ -152,8 +152,7 @@ impl Tokens {
             .ok_or_else(|| CONSTRUCTION_FAILED.to_string())?;
         if e8s >= TOKEN_SUBDIVIDABLE_BY {
             return Err(format!(
-                "You've added too many E8s, make sure there are less than {}",
-                TOKEN_SUBDIVIDABLE_BY
+                "You've added too many E8s, make sure there are less than {TOKEN_SUBDIVIDABLE_BY}"
             ));
         }
         let e8s = token_part
@@ -293,8 +292,7 @@ impl TryFrom<Nat> for Tokens {
         match value.0.to_u64() {
             Some(e8s) => Ok(Self { e8s }),
             None => Err(format!(
-                "value {} is bigger than Tokens::max_value()",
-                value
+                "value {value} is bigger than Tokens::max_value()"
             )),
         }
     }

@@ -495,7 +495,7 @@ impl TryFrom<pb::execution_task::CanisterTask> for CanisterTask {
             pb::execution_task::CanisterTask::Unspecified => {
                 Err(ProxyDecodeError::ValueOutOfRange {
                     typ: "CanisterTask",
-                    err: format!("Unknown value for canister task {:?}", task),
+                    err: format!("Unknown value for canister task {task:?}"),
                 })
             }
             pb::execution_task::CanisterTask::Heartbeat => Ok(CanisterTask::Heartbeat),

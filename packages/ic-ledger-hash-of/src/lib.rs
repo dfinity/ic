@@ -51,7 +51,7 @@ impl<T> HashOf<T> {
 impl<T> fmt::Display for HashOf<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let res = hex::encode(self.as_slice());
-        write!(f, "{}", res)
+        write!(f, "{res}")
     }
 }
 

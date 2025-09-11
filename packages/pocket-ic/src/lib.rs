@@ -469,7 +469,7 @@ impl Time {
 impl std::fmt::Debug for Time {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let nanos_since_unix_epoch = self.as_nanos_since_unix_epoch();
-        write!(f, "{}", nanos_since_unix_epoch)
+        write!(f, "{nanos_since_unix_epoch}")
     }
 }
 
@@ -503,8 +503,7 @@ impl TryFrom<Time> for SystemTime {
             Ok(system_time)
         } else {
             Err(format!(
-                "Converting UNIX timestamp {} in nanoseconds to SystemTime failed due to losing precision",
-                nanos
+                "Converting UNIX timestamp {nanos} in nanoseconds to SystemTime failed due to losing precision"
             ))
         }
     }
@@ -1852,13 +1851,12 @@ fn check_pocketic_server_version(server_binary: &PathBuf) -> Result<(), String> 
     cmd.arg("--version");
     let version = cmd.output().map_err(|e| e.to_string())?.stdout;
     let version_str = String::from_utf8(version)
-        .map_err(|e| format!("Failed to parse PocketIC server version: {}.", e))?;
+        .map_err(|e| format!("Failed to parse PocketIC server version: {e}."))?;
     let version_line = version_str.trim_end_matches('\n');
-    let expected_version_line = format!("pocket-ic-server {}", EXPECTED_SERVER_VERSION);
+    let expected_version_line = format!("pocket-ic-server {EXPECTED_SERVER_VERSION}");
     if version_line != expected_version_line {
         return Err(format!(
-            "Incompatible PocketIC server version: got {}; expected {}.",
-            version_line, expected_version_line
+            "Incompatible PocketIC server version: got {version_line}; expected {expected_version_line}."
         ));
     }
     Ok(())
@@ -1870,14 +1868,14 @@ async fn download_pocketic_server(
 ) -> Result<(), String> {
     let binary = reqwest::get(server_url)
         .await
-        .map_err(|e| format!("Failed to download PocketIC server: {}", e))?
+        .map_err(|e| format!("Failed to download PocketIC server: {e}"))?
         .bytes()
         .await
-        .map_err(|e| format!("Failed to download PocketIC server: {}", e))?
+        .map_err(|e| format!("Failed to download PocketIC server: {e}"))?
         .to_vec();
     let mut gz = GzDecoder::new(&binary[..]);
     let _ = std::io::copy(&mut gz, &mut out)
-        .map_err(|e| format!("Failed to write PocketIC server binary: {}", e));
+        .map_err(|e| format!("Failed to write PocketIC server binary: {e}"));
     Ok(())
 }
 
@@ -1891,7 +1889,7 @@ pub struct StartServerParams {
 /// Attempt to start a new PocketIC server.
 pub async fn start_server(params: StartServerParams) -> (Child, Url) {
     let default_bin_dir =
-        std::env::temp_dir().join(format!("pocket-ic-server-{}", EXPECTED_SERVER_VERSION));
+        std::env::temp_dir().join(format!("pocket-ic-server-{EXPECTED_SERVER_VERSION}"));
     let default_bin_path = default_bin_dir.join("pocket-ic");
     let mut bin_path: PathBuf = params.server_binary.unwrap_or_else(|| {
         std::env::var_os("POCKET_IC_BIN")
@@ -1918,8 +1916,7 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
                 #[cfg(not(target_arch = "aarch64"))]
                 let arch = "x86_64";
                 let server_url = format!(
-                    "https://github.com/dfinity/pocketic/releases/download/{}/pocket-ic-{}-{}.gz",
-                    EXPECTED_SERVER_VERSION, arch, os
+                    "https://github.com/dfinity/pocketic/releases/download/{EXPECTED_SERVER_VERSION}/pocket-ic-{arch}-{os}.gz"
                 );
                 println!(
                     "Failed to validate PocketIC server binary: `{}`. Going to download PocketIC server {} from {} to the local path {}. To avoid downloads during test execution, please specify the path to the (ungzipped and executable) PocketIC server {} using the function `PocketIcBuilder::with_server_binary` or using the `POCKET_IC_BIN` environment variable.",
@@ -1958,7 +1955,7 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
         // We use the test driver's process ID to share the PocketIC server between multiple tests
         // launched by the same test driver.
         let test_driver_pid = std::process::id();
-        std::env::temp_dir().join(format!("pocket_ic_{}.port", test_driver_pid))
+        std::env::temp_dir().join(format!("pocket_ic_{test_driver_pid}.port"))
     } else {
         NamedTempFile::new().unwrap().into_temp_path().to_path_buf()
     };
@@ -1998,7 +1995,7 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
                     .expect("Failed to parse port to number");
                 break (
                     child,
-                    Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap(),
+                    Url::parse(&format!("http://{LOCALHOST}:{port}/")).unwrap(),
                 );
             }
         }
@@ -2017,10 +2014,10 @@ impl std::fmt::Display for DefaultEffectiveCanisterIdError {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             DefaultEffectiveCanisterIdError::ReqwestError(err) => {
-                write!(f, "ReqwestError({})", err)
+                write!(f, "ReqwestError({err})")
             }
-            DefaultEffectiveCanisterIdError::JsonError(err) => write!(f, "JsonError({})", err),
-            DefaultEffectiveCanisterIdError::Utf8Error(err) => write!(f, "Utf8Error({})", err),
+            DefaultEffectiveCanisterIdError::JsonError(err) => write!(f, "JsonError({err})"),
+            DefaultEffectiveCanisterIdError::Utf8Error(err) => write!(f, "Utf8Error({err})"),
         }
     }
 }

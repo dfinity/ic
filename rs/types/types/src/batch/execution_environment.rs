@@ -84,7 +84,7 @@ fn get_u128_from_protobuf(proto: Option<Unsigned128>) -> Result<u128, ProxyDecod
         .raw
         .try_into()
         .map_err(|e| {
-            ProxyDecodeError::Other(format!("Failed to decode total_query_stats: {:?}", e))
+            ProxyDecodeError::Other(format!("Failed to decode total_query_stats: {e:?}"))
         })?;
     Ok(u128::from_le_bytes(array))
 }
