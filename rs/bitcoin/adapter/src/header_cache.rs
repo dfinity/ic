@@ -565,7 +565,7 @@ mod test {
     ) -> BTreeSet<HeaderNode<Header>> {
         let mut set = BTreeSet::new();
         let node = cache.get_header(block_hash).unwrap();
-        if node.children.len() == 0 {
+        if node.children.is_empty() {
             set.insert(node);
         } else {
             for hash in node.children {
