@@ -395,14 +395,14 @@ pub async fn install_universal_canister(
         .with_effective_canister_id(effective_canister_id)
         .call_and_wait()
         .await
-        .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))
+        .map_err(|err| format!("Couldn't create canister with provisional API: {err}"))
         .unwrap()
         .0;
     mgr.install_code(&canister_id, &UNIVERSAL_CANISTER_WASM)
         .with_raw_arg(wasm().build())
         .call_and_wait()
         .await
-        .map_err(|err| format!("Couldn't install universal canister: {}", err))
+        .map_err(|err| format!("Couldn't install universal canister: {err}"))
         .unwrap();
     canister_id
 }

@@ -438,8 +438,7 @@ pub async fn install_btc_checker(
     let universal_vm = deployed_universal_vm.get_vm().unwrap();
     let btc_node_ipv6 = universal_vm.ipv6;
     let json_rpc_url = format!(
-        "https://{}:{}@[{}]:{}",
-        BITCOIND_RPC_USER, BITCOIND_RPC_PASSWORD, btc_node_ipv6, HTTPS_PORT,
+        "https://{BITCOIND_RPC_USER}:{BITCOIND_RPC_PASSWORD}@[{btc_node_ipv6}]:{HTTPS_PORT}",
     );
     let init_args = CheckArg::InitArg(CheckerInitArg {
         btc_network: ic_btc_checker::BtcNetwork::Regtest { json_rpc_url },

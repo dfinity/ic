@@ -67,8 +67,7 @@ pub fn get_deployed_sns_by_proposal_id_unchecked(
     match response.get_deployed_sns_by_proposal_id_result.unwrap() {
         GetDeployedSnsByProposalIdResult::DeployedSns(deployed_sns) => deployed_sns,
         GetDeployedSnsByProposalIdResult::Error(message) => panic!(
-            "Expected Ok response from get_deployed_sns_by_proposal_id. Instead, got {:?}",
-            message
+            "Expected Ok response from get_deployed_sns_by_proposal_id. Instead, got {message:?}"
         ),
     }
 }

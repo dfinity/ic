@@ -118,7 +118,7 @@ impl IcGatewayVm {
         emit_ic_gateway_records_event(&logger, &ic_gateway_fqdn, &playnet);
 
         // Save playnet configuration and start the gateway
-        let playnet_url = Url::parse(&format!("https://{}", ic_gateway_fqdn))?;
+        let playnet_url = Url::parse(&format!("https://{ic_gateway_fqdn}"))?;
         env.write_deployed_ic_gateway(&self.universal_vm.name, &playnet_url, &allocated_vm)?;
         let api_nodes: Vec<IcNodeSnapshot> = env.topology_snapshot().api_boundary_nodes().collect();
         info!(
@@ -130,7 +130,7 @@ impl IcGatewayVm {
             .map(|node| {
                 let url = node.get_public_url().to_string();
                 node.await_status_is_healthy()
-                    .unwrap_or_else(|_| panic!("Expect {} to be healthy!", url));
+                    .unwrap_or_else(|_| panic!("Expect {url} to be healthy!"));
                 url
             })
             .collect();
@@ -437,7 +437,7 @@ async fn await_dns_propagation(logger: &Logger, base_domain: &str) -> Result<()>
         "Waiting for DNS propagation of wildcard records for domain: {}", base_domain
     );
 
-    let msg = format!("DNS propagation check for domain {}", base_domain);
+    let msg = format!("DNS propagation check for domain {base_domain}");
     retry_with_msg_async!(&msg, logger, READY_TIMEOUT, RETRY_INTERVAL, || async {
         // Generate a random subdomain to test the wildcard record
         let random_subdomain: String = rand::thread_rng()
@@ -446,9 +446,9 @@ async fn await_dns_propagation(logger: &Logger, base_domain: &str) -> Result<()>
             .map(char::from)
             .collect();
 
-        let test_domain = format!("{}.{}", random_subdomain, base_domain);
+        let test_domain = format!("{random_subdomain}.{base_domain}");
 
-        match lookup_host(&format!("{}:443", test_domain)).await {
+        match lookup_host(&format!("{test_domain}:443")).await {
             Ok(mut addrs) => {
                 if addrs.next().is_some() {
                     info!(

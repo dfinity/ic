@@ -2661,27 +2661,14 @@ mod tests {
                 Ok(()) => {
                     assert!(
                         result.is_ok(),
-                        "{}: Expected success for sns_balance={}, icp_balance={}, sns_request={}, icp_request={}, but got: {:?}",
-                        label,
-                        sns_balance,
-                        icp_balance,
-                        sns_request,
-                        icp_request,
-                        result
+                        "{label}: Expected success for sns_balance={sns_balance}, icp_balance={icp_balance}, sns_request={sns_request}, icp_request={icp_request}, but got: {result:?}"
                     );
                 }
                 Err(expected_substr) => {
                     let error = result.unwrap_err();
                     assert!(
                         error.contains(expected_substr),
-                        "{}: Expected error containing '{}' for sns_balance={}, icp_balance={}, sns_request={}, icp_request={}, but got: {}",
-                        label,
-                        expected_substr,
-                        sns_balance,
-                        icp_balance,
-                        sns_request,
-                        icp_request,
-                        error
+                        "{label}: Expected error containing '{expected_substr}' for sns_balance={sns_balance}, icp_balance={icp_balance}, sns_request={sns_request}, icp_request={icp_request}, but got: {error}"
                     );
                 }
             }
@@ -2839,7 +2826,7 @@ mod tests {
 
         let okay_test = valid_upgrade_extension();
         let result = validate_upgrade_extension(&governance, okay_test).await;
-        assert!(result.is_ok(), "{:?}", result);
+        assert!(result.is_ok(), "{result:?}");
         let validated = result.unwrap();
         assert_eq!(validated.extension_canister_id, extension_canister_id);
         assert_eq!(validated.current_version, ExtensionVersion(1));

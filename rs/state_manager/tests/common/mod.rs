@@ -170,7 +170,7 @@ pub fn encode_decode_stream_test<
         );
 
         let decoded_slice =
-            decoded_slice.unwrap_or_else(|e| panic!("Failed to decode slice with error {:?}", e));
+            decoded_slice.unwrap_or_else(|e| panic!("Failed to decode slice with error {e:?}"));
 
         assert_eq!(
             stream.slice(stream.header().begin(), size_limit),
@@ -244,7 +244,7 @@ pub fn encode_partial_slice_test(
                 RegistryVersion::new(1),
                 &same_payload_slice,
             )
-            .unwrap_or_else(|e| panic!("Failed to decode slice with error {:?}", e));
+            .unwrap_or_else(|e| panic!("Failed to decode slice with error {e:?}"));
         let msg_count = decoded_slice.messages().map_or(0, |m| m.len());
 
         // Slice with the same witness and matching payload.
@@ -326,13 +326,12 @@ pub fn wait_for_checkpoint(state_manager: &impl StateManager, h: Height) -> Cryp
         match state_manager.get_state_hash_at(h) {
             Ok(hash) => return hash,
             Err(StateHashError::Permanent(err)) => {
-                panic!("Unable to get checkpoint @{}: {:?}", h, err);
+                panic!("Unable to get checkpoint @{h}: {err:?}");
             }
             Err(StateHashError::Transient(err)) => match err {
                 TransientStateHashError::StateNotCommittedYet(_) => {
                     panic!(
-                        "state must be committed before calling wait_for_checkpoint: {:?}",
-                        err
+                        "state must be committed before calling wait_for_checkpoint: {err:?}"
                     );
                 }
                 TransientStateHashError::HashNotComputedYet(_) => {
@@ -342,7 +341,7 @@ pub fn wait_for_checkpoint(state_manager: &impl StateManager, h: Height) -> Cryp
         }
     }
 
-    panic!("Checkpoint @{} didn't complete in {:?}", h, timeout)
+    panic!("Checkpoint @{h} didn't complete in {timeout:?}")
 }
 
 pub fn insert_dummy_canister(state: &mut ReplicatedState, canister_id: CanisterId) {
@@ -441,7 +440,7 @@ pub fn pipe_meta_manifest(
     let mut chunk = src
         .clone()
         .get_chunk(id)
-        .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
+        .unwrap_or_else(|| panic!("Requested unknown chunk {id}"));
 
     if use_bad_chunk {
         alter_chunk_data(&mut chunk);
@@ -474,7 +473,7 @@ pub fn pipe_manifest(
         let mut chunk = src
             .clone()
             .get_chunk(*id)
-            .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
+            .unwrap_or_else(|| panic!("Requested unknown chunk {id}"));
 
         if use_bad_chunk && index == ids.len() / 2 {
             alter_chunk_data(&mut chunk);
@@ -518,7 +517,7 @@ pub fn pipe_partial_state_sync(
             let mut chunk = src
                 .clone()
                 .get_chunk(*id)
-                .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
+                .unwrap_or_else(|| panic!("Requested unknown chunk {id}"));
 
             if use_bad_chunk && index == ids.len() / 2 {
                 alter_chunk_data(&mut chunk);

@@ -86,7 +86,7 @@ async fn nns_init(args: NnsInitArgs) {
     pocket_ic.auto_progress().await;
 
     let endpoint = pocket_ic.url().unwrap();
-    println!("PocketIC endpoint: {}", endpoint);
+    println!("PocketIC endpoint: {endpoint}");
 
     println!("NNS initialized");
     println!(

@@ -134,8 +134,7 @@ fn test_decoding_nat() {
         let decoding_result = decode_nat_to_u64(num_nat.clone());
         assert_eq!(
             decoding_result, expected,
-            "Decoding {:?} to u64 failed",
-            num_nat
+            "Decoding {num_nat:?} to u64 failed"
         );
     }
 }
@@ -163,9 +162,7 @@ fn test_get_block_timestamp_nanos() {
     assert_eq!(
         observed_ts_nanos,
         Nat::from(expected_timestamp),
-        "decoded timestamp {} doesn't match the actual value {}",
-        observed_ts_nanos,
-        expected_timestamp
+        "decoded timestamp {observed_ts_nanos} doesn't match the actual value {expected_timestamp}"
     );
 
     let observed_ts = observed_ts_nanos / Nat::from(ONE_SEC_NANOSEC);
@@ -177,8 +174,6 @@ fn test_get_block_timestamp_nanos() {
     let expected_time = expected_timestamp / ONE_SEC_NANOSEC;
     assert!(
         matches!(observed_ts_u64, time if time == expected_time),
-        "observed timestamp {:?} doesn't match the expected {:?}",
-        observed_ts_u64,
-        expected_time
+        "observed timestamp {observed_ts_u64:?} doesn't match the expected {expected_time:?}"
     );
 }

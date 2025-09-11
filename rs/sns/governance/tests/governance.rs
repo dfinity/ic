@@ -108,9 +108,9 @@ async fn test_disburse_succeeds() {
         user_principal,
     );
     match manage_neuron_response.command.unwrap() {
-        CommandResponse::Disburse(response) => println!("Successfully disbursed: {:?}", response),
+        CommandResponse::Disburse(response) => println!("Successfully disbursed: {response:?}"),
         CommandResponse::Error(error) => {
-            panic!("Unexpected error when disbursing the neuron: {}", error)
+            panic!("Unexpected error when disbursing the neuron: {error}")
         }
         _ => panic!("Unexpected command response when disbursing the neuron"),
     };
@@ -262,8 +262,7 @@ fn test_disburse_maturity_succeeds_to_self() {
     let response = match command_response {
         CommandResponse::DisburseMaturity(response) => response,
         _ => panic!(
-            "Wrong response to DisburseMaturity: {:#?}",
-            command_response
+            "Wrong response to DisburseMaturity: {command_response:#?}"
         ),
     };
     assert_eq!(response.amount_disbursed_e8s, earned_maturity_e8s);
@@ -293,15 +292,11 @@ fn test_disburse_maturity_succeeds_to_self() {
     let d_age = now - ts;
     assert!(
         d_age >= 0,
-        "Disbursement timestamp {} is in the future (now = {})",
-        ts,
-        now
+        "Disbursement timestamp {ts} is in the future (now = {now})"
     );
     assert!(
         d_age < 10,
-        "Disbursement timestamp {} is too old (now = {})",
-        ts,
-        now
+        "Disbursement timestamp {ts} is too old (now = {now})"
     );
 
     // Check the disbursal is not transferred yet.
@@ -405,15 +400,11 @@ fn test_disburse_maturity_succeeds_to_other() {
     let d_age = now - ts;
     assert!(
         d_age >= 0,
-        "Disbursement timestamp {} is in the future (now = {})",
-        ts,
-        now
+        "Disbursement timestamp {ts} is in the future (now = {now})"
     );
     assert!(
         d_age < 10,
-        "Disbursement timestamp {} is too old (now = {})",
-        ts,
-        now
+        "Disbursement timestamp {ts} is too old (now = {now})"
     );
 
     // Check the disbursal is not transferred yet.
@@ -708,7 +699,7 @@ fn test_vesting_neuron_manage_neuron_operations() {
     let err = |op: &str| -> ManageNeuronResponse {
         ManageNeuronResponse::error(GovernanceError::new_with_message(
             ErrorType::PreconditionFailed,
-            format!("Neuron {} is vesting and cannot call {}", neuron_id1, op),
+            format!("Neuron {neuron_id1} is vesting and cannot call {op}"),
         ))
     };
 
@@ -1465,8 +1456,7 @@ fn test_list_nervous_system_function_contain_all_proposal_actions() {
     assert!(
         missing_actions.is_empty(),
         "Governance::list_nervous_system_functions is missing \
-         native proposal actions in response {:?}",
-        missing_actions
+         native proposal actions in response {missing_actions:?}"
     );
 }
 
@@ -2111,8 +2101,7 @@ fn test_claim_swap_neurons_succeeds() {
     let swap_neurons = match response.claim_swap_neurons_result.unwrap() {
         ClaimSwapNeuronsResult::Ok(result) => result.swap_neurons,
         ClaimSwapNeuronsResult::Err(err) => panic!(
-            "Unexpected response from claim_swap_neurons. Was expected Ok(result). Err {}",
-            err
+            "Unexpected response from claim_swap_neurons. Was expected Ok(result). Err {err}"
         ),
     };
 
@@ -2832,7 +2821,7 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
     let disburse_maturity_response = match manage_neuron_response.command.unwrap() {
         CommandResponse::DisburseMaturity(response) => response,
         CommandResponse::Error(error) => {
-            panic!("Unexpected error when disbursing maturity: {}", error)
+            panic!("Unexpected error when disbursing maturity: {error}")
         }
         _ => panic!("Unexpected command response when disbursing maturity"),
     };
@@ -2936,7 +2925,7 @@ async fn test_disburse_maturity_applied_modulation_at_end_of_window() {
     let disburse_maturity_response = match manage_neuron_response.command.unwrap() {
         CommandResponse::DisburseMaturity(response) => response,
         CommandResponse::Error(error) => {
-            panic!("Unexpected error when disbursing maturity: {}", error)
+            panic!("Unexpected error when disbursing maturity: {error}")
         }
         _ => panic!("Unexpected command response when disbursing maturity"),
     };

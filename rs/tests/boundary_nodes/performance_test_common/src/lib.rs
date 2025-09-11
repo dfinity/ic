@@ -397,7 +397,7 @@ pub fn mainnet_query_calls_ic_gateway_test(env: TestEnv, bn_ipv6: Ipv6Addr) {
 
                     RequestOutcome::new(
                         result,
-                        format!("GET@{}", http_request),
+                        format!("GET@{http_request}"),
                         start_time.elapsed(),
                         1,
                     )

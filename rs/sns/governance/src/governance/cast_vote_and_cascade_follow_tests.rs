@@ -1498,8 +1498,7 @@ fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
         assert_ne!(
             actively_voting_neurons.len(),
             0,
-            "There must be at least one actively voting neuron. {}",
-            label
+            "There must be at least one actively voting neuron. {label}"
         );
 
         // The order of votes should not matter, as the `cast_vote_and_cascade_follow` function

@@ -56,15 +56,15 @@ fn add_block(
     canister_id: CanisterId,
     block: &ICRC3Value,
 ) -> Result<Nat, String> {
-    let result = Decode!(
+    
+
+    Decode!(
         &env.execute_ingress(canister_id, "add_block", Encode!(block).unwrap())
             .expect("failed to add block")
             .bytes(),
         AddBlockResult
     )
-    .expect("failed to decode add_block response");
-
-    result
+    .expect("failed to decode add_block response")
 }
 
 fn icrc3_get_blocks(
@@ -463,8 +463,7 @@ fn lookup_hashtree(hash_tree: &HashTree, leaf_name: &str) -> Result<Vec<u8>, Str
             _ => Err("Expected a leaf node".to_string()),
         },
         _ => Err(format!(
-            "Expected to find a leaf node: Hash tree: {:?}, leaf_name: {}",
-            hash_tree, leaf_name
+            "Expected to find a leaf node: Hash tree: {hash_tree:?}, leaf_name: {leaf_name}"
         )
         .to_string()),
     }

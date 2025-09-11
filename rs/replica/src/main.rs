@@ -45,13 +45,13 @@ use std::io::Write;
 fn get_replica_binary_hash() -> Result<(PathBuf, String), String> {
     let mut hasher = Sha256::new();
     let replica_binary_path = env::current_exe()
-        .map_err(|e| format!("Failed to determine replica binary path: {:?}", e))?;
+        .map_err(|e| format!("Failed to determine replica binary path: {e:?}"))?;
 
     let mut binary_file = fs::File::open(&replica_binary_path)
-        .map_err(|e| format!("Failed to open replica binary to calculate hash: {:?}", e))?;
+        .map_err(|e| format!("Failed to open replica binary to calculate hash: {e:?}"))?;
 
     io::copy(&mut binary_file, &mut hasher)
-        .map_err(|e| format!("Failed to calculate hash for replica binary: {:?}", e))?;
+        .map_err(|e| format!("Failed to calculate hash for replica binary: {e:?}"))?;
 
     Ok((replica_binary_path, hex::encode(hasher.finish())))
 }

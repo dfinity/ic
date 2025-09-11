@@ -126,7 +126,7 @@ pub fn assert_assigned_replica_version_with_time(
 pub fn get_assigned_replica_version(node: &IcNodeSnapshot) -> Result<ReplicaVersion, String> {
     let version = match node.status() {
         Ok(status) if Some(ReplicaHealthStatus::Healthy) == status.replica_health_status => status,
-        Ok(status) => return Err(format!("Replica is not healthy: {:?}", status)),
+        Ok(status) => return Err(format!("Replica is not healthy: {status:?}")),
         Err(err) => return Err(err.to_string()),
     }
     .impl_version

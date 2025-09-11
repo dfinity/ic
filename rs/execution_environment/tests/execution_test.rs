@@ -978,9 +978,9 @@ fn assert_replied(result: Result<WasmResult, UserError>) {
     match result {
         Ok(wasm_result) => match wasm_result {
             WasmResult::Reply(_) => {}
-            WasmResult::Reject(err) => panic!("Unexpected reject: {:?}", err),
+            WasmResult::Reject(err) => panic!("Unexpected reject: {err:?}"),
         },
-        Err(err) => panic!("Got unexpected error: {}", err),
+        Err(err) => panic!("Got unexpected error: {err}"),
     }
 }
 
@@ -995,10 +995,10 @@ fn assert_replied_with(result: Result<WasmResult, UserError>, expected: i64) {
                 assert_eq!(i64::from_le_bytes(res[0..8].try_into().unwrap()), expected)
             }
             WasmResult::Reject(reject_message) => {
-                panic!("Got unexpected reject: {}", reject_message)
+                panic!("Got unexpected reject: {reject_message}")
             }
         },
-        Err(err) => panic!("Got unexpected error: {}", err),
+        Err(err) => panic!("Got unexpected error: {err}"),
     }
 }
 
@@ -1016,10 +1016,10 @@ fn replied_with(result: &Result<WasmResult, UserError>, expected: i64) -> bool {
 fn assert_rejected(result: Result<WasmResult, UserError>) {
     match result {
         Ok(wasm_result) => match wasm_result {
-            WasmResult::Reply(blob) => panic!("Unexpected reply: {:?}", blob),
+            WasmResult::Reply(blob) => panic!("Unexpected reply: {blob:?}"),
             WasmResult::Reject(_err) => {}
         },
-        Err(err) => panic!("Got unexpected error: {}", err),
+        Err(err) => panic!("Got unexpected error: {err}"),
     }
 }
 
@@ -1189,8 +1189,7 @@ fn subnet_memory_reservation_scales_with_number_of_cores() {
     err.assert_contains(
         ErrorCode::CanisterTrapped,
         &format!(
-            "Error from Canister {}: Canister trapped: stable memory out of bounds",
-            a_id
+            "Error from Canister {a_id}: Canister trapped: stable memory out of bounds"
         ),
     );
 }
@@ -2417,7 +2416,7 @@ fn helper_tests_for_stale_data_in_buffer_between_calls(
 
     let data = match ret_val.unwrap() {
         WasmResult::Reply(data) => data,
-        WasmResult::Reject(msg) => panic!("Unexpected reject {}.", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject {msg}."),
     };
 
     assert_eq!(
@@ -2447,7 +2446,7 @@ fn helper_tests_for_stale_data_in_buffer_between_calls(
 
     let data = match ret_val.unwrap() {
         WasmResult::Reply(data) => data,
-        WasmResult::Reject(msg) => panic!("Unexpected reject {}.", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject {msg}."),
     };
 
     assert_eq!(
@@ -2944,7 +2943,7 @@ fn test_canister_liquid_cycle_balance() {
         .unwrap();
     let liquid_balance = match res {
         WasmResult::Reply(blob) => u128::from_le_bytes(blob.try_into().unwrap()),
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
 
     // Install another universal canister to receive as many cycles as possible from the existing universal canister.
@@ -2971,7 +2970,7 @@ fn test_canister_liquid_cycle_balance() {
         .unwrap();
     let accepted_cycles = match res {
         WasmResult::Reply(blob) => u128::from_le_bytes(blob.try_into().unwrap()),
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
     assert!(0 < accepted_cycles && accepted_cycles < liquid_balance);
 

@@ -563,17 +563,11 @@ mod test {
                 VOTING_REWARDS_PARAMETERS.reward_rate_at(round_number_to_instant(round));
             assert!(
                 reward_rate < r_i,
-                "round = {}, r_i = {:#?}, reward_rate = {:#?}",
-                round,
-                r_i,
-                reward_rate,
+                "round = {round}, r_i = {r_i:#?}, reward_rate = {reward_rate:#?}",
             );
             assert!(
                 reward_rate > r_f,
-                "round = {}, r_f = {:#?}, reward_rate = {:#?}",
-                round,
-                r_f,
-                reward_rate,
+                "round = {round}, r_f = {r_f:#?}, reward_rate = {reward_rate:#?}",
             );
         }
     }

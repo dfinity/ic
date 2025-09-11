@@ -89,8 +89,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
         let disburse_result = tokio_test::block_on(disburse_future);
         assert!(
             disburse_result.is_ok(),
-            "Got an unexpected error while disbursing: {:?}",
-            disburse_result
+            "Got an unexpected error while disbursing: {disburse_result:?}"
         );
     });
 
@@ -119,8 +118,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
     // This assert used to fail before fixing NNS-829
     assert!(
         increase_dissolve_result.is_err(),
-        "Shouldn't be able to increase the dissolve delay of a neuron while it's being disbursed, but got: {:?}",
-        increase_dissolve_result
+        "Shouldn't be able to increase the dissolve delay of a neuron while it's being disbursed, but got: {increase_dissolve_result:?}"
     );
 
     let set_dissolve_result = set_dissolve_delay(
@@ -134,8 +132,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
     // This assert used to fail before fixing NNS-829
     assert!(
         set_dissolve_result.is_err(),
-        "Shouldn't be able to increase the dissolve delay of a neuron while it's being disbursed, but got: {:?}",
-        set_dissolve_result
+        "Shouldn't be able to increase the dissolve delay of a neuron while it's being disbursed, but got: {set_dissolve_result:?}"
     );
 
     // Drain the channel to finish the test.

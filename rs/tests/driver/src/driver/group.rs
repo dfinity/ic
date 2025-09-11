@@ -587,7 +587,7 @@ impl SystemTestGroup {
                             .enable_all()
                             .build()
                             .unwrap_or_else(|err| {
-                                panic!("Could not create tokio runtime: {}", err)
+                                panic!("Could not create tokio runtime: {err}")
                             });
                         let root_search_dir = {
                             let root_env = group_ctx
@@ -682,8 +682,7 @@ impl SystemTestGroup {
                                             panic!(
                                                 "{}",
                                                 format!(
-                                                    "Failed to keep group {} alive via endpoint {:?}: {:?}",
-                                                    group_name, farm_url, e
+                                                    "Failed to keep group {group_name} alive via endpoint {farm_url:?}: {e:?}"
                                                 )
                                             )
                                         };
@@ -985,8 +984,7 @@ impl SystemTestGroup {
                     "Test function names must be unique across an entire SystemTestGroup instance"
                         .to_string(),
                 counterexample: format!(
-                    "test function name {} is specified more than once",
-                    duplicate_task_id
+                    "test function name {duplicate_task_id} is specified more than once"
                 )
             })
         }
@@ -1114,13 +1112,13 @@ impl std::fmt::Display for JournalRecord {
         }
         let mut display = format!("message: \"{}\"", self.message);
         if let Some(x) = &self.system_unit {
-            display += format!(", system_unit: \"{}\"", x).as_str()
+            display += format!(", system_unit: \"{x}\"").as_str()
         }
         if let Some(x) = &self.container_name {
-            display += format!(", container_name: \"{}\"", x).as_str()
+            display += format!(", container_name: \"{x}\"").as_str()
         }
         if let Some(x) = &self.comm {
-            display += format!(", comm: \"{}\"", x).as_str()
+            display += format!(", comm: \"{x}\"").as_str()
         }
         write!(f, "JournalRecord {{{display}}}")
     }
@@ -1186,7 +1184,7 @@ impl std::fmt::Display for Cursor {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Cursor::Start => write!(f, ""),
-            Cursor::Position(x) => write!(f, "{}", x),
+            Cursor::Position(x) => write!(f, "{x}"),
         }
     }
 }

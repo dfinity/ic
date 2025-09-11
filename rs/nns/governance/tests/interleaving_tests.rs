@@ -108,8 +108,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
         let disburse_result = tokio_test::block_on(disburse_future);
         assert!(
             disburse_result.is_ok(),
-            "Got an unexpected error while disbursing: {:?}",
-            disburse_result
+            "Got an unexpected error while disbursing: {disburse_result:?}"
         );
         // As the main thread will try to drain the channel, it's important to close the
         // channel once disbursing is done, otherwise the main thread will hang.
@@ -134,8 +133,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
     // This assert used to fail before fixing NNS-829
     assert!(
         increase_dissolve_result.is_err(),
-        "Shouldn't be able to increase the dissolve delay of a neuron while it's being disbursed, but got: {:?}",
-        increase_dissolve_result
+        "Shouldn't be able to increase the dissolve delay of a neuron while it's being disbursed, but got: {increase_dissolve_result:?}"
     );
 
     let set_dissolve_result =
@@ -145,8 +143,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
     // This assert used to fail before fixing NNS-829
     assert!(
         set_dissolve_result.is_err(),
-        "Shouldn't be able to increase the dissolve delay of a neuron while it's being disbursed, but got: {:?}",
-        set_dissolve_result
+        "Shouldn't be able to increase the dissolve delay of a neuron while it's being disbursed, but got: {set_dissolve_result:?}"
     );
 
     // Drain the channel to finish the test.
@@ -336,13 +333,12 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
         {
             snapshot.total_amount_icp_e8s().unwrap()
         } else {
-            panic!("Expected Ok settle result, got {:?}", settle_nf_result);
+            panic!("Expected Ok settle result, got {settle_nf_result:?}");
         };
 
         assert!(
             settle_nf_result.is_ok(),
-            "Got an unexpected error while settling NF for the first time: {:?}",
-            settle_nf_result,
+            "Got an unexpected error while settling NF for the first time: {settle_nf_result:?}",
         );
 
         // Repeat the call; the response should be the same
@@ -393,8 +389,7 @@ fn test_cant_interleave_calls_to_settle_neurons_fund() {
         .unwrap();
     assert!(
         settle_nf_result.is_err(),
-        "Got an unexpected response while settling NF for the second time: {:?}",
-        settle_nf_result
+        "Got an unexpected response while settling NF for the second time: {settle_nf_result:?}"
     );
 
     // Get the balance of the SNS Treasury account again. It should still be zero

@@ -551,7 +551,7 @@ impl FromStr for AddOrRemove {
         match string {
             "add" => Ok(AddOrRemove::Add),
             "remove" => Ok(AddOrRemove::Remove),
-            &_ => Err(format!("Unknown add or remove value: {:?}", string)),
+            &_ => Err(format!("Unknown add or remove value: {string:?}")),
         }
     }
 }
@@ -1550,7 +1550,7 @@ impl FromStr for JsonSnsVersion {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_json::from_str(s).map_err(|e| format!("{}", e))
+        serde_json::from_str(s).map_err(|e| format!("{e}"))
     }
 }
 
@@ -1560,23 +1560,23 @@ impl TryFrom<JsonSnsVersion> for SnsVersion {
     fn try_from(json_version: JsonSnsVersion) -> Result<Self, Self::Error> {
         Ok(SnsVersion {
             root_wasm_hash: hex::decode(json_version.root_wasm_hash.ok_or("Missing root")?)
-                .map_err(|e| format!("{}", e))?,
+                .map_err(|e| format!("{e}"))?,
             governance_wasm_hash: hex::decode(
                 json_version
                     .governance_wasm_hash
                     .ok_or("Missing governance")?,
             )
-            .map_err(|e| format!("{}", e))?,
+            .map_err(|e| format!("{e}"))?,
             ledger_wasm_hash: hex::decode(json_version.ledger_wasm_hash.ok_or("Missing ledger")?)
-                .map_err(|e| format!("{}", e))?,
+                .map_err(|e| format!("{e}"))?,
             swap_wasm_hash: hex::decode(json_version.swap_wasm_hash.ok_or("Missing swap")?)
-                .map_err(|e| format!("{}", e))?,
+                .map_err(|e| format!("{e}"))?,
             archive_wasm_hash: hex::decode(
                 json_version.archive_wasm_hash.ok_or("Missing archive")?,
             )
-            .map_err(|e| format!("{}", e))?,
+            .map_err(|e| format!("{e}"))?,
             index_wasm_hash: hex::decode(json_version.index_wasm_hash.ok_or("Missing index")?)
-                .map_err(|e| format!("{}", e))?,
+                .map_err(|e| format!("{e}"))?,
         })
     }
 }
@@ -1682,11 +1682,10 @@ fn print_insert_sns_wasm_upgrade_path_entries_payload(payload: InsertUpgradePath
             format!(
                 r"SnsUpgrade {{
     current_version:
-            {:#?},
+            {pretty_from:#?},
     next_version:
-            {:#?}
-}}",
-                pretty_from, pretty_to
+            {pretty_to:#?}
+}}"
             )
         })
         .collect::<Vec<String>>()
@@ -2161,7 +2160,7 @@ impl ProposalPayload<UpdateNodeOperatorConfigPayload> for ProposeToUpdateNodeOpe
 /// The supplied node types must be in the node type whitelist
 fn parse_rewardable_nodes(json: &str) -> BTreeMap<String, u32> {
     let map: BTreeMap<String, u32> = serde_json::from_str(json)
-        .unwrap_or_else(|e| panic!("Unable to parse rewardable_nodes: {}", e));
+        .unwrap_or_else(|e| panic!("Unable to parse rewardable_nodes: {e}"));
 
     map
 }
@@ -2201,8 +2200,7 @@ impl ProposeToAddOrRemoveDataCentersCmd {
             .map(|str| {
                 let dc: DataCenterRecord = serde_json::from_str(str).unwrap_or_else(|e| {
                     panic!(
-                        "Unable to parse JSON DataCenterRecord: {}\nError: {}",
-                        str, e
+                        "Unable to parse JSON DataCenterRecord: {str}\nError: {e}"
                     );
                 });
 
@@ -2306,7 +2304,7 @@ impl ProposalPayload<UpdateNodeRewardsTableProposalPayload> for ProposeToUpdateN
     async fn payload(&self, _: &Agent) -> UpdateNodeRewardsTableProposalPayload {
         let map: BTreeMap<String, BTreeMap<String, NodeRewardRate>> =
             serde_json::from_str(&self.updated_node_rewards)
-                .unwrap_or_else(|e| panic!("Unable to parse updated_node_rewards: {}", e));
+                .unwrap_or_else(|e| panic!("Unable to parse updated_node_rewards: {e}"));
 
         UpdateNodeRewardsTableProposalPayload::from(map)
     }
@@ -2418,7 +2416,7 @@ impl ProposalPayload<AddFirewallRulesPayload> for ProposeToAddFirewallRulesCmd {
             .split(',')
             .map(|pos_str| {
                 i32::from_str(pos_str)
-                    .unwrap_or_else(|_| panic!("Invalid input position: {}", pos_str))
+                    .unwrap_or_else(|_| panic!("Invalid input position: {pos_str}"))
             })
             .collect();
         let expected_hash = &self.expected_ruleset_hash;
@@ -2464,7 +2462,7 @@ impl ProposalPayload<RemoveFirewallRulesPayload> for ProposeToRemoveFirewallRule
             .split(',')
             .map(|pos_str| {
                 i32::from_str(pos_str)
-                    .unwrap_or_else(|_| panic!("Invalid input position: {}", pos_str))
+                    .unwrap_or_else(|_| panic!("Invalid input position: {pos_str}"))
             })
             .collect();
         let expected_hash = &self.expected_ruleset_hash;
@@ -2514,7 +2512,7 @@ impl ProposalPayload<UpdateFirewallRulesPayload> for ProposeToUpdateFirewallRule
             .split(',')
             .map(|pos_str| {
                 i32::from_str(pos_str)
-                    .unwrap_or_else(|_| panic!("Invalid input position: {}", pos_str))
+                    .unwrap_or_else(|_| panic!("Invalid input position: {pos_str}"))
             })
             .collect();
         let expected_hash = &self.expected_ruleset_hash;
@@ -3141,8 +3139,7 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
                 if distinct_lengths.len() != 1 {
                     return Err(format!(
                         "--developer_neuron_* flags must receive the same number \
-                         of values. lengths: {:#?}",
-                        lengths,
+                         of values. lengths: {lengths:#?}",
                     ));
                 }
 
@@ -3359,10 +3356,10 @@ async fn propose_to_create_service_nervous_system(
 
     match response {
         Ok(ok) => {
-            println!("{:#?}", ok);
+            println!("{ok:#?}");
         }
         Err(err) => {
-            eprintln!("propose_to_create_service_nervous_system error: {:?}", err);
+            eprintln!("propose_to_create_service_nervous_system error: {err:?}");
             std::process::exit(1);
         }
     }
@@ -3639,14 +3636,14 @@ fn url_to_host_with_port(url: Url) -> String {
     let host = url.host_str().unwrap_or("");
     let host = if host.contains(':') && !host.starts_with('[') && !host.ends_with(']') {
         // Likely an IPv6 address, enclose in brackets
-        format!("[{}]", host)
+        format!("[{host}]")
     } else {
         // IPv4 or hostname
         host.to_string()
     };
     let port = url.port_or_known_default().unwrap_or(8080);
 
-    format!("{}:{}", host, port)
+    format!("{host}:{port}")
 }
 
 /// Utility function to find NNS URLs that the local machine can connect to.
@@ -3680,22 +3677,20 @@ async fn find_reachable_nns_urls(nns_urls: Vec<Url>) -> Vec<Url> {
                                         Ok(_) => return Some(url.clone()),
                                         Err(err) => {
                                             eprintln!(
-                                                "WARNING: Failed to connect to {}: {:?}",
-                                                ip, err
+                                                "WARNING: Failed to connect to {ip}: {err:?}"
                                             );
                                         }
                                     },
                                     Err(err) => {
                                         eprintln!(
-                                            "WARNING: Failed to connect to {}: {:?}",
-                                            ip, err
+                                            "WARNING: Failed to connect to {ip}: {err:?}"
                                         );
                                     }
                                 }
                             }
                         }
                         Err(err) => {
-                            eprintln!("WARNING: Failed to lookup {}: {:?}", host_with_port, err);
+                            eprintln!("WARNING: Failed to lookup {host_with_port}: {err:?}");
                         }
                     }
                     None
@@ -3715,8 +3710,7 @@ async fn find_reachable_nns_urls(nns_urls: Vec<Url>) -> Vec<Url> {
                     }
                 }
                 eprintln!(
-                    "WARNING: None of the provided NNS urls are reachable. Retrying in 5 seconds... ({}/{})",
-                    i, retries_max
+                    "WARNING: None of the provided NNS urls are reachable. Retrying in 5 seconds... ({i}/{retries_max})"
                 );
                 tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
             }
@@ -3873,7 +3867,7 @@ async fn main() {
 
             let res = serde_json::to_string(&node_records)
                 .unwrap_or_else(|_| "Could not serialize node_records".to_string());
-            println!("{}", res);
+            println!("{res}");
         }
 
         SubCommand::GetTopology => {
@@ -3949,7 +3943,7 @@ async fn main() {
             let node_id = NodeId::from(PrincipalId::new_node_test_id(
                 convert_numeric_node_id_to_principal_id_cmd.node_id,
             ));
-            println!("{}", node_id);
+            println!("{node_id}");
         }
         SubCommand::GetSubnet(get_subnet_cmd) => {
             let subnet_id = get_subnet_cmd.subnet.get_id(&registry_canister).await;
@@ -4014,7 +4008,7 @@ async fn main() {
             match check_file_hash(&tmp_file, &version.release_package_sha256_hex) {
                 Ok(()) => println!("OK   sha256 hash of IC-OS upgrade tar"),
                 Err(e) => {
-                    println!("FAIL sha256 incorrect: {:?}", e);
+                    println!("FAIL sha256 incorrect: {e:?}");
                     success = false;
                 }
             };
@@ -4066,7 +4060,7 @@ async fn main() {
                 .unwrap()
                 .unwrap();
             for (key_id, subnets) in signing_subnets.iter() {
-                println!("KeyId {:?}: {:?}", key_id, subnets);
+                println!("KeyId {key_id:?}: {subnets:?}");
             }
         }
         SubCommand::GetChainKeySigningSubnets => {
@@ -4086,7 +4080,7 @@ async fn main() {
                 .unwrap()
                 .unwrap();
             for (key_id, subnets) in chain_key_enabled_subnets.iter() {
-                println!("KeyId {:?}: {:?}", key_id, subnets);
+                println!("KeyId {key_id:?}: {subnets:?}");
             }
         }
         SubCommand::ProposeToReviseElectedGuestosVersions(cmd) => {
@@ -4446,7 +4440,7 @@ async fn main() {
                 .unwrap();
 
             let firewall_config = FirewallConfig::decode(bytes.as_slice()).unwrap();
-            println!("{:#?}", firewall_config);
+            println!("{firewall_config:#?}");
         }
         SubCommand::ProposeToSetFirewallConfig(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
@@ -4546,7 +4540,7 @@ async fn main() {
         }
         SubCommand::GetRegistryVersion => {
             let latest_version = registry_canister.get_latest_version().await.unwrap();
-            println!("{}", latest_version)
+            println!("{latest_version}")
         }
         SubCommand::SubmitRootProposalToUpgradeGovernanceCanister(cmd) => {
             let sender = get_test_sender_if_set(sender, cmd.test_user_proposer);
@@ -4721,7 +4715,7 @@ async fn main() {
             ));
 
             let response = canister_client.get_monthly_node_provider_rewards().await;
-            println!("{:?}", response);
+            println!("{response:?}");
         }
         SubCommand::ProposeToRemoveNodeOperators(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
@@ -5037,11 +5031,11 @@ async fn main() {
 
 /// Reads (fully) the file in `path` and returns it's contents as a Vec<u8>.
 fn read_file_fully(path: &Path) -> Vec<u8> {
-    let mut f = File::open(path).unwrap_or_else(|_| panic!("Value file not found at: {:?}", path));
+    let mut f = File::open(path).unwrap_or_else(|_| panic!("Value file not found at: {path:?}"));
     let metadata = metadata(path).expect("Unable to read metadata");
     let mut buffer = vec![0; metadata.len() as usize];
     f.read_exact(&mut buffer)
-        .unwrap_or_else(|_| panic!("Couldn't read the content of {:?}", path));
+        .unwrap_or_else(|_| panic!("Couldn't read the content of {path:?}"));
     buffer
 }
 
@@ -5062,8 +5056,8 @@ fn print_value<T: Debug + serde::Serialize>(key: &String, version: u64, value: T
         println!("{}", serde_json::to_string_pretty(&data).unwrap());
     } else {
         // Dump as debug representation
-        println!("Fetching the most recent value for key: {}", key);
-        println!("Most recent version is {:?}. Value:\n{:?}", version, value);
+        println!("Fetching the most recent value for key: {key}");
+        println!("Most recent version is {version:?}. Value:\n{value:?}");
     }
 }
 
@@ -5125,8 +5119,7 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
                 )
                 .unwrap();
                 println!(
-                    "Canister migrations. Most recent version is {:?}.\n",
-                    version
+                    "Canister migrations. Most recent version is {version:?}.\n"
                 );
                 for (range, trace) in value.iter() {
                     println!(
@@ -5244,9 +5237,9 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
                     "Key not present: {}",
                     std::str::from_utf8(&key).expect("key is not a str")
                 ),
-                _ => format!("{:?}", error),
+                _ => format!("{error:?}"),
             };
-            panic!("Error getting value from registry: {}", msg);
+            panic!("Error getting value from registry: {msg}");
         }
     };
 
@@ -5295,7 +5288,7 @@ async fn propose_external_proposal_from_command<
     );
     match response {
         Ok(proposal_id) => {
-            println!("{}", proposal_id);
+            println!("{proposal_id}");
         }
         Err(e) => {
             eprintln!("submit_proposal for {} error: {:?}", cmd.title(), e);
@@ -5326,11 +5319,11 @@ where
         .submit_proposal_action(action, cmd.url(), cmd.title(), cmd.summary())
         .await
         .unwrap_or_else(|e| {
-            eprintln!("propose_action_from_command error: {:?}", e);
+            eprintln!("propose_action_from_command error: {e:?}");
             std::process::exit(1);
         });
 
-    println!("proposal {}", proposal_id);
+    println!("proposal {proposal_id}");
 }
 
 #[derive(Serialize)]
@@ -5355,7 +5348,7 @@ async fn test_add_firewall_rules(
         .clone()
         .split(',')
         .map(|pos_str| {
-            i32::from_str(pos_str).unwrap_or_else(|_| panic!("Invalid input position: {}", pos_str))
+            i32::from_str(pos_str).unwrap_or_else(|_| panic!("Invalid input position: {pos_str}"))
         })
         .collect();
 
@@ -5399,7 +5392,7 @@ async fn test_remove_firewall_rules(
         .clone()
         .split(',')
         .map(|pos_str| {
-            i32::from_str(pos_str).unwrap_or_else(|_| panic!("Invalid input position: {}", pos_str))
+            i32::from_str(pos_str).unwrap_or_else(|_| panic!("Invalid input position: {pos_str}"))
         })
         .collect();
 
@@ -5438,7 +5431,7 @@ async fn test_update_firewall_rules(
         .clone()
         .split(',')
         .map(|pos_str| {
-            i32::from_str(pos_str).unwrap_or_else(|_| panic!("Invalid input position: {}", pos_str))
+            i32::from_str(pos_str).unwrap_or_else(|_| panic!("Invalid input position: {pos_str}"))
         })
         .collect();
 
@@ -5582,7 +5575,7 @@ async fn get_node_list_since(
             Err(err) => {
                 errs += 1;
                 if errs > 10 {
-                    panic!("Couldn't fetch registry delta: {:?}", err)
+                    panic!("Couldn't fetch registry delta: {err:?}")
                 }
             }
             Ok((mut v, _, _)) => {
@@ -5743,7 +5736,7 @@ async fn get_subnet_pk(registry: &RegistryCanister, subnet_id: SubnetId) -> Publ
         Ok((bytes, _)) => {
             PublicKey::decode(&bytes[..]).expect("Error decoding PublicKey from registry")
         }
-        Err(error) => panic!("Error getting value from registry: {:?}", error),
+        Err(error) => panic!("Error getting value from registry: {error:?}"),
     }
 }
 
@@ -5765,15 +5758,15 @@ fn get_api_boundary_node_ids(nns_url: Vec<Url>) -> Vec<String> {
             registry_client.get_latest_version(),
         )
         .unwrap();
-    let records = keys
+    
+    keys
         .iter()
         .map(|k| {
             k.strip_prefix(API_BOUNDARY_NODE_RECORD_KEY_PREFIX)
                 .unwrap()
                 .to_string()
         })
-        .collect::<Vec<_>>();
-    records
+        .collect::<Vec<_>>()
 }
 
 fn print_routing_table(nns_urls: Vec<Url>) -> Vec<(SubnetId, CanisterIdRange)> {
@@ -5791,7 +5784,7 @@ fn print_routing_table(nns_urls: Vec<Url>) -> Vec<(SubnetId, CanisterIdRange)> {
 
     let latest_version = registry_client.get_latest_version();
 
-    println!("Routing table. Most recent version is {}", latest_version);
+    println!("Routing table. Most recent version is {latest_version}");
 
     let keys = registry_client
         .get_key_family(CANISTER_RANGES_PREFIX, latest_version)
@@ -5810,7 +5803,7 @@ fn print_routing_table(nns_urls: Vec<Url>) -> Vec<(SubnetId, CanisterIdRange)> {
                 subnet_id.expect("subnet_id is missing from routing table entry"),
             )
             .unwrap();
-            println!("Subnet: {}", subnet_id);
+            println!("Subnet: {subnet_id}");
             let range = CanisterIdRange::try_from(
                 range.expect("range is missing from routing table entry"),
             )
@@ -5917,10 +5910,10 @@ async fn propose_to_add_or_remove_node_provider(
 
     match response {
         Ok(proposal_id) => {
-            println!("{}", proposal_id);
+            println!("{proposal_id}");
         }
         Err(e) => {
-            eprintln!("propose_to_add_or_remove_node_provider error: {:?}", e);
+            eprintln!("propose_to_add_or_remove_node_provider error: {e:?}");
             std::process::exit(1);
         }
     };
@@ -5933,11 +5926,11 @@ fn get_root_subnet_pub_key(
 ) -> Result<ThresholdSigPublicKey, String> {
     let root_subnet_id = client
         .get_root_subnet_id(version)
-        .map_err(|err| format!("{}", err))?
+        .map_err(|err| format!("{err}"))?
         .ok_or("Root subnet_id is not found")?;
     client
         .get_threshold_signing_public_key_for_subnet(root_subnet_id, version)
-        .map_err(|err| format!("{}", err))?
+        .map_err(|err| format!("{err}"))?
         .ok_or_else(|| "Root subnet public key is not found".to_string())
 }
 
@@ -5952,10 +5945,10 @@ async fn update_registry_local_store(nns_urls: Vec<Url>, cmd: UpdateRegistryLoca
         .try_polling_latest_version(usize::MAX)
         .expect("Local registry client try_polling_latest_version failed");
     let latest_version = local_client.get_latest_version();
-    eprintln!("RegistryLocalStore latest version: {}", latest_version);
+    eprintln!("RegistryLocalStore latest version: {latest_version}");
     let nns_pub_key = match get_root_subnet_pub_key(local_client.clone(), latest_version) {
         Ok(pub_key) => {
-            eprintln!("Root subnet public key found: {:?}", pub_key);
+            eprintln!("Root subnet public key found: {pub_key:?}");
             pub_key
         }
         Err(err) => {
@@ -5965,7 +5958,7 @@ async fn update_registry_local_store(nns_urls: Vec<Url>, cmd: UpdateRegistryLoca
                 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
                 PublicKeyBytes([0; PublicKeyBytes::SIZE]).into()
             } else {
-                panic!("Error looking up RegistryLocalStore: {}", err)
+                panic!("Error looking up RegistryLocalStore: {err}")
             }
         }
     };
@@ -5976,7 +5969,7 @@ async fn update_registry_local_store(nns_urls: Vec<Url>, cmd: UpdateRegistryLoca
     let records = match response {
         Ok(response) => response.0,
         Err(err) => {
-            let throw_err = |err| panic!("Error retrieving registry records: {:?}", err);
+            let throw_err = |err| panic!("Error retrieving registry records: {err:?}");
             if cmd.disable_certificate_validation {
                 remote_canister
                     .get_changes_since_as_registry_records(latest_version.get())
@@ -6006,7 +5999,7 @@ async fn update_registry_local_store(nns_urls: Vec<Url>, cmd: UpdateRegistryLoca
         .enumerate()
         .try_for_each(|(i, cle)| {
             let v = latest_version + RegistryVersion::from(i as u64 + 1);
-            eprintln!("Writing data of registry version {}", v);
+            eprintln!("Writing data of registry version {v}");
             local_store.store(v, cle)
         })
         .expect("Writing to the filesystem failed: Stop.");
@@ -6041,8 +6034,7 @@ async fn submit_root_proposal_to_upgrade_governance_canister(
     match result {
         Ok(()) => println!("Root proposal to upgrade the governance canister submitted."),
         Err(error) => println!(
-            "Error submitting root proposal to upgrade governance canister: {}",
-            error
+            "Error submitting root proposal to upgrade governance canister: {error}"
         ),
     }
 }
@@ -6060,7 +6052,7 @@ async fn get_pending_root_proposals_to_upgrade_governance_canister(agent: Agent)
     } else {
         println!("Currently pending root proposals: ");
         for proposal in proposals {
-            println!("{:?}", proposal);
+            println!("{proposal:?}");
         }
     }
 }
@@ -6076,7 +6068,7 @@ async fn vote_on_root_proposal_to_upgrade_governance_canister(
         .await;
     match result {
         Ok(()) => println!("Ballot for root proposal cast."),
-        Err(error) => println!("Error submitting root proposal ballot: {}", error),
+        Err(error) => println!("Error submitting root proposal ballot: {error}"),
     }
 }
 
@@ -6230,7 +6222,7 @@ impl NnsCanisterClient {
                 Ok(result) => return Ok(result),
                 Err(error_string) => {
                     if error_string.contains("has no update method") {
-                        println!("Couldn't reach NNS canister at id: {:?}", canister_id);
+                        println!("Couldn't reach NNS canister at id: {canister_id:?}");
                         continue;
                     }
                     return Err(error_string);
@@ -6264,8 +6256,7 @@ impl GovernanceCanisterClient {
         })
             .map_err(|e| {
                 format!(
-                    "Cannot candid-serialize the submit_add_or_remove_node_provider_proposal payload: {}",
-                    e
+                    "Cannot candid-serialize the submit_add_or_remove_node_provider_proposal payload: {e}"
                 )
             })?;
         let response = self
@@ -6322,8 +6313,7 @@ impl GovernanceCanisterClient {
         })
         .map_err(|e| {
             format!(
-                "Cannot candid-serialize the submit_proposal_action payload: {}",
-                e
+                "Cannot candid-serialize the submit_proposal_action payload: {e}"
             )
         })?;
         let response = self
@@ -6342,8 +6332,7 @@ impl GovernanceCanisterClient {
     ) -> Result<ProposalId, String> {
         let serialized = Encode!(submit_proposal_command).map_err(|e| {
             format!(
-                "Cannot candid-serialize the payload of proposal:'{}'. Payload: {}",
-                title, e
+                "Cannot candid-serialize the payload of proposal:'{title}'. Payload: {e}"
             )
         })?;
         let response = self
@@ -6396,8 +6385,7 @@ impl RootCanisterClient {
 
         let status = Decode!(&response, CanisterStatusResult).map_err(|e| {
             format!(
-                "Cannot candid-deserialize the response from canister_status: {}",
-                e
+                "Cannot candid-deserialize the response from canister_status: {e}"
             )
         })?;
 
@@ -6424,8 +6412,7 @@ impl RootCanisterClient {
         Decode!(&response, Result<(), String>).map_err(|e| {
             format!(
                 "Cannot candid-deserialize the response from \
-                 submit_root_proposal_to_upgrade_governance_canister: {}",
-                e
+                 submit_root_proposal_to_upgrade_governance_canister: {e}"
             )
         })?
     }
@@ -6447,8 +6434,7 @@ impl RootCanisterClient {
             .map_err(|e| {
                 format!(
                     "Cannot candid-deserialize the response from \
-                 get_pending_root_proposals_to_upgrade_governance_canister: {}",
-                    e
+                 get_pending_root_proposals_to_upgrade_governance_canister: {e}"
                 )
             })
             .unwrap()
@@ -6485,8 +6471,7 @@ impl RootCanisterClient {
         Decode!(&response, Result<(), String>).map_err(|e| {
             format!(
                 "Cannot candid-deserialize the response from \
-                 vote_on_root_proposal_to_upgrade_governance_canister: {}",
-                e
+                 vote_on_root_proposal_to_upgrade_governance_canister: {e}"
             )
         })?
     }
@@ -6536,11 +6521,11 @@ fn print_proposal<T: Serialize + Debug, Command: ProposalMetadata + ProposalTitl
             payload,
         })
         .expect("Serialization for the cmd to JSON failed.");
-        println!("{}", serialized);
+        println!("{serialized}");
     } else {
         println!("Title: {}\n", cmd.title());
         println!("Summary: {}\n", cmd.summary());
         println!("URL: {}\n", cmd.url());
-        println!("Payload: {:#?}", payload);
+        println!("Payload: {payload:#?}");
     }
 }

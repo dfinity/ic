@@ -59,9 +59,7 @@ fn test_recently_executed_proposals() {
         assert_eq!(
             governance.recently_submitted_proposals(time_window),
             proposals,
-            "Expected {} submitted proposals for {}",
-            proposals,
-            lable
+            "Expected {proposals} submitted proposals for {lable}"
         );
     }
 }
@@ -129,9 +127,7 @@ fn test_recently_submitted_proposals() {
         assert_eq!(
             governance.recently_executed_proposals(time_window),
             proposals,
-            "Expected {} executed proposals for {}",
-            proposals,
-            lable
+            "Expected {proposals} executed proposals for {lable}"
         );
     }
 }

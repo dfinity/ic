@@ -310,7 +310,7 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
 async fn assert_orchestrator_stopped_gracefully(node: IcNodeSnapshot) {
     const MESSAGE: &str = r"Orchestrator shut down gracefully";
 
-    let script = format!("journalctl -f | grep -q \"{}\"", MESSAGE);
+    let script = format!("journalctl -f | grep -q \"{MESSAGE}\"");
 
     let ssh_session = node
         .block_on_ssh_session()

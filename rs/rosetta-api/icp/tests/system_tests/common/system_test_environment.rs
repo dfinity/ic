@@ -269,8 +269,7 @@ impl RosettaTestingEnvironmentBuilder {
 
         assert_eq!(
             ledger_canister_id, canister_id,
-            "Canister IDs do not match: expected {}, got {}",
-            ledger_canister_id, canister_id
+            "Canister IDs do not match: expected {ledger_canister_id}, got {canister_id}"
         );
 
         pocket_ic

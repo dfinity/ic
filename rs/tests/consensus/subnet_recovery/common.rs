@@ -612,7 +612,7 @@ fn remote_recovery(cfg: &TestConfig, subnet_recovery: AppSubnetRecovery, logger:
 
         info!(logger, "{}", step.descr());
         step.exec()
-            .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
+            .unwrap_or_else(|e| panic!("Execution of step {step_type:?} failed: {e}"));
     }
 }
 
@@ -785,8 +785,7 @@ fn corrupt_latest_cup(subnet: &SubnetSnapshot, recovery: &Recovery, logger: &Log
         execute_bash_command(
             &session,
             format!(
-                "sudo touch {}; sudo chmod a+rw {}",
-                NEW_CUP_PATH, NEW_CUP_PATH
+                "sudo touch {NEW_CUP_PATH}; sudo chmod a+rw {NEW_CUP_PATH}"
             ),
         )
         .expect("touch");
@@ -799,8 +798,7 @@ fn corrupt_latest_cup(subnet: &SubnetSnapshot, recovery: &Recovery, logger: &Log
         execute_bash_command(
             &session,
             format!(
-                "sudo mv {} {}; sudo systemctl restart ic-replica",
-                NEW_CUP_PATH, CUP_PATH
+                "sudo mv {NEW_CUP_PATH} {CUP_PATH}; sudo systemctl restart ic-replica"
             ),
         )
         .expect("restart");
@@ -848,8 +846,7 @@ fn assert_subnet_is_broken(
         info!(logger, "Ensure the subnet works in read mode");
         assert!(
             can_read_msg(logger, node_url, can_id, msg),
-            "Failed to read message on node: {}",
-            node_url
+            "Failed to read message on node: {node_url}"
         );
     }
     info!(
@@ -858,8 +855,7 @@ fn assert_subnet_is_broken(
     );
     assert!(
         cannot_store_msg(logger.clone(), node_url, can_id, msg),
-        "Writing messages still successful on: {}",
-        node_url
+        "Writing messages still successful on: {node_url}"
     );
 }
 

@@ -460,8 +460,7 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
                 wait_for_quiet_deadline_increase_seconds: 5 * ONE_DAY_SECONDS / 2, // 2.5 days
                 ..Default::default()
             },
-            "{:#?}",
-            proposal,
+            "{proposal:#?}",
         );
 
         // Assert that the bar to pass other proposal types is lower.
@@ -510,8 +509,7 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
                 wait_for_quiet_deadline_increase_seconds: ONE_DAY_SECONDS,
                 ..Default::default()
             },
-            "{:#?}",
-            proposal,
+            "{proposal:#?}",
         );
     }
 }
@@ -625,16 +623,15 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
             } = err;
 
             let error_type = SnsErrorType::try_from(*error_type).unwrap();
-            assert_eq!(error_type, SnsErrorType::InvalidProposal, "{:?}", err);
+            assert_eq!(error_type, SnsErrorType::InvalidProposal, "{err:?}");
 
             let error_message = error_message.to_lowercase();
-            assert!(error_message.contains("amount"), "{:?}", err);
-            assert!(error_message.contains("too large"), "{:?}", err);
+            assert!(error_message.contains("amount"), "{err:?}");
+            assert!(error_message.contains("too large"), "{err:?}");
         }
 
         wrong => panic!(
-            "Proposal submission was NOT rejected (as it should have been): {:?}",
-            wrong
+            "Proposal submission was NOT rejected (as it should have been): {wrong:?}"
         ),
     }
     match &take_sns_tokens_make_proposal_result {
@@ -645,16 +642,15 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
             } = err;
 
             let error_type = SnsErrorType::try_from(*error_type).unwrap();
-            assert_eq!(error_type, SnsErrorType::InvalidProposal, "{:?}", err);
+            assert_eq!(error_type, SnsErrorType::InvalidProposal, "{err:?}");
 
             let error_message = error_message.to_lowercase();
-            assert!(error_message.contains("amount"), "{:?}", err);
-            assert!(error_message.contains("too large"), "{:?}", err);
+            assert!(error_message.contains("amount"), "{err:?}");
+            assert!(error_message.contains("too large"), "{err:?}");
         }
 
         wrong => panic!(
-            "Proposal submission was NOT rejected (as it should have been): {:?}",
-            wrong
+            "Proposal submission was NOT rejected (as it should have been): {wrong:?}"
         ),
     }
 
@@ -763,7 +759,7 @@ fn test_transfer_sns_treasury_funds_upper_bound_is_enforced_at_execution() {
             *WHALE,
             whale_neuron_id.clone(),
             Proposal {
-                title: format!("{}: Give whale 20% of the ICP in the treasury", index),
+                title: format!("{index}: Give whale 20% of the ICP in the treasury"),
                 summary: "".to_string(),
                 url: "".to_string(),
                 action: Some(Action::TransferSnsTreasuryFunds(TransferSnsTreasuryFunds {
@@ -812,7 +808,7 @@ fn test_transfer_sns_treasury_funds_upper_bound_is_enforced_at_execution() {
     // Step 3.1: Inspect failure reason to make sure it didn't fail for some other reason.
     let proposal =
         sns_get_proposal(&state_machine, governance_canister_id, first_proposal_id).unwrap();
-    assert_ne!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
+    assert_ne!(proposal.failed_timestamp_seconds, 0, "{proposal:#?}");
 
     let failure_reason = proposal.failure_reason.unwrap();
     let SnsGovernanceError {
@@ -822,12 +818,11 @@ fn test_transfer_sns_treasury_funds_upper_bound_is_enforced_at_execution() {
     assert_eq!(
         SnsErrorType::try_from(*error_type),
         Ok(SnsErrorType::PreconditionFailed),
-        "{:#?}",
-        failure_reason,
+        "{failure_reason:#?}",
     );
     let error_message = error_message.to_lowercase();
     for keyword in ["7 day", "upper bound", "exceed", "try again"] {
-        assert!(error_message.contains(keyword), "{:#?}", failure_reason);
+        assert!(error_message.contains(keyword), "{failure_reason:#?}");
     }
 
     // Step 3.2: Assert that treasury is smaller by approximately 2_000 ICP, not 4_000 ICP as would

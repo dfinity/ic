@@ -152,7 +152,7 @@ impl Task for SubprocessTask {
                                     )),
                                     Some(code) => notify(TaskResult::Failure(
                                         task_id.clone(),
-                                        format!("Task {} failed with exit code: {:?}.", task_id, code),
+                                        format!("Task {task_id} failed with exit code: {code:?}."),
                                     )),
                                     None => notify(TaskResult::Failure(
                                         task_id.clone(),
@@ -163,7 +163,7 @@ impl Task for SubprocessTask {
                                 Err(e) => {
                                     notify(TaskResult::Failure(
                                         task_id,
-                                        format!("System API failure: {:?}", e),
+                                        format!("System API failure: {e:?}"),
                                     ));
                                 }
                             }
@@ -271,7 +271,7 @@ fn panic_to_result(panic_res: std::thread::Result<()>) -> Result<(), String> {
         } else if let Some(s) = panic_res.downcast_ref::<&str>() {
             Err(s.to_string())
         } else {
-            Err(format!("{:?}", panic_res))
+            Err(format!("{panic_res:?}"))
         }
     } else {
         Ok(())

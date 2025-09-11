@@ -762,7 +762,7 @@ fn test_multiple_spending() {
                     .unwrap()
             )
             .unwrap_err()
-            .contains(&format!("duplicate_of: Nat({})", idx)),
+            .contains(&format!("duplicate_of: Nat({idx})")),
     );
 
     // Get ICP accepted by the SNS sale canister
@@ -921,7 +921,7 @@ fn test_commitment_below_participant_minimum() {
     );
 
     let params = payment_flow_protocol.get_sns_sale_parameters();
-    println!("Sale parameters: {:?}", params);
+    println!("Sale parameters: {params:?}");
     let amount0_0 = (params.max_participant_icp_e8s - 1) / 2;
     let amount1_0 = (params.max_participant_icp_e8s - 1) / 2;
     let amount2_0 = params.min_participant_icp_e8s;

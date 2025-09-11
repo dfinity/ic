@@ -279,9 +279,9 @@ pub fn run_ic_ref_test(
     let mut cmd = Command::new(ic_ref_test_path);
     cmd.env("IC_TEST_DATA", ic_test_data_path)
         .arg("+RTS")
-        .arg(format!("-N{}", jobs))
+        .arg(format!("-N{jobs}"))
         .arg("-RTS")
-        .arg(format!("-j{}", jobs))
+        .arg(format!("-j{jobs}"))
         .arg("--pattern")
         .arg(tests_to_pattern(excluded_tests, included_tests))
         .arg("--endpoint")
@@ -361,6 +361,6 @@ fn tests_to_pattern(excluded_tests: Vec<&str>, included_tests: Vec<&str>) -> Str
         excluded
     } else {
         let included = format!("({})", included_tests.join(" || "));
-        format!("{} && {}", excluded, included)
+        format!("{excluded} && {included}")
     }
 }

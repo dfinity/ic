@@ -210,8 +210,7 @@ fn wait_for_ledger_canister_to_start_after_an_upgrade(
         match update(machine, ledger_id, "icrc1_fee", Encode!().unwrap()) {
             Ok(_) => break,
             Err(call_error) => println!(
-                "call error when checking if ledger is running: {:?}",
-                call_error
+                "call error when checking if ledger is running: {call_error:?}"
             ),
         }
         // if the ledger canister is stopped, then the update call fails in the ingress filter

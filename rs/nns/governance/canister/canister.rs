@@ -420,9 +420,8 @@ fn list_known_neurons() -> ListKnownNeuronsResponse {
 #[update(hidden = true)]
 fn submit_proposal(_proposer: NeuronId, _proposal: Proposal, _caller: PrincipalId) -> ProposalId {
     panic!(
-        "{}submit_proposal is deprecated, and now always panics. \
-               Use `manage_neuron` instead to submit a proposal.",
-        LOG_PREFIX
+        "{LOG_PREFIX}submit_proposal is deprecated, and now always panics. \
+               Use `manage_neuron` instead to submit a proposal."
     );
 }
 

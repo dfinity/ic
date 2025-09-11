@@ -283,20 +283,17 @@ fn test_upgrade_canister_proposal_reinstall() {
 
         assert_ne!(
             proposal.decided_timestamp_seconds, 0,
-            "proposal: {:?}",
-            proposal
+            "proposal: {proposal:?}"
         );
         assert_ne!(
             proposal.executed_timestamp_seconds, 0,
-            "proposal: {:?}",
-            proposal
+            "proposal: {proposal:?}"
         );
         assert_eq!(
             proposal.failed_timestamp_seconds, 0,
-            "proposal: {:?}",
-            proposal
+            "proposal: {proposal:?}"
         );
-        assert_eq!(proposal.failure_reason, None, "proposal: {:?}", proposal);
+        assert_eq!(proposal.failure_reason, None, "proposal: {proposal:?}");
 
         // Step 3.b: Wait until new dapp is running.
         let status = sns_canisters
@@ -307,8 +304,7 @@ fn test_upgrade_canister_proposal_reinstall() {
         assert_eq!(
             status.module_hash.as_ref().unwrap()[..],
             new_dapp_wasm_hash[..],
-            "status: {:?}",
-            status
+            "status: {status:?}"
         );
         // Check that stable memory was erased during reinstall.
         let res: Vec<u8> = dapp_canister
@@ -443,8 +439,7 @@ fn test_upgrade_canister_proposal_execution_fail() {
                 upgrade.canister_upgrade_arg = None;
             }
             action => panic!(
-                "Proposal action was not UpgradeSnsControlledCanister: {:?}",
-                action
+                "Proposal action was not UpgradeSnsControlledCanister: {action:?}"
             ),
         };
         fn age_s(t: u64) -> u64 {
@@ -457,27 +452,21 @@ fn test_upgrade_canister_proposal_execution_fail() {
         let decision_age_s = age_s(proposal.decided_timestamp_seconds);
         assert!(
             decision_age_s < EXPECTED_SNS_DAPP_CANISTER_UPGRADE_TIME_SECONDS,
-            "decision_age_s: {}, proposal: {:?}",
-            decision_age_s,
-            proposal
+            "decision_age_s: {decision_age_s}, proposal: {proposal:?}"
         );
         assert_eq!(
             proposal.executed_timestamp_seconds, 0,
-            "proposal: {:?}",
-            proposal
+            "proposal: {proposal:?}"
         );
         let failure_age_s = age_s(proposal.failed_timestamp_seconds);
         assert!(
             failure_age_s < EXPECTED_SNS_DAPP_CANISTER_UPGRADE_TIME_SECONDS,
-            "failure_age_s: {}, proposal: {:?}",
-            failure_age_s,
-            proposal
+            "failure_age_s: {failure_age_s}, proposal: {proposal:?}"
         );
         assert_eq!(
             proposal.failure_reason.as_ref().unwrap().error_type,
             ErrorType::External as i32,
-            "proposal: {:?}",
-            proposal
+            "proposal: {proposal:?}"
         );
 
         // Step 3.b: Assert that dapp is running the original wasm.
@@ -493,14 +482,12 @@ fn test_upgrade_canister_proposal_execution_fail() {
         assert_eq!(
             status.status,
             CanisterStatusType::Running,
-            "status: {:?}",
-            status,
+            "status: {status:?}",
         );
         assert_eq!(
             status.module_hash.as_ref().unwrap()[..],
             original_dapp_wasm_hash[..],
-            "status: {:?}",
-            status,
+            "status: {status:?}",
         );
 
         Ok(())
@@ -753,9 +740,9 @@ fn test_install_canisters_in_any_order() {
             canister_tags.into_iter().permutations(permutation_size);
 
         for canister_install_order in canister_install_order_permutations {
-            println!("Testing install order: {:?}", canister_install_order);
+            println!("Testing install order: {canister_install_order:?}");
             for canister_tag in canister_install_order {
-                println!("Starting install of {}", canister_tag);
+                println!("Starting install of {canister_tag}");
 
                 // Match the canister tag and wait for the install to complete to guarantee the
                 // order
@@ -774,7 +761,7 @@ fn test_install_canisters_in_any_order() {
                     "swap" => install_swap_canister(&mut swap, sns_init_payload.swap.clone()).await,
                     _ => panic!("Unexpected canister tag"),
                 };
-                println!("Successfully installed {}", canister_tag);
+                println!("Successfully installed {canister_tag}");
             }
 
             // After each permutation, reset all the canisters to the empty wasm to
@@ -793,5 +780,5 @@ async fn reset_canister_to_empty_wasm(canister: &mut Canister<'_>) {
     let wasm: Wasm = Wasm::from_bytes(EMPTY_WASM.clone());
     wasm.install_with_retries_onto_canister(canister, None, None)
         .await
-        .unwrap_or_else(|e| panic!("Could not install empty wasm due to {}", e));
+        .unwrap_or_else(|e| panic!("Could not install empty wasm due to {e}"));
 }

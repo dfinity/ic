@@ -48,7 +48,7 @@ fn test_icp_transfer() {
                 for arg_with_caller in args_with_caller.iter() {
                     assert!(
                         matches!(arg_with_caller.arg, LedgerEndpointArg::TransferArg(_)),
-                        "Strategy should only generate transactions with TransferArg, but got: {:?}", arg_with_caller
+                        "Strategy should only generate transactions with TransferArg, but got: {arg_with_caller:?}"
                     );
                 }
                 let rt = Runtime::new().unwrap();

@@ -945,7 +945,7 @@ fn state_manager_crash_test<Test>(
                     ic_types::malicious_flags::MaliciousFlags::default(),
                 ));
             })
-            .expect_err(&format!("Crash test fixture {} did not crash", i));
+            .expect_err(&format!("Crash test fixture {i} did not crash"));
         }
 
         let metrics = MetricsRegistry::new();
@@ -1038,9 +1038,7 @@ fn returns_state_no_committed_for_future_states() {
         let latest_state = state_manager.latest_state_height();
         assert!(
             latest_state < h,
-            "Expected latest state to be < {}, got {}",
-            h,
-            latest_state
+            "Expected latest state to be < {h}, got {latest_state}"
         );
         assert_eq!(
             state_manager.get_state_at(h),
@@ -4914,8 +4912,7 @@ fn certified_read_succeeds_for_empty_tree() {
 
         assert!(
             matches!(&mixed_tree, Pruned(_)),
-            "mixed_tree: {:#?}",
-            mixed_tree
+            "mixed_tree: {mixed_tree:#?}"
         );
     })
 }
@@ -4950,8 +4947,7 @@ fn certified_read_returns_absence_proof_for_non_existing_entries() {
             mixed_tree
                 .lookup(&[&b"request_status"[..], &message_test_id(2).as_bytes()[..]])
                 .is_absent(),
-            "mixed_tree: {:#?}",
-            mixed_tree
+            "mixed_tree: {mixed_tree:#?}"
         );
 
         let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {
@@ -4966,8 +4962,7 @@ fn certified_read_returns_absence_proof_for_non_existing_entries() {
             mixed_tree
                 .lookup(&[&b"request_status"[..], &message_test_id(0).as_bytes()[..]])
                 .is_absent(),
-            "mixed_tree: {:#?}",
-            mixed_tree
+            "mixed_tree: {mixed_tree:#?}"
         );
     })
 }
@@ -4992,8 +4987,7 @@ fn certified_read_returns_absence_proof_for_non_existing_entries_in_empty_state(
             mixed_tree
                 .lookup(&[&b"request_status"[..], &message_test_id(2).as_bytes()[..]])
                 .is_absent(),
-            "mixed_tree: {:#?}",
-            mixed_tree
+            "mixed_tree: {mixed_tree:#?}"
         );
     })
 }
@@ -5109,8 +5103,7 @@ fn certified_read_can_produce_proof_of_absence() {
             mixed_tree
                 .lookup(&[&b"request_status"[..], &message_test_id(2).as_bytes()[..]])
                 .is_absent(),
-            "mixed_tree: {:#?}",
-            mixed_tree
+            "mixed_tree: {mixed_tree:#?}"
         );
 
         assert_eq!(
@@ -7761,7 +7754,7 @@ fn query_stats_are_collected() {
         if height.get() < query_stats_epoch_length {
             // Query stats in the canister state should only be changed after more than QUERY_STATS_EPOCH_LENGTH batches.
             // have been delivered. Before, they should be unchanged.
-            println!("Checking query stats in round {}", i);
+            println!("Checking query stats in round {i}");
             check_query_stats_unmodified(&env, &test_canister_id);
             check_query_stats_unmodified(&env, &malicious_overreporting);
             check_query_stats_unmodified(&env, &malicious_underreporting);

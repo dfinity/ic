@@ -93,7 +93,7 @@ impl ICRC1Ledger for LedgerFixture {
             from_account,
             from_subaccount
                 .as_ref()
-                .map_or_else(|| "None".to_string(), |a| format!("{:?}", a)),
+                .map_or_else(|| "None".to_string(), |a| format!("{a:?}")),
             to,
             amount_e8s,
             fee_e8s
@@ -560,7 +560,7 @@ impl GovernanceCanisterFixture {
 
         match result {
             get_neuron_response::Result::Neuron(neuron) => neuron,
-            get_neuron_response::Result::Error(err) => panic!("Expected Neuron to exist: {}", err),
+            get_neuron_response::Result::Error(err) => panic!("Expected Neuron to exist: {err}"),
         }
     }
 
@@ -784,7 +784,7 @@ impl GovernanceCanisterFixture {
             .unwrap()
         {
             get_proposal_response::Result::Error(e) => {
-                panic!("Proposal retrieval failed. Panicking 😬: {:?}", e)
+                panic!("Proposal retrieval failed. Panicking 😬: {e:?}")
             }
             get_proposal_response::Result::Proposal(proposal_data) => proposal_data,
         }

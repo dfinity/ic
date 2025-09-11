@@ -1233,7 +1233,8 @@ async fn create_one_sale_participant(
             memo: None,
             amount: Nat::from(contribution),
         };
-        ledger_agent.call_and_parse(&Icrc1TransferRequest::new(ledger_canister_id, transfer_arg))
+        let request = Icrc1TransferRequest::new(ledger_canister_id, transfer_arg);
+        ledger_agent.call_and_parse(&request)
     }
     .await
     .context("error performing an ICP ledger transfer")

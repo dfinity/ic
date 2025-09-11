@@ -142,7 +142,7 @@ fn test_does_not_return_more_than_1000_certified_deltas() {
     fn count_deltas(tree: &LabeledTree<Vec<u8>>) -> usize {
         match lookup_path(tree, &[&b"delta"[..]]).unwrap() {
             LabeledTree::SubTree(children) => children.len(),
-            _ => panic!("unexpected data tree shape: {:?}", tree),
+            _ => panic!("unexpected data tree shape: {tree:?}"),
         }
     }
     fn has_delta(tree: &LabeledTree<Vec<u8>>, version: u64) -> bool {
@@ -157,7 +157,7 @@ fn test_does_not_return_more_than_1000_certified_deltas() {
             builder.push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0));
             for v in 1..(3 * MAX_VERSIONS_PER_QUERY / 2) {
                 let mutation_request = RegistryAtomicMutateRequest {
-                    mutations: vec![insert(format!("key{}", v), "value")],
+                    mutations: vec![insert(format!("key{v}"), "value")],
                     preconditions: vec![],
                 };
                 builder.push_init_mutate_request(mutation_request);

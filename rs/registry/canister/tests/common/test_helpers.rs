@@ -272,11 +272,11 @@ async fn wait_for_ecdsa_setup(
             )
             .await,
         );
-        println!("Response: {:?}", public_key_result);
+        println!("Response: {public_key_result:?}");
         if public_key_result.as_ref().unwrap().is_ok() {
             break;
         }
-        println!("Waiting for public key... {}", i);
+        println!("Waiting for public key... {i}");
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     public_key_result.unwrap().unwrap();
@@ -306,11 +306,11 @@ async fn wait_for_schnorr_setup(
             )
             .await,
         );
-        println!("Response: {:?}", public_key_result);
+        println!("Response: {public_key_result:?}");
         if public_key_result.as_ref().unwrap().is_ok() {
             break;
         }
-        println!("Waiting for public key... {}", i);
+        println!("Waiting for public key... {i}");
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     public_key_result.unwrap().unwrap();
@@ -340,11 +340,11 @@ async fn wait_for_vetkd_setup(
             )
             .await,
         );
-        println!("Response: {:?}", public_key_result);
+        println!("Response: {public_key_result:?}");
         if public_key_result.as_ref().unwrap().is_ok() {
             break;
         }
-        println!("Waiting for public key... {}", i);
+        println!("Waiting for public key... {i}");
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     public_key_result.unwrap().unwrap();
@@ -374,14 +374,11 @@ pub fn check_error_message<T: std::fmt::Debug>(
 ) {
     match result {
         Ok(value) => panic!(
-            "expected the call to fail with message '{}', got Ok({:?})",
-            expected_substring, value
+            "expected the call to fail with message '{expected_substring}', got Ok({value:?})"
         ),
         Err(e) => assert!(
             e.contains(expected_substring),
-            "expected the call to fail with message '{}', got:  {}",
-            expected_substring,
-            e
+            "expected the call to fail with message '{expected_substring}', got:  {e}"
         ),
     }
 }

@@ -75,8 +75,7 @@ fn test_get_status() {
         assert_eq!(
             response.status,
             CanisterStatusType::Running,
-            "response: {:?}",
-            response
+            "response: {response:?}"
         );
 
         Ok(())
@@ -368,8 +367,7 @@ fn root_get_sns_canisters_summary(
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
             panic!(
-                "get_sns_canisters_summary was rejected by the swap canister: {:#?}",
-                reject
+                "get_sns_canisters_summary was rejected by the swap canister: {reject:#?}"
             )
         }
     };

@@ -375,10 +375,7 @@ pub async fn vote_execute_proposal_assert_failed(
             .error_message
             .to_lowercase()
             .contains(expected_message_substring.to_lowercase().as_str()),
-        "Rejection error for proposal {}, which is '{}', does not contain the expected substring '{}'",
-        proposal_id,
-        reason,
-        expected_message_substring
+        "Rejection error for proposal {proposal_id}, which is '{reason}', does not contain the expected substring '{expected_message_substring}'"
     );
 }
 
@@ -582,19 +579,17 @@ pub async fn execute_fulfill_subnet_rental_request(
         .unwrap()
     {
         manage_neuron_response::Command::MakeProposal(ok) => ok,
-        other => panic!("Unexpected response: {:?}", other),
+        other => panic!("Unexpected response: {other:?}"),
     };
     let proposal_id = ProposalId::from(response.proposal_id.unwrap());
     println!(
-        "Submitted FulfillSubnetRentalRequest proposal {}.",
-        proposal_id
+        "Submitted FulfillSubnetRentalRequest proposal {proposal_id}."
     );
 
     // Vote the proposal in...
     vote_on_proposal(&governance, proposal_id).await;
     println!(
-        "Voted on FulfillSubnetRentalRequest proposal {}.",
-        proposal_id
+        "Voted on FulfillSubnetRentalRequest proposal {proposal_id}."
     );
 
     let proposal_info = wait_for_final_state(&governance, proposal_id).await;
@@ -832,7 +827,7 @@ pub async fn submit_update_unassigned_node_version_proposal(
         DeployGuestosToAllUnassignedNodesPayload {
             elected_replica_version: version.to_string(),
         },
-        format!("Update unassigned nodes version to: {}", version),
+        format!("Update unassigned nodes version to: {version}"),
         "".to_string(),
     )
     .await

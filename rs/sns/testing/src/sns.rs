@@ -236,8 +236,7 @@ pub async fn complete_sns_swap<C: CallCanisters + ProgressNetwork + BuildEphemer
         };
 
     println!(
-        "Performing {} direct swap participations with cumulative amount of {}",
-        remaining_direct_participation_count, remaining_direct_participation
+        "Performing {remaining_direct_participation_count} direct swap participations with cumulative amount of {remaining_direct_participation}"
     );
     let swap_participations = remaining_swap_participations(
         remaining_direct_participation_count,
@@ -306,7 +305,7 @@ pub async fn complete_sns_swap<C: CallCanisters + ProgressNetwork + BuildEphemer
         "Set following for all topics to the neuron {} ...",
         neurons_to_follow
             .iter()
-            .map(|neuron_id| format!("{:?}", neuron_id))
+            .map(|neuron_id| format!("{neuron_id:?}"))
             .collect::<Vec<_>>()
             .join(", ")
     );
@@ -315,7 +314,7 @@ pub async fn complete_sns_swap<C: CallCanisters + ProgressNetwork + BuildEphemer
         .enumerate()
         .map(|(i, neuron_id)| Followee {
             neuron_id: Some(neuron_id),
-            alias: Some(format!("Fellowee #{}", i)),
+            alias: Some(format!("Fellowee #{i}")),
         })
         .collect::<Vec<_>>();
 
@@ -338,8 +337,7 @@ pub async fn complete_sns_swap<C: CallCanisters + ProgressNetwork + BuildEphemer
     };
 
     println!(
-        "Increasing dissolve delay to {} for swap participants...",
-        minimum_dissolve_delay_seconds
+        "Increasing dissolve delay to {minimum_dissolve_delay_seconds} for swap participants..."
     );
     for swap_participant_agent in swap_participants {
         let swap_participant_neuron_id =
@@ -375,8 +373,7 @@ pub async fn complete_sns_swap<C: CallCanisters + ProgressNetwork + BuildEphemer
             .await
             .map_err(|e| {
                 format!(
-                    "Failed to increase dissolve delay for neuron {:?}: {}",
-                    swap_participant_neuron_id, e
+                    "Failed to increase dissolve delay for neuron {swap_participant_neuron_id:?}: {e}"
                 )
             })?;
     }

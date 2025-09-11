@@ -102,7 +102,7 @@ fn test_construction_metadata() {
             ConstructionMetadataResponse {
                 metadata: Default::default(),
                 suggested_fee: Some(vec![Amount {
-                    value: format!("{}", DEFAULT_TRANSFER_FEE),
+                    value: format!("{DEFAULT_TRANSFER_FEE}"),
                     currency: Currency {
                         symbol: "ICP".to_string(),
                         decimals: 8,

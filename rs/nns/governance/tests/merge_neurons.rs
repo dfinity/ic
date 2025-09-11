@@ -151,7 +151,7 @@ fn do_test_merge_neurons(
                     .unwrap()
             );
         }
-        CommandResponse::Error(e) => panic!("Received Error: {}", e),
+        CommandResponse::Error(e) => panic!("Received Error: {e}"),
         _ => panic!("Wrong response received"),
     }
 

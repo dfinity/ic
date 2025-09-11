@@ -642,7 +642,7 @@ fn simulate_create_canister_cost(subnet_type: SubnetType, subnet_size: usize) ->
         .unwrap();
     let canister_b = match result {
         WasmResult::Reply(bytes) => Decode!(&bytes, CanisterIdRecord).unwrap().get_canister_id(),
-        WasmResult::Reject(err) => panic!("Expected CreateCanister to succeed but got {}", err),
+        WasmResult::Reject(err) => panic!("Expected CreateCanister to succeed but got {err}"),
     };
 
     canister_b_initial_balance - Cycles::new(env.cycle_balance(canister_b))

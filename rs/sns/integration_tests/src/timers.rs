@@ -94,8 +94,7 @@ fn get_timers(state_machine: &StateMachine, canister_id: CanisterId) -> Option<T
         .execute_ingress(canister_id, "get_timers", payload)
         .unwrap_or_else(|err| {
             panic!(
-                "Unable to call get_timers on canister {:?}: {}",
-                canister_id, err
+                "Unable to call get_timers on canister {canister_id:?}: {err}"
             )
         });
     let response = Decode!(&response.bytes(), GetTimersResponse).unwrap();
@@ -157,8 +156,7 @@ fn run_canister_reset_timers_test(
     // Reset the timers.
     try_reset_timers(state_machine, canister_id).unwrap_or_else(|err| {
         panic!(
-            "Unable to call reset_timers on canister {:?}: {}",
-            canister_id, err
+            "Unable to call reset_timers on canister {canister_id:?}: {err}"
         )
     });
 
@@ -221,8 +219,7 @@ fn run_canister_reset_timers_cannot_be_spammed_test(
 
     try_reset_timers(state_machine, canister_id).unwrap_or_else(|err| {
         panic!(
-            "Unable to call reset_timers on canister {:?}: {}",
-            canister_id, err
+            "Unable to call reset_timers on canister {canister_id:?}: {err}"
         )
     });
 
@@ -240,8 +237,7 @@ fn run_canister_reset_timers_cannot_be_spammed_test(
     {
         let err_text = try_reset_timers(state_machine, canister_id).unwrap_err();
         assert!(err_text.contains(&format!(
-            "Reset has already been called within the past {} seconds",
-            reset_timers_cool_down_interval_seconds
+            "Reset has already been called within the past {reset_timers_cool_down_interval_seconds} seconds"
         )));
     }
 
@@ -259,8 +255,7 @@ fn run_canister_reset_timers_cannot_be_spammed_test(
 
     try_reset_timers(state_machine, canister_id).unwrap_or_else(|err| {
         panic!(
-            "Unable to call reset_timers on canister {:?}: {}",
-            canister_id, err
+            "Unable to call reset_timers on canister {canister_id:?}: {err}"
         )
     });
 

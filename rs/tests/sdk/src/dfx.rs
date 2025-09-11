@@ -181,12 +181,12 @@ impl DfxCommandContext {
         info!(self.log, "Executing command {:?} ...", &cmd);
         let out = cmd
             .output()
-            .unwrap_or_else(|e| panic!("Could not run '{:?}' because {e:?}", cmd));
+            .unwrap_or_else(|e| panic!("Could not run '{cmd:?}' because {e:?}"));
         std::io::stdout().write_all(&out.stdout).unwrap();
         std::io::stderr().write_all(&out.stderr).unwrap();
 
         if !out.status.success() {
-            panic!("Failed to run '{:?}'", cmd);
+            panic!("Failed to run '{cmd:?}'");
         }
         out
     }

@@ -56,8 +56,8 @@ fn test_set_time_warp() {
     environment.set_time_warp(TimeWarp { delta_s: 1_000 });
     let delta_s = environment.now() - start;
 
-    assert!(delta_s >= 1000, "delta_s = {}", delta_s);
-    assert!(delta_s < 1005, "delta_s = {}", delta_s);
+    assert!(delta_s >= 1000, "delta_s = {delta_s}");
+    assert!(delta_s < 1005, "delta_s = {delta_s}");
 }
 
 #[test]
@@ -100,9 +100,7 @@ fn test_upgrade_journal() {
 
     assert!(
         expected_headers.is_subset(&observed_headers),
-        "{:?} is expected to be a subset of {:?}",
-        expected_headers,
-        observed_headers
+        "{expected_headers:?} is expected to be a subset of {observed_headers:?}"
     );
 
     let observed_journal_str = std::str::from_utf8(&observed_body).unwrap();

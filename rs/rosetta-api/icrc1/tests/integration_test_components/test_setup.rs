@@ -16,7 +16,6 @@ fn smoke_test() {
         None,
     );
     println!(
-        "The canister id of the icrc ledger is: {:?}",
-        icrc_ledger_canister_id
+        "The canister id of the icrc ledger is: {icrc_ledger_canister_id:?}"
     );
 }

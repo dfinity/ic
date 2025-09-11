@@ -253,7 +253,7 @@ impl SnsInitializationFlowTestSetup {
                     None => panic!("Unable to find proposal ID!"),
                 }
             }
-            _ => panic!("Unable to submit the proposal: {:?}", response),
+            _ => panic!("Unable to submit the proposal: {response:?}"),
         }
     }
 
@@ -298,8 +298,7 @@ impl SnsInitializationFlowTestSetup {
             }
         }
         panic!(
-            "SNS Swap({}) never had its finalization status set during automatic swap finalization",
-            swap_canister_id
+            "SNS Swap({swap_canister_id}) never had its finalization status set during automatic swap finalization"
         );
     }
 }
@@ -441,8 +440,7 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
     // With Matched Funding, this field remains unset set until the swap finalization phase.
     assert!(
         cf_participants.is_empty(),
-        "Unexpected Neurons' Fund participants: {:#?}",
-        cf_participants
+        "Unexpected Neurons' Fund participants: {cf_participants:#?}"
     );
 
     // Step 3: Advance time to open the swap for participation, and then finish it

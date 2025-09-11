@@ -373,7 +373,7 @@ async fn test_wrong_canister_id(env: &TestEnv, node_url: Url, root_key_blob: Opt
         &err,
         740,
         200,
-        &format!("Canister {} not found", some_can_id),
+        &format!("Canister {some_can_id} not found"),
     );
 }
 

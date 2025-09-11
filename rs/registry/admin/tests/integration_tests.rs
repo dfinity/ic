@@ -132,7 +132,7 @@ async fn test_update_registry_local_store_handles_chunked_records() {
         ])
         .output()
         .unwrap();
-    assert!(output.status.success(), "{:#?}", output);
+    assert!(output.status.success(), "{output:#?}");
 
     // Step 3: Verify result(s): Read registry local store. It should have the
     // data that was inserted into Registry canister during step 1.3.

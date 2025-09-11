@@ -144,8 +144,8 @@ fn test_increase_neuron_stake() {
                 if e.to_string().contains(
                     "the debit account doesn't have enough funds to complete the transaction",
                 ) => {}
-            Err(e) => panic!("Unexpected error: {}", e),
-            Ok(ok) => panic!("Expected an errorm but got: {:?}", ok),
+            Err(e) => panic!("Unexpected error: {e}"),
+            Ok(ok) => panic!("Expected an errorm but got: {ok:?}"),
         }
 
         // Now we try with a valid amount
@@ -245,8 +245,7 @@ fn test_set_neuron_dissolve_delay_timestamp() {
                 dissolve_delay_timestamp
             }
             k => panic!(
-                "Neuron should be in WhenDissolvedTimestampSeconds state, but is instead: {:?}",
-                k
+                "Neuron should be in WhenDissolvedTimestampSeconds state, but is instead: {k:?}"
             ),
         };
 
@@ -280,8 +279,7 @@ fn test_set_neuron_dissolve_delay_timestamp() {
                 dissolve_delay_timestamp
             }
             k => panic!(
-                "Neuron should be in DissolveDelaySeconds state, but is instead: {:?}",
-                k
+                "Neuron should be in DissolveDelaySeconds state, but is instead: {k:?}"
             ),
         };
         // The Dissolve Delay Timestamp should be updated
@@ -338,8 +336,7 @@ fn test_start_and_stop_neuron_dissolve() {
                 dissolve_delay_timestamp
             }
             k => panic!(
-                "Neuron should be in DissolveDelaySeconds state, but is instead: {:?}",
-                k
+                "Neuron should be in DissolveDelaySeconds state, but is instead: {k:?}"
             ),
         };
         let start_dissolving_response = TransactionOperationResults::try_from(
@@ -359,8 +356,7 @@ fn test_start_and_stop_neuron_dissolve() {
         assert_eq!(
             start_dissolving_response.operations.first().unwrap().status,
             Some("COMPLETED".to_owned()),
-            "Expected the operation to be completed but got: {:?}",
-            start_dissolving_response
+            "Expected the operation to be completed but got: {start_dissolving_response:?}"
         );
         let neuron = list_neurons(&agent).await.full_neurons[0].to_owned();
         match neuron.dissolve_state.unwrap() {
@@ -368,8 +364,7 @@ fn test_start_and_stop_neuron_dissolve() {
                 assert!(dissolve_delay_timestamp <= d);
             }
             k => panic!(
-                "Neuron should be in DissolveDelaySeconds state, but is instead: {:?}",
-                k
+                "Neuron should be in DissolveDelaySeconds state, but is instead: {k:?}"
             ),
         };
 
@@ -587,7 +582,7 @@ fn test_disburse_neuron() {
             .await
         {
             Err(e) if e.to_string().contains(&format!("Could not disburse: PreconditionFailed: Neuron {} has NOT been dissolved. It is in state Dissolving",neuron.id.unwrap().id)) => (),
-            Err(e) => panic!("Unexpected error: {}", e),
+            Err(e) => panic!("Unexpected error: {e}"),
             Ok(_) => panic!("Expected an error but got success"),
         }
         // Let rosetta catch up with the transfer that happended when creating the neuron
@@ -625,8 +620,7 @@ fn test_disburse_neuron() {
                 assert!(d<now);
             }
             k => panic!(
-                "Neuron should be in DissolveDelaySeconds state, but is instead: {:?}",
-                k
+                "Neuron should be in DissolveDelaySeconds state, but is instead: {k:?}"
             ),
         }
 
@@ -1003,7 +997,7 @@ fn test_hotkey_management() {
                         Err(e)
                             if e.to_string()
                                 .contains("Either public key or principal id has to be set") => {}
-                        Err(e) => panic!("Unexpected error: {}", e),
+                        Err(e) => panic!("Unexpected error: {e}"),
                         Ok(_) => panic!("Expected an error but got success"),
                     }
                 });

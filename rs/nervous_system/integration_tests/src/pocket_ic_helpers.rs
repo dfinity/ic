@@ -75,7 +75,7 @@ pub(crate) const UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS: u64 = 60 * 60; 
 
 pub fn fmt_bytes(bytes: &[u8]) -> String {
     bytes.iter().fold(String::new(), |mut output, x| {
-        let _ = write!(output, "{:02x}", x);
+        let _ = write!(output, "{x:02x}");
         output
     })
 }
@@ -180,8 +180,7 @@ pub async fn install_canister_with_controllers(
         .await;
     let subnet_id = pocket_ic.get_subnet(canister_id).await.unwrap();
     println!(
-        "Installed the {} canister ({}) onto {:?}",
-        name, canister_id, subnet_id
+        "Installed the {name} canister ({canister_id}) onto {subnet_id:?}"
     );
 }
 
@@ -1036,7 +1035,7 @@ pub async fn upgrade_nns_canister_to_tip_of_master_or_panic(
     } else if canister_id == REGISTRY_CANISTER_ID {
         (build_registry_wasm(), ROOT_CANISTER_ID.get(), "Registry")
     } else {
-        panic!("ID {} does not identify a known NNS canister.", canister_id);
+        panic!("ID {canister_id} does not identify a known NNS canister.");
     };
 
     let expected_hash = wasm.sha256_hash();
@@ -1050,18 +1049,17 @@ pub async fn upgrade_nns_canister_to_tip_of_master_or_panic(
 
     if pre_upgrade_module_hash == expected_hash.to_vec() {
         println!(
-            "The {} canister is already at the tip of the master branch.",
-            label
+            "The {label} canister is already at the tip of the master branch."
         );
 
         return;
     }
 
-    println!("Upgrading {} to the latest version.", label);
+    println!("Upgrading {label} to the latest version.");
     let proposal_info = nns::governance::propose_and_wait(
         pocket_ic,
         MakeProposalRequest {
-            title: Some(format!("Upgrade {} to the latest version.", label)),
+            title: Some(format!("Upgrade {label} to the latest version.")),
             summary: "".to_string(),
             url: "".to_string(),
             action: Some(ProposalActionRequest::InstallCode(InstallCodeRequest {
@@ -1181,7 +1179,7 @@ pub mod nns {
             .map(|p| p.unwrap())
             .map_err(|err| match err {
                 PocketIcCallError::PocketIc(reject_response) => reject_response,
-                err => panic!("Unexpected error when getting proposal info: {:#?}", err),
+                err => panic!("Unexpected error when getting proposal info: {err:#?}"),
             })
         }
 
@@ -1207,7 +1205,7 @@ pub mod nns {
                 &agent,
                 test_neuron_1_id,
                 create_service_nervous_system,
-                format!("Create SNS #{}", sns_instance_label),
+                format!("Create SNS #{sns_instance_label}"),
                 "".to_string(),
                 "".to_string(),
             )
@@ -1547,8 +1545,7 @@ pub mod sns {
                 .unwrap();
             if canister_version_from_sns_pov != canister_version_from_ic00_pov {
                 println!(
-                    "pre_upgrade_canister_version = {:?}",
-                    pre_upgrade_canister_version
+                    "pre_upgrade_canister_version = {pre_upgrade_canister_version:?}"
                 );
                 return Err(SnsUpgradeError::CanisterVersionMismatch {
                     canister_type: expected_type_to_change,
@@ -1578,7 +1575,7 @@ pub mod sns {
         try_upgrade_sns_to_next_version(pocket_ic, sns, expected_type_to_change)
             .await
             .unwrap_or_else(|err| {
-                panic!("Upgrading {:?} failed: {:#?}", expected_type_to_change, err)
+                panic!("Upgrading {expected_type_to_change:?} failed: {err:#?}")
             });
     }
 
@@ -1699,7 +1696,7 @@ pub mod sns {
                 .await
                 .map_err(|err| match err {
                     PocketIcCallError::PocketIc(reject_response) => reject_response,
-                    err => panic!("Unexpected error when getting proposal info: {:#?}", err),
+                    err => panic!("Unexpected error when getting proposal info: {err:#?}"),
                 })
         }
 
@@ -1840,8 +1837,7 @@ pub mod sns {
                 sns_neuron_id.clone(),
                 sns_pb::Proposal {
                     title: format!(
-                        "Set automatically_advance_target_version to {}.",
-                        automatically_advance_target_version,
+                        "Set automatically_advance_target_version to {automatically_advance_target_version}.",
                     ),
                     summary: "".to_string(),
                     url: "".to_string(),
@@ -2024,20 +2020,17 @@ pub mod sns {
                 let (actual, expected) = match either_or_both {
                     EitherOrBoth::Both(actual, expected) => (actual, expected),
                     EitherOrBoth::Left(actual) => panic!(
-                        "Observed an unexpected journal entry at index {}: {:?}",
-                        index, actual
+                        "Observed an unexpected journal entry at index {index}: {actual:?}"
                     ),
                     EitherOrBoth::Right(expected) => panic!(
-                        "Did not observe an expected entry at index {}: {:?}",
-                        index, expected
+                        "Did not observe an expected entry at index {index}: {expected:?}"
                     ),
                 };
                 assert!(actual.timestamp_seconds.is_some());
                 assert_eq!(
                     &actual.event.clone().map(redact_human_readable),
                     &Some(redact_human_readable(expected.clone())),
-                    "Upgrade journal entry at index {} does not match",
-                    index
+                    "Upgrade journal entry at index {index} does not match"
                 );
             }
         }
@@ -2056,7 +2049,7 @@ pub mod sns {
                 .await
                 .map_err(|err| match err {
                     PocketIcCallError::PocketIc(reject_response) => reject_response,
-                    err => panic!("Unexpected error when setting following: {:#?}", err),
+                    err => panic!("Unexpected error when setting following: {err:#?}"),
                 })
         }
     }
@@ -2303,26 +2296,20 @@ pub mod sns {
             assert!(
                 !all_blocks.is_empty(),
                 "There should be some blocks.\n\
-                all_blocks = {:?}\n\
-                non_archived_blocks = {:?}",
-                all_blocks,
-                non_archived_blocks
+                all_blocks = {all_blocks:?}\n\
+                non_archived_blocks = {non_archived_blocks:?}"
             );
             assert!(
                 !non_archived_blocks.is_empty(),
                 "Some blocks should not be archived.\n\
-                all_blocks = {:?}\n\
-                non_archived_blocks = {:?}",
-                all_blocks,
-                non_archived_blocks
+                all_blocks = {all_blocks:?}\n\
+                non_archived_blocks = {non_archived_blocks:?}"
             );
             assert!(
                 non_archived_blocks.len() < all_blocks.len(),
                 "Some blocks should be archived.\n\
-                all_blocks = {:?}\n\
-                non_archived_blocks = {:?}",
-                all_blocks,
-                non_archived_blocks
+                all_blocks = {all_blocks:?}\n\
+                non_archived_blocks = {non_archived_blocks:?}"
             );
         }
 
@@ -2535,8 +2522,7 @@ pub mod sns {
         }
         panic!(
             "The index canister was unable to sync all the blocks with the ledger. Number of \
-            blocks synced {} but the Ledger chain length is {}.\n",
-            num_blocks_synced, chain_length,
+            blocks synced {num_blocks_synced} but the Ledger chain length is {chain_length}.\n",
         );
     }
 
@@ -2562,7 +2548,7 @@ pub mod sns {
         fn convert_to_std_format(x: Value) -> Value {
             match x {
                 Value::Int(x) => {
-                    assert!(x >= 0, "cannot conver negative value {:?} to Nat64", x);
+                    assert!(x >= 0, "cannot conver negative value {x:?} to Nat64");
                     Value::Nat(x.0.to_biguint().unwrap().into())
                 }
                 Value::Nat64(x) => Value::Nat(x.into()),
@@ -2598,8 +2584,7 @@ pub mod sns {
 
             assert_eq!(
                 generic_block_ledger, generic_block_index,
-                "block_index: {}",
-                idx
+                "block_index: {idx}"
             );
             assert_eq!(generic_block_ledger, generic_block_index);
             assert_eq!(encoded_block_ledger, encoded_block_index);

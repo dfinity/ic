@@ -29,8 +29,7 @@ fn test_statesync_test_canisters() {
     assert_eq!(
         val,
         Ok(0),
-        "Queried first element of state vector, should have been 0, was {:?}",
-        res
+        "Queried first element of state vector, should have been 0, was {res:?}"
     );
 
     let result = env
@@ -41,8 +40,7 @@ fn test_statesync_test_canisters() {
     assert_eq!(
         val,
         Ok(1),
-        "Changed state for the first time, result should have been 1, was {:?}",
-        res
+        "Changed state for the first time, result should have been 1, was {res:?}"
     );
 
     let result = env
@@ -53,8 +51,7 @@ fn test_statesync_test_canisters() {
     assert_eq!(
         val,
         Ok(119),
-        "Queried 0th element of state vector, should be 20 for seed 33, was {:?}",
-        res
+        "Queried 0th element of state vector, should be 20 for seed 33, was {res:?}"
     );
 }
 

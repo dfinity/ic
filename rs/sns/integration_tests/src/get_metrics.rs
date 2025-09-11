@@ -338,8 +338,7 @@ fn test_sns_metrics() {
         }) = get_metrics_result
         else {
             panic!(
-                "Expected to get an Ok() from the response, got {:?}",
-                get_metrics_result
+                "Expected to get an Ok() from the response, got {get_metrics_result:?}"
             );
         };
 

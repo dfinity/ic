@@ -65,8 +65,7 @@ fn execute_ingress_with_dts(
         }
     }
     panic!(
-        "Did not get answer to ingress {} after {} state machine ticks",
-        msg_id, MAX_TICKS,
+        "Did not get answer to ingress {msg_id} after {MAX_TICKS} state machine ticks",
     )
 }
 
@@ -119,7 +118,7 @@ fn test(wat: &str, mode: CanisterInstallMode, dts_install: bool, dts_upgrade: bo
         WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
             .expect("failed to decode canister ID record")
             .get_canister_id(),
-        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
     };
     // check canister_version
     assert_eq!(get_canister_version(&env, canister_id, user_id), 0);

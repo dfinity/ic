@@ -269,11 +269,7 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
 
         assert!(
             relative_error.abs() < epsilon,
-            "{}: {:?} vs. {:?} (relative error = {})",
-            msg,
-            observed,
-            expected,
-            relative_error,
+            "{msg}: {observed:?} vs. {expected:?} (relative error = {relative_error})",
         );
     }
 

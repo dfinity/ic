@@ -33,7 +33,7 @@ pub async fn get_test_agent(port: u16) -> Agent {
 
 pub async fn get_custom_agent(basic_identity: Arc<dyn Identity>, port: u16) -> Agent {
     // The local replica will be running on the localhost
-    let replica_url = Url::parse(&format!("http://localhost:{}", port)).unwrap();
+    let replica_url = Url::parse(&format!("http://localhost:{port}")).unwrap();
 
     // Setup the agent
     let agent = Agent::builder()
@@ -83,7 +83,7 @@ pub async fn wait_for_rosetta_to_sync_up_to_block(
                 return Some(last_block);
             }
         } else {
-            eprintln!("Failed to get network status: {:?}", response);
+            eprintln!("Failed to get network status: {response:?}");
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
@@ -205,7 +205,7 @@ pub async fn update_neuron(agent: &Agent, neuron: ic_nns_governance_api::Neuron)
         Option<GovernanceError>
     )
     .unwrap();
-    assert!(result.is_none(), "Failed to update neuron: {:?}", result);
+    assert!(result.is_none(), "Failed to update neuron: {result:?}");
 }
 
 // Get the balance by directly calling the PocketIC, without agent. Useful
@@ -226,8 +226,7 @@ pub async fn account_balance(pocket_ic: &PocketIc, account: &AccountIdentifier) 
     {
         Err(err) => {
             panic!(
-                "failed to get the balance of account id: {}, error msg: {}",
-                account, err
+                "failed to get the balance of account id: {account}, error msg: {err}"
             );
         }
         Ok(res) => Decode!(&res, Tokens)

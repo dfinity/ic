@@ -163,13 +163,13 @@ pub fn install_ii_nns_dapp_and_subnet_rental(
               ("GOVERNANCE_CANISTER_ID".to_string(), GOVERNANCE_CANISTER_ID.to_string()),
               ("HOST".to_string(), ic_gateway_url.to_string()),
               /* ICP swap canister is not deployed by the test driver! */
-              ("ICP_SWAP_URL".to_string(), format!("https://uvevg-iyaaa-aaaak-ac27q-cai.raw.{}/", ic_gateway_domain)),
-              ("IDENTITY_SERVICE_URL".to_string(), format!("https://{}.{}", ii_canister_id, ic_gateway_domain)),
+              ("ICP_SWAP_URL".to_string(), format!("https://uvevg-iyaaa-aaaak-ac27q-cai.raw.{ic_gateway_domain}/")),
+              ("IDENTITY_SERVICE_URL".to_string(), format!("https://{ii_canister_id}.{ic_gateway_domain}")),
               ("INDEX_CANISTER_ID".to_string(), LEDGER_CANISTER_ID.to_string()),
               ("LEDGER_CANISTER_ID".to_string(), LEDGER_CANISTER_ID.to_string()),
               ("OWN_CANISTER_ID".to_string(), nns_dapp_canister_id.to_string()),
               /* plausible.io API might not work anyway so the value of `PLAUSIBLE_DOMAIN` is pretty much arbitrary */
-              ("PLAUSIBLE_DOMAIN".to_string(), format!("{}.{}", nns_dapp_canister_id, ic_gateway_domain)),
+              ("PLAUSIBLE_DOMAIN".to_string(), format!("{nns_dapp_canister_id}.{ic_gateway_domain}")),
               ("ROBOTS".to_string(), "".to_string()),
               ("SNS_AGGREGATOR_URL".to_string(), format!("https://{}.{}", sns_aggregator_canister_id.unwrap_or(SNS_AGGREGATOR_CANISTER_ID.into()), ic_gateway_domain)),
               ("STATIC_HOST".to_string(), ic_gateway_url.to_string()),

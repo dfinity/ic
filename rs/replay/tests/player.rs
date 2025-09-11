@@ -65,7 +65,7 @@ impl PerformQuery for PerformQueryImpl<'_> {
                     }
                 }
 
-                Err(UserError::new(code, format!("{:?}", err)))
+                Err(UserError::new(code, format!("{err:?}")))
             }
         };
 
@@ -176,8 +176,7 @@ async fn test_registry_get_value_and_changes_since() {
                 == MegaBlob {
                     content: MEGA_BLOB_CONTENT.clone()
                 },
-            "len={}",
-            len,
+            "len={len}",
         );
     };
 }

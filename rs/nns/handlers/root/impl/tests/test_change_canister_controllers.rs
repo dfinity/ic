@@ -140,8 +140,7 @@ fn test_change_canister_controllers_integrates_with_management_canister() {
         ChangeCanisterControllersResult::Ok(_result) => (),
         ChangeCanisterControllersResult::Err(error) => {
             panic!(
-                "Expected change_canister_controllers to return a successful response. Instead found {:?}",
-                error
+                "Expected change_canister_controllers to return a successful response. Instead found {error:?}"
             );
         }
     }

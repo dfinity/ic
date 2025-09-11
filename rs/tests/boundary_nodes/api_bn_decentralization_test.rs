@@ -386,9 +386,8 @@ async fn add_api_boundary_nodes_via_proposal(
             "sudo openssl req -x509 -newkey rsa:2048 \
             -keyout /var/lib/ic/data/ic-boundary-tls.key \
             -out /var/lib/ic/data/ic-boundary-tls.crt -sha256 -days 3650 -nodes \
-            -subj \"/C=CH/ST=Zurich/L=Zurich/O=DFINITY/OU=BoundaryNodes/CN={}\" && \
-            sudo chmod +r /var/lib/ic/data/ic-boundary-tls.key",
-            domain
+            -subj \"/C=CH/ST=Zurich/L=Zurich/O=DFINITY/OU=BoundaryNodes/CN={domain}\" && \
+            sudo chmod +r /var/lib/ic/data/ic-boundary-tls.key"
         ))
         .expect("unable to setup TLS files");
 

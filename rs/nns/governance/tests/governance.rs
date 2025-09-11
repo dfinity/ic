@@ -942,9 +942,7 @@ async fn test_manage_network_economics_reject_invalid() {
         assert!(
             rust_decimal::Decimal::from(too_small_for_full_participation_milestone_xdr)
                 < one_third_participation_milestone_xdr,
-            "{} vs. {}",
-            too_small_for_full_participation_milestone_xdr,
-            one_third_participation_milestone_xdr
+            "{too_small_for_full_participation_milestone_xdr} vs. {one_third_participation_milestone_xdr}"
         );
     }
 
@@ -953,8 +951,7 @@ async fn test_manage_network_economics_reject_invalid() {
             NeuronsFundMatchedFundingCurveCoefficients {
                 full_participation_milestone_xdr: Some(Decimal {
                     human_readable: Some(format!(
-                        "{}",
-                        too_small_for_full_participation_milestone_xdr
+                        "{too_small_for_full_participation_milestone_xdr}"
                     )),
                 }),
                 ..Default::default()
@@ -994,7 +991,7 @@ async fn test_manage_network_economics_reject_invalid() {
         );
         let message = err.error_message.to_lowercase();
         for key_word in ["one_third", "full_participation"] {
-            assert!(message.contains(key_word), "{} not in {:#?}", key_word, err);
+            assert!(message.contains(key_word), "{key_word} not in {err:#?}");
         }
     }
 
@@ -1228,7 +1225,7 @@ async fn test_manage_network_economics_revalidate_at_execution_time(
         // Assert vote successful.
         match result.command {
             Some(manage_neuron_response::Command::RegisterVote(_)) => (),
-            _ => panic!("{:#?}", result),
+            _ => panic!("{result:#?}"),
         }
     }
 
@@ -1284,7 +1281,7 @@ async fn test_manage_network_economics_revalidate_at_execution_time(
         "greater",
         "minimum_icp_xdr_rate",
     ] {
-        assert!(message.contains(key_word), "{:#?}", second_proposal);
+        assert!(message.contains(key_word), "{second_proposal:#?}");
     }
 
     // Step 3.2: Let the caller inspect the resulting NetworkEconomics.
@@ -2770,7 +2767,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
 
     // The ballots should have been cleared
     let proposal = gov.get_proposal_data(proposal_id).unwrap();
-    assert!(proposal.ballots.is_empty(), "Proposal Info: {:?}", proposal);
+    assert!(proposal.ballots.is_empty(), "Proposal Info: {proposal:?}");
 
     // Now let's advance again -- a new empty reward event should happen
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
@@ -3512,7 +3509,7 @@ fn compute_maturities(
     assert_eq!(*gov.latest_reward_event(), expected_initial_event);
 
     for (i, behavior) in (1_u64..).zip(proposals.iter()) {
-        behavior.propose_and_vote(gov, format!("proposal {}", i));
+        behavior.propose_and_vote(gov, format!("proposal {i}"));
     }
 
     // Let's advance time by one reward periods. All proposals should be considered
@@ -3554,8 +3551,7 @@ fn compute_maturities(
     assert!(
         actual_reward_event.distributed_e8s_equivalent
             <= actual_reward_event.total_available_e8s_equivalent,
-        "{:#?}",
-        actual_reward_event,
+        "{actual_reward_event:#?}",
     );
 
     (0_u64..stakes_e8s.len() as u64)
@@ -3733,11 +3729,7 @@ fn test_random_voting_rewards_scenarios() {
                 / (*expected_neuron_rewards_e8s as f64);
             assert!(
                 (-EPSILON..=EPSILON).contains(&relative_diff),
-                "observed = {:?} vs expected = {:?}, seed = {}, proposals:\n{:#?}",
-                all_observed_voting_rewards_e8s,
-                all_expected_voting_rewards_e8s,
-                seed,
-                proposals,
+                "observed = {all_observed_voting_rewards_e8s:?} vs expected = {all_expected_voting_rewards_e8s:?}, seed = {seed}, proposals:\n{proposals:#?}",
             );
         }
 
@@ -4702,7 +4694,7 @@ fn test_claim_neuron_by_memo_only() {
 
     let nid = match manage_neuron_response.command.unwrap() {
         CommandResponse::ClaimOrRefresh(response) => response.refreshed_neuron_id,
-        CommandResponse::Error(error) => panic!("Error claiming neuron: {:?}", error),
+        CommandResponse::Error(error) => panic!("Error claiming neuron: {error:?}"),
         _ => panic!("Invalid response."),
     };
 
@@ -4759,7 +4751,7 @@ fn do_test_claim_neuron_by_memo_and_controller(owner: PrincipalId, caller: Princ
 
     let nid = match manage_neuron_response.command.unwrap() {
         CommandResponse::ClaimOrRefresh(response) => response.refreshed_neuron_id,
-        CommandResponse::Error(error) => panic!("Error claiming neuron: {:?}", error),
+        CommandResponse::Error(error) => panic!("Error claiming neuron: {error:?}"),
         _ => panic!("Invalid response."),
     };
 
@@ -4864,7 +4856,7 @@ fn refresh_neuron_by_memo(owner: PrincipalId, caller: PrincipalId) {
 
     let nid = match manage_neuron_response.command.unwrap() {
         CommandResponse::ClaimOrRefresh(response) => response.refreshed_neuron_id,
-        CommandResponse::Error(error) => panic!("Error claiming neuron: {:?}", error),
+        CommandResponse::Error(error) => panic!("Error claiming neuron: {error:?}"),
         _ => panic!("Invalid response."),
     };
 
@@ -4949,7 +4941,7 @@ fn refresh_neuron_by_id_or_subaccount(
 
     let nid = match manage_neuron_response.command.unwrap() {
         CommandResponse::ClaimOrRefresh(response) => response.refreshed_neuron_id,
-        CommandResponse::Error(error) => panic!("Error claiming neuron: {:?}", error),
+        CommandResponse::Error(error) => panic!("Error claiming neuron: {error:?}"),
         _ => panic!("Invalid response."),
     };
 
@@ -6459,7 +6451,7 @@ async fn test_neuron_with_non_self_authenticating_controller_is_now_allowed() {
     // Step 1: Prepare the world.
 
     let controller = PrincipalId::new_user_test_id(42);
-    assert!(!controller.is_self_authenticating(), "{:?}", controller);
+    assert!(!controller.is_self_authenticating(), "{controller:?}");
 
     let memo = 43;
     let neuron_subaccount = Subaccount(compute_neuron_staking_subaccount_bytes(controller, memo));
@@ -6507,12 +6499,12 @@ async fn test_neuron_with_non_self_authenticating_controller_is_now_allowed() {
     let manage_neuron_response::Command::ClaimOrRefresh(manage_neuron_response) =
         result.command.as_ref().unwrap()
     else {
-        panic!("{:#?}", result);
+        panic!("{result:#?}");
     };
     let Some(neuron_id) = manage_neuron_response.refreshed_neuron_id else {
-        panic!("{:#?}", result);
+        panic!("{result:#?}");
     };
-    assert!(neuron_id.id > 0, "{:#?}", result);
+    assert!(neuron_id.id > 0, "{result:#?}");
 
     // Step 3.2: Inspect the new neuron's controller.
     let neuron = gov.get_full_neuron(&neuron_id, &caller).unwrap();
@@ -6570,8 +6562,7 @@ fn test_disburse_to_neuron() {
                     .followees
                     .insert(topic, Followees { followees: vec![] })
                     .is_none(),
-                "{:#?}",
-                parent_neuron,
+                "{parent_neuron:#?}",
             );
             let followees = parent_neuron.followees.get_mut(&topic).unwrap();
             followees.followees.push(NeuronId { id: 42 });
@@ -7939,7 +7930,7 @@ async fn test_make_proposal_message() {
         .expect("Couldn't submit proposal.")
     {
         manage_neuron_response::Command::MakeProposal(resp) => resp,
-        r => panic!("Invalid response {:?}", r),
+        r => panic!("Invalid response {r:?}"),
     };
 
     assert_eq!(
@@ -7974,7 +7965,7 @@ async fn test_max_number_of_proposals_with_ballots() {
             &principal(1),
             &Proposal {
                 title: Some("A Reasonable Title".to_string()),
-                summary: format!("proposal {} summary", i),
+                summary: format!("proposal {i} summary"),
                 action: Some(proposal::Action::Motion(Motion {
                     motion_text: "dummy text".to_string(),
                 })),
@@ -9229,7 +9220,7 @@ where
     match result {
         CommandResponse::Configure(ok) => Ok(ok),
         CommandResponse::Error(err) => Err(GovernanceError::from(err)),
-        _ => panic!("{:#?}", result),
+        _ => panic!("{result:#?}"),
     }
 }
 
@@ -9337,7 +9328,7 @@ fn test_neuron_set_visibility() {
 
         let message = error_message.to_lowercase();
         for key_word in ["known", "visibility", "not allowed"] {
-            assert!(message.contains(key_word), "{:?}", err,);
+            assert!(message.contains(key_word), "{err:?}",);
         }
     }
 
@@ -9428,9 +9419,7 @@ fn test_deciding_and_potential_voting_power() {
         let new_timestamp_seconds = START_TIMESTAMP_SECONDS + seconds_since_start;
         assert!(
             new_timestamp_seconds > previous_timestamp_seconds,
-            "{} vs. {}",
-            new_timestamp_seconds,
-            previous_timestamp_seconds,
+            "{new_timestamp_seconds} vs. {previous_timestamp_seconds}",
         );
         driver.advance_time_by(new_timestamp_seconds - previous_timestamp_seconds);
         previous_timestamp_seconds = new_timestamp_seconds;
@@ -9461,13 +9450,11 @@ fn test_deciding_and_potential_voting_power() {
         // Because of age bonus, voting power increases.
         assert!(
             potential_voting_power > previous_potential_voting_power,
-            "{} vs. {}",
-            potential_voting_power,
-            previous_potential_voting_power,
+            "{potential_voting_power} vs. {previous_potential_voting_power}",
         );
         previous_potential_voting_power = potential_voting_power;
 
-        println!("{} vs. {}", deciding_voting_power, potential_voting_power);
+        println!("{deciding_voting_power} vs. {potential_voting_power}");
         deciding_voting_power as f64 / potential_voting_power as f64
     };
 
@@ -9765,17 +9752,17 @@ async fn test_refresh_voting_power() {
 
             let error_message = error_message.to_lowercase();
             for key_word in ["auth", "refresh", "voting power", "42"] {
-                assert!(error_message.contains(key_word), "{:?}", error);
+                assert!(error_message.contains(key_word), "{error:?}");
             }
         }
 
-        wrong => panic!("{:?}", wrong),
+        wrong => panic!("{wrong:?}"),
     }
 
     // Main happy case: Controller tries to refresh voting power.
     match refresh_voting_power(&mut governance, controller).await {
         manage_neuron_response::Command::RefreshVotingPower(_ok) => {}
-        wrong => panic!("{:?}", wrong),
+        wrong => panic!("{wrong:?}"),
     }
     assert_eq!(
         get_voting_power_refreshed_timestamp_seconds(&mut governance),
@@ -9787,7 +9774,7 @@ async fn test_refresh_voting_power() {
     driver.advance_time_by(delta_seconds);
     match refresh_voting_power(&mut governance, hot_key).await {
         manage_neuron_response::Command::RefreshVotingPower(_ok) => {}
-        wrong => panic!("{:?}", wrong),
+        wrong => panic!("{wrong:?}"),
     }
     assert_eq!(
         get_voting_power_refreshed_timestamp_seconds(&mut governance),
@@ -9908,7 +9895,7 @@ fn wait_for_quiet_test_helper(
             if result == successful_response || result == deadline_passed_response {
                 // Vote was successful or the deadline has passed
             } else {
-                panic!("Unexpected response: {:?}", result);
+                panic!("Unexpected response: {result:?}");
             }
         } else {
             break;
@@ -11812,7 +11799,7 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_sns_w_fail
     // Step 3: Inspect results.
     let proposal = gov.get_proposal_data(proposal_id).unwrap();
     // Assert that the proposal is executed and the lifecycle has been set
-    assert!(proposal.executed_timestamp_seconds > 0, "{:?}", proposal);
+    assert!(proposal.executed_timestamp_seconds > 0, "{proposal:?}");
     assert_eq!(
         proposal.sns_token_swap_lifecycle,
         Some(sns_swap_pb::Lifecycle::Open as i32)
@@ -11856,13 +11843,11 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_sns_w_fail
     assert!(
         settle_neurons_fund_participation_response
             .contains("not authorized to settle Neurons' Fund participation"),
-        "unexpected settle_neurons_fund_participation_response: {:?}",
-        settle_neurons_fund_participation_response,
+        "unexpected settle_neurons_fund_participation_response: {settle_neurons_fund_participation_response:?}",
     );
     assert!(
         settle_neurons_fund_participation_response.contains("list_deployed_snses failed"),
-        "unexpected settle_neurons_fund_participation_response: {:?}",
-        settle_neurons_fund_participation_response,
+        "unexpected settle_neurons_fund_participation_response: {settle_neurons_fund_participation_response:?}",
     );
 
     // Get the treasury account's balance again
@@ -11946,7 +11931,7 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_ledger_fai
     // Step 3: Inspect results.
     let proposal = gov.get_proposal_data(proposal_id).unwrap();
     // Assert that the proposal is executed and the lifecycle has been set
-    assert!(proposal.executed_timestamp_seconds > 0, "{:?}", proposal);
+    assert!(proposal.executed_timestamp_seconds > 0, "{proposal:?}");
     assert_eq!(
         proposal.sns_token_swap_lifecycle,
         Some(sns_swap_pb::Lifecycle::Open as i32)
@@ -11989,13 +11974,11 @@ async fn test_settle_neurons_fund_participation_restores_lifecycle_on_ledger_fai
     assert!(
         settle_neurons_fund_participation_response
             .contains("Minting ICP from the Neuron's Fund failed"),
-        "unexpected settle_neurons_fund_participation_response: {:?}",
-        settle_neurons_fund_participation_response,
+        "unexpected settle_neurons_fund_participation_response: {settle_neurons_fund_participation_response:?}",
     );
     assert!(
         settle_neurons_fund_participation_response.contains("Error conducting the transfer"),
-        "unexpected settle_neurons_fund_participation_response: {:?}",
-        settle_neurons_fund_participation_response,
+        "unexpected settle_neurons_fund_participation_response: {settle_neurons_fund_participation_response:?}",
     );
 
     // Get the treasury account's balance again
@@ -12252,7 +12235,7 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
                 },
             )
             .await;
-        assert!(response.is_ok(), "Expected Ok result, got {:?}", response);
+        assert!(response.is_ok(), "Expected Ok result, got {response:?}");
 
         // Re-inspect the proposal.
         let mut proposals: Vec<(_, _)> = gov.heap_data.proposals.iter().collect();
@@ -12276,8 +12259,7 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
             .lock()
             .unwrap()
             .is_empty(),
-        "Calls that should have been made, but were not: {:#?}",
-        expected_call_canister_method_calls,
+        "Calls that should have been made, but were not: {expected_call_canister_method_calls:#?}",
     );
 }
 
@@ -12395,7 +12377,7 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
             )
             .await;
 
-        assert!(response.is_ok(), "Expected Ok result, got {:?}", response);
+        assert!(response.is_ok(), "Expected Ok result, got {response:?}");
 
         // Re-inspect the proposal.
         let mut proposals: Vec<(_, _)> = gov.heap_data.proposals.iter().collect();
@@ -12422,8 +12404,7 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
             .lock()
             .unwrap()
             .is_empty(),
-        "Calls that should have been made, but were not: {:#?}",
-        expected_call_canister_method_calls,
+        "Calls that should have been made, but were not: {expected_call_canister_method_calls:#?}",
     );
 }
 
@@ -12516,8 +12497,7 @@ async fn test_create_service_nervous_system_proposal_execution_fails() {
     );
     assert!(
         failure_reason.error_message.contains("Error encountered"),
-        "proposal = {:#?}.",
-        proposal,
+        "proposal = {proposal:#?}.",
     );
     assert_eq!(proposal.derived_proposal_information, None);
 
@@ -12529,8 +12509,7 @@ async fn test_create_service_nervous_system_proposal_execution_fails() {
             .lock()
             .unwrap()
             .is_empty(),
-        "Calls that should have been made, but were not: {:#?}",
-        expected_call_canister_method_calls,
+        "Calls that should have been made, but were not: {expected_call_canister_method_calls:#?}",
     );
 }
 
@@ -12626,7 +12605,7 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
         )
         .await;
 
-    assert!(response.is_ok(), "Expected Ok result, got {:?}", response);
+    assert!(response.is_ok(), "Expected Ok result, got {response:?}");
 
     // Get the treasury account's balance again
     let sns_governance_treasury_balance_after_commitment = driver
@@ -12671,7 +12650,7 @@ async fn test_settle_neurons_fund_is_idempotent_for_create_service_nervous_syste
         )
         .await;
 
-    assert!(response.is_ok(), "Expected Ok result, got {:?}", response);
+    assert!(response.is_ok(), "Expected Ok result, got {response:?}");
 
     // Get the treasury account's balance again
     let sns_governance_treasury_balance_after_second_settle_call = driver

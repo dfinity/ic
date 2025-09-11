@@ -98,7 +98,7 @@ pub async fn get_pods(
     let label_selector = labels
         .map(|ls| {
             ls.iter()
-                .map(|(k, v)| format!("{}={}", k, v))
+                .map(|(k, v)| format!("{k}={v}"))
                 .collect::<Vec<String>>()
                 .join(",")
         })

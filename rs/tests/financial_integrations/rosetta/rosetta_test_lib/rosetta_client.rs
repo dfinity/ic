@@ -121,12 +121,12 @@ impl RosettaApiClient {
                 .body(body.clone())
                 .send()
                 .await
-                .map_err(|err| format!("sending post request failed with {}: ", err))?;
+                .map_err(|err| format!("sending post request failed with {err}: "))?;
             let response_status = response.status();
             let response_body = response
                 .bytes()
                 .await
-                .map_err(|err| format!("receive post response failed with {}: ", err))?
+                .map_err(|err| format!("receive post response failed with {err}: "))?
                 .to_vec();
             if response_status.is_success() || now.elapsed().unwrap() >= TIMEOUT {
                 debug!(
@@ -526,7 +526,7 @@ impl RosettaApiClient {
             }
             sleep(Duration::from_millis(100)).await;
         }
-        Err(format!("Timeout on waiting for block at {}", idx))
+        Err(format!("Timeout on waiting for block at {idx}"))
     }
 
     pub async fn wait_for_tip_sync(&self, tip_idx: BlockIndex) -> Result<(), String> {
@@ -544,7 +544,7 @@ impl RosettaApiClient {
             }
             sleep(Duration::from_millis(100)).await;
         }
-        Err(format!("Timeout on waiting for tip at {}", tip_idx))
+        Err(format!("Timeout on waiting for tip at {tip_idx}"))
     }
 
     pub async fn raw_construction_endpoint(

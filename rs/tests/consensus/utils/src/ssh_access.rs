@@ -70,7 +70,7 @@ impl Default for SshSession {
 
 impl SshSession {
     pub fn login(&mut self, ip: &IpAddr, username: &str, mean: &AuthMean) -> Result<(), String> {
-        let ip_str = format!("[{}]:22", ip);
+        let ip_str = format!("[{ip}]:22");
         let tcp = TcpStream::connect(ip_str).map_err(|err| err.to_string())?;
         self.session.set_tcp_stream(tcp);
         self.session.handshake().map_err(|err| err.to_string())?;
@@ -102,7 +102,7 @@ pub fn wait_until_authentication_is_granted(ip: &IpAddr, username: &str, mean: &
     loop {
         match SshSession::default().login(ip, username, mean) {
             Ok(_) => return,
-            Err(e) if current_time() > deadline => panic!("Authentication failed: {}", e),
+            Err(e) if current_time() > deadline => panic!("Authentication failed: {e}"),
             _ => {}
         }
     }
@@ -254,8 +254,7 @@ pub fn execute_bash_command(sess: &Session, command: String) -> Result<String, S
                     .read_to_string(&mut err_str)
                     .map_err(|e| format!("Failed to read stderr from the channel: {e}"))?;
                 Err(format!(
-                    "Error in: {}\nErr code: {}\nstdout: \n{}\nstderr: \n{}",
-                    command, status, out, err_str
+                    "Error in: {command}\nErr code: {status}\nstdout: \n{out}\nstderr: \n{err_str}"
                 ))
             }
         },
@@ -265,8 +264,7 @@ pub fn execute_bash_command(sess: &Session, command: String) -> Result<String, S
                 .read_to_string(&mut err_str)
                 .map_err(|e| format!("Failed to read stderr from the channel: {e}"))?;
             Err(format!(
-                "Error in: {}\nError: {}\nstdout: \n{}\nstderr: \n{}",
-                command, e, out, err_str
+                "Error in: {command}\nError: {e}\nstdout: \n{out}\nstderr: \n{err_str}"
             ))
         }
     }

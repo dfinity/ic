@@ -66,7 +66,7 @@ const JAEGER_ADDR_PATH: &str = "jaeger_addr";
 const SOCKS_PROXY_PATH: &str = "socks_proxy";
 
 fn mk_compressed_img_path() -> std::string::String {
-    format!("{}.zst", CONF_IMG_FNAME)
+    format!("{CONF_IMG_FNAME}.zst")
 }
 
 pub fn init_ic(
@@ -627,7 +627,7 @@ fn create_setupos_config_image(
     );
 
     // Create a unique temporary directory for this thread to avoid conflicts
-    let tmp_dir = env.get_path(format!("setupos_config_{}", name));
+    let tmp_dir = env.get_path(format!("setupos_config_{name}"));
     fs::create_dir_all(&tmp_dir)?;
 
     let build_setupos_config_image = get_build_setupos_config_image_tool();

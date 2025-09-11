@@ -152,8 +152,7 @@ fn test_sns_w_saves_metadata_on_upgrade() {
         } = response
         else {
             panic!(
-                "Unexpected response from SnsW.get_wasm_metadata: {:?}",
-                response
+                "Unexpected response from SnsW.get_wasm_metadata: {response:?}"
             );
         };
 
@@ -176,8 +175,7 @@ fn test_sns_w_saves_metadata_on_upgrade() {
         } = response
         else {
             panic!(
-                "Unexpected response from SnsW.get_wasm_metadata: {:?}",
-                response
+                "Unexpected response from SnsW.get_wasm_metadata: {response:?}"
             );
         };
         assert_eq!(sections, expected_metadata);

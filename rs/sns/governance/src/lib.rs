@@ -230,7 +230,7 @@ mod tests {
         Ok: Debug,
         Err: Debug,
     {
-        assert!(result.is_err(), "result: {:?}", result);
+        assert!(result.is_err(), "result: {result:?}");
     }
 
     pub fn assert_is_ok<Ok, Err>(result: Result<Ok, Err>)
@@ -238,7 +238,7 @@ mod tests {
         Ok: Debug,
         Err: Debug,
     {
-        assert!(result.is_ok(), "result: {:?}", result);
+        assert!(result.is_ok(), "result: {result:?}");
     }
 
     #[test]
@@ -292,13 +292,12 @@ mod tests {
         match result {
             Ok(_) => panic!(
                 "validate_required_field is supposed to return Err, \
-                 but returned {:?} instead.",
-                result
+                 but returned {result:?} instead."
             ),
 
             Err(err) => {
-                assert!(err.contains("foo"), "err: {:?}", err);
-                assert!(err.contains("populated"), "err: {:?}", err);
+                assert!(err.contains("foo"), "err: {err:?}");
+                assert!(err.contains("populated"), "err: {err:?}");
             }
         }
     }
@@ -310,14 +309,13 @@ mod tests {
         match result {
             Err(_) => panic!(
                 "validate_required_field is supposed to return Ok, \
-                 but returned {:?} instead.",
-                result
+                 but returned {result:?} instead."
             ),
 
             Ok(foo) => {
                 let expected: &i32 = widget.foo.as_ref().unwrap();
-                assert_eq!(foo, expected, "result: {:?}", result);
-                assert_eq!(*foo, 42, "result: {:?}", result);
+                assert_eq!(foo, expected, "result: {result:?}");
+                assert_eq!(*foo, 42, "result: {result:?}");
             }
         }
     }
@@ -328,9 +326,9 @@ mod tests {
         match result {
             Ok(()) => panic!("field_err is supposed to always return an Err."),
             Err(err) => {
-                assert!(err.contains("my_field"), "err: {}", err);
-                assert!(err.contains("41"), "err: {}", err);
-                assert!(err.contains("not the meaning of life"), "err: {}", err);
+                assert!(err.contains("my_field"), "err: {err}");
+                assert!(err.contains("41"), "err: {err}");
+                assert!(err.contains("not the meaning of life"), "err: {err}");
             }
         }
     }
@@ -359,9 +357,7 @@ mod tests {
                 run_test_for_value_of_size(barely_not_too_large_len + 1);
             assert!(
                 !observer_err.contains(&input_value),
-                "Expected ```{}``` not to contain ```{}```.",
-                observer_err,
-                input_value
+                "Expected ```{observer_err}``` not to contain ```{input_value}```."
             );
             // Only the last character was dropped.
             assert!(observer_err.contains(&input_value[..(input_value.chars().count() - 1)]));

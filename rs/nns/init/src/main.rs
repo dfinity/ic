@@ -133,7 +133,7 @@ const GTC_FORWARD_ALL_UNCLAIMED_ACCOUNTS_RECIPIENT_NEURON_ID: NeuronId = NeuronI
 #[tokio::main]
 async fn main() {
     let args = CliArgs::try_parse_from(std::env::args())
-        .unwrap_or_else(|e| panic!("Illegal arguments: {}", e));
+        .unwrap_or_else(|e| panic!("Illegal arguments: {e}"));
 
     let init_payloads = create_init_payloads(&args);
 
@@ -170,8 +170,7 @@ async fn main() {
         false => NnsCanisters::set_up(&runtime, init_payloads).await,
     };
     eprintln!(
-        "{}All NNS canisters have been set up on the replica with {}",
-        LOG_PREFIX, url
+        "{LOG_PREFIX}All NNS canisters have been set up on the replica with {url}"
     );
 }
 
@@ -187,14 +186,12 @@ fn create_init_payloads(args: &CliArgs) -> NnsInitPayloads {
 
     if let Some(path) = &args.initial_neurons {
         eprintln!(
-            "{}Initializing neurons from CSV file: {:?}",
-            LOG_PREFIX, path
+            "{LOG_PREFIX}Initializing neurons from CSV file: {path:?}"
         );
         init_payloads_builder.with_neurons_from_csv_file(path);
     } else {
         eprintln!(
-            "{}Initial neuron CSV or PB path not specified, initializing with test neurons",
-            LOG_PREFIX
+            "{LOG_PREFIX}Initial neuron CSV or PB path not specified, initializing with test neurons"
         );
         init_payloads_builder
             // We need some neurons, because we need to vote on some proposals to create subnets.
@@ -256,7 +253,7 @@ fn create_init_payloads(args: &CliArgs) -> NnsInitPayloads {
             .collect(),
     );
 
-    println!("{}Initialized governance.", LOG_PREFIX);
+    println!("{LOG_PREFIX}Initialized governance.");
 
     init_payloads_builder.build()
 }
@@ -268,8 +265,7 @@ fn add_registry_content(
 ) {
     let mutate_reqs = match (ic_prep_path, registry_local_store_dir) {
         (Some(_), Some(_)) => panic!(
-            "{} --initial-registry and --registry-local-store-dir are incompatible, gotta make up your mind!",
-            LOG_PREFIX
+            "{LOG_PREFIX} --initial-registry and --registry-local-store-dir are incompatible, gotta make up your mind!"
         ),
         (None, None) => vec![],
         (Some(p), None) => ic_nns_init::read_initial_mutations_from_ic_prep(p),
@@ -277,10 +273,9 @@ fn add_registry_content(
     };
     if mutate_reqs.is_empty() {
         eprintln!(
-            "{}The content of the registry will be initialized with an empty content. \
+            "{LOG_PREFIX}The content of the registry will be initialized with an empty content. \
         This is most likely not what you want. \
-        Use --initial-registry or --registry-local-store-dir to specify initial content.",
-            LOG_PREFIX
+        Use --initial-registry or --registry-local-store-dir to specify initial content."
         );
     } else {
         eprintln!(

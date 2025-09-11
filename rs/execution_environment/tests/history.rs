@@ -247,9 +247,7 @@ fn test_invalid_transitions() {
             });
             assert!(
                 result.is_err(),
-                "transition from {:?} to {:?} worked but should have failed",
-                origin_state,
-                next_state
+                "transition from {origin_state:?} to {next_state:?} worked but should have failed"
             );
         }
     })

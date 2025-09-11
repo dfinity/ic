@@ -114,7 +114,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
                 .expect("Error calling the manage_neuron api.");
 
             let neuron_id = match manage_neuron_response.command.unwrap() {
-                CommandResponse::Error(error) => panic!("Unexpected error: {}", error),
+                CommandResponse::Error(error) => panic!("Unexpected error: {error}"),
                 CommandResponse::ClaimOrRefresh(claim_or_refresh_response) => {
                     claim_or_refresh_response.refreshed_neuron_id.unwrap()
                 }

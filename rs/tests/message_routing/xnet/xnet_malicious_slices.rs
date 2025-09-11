@@ -170,7 +170,7 @@ pub async fn test_async(env: TestEnv, config: Config) {
     tokio::time::sleep(Duration::from_secs(config.runtime.as_secs())).await;
 
     for (index, subnet) in env.topology_snapshot().subnets().enumerate() {
-        println!("Collecting metrics for subnet {}.", index);
+        println!("Collecting metrics for subnet {index}.");
         fetch_metrics_and_assert(&env, subnet).await;
     }
 }

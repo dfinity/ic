@@ -304,7 +304,7 @@ impl InternetComputer {
             .chain(self.unassigned_nodes.iter_mut())
             .chain(self.api_boundary_nodes.iter_mut())
         {
-            let sks = NodeSecretKeyStore::new(tempdir.join(format!("node-{:p}", node)))?;
+            let sks = NodeSecretKeyStore::new(tempdir.join(format!("node-{node:p}")))?;
             node.secret_key_store = Some(sks);
         }
         Ok(())
@@ -534,8 +534,7 @@ impl Subnet {
     pub fn fast(subnet_type: SubnetType, no_of_nodes: usize) -> Self {
         assert!(
             0 < no_of_nodes,
-            "cannot create subner with {} nodes",
-            no_of_nodes
+            "cannot create subner with {no_of_nodes} nodes"
         );
         Self::new(subnet_type)
             // Shorter block time.
@@ -713,7 +712,7 @@ impl Subnet {
     pub fn summary(&self) -> String {
         let ns = self.nodes.len();
         let mut s = DefaultHasher::new();
-        format!("{:?}", self).hash(&mut s);
+        format!("{self:?}").hash(&mut s);
         let config_hash = format!("{:x}", s.finish());
         format!("S{:02}{}", ns, &config_hash[0..3])
     }

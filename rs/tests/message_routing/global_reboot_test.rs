@@ -199,8 +199,7 @@ pub fn start_all_canisters(
                 .await
                 .unwrap_or_else(|_| {
                     panic!(
-                        "Starting canister_idx={} on subnet_idx={} failed.",
-                        canister_idx, subnet_idx
+                        "Starting canister_idx={canister_idx} on subnet_idx={subnet_idx} failed."
                     )
                 });
         }
@@ -261,8 +260,7 @@ pub fn collect_metrics(canisters: &[Vec<Canister>]) -> Vec<Vec<Metrics>> {
                 .await
                 .unwrap_or_else(|_| {
                     panic!(
-                        "Collecting metrics for canister_idx={} on subnet_idx={} failed.",
-                        canister_idx, subnet_idx
+                        "Collecting metrics for canister_idx={canister_idx} on subnet_idx={subnet_idx} failed."
                     )
                 });
             metrics[subnet_idx].push(result);
@@ -288,8 +286,7 @@ pub fn install_canisters(
                     .await
                     .unwrap_or_else(|_| {
                         panic!(
-                            "Installation of the canister_idx={} on subnet_idx={} failed.",
-                            canister_idx, subnet_idx
+                            "Installation of the canister_idx={canister_idx} on subnet_idx={subnet_idx} failed."
                         )
                     });
                 canisters[subnet_idx].push(canister);

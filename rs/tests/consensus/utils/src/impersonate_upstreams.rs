@@ -72,8 +72,7 @@ pub fn uvm_serve_guestos_image(
         env,
         image_path,
         Path::new(&format!(
-            "ic/{}/guest-os/update-img/update-img.tar.zst",
-            image_version
+            "ic/{image_version}/guest-os/update-img/update-img.tar.zst"
         )),
     )
 }
@@ -86,7 +85,7 @@ pub fn uvm_serve_recovery_artifacts(
     uvm_serve_file(
         env,
         artifacts_path,
-        Path::new(&format!("recovery/{}/recovery.tar.zst", artifacts_hash)),
+        Path::new(&format!("recovery/{artifacts_hash}/recovery.tar.zst")),
     )
 }
 
@@ -120,9 +119,8 @@ fn get_spoof_commands(server_ipv6: &Ipv6Addr) -> String {
     for upstream in UPSTREAMS {
         command.push_str(&format!(
             r#"
-                echo "{} {}" | sudo tee -a /tmp/hosts > /dev/null
-            "#,
-            server_ipv6, upstream
+                echo "{server_ipv6} {upstream}" | sudo tee -a /tmp/hosts > /dev/null
+            "#
         ));
     }
     // Match the original /etc/hosts file permissions.

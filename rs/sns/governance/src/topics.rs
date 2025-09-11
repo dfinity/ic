@@ -509,16 +509,14 @@ mod test {
             let function_id_found = native_functions_with_topic.remove(&native_function_id);
             assert!(
                 function_id_found,
-                "Topic not defined for native proposal '{}' with ID {}.",
-                native_function_name, native_function_id,
+                "Topic not defined for native proposal '{native_function_name}' with ID {native_function_id}.",
             )
         }
 
         assert_eq!(
             native_functions_with_topic,
             BTreeSet::new(),
-            "Some native proposal topics were defined for non-native proposals: {:?}",
-            native_functions_with_topic,
+            "Some native proposal topics were defined for non-native proposals: {native_functions_with_topic:?}",
         )
     }
 }

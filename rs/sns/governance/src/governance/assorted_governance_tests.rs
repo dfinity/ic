@@ -139,8 +139,7 @@ fn unspecified_mode_is_invalid() {
     };
     assert!(
         ValidGovernanceProto::try_from(g.clone()).is_err(),
-        "{:#?}",
-        g
+        "{g:#?}"
     );
 }
 
@@ -152,8 +151,7 @@ fn garbage_mode_is_invalid() {
     };
     assert!(
         ValidGovernanceProto::try_from(g.clone()).is_err(),
-        "{:#?}",
-        g
+        "{g:#?}"
     );
 }
 
@@ -304,7 +302,7 @@ async fn test_perform_transfer_sns_treasury_funds_execution_fails_when_another_c
         "already",
         "in progress",
     ] {
-        assert!(error_message.contains(term), "{:#?}", err);
+        assert!(error_message.contains(term), "{err:#?}");
     }
 }
 
@@ -477,13 +475,13 @@ async fn test_neuron_operations_exclude_one_another() {
                         err,
                     );
                 }
-                _ => panic!("configure_result: {:#?}", configure_result),
+                _ => panic!("configure_result: {configure_result:#?}"),
             }
 
             // Allow disburse to complete.
             transfer_funds_continue.notify_one();
             let disburse_result = disburse_future.await;
-            assert!(disburse_result.is_ok(), "{:#?}", disburse_result);
+            assert!(disburse_result.is_ok(), "{disburse_result:#?}");
         })
         .await;
 }
@@ -550,16 +548,13 @@ fn swap_canister_id_is_required_when_mode_is_pre_initialization_swap() {
     let r = ValidGovernanceProto::try_from(proto.clone());
     match r {
         Ok(_ok) => panic!(
-            "Invalid Governance proto, but wasn't rejected: {:#?}",
-            proto
+            "Invalid Governance proto, but wasn't rejected: {proto:#?}"
         ),
         Err(err) => {
             for key_word in ["swap_canister_id", "populate"] {
                 assert!(
                     err.contains(key_word),
-                    "{:#?} not present in the error: {:#?}",
-                    key_word,
-                    err
+                    "{key_word:#?} not present in the error: {err:#?}"
                 );
             }
         }
@@ -779,7 +774,7 @@ fn execute_proposal(governance: &mut Governance, proposal_id: u64) -> ProposalDa
             .unwrap();
         let proposal_data = match result {
             get_proposal_response::Result::Proposal(p) => p,
-            _ => panic!("get_proposal result: {:#?}", result),
+            _ => panic!("get_proposal result: {result:#?}"),
         };
 
         let upgrade_sns_action_id = 7;
@@ -870,21 +865,19 @@ async fn test_disallow_enabling_voting_rewards_while_in_pre_initialization_swap(
 
     // Step 3: Inspect result(s).
     let err = match result {
-        Ok(ok) => panic!("Proposal should have been rejected: {:#?}", ok),
+        Ok(ok) => panic!("Proposal should have been rejected: {ok:#?}"),
         Err(err) => err,
     };
 
     let err = err.error_message.to_lowercase();
     assert!(
         err.contains("manage nervous system parameters"),
-        "{:#?}",
-        err
+        "{err:#?}"
     );
-    assert!(err.contains("not allowed"), "{:#?}", err);
+    assert!(err.contains("not allowed"), "{err:#?}");
     assert!(
         err.contains("in preinitializationswap (2) mode"),
-        "{:#?}",
-        err
+        "{err:#?}"
     );
 }
 
@@ -984,8 +977,7 @@ async fn no_new_reward_event_when_there_are_no_new_proposals() {
     let original_latest_reward_event = governance.proto.latest_reward_event.clone();
     assert!(
         original_latest_reward_event.is_some(),
-        "{:#?}",
-        original_latest_reward_event
+        "{original_latest_reward_event:#?}"
     );
 
     // Step 1.4: Make a proposal.
@@ -1076,10 +1068,8 @@ async fn no_new_reward_event_when_there_are_no_new_proposals() {
     let distributed_e8s_range = min_distributed_e8s..max_distributed_e8s;
     assert!(
         distributed_e8s_range.contains(&i2d(final_latest_reward_event.distributed_e8s_equivalent)),
-        "distributed_e8s_range = {:?}\n\
-            final_latest_reward_event = {:#?}",
-        distributed_e8s_range,
-        final_latest_reward_event,
+        "distributed_e8s_range = {distributed_e8s_range:?}\n\
+            final_latest_reward_event = {final_latest_reward_event:#?}",
     );
 
     assert_eq!(
@@ -1238,7 +1228,7 @@ fn test_disallow_concurrent_upgrade_execution(
             .unwrap();
         let proposal_data = match result {
             get_proposal_response::Result::Proposal(p) => p,
-            _ => panic!("get_proposal result: {:#?}", result),
+            _ => panic!("get_proposal result: {result:#?}"),
         };
 
         if proposal_data.status().is_final() {
@@ -3238,7 +3228,7 @@ fn test_allow_canister_upgrades_while_motion_proposal_execution_is_in_progress()
     let result = governance.check_no_upgrades_in_progress(Some(upgrade_proposal_id));
 
     // Step 3: Inspect result.
-    assert!(result.is_ok(), "{:#?}", result);
+    assert!(result.is_ok(), "{result:#?}");
 }
 
 #[test]
@@ -3298,7 +3288,7 @@ fn test_allow_canister_upgrades_while_another_upgrade_proposal_is_open() {
     let result = governance.check_no_upgrades_in_progress(Some(executing_upgrade_proposal_id));
 
     // Step 3: Inspect result.
-    assert!(result.is_ok(), "{:#?}", result);
+    assert!(result.is_ok(), "{result:#?}");
 }
 
 #[test]
@@ -3359,7 +3349,7 @@ fn test_allow_canister_upgrades_after_another_upgrade_proposal_has_executed() {
     let result = governance.check_no_upgrades_in_progress(Some(upgrade_proposal_id));
 
     // Step 3: Inspect result.
-    assert!(result.is_ok(), "{:#?}", result);
+    assert!(result.is_ok(), "{result:#?}");
 }
 
 #[test]
@@ -3402,7 +3392,7 @@ fn test_allow_canister_upgrades_proposal_does_not_block_itself_but_does_block_ot
 
     // Step 2 & 3: Run code under test, and inspect results.
     let result = governance.check_no_upgrades_in_progress(Some(proposal_id));
-    assert!(result.is_ok(), "{:#?}", result);
+    assert!(result.is_ok(), "{result:#?}");
 
     // Other upgrades should be blocked by proposal 1 though.
     let some_other_proposal_id = 99_u64;
@@ -3528,8 +3518,7 @@ fn test_upgrade_proposals_not_blocked_by_old_upgrade_proposals() {
     match governance.check_no_upgrades_in_progress(Some(some_other_proposal_id)) {
         Ok(_) => {}
         Err(err) => panic!(
-            "The proposal should not have gotten blocked by an old proposal. Instead, it was blocked due to: {:#?}",
-            err
+            "The proposal should not have gotten blocked by an old proposal. Instead, it was blocked due to: {err:#?}"
         ),
     }
 
@@ -4602,9 +4591,7 @@ fn assert_adding_generic_nervous_system_function_fails_for_target_and_validator(
         .perform_add_generic_nervous_system_function(nns_function_invalid_validator.clone());
     assert!(
         result.is_err(),
-        "function: {:?}\nresult: {:?}",
-        nns_function_invalid_validator,
-        result
+        "function: {nns_function_invalid_validator:?}\nresult: {result:?}"
     );
 
     let nns_function_invalid_target = NervousSystemFunction {
@@ -4625,9 +4612,7 @@ fn assert_adding_generic_nervous_system_function_fails_for_target_and_validator(
         governance.perform_add_generic_nervous_system_function(nns_function_invalid_target.clone());
     assert!(
         result.is_err(),
-        "function: {:?}\nresult: {:?}",
-        nns_function_invalid_target,
-        result
+        "function: {nns_function_invalid_target:?}\nresult: {result:?}"
     );
 }
 

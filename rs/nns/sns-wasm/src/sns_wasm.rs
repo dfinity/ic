@@ -2188,8 +2188,7 @@ mod test {
             let amount = *self.canister_cycles_balance.lock().unwrap();
             if amount < required_cycles {
                 return Err(format!(
-                    "Not enough cycles in canister.  Required: {}. Found: {}",
-                    required_cycles, amount
+                    "Not enough cycles in canister.  Required: {required_cycles}. Found: {amount}"
                 ));
             }
             Ok(amount)
@@ -2199,8 +2198,7 @@ mod test {
             let amount = *self.cycles_found_in_request.lock().unwrap();
             if amount < required_cycles {
                 return Err(format!(
-                    "Not enough cycles in request.  Required: {}. Found: {}",
-                    required_cycles, amount
+                    "Not enough cycles in request.  Required: {required_cycles}. Found: {amount}"
                 ));
             }
             Ok(amount)
@@ -2307,7 +2305,7 @@ mod test {
 
         let wasm_id = |label: &str| {
             if let Some(group_number) = group_number {
-                format!("{}_{}", label, group_number)
+                format!("{label}_{group_number}")
             } else {
                 label.to_string()
             }

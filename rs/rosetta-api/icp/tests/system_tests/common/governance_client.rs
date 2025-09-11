@@ -75,8 +75,7 @@ impl GovernanceClient {
             Ok(proposal_id.unwrap())
         } else {
             Err(format!(
-                "Making Proposal was unsuccessful --> Response : {:?}",
-                manage_neuron_res
+                "Making Proposal was unsuccessful --> Response : {manage_neuron_res:?}"
             ))
         }
     }

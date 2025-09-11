@@ -69,8 +69,8 @@ impl TestEnv {
 
     pub fn read_json_object<T: DeserializeOwned, P: AsRef<Path>>(&self, p: P) -> Result<T> {
         let path = self.get_json_path(&p);
-        let file = File::open(&path).with_context(|| format!("Could not open: {:?}", path))?;
-        serde_json::from_reader(file).with_context(|| format!("{:?}: Could not read json.", path))
+        let file = File::open(&path).with_context(|| format!("Could not open: {path:?}"))?;
+        serde_json::from_reader(file).with_context(|| format!("{path:?}: Could not read json."))
     }
 
     pub fn write_json_object<T: Serialize, P: AsRef<Path>>(&self, p: P, t: &T) -> Result<()> {
@@ -85,7 +85,7 @@ impl TestEnv {
         write_atomically(&path, Clobber::Yes, |buf| {
             serde_json::to_writer(buf, t).map_err(|e| std::io::Error::other(e.to_string()))
         })
-        .with_context(|| format!("{:?}: Could not write json object.", path))
+        .with_context(|| format!("{path:?}: Could not write json object."))
     }
 
     pub fn get_path<P: AsRef<Path>>(&self, p: P) -> PathBuf {
@@ -166,7 +166,7 @@ impl TestEnv {
         let mut path = self.get_path(&p);
         let new_ext = match path.extension().and_then(|x| x.to_str()) {
             Some("json") => return path,
-            Some(x) => format!("{}.json", x),
+            Some(x) => format!("{x}.json"),
             _ => "json".to_string(),
         };
         path.set_extension(new_ext);
@@ -291,7 +291,7 @@ impl HasIcPrepDir for TestEnv {
         if self.prep_dir(name).is_some() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
-                format!("prep-directory for '{}' already exists", name),
+                format!("prep-directory for '{name}' already exists"),
             ));
         }
         let p = ic_prep_path(self.base_path(), name);
@@ -312,7 +312,7 @@ fn ic_prep_path(base_path: PathBuf, name: &str) -> PathBuf {
     let dir_name = if name.is_empty() {
         "ic_prep".to_string()
     } else {
-        format!("ic_prep_{}", name)
+        format!("ic_prep_{name}")
     };
     base_path.join(dir_name)
 }

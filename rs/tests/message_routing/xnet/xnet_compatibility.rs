@@ -293,8 +293,7 @@ async fn assert_no_critical_errors(env: &TestEnv, log: &slog::Logger) {
                     .collect::<BTreeMap<_, _>>();
                 assert!(
                     filtered_results.is_empty(),
-                    "Critical error detected: {:?}",
-                    filtered_results
+                    "Critical error detected: {filtered_results:?}"
                 );
                 return;
             }

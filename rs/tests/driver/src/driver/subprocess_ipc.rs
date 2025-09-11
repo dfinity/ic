@@ -389,7 +389,7 @@ mod ser {
 
             f(&Record::new(
                 &rs,
-                &format_args!("{}", msg),
+                &format_args!("{msg}"),
                 b!("task_id" => format!("{}", task_id)),
             ));
         }

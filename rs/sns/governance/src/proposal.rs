@@ -4051,9 +4051,7 @@ Version {
         let target_string = "There is no next version found for the current SNS version: Version {";
         assert!(
             err.contains(target_string),
-            "Test did not contain '{}'.  Actual: {}",
-            target_string,
-            err
+            "Test did not contain '{target_string}'.  Actual: {err}"
         );
     }
 
@@ -5609,9 +5607,7 @@ Payload rendering here"#
         ] {
             assert!(
                 render.contains(keyword),
-                "Proposal render:\n{}\n does not contain expected keyword {}",
-                render,
-                keyword
+                "Proposal render:\n{render}\n does not contain expected keyword {keyword}"
             );
         }
     }
@@ -5656,9 +5652,7 @@ Payload rendering here"#
         ] {
             assert!(
                 rendered.contains(expected_content),
-                "Rendered proposal:\n{}\n\ndoes not contain expected content: {}",
-                rendered,
-                expected_content
+                "Rendered proposal:\n{rendered}\n\ndoes not contain expected content: {expected_content}"
             );
         }
     }

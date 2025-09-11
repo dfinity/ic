@@ -348,7 +348,7 @@ fn test_gaps_handling() {
 
         // Create a connection to the database
         let connection = Connection::open_with_flags(
-            format!("'file:{}?mode=memory&cache=shared', uri=True", DB_NAME),
+            format!("'file:{DB_NAME}?mode=memory&cache=shared', uri=True"),
             OpenFlags::default(),
         )
         .unwrap();

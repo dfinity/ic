@@ -595,7 +595,7 @@ pub async fn execute_update_subnet_proposal(
         governance,
         NnsFunction::UpdateConfigOfSubnet,
         proposal_payload,
-        &format!("<subnet update proposal created by system test>: {}", title),
+        &format!("<subnet update proposal created by system test>: {title}"),
         logger,
     )
     .await;

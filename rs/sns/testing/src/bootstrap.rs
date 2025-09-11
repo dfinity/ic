@@ -129,7 +129,7 @@ pub async fn bootstrap_nns(
     .unwrap();
     let deciding_neuron_id = match res {
         ClaimOrRefreshNeuronFromAccountResponseResult::NeuronId(neuron_id) => neuron_id,
-        _ => panic!("Unexpected result of claiming NNS neuron: {:?}", res),
+        _ => panic!("Unexpected result of claiming NNS neuron: {res:?}"),
     };
 
     // And finally update the neuron.

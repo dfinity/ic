@@ -392,8 +392,7 @@ fn test_claim_neuron_happy() {
         assert_eq!(
             ErrorType::try_from(error.error_type).unwrap(),
             ErrorType::InsufficientFunds,
-            "{:#?}",
-            error,
+            "{error:#?}",
         );
 
         // Now stake 1 governance token using the calculated subaccount
@@ -716,7 +715,7 @@ fn test_neuron_action_is_not_authorized() {
 
         match manage_neuron_response.command.unwrap() {
             CommandResponse::Error(e) => assert_eq!(e.error_type, ErrorType::NotAuthorized as i32),
-            response => panic!("Unexpected response, {:?}", response),
+            response => panic!("Unexpected response, {response:?}"),
         }
 
         Ok(())
@@ -773,7 +772,7 @@ fn test_disburse_maturity_succeeds_to_self() {
 
         let response = match manage_neuron_response.command.unwrap() {
             CommandResponse::DisburseMaturity(response) => response,
-            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+            response => panic!("Unexpected response from manage_neuron: {response:?}"),
         };
 
         // 3. Inspect the state after disbursal.
@@ -790,15 +789,11 @@ fn test_disburse_maturity_succeeds_to_self() {
         let d_age = now - ts;
         assert!(
             d_age >= 0,
-            "Disbursement timestamp {} is in the future (now = {})",
-            ts,
-            now
+            "Disbursement timestamp {ts} is in the future (now = {now})"
         );
         assert!(
             d_age < 10,
-            "Disbursement timestamp {} is too old (now = {})",
-            ts,
-            now
+            "Disbursement timestamp {ts} is too old (now = {now})"
         );
 
         Ok(())
@@ -842,7 +837,7 @@ fn test_disburse_maturity_succeeds_to_other_account() {
 
         let response = match manage_neuron_response.command.unwrap() {
             CommandResponse::DisburseMaturity(response) => response,
-            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+            response => panic!("Unexpected response from manage_neuron: {response:?}"),
         };
         // 3. Inspect the state after disbursal.
         // Disbursed 50% of the maturity
@@ -871,15 +866,11 @@ fn test_disburse_maturity_succeeds_to_other_account() {
         let d_age = now - ts;
         assert!(
             d_age >= 0,
-            "Disbursement timestamp {} is in the future (now = {})",
-            ts,
-            now
+            "Disbursement timestamp {ts} is in the future (now = {now})"
         );
         assert!(
             d_age < 10,
-            "Disbursement timestamp {} is too old (now = {})",
-            ts,
-            now
+            "Disbursement timestamp {ts} is too old (now = {now})"
         );
 
         Ok(())
@@ -1042,7 +1033,7 @@ fn test_stake_maturity_succeeds() {
 
         let response = match manage_neuron_response.command.unwrap() {
             CommandResponse::StakeMaturity(response) => response,
-            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+            response => panic!("Unexpected response from manage_neuron: {response:?}"),
         };
         assert_eq!(response.staked_maturity_e8s, earned_maturity_e8s);
         assert_eq!(response.maturity_e8s, 0);
@@ -1096,7 +1087,7 @@ fn test_stake_maturity_succeeds_with_partial_percentage() {
 
         let response = match manage_neuron_response.command.unwrap() {
             CommandResponse::StakeMaturity(response) => response,
-            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+            response => panic!("Unexpected response from manage_neuron: {response:?}"),
         };
         let remaining_maturity = earned_maturity_e8s.saturating_sub(maturity_to_be_staked);
         assert_eq!(response.staked_maturity_e8s, maturity_to_be_staked);
@@ -1149,10 +1140,9 @@ fn test_stake_maturity_fails_when_not_authorized() {
         let response = match manage_neuron_response.command.unwrap() {
             CommandResponse::Error(error) => error,
             CommandResponse::StakeMaturity(response) => panic!(
-                "Neuron should not have been able to stake maturity: {:?}",
-                response
+                "Neuron should not have been able to stake maturity: {response:?}"
             ),
-            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+            response => panic!("Unexpected response from manage_neuron: {response:?}"),
         };
         assert_eq!(response.error_type, ErrorType::NotAuthorized as i32);
 
@@ -1348,8 +1338,7 @@ async fn zero_total_reward_shares() {
     // We expect no change to the neuron's maturity.
     assert_eq!(
         neuron.maturity_e8s_equivalent, maturity_e8s_equivalent,
-        "neuron: {:#?}",
-        neuron,
+        "neuron: {neuron:#?}",
     );
 
     // Step 3.2: Inspect the latest_reward_event.
@@ -1361,13 +1350,11 @@ async fn zero_total_reward_shares() {
             .map(|p| p.id)
             .collect::<Vec<_>>(),
         vec![proposal_id],
-        "{:#?}",
-        reward_event,
+        "{reward_event:#?}",
     );
     assert_eq!(
         reward_event.distributed_e8s_equivalent, 0,
-        "{:#?}",
-        reward_event,
+        "{reward_event:#?}",
     );
 }
 
@@ -1482,7 +1469,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
     ];
     // Assert that neurons have voting power; otherwise, they won't receive voting rewards.
     for neuron in &neurons {
-        assert!(voting_power(neuron) > 0, "{:#?}", neuron);
+        assert!(voting_power(neuron) > 0, "{neuron:#?}");
     }
 
     // Step 1.2: Craft a ProposalData. The first neuron voted yes. The second
@@ -1594,12 +1581,11 @@ async fn couple_of_neurons_who_voted_get_rewards() {
             .map(|p| p.id)
             .collect::<Vec<_>>(),
         vec![proposal_id],
-        "{:#?}",
-        reward_event,
+        "{reward_event:#?}",
     );
 
     let rewards_e8s = reward_event.distributed_e8s_equivalent;
-    assert!(rewards_e8s > 0, "{:#?}", reward_event,);
+    assert!(rewards_e8s > 0, "{reward_event:#?}",);
     let observed_reward_rate_per_round = i2d(rewards_e8s) / i2d(TOTAL_SUPPLY);
     let reward_rate_per_round_range = {
         let round_duration = VOTING_REWARDS_PARAMETERS.round_duration();
@@ -1617,10 +1603,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
     assert!(
         reward_rate_per_round_range.contains(&observed_reward_rate_per_round),
         "Observed reward rate not between the initial and final reward \
-         rate: rewards_e8s = {}, which gives an effective rate of {} vs. reward_rate_per_round_range = {:?}",
-        rewards_e8s,
-        observed_reward_rate_per_round,
-        reward_rate_per_round_range,
+         rate: rewards_e8s = {rewards_e8s}, which gives an effective rate of {observed_reward_rate_per_round} vs. reward_rate_per_round_range = {reward_rate_per_round_range:?}",
     );
 
     // Step 3.2: Inspect the neurons. In particular, look at their maturity to
@@ -1647,12 +1630,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
         let epsilon = i2d(1) / i2d(1_000_000);
         assert!(
             delta < epsilon,
-            "neuron = {:#?}, weight = {:#?} (out of 5), rewards_e8s = {:#?}, delta = {:#?}, epsilon = {:#?}",
-            neuron,
-            weight,
-            rewards_e8s,
-            delta,
-            epsilon,
+            "neuron = {neuron:#?}, weight = {weight:#?} (out of 5), rewards_e8s = {rewards_e8s:#?}, delta = {delta:#?}, epsilon = {epsilon:#?}",
         );
 
         total_observed_rewards_e8s += observed_reward;
@@ -2052,7 +2030,7 @@ fn test_neuron_add_non_grantable_permission_fails() {
                 panic!("RemoveNeuronPermissions should have errored")
             }
             CommandResponse::Error(error) => error,
-            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+            response => panic!("Unexpected response from manage_neuron: {response:?}"),
         };
 
         assert_eq!(
@@ -2155,7 +2133,7 @@ fn test_exceeding_max_principals_for_neuron_fails() {
                 panic!("RemoveNeuronPermissions should have errored")
             }
             CommandResponse::Error(error) => error,
-            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+            response => panic!("Unexpected response from manage_neuron: {response:?}"),
         };
 
         assert_eq!(error.error_type, ErrorType::PreconditionFailed as i32);
@@ -2222,7 +2200,7 @@ fn test_add_neuron_permission_missing_principal_id_fails() {
                 panic!("AddNeuronPermission should have errored")
             }
             CommandResponse::Error(error) => error,
-            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+            response => panic!("Unexpected response from manage_neuron: {response:?}"),
         };
 
         assert_eq!(error.error_type, ErrorType::InvalidCommand as i32);
@@ -2417,7 +2395,7 @@ fn test_neuron_remove_permissions_of_wrong_principal() {
                 panic!("RemoveNeuronPermissions should have errored")
             }
             CommandResponse::Error(error) => error,
-            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+            response => panic!("Unexpected response from manage_neuron: {response:?}"),
         };
 
         assert_eq!(error.error_type, ErrorType::AccessControlList as i32);
@@ -2569,7 +2547,7 @@ fn test_remove_neuron_permission_missing_principal_id_fails() {
                 panic!("RemoveNeuronPermissions should have errored")
             }
             CommandResponse::Error(error) => error,
-            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+            response => panic!("Unexpected response from manage_neuron: {response:?}"),
         };
 
         assert_eq!(error.error_type, ErrorType::InvalidCommand as i32);
@@ -2638,7 +2616,7 @@ fn test_remove_neuron_permission_when_neuron_missing_permission_type_fails() {
                 panic!("RemoveNeuronPermissions should have errored")
             }
             CommandResponse::Error(error) => error,
-            response => panic!("Unexpected response from manage_neuron: {:?}", response),
+            response => panic!("Unexpected response from manage_neuron: {response:?}"),
         };
 
         assert_eq!(error.error_type, ErrorType::AccessControlList as i32);
@@ -2745,7 +2723,7 @@ fn test_disburse_neuron_to_self_succeeds() {
         let transfer_block_height = match disburse_response.command.unwrap() {
             CommandResponse::Disburse(response) => response.transfer_block_height,
             CommandResponse::Error(error) => {
-                panic!("Unexpected error when disbursing the neuron: {}", error)
+                panic!("Unexpected error when disbursing the neuron: {error}")
             }
             _ => panic!("Unexpected command response when disbursing the neuron"),
         };
@@ -2832,7 +2810,7 @@ fn test_disburse_neuron_to_different_account_succeeds() {
         let transfer_block_height = match disburse_response.command.unwrap() {
             CommandResponse::Disburse(response) => response.transfer_block_height,
             CommandResponse::Error(error) => {
-                panic!("Unexpected error when disbursing the neuron: {}", error)
+                panic!("Unexpected error when disbursing the neuron: {error}")
             }
             _ => panic!("Unexpected command response when disbursing the neuron"),
         };
@@ -2966,7 +2944,7 @@ fn test_disburse_neuron_burns_neuron_fees() {
         let transfer_block_height = match disburse_response.command.unwrap() {
             CommandResponse::Disburse(response) => response.transfer_block_height,
             CommandResponse::Error(error) => {
-                panic!("Unexpected error when disbursing the neuron: {}", error)
+                panic!("Unexpected error when disbursing the neuron: {error}")
             }
             _ => panic!("Unexpected command response when disbursing the neuron"),
         };
@@ -3049,7 +3027,7 @@ fn test_split_neuron_succeeds() {
                 .created_neuron_id
                 .expect("Expected a NeuronId to be returned after splitting"),
             CommandResponse::Error(error) => {
-                panic!("Unexpected error when splitting the neuron: {}", error)
+                panic!("Unexpected error when splitting the neuron: {error}")
             }
             _ => panic!("Unexpected command response when splitting the neuron"),
         };
@@ -3164,7 +3142,7 @@ fn test_split_neuron_inheritance() {
                 .created_neuron_id
                 .expect("Expected a NeuronId to be returned after splitting"),
             CommandResponse::Error(error) => {
-                panic!("Unexpected error when splitting the neuron: {}", error)
+                panic!("Unexpected error when splitting the neuron: {error}")
             }
             _ => panic!("Unexpected command response when splitting the neuron"),
         };
@@ -3255,7 +3233,7 @@ fn test_split_neuron_child_amount_is_above_min_stake() {
                 .created_neuron_id
                 .expect("Expected a NeuronId to be returned after splitting"),
             CommandResponse::Error(error) => {
-                panic!("Unexpected error when splitting the neuron: {}", error)
+                panic!("Unexpected error when splitting the neuron: {error}")
             }
             _ => panic!("Unexpected command response when splitting the neuron"),
         };
@@ -3333,7 +3311,7 @@ fn test_split_neuron_parent_amount_is_above_min_stake() {
                 .created_neuron_id
                 .expect("Expected a NeuronId to be returned after splitting"),
             CommandResponse::Error(error) => {
-                panic!("Unexpected error when splitting the neuron: {}", error)
+                panic!("Unexpected error when splitting the neuron: {error}")
             }
             _ => panic!("Unexpected command response when splitting the neuron"),
         };

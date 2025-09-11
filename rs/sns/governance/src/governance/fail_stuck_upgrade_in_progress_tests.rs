@@ -264,7 +264,7 @@ fn test_fails_proposal_and_removes_upgrade_if_upgrade_attempt_is_expired() {
 
     // Assert pending version has been cleared.
     let pending_version = &governance.proto.pending_version;
-    assert!(pending_version.is_none(), "{:#?}", pending_version);
+    assert!(pending_version.is_none(), "{pending_version:#?}");
     // Assert deployed_version unchanged from before.
     assert_eq!(
         governance.proto.deployed_version.clone().unwrap(),
@@ -290,12 +290,10 @@ fn test_fails_proposal_and_removes_upgrade_if_upgrade_attempt_is_expired() {
     assert_eq!(
         ErrorType::try_from(governance_error.error_type),
         Ok(ErrorType::External),
-        "{:#?}",
-        governance_error,
+        "{governance_error:#?}",
     );
     assert!(
         governance_error.error_message.contains("manually aborted"),
-        "{:#?}",
-        governance_error,
+        "{governance_error:#?}",
     );
 }

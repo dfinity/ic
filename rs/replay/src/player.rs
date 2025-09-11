@@ -1981,7 +1981,7 @@ mod tests {
                         ..
                     } = &observed_query.source
                     else {
-                        println!("{}th query NOT a User QuerySource.", i);
+                        println!("{i}th query NOT a User QuerySource.");
                         return false;
                     };
                     // ingress_expiry is a number of nanoseconds since the UNIX Epoch.
@@ -1995,8 +1995,7 @@ mod tests {
                         && observed_ingress_expiry < now + 5 * 60 * 1_000_000_000;
                     if !ok {
                         println!(
-                            "Bad ingress expiry in {}th call to {}: {}",
-                            i, method_name, observed_ingress_expiry,
+                            "Bad ingress expiry in {i}th call to {method_name}: {observed_ingress_expiry}",
                         );
                         return false;
                     }

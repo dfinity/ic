@@ -1076,7 +1076,7 @@ fn sns_wait_for_upgrade_finished(
             break statuses;
         }
 
-        assert!(attempt_count < 250, "status: {:?}", statuses);
+        assert!(attempt_count < 250, "status: {statuses:?}");
     }
 }
 
@@ -1139,8 +1139,7 @@ fn sns_wait_for_pending_upgrade(machine: &StateMachine, governance: CanisterId) 
 
         assert!(
             attempt_count < 50,
-            "Never found pending upgrade after {} attempts",
-            attempt_count
+            "Never found pending upgrade after {attempt_count} attempts"
         );
 
         std::thread::sleep(std::time::Duration::from_millis(50));

@@ -127,7 +127,7 @@ pub fn test_with_rt_handle(
 
     info!(log, "Reporting workload execution results ...");
     if report {
-        env.emit_report(format!("{}", test_metrics));
+        env.emit_report(format!("{test_metrics}"));
     } else {
         info!(log, "{}", test_metrics);
     }
@@ -298,13 +298,13 @@ impl HistogramMetrics {
     async fn fetch(metrics_name: &str, filter: Option<&str>, nodes: &[IcNodeSnapshot]) -> Self {
         let (metrics_sum, metrics_count) = if let Some(filter) = filter {
             (
-                format!("{}_sum{{{}}}", metrics_name, filter),
-                format!("{}_count{{{}}}", metrics_name, filter),
+                format!("{metrics_name}_sum{{{filter}}}"),
+                format!("{metrics_name}_count{{{filter}}}"),
             )
         } else {
             (
-                format!("{}_sum", metrics_name),
-                format!("{}_count", metrics_name),
+                format!("{metrics_name}_sum"),
+                format!("{metrics_name}_count"),
             )
         };
 

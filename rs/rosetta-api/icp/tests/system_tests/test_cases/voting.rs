@@ -97,9 +97,9 @@ fn test_neuron_voting() {
                 .submit_proposal(
                     TEST_IDENTITY.sender().unwrap(),
                     neuron_ids[0].into(),
-                    &format!("dummy title {}", i),
-                    &format!("test summary {}", i),
-                    &format!("dummy text {}", i),
+                    &format!("dummy title {i}"),
+                    &format!("test summary {i}"),
+                    &format!("dummy text {i}"),
                 )
                 .await
                 .expect("failed to submit proposal");

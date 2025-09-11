@@ -86,8 +86,7 @@ pub async fn test_sns_upgrade(
 
     {
         eprintln!(
-            "Set automatically_advance_target_version to {}",
-            automatically_advance_target_version
+            "Set automatically_advance_target_version to {automatically_advance_target_version}"
         );
         set_automatically_advance_target_version_flag(
             &pocket_ic,
@@ -101,13 +100,13 @@ pub async fn test_sns_upgrade(
     let mut latest_sns_version = initial_sns_version;
 
     for upgrade_pass in 0..2 {
-        let _timer = SectionTimer::new(format!("Upgrade pass {}", upgrade_pass));
+        let _timer = SectionTimer::new(format!("Upgrade pass {upgrade_pass}"));
 
         let mut expected_upgrade_steps = vec![];
         {
             let _timer = SectionTimer::new("Adding all WASMs");
             for canister_type in &sns_canisters_to_upgrade {
-                eprintln!("modify_and_add_master_wasm for {:?}", canister_type);
+                eprintln!("modify_and_add_master_wasm for {canister_type:?}");
                 latest_sns_version = nns::sns_wasm::modify_and_add_master_wasm(
                     &pocket_ic,
                     latest_sns_version,

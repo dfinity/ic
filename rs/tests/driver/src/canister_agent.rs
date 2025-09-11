@@ -164,7 +164,7 @@ impl CanisterAgent {
         .await;
         RequestOutcome::new(
             result,
-            format!("{}+retries", label),
+            format!("{label}+retries"),
             start_time.elapsed(),
             attempts.load(Ordering::Relaxed),
         )

@@ -105,8 +105,7 @@ impl GovernanceClient {
             proposal_id.unwrap()
         } else {
             panic!(
-                "Making Proposal was unsuccessful --> Response : {:?}",
-                manage_neuron_res
+                "Making Proposal was unsuccessful --> Response : {manage_neuron_res:?}"
             )
         }
     }

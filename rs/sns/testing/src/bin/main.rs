@@ -32,7 +32,7 @@ async fn run_basic_scenario(network: String, args: RunBasicScenarioArgs) {
     if !target_canister_validation_errors.is_empty() {
         eprintln!("SNS-testing failed to validate the test canister:");
         for error in &target_canister_validation_errors {
-            eprintln!("{}", error);
+            eprintln!("{error}");
         }
         exit(1);
     }
@@ -111,7 +111,7 @@ async fn validate_network(network: String) {
     if !network_validation_errors.is_empty() {
         eprintln!("SNS-testing failed to validate the target network:");
         for error in &network_validation_errors {
-            eprintln!("{}", error);
+            eprintln!("{error}");
         }
         exit(1);
     }
@@ -140,7 +140,7 @@ async fn swap_complete(network: String, args: SwapCompleteArgs) {
                 match get_principal_neurons(&agent, sns.governance, principal).await {
                     Ok(neurons) => neurons,
                     Err(e) => {
-                        eprintln!("Failed to get principal neurons: {}", e);
+                        eprintln!("Failed to get principal neurons: {e}");
                         vec![]
                     }
                 };

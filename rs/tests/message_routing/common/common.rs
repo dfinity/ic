@@ -45,8 +45,7 @@ pub async fn start_all_canisters(
                 .await
                 .unwrap_or_else(|e| {
                     panic!(
-                        "Starting canister_idx={} on subnet_idx={} failed because of: {}",
-                        canister_idx, subnet_idx, e
+                        "Starting canister_idx={canister_idx} on subnet_idx={subnet_idx} failed because of: {e}"
                     )
                 });
         });
@@ -90,8 +89,7 @@ pub async fn install_canisters(
                         .await
                         .unwrap_or_else(|e| {
                             panic!(
-                                "Installation of the canister_idx={} on subnet_idx={} failed with error: {}",
-                                canister_idx, subnet_idx, e
+                                "Installation of the canister_idx={canister_idx} on subnet_idx={subnet_idx} failed with error: {e}"
                             )
                         });
                     info!(
