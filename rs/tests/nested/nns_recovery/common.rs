@@ -501,7 +501,7 @@ async fn simulate_node_provider_action(
         "Remounting /boot as read-write, updating boot_args file and rebooting host {}", vm_name,
     );
     let boot_args_command = format!(
-        "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={} hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot && sudo reboot",
+        "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={} version-hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot && sudo reboot",
         &img_version, &img_short_hash
     );
     host.block_on_bash_script_async(&boot_args_command)

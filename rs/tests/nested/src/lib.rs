@@ -260,7 +260,7 @@ pub fn recovery_upgrader_test(env: TestEnv) {
             "Remounting /boot as read-write and updating boot_args file"
         );
         let boot_args_command = format!(
-            "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={} hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot",
+            "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={} version-hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot",
             target_version, target_short_hash
         );
         host.block_on_bash_script(&boot_args_command)

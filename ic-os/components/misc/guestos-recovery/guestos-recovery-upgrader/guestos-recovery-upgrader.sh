@@ -180,7 +180,7 @@ main() {
     echo "Starting GuestOS Recovery Upgrader"
 
     VERSION="$(get_cmdline_var version)"
-    SHORT_HASH="$(get_cmdline_var hash)"
+    SHORT_HASH="$(get_cmdline_var version-hash)"
 
     if [ -z "$VERSION" ] || [ -z "$SHORT_HASH" ]; then
         echo "ERROR: Both version and hash parameters are required"
