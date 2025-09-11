@@ -28,6 +28,7 @@ use ic_types::RegistryVersion;
 use rewards_calculation::rewards_calculator::RewardsCalculatorInput;
 use rewards_calculation::rewards_calculator_results::RewardsCalculatorResults;
 use rewards_calculation::types::RewardPeriod;
+use rewards_calculation::versions::v1::RewardsCalculationV1;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
@@ -142,6 +143,7 @@ impl NodeRewardsCanister {
         )
         .map_err(|e| format!("Could not get rewardable nodes: {e:?}"))?;
 
+        let c = RewardsCalculationV1::calculate(&self);
         let input = RewardsCalculatorInput {
             reward_period,
             rewards_table,

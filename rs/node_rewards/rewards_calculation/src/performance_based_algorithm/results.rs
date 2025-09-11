@@ -67,3 +67,18 @@ pub struct RewardsCalculatorResults {
     pub subnets_fr: BTreeMap<SubnetId, Percent>,
     pub provider_results: BTreeMap<PrincipalId, NodeProviderRewards>,
 }
+
+impl RewardsCalculatorResults {
+    pub fn new() -> Self {
+        Self {
+            subnets_fr: BTreeMap::new(),
+            provider_results: BTreeMap::new(),
+        }
+    }
+}
+
+impl Default for RewardsCalculatorResults {
+    fn default() -> Self {
+        Self::new()
+    }
+}

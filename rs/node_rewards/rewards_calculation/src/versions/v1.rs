@@ -1,13 +1,35 @@
-use crate::performance_based_algorithm::PerformanceBasedAlgorithm;
+use crate::performance_based_algorithm::results::RewardsCalculatorResults;
+use crate::performance_based_algorithm::{
+    InputProvider, InputProvider, PerformanceBasedAlgorithm, PerformanceBasedAlgorithmInternal,
+    RewardingAlgorithm, RewardsCalculator,
+};
+use crate::types::{DayUtc, NodeMetricsDailyRaw, RewardableNode};
 use crate::versions::{RewardsCalculation, Version};
+use ic_base_types::{NodeId, SubnetId};
+use ic_protobuf::registry::node::v1::NodeRewardType;
+use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
+use std::collections::{BTreeMap, HashMap};
 
-trait RewardsCalculationV1: RewardsCalculation + PerformanceBasedAlgorithm {
-    const VERSION: Version = Version::V1;
+pub struct RewardsCalculationV1;
+
+impl PerformanceBasedAlgorithm for RewardsCalculationV1 {
     const SUBNET_FAILURE_RATE_PERCENTILE: f64 = 0.75;
+    const MIN_FAILURE_RATE: Decimal = dec!(0.1);
+    const MAX_FAILURE_RATE: Decimal = dec!(0.6);
+    const MIN_REWARDS_REDUCTION: Decimal = dec!(0);
+    const MAX_REWARDS_REDUCTION: Decimal = dec!(0.8);
 }
 
 mod tests {
-    use crate::types::RewardableNode;
+    use super::*;
+    use crate::performance_based_algorithm::PerformanceBasedAlgorithm;
+    use crate::performance_based_algorithm::{Step4Results, Step5Results};
+    use crate::types::{Region, RewardableNode};
+    use crate::versions::test_utils::{
+        build_daily_metrics, create_rewards_table_for_region_test, generate_rewardable_nodes,
+        test_node_id, test_subnet_id,
+    };
     use ic_protobuf::registry::node::v1::NodeRewardType;
     use maplit::btreemap;
     use rust_decimal_macros::dec;
@@ -52,7 +74,7 @@ mod tests {
         ]);
 
         // --- Execution ---
-        let result = step_0_subnets_nodes_fr(daily_metrics_by_subnet);
+        let result = RewardsCalculationV1::step_0_subnets_nodes_fr(daily_metrics_by_subnet);
         let subnets_fr = result.subnets_fr;
         let original_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
@@ -140,8 +162,11 @@ mod tests {
         let extrapolated_fr = dec!(0.35);
 
         // --- Execution ---
-        let result =
-            step_3_performance_multiplier(&rewardable_nodes, &relative_nodes_fr, &extrapolated_fr);
+        let result = NodeRewastep_3_performance_multiplier(
+            &rewardable_nodes,
+            &relative_nodes_fr,
+            &extrapolated_fr,
+        );
         let reward_reduction = result.reward_reduction;
         let performance_multiplier = result.performance_multiplier;
 
@@ -149,7 +174,7 @@ mod tests {
         // Good node: reduction = 0, multiplier = 1
         assert_eq!(
             reward_reduction.get(&node_good),
-            Some(&MIN_REWARDS_REDUCTION)
+            Some(&TestAlgorithm::MIN_REWARDS_REDUCTION)
         );
         assert_eq!(performance_multiplier.get(&node_good), Some(&dec!(1.0)));
 
@@ -160,7 +185,7 @@ mod tests {
         // Bad node: reduction = 0.8, multiplier = 0.2
         assert_eq!(
             reward_reduction.get(&node_bad),
-            Some(&MAX_REWARDS_REDUCTION)
+            Some(&TestAlgorithm::MAX_REWARDS_REDUCTION)
         );
         assert_eq!(performance_multiplier.get(&node_bad), Some(&dec!(0.2)));
 
