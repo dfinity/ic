@@ -3,7 +3,7 @@ use ic_protobuf::{p2p::v1 as pb, proxy::ProxyDecodeError};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Advert {
-    id: StateSyncArtifactId,
+    pub(crate) id: StateSyncArtifactId,
 }
 
 impl From<Advert> for pb::Advert {
