@@ -3,8 +3,7 @@ use bitcoin::{block::Header as BlockHeader, BlockHash, Network};
 use criterion::measurement::Measurement;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
 use ic_btc_adapter::{
-    start_server, BlockchainManager, BlockchainNetwork, BlockchainState, Config, ConnectionManager,
-    IncomingSource, RouterMetrics,
+    start_server, BlockchainNetwork, BlockchainState, Config, IncomingSource, MAX_HEADERS_SIZE,
 };
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_adapter_test_utils::generate_headers;
@@ -199,9 +198,12 @@ fn add_800k_block_headers(criterion: &mut Criterion) {
         bench.iter(|| {
             let mut blockchain_state =
                 BlockchainState::new(Network::Bitcoin, &MetricsRegistry::default());
-            let (added_headers, error) = blockchain_state.add_headers(bitcoin_headers_to_add);
-            assert_eq!(error, None);
-            assert_eq!(added_headers.len(), bitcoin_headers_to_add.len())
+            // Headers are processed in chunks of at most MAX_HEADERS_SIZE entries
+            for chunk in bitcoin_headers_to_add.chunks(MAX_HEADERS_SIZE) {
+                let (added_headers, error) = blockchain_state.add_headers(chunk);
+                assert_eq!(error, None);
+                assert_eq!(added_headers.len(), chunk.len())
+            }
         })
     });
 }
