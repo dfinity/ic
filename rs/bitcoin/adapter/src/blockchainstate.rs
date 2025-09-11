@@ -209,7 +209,7 @@ where
         let hashes_below_height = self
             .block_cache
             .keys()
-            .filter(|b| height > self.get_cached_header(b).map_or(0, |c| c.height))
+            .filter(|b| height > self.get_cached_header(b).map_or(0, |c| c.data.height))
             .copied()
             .collect::<Vec<_>>();
         self.prune_blocks(&hashes_below_height);
@@ -235,7 +235,7 @@ where
                 let prev_hash = current_header.prev_block_hash();
                 //If the prev header does not exist, then simply return the `hashes` vector.
                 if let Some(cached) = self.header_cache.get_header(&prev_hash) {
-                    current_header = cached.header.clone();
+                    current_header = cached.data.header.clone();
                 } else {
                     if last_hash != genesis_hash {
                         hashes.push(genesis_hash);
@@ -281,7 +281,7 @@ where
 {
     fn get_header(&self, hash: &BlockHash) -> Option<(Network::Header, BlockHeight)> {
         self.get_cached_header(hash)
-            .map(|cached| (cached.header.clone(), cached.height))
+            .map(|cached| (cached.data.header.clone(), cached.data.height))
     }
 
     fn get_initial_hash(&self) -> BlockHash {
@@ -758,7 +758,7 @@ mod test {
             } else {
                 let header_node = state.get_cached_header(&header.block_hash()).unwrap();
                 assert_eq!(
-                    (header_node.header, header_node.height),
+                    (header_node.data.header, header_node.data.height),
                     (chain[h], (h + 1) as u32)
                 );
             }

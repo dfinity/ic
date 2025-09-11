@@ -127,7 +127,7 @@ impl<Network: BlockchainNetwork> GetSuccessorsHandler<Network> {
             let state = self.state.lock().unwrap();
             let anchor_height = state
                 .get_cached_header(&request.anchor)
-                .map_or(0, |cached| cached.height);
+                .map_or(0, |cached| cached.data.height);
 
             let allow_multiple_blocks = self.network.are_multiple_blocks_allowed(anchor_height);
             let blocks = get_successor_blocks(
@@ -298,7 +298,7 @@ fn get_next_headers<Network: BlockchainNetwork>(
 
         if let Some(header_node) = state.get_cached_header(&block_hash) {
             if !seen.contains(&block_hash) {
-                next_headers.push(header_node.header.clone());
+                next_headers.push(header_node.data.header.clone());
             }
             queue.extend(header_node.children.iter());
         }

@@ -17,47 +17,38 @@ use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 use thiserror::Error;
 
-/// This struct stores a BlockHeader along with its height in the Bitcoin Blockchain.
+/// Block header with its height in the blockchain and other info.
+#[derive(Clone, Debug)]
+pub struct HeaderData<Header> {
+    /// Block header.
+    pub header: Header,
+    /// Height of the header.
+    pub height: BlockHeight,
+    /// Total work of the blockchain leading up to this header.
+    /// That is, this field is the sum of work of this header and all its ancestors.
+    pub work: Work,
+}
+
+/// A node contains both header data and children hash.
 #[derive(Clone, Debug)]
 pub struct HeaderNode<Header> {
-    /// This field stores a Bitcoin header.
-    pub header: Header,
-    /// This field stores the height of a Bitcoin header
-    pub height: BlockHeight,
-    /// This field stores the work of the Blockchain leading up to this header.
-    /// That is, this field is the sum of work of the above header and all its ancestors.
-    pub work: Work,
-    /// This field contains this node's successor headers.
+    /// Header data.
+    pub data: HeaderData<Header>,
+    /// Headers of the the successors of this node.
     pub children: Vec<BlockHash>,
 }
 
-/// Contains the necessary information about a tip.
-#[derive(Clone, Debug)]
-pub struct Tip<Header> {
-    /// This field stores a Bitcoin header.
-    pub header: Header,
-    /// This field stores the height of the Bitcoin header stored in the field `header`.
-    pub height: BlockHeight,
-    /// This field stores the work of the Blockchain leading up to this tip.
-    /// That is, this field is the sum of work of the above header and all its ancestors.
-    pub work: Work,
-}
-
-impl<Header> From<HeaderNode<Header>> for Tip<Header> {
-    fn from(node: HeaderNode<Header>) -> Self {
-        let HeaderNode {
-            header,
-            height,
-            work,
-            ..
-        } = node;
+impl<Header> From<HeaderData<Header>> for HeaderNode<Header> {
+    fn from(data: HeaderData<Header>) -> Self {
         Self {
-            header,
-            height,
-            work,
+            data,
+            children: Default::default(),
         }
     }
 }
+
+/// [Tip] is the same as [HeaderData].
+pub type Tip<Header> = HeaderData<Header>;
 
 impl<Header: Encodable> Encodable for Tip<Header> {
     fn consensus_encode<W: io::Write + ?Sized>(&self, writer: &mut W) -> Result<usize, io::Error> {
@@ -151,14 +142,13 @@ impl<Header: BlockchainHeader> InMemoryHeaderCache<Header> {
             height: 0,
             work: genesis.work(),
         }];
-        let node = HeaderNode {
+        let data = HeaderData {
             header: genesis.clone(),
             height: 0,
             work: genesis.work(),
-            children: vec![],
         };
         let mut cache = HashMap::new();
-        cache.insert(genesis.block_hash(), node);
+        cache.insert(genesis.block_hash(), data.into());
 
         RwLock::new(InMemoryHeaderCache {
             genesis: genesis.into_pure_header(),
@@ -193,11 +183,10 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for RwLock<InMemoryHead
                     header.prev_block_hash(),
                 ))?;
 
-        let node = HeaderNode {
+        let tip = HeaderData {
             header: header.clone(),
-            height: parent.height + 1,
-            work: parent.work + header.work(),
-            children: vec![],
+            height: parent.data.height + 1,
+            work: parent.data.work + header.work(),
         };
         parent.children.push(header.block_hash());
 
@@ -207,18 +196,18 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for RwLock<InMemoryHead
             .tips
             .iter()
             .position(|tip| tip.header.block_hash() == parent_hash);
-        let tip = node.clone().into();
+
         match maybe_node_idx {
             Some(idx) => {
-                this.tips[idx] = tip;
+                this.tips[idx] = tip.clone();
             }
             None => {
                 // If the previous header is not a tip, then add the `cached_header` as a tip.
-                this.tips.push(tip)
+                this.tips.push(tip.clone())
             }
         };
 
-        this.cache.insert(block_hash, node);
+        this.cache.insert(block_hash, tip.into());
 
         Ok(AddHeaderResult::HeaderAdded(block_hash))
     }
@@ -385,18 +374,9 @@ impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
         hash: &BlockHash,
     ) -> Result<HeaderNode<Header>, LMDBCacheError> {
         let mut bytes = tx.get(self.headers, hash)?;
-        let Tip {
-            header,
-            height,
-            work,
-        } = <Tip<Header>>::consensus_decode(&mut bytes)?;
+        let data = <HeaderData<Header>>::consensus_decode(&mut bytes)?;
         let children = self.tx_get_children(tx, hash)?;
-        Ok(HeaderNode {
-            header,
-            height,
-            work,
-            children,
-        })
+        Ok(HeaderNode { data, children })
     }
 
     fn tx_add_child(
@@ -417,9 +397,9 @@ impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
     ) -> Result<AddHeaderResult, LMDBCacheError> {
         let tip = Tip {
             header: header.clone(),
-            height: parent.map(|p| p.height + 1).unwrap_or_default(),
+            height: parent.map(|p| p.data.height + 1).unwrap_or_default(),
             work: parent
-                .map(|p| p.work + header.work())
+                .map(|p| p.data.work + header.work())
                 .unwrap_or(header.work()),
         };
         let mut bytes = Vec::new();
@@ -428,7 +408,7 @@ impl<Header: BlockchainHeader> LMDBHeaderCache<Header> {
         tx.put(self.tips, &block_hash, &bytes, WriteFlags::empty())?;
 
         if let Some(parent) = parent {
-            let parent_hash = parent.header.block_hash();
+            let parent_hash = parent.data.header.block_hash();
             self.tx_add_child(tx, &parent_hash, &block_hash)?;
             // If the previous header already exists in `tips`, then remove it
             for tip in self.tx_get_tips(tx)?.iter() {
@@ -548,8 +528,8 @@ mod test {
             let cache = <InMemoryHeaderCache<bitcoin::block::Header>>::new(genesis_block_header);
             assert!(cache.get_header(&genesis_block_hash).is_some());
             let node = cache.get_header(&genesis_block_hash).unwrap();
-            assert_eq!(node.height, 0);
-            assert_eq!(node.header, genesis_block_header);
+            assert_eq!(node.data.height, 0);
+            assert_eq!(node.data.header, genesis_block_header);
             assert_eq!(cache.get_active_chain_tip().header, genesis_block_header);
 
             // Make a few new header
@@ -561,8 +541,8 @@ mod test {
                     .add_header(next_header.block_hash(), *next_header)
                     .is_ok());
                 let next_node = cache.get_header(&next_header.block_hash()).unwrap();
-                assert_eq!(next_node.height, 1);
-                assert_eq!(&next_node.header, next_header);
+                assert_eq!(next_node.data.height, 1);
+                assert_eq!(&next_node.data.header, next_header);
             }
             let tip = cache.get_active_chain_tip();
             assert!(next_headers.contains(&tip.header));
@@ -590,8 +570,8 @@ mod test {
             );
             assert!(cache.get_header(&genesis_block_hash).is_some());
             let node = cache.get_header(&genesis_block_hash).unwrap();
-            assert_eq!(node.height, 0);
-            assert_eq!(node.header, genesis_block_header);
+            assert_eq!(node.data.height, 0);
+            assert_eq!(node.data.header, genesis_block_header);
             assert_eq!(cache.get_active_chain_tip().header, genesis_block_header);
 
             // Make a few new header
@@ -603,8 +583,8 @@ mod test {
                     .add_header(next_header.block_hash(), *next_header)
                     .is_ok());
                 let next_node = cache.get_header(&next_header.block_hash()).unwrap();
-                assert_eq!(next_node.height, 1);
-                assert_eq!(&next_node.header, next_header);
+                assert_eq!(next_node.data.height, 1);
+                assert_eq!(&next_node.data.header, next_header);
             }
             let tip = cache.get_active_chain_tip();
             assert!(next_headers.contains(&tip.header));
@@ -626,8 +606,8 @@ mod test {
             );
             assert!(cache.get_header(&genesis_block_hash).is_some());
             let node = cache.get_header(&genesis_block_hash).unwrap();
-            assert_eq!(node.height, 0);
-            assert_eq!(node.header, genesis_block_header);
+            assert_eq!(node.data.height, 0);
+            assert_eq!(node.data.header, genesis_block_header);
             assert_eq!(node.children.len(), 4);
             let tip = cache.get_active_chain_tip();
             let children = node.children.into_iter().collect::<BTreeSet<_>>();
