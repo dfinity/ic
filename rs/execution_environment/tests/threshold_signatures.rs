@@ -227,7 +227,7 @@ pub fn get_reject_message(result: Result<WasmResult, UserError>) -> String {
 }
 
 macro_rules! expect_contains {
-    ($message:expr, $expected:expr) => {
+    ($message:expr_2021, $expected:expr_2021) => {
         assert!(
             $message.contains($expected),
             "Expected: {}\nActual: {}",

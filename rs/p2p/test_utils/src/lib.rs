@@ -301,7 +301,8 @@ impl ConnectivityChecker {
 
     pub fn check_fut(
         &self,
-    ) -> impl Fn(NodeId, Arc<dyn Transport>) -> BoxFuture<'static, ()> + Clone + 'static {
+    ) -> impl Fn(NodeId, Arc<dyn Transport>) -> BoxFuture<'static, ()> + Clone + 'static + use<>
+    {
         let conn_checker = self.clone();
         move |peer, transport| {
             let conn_checker_clone = conn_checker.clone();

@@ -78,7 +78,7 @@ async fn test_limit_outstanding_calls() {
 
         // Generate a random CanisterIdRecord.
         let canister_id_record = {
-            let result = PrincipalId::new_user_test_id(thread_rng().gen());
+            let result = PrincipalId::new_user_test_id(thread_rng().r#gen());
             let result = CanisterId::try_from(result).unwrap();
             CanisterIdRecord::from(result)
         };

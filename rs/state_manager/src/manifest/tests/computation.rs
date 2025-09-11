@@ -30,7 +30,7 @@ use strum::IntoEnumIterator;
 const NUM_THREADS: u32 = 3;
 
 macro_rules! hash_concat {
-    ($( $x:expr ),*) => {
+    ($( $x:expr_2021 ),*) => {
         {
             let mut h = Sha256::new();
             $( $x.update_hash(&mut h); )*

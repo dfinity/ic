@@ -765,10 +765,13 @@ mod tests {
             assert!(run_block_maker().is_none());
 
             time_source.set_time(expected_time).unwrap();
-            if let Some(proposal) = run_block_maker() {
-                assert_eq!(proposal.as_ref(), &expected_block);
-            } else {
-                panic!("Expected a new block proposal");
+            match run_block_maker() {
+                Some(proposal) => {
+                    assert_eq!(proposal.as_ref(), &expected_block);
+                }
+                _ => {
+                    panic!("Expected a new block proposal");
+                }
             }
 
             // insert a rank 0 block for the current round

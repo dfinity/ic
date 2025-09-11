@@ -42,7 +42,7 @@ use std::{collections::HashMap, fmt};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 macro_rules! ctoption_ok_or {
-    ($val:expr, $err:expr) => {
+    ($val:expr_2021, $err:expr_2021) => {
         if bool::from($val.is_some()) {
             Ok(Self::new($val.unwrap()))
         } else {
@@ -199,7 +199,7 @@ impl Scalar {
 
         // We can't use fill_bytes here because that results in incompatible output.
         for i in 0..64 {
-            bytes[i] = rng.gen::<u8>();
+            bytes[i] = rng.r#gen::<u8>();
         }
 
         let mut rbuf = [0u8; 64];
@@ -793,7 +793,7 @@ declare_addsub_ops_for!(Scalar);
 declare_mul_scalar_ops_for!(Scalar);
 
 macro_rules! define_affine_and_projective_types {
-    ( $affine:ident, $projective:ident, $size:expr ) => {
+    ( $affine:ident, $projective:ident, $size:expr_2021 ) => {
         paste! {
             static [<$affine:upper _GENERATOR>] : LazyLock<$affine> = LazyLock::new(|| $affine::new_with_precomputation(ic_bls12_381::$affine::generator()));
         }
@@ -1442,7 +1442,7 @@ macro_rules! define_affine_and_projective_types {
 
 // declare the impl for the mul2 table struct
 macro_rules! declare_mul2_table_impl {
-    ($projective:ty, $tbl_typ:ident, $window:expr) => {
+    ($projective:ty, $tbl_typ:ident, $window:expr_2021) => {
         /// Table for storing linear combinations of two points.
         /// It is stored as a vector to reduce the amount of indirection for accessing cells.
         /// A table can be computed by calling the `compute_mul2_tbl` function of the corresponding
@@ -1518,7 +1518,7 @@ macro_rules! declare_mul2_table_impl {
 }
 
 macro_rules! declare_compute_mul2_table_inline {
-    ($projective:ty, $tbl_typ:ident, $window_size:expr, $x:expr, $y:expr) => {{
+    ($projective:ty, $tbl_typ:ident, $window_size:expr_2021, $x:expr_2021, $y:expr_2021) => {{
         // Configurable window size: can be in 1..=8
         type Window = WindowInfo<$window_size>;
 
@@ -1563,7 +1563,7 @@ macro_rules! declare_compute_mul2_table_inline {
 }
 
 macro_rules! declare_mul2_impl_for {
-    ( $projective:ty, $tbl_typ:ident, $small_window_size:expr, $big_window_size:expr ) => {
+    ( $projective:ty, $tbl_typ:ident, $small_window_size:expr_2021, $big_window_size:expr_2021 ) => {
         paste! {
             /// Contains a small precomputed table with linear combinations of two points that
             /// can be used for faster mul2 computation. This table is called small because its
@@ -1634,7 +1634,7 @@ macro_rules! declare_mul2_impl_for {
 * of additions for w=4 is typically smaller than for w=3.
 */
 macro_rules! declare_muln_vartime_dispatch_for {
-    ( $typ:ty, $naive_cutoff:expr, $w3_cutoff:expr ) => {
+    ( $typ:ty, $naive_cutoff:expr_2021, $w3_cutoff:expr_2021 ) => {
         impl $typ {
             /// Multiscalar multiplication using Pippenger's algorithm
             ///
@@ -1678,7 +1678,7 @@ macro_rules! declare_muln_vartime_dispatch_for {
 }
 
 macro_rules! declare_muln_vartime_impls_for {
-    ( $typ:ty, $window:expr ) => {
+    ( $typ:ty, $window:expr_2021 ) => {
         impl $typ {
             paste! {
                 fn [< muln_vartime_window_ $window >] (points: &[Self], scalars: &[Scalar]) -> Self {
@@ -1732,7 +1732,7 @@ macro_rules! declare_muln_vartime_impls_for {
             }
         }
     };
-    ( $typ:ty, $window:expr, $($windows:expr),+ ) => {
+    ( $typ:ty, $window:expr_2021, $($windows:expr_2021),+ ) => {
         declare_muln_vartime_impls_for!($typ, $window);
         declare_muln_vartime_impls_for!($typ, $($windows),+ );
     }
@@ -1804,7 +1804,7 @@ macro_rules! declare_muln_vartime_affine_impl_for {
 }
 
 macro_rules! declare_windowed_scalar_mul_ops_for {
-    ( $typ:ty, $window:expr ) => {
+    ( $typ:ty, $window:expr_2021 ) => {
         impl $typ {
             pub(crate) fn windowed_mul(&self, scalar: &Scalar) -> Self {
                 // Configurable window size: can be in 1..=8

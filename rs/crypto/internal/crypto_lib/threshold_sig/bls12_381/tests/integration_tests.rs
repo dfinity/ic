@@ -27,7 +27,7 @@ fn potpourri() {
     }
     let epoch10 = Epoch::from(10);
 
-    let associated_data = rng.gen::<[u8; 32]>();
+    let associated_data = rng.r#gen::<[u8; 32]>();
 
     let mut keys = Vec::new();
     for i in 0..=3 {
@@ -146,7 +146,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         .collect::<Vec<_>>();
 
     // Encrypt
-    let associated_data = rng.gen::<[u8; 10]>();
+    let associated_data = rng.r#gen::<[u8; 10]>();
     let (crsz, encryption_witness) =
         enc_chunks(&keys_and_chunks, epoch, &associated_data, sys, rng);
 

@@ -89,8 +89,10 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         // SSL_CERT_FILE is respected by OpenSSL and Rustls.
         // Rustlts: https://github.com/rustls/rustls/issues/540
         // OpenSSL: https://www.openssl.org/docs/man1.1.1/man3/SSL_CTX_set_default_verify_paths.html
-        env::set_var("SSL_CERT_FILE", dir.path().join("cert.crt"));
-        env::remove_var("NIX_SSL_CERT_FILE");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::set_var("SSL_CERT_FILE", dir.path().join("cert.crt")) };
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { env::remove_var("NIX_SSL_CERT_FILE") };
         dir
     }
 
@@ -136,11 +138,11 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             .boxed()
     }
 
-    fn cert_path(cert_dir: &TempDir) -> impl AsRef<Path> {
+    fn cert_path(cert_dir: &TempDir) -> impl AsRef<Path> + use<> {
         cert_dir.path().join("cert.crt")
     }
 
-    fn key_path(cert_dir: &TempDir) -> impl AsRef<Path> {
+    fn key_path(cert_dir: &TempDir) -> impl AsRef<Path> + use<> {
         cert_dir.path().join("key.pem")
     }
 
