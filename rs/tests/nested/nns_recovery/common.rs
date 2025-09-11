@@ -650,6 +650,17 @@ fn local_recovery(
         .upgrade_image_hash
         .map(|h| format!("--upgrade-image-hash {h} "))
         .unwrap_or_default();
+    let maybe_skips = subnet_recovery_tool
+        .params
+        .skip
+        .as_ref()
+        .map(|skips| {
+            skips
+                .iter()
+                .map(|s| format!("--skip {s:?} "))
+                .collect::<String>()
+        })
+        .unwrap_or_default();
 
     let command = format!(
         r#"/opt/ic/bin/ic-recovery \
@@ -667,6 +678,7 @@ fn local_recovery(
         --wait-for-cup-node {node_ip} \
         {maybe_backup_key_file} \
         --output-dir {OUTPUT_DIR_REMOTE_PATH} \
+        {maybe_skips} \
         --skip Cleanup \
         "#
     );
