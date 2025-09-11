@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::types::DayUtc;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;

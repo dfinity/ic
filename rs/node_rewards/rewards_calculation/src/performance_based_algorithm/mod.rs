@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::performance_based_algorithm::results::{
     BaseRewards, BaseRewardsType3, DailyResults, NodeMetricsDaily, NodeProviderRewards,
     NodeResults, NodeStatus, Percent, RewardsCalculatorResults, XDRPermyriad,
