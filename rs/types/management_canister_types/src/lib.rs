@@ -3293,15 +3293,28 @@ pub struct NodeMetricsHistoryResponse {
 
 impl Payload<'_> for NodeMetricsHistoryResponse {}
 
+#[derive(Clone, Debug, Default, CandidType, Deserialize)]
+pub struct IndexRange {
+    pub start: u64,
+    pub end: u64,
+}
+
+impl Payload<'_> for IndexRange {}
+
 /// `CandidType` for `FetchCanisterLogsRequest`
 /// ```text
 /// record {
 ///     canister_id: principal;
+///     filter_by_idx: opt record {
+///            start: nat64;
+///            end: nat64;
+///     };
 /// }
 /// ```
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 pub struct FetchCanisterLogsRequest {
     pub canister_id: PrincipalId,
+    pub filter_by_idx: Option<IndexRange>,
 }
 
 impl Payload<'_> for FetchCanisterLogsRequest {}
@@ -3310,6 +3323,7 @@ impl FetchCanisterLogsRequest {
     pub fn new(canister_id: CanisterId) -> Self {
         Self {
             canister_id: canister_id.into(),
+            filter_by_idx: None,
         }
     }
 
