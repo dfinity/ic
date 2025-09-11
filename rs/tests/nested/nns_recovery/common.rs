@@ -33,8 +33,7 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use nested::util::{
-    get_host_boot_id, setup_ic_infrastructure, setup_vector_targets_for_vm,
-    NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT,
+    get_host_boot_id, setup_ic_infrastructure, NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT,
 };
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
@@ -129,10 +128,6 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
     NestedNodes::new(&host_vm_names)
         .setup_and_start(&env)
         .unwrap();
-
-    for vm_name in &host_vm_names {
-        setup_vector_targets_for_vm(&env, vm_name);
-    }
 }
 
 pub fn test(env: TestEnv, _cfg: TestConfig) {

@@ -14,9 +14,10 @@ use crate::{
     driver::{
         farm::HostFeature,
         log_events::LogEvent,
+        nested::HasNestedVms,
         prometheus_vm::{SCP_RETRY_BACKOFF, SCP_RETRY_TIMEOUT},
         test_env::TestEnvAttribute,
-        test_env_api::{HasTopologySnapshot, IcNodeContainer, SshSession},
+        test_env_api::{HasTopologySnapshot, HasVmName, IcNodeContainer, SshSession},
         test_setup::GroupSetup,
         universal_vm::UniversalVms,
     },
@@ -165,6 +166,29 @@ impl VectorVm {
                 ip,
                 Some(labels),
             );
+        }
+
+        for vm in env.get_all_nested_vms()? {
+            let vm_name = vm.vm_name();
+            let network = vm.get_nested_network().unwrap();
+
+            for (job, ip) in [
+                ("node_exporter", network.guest_ip),
+                ("host_node_exporter", network.host_ip),
+            ] {
+                add_vector_target(
+                    &mut sources,
+                    &mut transforms,
+                    format!("{vm_name}-{job}"),
+                    ip.into(),
+                    Some(
+                        [("job", job)]
+                            .into_iter()
+                            .map(|(k, v)| (k.to_string(), v.to_string()))
+                            .collect(),
+                    ),
+                )
+            }
         }
 
         // Extend with custom targets

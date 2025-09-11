@@ -17,9 +17,9 @@ pub mod util;
 use util::{
     check_hostos_version, elect_guestos_version, elect_hostos_version,
     get_blessed_guestos_versions, get_host_boot_id, get_unassigned_nodes_config,
-    setup_ic_infrastructure, setup_vector_targets_for_vm, update_nodes_hostos_version,
-    update_unassigned_nodes, wait_for_expected_guest_version, wait_for_guest_version,
-    NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT,
+    setup_ic_infrastructure, update_nodes_hostos_version, update_unassigned_nodes,
+    wait_for_expected_guest_version, wait_for_guest_version, NODE_REGISTRATION_BACKOFF,
+    NODE_REGISTRATION_TIMEOUT,
 };
 
 use anyhow::bail;
@@ -34,7 +34,6 @@ pub fn setup(env: TestEnv) {
     NestedNodes::new(&[HOST_VM_NAME])
         .setup_and_start(&env)
         .unwrap();
-    setup_vector_targets_for_vm(&env, HOST_VM_NAME);
 }
 
 /// Minimal setup that only creates a nested VM without any IC infrastructure.

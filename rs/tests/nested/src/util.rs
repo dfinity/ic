@@ -21,10 +21,9 @@ use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
         ic_gateway_vm::{IcGatewayVm, IC_GATEWAY_VM_NAME},
-        nested::{HasNestedVms, NestedVm},
+        nested::NestedVm,
         test_env::TestEnv,
         test_env_api::*,
-        vector_vm::HasVectorTargets,
     },
     nns::{
         get_governance_canister, submit_update_elected_hostos_versions_proposal,
@@ -256,32 +255,6 @@ pub(crate) async fn update_nodes_hostos_version(
     )
     .await;
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
-}
-
-/// Setup vector targets for a single VM
-pub fn setup_vector_targets_for_vm(env: &TestEnv, vm_name: &str) {
-    let vm = env
-        .get_nested_vm(vm_name)
-        .unwrap_or_else(|e| panic!("Expected nested vm {vm_name} to exist, but got error: {e:?}"));
-
-    let network = vm.get_nested_network().unwrap();
-
-    for (job, ip) in [
-        ("node_exporter", network.guest_ip),
-        ("host_node_exporter", network.host_ip),
-    ] {
-        env.add_custom_vector_target(
-            format!("{vm_name}-{job}"),
-            ip.into(),
-            Some(
-                [("job", job)]
-                    .into_iter()
-                    .map(|(k, v)| (k.to_string(), v.to_string()))
-                    .collect(),
-            ),
-        )
-        .unwrap();
-    }
 }
 
 /// Wait for the guest to return any available version (not "unavailable").
