@@ -48,6 +48,8 @@ impl TryFrom<pb::Advert> for Advert {
 pub(crate) struct XorDistance([u8; 32]);
 
 impl XorDistance {
+    // TODO: Remove this when using XorDistance in chunks to download
+    #[allow(dead_code)]
     pub(crate) fn new(
         peer_id: NodeId,
         artifact_id: StateSyncArtifactId,

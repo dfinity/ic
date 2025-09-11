@@ -27,7 +27,7 @@ pub(crate) async fn state_sync_advert_handler(
 
     state
         .advert_sender
-        .send((advert.id, peer))
+        .send((advert, peer))
         .await
         .expect("State sync manager stopped.");
 
@@ -36,13 +36,13 @@ pub(crate) async fn state_sync_advert_handler(
 
 pub(crate) struct StateSyncAdvertHandler {
     _log: ReplicaLogger,
-    advert_sender: tokio::sync::mpsc::Sender<(StateSyncArtifactId, NodeId)>,
+    advert_sender: tokio::sync::mpsc::Sender<(Advert, NodeId)>,
 }
 
 impl StateSyncAdvertHandler {
     pub fn new(
         log: ReplicaLogger,
-        advert_sender: tokio::sync::mpsc::Sender<(StateSyncArtifactId, NodeId)>,
+        advert_sender: tokio::sync::mpsc::Sender<(Advert, NodeId)>,
     ) -> Self {
         Self {
             _log: log,
