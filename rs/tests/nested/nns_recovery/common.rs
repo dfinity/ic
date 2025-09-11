@@ -48,7 +48,8 @@ pub const SUBNET_SIZE: usize = 4;
 /// test runtime low
 pub const DKG_INTERVAL: u64 = 9;
 
-/// 40 nodes and DKG interval of 199 are the production values for the NNS
+/// 40 nodes and DKG interval of 199 are the production values for the NNS but 49 was chosen for
+/// the DKG interval to make the test faster
 pub const LARGE_SUBNET_SIZE: usize = 40;
 pub const LARGE_DKG_INTERVAL: u64 = 49;
 
