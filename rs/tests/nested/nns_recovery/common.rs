@@ -439,7 +439,20 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             handles.join_all().await;
         });
 
-    info!(logger, "Wait for state sync to complete");
+    info!(logger, "Ensure every node uses the new replica version, is healthy and the subnet is making progress");
+    let nns_subnet = block_on(new_topology.block_for_newer_registry_version())
+        .expect("Could not obtain updated registry.")
+        .root_subnet();
+    for node in nns_subnet.nodes() {
+        assert_assigned_replica_version(&node, &working_version, env.logger());
+        node.await_status_is_healthy().unwrap_or_else(|_| {
+            panic!(
+                "Node {} ({:?}) did not become healthy after the recovery",
+                node.node_id,
+                node.get_ip_addr()
+            )
+        });
+    }
     cert_state_makes_progress_with_retries(
         &dfinity_owned_node.get_public_url(),
         dfinity_owned_node.effective_canister_id(),
@@ -448,13 +461,6 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         secs(10),
     );
 
-    info!(logger, "Ensure the subnet uses the new replica version");
-    let nns_subnet = block_on(new_topology.block_for_newer_registry_version())
-        .expect("Could not obtain updated registry.")
-        .root_subnet();
-    for node in nns_subnet.nodes() {
-        assert_assigned_replica_version(&node, &working_version, env.logger());
-    }
     let nns_node = nns_subnet.nodes().next().unwrap();
 
     info!(logger, "Ensure the old message is still readable");
