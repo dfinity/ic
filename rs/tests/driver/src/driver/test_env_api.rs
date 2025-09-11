@@ -1357,7 +1357,7 @@ pub fn read_dependency_to_string<P: AsRef<Path>>(p: P) -> Result<String> {
     }
 }
 
-pub(crate) fn read_dependency_from_env_to_string(v: &str) -> Result<String> {
+pub fn read_dependency_from_env_to_string(v: &str) -> Result<String> {
     let path_from_env =
         std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {} not set", v));
     read_dependency_to_string(path_from_env)

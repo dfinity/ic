@@ -87,7 +87,7 @@ enum Topic {
   TOPIC_SUBNET_MANAGEMENT = 7;
   // All proposals to manage NNS-controlled canisters not covered by other topics (Protocol Canister
   // Management or Service Nervous System Management).
-  TOPIC_NETWORK_CANISTER_MANAGEMENT = 8;
+  TOPIC_APPLICATION_CANISTER_MANAGEMENT = 8;
   // Proposals that update KYC information for regulatory purposes,
   // for example during the initial Genesis distribution of ICP in the
   // form of neurons.
