@@ -882,7 +882,9 @@ wasmprinter = "0.228.0"
 wast = "228.0.0"
 wat = "1.228.0"
 which = "6.0.3"
-wirm = { version = "2.0.0", features = ["parallel"] }
+wirm = { git = "https://github.com/adambratschikaye/wirm.git", rev = "63b5dd7ff15bdd94cfd0f5ce607238fe518f0bd0", features = [
+    "parallel",
+] }
 x509-cert = { version = "0.2.5", features = ["builder", "hazmat"] }
 x509-parser = { version = "0.16.0" }
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }

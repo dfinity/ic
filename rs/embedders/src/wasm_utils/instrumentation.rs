@@ -732,9 +732,9 @@ fn max_memory_size_in_wasm_pages(memory_size: NumBytes) -> u64 {
 /// functions, since imported functions precede all others in the function index
 /// space, but this would be error-prone).
 fn inject_helper_functions(
-    mut module: wirm::Module,
+    module: &mut wirm::Module,
     mem_type: WasmMemoryType,
-) -> (InjectedFunctions, wirm::Module) {
+) -> InjectedFunctions {
     let ooi_type_idx = module.types.add_func_type(&[], &[]);
     let (out_of_instructions_fn_id, _) = module.add_import_func(
         INSTRUMENTED_FUN_MODULE.to_string(),
@@ -787,7 +787,7 @@ fn inject_helper_functions(
         stable_read_first_access: *stable_read_first_access_fn_id,
     };
 
-    (injected_functions, module)
+    injected_functions
 }
 
 /// Indices for injected counters and functions to update them.
@@ -890,10 +890,7 @@ fn update_memories(
 }
 
 // Mutable globals must be exported to be persisted.
-fn export_mutable_globals<'a>(
-    mut module: wirm::Module<'a>,
-    extra_data: &'a mut Vec<String>,
-) -> wirm::Module<'a> {
+fn export_mutable_globals<'a>(mut module: wirm::Module<'a>) -> wirm::Module<'a> {
     let mut mutable_exported: Vec<(bool, bool)> = module
         .globals
         .iter()
@@ -910,18 +907,11 @@ fn export_mutable_globals<'a>(
         }
     }
 
-    for (ix, (mutable, exported)) in mutable_exported.iter().enumerate() {
-        if *mutable && !exported {
-            extra_data.push(format!("__persistent_mutable_global_{}", ix));
-        }
-    }
-    let mut iy = 0;
     for (ix, (mutable, exported)) in mutable_exported.into_iter().enumerate() {
         if mutable && !exported {
             module
                 .exports
-                .add_export_global(extra_data[iy].clone(), ix as u32);
-            iy += 1;
+                .add_export_global(format!("__persistent_mutable_global_{}", ix), ix as u32);
         }
     }
 
@@ -1460,7 +1450,7 @@ fn calculate_api_indexes(module: &wirm::Module<'_>) -> BTreeMap<SystemApiFunc, u
             if import.module == API_VERSION_IC0 {
                 // The imports get function indexes before defined functions (so
                 // starting at zero) and these are required to fit in 32-bits.
-                SystemApiFunc::from_import_name(import.name).map(|api| (api, func_index as u32))
+                SystemApiFunc::from_import_name(&import.name).map(|api| (api, func_index as u32))
             } else {
                 None
             }
@@ -1556,7 +1546,7 @@ fn get_data(
 /// Returns an [`InstrumentationOutput`] or an error if the input binary could
 /// not be instrumented.
 pub(super) fn instrument(
-    module: wirm::Module<'_>,
+    mut module: wirm::Module<'_>,
     cost_to_compile_wasm_instruction: NumInstructions,
     metering_type: MeteringType,
     dirty_page_overhead: NumInstructions,
@@ -1564,15 +1554,14 @@ pub(super) fn instrument(
     max_stable_memory_size: NumBytes,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
     let main_memory_type = main_memory_type(&module);
-    let (injected_functions, mut module) = inject_helper_functions(module, main_memory_type);
+    let injected_functions = inject_helper_functions(&mut module, main_memory_type);
 
     module = export_table(module);
     let stable_memory_index;
     (module, stable_memory_index) =
         update_memories(module, max_wasm_memory_size, max_stable_memory_size);
 
-    let mut extra_strs: Vec<String> = Vec::new();
-    module = export_mutable_globals(module, &mut extra_strs);
+    module = export_mutable_globals(module);
 
     let injected_counters;
     (injected_counters, module) =

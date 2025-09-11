@@ -231,7 +231,7 @@ fn backtrace_test_stable_oob() {
         "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped: ",
         r#"stable memory out of bounds
 Canister Backtrace:
-ic0::sys::stable64_write
+stable64_write
 _wasm_backtrace_canister::stable_oob::inner_2
 _wasm_backtrace_canister::stable_oob::inner
 _wasm_backtrace_canister::stable_oob::outer

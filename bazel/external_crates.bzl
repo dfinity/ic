@@ -1630,7 +1630,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^4.2.2",
             ),
             "wirm": crate.spec(
-                version = "^2.0.0",
+                git = "https://github.com/adambratschikaye/wirm.git",
+                rev = "63b5dd7ff15bdd94cfd0f5ce607238fe518f0bd0",
                 features = ["parallel"],
             ),
             "wsl": crate.spec(

@@ -531,44 +531,30 @@ fn run_directive<'a>(
             test_state.create_instance(&wasm, wat_id(&wat));
             Ok(())
         }
-        // wirm itself should throw an error when trying to parse these modules.
-        // TODO(RUN-448): Change this to assert `parse_and_encode` returned an error.
+
         WastDirective::AssertMalformed {
             span: _,
             module: mut wat,
             message,
-        } => {
-            if let Ok(wasm) = parse_and_encode(&mut wat, text, path, multi_memory_enabled) {
-                if test_state
-                    .validate_with_wasmtime(&wasm, &wat, text, path)
-                    .is_ok()
-                {
-                    return Err(format!(
-                        "Should not have been able to validate malformed module ({}) {}",
-                        message,
-                        location(&wat, text, path)
-                    ));
-                }
-            }
-            Ok(())
         }
-        // These directives include many wasm modules that wasm-transform won't
-        // be able to recognize as invalid (e.g. function bodies that don't type
-        // check). So we want to assert that after parsing and encoding,
-        // wasmtime still throws an error on validation. That is, wasm-transform
-        // didn't somehow make an invalid module valid.
-        WastDirective::AssertInvalid {
+        | WastDirective::AssertInvalid {
             span: _,
             module: mut wat,
             message,
         } => {
-            if let Ok(wasm) = parse_and_encode(&mut wat, text, path, multi_memory_enabled) {
+            if let Ok(wasm) = wat.encode() {
                 if test_state
                     .validate_with_wasmtime(&wasm, &wat, text, path)
                     .is_ok()
                 {
+                    // The memory 64 feature allows some integer representations
+                    // which were originally to long in wasm2, so ignore those
+                    // cases.
+                    if message == "integer representation too long" {
+                        return Ok(());
+                    }
                     return Err(format!(
-                        "Should not have been able to validate invalid module ({}) {}",
+                        "Should not have been able to validate malformed or invalid module ({}) {}",
                         message,
                         location(&wat, text, path)
                     ));

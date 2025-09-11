@@ -979,8 +979,10 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
             WasmMemoryType::Wasm64 => get_valid_system_apis_common(DataType::I64),
         };
         for entry in module.imports.iter() {
-            let import_module = entry.module;
-            let field = entry.name;
+            // Explicitly convert these `Cow<_, str>`s to &str because it isn't
+            // inferred in all the places they're used.
+            let import_module: &str = &entry.module;
+            let field: &str = &entry.name;
             match &entry.ty {
                 TypeRef::Func(index) => {
                     let (params, results) = if let Types::FuncType {
@@ -1001,7 +1003,7 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
                                 Some(signature) => {
                                     validate_function_signature(
                                         signature,
-                                        field,
+                                        &field,
                                         params,
                                         results
                                     )?;
