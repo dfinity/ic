@@ -20,7 +20,7 @@ canisters(
         "registry": "registry-canister.wasm.gz",
         "governance": "governance-canister.wasm.gz",
         "governance-canister_test": "governance-canister_test.wasm.gz",
-        "ledger": "ledger-canister.wasm.gz",
+        "ledger": "ledger-canister_notify-method.wasm.gz",
         "archive": "ledger-archive-node-canister.wasm.gz",
         "index": "ic-icp-index-canister.wasm.gz",
         "root": "root-canister.wasm.gz",
