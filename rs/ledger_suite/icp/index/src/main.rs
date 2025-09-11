@@ -116,14 +116,14 @@ impl Storable for State {
     fn to_bytes(&self) -> Cow<[u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(self, &mut buf).unwrap_or_else(|err| {
-            ic_cdk::api::trap(format!("{:?}", err));
+            ic_cdk::api::trap(format!("{err:?}"));
         });
         Cow::Owned(buf)
     }
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         ciborium::de::from_reader(&bytes[..]).unwrap_or_else(|err| {
-            ic_cdk::api::trap(format!("{:?}", err));
+            ic_cdk::api::trap(format!("{err:?}"));
         })
     }
 
@@ -178,7 +178,7 @@ fn mutate_state(f: impl FnOnce(&mut State)) {
             borrowed.set(state)
         })
         .unwrap_or_else(|err| {
-            ic_cdk::api::trap(format!("{:?}", err));
+            ic_cdk::api::trap(format!("{err:?}"));
         });
 }
 
@@ -258,7 +258,7 @@ async fn get_blocks_from_ledger(start: u64) -> Result<QueryEncodedBlocksResponse
     let (res,): (QueryEncodedBlocksResponse,) =
         ic_cdk::call(ledger_id, "query_encoded_blocks", (req,))
             .await
-            .map_err(|(code, str)| format!("code: {:#?} message: {}", code, str))?;
+            .map_err(|(code, str)| format!("code: {code:#?} message: {str}"))?;
     Ok(res)
 }
 
@@ -275,19 +275,18 @@ async fn get_blocks_from_archive(
         (req,),
     )
     .await
-    .map_err(|(code, str)| format!("code: {:#?} message: {}", code, str))?;
+    .map_err(|(code, str)| format!("code: {code:#?} message: {str}"))?;
     let blocks = blocks_res.map_err(|err| match err {
         icp_ledger::GetBlocksError::BadFirstBlockIndex {
             requested_index,
             first_valid_index,
         } => format!(
-            "First provided index is not valid: Requested Index:{} | First valid index: {}",
-            requested_index, first_valid_index
+            "First provided index is not valid: Requested Index:{requested_index} | First valid index: {first_valid_index}"
         ),
         icp_ledger::GetBlocksError::Other {
             error_code,
             error_message,
-        } => format!("code: {:#?} message: {}", error_code, error_message),
+        } => format!("code: {error_code:#?} message: {error_message}"),
     })?;
     Ok(blocks)
 }
@@ -395,7 +394,7 @@ fn append_blocks(new_blocks: Vec<EncodedBlock>) -> Result<(), String> {
         // append the encoded block to the block log
         with_blocks(|blocks| {
             blocks.append(&block.0).map_err(|msg| {
-                format!("could append the encoded block to the block log: {:?}", msg)
+                format!("could append the encoded block to the block log: {msg:?}")
             })
         })?;
 
@@ -442,8 +441,7 @@ fn debit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount:
     change_balance(account_identifier, |balance| {
         if balance < amount {
             ic_cdk::trap(format!(
-                "Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
-                block_index, account_identifier, balance, amount
+                "Block {block_index} caused an overflow for account_identifier {account_identifier} when calculating balance {balance} + amount {amount}"
             ))
         }
         balance - amount
@@ -454,8 +452,7 @@ fn credit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount
     change_balance(account_identifier, |balance| {
         if u64::MAX - balance < amount {
             ic_cdk::trap(format!(
-                "Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
-                block_index, account_identifier, balance, amount
+                "Block {block_index} caused an overflow for account_identifier {account_identifier} when calculating balance {balance} + amount {amount}"
             ))
         }
         balance + amount
@@ -465,8 +462,7 @@ fn credit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount
 fn decode_encoded_block(block_index: BlockIndex, block: EncodedBlock) -> Result<Block, String> {
     Block::decode(block).map_err(|e| {
         format!(
-            "[decode_encoded_block]: Unable to decode encoded block at index {}. Error: {}",
-            block_index, e
+            "[decode_encoded_block]: Unable to decode encoded block at index {block_index}. Error: {e}"
         )
     })
 }
@@ -504,8 +500,7 @@ fn get_block_range_from_stable_memory(
         for i in start..limit {
             res.push(EncodedBlock::from_vec(blocks.get(i).ok_or_else(|| {
                 format!(
-                    "[get_block_range_from_stable_memory]: Cannot find index {} in icp ledger index canister storage",
-                    i
+                    "[get_block_range_from_stable_memory]: Cannot find index {i} in icp ledger index canister storage"
                 )
             })?));
         }
@@ -618,15 +613,14 @@ fn get_account_identifier_transactions(
         let block = with_blocks(|blocks| {
             blocks.get(id).unwrap_or_else(|| {
                 ic_cdk::api::trap(format!(
-                    "Block {} not found in the block log, account_identifier blocks map is corrupted!",
-                    id
+                    "Block {id} not found in the block log, account_identifier blocks map is corrupted!"
                 ));
             })
         });
         let settled_transaction = SettledTransaction::from(decode_encoded_block(id, EncodedBlock::from(block))
             .unwrap_or_else(|_| {
                 ic_cdk::api::trap(format!(
-                    "Block {} not found in the block log, account_identifier blocks map is corrupted!",id))
+                    "Block {id} not found in the block log, account_identifier blocks map is corrupted!"))
             }));
         let transaction_with_idx = SettledTransactionWithId {
             id,
@@ -675,7 +669,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
-                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
                     .build()
             }
         }

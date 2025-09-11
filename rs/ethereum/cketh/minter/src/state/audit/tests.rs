@@ -194,7 +194,7 @@ impl GetEventsFile {
             ))
             .map(|(tx, sig)| match tx {
                 TypedTransaction::Eip1559(eip1559_tx) => (eip1559_tx, sig),
-                _ => panic!("BUG: unexpected sent ETH transaction type {:?}", tx),
+                _ => panic!("BUG: unexpected sent ETH transaction type {tx:?}"),
             })
             .expect("BUG: failed to deserialize sent ETH transaction");
 

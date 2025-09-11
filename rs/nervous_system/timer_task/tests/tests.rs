@@ -34,7 +34,7 @@ fn get_counter(state_machine: &StateMachine, canister_id: CanisterId, name: &str
         )
         .unwrap();
     let WasmResult::Reply(reply) = result else {
-        panic!("Query failed: {:?}", result);
+        panic!("Query failed: {result:?}");
     };
     Decode!(&reply, u64).unwrap()
 }
@@ -44,7 +44,7 @@ fn get_metrics(state_machine: &StateMachine, canister_id: CanisterId) -> String 
         .query(canister_id, "get_metrics", Encode!(&()).unwrap())
         .unwrap();
     let WasmResult::Reply(reply) = result else {
-        panic!("Query failed: {:?}", result);
+        panic!("Query failed: {result:?}");
     };
     Decode!(&reply, String).unwrap()
 }
@@ -78,7 +78,7 @@ fn test_success_tasks() {
 
     for name in task_names {
         let counter = get_counter(&state_machine, canister_id, &name);
-        assert!(counter >= 100, "{} counter {}", name, counter);
+        assert!(counter >= 100, "{name} counter {counter}");
     }
 
     // We just make sure that the metrics are present without checking the values, to prevent
@@ -108,8 +108,7 @@ fn test_success_tasks() {
     ] {
         assert!(
             metrics.contains(metric_snippet),
-            "Metrics missing snippet: {}",
-            metric_snippet
+            "Metrics missing snippet: {metric_snippet}"
         );
     }
 }
@@ -158,8 +157,7 @@ fn test_out_of_instruction_tasks() {
     let successful_counter = get_counter(&state_machine, canister_id, "success_periodic_sync_task");
     assert!(
         successful_counter > 20,
-        "successful_counter {}",
-        successful_counter
+        "successful_counter {successful_counter}"
     );
 
     let out_of_instructions_sync_counter = get_counter(
@@ -224,5 +222,5 @@ fn test_panic_periodic_async_task() {
     }
 
     let counter = get_counter(&state_machine, canister_id, "panic_periodic_async_task");
-    assert!(counter >= 100, "counter {}", counter);
+    assert!(counter >= 100, "counter {counter}");
 }

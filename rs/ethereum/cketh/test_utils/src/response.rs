@@ -82,7 +82,7 @@ pub fn transaction_receipt(transaction_hash: String) -> ethers_core::types::Tran
 }
 
 pub fn transaction_count_response(count: u32) -> String {
-    format!("{:#x}", count)
+    format!("{count:#x}")
 }
 
 pub fn fee_history() -> ethers_core::types::FeeHistory {
@@ -209,7 +209,7 @@ pub fn decode_transaction(
     ))
     .map(|(tx, sig)| match tx {
         TypedTransaction::Eip1559(eip1559_tx) => (eip1559_tx, sig),
-        _ => panic!("BUG: unexpected sent ETH transaction type {:?}", tx),
+        _ => panic!("BUG: unexpected sent ETH transaction type {tx:?}"),
     })
     .expect("BUG: failed to deserialize sent ETH transaction")
 }

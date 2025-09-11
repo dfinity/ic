@@ -225,8 +225,7 @@ impl SubnetSplitting {
     ) -> RecoveryResult<SubnetRecord> {
         let validation_error = |error_message| {
             Err(RecoveryError::ValidationFailed(format!(
-                "Subnet {}: {}",
-                subnet_id, error_message
+                "Subnet {subnet_id}: {error_message}"
             )))
         };
 
@@ -250,8 +249,7 @@ impl SubnetSplitting {
 
         if !SUBNET_TYPE_ALLOW_LIST.contains(&subnet_type) {
             return validation_error(format!(
-                "Subnet's type ({:?}) is not allowed for subnet splitting. Allowlist: {:?}",
-                subnet_type, SUBNET_TYPE_ALLOW_LIST,
+                "Subnet's type ({subnet_type:?}) is not allowed for subnet splitting. Allowlist: {SUBNET_TYPE_ALLOW_LIST:?}",
             ));
         }
 

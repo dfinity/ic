@@ -41,7 +41,7 @@ pub async fn exec(args: ListArgs, agent: &Agent) -> Result<()> {
         as_table(snses_with_metadata.as_ref())
     };
 
-    println!("{}", output);
+    println!("{output}");
 
     Ok(())
 }

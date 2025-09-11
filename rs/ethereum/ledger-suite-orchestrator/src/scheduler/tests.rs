@@ -1672,8 +1672,7 @@ orchestrator_tasks_duration_seconds_count{task="maybe_top_up",result="err"} 1 12
         .trim();
         assert_eq!(
             actual, expected,
-            "BUG: Unexpected task durations histogram. Actual:\n{}\nexpected:\n{}",
-            actual, expected
+            "BUG: Unexpected task durations histogram. Actual:\n{actual}\nexpected:\n{expected}"
         );
     }
 }

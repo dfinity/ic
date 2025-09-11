@@ -1970,7 +1970,7 @@ pub mod test {
             Some(ChangeAction::MoveToValidated(ConsensusMessage::BlockProposal(b))) => {
                 assert_eq!(block, b);
             }
-            item => panic!("Unexpected change action set: {:?}", item),
+            item => panic!("Unexpected change action set: {item:?}"),
         };
     }
 
@@ -1979,7 +1979,7 @@ pub mod test {
             Some(ChangeAction::HandleInvalid(ConsensusMessage::BlockProposal(b), _)) => {
                 assert_eq!(block, b);
             }
-            item => panic!("Unexpected change action set: {:?}", item),
+            item => panic!("Unexpected change action set: {item:?}"),
         };
     }
 

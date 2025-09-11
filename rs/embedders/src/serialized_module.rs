@@ -286,7 +286,7 @@ mod test {
                 0,
             )
         }
-        .unwrap_or_else(|err| panic!("Reading OnDiskSerializedModule failed: {:?}", err))
+        .unwrap_or_else(|err| panic!("Reading OnDiskSerializedModule failed: {err:?}"))
             as *mut u8;
         unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) }.to_vec()
     }

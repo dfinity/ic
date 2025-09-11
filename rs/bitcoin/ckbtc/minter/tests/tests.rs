@@ -141,7 +141,7 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
     match result {
         WasmResult::Reply(bytes) => bytes,
         WasmResult::Reject(reject) => {
-            panic!("Expected a successful reply, got a reject: {}", reject)
+            panic!("Expected a successful reply, got a reject: {reject}")
         }
     }
 }
@@ -267,8 +267,7 @@ fn test_upgrade_read_only() {
     let res = Decode!(&res.bytes(), Result<Vec<UtxoStatus>, UpdateBalanceError>).unwrap();
     assert!(
         matches!(res, Err(UpdateBalanceError::TemporarilyUnavailable(_))),
-        "unexpected result: {:?}",
-        res
+        "unexpected result: {res:?}"
     );
 
     // 2. retrieve_btc
@@ -287,8 +286,7 @@ fn test_upgrade_read_only() {
     let res = Decode!(&res.bytes(), Result<RetrieveBtcOk, RetrieveBtcError>).unwrap();
     assert!(
         matches!(res, Err(RetrieveBtcError::TemporarilyUnavailable(_))),
-        "unexpected result: {:?}",
-        res
+        "unexpected result: {res:?}"
     );
 }
 
@@ -333,8 +331,7 @@ fn test_upgrade_restricted() {
     let res = Decode!(&res.bytes(), Result<Vec<UtxoStatus>, UpdateBalanceError>).unwrap();
     assert!(
         matches!(res, Err(UpdateBalanceError::TemporarilyUnavailable(_))),
-        "unexpected result: {:?}",
-        res
+        "unexpected result: {res:?}"
     );
 
     // 2. retrieve_btc
@@ -353,8 +350,7 @@ fn test_upgrade_restricted() {
     let res = Decode!(&res.bytes(), Result<RetrieveBtcOk, RetrieveBtcError>).unwrap();
     assert!(
         matches!(res, Err(RetrieveBtcError::TemporarilyUnavailable(_))),
-        "unexpected result: {:?}",
-        res
+        "unexpected result: {res:?}"
     );
 
     // Test restricted BTC deposits.
@@ -378,8 +374,7 @@ fn test_upgrade_restricted() {
     let res = Decode!(&res.bytes(), Result<Vec<UtxoStatus>, UpdateBalanceError>).unwrap();
     assert!(
         matches!(res, Err(UpdateBalanceError::TemporarilyUnavailable(_))),
-        "unexpected result: {:?}",
-        res
+        "unexpected result: {res:?}"
     );
 }
 
@@ -1246,8 +1241,7 @@ impl CkBtcSetup {
         self.print_minter_logs();
         self.print_minter_events();
         panic!(
-            "did not reach condition '{}' in {} ticks",
-            description, max_ticks
+            "did not reach condition '{description}' in {max_ticks} ticks"
         )
     }
 
@@ -1262,8 +1256,7 @@ impl CkBtcSetup {
             self.env.tick();
             if !condition(self) {
                 panic!(
-                    "Condition '{}' does not hold after {} ticks",
-                    description, n
+                    "Condition '{description}' does not hold after {n} ticks"
                 );
             }
         }
@@ -1287,8 +1280,7 @@ impl CkBtcSetup {
         }
         dbg!(self.get_logs());
         panic!(
-            "the minter did not submit a transaction in {} ticks; last status {:?}",
-            max_ticks, last_status
+            "the minter did not submit a transaction in {max_ticks} ticks; last status {last_status:?}"
         )
     }
 
@@ -1323,8 +1315,7 @@ impl CkBtcSetup {
             }
         }
         panic!(
-            "the minter did not finalize the transaction in {} ticks; last status: {:?}",
-            max_ticks, last_status
+            "the minter did not finalize the transaction in {max_ticks} ticks; last status: {last_status:?}"
         )
     }
 
@@ -1624,7 +1615,7 @@ fn test_transaction_resubmission_finalize_new() {
     let tx = mempool
         .get(&txid)
         .expect("the mempool does not contain the original transaction");
-    assert_eq!(tx.input.len(), 2, "expect 2 input utxos: {:?}", tx);
+    assert_eq!(tx.input.len(), 2, "expect 2 input utxos: {tx:?}");
 
     // Step 4: wait for the transaction resubmission
 
@@ -1981,7 +1972,7 @@ fn test_filter_logs() {
 
     let request = HttpRequest {
         method: "".to_string(),
-        url: format!("/logs?time={}", nanos),
+        url: format!("/logs?time={nanos}"),
         headers: vec![],
         body: serde_bytes::ByteBuf::new(),
     };

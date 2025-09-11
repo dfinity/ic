@@ -88,8 +88,7 @@ fn test_load_shedding_query(
         assert_eq!(
             StatusCode::OK,
             response.status(),
-            "Received unexpected response: {:?}",
-            response
+            "Received unexpected response: {response:?}"
         );
 
         let response = load_shedded_request.await.unwrap();
@@ -303,7 +302,7 @@ fn test_load_shedding_pprof() {
     let pprof_base_req = move || {
         Request::builder()
             .method(Method::GET)
-            .uri(format!("http://{}/_/pprof", addr))
+            .uri(format!("http://{addr}/_/pprof"))
             .body(Body::empty())
             .expect("request builder")
     };

@@ -113,7 +113,7 @@ pub fn make_hsm_sender(hsm_slot: &str, key_id: &str, pin: &str) -> Sender {
     if let Err(UtilityCommandError::Failed(err, _status)) = res {
         // The key id is not found.
         if err.contains("object not found") {
-            panic!("Cannot find key with id {}", key_id);
+            panic!("Cannot find key with id {key_id}");
         }
         // The pin is incorrect.
         if err.contains("CKR_PIN_INCORRECT") {
@@ -125,8 +125,7 @@ pub fn make_hsm_sender(hsm_slot: &str, key_id: &str, pin: &str) -> Sender {
         .execute()
         .unwrap_or_else(|e| {
             panic!(
-                "Error while trying to read the public key from the HSM. Underlying error: {}",
-                e
+                "Error while trying to read the public key from the HSM. Underlying error: {e}"
             )
         });
 
@@ -153,7 +152,7 @@ pub fn set_up_env_vars_for_all_canisters<P: AsRef<Path>>(wasm_dir: P) {
     'outer: for canister in &NNS_CANISTER_WASMS {
         // Can either .wasm.gz or .wasm be found?
         for ext in &[".wasm.gz", ".wasm"] {
-            let file_part = format!("{}{}", canister, ext);
+            let file_part = format!("{canister}{ext}");
             let mut path = wasm_dir.as_ref().to_path_buf();
             path.push(file_part.as_str());
             if path.is_file() {

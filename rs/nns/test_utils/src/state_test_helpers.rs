@@ -129,8 +129,7 @@ pub fn registry_mutate_test_high_capacity_records(
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
             panic!(
-                "get_changes_since was rejected by the NNS registry canister: {:#?}",
-                reject
+                "get_changes_since was rejected by the NNS registry canister: {reject:#?}"
             )
         }
     };
@@ -167,8 +166,7 @@ pub fn registry_high_capacity_get_changes_since(
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
             panic!(
-                "get_changes_since was rejected by the NNS registry canister: {:#?}",
-                reject
+                "get_changes_since was rejected by the NNS registry canister: {reject:#?}"
             )
         }
     };
@@ -194,8 +192,7 @@ pub fn registry_get_value(
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
             panic!(
-                "get_changes_since was rejected by the NNS registry canister: {:#?}",
-                reject
+                "get_changes_since was rejected by the NNS registry canister: {reject:#?}"
             )
         }
     };
@@ -222,8 +219,7 @@ pub fn registry_get_chunk(
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
             panic!(
-                "get chunk was rejected by the NNS registry canister: {:#?}",
-                reject
+                "get chunk was rejected by the NNS registry canister: {reject:#?}"
             )
         }
     };
@@ -324,7 +320,7 @@ pub fn update_with_sender_bytes(
         .map_err(|e| e.to_string())?;
     match result {
         WasmResult::Reply(v) => Ok(v),
-        WasmResult::Reject(s) => Err(format!("Canister rejected with message: {}", s)),
+        WasmResult::Reject(s) => Err(format!("Canister rejected with message: {s}")),
     }
 }
 
@@ -370,7 +366,7 @@ fn query_impl(
     .map_err(|e| e.to_string())?;
     match result {
         WasmResult::Reply(v) => Ok(v),
-        WasmResult::Reject(s) => Err(format!("Canister rejected with message: {}", s)),
+        WasmResult::Reject(s) => Err(format!("Canister rejected with message: {s}")),
     }
 }
 
@@ -412,7 +408,7 @@ pub fn scrape_metrics(
         },
     );
 
-    assert_eq!(http_response.status_code, 200, "{:#?}", http_response);
+    assert_eq!(http_response.status_code, 200, "{http_response:#?}");
 
     let body = String::from_utf8(http_response.body.to_vec())
         .unwrap()
@@ -834,7 +830,7 @@ pub fn mint_icp(state_machine: &StateMachine, destination: AccountIdentifier, am
     // Assert result is ok.
     match result {
         Ok(WasmResult::Reply(_reply)) => (), // Ok,
-        _ => panic!("{:?}", result),
+        _ => panic!("{result:?}"),
     }
 }
 
@@ -856,8 +852,7 @@ pub fn nns_governance_get_full_neuron(
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
             panic!(
-                "get_full_neuron was rejected by the NNS governance canister: {:#?}",
-                reject
+                "get_full_neuron was rejected by the NNS governance canister: {reject:#?}"
             )
         }
     };
@@ -882,8 +877,7 @@ pub fn nns_governance_get_neuron_info(
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
             panic!(
-                "get_neuron_info was rejected by the NNS governance canister: {:#?}",
-                reject
+                "get_neuron_info was rejected by the NNS governance canister: {reject:#?}"
             )
         }
     };
@@ -915,8 +909,7 @@ pub fn nns_governance_get_proposal_info(
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
             panic!(
-                "get_proposal_info was rejected by the NNS governance canister: {:#?}",
-                reject
+                "get_proposal_info was rejected by the NNS governance canister: {reject:#?}"
             )
         }
     };
@@ -1037,7 +1030,7 @@ fn nns_configure_neuron(
             Ok(configure)
         }
         Some(nns_governance_pb::manage_neuron_response::Command::Error(error)) => Err(error),
-        _ => panic!("{:#?}", result),
+        _ => panic!("{result:#?}"),
     }
 }
 
@@ -1070,7 +1063,7 @@ pub fn nns_create_super_powerful_neuron(
     // assert ok.
     match increase_dissolve_delay_result {
         Ok(nns_governance_pb::manage_neuron_response::ConfigureResponse {}) => (),
-        _ => panic!("{:#?}", increase_dissolve_delay_result),
+        _ => panic!("{increase_dissolve_delay_result:#?}"),
     }
 
     neuron_id
@@ -1109,13 +1102,13 @@ pub fn nns_claim_or_refresh_neuron(
     // Unpack and return result.
     let result = match result {
         WasmResult::Reply(reply) => Decode!(&reply, ManageNeuronResponse).unwrap(),
-        _ => panic!("{:?}", result),
+        _ => panic!("{result:?}"),
     };
     let neuron_id = match &result.command {
         Some(manage_neuron_response::Command::ClaimOrRefresh(ClaimOrRefreshResponse {
             refreshed_neuron_id: Some(neuron_id),
         })) => neuron_id,
-        _ => panic!("{:?}", result),
+        _ => panic!("{result:?}"),
     };
     *neuron_id
 }
@@ -1204,7 +1197,7 @@ pub fn nns_propose_upgrade_nns_canister(
     let target_canister_name = canister_id_to_nns_canister_name(target_canister_id);
 
     let proposal = MakeProposalRequest {
-        title: Some(format!("Upgrade {}", target_canister_name)),
+        title: Some(format!("Upgrade {target_canister_name}")),
         action: Some(ProposalActionRequest::InstallCode(InstallCodeRequest {
             canister_id: Some(target_canister_id.get()),
             install_mode: Some(3),
@@ -1235,7 +1228,7 @@ pub fn nns_propose_upgrade_nns_canister(
                 )),
         } => proposal_id,
 
-        _ => panic!("{:#?}", manage_neuron_response),
+        _ => panic!("{manage_neuron_response:#?}"),
     }
 }
 
@@ -1273,9 +1266,8 @@ pub fn wait_for_canister_upgrade_to_succeed(
             Ok(ok) => ok,
             Err(err) => {
                 println!(
-                    "Unable to read the status of {} on iteration {}. \
-                     This is most likely a transient error:\n{:?}",
-                    canister_id, i, err,
+                    "Unable to read the status of {canister_id} on iteration {i}. \
+                     This is most likely a transient error:\n{err:?}",
                 );
                 continue;
             }
@@ -1362,7 +1354,7 @@ pub fn get_neuron_ids(state_machine: &StateMachine, sender: PrincipalId) -> Vec<
         .unwrap();
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to get_neuron_ids failed: {:#?}", s),
+        WasmResult::Reject(s) => panic!("Call to get_neuron_ids failed: {s:#?}"),
     };
 
     Decode!(&result, Vec<u64>).unwrap()
@@ -1378,7 +1370,7 @@ pub fn get_pending_proposals(state_machine: &StateMachine) -> Vec<ProposalInfo> 
         .unwrap();
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to get_pending_proposals failed: {:#?}", s),
+        WasmResult::Reject(s) => panic!("Call to get_pending_proposals failed: {s:#?}"),
     };
 
     Decode!(&result, Vec<ProposalInfo>).unwrap()
@@ -1511,7 +1503,7 @@ pub fn nns_list_proposals(
 
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to list_proposals failed: {:#?}", s),
+        WasmResult::Reject(s) => panic!("Call to list_proposals failed: {s:#?}"),
     };
 
     Decode!(&result, ListProposalInfoResponse).unwrap()
@@ -1532,7 +1524,7 @@ pub fn nns_get_monthly_node_provider_rewards(
     let result = match result {
         WasmResult::Reply(result) => result,
         WasmResult::Reject(s) => {
-            panic!("Call to get_monthly_node_provider_rewards failed: {:#?}", s)
+            panic!("Call to get_monthly_node_provider_rewards failed: {s:#?}")
         }
     };
 
@@ -1555,8 +1547,7 @@ pub fn nns_get_most_recent_monthly_node_provider_rewards(
         WasmResult::Reply(result) => result,
         WasmResult::Reject(s) => {
             panic!(
-                "Call to get_most_recent_monthly_node_provider_rewards failed: {:#?}",
-                s
+                "Call to get_most_recent_monthly_node_provider_rewards failed: {s:#?}"
             )
         }
     };
@@ -1578,7 +1569,7 @@ pub fn nns_list_node_provider_rewards(
 
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to list_node_provider_rewards failed: {:#?}", s),
+        WasmResult::Reject(s) => panic!("Call to list_node_provider_rewards failed: {s:#?}"),
     };
 
     Decode!(&result, ListNodeProviderRewardsResponse).unwrap()
@@ -1596,7 +1587,7 @@ pub fn nns_get_network_economics_parameters(state_machine: &StateMachine) -> Net
     let result = match result {
         WasmResult::Reply(result) => result,
         WasmResult::Reject(s) => {
-            panic!("Call to get_network_economics_parameters failed: {:#?}", s)
+            panic!("Call to get_network_economics_parameters failed: {s:#?}")
         }
     };
 
@@ -1614,7 +1605,7 @@ pub fn list_deployed_snses(state_machine: &StateMachine) -> ListDeployedSnsesRes
 
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to list_deployed_snses failed: {:#?}", s),
+        WasmResult::Reject(s) => panic!("Call to list_deployed_snses failed: {s:#?}"),
     };
 
     Decode!(&result, ListDeployedSnsesResponse).unwrap()
@@ -1638,7 +1629,7 @@ pub fn get_neurons_fund_audit_info(
     let result = match result {
         WasmResult::Reply(result) => result,
         WasmResult::Reject(s) => {
-            panic!("Call to get_neurons_fund_audit_info failed: {:#?}", s)
+            panic!("Call to get_neurons_fund_audit_info failed: {s:#?}")
         }
     };
 
@@ -1661,7 +1652,7 @@ pub fn list_neurons(
 
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to list_neurons failed: {:#?}", s),
+        WasmResult::Reject(s) => panic!("Call to list_neurons failed: {s:#?}"),
     };
 
     Decode!(&result, ListNeuronsResponse).unwrap()
@@ -1734,8 +1725,7 @@ pub fn nns_wait_for_proposal_execution(machine: &StateMachine, proposal_id: u64)
         }
         assert_eq!(
             proposal.failure_reason, None,
-            "Proposal execution failed: {:#?}",
-            proposal
+            "Proposal execution failed: {proposal:#?}"
         );
 
         last_proposal = Some(proposal);
@@ -1743,8 +1733,7 @@ pub fn nns_wait_for_proposal_execution(machine: &StateMachine, proposal_id: u64)
     }
 
     panic!(
-        "Looks like proposal {:?} is never going to be executed: {:#?}",
-        proposal_id, last_proposal,
+        "Looks like proposal {proposal_id:?} is never going to be executed: {last_proposal:#?}",
     );
 }
 
@@ -1761,8 +1750,7 @@ pub fn nns_wait_for_proposal_failure(machine: &StateMachine, proposal_id: u64) {
         }
         assert_eq!(
             proposal.executed_timestamp_seconds, 0,
-            "Proposal execution succeeded when it was not supposed to: {:#?}",
-            proposal
+            "Proposal execution succeeded when it was not supposed to: {proposal:#?}"
         );
 
         last_proposal = Some(proposal);
@@ -1770,8 +1758,7 @@ pub fn nns_wait_for_proposal_failure(machine: &StateMachine, proposal_id: u64) {
     }
 
     panic!(
-        "Looks like proposal {:?} is never going to be executed: {:#?}",
-        proposal_id, last_proposal,
+        "Looks like proposal {proposal_id:?} is never going to be executed: {last_proposal:#?}",
     );
 }
 
@@ -1820,7 +1807,7 @@ pub fn ledger_account_balance(
     let result = match result {
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
-            panic!("get_state was rejected by the swap canister: {:#?}", reject)
+            panic!("get_state was rejected by the swap canister: {reject:#?}")
         }
     };
     Decode!(&result, Tokens).unwrap()
@@ -1854,7 +1841,7 @@ pub fn icrc1_transfer(
     let result = result.unwrap();
     match result {
         Ok(n) => Ok(n.0.to_u64().unwrap()),
-        Err(e) => Err(format!("{:?}", e)),
+        Err(e) => Err(format!("{e:?}")),
     }
 }
 
@@ -1919,17 +1906,15 @@ pub fn sns_claim_staked_neuron(
 
     let neuron_id = match claim_response.command.unwrap() {
         SnsCommandResponse::ClaimOrRefresh(response) => {
-            println!("User {} successfully claimed neuron", sender);
+            println!("User {sender} successfully claimed neuron");
 
             response.refreshed_neuron_id.unwrap()
         }
         SnsCommandResponse::Error(error) => panic!(
-            "Unexpected error when claiming neuron for user {}: {}",
-            sender, error
+            "Unexpected error when claiming neuron for user {sender}: {error}"
         ),
         _ => panic!(
-            "Unexpected command response when claiming neuron for user {}.",
-            sender
+            "Unexpected command response when claiming neuron for user {sender}."
         ),
     };
 
@@ -1982,12 +1967,10 @@ pub fn sns_increase_dissolve_delay(
     match increase_response.command.unwrap() {
         SnsCommandResponse::Configure(_) => (),
         SnsCommandResponse::Error(error) => panic!(
-            "Unexpected error when increasing dissolve delay for user {}: {}",
-            sender, error
+            "Unexpected error when increasing dissolve delay for user {sender}: {error}"
         ),
         _ => panic!(
-            "Unexpected command response when increasing dissolve delay for user {}.",
-            sender
+            "Unexpected command response when increasing dissolve delay for user {sender}."
         ),
     };
 }
@@ -2036,7 +2019,7 @@ pub fn sns_governance_get_mode(
         "get_mode",
         Encode!(&sns_pb::GetMode {}).unwrap(),
     )
-    .map_err(|e| format!("Error calling get_mode: {}", e))?;
+    .map_err(|e| format!("Error calling get_mode: {e}"))?;
 
     let GetModeResponse { mode } = Decode!(&get_mode_response, sns_pb::GetModeResponse).unwrap();
 
@@ -2078,7 +2061,7 @@ pub fn sns_get_proposal(
         })
         .unwrap(),
     )
-    .map_err(|e| format!("Error calling get_proposal: {}", e))?;
+    .map_err(|e| format!("Error calling get_proposal: {e}"))?;
 
     let get_proposal_response =
         Decode!(&get_proposal_response, sns_pb::GetProposalResponse).unwrap();
@@ -2087,7 +2070,7 @@ pub fn sns_get_proposal(
         .expect("Empty get_proposal_response")
     {
         sns_pb::get_proposal_response::Result::Error(e) => {
-            panic!("get_proposal error: {}", e);
+            panic!("get_proposal error: {e}");
         }
         sns_pb::get_proposal_response::Result::Proposal(proposal) => Ok(proposal),
     }
@@ -2110,10 +2093,7 @@ pub fn sns_wait_for_proposal_execution(
         let proposal = sns_get_proposal(machine, governance, proposal_id);
         assert!(
             attempt_count < 50,
-            "proposal {:?} not executed after {} attempts: {:?}",
-            proposal_id,
-            attempt_count,
-            proposal
+            "proposal {proposal_id:?} not executed after {attempt_count} attempts: {proposal:?}"
         );
 
         if let Ok(p) = proposal {
@@ -2139,10 +2119,7 @@ pub fn sns_wait_for_proposal_executed_or_failed(
         let proposal = sns_get_proposal(machine, governance, proposal_id);
         assert!(
             attempt_count < 50,
-            "proposal {:?} not executed after {} attempts: {:?}",
-            proposal_id,
-            attempt_count,
-            proposal
+            "proposal {proposal_id:?} not executed after {attempt_count} attempts: {proposal:?}"
         );
 
         if let Ok(p) = proposal {
@@ -2351,7 +2328,7 @@ pub fn nns_register_known_neuron(
             let proposal_id = response.proposal_id.unwrap();
             nns_wait_for_proposal_execution(state_machine, proposal_id.id);
         }
-        other => panic!("Expected MakeProposal response but got: {:?}", other),
+        other => panic!("Expected MakeProposal response but got: {other:?}"),
     }
 }
 
@@ -2383,7 +2360,7 @@ pub fn nns_deregister_known_neuron(
             let proposal_id = response.proposal_id.unwrap();
             nns_wait_for_proposal_execution(state_machine, proposal_id.id);
         }
-        other => panic!("Expected MakeProposal response but got: {:?}", other),
+        other => panic!("Expected MakeProposal response but got: {other:?}"),
     }
 }
 

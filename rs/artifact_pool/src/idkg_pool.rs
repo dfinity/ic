@@ -661,13 +661,13 @@ mod tests {
             }
         }
 
-        let pool_section = if test_unvalidated {
+        
+
+        (if test_unvalidated {
             idkg_pool.unvalidated()
         } else {
             idkg_pool.validated()
-        };
-
-        pool_section
+        }) as _
     }
 
     // Verifies the prefix based search

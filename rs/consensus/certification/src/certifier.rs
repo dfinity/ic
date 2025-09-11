@@ -1283,8 +1283,7 @@ mod tests {
                 assert_eq!(
                     change_set.len(),
                     2,
-                    "unexpected changeset: {:?}",
-                    change_set
+                    "unexpected changeset: {change_set:?}"
                 );
 
                 assert!(

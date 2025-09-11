@@ -495,7 +495,9 @@ mod tests {
                 idkg: idkg::Payload::default(),
             });
 
-            let result = validate_payload(
+            
+
+            validate_payload(
                 subnet_id,
                 registry.as_ref(),
                 crypto.as_ref(),
@@ -507,9 +509,7 @@ mod tests {
                 &context,
                 &mock_metrics(),
                 &no_op_logger(),
-            );
-
-            result
+            )
         })
     }
 

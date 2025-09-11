@@ -411,8 +411,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
     )
     .unwrap_or_else(|err| {
         panic!(
-            "Expected make_unvalidated_checkpoint to succeed, got {:?}",
-            err
+            "Expected make_unvalidated_checkpoint to succeed, got {err:?}"
         )
     });
     flush_tip_channel(&tip_channel);
@@ -557,7 +556,7 @@ fn file_info<'a>(file: &str, manifest: &'a Manifest) -> &'a FileInfo {
             return file_info;
         }
     }
-    panic!("file '{}' not found in manifest: {:?}", file, manifest)
+    panic!("file '{file}' not found in manifest: {manifest:?}")
 }
 
 /// Computes the manifest of the latest checkpoint under the state layout at

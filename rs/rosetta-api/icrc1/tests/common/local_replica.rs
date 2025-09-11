@@ -36,7 +36,7 @@ pub async fn get_testing_agent(port: u16) -> Agent {
 
 pub async fn get_custom_agent(basic_identity: Arc<dyn Identity>, port: u16) -> Agent {
     // The local replica will be running on the localhost
-    let replica_url = Url::parse(&format!("http://localhost:{}", port)).unwrap();
+    let replica_url = Url::parse(&format!("http://localhost:{port}")).unwrap();
 
     // Setup the agent
     let agent = Agent::builder()

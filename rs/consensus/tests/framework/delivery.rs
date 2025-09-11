@@ -169,9 +169,7 @@ impl RandomGraph {
             tries += 1;
             assert!(
                 tries < 10,
-                "Insufficient degree {} for {} nodes",
-                degree,
-                num_nodes
+                "Insufficient degree {degree} for {num_nodes} nodes"
             );
         }
     }

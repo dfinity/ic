@@ -566,9 +566,7 @@ where
     assert!(
         expected_reserved_cycles <= reserved_cycles
             && reserved_cycles <= expected_reserved_cycles + T,
-        "reserved: {}, expected (rounded down to T cycles): {}",
-        reserved_cycles,
-        expected_reserved_cycles
+        "reserved: {reserved_cycles}, expected (rounded down to T cycles): {expected_reserved_cycles}"
     );
 
     // Ensure that no more significant amount of memory can be taken on this subnet

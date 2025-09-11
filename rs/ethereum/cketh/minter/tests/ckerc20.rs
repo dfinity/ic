@@ -1176,7 +1176,7 @@ mod withdraw_erc20 {
                         effective_gas_price: Nat::from(4_277_923_390_u64),
                         gas_used: Nat::from(21_000_u64),
                         status: TransactionStatus::Success,
-                        transaction_hash: format!("{:?}", resubmitted_tx_hash),
+                        transaction_hash: format!("{resubmitted_tx_hash:?}"),
                     },
                 },
             ]);

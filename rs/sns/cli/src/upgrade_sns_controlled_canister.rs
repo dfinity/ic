@@ -237,10 +237,9 @@ pub async fn create_canister_next_to<C: CallCanisters>(
     .map_err(|err| {
         if let CreateCanisterError::InsufficientFunds { balance } = err {
             let err = format!(
-                "Requested creating the {} canister with {} cycles, but the caller identity has \
-                 only {} cycles on the cycles ledger. Please buy more cycles using \
+                "Requested creating the {name} canister with {cycles_amount} cycles, but the caller identity has \
+                 only {balance} cycles on the cycles ledger. Please buy more cycles using \
                  `dfx cycles convert --amount AMOUNT --network NETWORK` and try again.",
-                name, cycles_amount, balance,
             );
             anyhow::anyhow!(err)
         } else {
@@ -632,7 +631,7 @@ pub async fn refund<C: CallCanisters>(
 
     // TODO: Implement the actual reimbursement.
 
-    print!("Deleting the store canister {} ... ", store_canister_id);
+    print!("Deleting the store canister {store_canister_id} ... ");
     std::io::stdout().flush().unwrap();
     stop_canister(
         agent,
@@ -747,14 +746,14 @@ pub async fn cycles_ledger_create_canister<C: CallCanisters>(
 
 fn format_full_hash(hash: &[u8]) -> String {
     hash.iter()
-        .map(|b| format!("{:02x}", b))
+        .map(|b| format!("{b:02x}"))
         .collect::<Vec<_>>()
         .join("")
 }
 
 fn suggested_install_command(wasm_path_str: &Path, candid_arg: &Option<String>) -> String {
     let arg_suggestion = if let Some(candid_arg) = candid_arg {
-        format!(" --argument '{}'", candid_arg)
+        format!(" --argument '{candid_arg}'")
     } else {
         "".to_string()
     };

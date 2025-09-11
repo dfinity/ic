@@ -195,8 +195,7 @@ pub fn sns_governance_list_neurons(
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
             panic!(
-                "list_neurons was rejected by the governance canister: {:#?}",
-                reject
+                "list_neurons was rejected by the governance canister: {reject:#?}"
             )
         }
     };
@@ -218,8 +217,7 @@ pub fn sns_governance_get_nervous_system_parameters(
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
             panic!(
-                "get_nervous_system_parameters was rejected by the governance canister: {:#?}",
-                reject
+                "get_nervous_system_parameters was rejected by the governance canister: {reject:#?}"
             )
         }
     };
@@ -249,7 +247,7 @@ fn manage_neuron(
 
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to manage_neuron failed: {:#?}", s),
+        WasmResult::Reject(s) => panic!("Call to manage_neuron failed: {s:#?}"),
     };
 
     Decode!(&result, ManageNeuronResponse).unwrap()
@@ -307,8 +305,7 @@ pub fn participate_in_swap(
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
             panic!(
-                "refresh_buyer_tokens was rejected by the swap canister: {:#?}",
-                reject
+                "refresh_buyer_tokens was rejected by the swap canister: {reject:#?}"
             )
         }
     };
@@ -391,8 +388,7 @@ pub fn send_participation_funds(
             .expect("Failed to transfer participation funds"),
         WasmResult::Reject(reject) => {
             panic!(
-                "transfer was rejected by the ICP ledger canister: {:#?}",
-                reject
+                "transfer was rejected by the ICP ledger canister: {reject:#?}"
             )
         }
     };
@@ -409,7 +405,7 @@ pub fn swap_get_state(
     let result = match result {
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
-            panic!("get_state was rejected by the swap canister: {:#?}", reject)
+            panic!("get_state was rejected by the swap canister: {reject:#?}")
         }
     };
     Decode!(&result, swap_pb::GetStateResponse).unwrap()
@@ -427,7 +423,7 @@ pub fn canister_status(
     let result = match result {
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
-            panic!("get_state was rejected by the swap canister: {:#?}", reject)
+            panic!("get_state was rejected by the swap canister: {reject:#?}")
         }
     };
     Decode!(&result, CanisterStatusResultV2).unwrap()
@@ -454,8 +450,7 @@ pub fn sns_root_register_dapp_canister(
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
             panic!(
-                "register_dapp_canisters was rejected by the swap canister: {:#?}",
-                reject
+                "register_dapp_canisters was rejected by the swap canister: {reject:#?}"
             )
         }
     };
@@ -483,8 +478,7 @@ pub fn sns_root_register_dapp_canisters(
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
             panic!(
-                "register_dapp_canisters was rejected by the swap canister: {:#?}",
-                reject
+                "register_dapp_canisters was rejected by the swap canister: {reject:#?}"
             )
         }
     };

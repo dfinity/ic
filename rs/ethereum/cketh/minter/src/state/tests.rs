@@ -1824,9 +1824,7 @@ fn checked_sub(lhs: Erc20Balances, rhs: Erc20Balances) -> BTreeMap<Address, Erc2
                 lhs.balance_by_erc20_contract
                     .contains_key(rhs_erc20_contract)
             }),
-        "BUG: Cannot subtract rhs {:?} to lhs {:?} since some ERC-20 contracts are missing in the lhs",
-        rhs,
-        lhs
+        "BUG: Cannot subtract rhs {rhs:?} to lhs {lhs:?} since some ERC-20 contracts are missing in the lhs"
     );
     let mut result = lhs.balance_by_erc20_contract.clone();
     for (erc20_contract, rhs_value) in rhs.balance_by_erc20_contract.into_iter() {
@@ -1838,8 +1836,7 @@ fn checked_sub(lhs: Erc20Balances, rhs: Erc20Balances) -> BTreeMap<Address, Erc2
                 result.insert(erc20_contract, lhs_value.checked_sub(rhs_value).unwrap());
             }
             lhs_value => panic!(
-                "BUG: Cannot subtract rhs {:?} to lhs {:?} since it would underflow",
-                rhs_value, lhs_value
+                "BUG: Cannot subtract rhs {rhs_value:?} to lhs {lhs_value:?} since it would underflow"
             ),
         }
     }

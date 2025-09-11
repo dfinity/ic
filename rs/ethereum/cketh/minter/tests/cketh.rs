@@ -687,7 +687,7 @@ fn should_resubmit_new_transaction_when_price_increased() {
                     effective_gas_price: Nat::from(4277923390u64),
                     gas_used: Nat::from(21_000_u32),
                     status: TransactionStatus::Success,
-                    transaction_hash: format!("{:?}", resubmitted_tx_hash),
+                    transaction_hash: format!("{resubmitted_tx_hash:?}"),
                 },
             },
         ]);

@@ -111,9 +111,7 @@ fn should_install_and_upgrade_with_valid_values() {
             assert_eq!(
                 install_and_upgrade(*install_interval, *upgrade_interval),
                 Ok(()),
-                "install_interval: {:?}, upgrade_interval: {:?}",
-                install_interval,
-                upgrade_interval
+                "install_interval: {install_interval:?}, upgrade_interval: {upgrade_interval:?}"
             );
         }
     }

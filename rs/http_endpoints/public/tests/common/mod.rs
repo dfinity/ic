@@ -344,7 +344,7 @@ pub async fn create_conn_and_send_request(addr: SocketAddr) -> (SendRequest<Body
 
     let request = Request::builder()
         .method(Method::GET)
-        .uri(format!("http://{}/api/v2/status", addr))
+        .uri(format!("http://{addr}/api/v2/status"))
         .body(Body::from(""))
         .expect("Building the request failed.");
     let response = request_sender

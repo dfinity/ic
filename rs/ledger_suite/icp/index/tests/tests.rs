@@ -1302,8 +1302,7 @@ fn test_get_account_identifier_transactions_pagination() {
         // didn't return the expected batch for the given start
         if res.transactions.is_empty() {
             panic!(
-                "get_account_identifier_transactions({:?}, u64::MAX) returned an empty batch!",
-                start
+                "get_account_identifier_transactions({start:?}, u64::MAX) returned an empty batch!"
             );
         }
 

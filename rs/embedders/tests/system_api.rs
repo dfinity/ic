@@ -1373,8 +1373,7 @@ fn call_perform_not_enough_cycles_does_not_trap() {
             assert_eq!(code, RejectCode::SysTransient as i32);
         }
         _ => panic!(
-            "expected to get an InsufficientCyclesInMessageMemoryGrow error, got {:?}",
-            res
+            "expected to get an InsufficientCyclesInMessageMemoryGrow error, got {res:?}"
         ),
     }
     let system_state_modifications = api.take_system_state_modifications();

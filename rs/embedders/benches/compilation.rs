@@ -31,7 +31,7 @@ fn set_production_rayon_threads() {
         .num_threads(EmbeddersConfig::default().num_rayon_compilation_threads)
         .build_global()
         .unwrap_or_else(|err| {
-            eprintln!("error in ThreadPoolBuildError (it's fine if the threadpool has already been initialized): {}", err);
+            eprintln!("error in ThreadPoolBuildError (it's fine if the threadpool has already been initialized): {err}");
         });
 }
 

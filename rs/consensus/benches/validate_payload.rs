@@ -366,7 +366,7 @@ fn validate_payload_benchmark(criterion: &mut Criterion) {
                     }),
                 );
 
-                group.bench_function(format!("validate_payload_{}", message_count), |bench| {
+                group.bench_function(format!("validate_payload_{message_count}"), |bench| {
                     bench.iter(|| {
                         validate_payload(now, &payload, &pool_reader, &tip, payload_builder)
                             .expect("Invalid payload")

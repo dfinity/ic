@@ -332,7 +332,7 @@ mod eth_transactions {
             let burn_index = withdrawal_request.cketh_ledger_burn_index();
             expect_panic_with_message(
                 || transactions.record_created_transaction(burn_index, tx),
-                &format!("withdrawal request {} not found", burn_index),
+                &format!("withdrawal request {burn_index} not found"),
             );
         }
 
@@ -2232,7 +2232,7 @@ mod eth_withdrawal_request {
     fn should_have_readable_debug_representation() {
         let request = cketh_withdrawal_request_with_index(LedgerBurnIndex::new(131));
         let expected_debug = "EthWithdrawalRequest { withdrawal_amount: 1_100_000_000_000_000, destination: 0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34, ledger_burn_index: 131, from: k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae, from_subaccount: Some(1111111111111111111111111111111111111111111111111111111111111111), created_at: Some(1699527697000000000) }";
-        assert_eq!(format!("{:?}", request), expected_debug);
+        assert_eq!(format!("{request:?}"), expected_debug);
     }
 }
 
@@ -2247,7 +2247,7 @@ mod erc_20_withdrawal_request {
             LedgerBurnIndex::new(2),
         );
         let expected_debug = "Erc20WithdrawalRequest { max_transaction_fee: 30_000_000_000_000_000, withdrawal_amount: 1_100_000_000_000_000, erc20_contract_address: 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48, destination: 0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34, cketh_ledger_burn_index: 131, ckerc20_ledger_id: sa4so-piaaa-aaaar-qacnq-cai, ckerc20_ledger_burn_index: 2, from: k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae, from_subaccount: Some(1111111111111111111111111111111111111111111111111111111111111111), created_at: 1699527697000000000 }";
-        assert_eq!(format!("{:?}", request), expected_debug);
+        assert_eq!(format!("{request:?}"), expected_debug);
     }
 }
 

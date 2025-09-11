@@ -34,7 +34,7 @@ fn validate_wasm_binary(
     match validate_and_instrument_for_testing(&embedder, wasm) {
         Ok((validation_details, _)) => Ok(validation_details),
         Err(HypervisorError::InvalidWasm(err)) => Err(err),
-        Err(other_error) => panic!("unexpected error {}", other_error),
+        Err(other_error) => panic!("unexpected error {other_error}"),
     }
 }
 
@@ -556,11 +556,10 @@ fn many_exported_functions(n: usize) -> String {
             "composite_query"
         };
         ret = format!(
-            "{}  (export \"canister_{} xxx{}\" (func $read))\n",
-            ret, typ, i
+            "{ret}  (export \"canister_{typ} xxx{i}\" (func $read))\n"
         );
     }
-    format!("{}\n)", ret)
+    format!("{ret}\n)")
 }
 
 #[test]
@@ -597,10 +596,9 @@ fn can_validate_large_sum_exported_function_name_lengths() {
     let wasm = wat2wasm(&format!(
         r#"(module
                     (func $read)
-                    (export "canister_update {}" (func $read))
-                    (export "canister_composite_query {}" (func $read))
-                    (export "canister_query {}" (func $read)))"#,
-        func_a, func_b, func_c
+                    (export "canister_update {func_a}" (func $read))
+                    (export "canister_composite_query {func_b}" (func $read))
+                    (export "canister_query {func_c}" (func $read)))"#
     ))
     .unwrap();
     assert_eq!(
@@ -622,10 +620,9 @@ fn can_validate_too_large_sum_exported_function_name_lengths() {
     let wasm = wat2wasm(&format!(
         r#"(module
                     (func $read)
-                    (export "canister_update {}" (func $read))
-                    (export "canister_composite_query {}" (func $read))
-                    (export "canister_query {}" (func $read)))"#,
-        func_a, func_b, func_c
+                    (export "canister_update {func_a}" (func $read))
+                    (export "canister_composite_query {func_b}" (func $read))
+                    (export "canister_query {func_c}" (func $read)))"#
     ))
     .unwrap();
     assert_eq!(
@@ -859,7 +856,7 @@ fn can_validate_module_with_empty_custom_section_name() {
     ] {
         let mut module = wasm_encoder::Module::new();
         module.section(&wasm_encoder::CustomSection {
-            name: Cow::Borrowed(&format!("icp:{} ", visibility)),
+            name: Cow::Borrowed(&format!("icp:{visibility} ")),
             data: Cow::Borrowed(&[0, 1]),
         });
         let wasm = BinaryEncodedWasm::new(module.finish());
@@ -968,8 +965,7 @@ fn can_reject_module_with_custom_sections_too_big() {
             }
         ),
         Err(WasmValidationError::InvalidCustomSection(format!(
-            "Invalid custom sections: total size of the custom sections exceeds the maximum allowed: size {} bytes, allowed {} bytes",
-            size, max_custom_sections_size
+            "Invalid custom sections: total size of the custom sections exceeds the maximum allowed: size {size} bytes, allowed {max_custom_sections_size} bytes"
         )))
     );
 }
@@ -980,7 +976,7 @@ fn can_reject_module_with_duplicate_custom_sections() {
         for visibility_2 in ["public", "private"] {
             let mut module = wasm_encoder::Module::new();
             module.section(&wasm_encoder::CustomSection {
-                name: Cow::Borrowed(&format!("icp:{} custom1", visibility_1)),
+                name: Cow::Borrowed(&format!("icp:{visibility_1} custom1")),
                 data: Cow::Borrowed(&[0, 1]),
             });
             module.section(&wasm_encoder::CustomSection {
@@ -988,7 +984,7 @@ fn can_reject_module_with_duplicate_custom_sections() {
                 data: Cow::Borrowed(&[0, 2]),
             });
             module.section(&wasm_encoder::CustomSection {
-                name: Cow::Borrowed(&format!("icp:{} custom1", visibility_2)),
+                name: Cow::Borrowed(&format!("icp:{visibility_2} custom1")),
                 data: Cow::Borrowed(&[0, 3]),
             });
             let wasm = BinaryEncodedWasm::new(module.finish());
@@ -1082,9 +1078,8 @@ fn can_validate_module_with_reserved_symbols() {
                 r#"
                 (module
                     (global (;0;) (mut i32) (i32.const 0))
-                    (export "{}" (global 0))
-                )"#,
-                reserved_symbol
+                    (export "{reserved_symbol}" (global 0))
+                )"#
             ))
             .unwrap(),
         );
@@ -1099,9 +1094,8 @@ fn can_validate_module_with_reserved_symbols() {
                 r#"
                 (module
                     (func $x)
-                    (export "{}" (func $x))
-                )"#,
-                reserved_symbol
+                    (export "{reserved_symbol}" (func $x))
+                )"#
             ))
             .unwrap(),
         );
@@ -1257,7 +1251,7 @@ fn wasm_with_fixed_sizes(code_section_size: u32, data_section_size: u32) -> Bina
         wat.push_str("(block)");
     }
     wat.push(')');
-    wat.push_str(&format!("(memory {})", memory_size));
+    wat.push_str(&format!("(memory {memory_size})"));
     wat.push_str(&format!(
         "(data (i32.const 0) \"{}\")",
         "a".repeat(data_section_size as usize),
@@ -1397,9 +1391,8 @@ fn test_wasm64_initial_wasm_memory_size_validation() {
     let declared_wasm_memory_size_in_pages = allowed_wasm_memory_size_in_pages + 10;
     let wasm = wat2wasm(&format!(
         r#"(module
-            (memory i64 {} {})
-        )"#,
-        declared_wasm_memory_size_in_pages, declared_wasm_memory_size_in_pages
+            (memory i64 {declared_wasm_memory_size_in_pages} {declared_wasm_memory_size_in_pages})
+        )"#
     ))
     .unwrap();
 

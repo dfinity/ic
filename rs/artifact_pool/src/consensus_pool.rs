@@ -1986,7 +1986,7 @@ mod tests {
                 let m = self.map.read().unwrap();
                 let age = m
                     .get(&name)
-                    .unwrap_or_else(|| panic!("No age entry found for key path: {:?}", path));
+                    .unwrap_or_else(|| panic!("No age entry found for key path: {path:?}"));
                 Ok(*age)
             }
         }
@@ -1995,7 +1995,7 @@ mod tests {
             let time_source = FastForwardTimeSource::new();
             let backup_dir = tempfile::Builder::new().tempdir().unwrap();
             let subnet_id = subnet_test_id(0);
-            let path = backup_dir.path().join(format!("{:?}", subnet_id));
+            let path = backup_dir.path().join(format!("{subnet_id:?}"));
             let mut pool = new_from_cup_without_bytes(
                 node_test_id(0),
                 subnet_id,
@@ -2028,7 +2028,7 @@ mod tests {
             pool.backup = Some(Backup::new_with_age_func(
                 &pool,
                 backup_dir.path().into(),
-                backup_dir.path().join(format!("{:?}", subnet_id)),
+                backup_dir.path().join(format!("{subnet_id:?}")),
                 // Artifact retention time
                 Duration::from_millis(2700),
                 purging_interval,

@@ -403,7 +403,7 @@ fn test_small_load_test() {
     // https://github.com/tokio-rs/tokio/issues/4516
     std::panic::set_hook(Box::new(|info| {
         let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
         std::process::abort();
     }));
     let load_params = LoadParameters {
@@ -423,7 +423,7 @@ fn test_large_load_test_many_nodes() {
     // https://github.com/tokio-rs/tokio/issues/4516
     std::panic::set_hook(Box::new(|info| {
         let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
         std::process::abort();
     }));
     let load_params = LoadParameters {
@@ -443,7 +443,7 @@ fn test_load_test_many_ids() {
     // https://github.com/tokio-rs/tokio/issues/4516
     std::panic::set_hook(Box::new(|info| {
         let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
         std::process::abort();
     }));
     let load_params = LoadParameters {
@@ -463,7 +463,7 @@ fn test_small_load_test_without_purging() {
     // https://github.com/tokio-rs/tokio/issues/4516
     std::panic::set_hook(Box::new(|info| {
         let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
         std::process::abort();
     }));
     let load_params = LoadParameters {
@@ -483,7 +483,7 @@ fn test_small_load_test_with_non_overlap() {
     // https://github.com/tokio-rs/tokio/issues/4516
     std::panic::set_hook(Box::new(|info| {
         let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
         std::process::abort();
     }));
     let load_params = LoadParameters {

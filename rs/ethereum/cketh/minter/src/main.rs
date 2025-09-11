@@ -179,8 +179,7 @@ async fn eip_1559_transaction_price(
                         CKETH_WITHDRAWAL_TRANSACTION_GAS_LIMIT
                     } else {
                         ic_cdk::trap(format!(
-                            "ERROR: Unsupported ckERC20 token ledger {}",
-                            ckerc20_ledger_id
+                            "ERROR: Unsupported ckERC20 token ledger {ckerc20_ledger_id}"
                         ))
                     }
                 }
@@ -273,8 +272,7 @@ async fn withdraw_eth(
     let caller = validate_caller_not_anonymous();
     let _guard = retrieve_withdraw_guard(caller).unwrap_or_else(|e| {
         ic_cdk::trap(format!(
-            "Failed retrieving guard for principal {}: {:?}",
-            caller, e
+            "Failed retrieving guard for principal {caller}: {e:?}"
         ))
     });
 
@@ -401,8 +399,7 @@ async fn withdraw_erc20(
     let caller = validate_caller_not_anonymous();
     let _guard = retrieve_withdraw_guard(caller).unwrap_or_else(|e| {
         ic_cdk::trap(format!(
-            "Failed retrieving guard for principal {}: {:?}",
-            caller, e
+            "Failed retrieving guard for principal {caller}: {e:?}"
         ))
     });
 
@@ -557,7 +554,7 @@ async fn estimate_erc20_transaction_fee() -> Option<Wei> {
 #[query]
 fn is_address_blocked(address_string: String) -> bool {
     let address = Address::from_str(&address_string)
-        .unwrap_or_else(|e| ic_cdk::trap(format!("invalid recipient address: {:?}", e)));
+        .unwrap_or_else(|e| ic_cdk::trap(format!("invalid recipient address: {e:?}")));
     ic_cketh_minter::blocklist::is_blocked(&address)
 }
 
@@ -567,12 +564,11 @@ async fn add_ckerc20_token(erc20_token: AddCkErc20Token) {
         .unwrap_or_else(|| ic_cdk::trap("ERROR: ERC-20 feature is not activated"));
     if orchestrator_id != ic_cdk::caller() {
         ic_cdk::trap(format!(
-            "ERROR: only the orchestrator {} can add ERC-20 tokens",
-            orchestrator_id
+            "ERROR: only the orchestrator {orchestrator_id} can add ERC-20 tokens"
         ));
     }
     let ckerc20_token = erc20::CkErc20Token::try_from(erc20_token)
-        .unwrap_or_else(|e| ic_cdk::trap(format!("ERROR: {}", e)));
+        .unwrap_or_else(|e| ic_cdk::trap(format!("ERROR: {e}")));
     mutate_state(|s| process_event(s, EventType::AddedCkErc20Token(ckerc20_token)));
 }
 
@@ -945,8 +941,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                         last_processed_block_metric_name(id),
                         scraping_state.last_scraped_block_number().as_f64(),
                         &format!(
-                            "The last Ethereum block the ckETH minter checked for {} deposits.",
-                            id
+                            "The last Ethereum block the ckETH minter checked for {id} deposits."
                         ),
                     )?;
                 }
@@ -1028,7 +1023,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
-                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
                     .build()
             }
         }
@@ -1170,14 +1165,13 @@ fn check_candid_interface_compatibility() {
             Ok(_) => {}
             Err(e) => {
                 eprintln!(
-                    "{} is not compatible with {}!\n\n\
-            {}:\n\
-            {}\n\n\
-            {}:\n\
-            {}\n",
-                    new_name, old_name, new_name, new_str, old_name, old_str
+                    "{new_name} is not compatible with {old_name}!\n\n\
+            {new_name}:\n\
+            {new_str}\n\n\
+            {old_name}:\n\
+            {old_str}\n"
                 );
-                panic!("{:?}", e);
+                panic!("{e:?}");
             }
         }
     }

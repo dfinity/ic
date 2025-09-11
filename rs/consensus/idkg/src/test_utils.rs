@@ -237,8 +237,7 @@ impl IDkgBlockReader for TestIDkgBlockReader {
             .get(transcript_ref)
             .cloned()
             .ok_or(format!(
-                "transcript(): {:?} not found in idkg_transcripts",
-                transcript_ref
+                "transcript(): {transcript_ref:?} not found in idkg_transcripts"
             ))
     }
 
@@ -1235,7 +1234,7 @@ impl IDkgPayloadTestHelper for IDkgPayload {
         match self.key_transcripts.len() {
             0 => panic!("There are no key transcripts in the payload"),
             1 => self.key_transcripts.values().next().unwrap(),
-            n => panic!("There are multiple ({}) key transcripts in the payload", n),
+            n => panic!("There are multiple ({n}) key transcripts in the payload"),
         }
     }
 
@@ -1243,7 +1242,7 @@ impl IDkgPayloadTestHelper for IDkgPayload {
         match self.key_transcripts.len() {
             0 => panic!("There are no key transcripts in the payload"),
             1 => self.key_transcripts.values_mut().next().unwrap(),
-            n => panic!("There are multiple ({}) key transcripts in the payload", n),
+            n => panic!("There are multiple ({n}) key transcripts in the payload"),
         }
     }
 

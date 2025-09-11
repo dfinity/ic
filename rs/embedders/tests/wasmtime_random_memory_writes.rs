@@ -200,7 +200,7 @@ fn make_module_wat(heap_size: usize) -> String {
         (call $ic0_stable64_write (i64.const 0) (i64.const 0) (i64.const {STABLE_OP_BYTES}))
       )
 
-      (memory $memory {HEAP_SIZE})
+      (memory $memory {heap_size})
       (export "memory" (memory $memory))
       (export "canister_query dump_heap" (func $dump_heap))
       (export "canister_update write_bytes" (func $write_bytes))
@@ -209,8 +209,7 @@ fn make_module_wat(heap_size: usize) -> String {
       (export "canister_update test_stable64_read_nonzero" (func $test_stable_read_nonzero))
       (export "canister_update test_stable_write_nonzero" (func $test_stable_write_nonzero))
       (export "canister_update test_stable64_write_nonzero" (func $test_stable64_write_nonzero))
-    )"#,
-        HEAP_SIZE = heap_size
+    )"#
     )
 }
 
@@ -257,11 +256,10 @@ fn make_module_wat_for_api_calls(heap_size: usize) -> String {
         (call $ic0_stable_read (i32.const 40960) (i32.const 0) (i32.const 4))
       )
 
-      (memory $memory {HEAP_SIZE})
+      (memory $memory {heap_size})
       (export "memory" (memory $memory))
       (export "canister_update touch_heap_with_api_calls" (func $touch_heap_with_api_calls))
-    )"#,
-        HEAP_SIZE = heap_size
+    )"#
     )
 }
 
@@ -308,11 +306,10 @@ fn make_module64_wat_for_api_calls(heap_size: usize) -> String {
         (call $ic0_stable64_read (i64.const 40960) (i64.const 0) (i64.const 4))
       )
 
-      (memory $memory i64 {HEAP_SIZE})
+      (memory $memory i64 {heap_size})
       (export "memory" (memory $memory))
       (export "canister_update touch_heap_with_api_calls" (func $touch_heap_with_api_calls))
-    )"#,
-        HEAP_SIZE = heap_size
+    )"#
     )
 }
 
@@ -327,14 +324,12 @@ fn make_module_wat_with_write_fun(heap_size: usize, write_fun: &str) -> String {
         (func $ic0_msg_arg_data_size (result i32)))
 
       ;; write to memory
-      {WRITE_FUN}
+      {write_fun}
 
-      (memory $memory {HEAP_SIZE})
+      (memory $memory {heap_size})
       (export "memory" (memory $memory))
       (export "canister_update write_bytes" (func $write_bytes))
-    )"#,
-        WRITE_FUN = write_fun,
-        HEAP_SIZE = heap_size
+    )"#
     )
 }
 
@@ -371,9 +366,6 @@ fn make_backward_store_module_wat(
         (call $msg_reply)
       )
       "#,
-        store_inst_data_size = store_inst_data_size,
-        store_inst = store_inst,
-        load_inst = load_inst,
     );
     make_module_wat_with_write_fun(heap_size, &write_fun)
 }
@@ -585,8 +577,7 @@ mod tests {
                     };
                     assert!(
                         pages_match == 0,
-                        "page({}) of test buffer and Wasm heap doesn't match",
-                        i
+                        "page({i}) of test buffer and Wasm heap doesn't match"
                     );
                     page_map.update(&compute_page_delta(
                         &mut instance,

@@ -1324,10 +1324,7 @@ fn test_icrc3_get_blocks() {
         assert_eq!(
             expected_block.hash(),
             block.clone().hash(),
-            "Block {} is different.\nExpected Block: {}\nActual   Block: {}",
-            block_index,
-            expected_block,
-            block,
+            "Block {block_index} is different.\nExpected Block: {expected_block}\nActual   Block: {block}",
         )
     }
 
@@ -1505,7 +1502,7 @@ fn test_icrc3_get_blocks() {
                 None => panic!("Got block with id {id} at position {pos} which doesn't exist"),
                 Some(expected_block) => expected_block,
             };
-            assert_eq!(expected_block, &block, "id: {}, position: {}", id, pos);
+            assert_eq!(expected_block, &block, "id: {id}, position: {pos}");
         }
     };
 
@@ -1696,8 +1693,7 @@ fn test_icrc3_certificate_ledger_upgrade() {
                 _ => Err("Expected a leaf node".to_string()),
             },
             _ => Err(format!(
-                "Expected to find a leaf node: Hash tree: {:?}, leaf_name: {}",
-                hash_tree, leaf_name
+                "Expected to find a leaf node: Hash tree: {hash_tree:?}, leaf_name: {leaf_name}"
             )
             .to_string()),
         }
@@ -1867,8 +1863,7 @@ fn is_valid_root_hash(
         LookupResult::Found(v) => v,
         _ => {
             panic!(
-                "could not find certified_data for canister: {}",
-                ledger_canister_id
+                "could not find certified_data for canister: {ledger_canister_id}"
             )
         }
     };
@@ -2172,7 +2167,7 @@ mod verify_written_blocks {
             {
                 WasmResult::Reply(bytes) => bytes,
                 WasmResult::Reject(reject) => {
-                    panic!("Expected a successful reply, got a reject: {}", reject)
+                    panic!("Expected a successful reply, got a reject: {reject}")
                 }
             };
             let mut response = Decode!(&wasm_result_bytes, GetTransactionsResponse).unwrap();

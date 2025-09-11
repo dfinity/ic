@@ -398,8 +398,7 @@ mod assertions {
                 if filter(href) {
                     assert!(
                         predicate(href),
-                        "Link '{}' does not satisfy predicate",
-                        href
+                        "Link '{href}' does not satisfy predicate"
                     );
                 }
             }
@@ -546,13 +545,11 @@ mod assertions {
                     chain_id,
                     erc20_address,
                 } => Selector::parse(&format!(
-                    "#managed-canisters-{}-{} + table > tbody > tr",
-                    chain_id, erc20_address
+                    "#managed-canisters-{chain_id}-{erc20_address} + table > tbody > tr"
                 ))
                 .unwrap(),
                 TokenSelector::Other { token_symbol } => Selector::parse(&format!(
-                    "#other-canisters-{} + table > tbody > tr",
-                    token_symbol
+                    "#other-canisters-{token_symbol} + table > tbody > tr"
                 ))
                 .unwrap(),
             };
@@ -594,8 +591,7 @@ mod assertions {
                 }
             }
             panic!(
-                "BUG: row matching canister type {} not found!",
-                canister_type
+                "BUG: row matching canister type {canister_type} not found!"
             );
         }
     }

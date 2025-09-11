@@ -211,7 +211,7 @@ pub async fn exec(args: HealthArgs, agent: &Agent) -> Result<()> {
         .into_iter()
         .inspect(|result| {
             if let Err(e) = result {
-                println!("Error: {}", e)
+                println!("Error: {e}")
             }
         })
         .filter_map(Result::ok)
@@ -223,7 +223,7 @@ pub async fn exec(args: HealthArgs, agent: &Agent) -> Result<()> {
     } else {
         as_table(health_info.as_ref())
     };
-    println!("{}", output);
+    println!("{output}");
 
     eprintln!(
         "Out of {num_total_snses} SNSes, {num_snses_with_metadata} had metadata and I checked the health of {num_healthchecked} of them.",

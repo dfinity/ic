@@ -193,11 +193,10 @@ fn ic0_stable_write_increases_heap_delta() {
                 )
                 (func (export "canister_update test")
                     (drop (call $stable_grow (i32.const 1)))
-                    (call $stable_write (i32.const 0) (i32.const 0) (i32.const {}))
+                    (call $stable_write (i32.const 0) (i32.const 0) (i32.const {bytes}))
                 )
                 (memory 1)
-            )"#,
-            bytes
+            )"#
         )
     }
     let canister_id = test.canister_from_wat(wat(4097)).unwrap();
@@ -234,11 +233,10 @@ fn ic0_stable64_write_increases_heap_delta() {
                 )
                 (func (export "canister_update test")
                     (drop (call $stable64_grow (i64.const 1)))
-                    (call $stable64_write (i64.const 0) (i64.const 0) (i64.const {}))
+                    (call $stable64_write (i64.const 0) (i64.const 0) (i64.const {bytes}))
                 )
                 (memory 1)
-            )"#,
-            bytes
+            )"#
         )
     }
     let canister_id = test.canister_from_wat(wat(4097)).unwrap();
@@ -2379,7 +2377,7 @@ fn ic0_root_key_works(test: &mut ExecutionTest, root_key: Vec<u8>) {
     let result = test.ingress(canister_id, "test", vec![]).unwrap();
     let raw = match result {
         WasmResult::Reply(data) => data,
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
     let n: u32 = u32::from_le_bytes(raw[0..4].try_into().unwrap());
     assert_eq!(raw.len() as u32, 4 + n);
@@ -4041,7 +4039,7 @@ fn changes_to_stable_memory_in_canister_init_are_rolled_back_on_failure() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = format!(
         r#"(module
-            {}
+            {STABLE_MEMORY_WAT}
             (func (export "canister_init")
                 (drop (call $stable_grow (i32.const 1)))
                 (call $stable_write (i32.const 0) (i32.const 0) (i32.const 4))
@@ -4049,8 +4047,7 @@ fn changes_to_stable_memory_in_canister_init_are_rolled_back_on_failure() {
             )
             (memory 1)
             (data (i32.const 0) "abcd")  ;; Initial contents of the heap.
-        )"#,
-        STABLE_MEMORY_WAT
+        )"#
     );
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
     let err = test
@@ -4065,7 +4062,7 @@ fn changes_to_stable_memory_in_canister_pre_upgrade_are_rolled_back_on_failure()
     let mut test = ExecutionTestBuilder::new().build();
     let wat = format!(
         r#"(module
-            {}
+            {STABLE_MEMORY_WAT}
             (func (export "canister_init")
                 (drop (call $stable_grow (i32.const 1)))
             )
@@ -4076,8 +4073,7 @@ fn changes_to_stable_memory_in_canister_pre_upgrade_are_rolled_back_on_failure()
             )
             (memory 1)
             (data (i32.const 0) "abcd")  ;; Initial contents of the heap.
-        )"#,
-        STABLE_MEMORY_WAT
+        )"#
     );
     let canister_id = test.canister_from_wat(wat.clone()).unwrap();
     let result = test.ingress(canister_id, "read", vec![]);
@@ -4095,7 +4091,7 @@ fn changes_to_stable_memory_in_canister_post_upgrade_are_rolled_back_on_failure(
     let mut test = ExecutionTestBuilder::new().build();
     let wat = format!(
         r#"(module
-            {}
+            {STABLE_MEMORY_WAT}
             (func (export "canister_init")
                 (drop (call $stable_grow (i32.const 1)))
             )
@@ -4106,8 +4102,7 @@ fn changes_to_stable_memory_in_canister_post_upgrade_are_rolled_back_on_failure(
             )
             (memory 1)
             (data (i32.const 0) "abcd")  ;; Initial contents of the heap.
-        )"#,
-        STABLE_MEMORY_WAT
+        )"#
     );
     let canister_id = test.canister_from_wat(wat.clone()).unwrap();
     let result = test.ingress(canister_id, "read", vec![]);
@@ -4125,14 +4120,13 @@ fn upgrade_preserves_stable_memory() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = format!(
         r#"(module
-            {}
+            {STABLE_MEMORY_WAT}
             (func (export "canister_init")
                 (drop (call $stable_grow (i32.const 1)))
             )
             (memory 1)
             (data (i32.const 0) "abcd")  ;; Initial contents of the heap.
-        )"#,
-        STABLE_MEMORY_WAT
+        )"#
     );
     let canister_id = test.canister_from_wat(wat.clone()).unwrap();
     let result = test.ingress(canister_id, "write", vec![]);
@@ -4150,14 +4144,13 @@ fn reinstall_clears_stable_memory() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = format!(
         r#"(module
-            {}
+            {STABLE_MEMORY_WAT}
             (func (export "canister_init")
                 (drop (call $stable_grow (i32.const 1)))
             )
             (memory 1)
             (data (i32.const 0) "abcd")  ;; Initial contents of the heap.
-        )"#,
-        STABLE_MEMORY_WAT
+        )"#
     );
     let canister_id = test.canister_from_wat(wat.clone()).unwrap();
     let result = test.ingress(canister_id, "write", vec![]);
@@ -4182,7 +4175,7 @@ fn cannot_execute_update_on_stopping_canister() {
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopping, err.code());
     assert_eq!(
-        format!("Canister {} is not running", canister_id),
+        format!("Canister {canister_id} is not running"),
         err.description()
     );
 }
@@ -4200,7 +4193,7 @@ fn cannot_execute_update_on_stopped_canister() {
     let err = test.ingress(canister_id, "update", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopped, err.code());
     assert_eq!(
-        format!("Canister {} is not running", canister_id),
+        format!("Canister {canister_id} is not running"),
         err.description()
     );
 }
@@ -4217,7 +4210,7 @@ fn cannot_execute_query_on_stopping_canister() {
     let err = test.ingress(canister_id, "query", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopping, err.code());
     assert_eq!(
-        format!("Canister {} is not running", canister_id),
+        format!("Canister {canister_id} is not running"),
         err.description()
     );
 }
@@ -4235,7 +4228,7 @@ fn cannot_execute_query_on_stopped_canister() {
     let err = test.ingress(canister_id, "query", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterStopped, err.code());
     assert_eq!(
-        format!("Canister {} is not running", canister_id),
+        format!("Canister {canister_id} is not running"),
         err.description()
     );
 }
@@ -4503,7 +4496,6 @@ fn memory_module_wat(wasm_pages: i32) -> String {
             (export "canister_update grow_and_read" (func $grow_and_read))
             (export "canister_update grow_and_write" (func $grow_and_write))
         )"#,
-        wasm_pages = wasm_pages,
     )
 }
 
@@ -5309,8 +5301,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
     };
     assert!(
         reject_message.contains("Canister has been uninstalled"),
-        "Unexpected error message: {}",
-        reject_message
+        "Unexpected error message: {reject_message}"
     );
 
     // Canister A gets all cycles that are not accepted by B.
@@ -5417,8 +5408,7 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
     assert!(
         reject_message.contains("Canister called `ic0.trap` with message: 'panicked at")
             && reject_message.contains("get_callback: 1 out of bounds"),
-        "Unexpected error message: {}",
-        reject_message
+        "Unexpected error message: {reject_message}"
     );
 
     // Canister A gets all cycles that are not accepted by B.
@@ -5539,8 +5529,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
     };
     assert!(
         reject_message.contains("Canister has been uninstalled"),
-        "Unexpected error message: {}",
-        reject_message
+        "Unexpected error message: {reject_message}"
     );
 
     // Canister A gets a refund for all cycles that B did not accept.
@@ -7667,7 +7656,7 @@ fn upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
     let mut test: ExecutionTest = ExecutionTestBuilder::new().build();
     let wat = format!(
         r#"(module
-            {}
+            {STABLE_MEMORY_WAT}
             (func (export "canister_init")
                 (drop (call $stable_grow (i32.const 1)))
             )
@@ -7676,8 +7665,7 @@ fn upgrade_with_skip_pre_upgrade_preserves_stable_memory() {
             )
             (memory 1)
             (data (i32.const 0) "abcd")  ;; Initial contents of the heap.
-        )"#,
-        STABLE_MEMORY_WAT
+        )"#
     );
     let canister_id = test.canister_from_wat(wat.clone()).unwrap();
     let result = test.ingress(canister_id, "write", vec![]);
@@ -8701,7 +8689,7 @@ fn invoke_cost_call() {
         CanisterCyclesCostSchedule::Normal,
     );
     let Ok(WasmResult::Reply(bytes)) = res else {
-        panic!("Expected reply, got {:?}", res);
+        panic!("Expected reply, got {res:?}");
     };
     let actual_cost = Cycles::from(&bytes);
     assert_eq!(actual_cost, expected_cost,);
@@ -8722,7 +8710,7 @@ fn invoke_cost_create_canister() {
         .cycles_account_manager()
         .canister_creation_fee(subnet_size, CanisterCyclesCostSchedule::Normal);
     let Ok(WasmResult::Reply(bytes)) = res else {
-        panic!("Expected reply, got {:?}", res);
+        panic!("Expected reply, got {res:?}");
     };
     let actual_cost = Cycles::from(&bytes);
     assert_eq!(actual_cost, expected_cost,);
@@ -8748,7 +8736,7 @@ fn invoke_cost_http_request() {
         CanisterCyclesCostSchedule::Normal,
     );
     let Ok(WasmResult::Reply(bytes)) = res else {
-        panic!("Expected reply, got {:?}", res);
+        panic!("Expected reply, got {res:?}");
     };
     let actual_cost = Cycles::from(&bytes);
     assert_eq!(actual_cost, expected_cost,);
@@ -8776,7 +8764,7 @@ fn invoke_cost_sign_with_ecdsa() {
         .cycles_account_manager()
         .ecdsa_signature_fee(subnet_size, CanisterCyclesCostSchedule::Normal);
     let Ok(WasmResult::Reply(bytes)) = res else {
-        panic!("Expected reply, got {:?}", res);
+        panic!("Expected reply, got {res:?}");
     };
     let actual_cost = Cycles::from(&bytes);
     assert_eq!(actual_cost, expected_cost,);
@@ -8856,7 +8844,7 @@ fn invoke_cost_sign_with_schnorr() {
         .cycles_account_manager()
         .schnorr_signature_fee(subnet_size, CanisterCyclesCostSchedule::Normal);
     let Ok(WasmResult::Reply(bytes)) = res else {
-        panic!("Expected reply, got {:?}", res);
+        panic!("Expected reply, got {res:?}");
     };
     let actual_cost = Cycles::from(&bytes);
     assert_eq!(actual_cost, expected_cost,);
@@ -8936,7 +8924,7 @@ fn invoke_cost_vetkd_derive_key() {
         .cycles_account_manager()
         .vetkd_fee(subnet_size, CanisterCyclesCostSchedule::Normal);
     let Ok(WasmResult::Reply(bytes)) = res else {
-        panic!("Expected reply, got {:?}", res);
+        panic!("Expected reply, got {res:?}");
     };
     let actual_cost = Cycles::from(&bytes);
     assert_eq!(actual_cost, expected_cost,);
@@ -9020,7 +9008,7 @@ fn legacy_cycles_balance_traps_if_balance_too_large() {
             let balance = u128::from_le_bytes(data.try_into().unwrap());
             balance_is_roughly(balance, 1_u128 << 65);
         }
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
 }
 
@@ -9051,7 +9039,7 @@ fn get_balance_twice() {
             assert_eq!(balance1 as u128, balance2);
             balance_is_roughly(balance1.into(), 1_u128 << 62);
         }
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
 }
 
@@ -9094,7 +9082,7 @@ fn get_available_call_cycles_twice_in_callback() {
             assert_eq!(balance1, balance2);
             assert_eq!(balance1, 1_u128 << 60);
         }
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
 }
 
@@ -9116,7 +9104,7 @@ fn can_accept_zero_cycles() {
             let balance = u64::from_le_bytes(data.try_into().unwrap());
             assert_eq!(balance, 0);
         }
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
     canister_balance_is_roughly(&test, canister_id, 1_u128 << 60);
 }
@@ -9139,7 +9127,7 @@ fn can_accept_arbitrarily_many_cycles() {
             let balance = u64::from_le_bytes(data.try_into().unwrap());
             assert_eq!(balance, 0);
         }
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
     canister_balance_is_roughly(&test, canister_id, 1_u128 << 60);
 }
@@ -9229,7 +9217,7 @@ fn call_cycles_not_in_balance() {
             let balance = u128::from_le_bytes(data.try_into().unwrap());
             balance_is_roughly(balance, 1_u128 << 61);
         }
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
     canister_balance_is_roughly(&test, canister_id, 1_u128 << 62);
 }
@@ -9266,7 +9254,7 @@ fn relay_before_accept_traps() {
         )
         .unwrap();
     match res {
-        WasmResult::Reply(data) => panic!("Unexpected reply: {:?}", data),
+        WasmResult::Reply(data) => panic!("Unexpected reply: {data:?}"),
         WasmResult::Reject(msg) => {
             assert!(msg.contains("out of cycles"));
         }
@@ -9307,7 +9295,7 @@ fn relay_after_accept_works() {
         .unwrap();
     match res {
         WasmResult::Reply(_) => (),
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
     canister_balance_is_roughly(&test, canister_1, 1_u128 << 61);
     canister_balance_is_roughly(&test, canister_2, 1_u128 << 60);
@@ -9344,7 +9332,7 @@ fn aborting_call_resets_balance() {
             balance_is_roughly(balance1, 1_u128 << 61);
             balance_is_roughly(balance2, 1_u128 << 62);
         }
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
     canister_balance_is_roughly(&test, canister_1, 1_u128 << 62);
     canister_balance_is_roughly(&test, canister_2, 1_u128 << 62);

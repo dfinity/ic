@@ -112,6 +112,6 @@ fn assert_reply_eq(res: WasmResult, expected: u64) {
         WasmResult::Reply(reply) => {
             assert_eq!(String::from_utf8(reply).unwrap(), expected.to_string());
         }
-        WasmResult::Reject(err) => panic!("Expected a reply but got {}", err),
+        WasmResult::Reject(err) => panic!("Expected a reply but got {err}"),
     }
 }

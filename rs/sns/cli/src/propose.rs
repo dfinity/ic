@@ -134,7 +134,7 @@ pub fn exec(args: ProposeArgs) -> Result<()> {
         }) => {
             println!("🚀 Success!");
             if let Some(message) = message {
-                println!("Message from NNS governance: {:?}", message);
+                println!("Message from NNS governance: {message:?}");
             }
             if network == "ic" {
                 println!("View the proposal here:");
@@ -190,14 +190,14 @@ fn confirmation_messages(proposal: &Proposal) -> Result<Vec<String>> {
     let fallback_controllers = csns
         .fallback_controller_principal_ids
         .iter()
-        .map(|id| format!("  - {}", id))
+        .map(|id| format!("  - {id}"))
         .join("\n");
     let dapp_canister_controllers = if !csns.dapp_canisters.is_empty() {
         let canisters = csns
             .dapp_canisters
             .iter()
             .filter_map(|canister| canister.id.as_ref())
-            .map(|id| format!("  - {}", id))
+            .map(|id| format!("  - {id}"))
             .join("\n");
         format!(
             r#"A CreateServiceNervousSystem proposal will be submitted.
@@ -214,7 +214,7 @@ Then, if the swap completes successfully, the SNS will take sole control. If the
 
     let disallowed_types = functions_disallowed_in_pre_initialization_swap()
         .into_iter()
-        .map(|t| format!("  - {}", t))
+        .map(|t| format!("  - {t}"))
         .join("\n");
     let allowed_proposals = format!(
         r#"After the proposal is adopted, a swap is started. While the swap is running, the SNS will be in a restricted mode.
@@ -230,7 +230,7 @@ fn inform_user_of_sns_behavior(proposal: &Proposal, skip_confirmation: bool) -> 
     let messages = confirmation_messages(proposal)?;
     for message in messages {
         println!();
-        println!("{}", message);
+        println!("{message}");
         confirm_understanding(skip_confirmation)?;
     }
     Ok(())
@@ -424,23 +424,21 @@ impl Display for SaveToErrors {
         let error_string = match self {
             SaveToErrors::FileOpenFailed(path_buf, reason) => {
                 format!(
-                    "could not open file for writing {:?} due to {}",
-                    path_buf, reason
+                    "could not open file for writing {path_buf:?} due to {reason}"
                 )
             }
             SaveToErrors::FileWriteFailed(path_buf, reason) => {
-                format!("could not write to file {:?} due to {}", path_buf, reason)
+                format!("could not write to file {path_buf:?} due to {reason}")
             }
             SaveToErrors::InvalidData(reason) => {
-                format!("could not format data to JSON scheme due to {}", reason)
+                format!("could not format data to JSON scheme due to {reason}")
             }
         };
 
         write!(
             f,
-            "Unable to save ProposalId to file because {}. \
-            The proposal may or may not have been submitted",
-            error_string
+            "Unable to save ProposalId to file because {error_string}. \
+            The proposal may or may not have been submitted"
         )
     }
 }

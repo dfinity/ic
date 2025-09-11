@@ -1531,8 +1531,7 @@ mod assertions {
             let selector = Selector::parse(selector).unwrap();
             assert!(
                 self.actual.select(&selector).next().is_none(),
-                "expected no elements matching '{:?}', but found some",
-                selector
+                "expected no elements matching '{selector:?}', but found some"
             );
             self
         }
@@ -1560,7 +1559,7 @@ mod assertions {
                     lower_alphanumeric(id).unwrap()
                 ),
                 expected_href,
-                &format!("wrong last {} synced block href", id),
+                &format!("wrong last {id} synced block href"),
             )
         }
 
@@ -1569,14 +1568,13 @@ mod assertions {
                 .iter()
                 .map(|i| {
                     format!(
-                        "<a href=\"https://sepolia.etherscan.io/block/{}\"><code>{}</code></a>",
-                        i, i
+                        "<a href=\"https://sepolia.etherscan.io/block/{i}\"><code>{i}</code></a>"
                     )
                 })
                 .collect::<Vec<_>>()
                 .join(", ");
             self.has_html_value(
-                &format!("#skipped-blocks-{} > td", contract_address),
+                &format!("#skipped-blocks-{contract_address} > td"),
                 &expected_links,
                 "wrong skipped blocks",
             )
@@ -1593,8 +1591,7 @@ mod assertions {
                 if filter(href) {
                     assert!(
                         predicate(href),
-                        "Link '{}' does not satisfy predicate",
-                        href
+                        "Link '{href}' does not satisfy predicate"
                     );
                 }
             }
@@ -1645,7 +1642,7 @@ mod assertions {
                     lower_alphanumeric(id).unwrap()
                 ),
                 expected_address,
-                &format!("wrong {} helper contract address", id),
+                &format!("wrong {id} helper contract address"),
             )
         }
 

@@ -44,7 +44,7 @@ fn smoke_test() {
         None,
     );
     let port = endpoint.port().unwrap();
-    let replica_url = format!("http://localhost:{}", port);
+    let replica_url = format!("http://localhost:{port}");
     let rosetta_bin = path_from_env("ROSETTA_BIN_PATH");
     let rosetta_state_directory =
         tempfile::TempDir::new().expect("failed to create a temporary directory");

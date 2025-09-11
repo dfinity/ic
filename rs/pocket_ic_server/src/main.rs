@@ -189,7 +189,7 @@ async fn start(runtime: Arc<Runtime>) {
     let ip_addr = args.ip_addr.unwrap_or("127.0.0.1".to_string());
     let addr = format!("{}:{}", ip_addr, args.port);
     let listener = std::net::TcpListener::bind(addr.clone())
-        .unwrap_or_else(|_| panic!("Failed to bind PocketIC server to address {}", addr));
+        .unwrap_or_else(|_| panic!("Failed to bind PocketIC server to address {addr}"));
     let real_port = listener.local_addr().unwrap().port();
 
     // The shared, mutable state of the PocketIC process.
@@ -303,7 +303,7 @@ async fn start(runtime: Arc<Runtime>) {
     while handle.listening().await.is_none() {}
 
     if let Some(mut port_file) = port_file {
-        let _ = port_file.write_all(format!("{}\n", real_port).as_bytes());
+        let _ = port_file.write_all(format!("{real_port}\n").as_bytes());
         let _ = port_file.flush();
     }
 
@@ -502,24 +502,21 @@ pub async fn verify_signature(
                 Err(err) => (
                     StatusCode::NOT_ACCEPTABLE,
                     Json(Err(format!(
-                        "Canister signature verification failed: {:?}",
-                        err
+                        "Canister signature verification failed: {err:?}"
                     ))),
                 ),
             },
             Err(err) => (
                 StatusCode::BAD_REQUEST,
                 Json(Err(format!(
-                    "Failed to parse DER encoded root public key: {:?}",
-                    err
+                    "Failed to parse DER encoded root public key: {err:?}"
                 ))),
             ),
         },
         Err(err) => (
             StatusCode::BAD_REQUEST,
             Json(Err(format!(
-                "Failed to parse DER encoded public key: {:?}",
-                err
+                "Failed to parse DER encoded public key: {err:?}"
             ))),
         ),
     }

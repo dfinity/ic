@@ -220,9 +220,8 @@ fn install_code_validate_input_controller() {
     result.assert_contains(
         ErrorCode::CanisterInvalidController,
         &format!(
-            "Only the controllers of the canister {} can control it.\n\
-            Canister's controllers: {}\nSender's ID: {}",
-            canister_id, controller, sender
+            "Only the controllers of the canister {canister_id} can control it.\n\
+            Canister's controllers: {controller}\nSender's ID: {sender}"
         ),
     );
 }
@@ -265,9 +264,8 @@ fn install_code_validates_execution_state() {
     result.assert_contains(
         ErrorCode::CanisterNonEmpty,
         &format!(
-            "Canister {} cannot be installed because the canister is not empty. \
-                   Try installing with mode='reinstall' instead.",
-            canister_id
+            "Canister {canister_id} cannot be installed because the canister is not empty. \
+                   Try installing with mode='reinstall' instead."
         ),
     );
 }
@@ -476,8 +474,7 @@ fn install_code_with_start_with_err() {
     err.assert_contains(
         ErrorCode::CanisterTrapped,
         &format!(
-            "Error from Canister {}: Canister trapped: unreachable",
-            canister_id
+            "Error from Canister {canister_id}: Canister trapped: unreachable"
         ),
     );
 }
@@ -585,8 +582,7 @@ fn install_code_with_init_method_with_error() {
     err.assert_contains(
         ErrorCode::CanisterTrapped,
         &format!(
-            "Error from Canister {}: Canister trapped: unreachable",
-            canister_id
+            "Error from Canister {canister_id}: Canister trapped: unreachable"
         ),
     );
 }
@@ -1108,7 +1104,7 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
         check_ingress_status(test.ingress_status(&message_id)),
         Err(UserError::new(
             ErrorCode::CanisterNotFound,
-            format!("Canister {} migrated during a subnet split", canister_id_2),
+            format!("Canister {canister_id_2} migrated during a subnet split"),
         ))
     );
 }
@@ -1245,8 +1241,7 @@ fn assert_consistent_install_code_calls(state: &ReplicatedState, expected_calls:
             .remove_install_code_call(*call_id)
             .unwrap_or_else(|| {
                 panic!(
-                    "Canister AbortedInstallCode task without matching subnet InstallCodeCall: {} {:?}",
-                    call_id, call
+                    "Canister AbortedInstallCode task without matching subnet InstallCodeCall: {call_id} {call:?}"
                 )
             });
     }
@@ -1768,14 +1763,12 @@ fn install_chunked_fails_from_noncontroller_of_store() {
         Ok(WasmResult::Reject(reject)) => {
             assert!(
                 reject.contains(&format!(
-                    "Only the controllers of the canister {} can control it",
-                    store_canister
+                    "Only the controllers of the canister {store_canister} can control it"
                 )),
-                "Unexpected reject message {}",
-                reject
+                "Unexpected reject message {reject}"
             );
         }
-        other => panic!("Expected reject, but got {:?}", other),
+        other => panic!("Expected reject, but got {other:?}"),
     }
 }
 
@@ -2149,9 +2142,7 @@ fn failed_install_chunked_charges_for_wasm_assembly() {
     assert!(
         charged_cycles - expected_cost <= Cycles::from(1_u64)
             && expected_cost - charged_cycles <= Cycles::from(1_u64),
-        "Charged cycles {} differs from expected cost {}",
-        charged_cycles,
-        expected_cost
+        "Charged cycles {charged_cycles} differs from expected cost {expected_cost}"
     );
 }
 
@@ -2234,9 +2225,7 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
     assert!(
         charged_cycles - expected_cost <= Cycles::from(1_u64)
             && expected_cost - charged_cycles <= Cycles::from(1_u64),
-        "Charged cycles {} differs from expected cost {}",
-        charged_cycles,
-        expected_cost
+        "Charged cycles {charged_cycles} differs from expected cost {expected_cost}"
     );
 }
 

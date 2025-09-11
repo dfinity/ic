@@ -65,7 +65,7 @@ type LedgerMap = BTreeMap<AccountIdentifier, u64>;
 /// Constructs a test principal id from an integer.
 /// Convenience functions to make creating neurons more concise.
 pub fn principal(i: u64) -> PrincipalId {
-    PrincipalId::try_from(format!("SID{}", i).as_bytes().to_vec()).unwrap()
+    PrincipalId::try_from(format!("SID{i}").as_bytes().to_vec()).unwrap()
 }
 
 /// Constructs a test neuron's account.
@@ -661,7 +661,7 @@ impl ProposalNeuronBehavior {
         // Submit proposal
         let action = match self.proposal_topic {
             ProposalTopicBehaviour::Governance => proposal::Action::Motion(Motion {
-                motion_text: format!("summary: {}", summary),
+                motion_text: format!("summary: {summary}"),
             }),
             ProposalTopicBehaviour::NetworkEconomics => {
                 proposal::Action::ManageNetworkEconomics(NetworkEconomics {

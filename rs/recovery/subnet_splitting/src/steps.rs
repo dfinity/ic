@@ -156,8 +156,7 @@ impl Step for SplitStateStep {
         );
         if actual_state_hash != expected_state_hash {
             return Err(RecoveryError::ValidationFailed(format!(
-                "State hash after split {} doesn't match the expected state hash {}",
-                actual_state_hash, expected_state_hash,
+                "State hash after split {actual_state_hash} doesn't match the expected state hash {expected_state_hash}",
             )));
         }
 

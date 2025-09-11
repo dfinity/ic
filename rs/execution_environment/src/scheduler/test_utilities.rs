@@ -480,8 +480,7 @@ impl SchedulerTest {
             match msg {
                 RequestOrResponse::Request(request) => {
                     panic!(
-                        "Expected the xnet message to be a Response, but got a Request: {:?}",
-                        request
+                        "Expected the xnet message to be a Response, but got a Request: {request:?}"
                     )
                 }
                 RequestOrResponse::Response(response) => {
@@ -1349,7 +1348,7 @@ impl TestWasmExecutorCore {
                 canister_current_memory_usage,
                 canister_current_message_memory_usage,
             ) {
-                eprintln!("Skipping a call due to an error: {}", error);
+                eprintln!("Skipping a call due to an error: {error}");
             }
         }
         system_state.take_changes()
@@ -1412,7 +1411,7 @@ impl TestWasmExecutorCore {
             prepayment_for_response_transmission,
         ) {
             system_state.unregister_callback(callback);
-            return Err(format!("Failed pushing request {:?} to output queue.", req));
+            return Err(format!("Failed pushing request {req:?} to output queue."));
         }
         self.messages.insert(call_message_id, call.other_side);
         self.messages.insert(response_message_id, call.on_response);

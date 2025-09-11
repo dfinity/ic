@@ -639,11 +639,11 @@ fn orphan_chunk_detected() {
 
         match validate_manifest_internal_consistency(&manifest) {
             Err(ManifestValidationError::InconsistentManifest { .. }) => (),
-            other => panic!("Expected an orphan chunk to be detected, got: {:?}", other),
+            other => panic!("Expected an orphan chunk to be detected, got: {other:?}"),
         }
         match validate_manifest(&manifest, &root_hash) {
             Err(ManifestValidationError::InconsistentManifest { .. }) => (),
-            other => panic!("Expected an orphan chunk to be detected, got: {:?}", other),
+            other => panic!("Expected an orphan chunk to be detected, got: {other:?}"),
         }
     }
 }

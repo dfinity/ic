@@ -547,7 +547,7 @@ impl DepositCkErc20WithSubaccountParams {
             assert_eq!(amount_hex.len(), 64);
             let subaccount = hex::encode(self.recipient_subaccount.unwrap_or([0; 32]));
             assert_eq!(amount_hex.len(), 64);
-            format!("0x{}{}", amount_hex, subaccount)
+            format!("0x{amount_hex}{subaccount}")
         };
 
         let topics = vec![

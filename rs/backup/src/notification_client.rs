@@ -50,11 +50,11 @@ impl NotificationClient {
     }
 
     pub fn report_failure_slack(&self, message: String) {
-        self.message_slack(format!("<!channel> ❌ {}", message))
+        self.message_slack(format!("<!channel> ❌ {message}"))
     }
 
     pub fn report_warning_slack(&self, message: String) {
-        self.message_slack(format!("⚠️ {}", message))
+        self.message_slack(format!("⚠️ {message}"))
     }
 
     fn push_metrics(&self, message: String) {

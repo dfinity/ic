@@ -436,12 +436,12 @@ where
     O: CandidType + Debug + for<'a> Deserialize<'a>,
 {
     let req = measure_span(&PROFILING_DATA, encode_span_name, || Encode!(i))
-        .map_err(|err| format!("failed to candid encode the input {:?}: {}", i, err))?;
+        .map_err(|err| format!("failed to candid encode the input {i:?}: {err}"))?;
     let res = ic_cdk::api::call::call_raw(id, method, &req, 0)
         .await
-        .map_err(|(code, str)| format!("code: {:#?} message: {}", code, str))?;
+        .map_err(|(code, str)| format!("code: {code:#?} message: {str}"))?;
     measure_span(&PROFILING_DATA, decode_span_name, || Decode!(&res, O))
-        .map_err(|err| format!("failed to candid decode the output: {}", err))
+        .map_err(|err| format!("failed to candid decode the output: {err}"))
 }
 
 async fn get_blocks_from_ledger(start: u64) -> Option<GetBlocksResponse> {
@@ -798,8 +798,7 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
             } => {
                 let fee = block.effective_fee.or(fee).unwrap_or_else(|| {
                     ic_cdk::trap(format!(
-                        "Block {} is of type Transfer but has no fee or effective fee!",
-                        block_index
+                        "Block {block_index} is of type Transfer but has no fee or effective fee!"
                     ))
                 });
                 mutate_state(|s| s.last_fee = Some(fee));
@@ -855,8 +854,7 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
 fn debit(block_index: BlockIndex64, account: Account, amount: Tokens) {
     change_balance(account, |balance| {
         balance.checked_sub(&amount).unwrap_or_else(|| {
-            ic_cdk::trap(format!("Block {} caused an underflow for account {} when calculating balance {} - amount {}",
-                block_index, account, balance, amount));
+            ic_cdk::trap(format!("Block {block_index} caused an underflow for account {account} when calculating balance {balance} - amount {amount}"));
         })
     })
 }
@@ -864,8 +862,7 @@ fn debit(block_index: BlockIndex64, account: Account, amount: Tokens) {
 fn credit(block_index: BlockIndex64, account: Account, amount: Tokens) {
     change_balance(account, |balance| {
         balance.checked_add(&amount).unwrap_or_else(|| {
-            ic_cdk::trap(format!("Block {} caused an overflow for account {} when calculating balance {} + amount {}",
-                block_index, account, balance, amount))
+            ic_cdk::trap(format!("Block {block_index} caused an overflow for account {account} when calculating balance {balance} + amount {amount}"))
         })
     });
 }
@@ -876,8 +873,7 @@ fn generic_block_to_encoded_block_or_trap(
 ) -> EncodedBlock {
     generic_block_to_encoded_block(block).unwrap_or_else(|e| {
         trap(format!(
-            "Unable to decode generic block at index {}. Error: {}",
-            block_index, e
+            "Unable to decode generic block at index {block_index}. Error: {e}"
         ))
     })
 }
@@ -885,8 +881,7 @@ fn generic_block_to_encoded_block_or_trap(
 fn decode_encoded_block_or_trap(block_index: BlockIndex64, block: EncodedBlock) -> Block<Tokens> {
     Block::<Tokens>::decode(block).unwrap_or_else(|e| {
         trap(format!(
-            "Unable to decode encoded block at index {}. Error: {}",
-            block_index, e
+            "Unable to decode encoded block at index {block_index}. Error: {e}"
         ))
     })
 }
@@ -906,11 +901,10 @@ fn get_fee_collector(block_index: BlockIndex64, block: &Block<Tokens>) -> Option
     } else if let Some(fee_collector_block_index) = block.fee_collector_block_index {
         let block = get_decoded_block(fee_collector_block_index)
             .unwrap_or_else(||
-                ic_cdk::trap(format!("Block at index {} has fee_collector_block_index {} but there is no block at that index", block_index, fee_collector_block_index)));
+                ic_cdk::trap(format!("Block at index {block_index} has fee_collector_block_index {fee_collector_block_index} but there is no block at that index")));
         if block.fee_collector.is_none() {
             ic_cdk::trap(format!(
-                "Block at index {} has fee_collector_block_index {} but that block has no fee_collector set",
-                block_index, fee_collector_block_index
+                "Block at index {block_index} has fee_collector_block_index {fee_collector_block_index} but that block has no fee_collector set"
             ))
         } else {
             block.fee_collector
@@ -993,8 +987,7 @@ fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransa
         let block = with_blocks(|blocks| {
             blocks.get(id).unwrap_or_else(|| {
                 trap(format!(
-                    "Block {} not found in the block log, account blocks map is corrupted!",
-                    id
+                    "Block {id} not found in the block log, account blocks map is corrupted!"
                 ))
             })
         });
@@ -1020,8 +1013,7 @@ fn encoded_block_bytes_to_flat_transaction(
 ) -> Transaction {
     let block = Block::<Tokens>::decode(EncodedBlock::from(block)).unwrap_or_else(|e| {
         trap(format!(
-            "Unable to decode encoded block at index {}. Error: {}",
-            block_index, e
+            "Unable to decode encoded block at index {block_index}. Error: {e}"
         ))
     });
     block.into()
@@ -1098,7 +1090,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
-                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
                     .build()
             }
         }

@@ -49,8 +49,7 @@ impl StateToolHelper {
         compute_manifest(dir)
             .map_err(|err| {
                 RecoveryError::StateToolError(format!(
-                    "Failed to compute the state manifest: {}",
-                    err
+                    "Failed to compute the state manifest: {err}"
                 ))
             })
             .and_then(|manifest| write_file(output_path, manifest))
@@ -97,8 +96,7 @@ impl StateToolHelper {
         verify_manifest(manifest_file)
             .map_err(|err| {
                 RecoveryError::StateToolError(format!(
-                    "Failed to verify the state manifest: {}",
-                    err
+                    "Failed to verify the state manifest: {err}"
                 ))
             })
             .map(hex::encode)
@@ -117,7 +115,7 @@ impl StateToolHelper {
         info!(self.logger, "Executing {:?}", command);
 
         let output = command.output().map_err(|e| {
-            RecoveryError::StateToolError(format!("Failed executing the command, error: {}", e))
+            RecoveryError::StateToolError(format!("Failed executing the command, error: {e}"))
         })?;
 
         if !output.status.success() {

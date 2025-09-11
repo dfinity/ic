@@ -210,19 +210,19 @@ where
     match result {
         Ok(wasm_result) => match wasm_result {
             WasmResult::Reply(bytes) => Decode!(&bytes, T).unwrap(),
-            WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+            WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
         },
-        Err(err) => panic!("Unexpected error: {}", err),
+        Err(err) => panic!("Unexpected error: {err}"),
     }
 }
 
 pub fn get_reject_message(result: Result<WasmResult, UserError>) -> String {
     match result {
         Ok(wasm_result) => match wasm_result {
-            WasmResult::Reply(bytes) => panic!("Unexpected reply: {:?}", bytes),
+            WasmResult::Reply(bytes) => panic!("Unexpected reply: {bytes:?}"),
             WasmResult::Reject(msg) => msg,
         },
-        Err(err) => panic!("Unexpected error: {}", err),
+        Err(err) => panic!("Unexpected error: {err}"),
     }
 }
 
@@ -377,8 +377,7 @@ fn test_reshare_chain_key_with_unknown_key() {
         assert_eq!(
             result,
             Ok(WasmResult::Reject(format!(
-                "Unable to route management canister request {}: ChainKeyError(\"Requested unknown threshold key {} on subnet {}, subnet has keys: []\")",
-                method, unknown_key, nns_subnet,
+                "Unable to route management canister request {method}: ChainKeyError(\"Requested unknown threshold key {unknown_key} on subnet {nns_subnet}, subnet has keys: []\")",
             ))),
         );
     }
@@ -899,8 +898,7 @@ fn test_sign_with_threshold_key_queue_fills_up() {
         assert_eq!(
             result,
             Ok(WasmResult::Reject(format!(
-                "{} request failed: request queue for key {} is full.",
-                method, key_id,
+                "{method} request failed: request queue for key {key_id} is full.",
             )))
         );
     }

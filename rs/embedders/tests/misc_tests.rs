@@ -133,7 +133,7 @@ fn compressed_test_contents(name: &str) -> Vec<u8> {
         std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set"),
         name
     );
-    std::fs::read(&path).unwrap_or_else(|e| panic!("couldn't open file {}: {}", path, e))
+    std::fs::read(&path).unwrap_or_else(|e| panic!("couldn't open file {path}: {e}"))
 }
 
 fn default_max_size() -> NumBytes {

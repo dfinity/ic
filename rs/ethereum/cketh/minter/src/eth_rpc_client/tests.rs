@@ -418,7 +418,7 @@ mod eth_get_transaction_receipt {
     proptest! {
         #[test]
         fn should_fail_deserializing_wrong_transaction_status(wrong_status in 2_u32..u32::MAX) {
-            let status = format!("\"0x{:x}\"", wrong_status);
+            let status = format!("\"0x{wrong_status:x}\"");
             let error = serde_json::from_str::<TransactionStatus>(&status);
             assert_matches!(error, Err(e) if e.to_string().contains("invalid transaction status"));
         }

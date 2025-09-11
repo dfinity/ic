@@ -234,10 +234,9 @@ pub async fn create_extension_canister<C: CallCanisters>(
     .map_err(|err| {
         if let CreateCanisterError::InsufficientFunds { balance } = err {
             let err = format!(
-                "Requested creating the {} canister with {} cycles, but the caller identity has \
-                 only {} cycles on the cycles ledger. Please buy more cycles using \
+                "Requested creating the {name} canister with {cycles_amount} cycles, but the caller identity has \
+                 only {balance} cycles on the cycles ledger. Please buy more cycles using \
                  `dfx cycles convert --amount AMOUNT --network NETWORK` and try again.",
-                name, cycles_amount, balance,
             );
             anyhow::anyhow!(err)
         } else {
@@ -505,7 +504,7 @@ pub async fn cycles_ledger_create_canister<C: CallCanisters>(
 
 fn format_full_hash(hash: &[u8]) -> String {
     hash.iter()
-        .map(|b| format!("{:02x}", b))
+        .map(|b| format!("{b:02x}"))
         .collect::<Vec<_>>()
         .join("")
 }

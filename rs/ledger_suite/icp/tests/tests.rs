@@ -398,14 +398,13 @@ fn archive_blocks_small_test() {
 
         // 12 blocks
         let accounts = make_accounts(4, 3);
-        println!("[test] accounts: {:?}", accounts);
+        println!("[test] accounts: {accounts:?}");
 
         // For this test we will use a tiny node size. This is because
         // we want multiple archive nodes to be created.
         let blocks_per_archive_node = 2;
         println!(
-            "[test] blocks per archive node: {}",
-            blocks_per_archive_node
+            "[test] blocks per archive node: {blocks_per_archive_node}"
         );
         // The tiny maximum message size will force archiving one block at a
         // time.
@@ -482,7 +481,7 @@ fn archive_blocks_small_test() {
         // Then loop over these nodes and fetch all blocks.
         let mut blocks_from_archive = vec![];
         for n in nodes {
-            println!("[test] retrieving blocks from {}. calling iter_blocks()", n);
+            println!("[test] retrieving blocks from {n}. calling iter_blocks()");
             let node = Canister::new(&r, n);
 
             assert_eq!(
@@ -641,7 +640,7 @@ fn archive_blocks_large_test() {
         // Then loop over these nodes and fetch all blocks.
         let mut blocks_from_archive = vec![];
         for n in nodes {
-            println!("[test] retrieving blocks from {}. calling iter_blocks()", n);
+            println!("[test] retrieving blocks from {n}. calling iter_blocks()");
             let node = Canister::new(&r, n);
 
             let mut blocks = {
@@ -876,8 +875,7 @@ fn notify_trap_test() {
                 r.as_ref()
                     .unwrap_err()
                     .contains("Please migrate to the CMC notify flow"),
-                "Notifying after duration should return an error containing \"Please migrate to the CMC notify flow\". Instead got {:?}",
-                r
+                "Notifying after duration should return an error containing \"Please migrate to the CMC notify flow\". Instead got {r:?}"
             );
         }
 
@@ -1030,8 +1028,7 @@ fn notify_disabled_test() {
                             .map_err(|e| e.contains("has no update method 'notify"))
                             .err()
                             .unwrap_or(false),
-                        "Calling notify_* when notify-method feature is not set should result in an error containing the string has no update method 'notify. Result was: {:?}",
-                        r
+                        "Calling notify_* when notify-method feature is not set should result in an error containing the string has no update method 'notify. Result was: {r:?}"
                     );
                 }
 
@@ -1564,7 +1561,7 @@ fn get_block_test() {
 
         let icp_ledger::protobuf::ArchiveIndexResponse { entries } =
             ledger.query_("get_archive_index_pb", protobuf, ()).await?;
-        println!("[test] archive_index: {:?}", entries);
+        println!("[test] archive_index: {entries:?}");
 
         Ok(())
     })

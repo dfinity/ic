@@ -106,7 +106,7 @@ fn validate_original_source_cup_and_extract_state_hash(
         subnet_public_key,
     )
     .map_err(|err| {
-        RecoveryError::ValidationFailed(format!("Failed to validate the CUP signature: {}", err))
+        RecoveryError::ValidationFailed(format!("Failed to validate the CUP signature: {err}"))
     })?;
 
     Ok(state_hash)
@@ -131,7 +131,7 @@ fn validate_state_tree_and_extract_subnet_public_key(
     let bytes = state_tree.lookup_public_key()?;
 
     parse_threshold_sig_key_from_der(bytes).map_err(|err| {
-        RecoveryError::UnexpectedError(format!("Failed to parse the public key bytes: {}", err))
+        RecoveryError::UnexpectedError(format!("Failed to parse the public key bytes: {err}"))
     })
 }
 

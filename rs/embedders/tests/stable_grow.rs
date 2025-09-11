@@ -38,7 +38,7 @@ fn run_memory_grows(grows: &[GrowCommand]) {
     );
     let result = test.install_code(args).unwrap();
     if let WasmResult::Reject(s) = result {
-        panic!("Installation rejected: {}", s)
+        panic!("Installation rejected: {s}")
     }
 
     let mut wasm = wasm();

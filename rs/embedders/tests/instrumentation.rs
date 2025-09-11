@@ -743,15 +743,13 @@ fn run_charge_for_dirty_heap(wasm_memory_type: WasmMemoryType) {
         (module
             (global $g1 (export "g1") (mut i64) (i64.const 0))
             (func $test (export "canister_update test")
-                (i64.store ({ADDRESS} 0) (i64.const 17))
-                (i64.store ({ADDRESS} 4096) (i64.const 117))
-                (i64.load ({ADDRESS} 0))
+                (i64.store ({address} 0) (i64.const 17))
+                (i64.store ({address} 4096) (i64.const 117))
+                (i64.load ({address} 0))
                 global.set $g1
             )
-            {MEMORY}
-        )"#,
-        ADDRESS = address,
-        MEMORY = memory
+            {memory}
+        )"#
     );
     let mut instance = new_instance(&wat, 10000);
     let res = instance.run(func_ref("test")).unwrap();

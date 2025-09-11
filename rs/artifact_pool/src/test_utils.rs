@@ -294,7 +294,7 @@ where
                     if let PoolSectionOp::Insert(artifact) = op {
                         &artifact.msg
                     } else {
-                        panic!("Expect Insert but found {:?}", op)
+                        panic!("Expect Insert but found {op:?}")
                     }
                 })
                 .collect::<Vec<_>>();

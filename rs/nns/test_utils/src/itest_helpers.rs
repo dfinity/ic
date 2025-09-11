@@ -81,7 +81,7 @@ impl NnsCanisters<'_> {
         .into_iter()
         .collect();
 
-        maybe_canisters.unwrap_or_else(|e| panic!("At least one canister creation failed: {}", e));
+        maybe_canisters.unwrap_or_else(|e| panic!("At least one canister creation failed: {e}"));
         eprintln!("NNS canisters created after {:.1} s", since_start_secs());
 
         // TODO (after deploying SNS-WASMs to mainnet) update ALL_NNS_CANISTER_IDS to the resulting
@@ -880,8 +880,7 @@ pub async fn forward_call_via_universal_canister(
         UNIVERSAL_CANISTER_YEAH_RESPONSE => true,
         UNIVERSAL_CANISTER_NOPE_RESPONSE => false,
         other => panic!(
-            "Unexpected response from the universal canister: {:?}",
-            other
+            "Unexpected response from the universal canister: {other:?}"
         ),
     }
 }

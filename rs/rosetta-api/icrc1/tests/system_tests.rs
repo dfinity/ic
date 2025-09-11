@@ -78,7 +78,7 @@ lazy_static! {
 
 fn path_from_env(var: &str) -> PathBuf {
     std::fs::canonicalize(
-        std::env::var(var).unwrap_or_else(|_| panic!("Environment variable {} is not set", var)),
+        std::env::var(var).unwrap_or_else(|_| panic!("Environment variable {var} is not set")),
     )
     .unwrap()
 }
@@ -161,14 +161,12 @@ impl SetupBuilder {
 
         let subnet_id = pocket_ic.get_subnet(canister_id).unwrap();
         println!(
-            "Installed the ICRC1 ledger canister ({}) onto {:?}",
-            canister_id, subnet_id
+            "Installed the ICRC1 ledger canister ({canister_id}) onto {subnet_id:?}"
         );
         let sns_subnet_id = pocket_ic.topology().get_sns().unwrap();
         assert_eq!(
             subnet_id, sns_subnet_id,
-            "The canister subnet {} does not match the SNS subnet {}",
-            subnet_id, sns_subnet_id
+            "The canister subnet {subnet_id} does not match the SNS subnet {sns_subnet_id}"
         );
 
         let endpoint = pocket_ic.make_live(None);
@@ -343,8 +341,7 @@ async fn assert_rosetta_balance(
     network_identifier: NetworkIdentifier,
 ) {
     println!(
-        "Checking balance for account: {:?} at block index {}",
-        account, block_index
+        "Checking balance for account: {account:?} at block index {block_index}"
     );
     let start = Instant::now();
     let timeout = Duration::from_secs(30);
@@ -357,14 +354,12 @@ async fn assert_rosetta_balance(
             break;
         } else {
             println!(
-                "Waited for rosetta, received block index {} but expected {}, waiting some more...",
-                latest_rosetta_block, block_index
+                "Waited for rosetta, received block index {latest_rosetta_block} but expected {block_index}, waiting some more..."
             );
         }
         if start.elapsed() > timeout {
             panic!(
-                "Failed to get block index {} within {:?}",
-                block_index, timeout
+                "Failed to get block index {block_index} within {timeout:?}"
             );
         }
     }

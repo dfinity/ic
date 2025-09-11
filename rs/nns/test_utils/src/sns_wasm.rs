@@ -199,7 +199,7 @@ fn make_proposal_with_test_neuron_1(env: &StateMachine, proposal: Proposal) -> P
 
     match response.command.unwrap() {
         CommandResponse::MakeProposal(resp) => ProposalId::from(resp.proposal_id.unwrap()),
-        other => panic!("Unexpected response: {:?}", other),
+        other => panic!("Unexpected response: {other:?}"),
     }
 }
 
@@ -394,7 +394,7 @@ pub fn wait_for_proposal_status(
         machine.tick();
         machine.advance_time(Duration::from_secs(1));
     }
-    panic!("Proposal {} never exited the Open state.", proposal_id);
+    panic!("Proposal {proposal_id} never exited the Open state.");
 }
 
 /// Makes a bunch of proposals, and waits for them to be no longer be open.

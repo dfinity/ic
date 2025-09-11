@@ -1066,7 +1066,7 @@ mod tests {
             registry_version,
             &vet_key_ids,
         )
-        .unwrap_or_else(|err| panic!("Couldn't create configs: {:?}", err));
+        .unwrap_or_else(|err| panic!("Couldn't create configs: {err:?}"));
 
         // We produced exactly four configs (high, low and two vetkeys), and with expected ids.
         assert_eq!(configs.len(), 4);
@@ -1206,8 +1206,7 @@ mod tests {
                             == NiDkgTargetSubnet::Remote(target_id))
                         .count(),
                     2,
-                    "{:?}",
-                    configs
+                    "{configs:?}"
                 );
 
                 // This is the first attempt to run DKG for this remote target.

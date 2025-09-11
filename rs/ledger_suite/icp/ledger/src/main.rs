@@ -127,8 +127,7 @@ fn init(
     feature_flags: Option<FeatureFlags>,
 ) {
     print(format!(
-        "[ledger] init(): minting account is {}",
-        minting_account
+        "[ledger] init(): minting account is {minting_account}"
     ));
     LEDGER.write().unwrap().from_init(
         initial_values,
@@ -152,8 +151,7 @@ fn init(
         Some(max_message_size_bytes) => {
             *MAX_MESSAGE_SIZE_BYTES.write().unwrap() = max_message_size_bytes;
             print(format!(
-                "[ledger] init(): using maximum message size: {}",
-                max_message_size_bytes
+                "[ledger] init(): using maximum message size: {max_message_size_bytes}"
             ));
         }
     }
@@ -202,7 +200,7 @@ async fn send(
     let caller_principal_id = PrincipalId::from(caller());
 
     if !LEDGER.read().unwrap().can_send(&caller_principal_id) {
-        panic!("Sending from {} is not allowed", caller_principal_id);
+        panic!("Sending from {caller_principal_id} is not allowed");
     }
 
     let from = AccountIdentifier::new(caller_principal_id, from_subaccount);
@@ -224,7 +222,7 @@ async fn send(
         let balance = LEDGER.read().unwrap().balances().account_balance(&from);
         let min_burn_amount = LEDGER.read().unwrap().transfer_fee.min(balance);
         if amount < min_burn_amount {
-            panic!("Burns lower than {} are not allowed", min_burn_amount);
+            panic!("Burns lower than {min_burn_amount} are not allowed");
         }
         Operation::Burn {
             from,
@@ -404,8 +402,7 @@ thread_local! {
 fn trap_since_notify_is_no_longer_supported() {
     let caller_principal_id = PrincipalId::from(caller());
     print(format!(
-        "[ledger] notify method called by [{}]",
-        caller_principal_id
+        "[ledger] notify method called by [{caller_principal_id}]"
     ));
 
     trap(
@@ -783,7 +780,7 @@ fn notify_() {
 #[update]
 async fn transfer(arg: TransferArgs) -> Result<BlockIndex, TransferError> {
     let to_account = AccountIdentifier::from_address(arg.to).unwrap_or_else(|e| {
-        trap(format!("Invalid account identifier: {}", e));
+        trap(format!("Invalid account identifier: {e}"));
     });
     send(
         arg.memo,
@@ -953,7 +950,7 @@ fn account_balance_candid_(arg: AccountIdentifierByteBuf) -> Tokens {
     match BinaryAccountBalanceArgs::try_from(arg) {
         Ok(arg) => {
             let account = AccountIdentifier::from_address(arg.account).unwrap_or_else(|e| {
-                trap(format!("Invalid account identifier: {}", e));
+                trap(format!("Invalid account identifier: {e}"));
             });
             account_balance(account)
         }
@@ -1123,7 +1120,7 @@ fn get_nodes_() {
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     let ledger = LEDGER.try_read().map_err(|err| {
-        std::io::Error::other(format!("Failed to get a LEDGER for read: {}", err))
+        std::io::Error::other(format!("Failed to get a LEDGER for read: {err}"))
     })?;
     let archive_guard = ledger.blockchain.archive.read().unwrap();
     let num_archives = archive_guard
@@ -1245,7 +1242,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
-                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
                     .build()
             }
         }
@@ -1436,7 +1433,7 @@ async fn remove_approval(args: RemoveApprovalArgs) -> Result<Nat, ApproveError> 
         created_at_time: None,
     };
     let spender = AccountIdentifier::from_address(args.spender).unwrap_or_else(|e| {
-        trap(format!("Invalid account identifier: {}", e));
+        trap(format!("Invalid account identifier: {e}"));
     });
     let block_index = icrc2_approve_not_async(caller(), approve_arg, Some(spender))?;
 
@@ -1481,7 +1478,7 @@ fn icrc21_canister_call_consent_message(
             created_at_time: _,
         } = Decode!(&consent_msg_request.arg, TransferArgs).map_err(|e| {
             Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                description: format!("Failed to decode TransferArgs: {}", e),
+                description: format!("Failed to decode TransferArgs: {e}"),
             })
         })?;
         icrc21_check_fee(&Some(Nat::from(fee)), &ledger_fee)?;
@@ -1496,7 +1493,7 @@ fn icrc21_canister_call_consent_message(
         };
         let receiver = AccountIdentifier::from_slice(&to).map_err(|e| {
             Icrc21Error::UnsupportedCanisterCall(ErrorInfo {
-                description: format!("Failed to parse receiver account id: {}", e),
+                description: format!("Failed to parse receiver account id: {e}"),
             })
         })?;
         let args = GenericTransferArgs {

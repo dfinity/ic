@@ -81,8 +81,7 @@ fn make_checkpoint_and_get_state_impl(
     )
     .unwrap_or_else(|err| {
         panic!(
-            "Expected make_unvalidated_checkpoint to succeed, got {:?}",
-            err
+            "Expected make_unvalidated_checkpoint to succeed, got {err:?}"
         )
     });
     *state = (*switched_state).clone();
@@ -364,7 +363,7 @@ fn returns_not_found_for_missing_checkpoints() {
                 )
             }) {
             Err(CheckpointError::NotFound(_)) => (),
-            Err(err) => panic!("Expected to get NotFound error, got {:?}", err),
+            Err(err) => panic!("Expected to get NotFound error, got {err:?}"),
             Ok(_) => panic!("Expected to get an error, got state!"),
         }
     });
@@ -384,8 +383,7 @@ fn reports_an_error_on_misconfiguration() {
         let err_msg = layout.err().unwrap().to_string();
         assert!(
             err_msg.contains("Permission denied"),
-            "Expected a permission error, got {}",
-            err_msg
+            "Expected a permission error, got {err_msg}"
         );
     });
 }

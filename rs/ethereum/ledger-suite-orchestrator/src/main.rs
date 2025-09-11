@@ -18,7 +18,7 @@ mod dashboard;
 #[query]
 fn canister_ids(contract: CandidErc20Contract) -> Option<ManagedCanisterIds> {
     let contract = Erc20Token::try_from(contract)
-        .unwrap_or_else(|e| ic_cdk::trap(format!("Invalid ERC-20 contract: {:?}", e)));
+        .unwrap_or_else(|e| ic_cdk::trap(format!("Invalid ERC-20 contract: {e:?}")));
     let token_id = TokenId::from(contract);
     read_state(|s| s.managed_canisters(&token_id).cloned()).map(ManagedCanisterIds::from)
 }
@@ -260,7 +260,7 @@ fn http_request(req: ic_http_types::HttpRequest) -> ic_http_types::HttpResponse 
                     .with_body_and_content_length(writer.into_inner())
                     .build(),
                 Err(err) => {
-                    HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                    HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
                         .build()
                 }
             }
@@ -306,14 +306,13 @@ fn check_candid_interface_compatibility() {
             Ok(_) => {}
             Err(e) => {
                 eprintln!(
-                    "{} is not compatible with {}!\n\n\
-            {}:\n\
-            {}\n\n\
-            {}:\n\
-            {}\n",
-                    new_name, old_name, new_name, new_str, old_name, old_str
+                    "{new_name} is not compatible with {old_name}!\n\n\
+            {new_name}:\n\
+            {new_str}\n\n\
+            {old_name}:\n\
+            {old_str}\n"
                 );
-                panic!("{:?}", e);
+                panic!("{e:?}");
             }
         }
     }

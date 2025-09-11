@@ -122,7 +122,7 @@ impl StableState {
             .unwrap()
         {
             WasmResult::Reply(bytes) => bytes,
-            WasmResult::Reject(err) => panic!("Failed to get stable memory size: {}", err),
+            WasmResult::Reject(err) => panic!("Failed to get stable memory size: {err}"),
         };
 
         assert_eq!(
@@ -165,7 +165,7 @@ impl StableState {
                 {
                     WasmResult::Reply(bytes) => bytes,
                     WasmResult::Reject(err) => {
-                        panic!("Failed to read stable memory contents: {}", err)
+                        panic!("Failed to read stable memory contents: {err}")
                     }
                 };
                 assert_eq!(chunk, &Decode!(&result, Vec<u8>).unwrap());

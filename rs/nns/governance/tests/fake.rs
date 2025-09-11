@@ -651,7 +651,7 @@ impl Environment for FakeDriver {
 /// Constructs a test principal id from an integer.
 /// Convenience functions to make creating neurons more concise.
 pub fn principal(i: u64) -> PrincipalId {
-    PrincipalId::try_from(format!("SID{}", i).as_bytes().to_vec()).unwrap()
+    PrincipalId::try_from(format!("SID{i}").as_bytes().to_vec()).unwrap()
 }
 
 /// Issues a manage_neuron command to register a vote
@@ -728,7 +728,7 @@ impl ProposalNeuronBehavior {
         // Submit proposal
         let action = match self.proposal_topic {
             ProposalTopicBehavior::Governance => proposal::Action::Motion(Motion {
-                motion_text: format!("summary: {}", summary),
+                motion_text: format!("summary: {summary}"),
             }),
             ProposalTopicBehavior::NetworkEconomics => {
                 proposal::Action::ManageNetworkEconomics(NetworkEconomics {

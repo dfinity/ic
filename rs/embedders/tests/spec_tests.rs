@@ -39,27 +39,23 @@ mod convert {
                 | AbstractHeapType::NoExtern
                 | AbstractHeapType::None => {
                     panic!(
-                        "Unable to handle heap type {:?}. The GC proposal isn't supported",
-                        heap_type
+                        "Unable to handle heap type {heap_type:?}. The GC proposal isn't supported"
                     )
                 }
                 AbstractHeapType::Exn | AbstractHeapType::NoExn => {
                     panic!(
-                        "Unable to handle heap type {:?}. The exceptions proposal isn't supported",
-                        heap_type
+                        "Unable to handle heap type {heap_type:?}. The exceptions proposal isn't supported"
                     )
                 }
                 AbstractHeapType::Cont | AbstractHeapType::NoCont => {
                     panic!(
-                        "Unable to handle heap type {:?}. The stack switching proposal isn't supported",
-                        heap_type
+                        "Unable to handle heap type {heap_type:?}. The stack switching proposal isn't supported"
                     )
                 }
             },
             HeapType::Concrete(_) => {
                 panic!(
-                    "Unable to handle heap type {:?}. The GC proposal isn't supported",
-                    heap_type
+                    "Unable to handle heap type {heap_type:?}. The GC proposal isn't supported"
                 )
             }
         }
@@ -83,13 +79,12 @@ mod convert {
             }
             WastArg::Component(_) => {
                 println!(
-                    "Component feature not enabled. Can't handle WastArg {:?}",
-                    arg
+                    "Component feature not enabled. Can't handle WastArg {arg:?}"
                 );
                 None
             }
             _ => {
-                panic!("Unknown WastArg {:?}", arg);
+                panic!("Unknown WastArg {arg:?}");
             }
         }
     }
@@ -401,7 +396,7 @@ impl<'a> TestState<'a> {
                 self.created
                     .iter()
                     .find(|(next_id, _)| *next_id == Some(id))
-                    .unwrap_or_else(|| panic!("Unable to find module matching id {:?}", id))
+                    .unwrap_or_else(|| panic!("Unable to find module matching id {id:?}"))
                     .1
             }
         }
@@ -478,8 +473,7 @@ fn span_location(span: Span, text: &str, path: &PathBuf) -> String {
         .next()
         .unwrap();
     format!(
-        "Test failed in wast {:?} at line {}: {}",
-        path, line, line_text
+        "Test failed in wast {path:?} at line {line}: {line_text}"
     )
 }
 
@@ -752,7 +746,7 @@ fn test_spec_file(
             &mut test_state,
             parsing_multi_memory_enabled,
         ) {
-            writeln!(error_string, "{}", e).unwrap();
+            writeln!(error_string, "{e}").unwrap();
         }
     }
     if !error_string.is_empty() {
@@ -771,7 +765,7 @@ fn run_testsuite(test_files: Vec<PathBuf>, config: &Config, parsing_multi_memory
     println!("Running spec tests on {} files", test_files.len());
     let mut errors = vec![];
     for path in test_files {
-        println!("Running tests on file {:?}", path);
+        println!("Running tests on file {path:?}");
         if let Err(e) = test_spec_file(&path, config, parsing_multi_memory_enabled) {
             errors.push(e);
         }
@@ -810,7 +804,7 @@ fn default_config() -> Config {
 /// Note that `e.to_string()` returns only the first level error,
 /// which is not sufficient in many cases.
 fn error_to_string(e: anyhow::Error) -> String {
-    format!("{:?}", e)
+    format!("{e:?}")
 }
 
 /// These tests run on data from the WebAssembly spec testsuite. The suite is not

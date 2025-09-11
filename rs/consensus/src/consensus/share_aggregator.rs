@@ -387,7 +387,7 @@ mod tests {
             assert!(messages.len() == 1);
             let cup = match messages.pop() {
                 Some(ConsensusMessage::CatchUpPackage(x)) => x,
-                x => panic!("Expecting CatchUpPackageShare but got {:?}\n", x),
+                x => panic!("Expecting CatchUpPackageShare but got {x:?}\n"),
             };
 
             assert_eq!(CatchUpShareContent::from(&cup.content), share0.content);

@@ -134,7 +134,7 @@ fn test_healthy_behind() {
         wait_for_status_healthy(&addr).await.unwrap();
         healthy.store(true, Ordering::SeqCst);
 
-        let url = format!("http://{}/api/v2/status", addr);
+        let url = format!("http://{addr}/api/v2/status");
 
         let response = reqwest::Client::new()
             .get(url)
@@ -151,7 +151,7 @@ fn test_healthy_behind() {
             .expect("Status endpoint is a valid CBOR.");
 
         let CBOR::Map(replica_status) = replica_status else {
-            panic!("Expected a map, got {:?}", replica_status);
+            panic!("Expected a map, got {replica_status:?}");
         };
 
         let replica_health_status = replica_status
@@ -205,8 +205,7 @@ fn test_unauthorized_controller(
         assert_eq!(TEXT_PLAIN, response.headers().get(CONTENT_TYPE).unwrap());
         assert_eq!(
             format!(
-                "Effective principal id in URL {} does not match requested principal id: {}.",
-                canister1, canister2
+                "Effective principal id in URL {canister1} does not match requested principal id: {canister2}."
             ),
             response.text().await.unwrap()
         );
@@ -269,8 +268,7 @@ fn test_unauthorized_query(
 
         assert_eq!(
             format!(
-                "Specified CanisterId {} does not match effective canister id in URL {}",
-                canister1, canister2
+                "Specified CanisterId {canister1} does not match effective canister id in URL {canister2}"
             ),
             response.text().await.unwrap()
         )
@@ -378,8 +376,7 @@ fn test_unauthorized_call(#[values(Call::V2, Call::V3, Call::V4)] endpoint: Call
 
         assert_eq!(
             format!(
-                "Specified CanisterId {} does not match effective canister id in URL {}",
-                canister1, canister2
+                "Specified CanisterId {canister1} does not match effective canister id in URL {canister2}"
             ),
             invalid_update_call.text().await.unwrap()
         );
@@ -632,8 +629,7 @@ fn test_graceful_shutdown_of_the_endpoint() {
     let connection_to_endpoint = TcpStream::connect(addr);
     assert!(
         connection_to_endpoint.is_ok(),
-        "Connecting to endpoint failed: {:?}.",
-        connection_to_endpoint
+        "Connecting to endpoint failed: {connection_to_endpoint:?}."
     );
 
     // If the shutdown of the endpoint is not "graceful" then the test will timeout
@@ -666,7 +662,7 @@ fn test_too_long_paths_are_rejected(
     HttpEndpointBuilder::new(rt.handle().clone(), config).run();
 
     let long_path: Path = (0..100)
-        .map(|i| format!("hallo{}", i).into())
+        .map(|i| format!("hallo{i}").into())
         .collect::<Vec<Label>>()
         .into();
 
@@ -973,7 +969,7 @@ fn test_http_2_requests_are_accepted() {
         wait_for_status_healthy(&addr).await.unwrap();
 
         client
-            .get(format!("http://{}/api/v2/status", addr))
+            .get(format!("http://{addr}/api/v2/status"))
             .header("Content-Type", "application/cbor")
             .send()
             .await
@@ -982,8 +978,7 @@ fn test_http_2_requests_are_accepted() {
 
     assert!(
         response.status().is_success(),
-        "Response was not successful: {:?}.",
-        response
+        "Response was not successful: {response:?}."
     );
     assert_eq!(response.version(), reqwest::Version::HTTP_2);
 }
@@ -1095,7 +1090,7 @@ fn test_http_1_requests_are_accepted() {
         wait_for_status_healthy(&addr).await.unwrap();
 
         client
-            .get(format!("http://{}/api/v2/status", addr))
+            .get(format!("http://{addr}/api/v2/status"))
             .header("Content-Type", "application/cbor")
             .send()
             .await
@@ -1104,8 +1099,7 @@ fn test_http_1_requests_are_accepted() {
 
     assert!(
         response.status().is_success(),
-        "Response was not successful: {:?}.",
-        response
+        "Response was not successful: {response:?}."
     );
     assert_eq!(response.version(), reqwest::Version::HTTP_11);
 }
@@ -1252,7 +1246,7 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
             serde_cbor::from_slice::<CBOR>(&response_body).expect("Response is a valid CBOR.");
 
         let CBOR::Map(response_map) = response else {
-            panic!("Expected a map, got {:?}", response);
+            panic!("Expected a map, got {response:?}");
         };
 
         assert_eq!(
@@ -1262,7 +1256,7 @@ fn test_call_handler_returns_early_for_ingress_message_already_in_certified_stat
 
         let certificate = match response_map.get(&CBOR::Text("certificate".to_string())) {
             Some(CBOR::Bytes(certificate)) => certificate,
-            Some(content) => panic!("Expected bytes for Certificate. Got {:?} instead", content),
+            Some(content) => panic!("Expected bytes for Certificate. Got {content:?} instead"),
             _ => panic!("Reply is missing."),
         };
 
@@ -1349,7 +1343,7 @@ fn test_duplicate_concurrent_requests_return_early(#[values(Call::V3, Call::V4)]
             serde_cbor::from_slice::<CBOR>(&response_body).expect("Response is a valid CBOR.");
 
         let CBOR::Map(response_map) = response else {
-            panic!("Expected a map, got {:?}", response);
+            panic!("Expected a map, got {response:?}");
         };
 
         assert_eq!(
@@ -1435,7 +1429,7 @@ fn test_sync_call_endpoint_responds_with_certificate(
             serde_cbor::from_slice::<CBOR>(&response_body).expect("Response is a valid CBOR.");
 
         let CBOR::Map(response_map) = response else {
-            panic!("Expected a map, got {:?}", response);
+            panic!("Expected a map, got {response:?}");
         };
 
         assert_eq!(
@@ -1445,7 +1439,7 @@ fn test_sync_call_endpoint_responds_with_certificate(
 
         let certificate = match response_map.get(&CBOR::Text("certificate".to_string())) {
             Some(CBOR::Bytes(certificate)) => certificate,
-            Some(content) => panic!("Expected bytes for Certificate. Got {:?} instead", content),
+            Some(content) => panic!("Expected bytes for Certificate. Got {content:?} instead"),
             _ => panic!("Reply is missing."),
         };
 

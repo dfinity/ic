@@ -106,8 +106,7 @@ pub(crate) fn get_halt_subnet_at_cup_height_command(
         .add_argument(
             SUMMARY_ARG,
             quote(format!(
-                "Halt subnet {} at cup height and optionally update ssh readonly access",
-                subnet_id,
+                "Halt subnet {subnet_id} at cup height and optionally update ssh readonly access",
             )),
         )
         .add_argument("halt-at-cup-height", true);

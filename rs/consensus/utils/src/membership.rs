@@ -327,10 +327,7 @@ pub mod test {
                 // threshold, which shows that no other height-h block can be notarized.
                 c - (t_fin - f) < t_not,
                 "The thresholds violate the safety property of consensus. \
-                    committee_size = {}, f = {}, t_not = t_fin = {}",
-                c,
-                f,
-                t_not
+                    committee_size = {c}, f = {f}, t_not = t_fin = {t_not}"
             );
 
             assert!(
@@ -338,10 +335,7 @@ pub mod test {
                                  * participate, so we must be able to reach the threshold with
                                  * only the honest nodes. */
                 "The thresholds violate the liveness property of consensus. \
-                    committee_size = {}, f = {}, t_not = t_fin = {}",
-                c,
-                f,
-                t_not
+                    committee_size = {c}, f = {f}, t_not = t_fin = {t_not}"
             );
         }
     }

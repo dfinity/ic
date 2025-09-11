@@ -232,8 +232,8 @@ mod tests {
     fn recompute_root_hash_with_current_version_succeeds() {
         let (manifest, root_hash) = test_manifest_current_version();
         let mut tmp_file = tempfile::tempfile().unwrap();
-        writeln!(&mut tmp_file, "{}", manifest).unwrap();
-        writeln!(&mut tmp_file, "ROOT HASH: {}", root_hash).unwrap();
+        writeln!(&mut tmp_file, "{manifest}").unwrap();
+        writeln!(&mut tmp_file, "ROOT HASH: {root_hash}").unwrap();
         tmp_file.seek(std::io::SeekFrom::Start(0)).unwrap();
 
         verify_manifest(tmp_file).unwrap();
@@ -243,8 +243,8 @@ mod tests {
     fn recompute_root_hash_v2_succeeds() {
         let (manifest, root_hash) = test_manifest_v2();
         let mut tmp_file = tempfile::tempfile().unwrap();
-        writeln!(&mut tmp_file, "{}", manifest).unwrap();
-        writeln!(&mut tmp_file, "ROOT HASH: {}", root_hash).unwrap();
+        writeln!(&mut tmp_file, "{manifest}").unwrap();
+        writeln!(&mut tmp_file, "ROOT HASH: {root_hash}").unwrap();
         tmp_file.seek(std::io::SeekFrom::Start(0)).unwrap();
 
         verify_manifest(tmp_file).unwrap();

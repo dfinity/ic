@@ -699,7 +699,7 @@ mod test {
                         if blockchain.is_empty() {
                             assert!(block_res.is_err());
                         } else {
-                            assert!(block_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {} could not be found",invalid_block_idx)));
+                            assert!(block_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {invalid_block_idx} could not be found")));
                         }
 
                         block_identifier = PartialBlockIdentifier{
@@ -791,7 +791,7 @@ mod test {
 
                             // If the block identifier index is invalid and the hash is valid the service should return an error
                             let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
-                            assert!(block_res.unwrap_err().0.description.unwrap().contains(format!("Block at index {} could not be found",invalid_block_idx).as_str()));
+                            assert!(block_res.unwrap_err().0.description.unwrap().contains(format!("Block at index {invalid_block_idx} could not be found").as_str()));
 
                             block_identifier = PartialBlockIdentifier{
                                 index: None,
@@ -841,7 +841,7 @@ mod test {
                 if blockchain.is_empty() {
                     assert!(block_transaction_res.is_err());
                 } else {
-                    assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {} could not be found",invalid_block_idx)));
+                    assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {invalid_block_idx} could not be found")));
                 }
 
                 if !blockchain.is_empty() {
@@ -1949,15 +1949,15 @@ mod test {
             subaccount: Some(to_subaccount),
         };
 
-        println!("Original from_account: {:?}", from_account);
-        println!("Original to_account: {:?}", to_account);
+        println!("Original from_account: {from_account:?}");
+        println!("Original to_account: {to_account:?}");
 
         // Step 1: Convert accounts to AccountIdentifiers (like the client would)
         let from_account_identifier: AccountIdentifier = from_account.into();
         let to_account_identifier: AccountIdentifier = to_account.into();
 
-        println!("from_account_identifier: {:?}", from_account_identifier);
-        println!("to_account_identifier: {:?}", to_account_identifier);
+        println!("from_account_identifier: {from_account_identifier:?}");
+        println!("to_account_identifier: {to_account_identifier:?}");
 
         // Step 2: Build Rosetta operations (like the client would)
         let currency = Currency {
@@ -2010,8 +2010,8 @@ mod test {
             crate::common::storage::types::IcrcOperation::Transfer {
                 from, to, amount, ..
             } => {
-                println!("Converted from: {:?}", from);
-                println!("Converted to: {:?}", to);
+                println!("Converted from: {from:?}");
+                println!("Converted to: {to:?}");
 
                 assert_eq!(
                     from, from_account,
@@ -2050,8 +2050,8 @@ mod test {
         let account_identifier_none: AccountIdentifier = account_none.into();
         let converted_back_none: Account = account_identifier_none.try_into().unwrap();
 
-        println!("Original account (None): {:?}", account_none);
-        println!("Converted back (None): {:?}", converted_back_none);
+        println!("Original account (None): {account_none:?}");
+        println!("Converted back (None): {converted_back_none:?}");
 
         // This should pass with correct code, fail with buggy code
         assert_eq!(
@@ -2069,8 +2069,8 @@ mod test {
         let account_identifier_nonzero: AccountIdentifier = account_nonzero.into();
         let converted_back_nonzero: Account = account_identifier_nonzero.try_into().unwrap();
 
-        println!("Original account (non-zero): {:?}", account_nonzero);
-        println!("Converted back (non-zero): {:?}", converted_back_nonzero);
+        println!("Original account (non-zero): {account_nonzero:?}");
+        println!("Converted back (non-zero): {converted_back_nonzero:?}");
 
         // This should pass with correct code, fail with buggy code
         assert_eq!(
@@ -2196,9 +2196,9 @@ mod test {
             .unwrap_or(Nat::from(0u64));
 
         println!("Individual balances:");
-        println!("  Main account (None): {}", main_balance);
-        println!("  Explicit [0;32] account: {}", explicit_zero_balance);
-        println!("  Account1 (non-zero): {}", account1_balance);
+        println!("  Main account (None): {main_balance}");
+        println!("  Explicit [0;32] account: {explicit_zero_balance}");
+        println!("  Account1 (non-zero): {account1_balance}");
 
         // Check aggregated balance
         let aggregated_balance = storage_client
@@ -2208,11 +2208,11 @@ mod test {
             )
             .unwrap();
 
-        println!("Aggregated balance: {}", aggregated_balance);
+        println!("Aggregated balance: {aggregated_balance}");
 
         // Expected: 6000000 + 1000000 + 1000000 = 8000000
         let expected_total = Nat::from(8000000u64);
-        println!("Expected total: {}", expected_total);
+        println!("Expected total: {expected_total}");
 
         // Debug: Let's manually check what the SQL query returns by using the storage operations directly
         println!(
@@ -2223,8 +2223,7 @@ mod test {
 
         // Use a simpler approach - just check if the aggregated balance matches expected
         println!(
-            "Checking if aggregated balance ({}) matches expected ({})",
-            aggregated_balance, expected_total
+            "Checking if aggregated balance ({aggregated_balance}) matches expected ({expected_total})"
         );
 
         // This should FAIL due to the bug - aggregated balance will be less than expected
@@ -2233,8 +2232,7 @@ mod test {
             println!("✓ Aggregated balance matches expected total!");
         } else {
             println!(
-                "✗ BUG CONFIRMED: Aggregated balance mismatch: got {}, expected {}",
-                aggregated_balance, expected_total
+                "✗ BUG CONFIRMED: Aggregated balance mismatch: got {aggregated_balance}, expected {expected_total}"
             );
             println!(
                 "This happens because both None and Some([0;32]) are stored as [0;32] in the database"

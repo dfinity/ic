@@ -32,8 +32,7 @@ pub fn lookup_or_else_create_canisters(
         }
         None => {
             println!(
-                "SNS canisters not found, creating SNS canisters with {:?} cycles each",
-                initial_cycles_per_canister
+                "SNS canisters not found, creating SNS canisters with {initial_cycles_per_canister:?} cycles each"
             );
             create_canisters(verbose, network, initial_cycles_per_canister)
         }
@@ -88,8 +87,7 @@ pub fn get_canister_id(
         .map_err(|e| {
             if verbose {
                 println!(
-                    "Could not parse the output of 'dfx canister id {}' as a string, error: {}",
-                    canister_name, e
+                    "Could not parse the output of 'dfx canister id {canister_name}' as a string, error: {e}"
                 )
             }
         })
@@ -99,8 +97,7 @@ pub fn get_canister_id(
         .map_err(|e| {
             if verbose {
                 println!(
-                    "Could not parse the output of 'dfx canister id {}' as a PrincipalId, error: {}",
-                    canister_name, e
+                    "Could not parse the output of 'dfx canister id {canister_name}' as a PrincipalId, error: {e}"
                 )
             }
         })
@@ -464,7 +461,7 @@ impl DirectSnsDeployerForTests {
     /// Install the given canister
     fn install_canister(&self, sns_canister_name: &str, wasm_name: &str, init_args: &str) {
         let mut wasm = self.wasms_dir.clone();
-        wasm.push(format!("{}.wasm", wasm_name));
+        wasm.push(format!("{wasm_name}.wasm"));
         call_dfx_or_panic(&[
             "canister",
             "--network",

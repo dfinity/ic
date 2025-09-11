@@ -142,8 +142,7 @@ fn main() {
                     Err(err) => {
                         send_response(
                             VerificationResult::Err(format!(
-                                "failed to parse DER encoded public key: {:?}",
-                                err
+                                "failed to parse DER encoded public key: {err:?}"
                             )),
                             &opts,
                         );
@@ -155,8 +154,7 @@ fn main() {
                     Err(err) => {
                         send_response(
                             VerificationResult::Err(format!(
-                                "failed to parse DER encoded root public key: {:?}",
-                                err
+                                "failed to parse DER encoded root public key: {err:?}"
                             )),
                             &opts,
                         );
@@ -167,8 +165,7 @@ fn main() {
                     Ok(()) => send_response(VerificationResult::Ok(()), &opts),
                     Err(err) => send_response(
                         VerificationResult::Err(format!(
-                            "canister signature verification failed: {:?}",
-                            err
+                            "canister signature verification failed: {err:?}"
                         )),
                         &opts,
                     ),

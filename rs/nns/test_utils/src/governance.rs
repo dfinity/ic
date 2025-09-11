@@ -70,7 +70,7 @@ pub async fn submit_external_update_proposal_allowing_error(
     match response.command.unwrap() {
         CommandResponse::MakeProposal(resp) => Ok(ProposalId::from(resp.proposal_id.unwrap())),
         CommandResponse::Error(err) => Err(err),
-        other => panic!("Unexpected response: {:?}", other),
+        other => panic!("Unexpected response: {other:?}"),
     }
 }
 
@@ -118,7 +118,7 @@ pub async fn submit_external_update_proposal(
         .unwrap()
     {
         CommandResponse::MakeProposal(resp) => ProposalId::from(resp.proposal_id.unwrap()),
-        other => panic!("Unexpected response: {:?}", other),
+        other => panic!("Unexpected response: {other:?}"),
     }
 }
 
@@ -252,8 +252,7 @@ pub async fn wait_for_final_state(
         std::thread::sleep(Duration::from_millis(500));
     }
     eprintln!(
-        "Non-final states were seen {} times for {}.",
-        num_observed_accepted_state, id
+        "Non-final states were seen {num_observed_accepted_state} times for {id}."
     );
     // Return the final state
     get_proposal_info(governance_canister, id).await.unwrap()
@@ -335,7 +334,7 @@ async fn change_nns_canister_by_proposal(
         .unwrap()
     {
         CommandResponse::MakeProposal(resp) => resp.proposal_id.expect("No proposal id"),
-        other => panic!("Unexpected response: {:?}", other),
+        other => panic!("Unexpected response: {other:?}"),
     };
 
     // If the canister is the root canister, we need to wait for the proposal to be executed before

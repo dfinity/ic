@@ -2291,7 +2291,7 @@ mod tests {
                                 hash: hash.clone(),
                             }),
                         ),
-                        _ => panic!("Unexpected type: {:?}", message_type),
+                        _ => panic!("Unexpected type: {message_type:?}"),
                     };
                     let id_key = IDkgIdKey::from(id.clone());
                     let deser_id = deser_idkg_message_id(*message_type, id_key).unwrap();

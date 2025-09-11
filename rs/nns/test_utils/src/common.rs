@@ -249,7 +249,7 @@ impl NnsInitPayloadsBuilder {
                     "Subaccounts should be exactly 32 bytes in length. Got {} for neuron {}. {}",
                     truncate_and_format(n.account.as_slice(), 80),
                     n.id.as_ref()
-                        .unwrap_or_else(|| panic!("Couldn't get id of neuron: {:?}", n))
+                        .unwrap_or_else(|| panic!("Couldn't get id of neuron: {n:?}"))
                         .id,
                     e
                 )

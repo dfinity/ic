@@ -189,8 +189,7 @@ impl StubOnce {
     fn expect_no_matching_rpc_call(self, env: &StateMachine) {
         if let Some((id, _)) = self.matcher.find_rpc_call(env) {
             panic!(
-                "expect no request matching the stub {:?} but found one {}",
-                self, id
+                "expect no request matching the stub {self:?} but found one {id}"
             );
         }
     }
@@ -228,8 +227,7 @@ impl StubOnce {
                     id,
                     RejectCode::SysFatal,
                     format!(
-                        "Http body exceeds size limit of {} bytes.",
-                        max_response_bytes
+                        "Http body exceeds size limit of {max_response_bytes} bytes."
                     ),
                 );
                 env.execute_payload(payload);
@@ -270,8 +268,7 @@ impl StubOnce {
                     id,
                     RejectCode::SysFatal,
                     format!(
-                        "Http body exceeds size limit of {} bytes.",
-                        max_response_bytes
+                        "Http body exceeds size limit of {max_response_bytes} bytes."
                     ),
                 );
                 env.execute_payload(payload);

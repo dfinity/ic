@@ -410,28 +410,24 @@ impl SubnetPair {
         let (local_memory, remote_memory) = self.guaranteed_response_message_memory_taken();
         if local_memory > local_memory_upper_limit.into() {
             return self.failed_with_reason(format!(
-                "{}: local guaranteed response message memory exceeds limit",
-                label
+                "{label}: local guaranteed response message memory exceeds limit"
             ));
         }
         if remote_memory > remote_memory_upper_limit.into() {
             return self.failed_with_reason(format!(
-                "{}: remote guaranteed response message memory exceeds limit",
-                label
+                "{label}: remote guaranteed response message memory exceeds limit"
             ));
         }
 
         let (local_memory, remote_memory) = self.best_effort_message_memory_taken();
         if local_memory > local_memory_upper_limit.into() {
             return self.failed_with_reason(format!(
-                "{}: local best-effort message memory exceeds limit",
-                label
+                "{label}: local best-effort message memory exceeds limit"
             ));
         }
         if remote_memory > remote_memory_upper_limit.into() {
             return self.failed_with_reason(format!(
-                "{}: remote best-effort message memory exceeds limit",
-                label
+                "{label}: remote best-effort message memory exceeds limit"
             ));
         }
 
@@ -607,7 +603,7 @@ impl SubnetPair {
     pub fn check_canister_traps(&self) -> Result<(), (String, DebugInfo)> {
         let traps = self.gather_canister_traps();
         if !traps.is_empty() {
-            return self.failed_with_reason(format!("{:#?}", traps));
+            return self.failed_with_reason(format!("{traps:#?}"));
         }
 
         let invocations = self.gather_successful_heartbeat_invocations();

@@ -63,11 +63,11 @@ fn println_colored(text: &str, color: RGB8) {
 }
 
 fn audit_check_success(text: &str) {
-    println_colored(&format!("✅ {}", text), GREEN);
+    println_colored(&format!("✅ {text}"), GREEN);
 }
 
 fn audit_check_failure(text: &str) {
-    println_colored(&format!("❌ {}", text), RED);
+    println_colored(&format!("❌ {text}"), RED);
 }
 
 fn audit_check(text: &str, condition: bool) {
@@ -103,7 +103,7 @@ pub async fn validate_sns_swap<C: CallCanisters>(
 
     let metadata = governance.metadata(agent).await?;
     let sns_name = metadata.name.unwrap();
-    println!("sns_name = {}", sns_name);
+    println!("sns_name = {sns_name}");
 
     let Some(nns_proposal_id) = swap_init.nns_proposal_id.as_ref() else {
         return Err(AuditError::CreatedBeforeOneProposal);
@@ -153,7 +153,7 @@ pub async fn validate_sns_swap<C: CallCanisters>(
     let sns_token_e8s = swap_init.sns_token_e8s.unwrap();
     let sns_tokens_per_icp =
         u64_to_dec::<C>(sns_token_e8s)? / u64_to_dec::<C>(buyer_total_icp_e8s)?;
-    println!("sns_tokens_per_icp = {:?}", sns_tokens_per_icp);
+    println!("sns_tokens_per_icp = {sns_tokens_per_icp:?}");
 
     let sns_neuron_recipes: Vec<_> = swap
         .list_all_sns_neuron_recipes(agent)
@@ -246,8 +246,7 @@ pub async fn validate_sns_swap<C: CallCanisters>(
             *refunded_amounts_per_controller.get(&nid).unwrap_or(&0) as u128;
         audit_check(
             &format!(
-                "initial_amount_icp_e8s ({}) == final_amount_icp_e8s ({}) + refunded_amount_icp_e8s ({}).",
-                initial_amount_icp_e8s, final_amount_icp_e8s, refunded_amount_icp_e8s,
+                "initial_amount_icp_e8s ({initial_amount_icp_e8s}) == final_amount_icp_e8s ({final_amount_icp_e8s}) + refunded_amount_icp_e8s ({refunded_amount_icp_e8s}).",
             ),
             initial_amount_icp_e8s == final_amount_icp_e8s + refunded_amount_icp_e8s,
         );
@@ -258,8 +257,7 @@ pub async fn validate_sns_swap<C: CallCanisters>(
 
     let sns_neurons_per_backet = neuron_basket_construction_parameters.count;
     let msg = format!(
-        "{} SNS neurons created for {} Neurons' Fund participants ({} SNS neurons per basket)",
-        num_sns_nf_neurons, num_nns_nf_neurons, sns_neurons_per_backet,
+        "{num_sns_nf_neurons} SNS neurons created for {num_nns_nf_neurons} Neurons' Fund participants ({sns_neurons_per_backet} SNS neurons per basket)",
     );
     audit_check(
         &msg,
@@ -310,14 +308,7 @@ pub async fn validate_sns_swap<C: CallCanisters>(
             .collect::<Vec<_>>()
             .join(", ");
         let msg = format!(
-            "Neurons' Fund controller {:?} participated with {} ICP e8s ({}), receiving {} SNS token e8s ({}). Error = {}% = {} SNS e8s",
-            controller,
-            amount_icp_e8s,
-            nns_neurons_str,
-            amount_sns_e8s,
-            sns_neurons_str,
-            error_per_cent,
-            absolute_error_sns_e8s,
+            "Neurons' Fund controller {controller:?} participated with {amount_icp_e8s} ICP e8s ({nns_neurons_str}), receiving {amount_sns_e8s} SNS token e8s ({sns_neurons_str}). Error = {error_per_cent}% = {absolute_error_sns_e8s} SNS e8s",
         );
         let cummulative_error_tolerance =
             ERROR_TOLERANCE_ICP_E8S * Decimal::from_usize(nns_neurons.len()).unwrap();

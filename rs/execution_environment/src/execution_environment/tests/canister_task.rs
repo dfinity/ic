@@ -813,7 +813,7 @@ fn global_timer_in_pre_and_post_upgrade() {
                 [far_future_time.to_le_bytes(), 0_u64.to_le_bytes()].concat()
             );
         }
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
 
     // We confirm that post-upgrade set the timer by resetting the timer and checking its previous value.
@@ -831,7 +831,7 @@ fn global_timer_in_pre_and_post_upgrade() {
         WasmResult::Reply(data) => {
             assert_eq!(data, other_far_future_time.to_le_bytes());
         }
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
 }
 
@@ -882,7 +882,7 @@ fn global_timer_in_init() {
         WasmResult::Reply(data) => {
             assert_eq!(data, 0_u64.to_le_bytes(),);
         }
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
 
     // We confirm that init set the timer by resetting the timer and checking its previous value.
@@ -900,7 +900,7 @@ fn global_timer_in_init() {
         WasmResult::Reply(data) => {
             assert_eq!(data, other_far_future_time.to_le_bytes());
         }
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
 }
 

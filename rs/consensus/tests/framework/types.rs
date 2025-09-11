@@ -427,7 +427,7 @@ impl fmt::Display for ConsensusRunnerConfig {
 
 /// Return a strategy's name using their derived Debug formatting.
 pub(crate) fn get_name<T: fmt::Debug>(value: T) -> String {
-    format!("{:?}", value)
+    format!("{value:?}")
         .split_whitespace()
         .collect::<Vec<_>>()
         .remove(0)

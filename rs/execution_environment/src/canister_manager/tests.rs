@@ -473,7 +473,7 @@ fn upgrade_non_existing_canister_fails() {
     assert_eq!(err.code(), ErrorCode::CanisterNotFound);
     assert!(
         err.description()
-            .contains(&format!("Canister {} not found", canister_id))
+            .contains(&format!("Canister {canister_id} not found"))
     );
 }
 
@@ -587,8 +587,7 @@ fn cannot_install_non_empty_canister() {
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterNonEmpty);
     assert!(err.description().contains(&format!(
-        "Canister {} cannot be installed because the canister is not empty",
-        canister_id
+        "Canister {canister_id} cannot be installed because the canister is not empty"
     )));
 }
 
@@ -613,8 +612,7 @@ fn install_code_with_wrong_controller_fails() {
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
     assert!(err.description().contains(&format!(
-        "Only the controllers of the canister {} can control it",
-        canister_id
+        "Only the controllers of the canister {canister_id} can control it"
     )));
 }
 
@@ -915,8 +913,7 @@ fn stop_a_canister_with_incorrect_controller() {
 
     assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
     assert!(err.description().contains(&format!(
-        "Only the controllers of the canister {} can control it",
-        canister_id
+        "Only the controllers of the canister {canister_id} can control it"
     )));
     // Canister should still be running.
     assert_eq!(
@@ -940,7 +937,7 @@ fn stop_a_non_existing_canister() {
     assert_eq!(err.code(), ErrorCode::CanisterNotFound);
     assert!(
         err.description()
-            .contains(&format!("Canister {} not found", non_existing_canister_id))
+            .contains(&format!("Canister {non_existing_canister_id} not found"))
     );
 }
 
@@ -962,8 +959,7 @@ fn start_a_canister_with_incorrect_controller() {
 
     assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
     assert!(err.description().contains(&format!(
-        "Only the controllers of the canister {} can control it",
-        canister_id
+        "Only the controllers of the canister {canister_id} can control it"
     )));
 }
 
@@ -1070,8 +1066,7 @@ fn get_canister_status_with_incorrect_controller() {
 
     assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
     assert!(err.description().contains(&format!(
-        "Only the controllers of the canister {} can control it",
-        canister_id
+        "Only the controllers of the canister {canister_id} can control it"
     )));
 }
 
@@ -1218,8 +1213,7 @@ fn set_controller_with_incorrect_controller() {
 
     assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
     assert!(err.description().contains(&format!(
-        "Only the controllers of the canister {} can control it",
-        canister_id
+        "Only the controllers of the canister {canister_id} can control it"
     )));
     // List of controllers should not have changed.
     assert_eq!(
@@ -1253,7 +1247,7 @@ fn delete_non_existing_canister_fails() {
     assert_eq!(err.code(), ErrorCode::CanisterNotFound);
     assert!(
         err.description()
-            .contains(&format!("Canister {} not found", canister_id))
+            .contains(&format!("Canister {canister_id} not found"))
     );
 }
 
@@ -1270,8 +1264,7 @@ fn delete_canister_with_incorrect_controller_fails() {
 
     assert_eq!(err.code(), ErrorCode::CanisterInvalidController);
     assert!(err.description().contains(&format!(
-        "Only the controllers of the canister {} can control it",
-        canister_id
+        "Only the controllers of the canister {canister_id} can control it"
     )));
     // Canister should still be there.
     assert!(test.state().canister_state(&canister_id).is_some());
@@ -1287,8 +1280,7 @@ fn delete_running_canister_fails() {
 
     assert_eq!(err.code(), ErrorCode::CanisterNotStopped);
     assert!(err.description().contains(&format!(
-        "Canister {} must be stopped before it is deleted",
-        canister_id
+        "Canister {canister_id} must be stopped before it is deleted"
     ),));
     // Canister should still be there.
     assert!(test.state().canister_state(&canister_id).is_some());
@@ -1310,8 +1302,7 @@ fn delete_stopping_canister_fails() {
 
     assert_eq!(err.code(), ErrorCode::CanisterNotStopped);
     assert!(err.description().contains(&format!(
-        "Canister {} must be stopped before it is deleted",
-        canister_id
+        "Canister {canister_id} must be stopped before it is deleted"
     ),));
     // Canister should still be there.
     assert!(test.state().canister_state(&canister_id).is_some());
@@ -1589,8 +1580,7 @@ fn installing_a_canister_with_not_enough_cycles_fails() {
 
     assert_eq!(err.code(), ErrorCode::CanisterOutOfCycles);
     assert!(err.description().contains(&format!(
-        "Canister installation failed with `Canister {} is out of cycles",
-        canister_id
+        "Canister installation failed with `Canister {canister_id} is out of cycles"
     )));
 }
 
@@ -2266,8 +2256,7 @@ fn lower_memory_allocation_than_usage_fails() {
 
     assert_eq!(err.code(), ErrorCode::InsufficientMemoryAllocation);
     assert!(err.description().contains(&format!(
-        "Canister was given {} B memory allocation but at least",
-        memory_allocation,
+        "Canister was given {memory_allocation} B memory allocation but at least",
     )));
 }
 
@@ -2291,8 +2280,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InsufficientMemoryAllocation);
     assert!(err.description().contains(&format!(
-        "Canister was given {} B memory allocation but at least",
-        memory_allocation
+        "Canister was given {memory_allocation} B memory allocation but at least"
     )));
 
     // Update memory allocation to a big enough value, `install_code` should succeed.
@@ -2398,7 +2386,7 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
     let result = store.can_insert_chunk(canister_manager.config.wasm_chunk_store_max_size, chunk);
     let validated_chunk = match result {
         ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
-        res => panic!("Unexpected chunk validation result: {:?}", res),
+        res => panic!("Unexpected chunk validation result: {res:?}"),
     };
     store.insert_chunk(validated_chunk);
 
@@ -2516,8 +2504,7 @@ fn max_number_of_canisters_is_respected_when_creating_canisters() {
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::MaxNumberOfCanistersReached);
     assert!(err.description().contains(&format!(
-        "has reached the allowed canister limit of {} canisters",
-        max_number_of_canisters,
+        "has reached the allowed canister limit of {max_number_of_canisters} canisters",
     )));
 }
 
@@ -3040,8 +3027,7 @@ fn frozen_canister_reveal_top_up() {
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterOutOfCycles, err.code());
     assert!(err.description().starts_with(&format!(
-        "Canister {} is out of cycles: please top up the canister with at least",
-        canister_id
+        "Canister {canister_id} is out of cycles: please top up the canister with at least"
     )));
 
     // Blackhole the canister.
@@ -3056,7 +3042,7 @@ fn frozen_canister_reveal_top_up() {
     assert_eq!(ErrorCode::CanisterOutOfCycles, err.code());
     assert_eq!(
         err.description(),
-        format!("Canister {} is out of cycles", canister_id)
+        format!("Canister {canister_id} is out of cycles")
     );
 }
 
@@ -3716,8 +3702,7 @@ fn delete_canister_with_non_empty_input_queue_fails() {
     let err = test.delete_canister(canister_id).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterQueueNotEmpty);
     assert!(err.description().contains(&format!(
-        "Canister {} has messages in its queues and cannot be deleted now",
-        canister_id,
+        "Canister {canister_id} has messages in its queues and cannot be deleted now",
     )));
 }
 
@@ -4641,8 +4626,7 @@ fn chunk_store_methods_fail_from_non_controller() {
 
         let result = test.ingress(uc, "update", wasm);
         let expected_err = format!(
-            "Only the controllers of the canister {} can control it.",
-            canister_id
+            "Only the controllers of the canister {canister_id} can control it."
         );
         match result {
             Ok(WasmResult::Reject(reject)) => {
@@ -4651,7 +4635,7 @@ fn chunk_store_methods_fail_from_non_controller() {
                     "Reject \"{reject}\" does not contain expected error \"{expected_err}\""
                 );
             }
-            other => panic!("Expected reject, but got {:?}", other),
+            other => panic!("Expected reject, but got {other:?}"),
         }
     }
 }
@@ -5048,8 +5032,7 @@ fn upload_chunk_reserves_cycles() {
             .get();
         assert_eq!(
             new_reserved_balance, reserved_balance,
-            "The current reserved balance {} should match the previous reserved balance {}",
-            new_reserved_balance, reserved_balance
+            "The current reserved balance {new_reserved_balance} should match the previous reserved balance {reserved_balance}"
         );
     });
 }
@@ -5558,7 +5541,7 @@ fn subnet_info_canister_call_succeeds() {
     let result = test.ingress(uni_canister, "update", uc_call).unwrap();
     let bytes = match result {
         WasmResult::Reply(bytes) => bytes,
-        WasmResult::Reject(err_msg) => panic!("Unexpected reject, expected reply: {}", err_msg),
+        WasmResult::Reject(err_msg) => panic!("Unexpected reject, expected reply: {err_msg}"),
     };
     let SubnetInfoResponse {
         replica_version,
@@ -6079,7 +6062,7 @@ fn memory_usage_updates_increment_subnet_available_memory() {
         .unwrap();
     let snapshot_id = match res {
         WasmResult::Reply(data) => Decode!(&data, CanisterSnapshotResponse).unwrap().id,
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
 
     // capture current subnet available memory
@@ -6263,7 +6246,7 @@ fn test_environment_variables_are_not_set_when_too_many_keys() {
         .build();
 
     let env_vars = (0..MAX_ENVIRONMENT_VARIABLES + 1)
-        .map(|i| (format!("KEY{}", i), "VAL".to_string()))
+        .map(|i| (format!("KEY{i}"), "VAL".to_string()))
         .map(|(k, v)| EnvironmentVariable { name: k, value: v })
         .collect::<Vec<_>>();
 
@@ -6325,8 +6308,7 @@ fn test_environment_variables_are_not_set_when_key_is_too_long() {
         UserError::new(
             ErrorCode::InvalidManagementPayload,
             format!(
-                "Environment variable name \"{}\" exceeds the maximum allowed length of {}.",
-                long_key, MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH
+                "Environment variable name \"{long_key}\" exceeds the maximum allowed length of {MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH}."
             )
         )
     );
@@ -6367,8 +6349,7 @@ fn test_environment_variables_are_not_set_when_value_is_too_long() {
         UserError::new(
             ErrorCode::InvalidManagementPayload,
             format!(
-                "Environment variable value \"{}\" exceeds the maximum allowed length of {}.",
-                long_value, MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH
+                "Environment variable value \"{long_value}\" exceeds the maximum allowed length of {MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH}."
             )
         )
     );

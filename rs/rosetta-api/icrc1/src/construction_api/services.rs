@@ -294,8 +294,7 @@ mod tests {
                 operations.contains(&operation),
                 "{}",
                 format!(
-                    "Operation {:?} not found in operations {:?}",
-                    operation, operations
+                    "Operation {operation:?} not found in operations {operations:?}"
                 )
             )
         });

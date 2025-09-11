@@ -221,9 +221,9 @@ fn serialize() {
     let block_bytes = block.clone().encode();
     println!("block bytes = {:02x?}", block_bytes.0);
     let block_hash = Block::block_hash(&block_bytes);
-    println!("block hash = {}", block_hash);
+    println!("block hash = {block_hash}");
     let block_decoded = Block::decode(block_bytes).unwrap();
-    println!("block decoded = {:#?}", block_decoded);
+    println!("block decoded = {block_decoded:#?}");
     assert_eq!(block, block_decoded);
 
     state.add_block(block).unwrap();
@@ -657,8 +657,7 @@ fn apply_at(ledger: &mut Ledger, op: &Operation, ts: TimeStamp) -> BlockIndex {
         .add_payment_with_timestamp(memo, op.clone(), None, ts)
         .unwrap_or_else(|e| {
             panic!(
-                "Failed to execute operation {:?} with memo {:?} at {:?}: {:?}",
-                op, memo, ts, e
+                "Failed to execute operation {op:?} with memo {memo:?} at {ts:?}: {e:?}"
             )
         })
         .0

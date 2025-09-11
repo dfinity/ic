@@ -4608,9 +4608,7 @@ fn should_never_consume_more_than_max_instructions_per_round_in_a_single_executi
     let total_executed_messages: u64 = total_executed_instructions / instructions_per_message.get();
     assert!(
         minimum_executed_messages <= total_executed_messages,
-        "Executed {} messages but expected at least {}.",
-        total_executed_messages,
-        minimum_executed_messages,
+        "Executed {total_executed_messages} messages but expected at least {minimum_executed_messages}.",
     );
 }
 
@@ -5813,11 +5811,11 @@ fn test_is_next_method_added_to_task_queue() {
 }
 
 pub(crate) fn make_ecdsa_key_id(id: u64) -> EcdsaKeyId {
-    EcdsaKeyId::from_str(&format!("Secp256k1:key_{:?}", id)).unwrap()
+    EcdsaKeyId::from_str(&format!("Secp256k1:key_{id:?}")).unwrap()
 }
 
 pub(crate) fn make_schnorr_key_id(id: u64) -> SchnorrKeyId {
-    SchnorrKeyId::from_str(&format!("Bip340Secp256k1:key_{:?}", id)).unwrap()
+    SchnorrKeyId::from_str(&format!("Bip340Secp256k1:key_{id:?}")).unwrap()
 }
 
 fn inject_ecdsa_signing_request(test: &mut SchedulerTest, key_id: &EcdsaKeyId) {

@@ -1758,8 +1758,7 @@ Charged for processing the transfer.
     let message = extract_icrc21_message_string(&consent_info.consent_message);
     assert_eq!(
         message, expected_transfer_message,
-        "Expected: {}, got: {}",
-        expected_transfer_message, message
+        "Expected: {expected_transfer_message}, got: {message}"
     );
     let fields_consent_info = icrc21_consent_message(
         &env,
@@ -1771,8 +1770,7 @@ Charged for processing the transfer.
     let fields_message = extract_icrc21_fields_message(&fields_consent_info.consent_message);
     assert_eq!(
         fields_message, expected_fields_message,
-        "Expected: {:?}, got: {:?}",
-        expected_fields_message, fields_message
+        "Expected: {expected_fields_message:?}, got: {fields_message:?}"
     );
 
     // If the caller is anonymous, the message should not include the From information.
@@ -1788,8 +1786,7 @@ Charged for processing the transfer.
     );
     assert_eq!(
         message, expected_message,
-        "Expected: {}, got: {}",
-        expected_message, message
+        "Expected: {expected_message}, got: {message}"
     );
     let fields_consent_info = icrc21_consent_message(
         &env,
@@ -1802,8 +1799,7 @@ Charged for processing the transfer.
     let new_exp_fields_message = modify_field(&expected_fields_message, "From".to_string(), None);
     assert_eq!(
         fields_message, new_exp_fields_message,
-        "Expected: {:?}, got: {:?}",
-        new_exp_fields_message, fields_message
+        "Expected: {new_exp_fields_message:?}, got: {fields_message:?}"
     );
 }
 
@@ -1968,7 +1964,7 @@ fn test_notify_caller_logging() {
 
     // Verify that the ledger logged the caller of the notify method.
     let log = env.canister_log(canister_id);
-    let expected_log_entry = format!("notify method called by [{}]", user1);
+    let expected_log_entry = format!("notify method called by [{user1}]");
     for record in log.records().iter() {
         let entry =
             String::from_utf8(record.content.clone()).expect("log entry should be a string");
@@ -2544,7 +2540,7 @@ fn test_burn_whole_balance() {
         if let Some(error_tokens) = error_tokens {
             assert!(response.is_err());
             assert!(response.unwrap_err().description().contains(
-                &format!("Burns lower than {} are not allowed", error_tokens).to_string()
+                &format!("Burns lower than {error_tokens} are not allowed").to_string()
             ));
         } else {
             let result = Decode!(&response.expect("burn transfer failed").bytes(), Result<BlockIndex, icp_ledger::TransferError> )

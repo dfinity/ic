@@ -128,7 +128,7 @@ fn take_canister_snapshot_fails_canister_not_found() {
             res.response_payload,
             Payload::Reject(RejectContext::new(
                 RejectCode::DestinationInvalid,
-                format!("Canister {} not found.", canister_id)
+                format!("Canister {canister_id} not found.")
             ))
         );
     }
@@ -220,8 +220,7 @@ fn take_canister_snapshot_fails_invalid_replace_snapshot_id() {
         res.response_payload.assert_contains_reject(
             RejectCode::DestinationInvalid,
             &format!(
-                "Could not find the snapshot ID {} for canister {}.",
-                snapshot_id, canister_id
+                "Could not find the snapshot ID {snapshot_id} for canister {canister_id}."
             ),
         );
     }
@@ -265,8 +264,7 @@ fn take_canister_snapshot_fails_canister_does_not_own_replace_snapshot() {
 
     assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
     let message = format!(
-        "The snapshot {} does not belong to canister {}",
-        snapshot_id, canister_id_2,
+        "The snapshot {snapshot_id} does not belong to canister {canister_id_2}",
     )
     .to_string();
     assert!(error.description().contains(&message));
@@ -450,8 +448,7 @@ fn take_canister_snapshot_fails_when_limit_is_reached() {
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
     let error_message = format!(
-        "Canister {} has reached the maximum number of snapshots allowed: {}.",
-        canister_id, max_snapshots_per_canister,
+        "Canister {canister_id} has reached the maximum number of snapshots allowed: {max_snapshots_per_canister}.",
     );
     assert!(error.description().contains(&error_message));
 }
@@ -876,7 +873,7 @@ fn take_canister_snapshot_fails_when_heap_delta_rate_limited() {
         .unwrap_err();
 
     assert_eq!(error.code(), ErrorCode::CanisterHeapDeltaRateLimited);
-    let message = format!("Canister {} is heap delta rate limited", canister_id).to_string();
+    let message = format!("Canister {canister_id} is heap delta rate limited").to_string();
     assert!(error.description().contains(&message));
     assert_eq!(
         test.subnet_available_memory(),
@@ -1063,7 +1060,7 @@ fn delete_canister_snapshot_fails_canister_not_found() {
         .subnet_message("delete_canister_snapshot", args.encode())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterNotFound);
-    let message = format!("Canister {} not found.", canister_id,).to_string();
+    let message = format!("Canister {canister_id} not found.",).to_string();
     assert!(error.description().contains(&message));
 }
 
@@ -1091,8 +1088,7 @@ fn delete_canister_snapshot_fails_snapshot_not_found() {
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
     let message = format!(
-        "Could not find the snapshot ID {} for canister {}",
-        snapshot_id, canister_id,
+        "Could not find the snapshot ID {snapshot_id} for canister {canister_id}",
     )
     .to_string();
     assert!(error.description().contains(&message));
@@ -1135,8 +1131,7 @@ fn delete_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
     let message = format!(
-        "The snapshot {} does not belong to canister {}",
-        snapshot_id, canister_id_2,
+        "The snapshot {snapshot_id} does not belong to canister {canister_id_2}",
     )
     .to_string();
     assert!(error.description().contains(&message));
@@ -1230,7 +1225,7 @@ fn list_canister_snapshot_fails_canister_not_found() {
         .subnet_message("list_canister_snapshots", args.encode())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterNotFound);
-    let message = format!("Canister {} not found.", canister_id,).to_string();
+    let message = format!("Canister {canister_id} not found.",).to_string();
     assert!(error.description().contains(&message));
 }
 
@@ -1350,7 +1345,7 @@ fn load_canister_snapshot_fails_canister_not_found() {
         .subnet_message("load_canister_snapshot", args.encode())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterNotFound);
-    let message = format!("Canister {} not found.", canister_id,).to_string();
+    let message = format!("Canister {canister_id} not found.",).to_string();
     assert!(error.description().contains(&message));
 }
 
@@ -1431,8 +1426,7 @@ fn load_canister_snapshot_fails_snapshot_not_found() {
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterSnapshotNotFound);
     let message = format!(
-        "Could not find the snapshot ID {} for canister {}",
-        snapshot_id, canister_id,
+        "Could not find the snapshot ID {snapshot_id} for canister {canister_id}",
     )
     .to_string();
     assert!(error.description().contains(&message));
@@ -1475,8 +1469,7 @@ fn load_canister_snapshot_fails_snapshot_does_not_belong_to_canister() {
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterRejectedMessage);
     let message = format!(
-        "The snapshot {} does not belong to canister {}",
-        snapshot_id, canister_id_2,
+        "The snapshot {snapshot_id} does not belong to canister {canister_id_2}",
     )
     .to_string();
     assert!(error.description().contains(&message));
@@ -1551,7 +1544,7 @@ fn load_canister_snapshot_fails_when_heap_delta_rate_limited() {
         .subnet_message("load_canister_snapshot", args.encode())
         .unwrap_err();
     assert_eq!(error.code(), ErrorCode::CanisterHeapDeltaRateLimited);
-    let message = format!("Canister {} is heap delta rate limited", canister_id).to_string();
+    let message = format!("Canister {canister_id} is heap delta rate limited").to_string();
     assert!(error.description().contains(&message));
 
     let heap_delta_estimate_after_loading_snapshot_again =

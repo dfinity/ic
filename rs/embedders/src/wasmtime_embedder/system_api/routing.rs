@@ -966,8 +966,7 @@ mod tests {
                 Err(ResolveDestinationError::ChainKeyError(msg)) => assert_eq!(
                     msg,
                     format!(
-                        "Subnet {} is not enabled to use threshold key {}",
-                        subnet_id, key_id,
+                        "Subnet {subnet_id} is not enabled to use threshold key {key_id}",
                     )
                 ),
                 _ => panic!("Unexpected result."),

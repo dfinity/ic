@@ -290,8 +290,7 @@ impl<'a> AliasToPrincipalId<'a> {
                 PrincipalId::from_str(string)
                     .map_err(|err| {
                         defects.push(format!(
-                            "Unable to parse PrincipalId ({:?}) in {}. Reason: {}",
-                            string, field_name, err,
+                            "Unable to parse PrincipalId ({string:?}) in {field_name}. Reason: {err}",
                         ))
                     })
                     .unwrap_or_default()
@@ -321,12 +320,11 @@ fn parse_image_path(
     let image = image.as_path();
     let image_content = std::fs::read(image).map_err(|err| {
         format!(
-            "An error occurred while reading the image file ({:?}): {}",
-            image_path, err,
+            "An error occurred while reading the image file ({image_path:?}): {err}",
         )
     })?;
     let image_content = base64::encode(image_content);
-    let base64_encoding = Some(format!("data:image/png;base64,{}", image_content));
+    let base64_encoding = Some(format!("data:image/png;base64,{image_content}"));
     Ok(nervous_system_pb::Image { base64_encoding })
 }
 
@@ -598,9 +596,8 @@ impl Neuron {
         let controller = PrincipalId::from_str(principal)
             .map_err(|err| {
                 defects.push(format!(
-                    "Unable to parse PrincipalId in distribution.neurons ({:?}). \
-                     err: {:#?}",
-                    principal, err,
+                    "Unable to parse PrincipalId in distribution.neurons ({principal:?}). \
+                     err: {err:#?}",
                 ))
             })
             .unwrap_or_default();

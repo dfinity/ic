@@ -225,7 +225,7 @@ fn test_initial_wasmtime_config() {
             panic!("Error having `{proposal}` proposal enabled in the `wasmtime` config.")
         });
         // Format error message with cause using '{:?}'
-        let err_msg = format!("{:?}", err);
+        let err_msg = format!("{err:?}");
         // Verify that the error occurred because the expected feature was disabled.
         // If this test fails, check whether:
         // 1. The feature being tested is enabled by default (in that case, explicitly disable it in the config), or

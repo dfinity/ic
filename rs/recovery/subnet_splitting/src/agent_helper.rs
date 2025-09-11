@@ -151,7 +151,7 @@ impl AgentHelper {
 }
 
 fn agent_error(message: impl Display, error: impl Display) -> RecoveryError {
-    RecoveryError::AgentError(format!("{}: {}", message, error))
+    RecoveryError::AgentError(format!("{message}: {error}"))
 }
 
 fn create_path(subnet_id: SubnetId, label: &[u8]) -> Vec<Label<StorageType>> {

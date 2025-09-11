@@ -235,8 +235,7 @@ impl LedgerSuiteConfig {
                 self.check_index_principal(state_machine, ledger_canister_id, index_canister_id);
             assert!(
                 index_principal_check.is_ok(),
-                "ICRC-106 index principal was set before upgrading the ledger to master, but now it is no longer set: {:?}",
-                index_principal_check
+                "ICRC-106 index principal was set before upgrading the ledger to master, but now it is no longer set: {index_principal_check:?}"
             );
         }
         // Downgrade back to the mainnet canister versions
@@ -300,8 +299,7 @@ impl LedgerSuiteConfig {
             }
             Err(err) => {
                 println!(
-                    "Failed to get index principal for ledger {}: {:?}",
-                    ledger_canister_id, err
+                    "Failed to get index principal for ledger {ledger_canister_id}: {err:?}"
                 );
                 Err(Icrc106CheckError::IndexPrincipalNotSet)
             }
@@ -314,7 +312,7 @@ impl LedgerSuiteConfig {
         let metrics = retrieve_metrics(state_machine, ledger_id);
         println!("Ledger metrics:");
         for metric in metrics {
-            println!("  {}", metric);
+            println!("  {metric}");
         }
     }
 
@@ -330,12 +328,11 @@ impl LedgerSuiteConfig {
                 .upgrade_canister(archive_canister_id, wasm.clone().bytes(), vec![])
                 .unwrap_or_else(|e| {
                     panic!(
-                        "should successfully upgrade archive '{}': {}",
-                        archive_canister_id, e
+                        "should successfully upgrade archive '{archive_canister_id}': {e}"
                     )
                 });
         }
-        println!("Upgraded {} archive(s)", num_archives);
+        println!("Upgraded {num_archives} archive(s)");
     }
 
     fn upgrade_index_or_panic(&self, state_machine: &StateMachine, wasm: &Wasm) {
@@ -392,8 +389,7 @@ impl LedgerSuiteConfig {
             }
             (true, Err(e)) => {
                 panic!(
-                    "should successfully downgrade to mainnet ledger version: {}",
-                    e
+                    "should successfully downgrade to mainnet ledger version: {e}"
                 );
             }
             (false, Ok(_)) => {
@@ -1128,8 +1124,7 @@ mod index {
             }
         }
         panic!(
-            "The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}",
-            num_blocks_synced, chain_length
+            "The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {num_blocks_synced} but the Ledger chain length is {chain_length}"
         );
     }
 

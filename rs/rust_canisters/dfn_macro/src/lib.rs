@@ -72,9 +72,7 @@ impl Errors {
 fn get_ident(arg: &FnArg, default_id: &str, method: &str) -> Result<PatIdent, (String, Span)> {
     match arg {
         FnArg::Receiver(r) => {
-            let msg = format!(
-                "#[{method}] cannot be above functions with `self` as a parameter"
-            );
+            let msg = format!("#[{method}] cannot be above functions with `self` as a parameter");
             Err((msg, r.span()))
         }
         FnArg::Typed(t) => match &*t.pat {
@@ -118,9 +116,7 @@ fn function_info(
     let generics = &signature.generics;
 
     if !generics.params.is_empty() {
-        let msg = format!(
-            "#[{method}] must be above a function with no generic parameters"
-        );
+        let msg = format!("#[{method}] must be above a function with no generic parameters");
         errors.add(msg, generics);
     }
     let function_args = signature.inputs;
@@ -244,7 +240,7 @@ fn dfn_macro(
     };
     let ret: TokenStream = quote_spanned! {
         proc_macro2::Span::call_site() =>
-        #[export_name = #export_name]
+        #[unsafe(export_name = #export_name)]
         fn #async_runner_fn(){
             use dfn_json::json;
             use dfn_core::over_async;

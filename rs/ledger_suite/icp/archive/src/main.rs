@@ -52,14 +52,14 @@ impl Storable for ArchiveState {
     fn to_bytes(&self) -> Cow<[u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(self, &mut buf).unwrap_or_else(|err| {
-            ic_cdk::api::trap(format!("{:?}", err));
+            ic_cdk::api::trap(format!("{err:?}"));
         });
         Cow::Owned(buf)
     }
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         ciborium::de::from_reader(&bytes[..]).unwrap_or_else(|err| {
-            ic_cdk::api::trap(format!("{:?}", err));
+            ic_cdk::api::trap(format!("{err:?}"));
         })
     }
 
@@ -211,8 +211,7 @@ fn append_block(block: &EncodedBlock) {
     BLOCKS.with_borrow_mut(|blocks| match blocks.append(&block.0) {
         Ok(_) => {}
         Err(e) => ic_cdk::trap(format!(
-            "Could not append block to stable block log: {:?}",
-            e
+            "Could not append block to stable block log: {e:?}"
         )),
     });
 }
@@ -227,8 +226,7 @@ fn remaining_capacity() -> u64 {
         .checked_sub(total_block_size())
         .unwrap();
     print(format!(
-        "[archive node] remaining_capacity: {} bytes",
-        remaining_capacity
+        "[archive node] remaining_capacity: {remaining_capacity} bytes"
     ));
     remaining_capacity
 }
@@ -241,14 +239,12 @@ fn init(
     match max_memory_size_bytes {
         None => {
             print(format!(
-                "[archive node] init(): using default maximum memory size: {} bytes and height offset {}",
-                DEFAULT_MAX_MEMORY_SIZE, block_height_offset
+                "[archive node] init(): using default maximum memory size: {DEFAULT_MAX_MEMORY_SIZE} bytes and height offset {block_height_offset}"
             ));
         }
         Some(max_memory_size_bytes) => {
             print(format!(
-                "[archive node] init(): using maximum memory size: {} bytes and height offset {}",
-                max_memory_size_bytes, block_height_offset
+                "[archive node] init(): using maximum memory size: {max_memory_size_bytes} bytes and height offset {block_height_offset}"
             ));
         }
     }
@@ -402,8 +398,7 @@ fn post_upgrade(upgrade_arg: Option<ArchiveUpgradeArgument>) {
     assert_eq!(stable_memory_version(), MEMORY_VERSION_MEM_MGR_INSTALLED);
     if let Some(max_memory_size_bytes) = arg_max_memory_size_bytes {
         print(format!(
-            "Changing the max_memory_size_bytes to {}",
-            max_memory_size_bytes
+            "Changing the max_memory_size_bytes to {max_memory_size_bytes}"
         ));
         set_max_memory_size_bytes(max_memory_size_bytes);
     }
@@ -470,7 +465,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
-                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
                     .build()
             }
         }

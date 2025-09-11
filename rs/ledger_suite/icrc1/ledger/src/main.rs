@@ -520,8 +520,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
                 )?;
             }
             Err(err) => Err(std::io::Error::other(format!(
-                "Failed to read number of archives: {}",
-                err
+                "Failed to read number of archives: {err}"
             )))?,
         }
         if is_ready() {
@@ -595,7 +594,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
-                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
                     .build()
             }
         }

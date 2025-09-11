@@ -340,7 +340,7 @@ pub fn add_sns_wasm_for_tests(args: AddSnsWasmForTestsArgs) -> Result<()> {
     let idl = IDLArgs::from_bytes(&Encode!(&add_sns_wasm_request).unwrap()).unwrap();
     let mut argument_file = NamedTempFile::new().expect("Could not open temp file");
     argument_file
-        .write_all(format!("{}", idl).as_bytes())
+        .write_all(format!("{idl}").as_bytes())
         .expect("Could not write wasm to temp file");
     let argument_path = argument_file.path().as_os_str().to_str().unwrap();
 
@@ -360,20 +360,18 @@ pub fn add_sns_wasm_for_tests(args: AddSnsWasmForTestsArgs) -> Result<()> {
 
 /// Return the `PrincipalId` of the given dfx identity
 pub(crate) fn get_identity(identity: &str, network: &str) -> PrincipalId {
-    println!("dfx identity {}", identity);
+    println!("dfx identity {identity}");
     let output = call_dfx(&["identity", "--network", network, identity]);
 
     let canister_id = String::from_utf8(output.stdout).unwrap_or_else(|_| {
         panic!(
-            "Could not parse the output of 'dfx identity {}' as a string",
-            identity
+            "Could not parse the output of 'dfx identity {identity}' as a string"
         )
     });
 
     PrincipalId::from_str(canister_id.trim()).unwrap_or_else(|_| {
         panic!(
-            "Could not parse the output of 'dfx identity {}' as a PrincipalId",
-            identity
+            "Could not parse the output of 'dfx identity {identity}' as a PrincipalId"
         )
     })
 }
@@ -512,7 +510,7 @@ impl Canister {
         // pass to `dfx canister call --argument-file`.
         let request = Encode!(&request).context("Unable to serialize the request")?;
         let request = IDLArgs::from_bytes(&request).context("Unable to format request")?;
-        let request = format!("{}", request);
+        let request = format!("{request}");
         let mut argument_file =
             NamedTempFile::new().context("Could not create temporary argument file.")?;
         argument_file
@@ -553,11 +551,10 @@ impl Canister {
 
         let response = stdout.trim_end();
         let response = hex::decode(response)
-            .with_context(|| format!("Unable to hex decode the response:\n{:?}.", response,))?;
+            .with_context(|| format!("Unable to hex decode the response:\n{response:?}.",))?;
         Decode!(&response, Req::Response).with_context(|| {
             format!(
-                "Candid deserialization of response failed. Response:\n{:?}",
-                response,
+                "Candid deserialization of response failed. Response:\n{response:?}",
             )
         })
     }
@@ -790,7 +787,7 @@ fn call_dfx(args: &[&str]) -> Output {
     let output = Command::new(dfx_cmd)
         .args(args)
         .output()
-        .unwrap_or_else(|e| panic!("dfx failed when called with args: {:?}: {}", args, e));
+        .unwrap_or_else(|e| panic!("dfx failed when called with args: {args:?}: {e}"));
 
     // Some dfx commands output stderr instead of stdout, so we assign it for use in both
     // success and error cases below.
@@ -798,11 +795,10 @@ fn call_dfx(args: &[&str]) -> Output {
 
     if output.status.success() {
         print!("{}", String::from_utf8_lossy(&output.stdout));
-        print!("{}", std_err);
+        print!("{std_err}");
     } else {
         println!(
-            "dfx failed when called with args: {:?}, error: {}",
-            args, std_err
+            "dfx failed when called with args: {args:?}, error: {std_err}"
         );
     }
 

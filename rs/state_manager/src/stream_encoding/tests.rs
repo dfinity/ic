@@ -48,8 +48,7 @@ fn stream_encode_decode_roundtrip(
     assert_eq!(
         decode_stream_slice(&bytes[..]),
         Ok((subnet, stream_slice)),
-        "failed to decode tree {:?}",
-        tree_encoding
+        "failed to decode tree {tree_encoding:?}"
     );
 }
 
@@ -97,6 +96,6 @@ fn stream_encode_with_size_limit(
                 None => assert_eq!(stream_slice, actual_slice),
             }
         }
-        Err(e) => panic!("Failed to decode tree {:?}: {}", tree_encoding, e),
+        Err(e) => panic!("Failed to decode tree {tree_encoding:?}: {e}"),
     }
 }

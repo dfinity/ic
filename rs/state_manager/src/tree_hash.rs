@@ -122,9 +122,7 @@ mod tests {
 
         assert!(
             hash_of_empty_state != hash_of_state_with_streams,
-            "Expected the hash tree of the empty state {:?} to different from the hash tree with streams {:?}",
-            hash_of_empty_state,
-            hash_of_state_with_streams
+            "Expected the hash tree of the empty state {hash_of_empty_state:?} to different from the hash tree with streams {hash_of_state_with_streams:?}"
         );
     }
 
@@ -158,9 +156,7 @@ mod tests {
 
         assert!(
             hash_of_state_one != hash_of_state_two,
-            "Expected the hash tree of one stream {:?} to different from the hash tree with two streams {:?}",
-            hash_of_state_one,
-            hash_of_state_two
+            "Expected the hash tree of one stream {hash_of_state_one:?} to different from the hash tree with two streams {hash_of_state_two:?}"
         );
     }
 
@@ -363,9 +359,8 @@ mod tests {
             assert_eq!(
                 hash_state(&state).digest(),
                 &Digest::from(<[u8; 32]>::from_hex(expected_hash,).unwrap()),
-                "Mismatched partial state hash computed according to certification version {:?}. \
-                Perhaps you made a change that requires writing backward compatibility code?",
-                certification_version
+                "Mismatched partial state hash computed according to certification version {certification_version:?}. \
+                Perhaps you made a change that requires writing backward compatibility code?"
             );
         }
 

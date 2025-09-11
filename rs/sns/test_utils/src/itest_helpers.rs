@@ -424,7 +424,7 @@ impl SnsCanisters<'_> {
             for n in init_payloads.governance.neurons.values() {
                 let sub = n
                     .subaccount()
-                    .unwrap_or_else(|e| panic!("Couldn't calculate subaccount from neuron: {}", e));
+                    .unwrap_or_else(|e| panic!("Couldn't calculate subaccount from neuron: {e}"));
                 let aid = Account {
                     owner: governance_canister_id.get().0,
                     subaccount: Some(sub),
@@ -517,7 +517,7 @@ impl SnsCanisters<'_> {
             .expect("Empty get_proposal_response")
         {
             get_proposal_response::Result::Error(e) => {
-                panic!("get_proposal error: {}", e);
+                panic!("get_proposal error: {e}");
             }
             get_proposal_response::Result::Proposal(proposal) => proposal,
         }
@@ -542,7 +542,7 @@ impl SnsCanisters<'_> {
             .expect("Empty get_neuron_response")
         {
             get_neuron_response::Result::Error(e) => {
-                panic!("get_neuron error: {}", e)
+                panic!("get_neuron error: {e}")
             }
             get_neuron_response::Result::Neuron(neuron) => neuron,
         }
@@ -972,8 +972,7 @@ impl SnsCanisters<'_> {
             const TIME_OUT_MINUTES: f64 = 10.0;
             assert!(
                 waiting_for_minutes() < TIME_OUT_MINUTES,
-                "Rewards did not show up after {} minutes.",
-                TIME_OUT_MINUTES
+                "Rewards did not show up after {TIME_OUT_MINUTES} minutes."
             );
 
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -1008,7 +1007,7 @@ impl SnsCanisters<'_> {
 
         match response {
             Ok(_add_neuron_permission_response) => (),
-            Err(error) => panic!("Unexpected error from manage_neuron: {:?}", error),
+            Err(error) => panic!("Unexpected error from manage_neuron: {error:?}"),
         };
     }
 
@@ -1042,8 +1041,7 @@ impl SnsCanisters<'_> {
             CommandResponse::AddNeuronPermission(response) => Ok(response),
             CommandResponse::Error(error) => Err(error),
             response => panic!(
-                "Unexpected response from manage_neuron::AddNeuronPermissions: {:?}",
-                response
+                "Unexpected response from manage_neuron::AddNeuronPermissions: {response:?}"
             ),
         }
     }
@@ -1061,7 +1059,7 @@ impl SnsCanisters<'_> {
 
         match response {
             Ok(_remove_neuron_permissions_response) => (),
-            Err(error) => panic!("Unexpected error from manage_neuron: {:?}", error),
+            Err(error) => panic!("Unexpected error from manage_neuron: {error:?}"),
         };
     }
 
@@ -1095,8 +1093,7 @@ impl SnsCanisters<'_> {
             CommandResponse::RemoveNeuronPermission(response) => Ok(response),
             CommandResponse::Error(error) => Err(error),
             response => panic!(
-                "Unexpected response from manage_neuron::RemoveNeuronPermissions: {:?}",
-                response
+                "Unexpected response from manage_neuron::RemoveNeuronPermissions: {response:?}"
             ),
         }
     }
@@ -1137,8 +1134,7 @@ impl SnsCanisters<'_> {
         }
 
         panic!(
-            "Timed out while waiting for RewardEvent with end_timestamp_seconds greater than {:?}",
-            last_end_timestamp_seconds,
+            "Timed out while waiting for RewardEvent with end_timestamp_seconds greater than {last_end_timestamp_seconds:?}",
         );
     }
 
@@ -1154,7 +1150,7 @@ impl SnsCanisters<'_> {
             }
             self.governance.runtime().tick().await;
         }
-        panic!("Proposal {:?} was not rewarded", proposal_id);
+        panic!("Proposal {proposal_id:?} was not rewarded");
     }
 
     /// Get an SNS canister status from Root
@@ -1182,8 +1178,7 @@ impl SnsCanisters<'_> {
             self.governance.runtime().tick().await;
         }
         panic!(
-            "Canister {} didn't reach the running state after upgrading",
-            canister_id
+            "Canister {canister_id} didn't reach the running state after upgrading"
         )
     }
 
@@ -1203,8 +1198,7 @@ impl SnsCanisters<'_> {
         }
 
         panic!(
-            "Proposal {:?} didn't execute or fail in a reasonable time. {:?}",
-            proposal_id, proposal
+            "Proposal {proposal_id:?} didn't execute or fail in a reasonable time. {proposal:?}"
         );
     }
 
@@ -1276,8 +1270,7 @@ impl SnsCanisters<'_> {
             let response = self.get_maturity_modulation().await;
             if response.maturity_modulation.as_ref().is_some() {
                 println!(
-                    "got MaturityModulation on attempt {}: {:#?}",
-                    attempt, response
+                    "got MaturityModulation on attempt {attempt}: {response:#?}"
                 );
                 return;
             }
@@ -1285,8 +1278,7 @@ impl SnsCanisters<'_> {
         }
 
         panic!(
-            "maturity_modulation still None after {} attempts.",
-            MAX_ATTEMPTS
+            "maturity_modulation still None after {MAX_ATTEMPTS} attempts."
         );
     }
 }

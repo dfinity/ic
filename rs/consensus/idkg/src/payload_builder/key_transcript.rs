@@ -336,7 +336,7 @@ mod tests {
         let masked_transcript = {
             let param = match &payload.single_key_transcript().next_in_creation {
                 idkg::KeyTranscriptCreation::RandomTranscriptParams(param) => param.clone(),
-                other => panic!("Unexpected state: {:?}", other,),
+                other => panic!("Unexpected state: {other:?}",),
             };
             env.nodes.run_idkg_and_create_and_verify_transcript(
                 &param.as_ref().translate(&block_reader).unwrap(),
@@ -369,7 +369,7 @@ mod tests {
         let unmasked_transcript = {
             let param = match &payload.single_key_transcript().next_in_creation {
                 idkg::KeyTranscriptCreation::ReshareOfMaskedParams(param) => param.clone(),
-                other => panic!("Unexpected state: {:?}", other,),
+                other => panic!("Unexpected state: {other:?}",),
             };
             env.nodes.run_idkg_and_create_and_verify_transcript(
                 &param.as_ref().translate(&block_reader).unwrap(),
@@ -407,7 +407,7 @@ mod tests {
             idkg::KeyTranscriptCreation::Created(unmasked) => {
                 assert_eq!(*unmasked.as_ref(), *current_key_transcript.as_ref());
             }
-            other => panic!("Unexpected state: {:?}", other,),
+            other => panic!("Unexpected state: {other:?}",),
         }
 
         // 4. Reshare the current key transcript to get the next one
@@ -433,7 +433,7 @@ mod tests {
         let unmasked_transcript = {
             let param = match &payload.single_key_transcript().next_in_creation {
                 idkg::KeyTranscriptCreation::ReshareOfUnmaskedParams(param) => param.clone(),
-                other => panic!("Unexpected state: {:?}", other,),
+                other => panic!("Unexpected state: {other:?}",),
             };
             env.nodes.run_idkg_and_create_and_verify_transcript(
                 &param.as_ref().translate(&block_reader).unwrap(),
@@ -464,7 +464,7 @@ mod tests {
             idkg::KeyTranscriptCreation::Created(unmasked) => {
                 assert_eq!(*unmasked.as_ref(), *current_key_transcript.as_ref());
             }
-            other => panic!("Unexpected state: {:?}", other,),
+            other => panic!("Unexpected state: {other:?}",),
         }
         assert_eq!(
             completed_transcript.algorithm_id,
@@ -529,7 +529,7 @@ mod tests {
         let masked_transcript = {
             let param = match &payload.single_key_transcript().next_in_creation {
                 idkg::KeyTranscriptCreation::RandomTranscriptParams(param) => param.clone(),
-                other => panic!("Unexpected state: {:?}", other,),
+                other => panic!("Unexpected state: {other:?}",),
             };
             subnet_nodes.run_idkg_and_create_and_verify_transcript(
                 &param.as_ref().translate(&block_reader).unwrap(),
@@ -562,7 +562,7 @@ mod tests {
         let unmasked_transcript = {
             let param = match &payload.single_key_transcript().next_in_creation {
                 idkg::KeyTranscriptCreation::ReshareOfMaskedParams(param) => param.clone(),
-                other => panic!("Unexpected state: {:?}", other,),
+                other => panic!("Unexpected state: {other:?}",),
             };
             subnet_nodes.run_idkg_and_create_and_verify_transcript(
                 &param.as_ref().translate(&block_reader).unwrap(),
@@ -598,7 +598,7 @@ mod tests {
             idkg::KeyTranscriptCreation::Created(unmasked) => {
                 assert_eq!(*unmasked.as_ref(), *current_key_transcript.as_ref());
             }
-            other => panic!("Unexpected state: {:?}", other,),
+            other => panic!("Unexpected state: {other:?}",),
         }
 
         // 4. Reshare the created transcript to a different set of nodes
@@ -644,7 +644,7 @@ mod tests {
                 idkg::KeyTranscriptCreation::XnetReshareOfUnmaskedParams((_, param)) => {
                     param.clone()
                 }
-                other => panic!("Unexpected state: {:?}", other,),
+                other => panic!("Unexpected state: {other:?}",),
             };
 
             let all_nodes: Nodes = subnet_nodes
@@ -680,7 +680,7 @@ mod tests {
             idkg::KeyTranscriptCreation::Created(unmasked) => {
                 assert_eq!(*unmasked.as_ref(), *current_key_transcript.as_ref());
             }
-            other => panic!("Unexpected state: {:?}", other,),
+            other => panic!("Unexpected state: {other:?}",),
         }
     }
 }
