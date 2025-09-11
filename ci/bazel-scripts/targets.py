@@ -109,9 +109,7 @@ def load_explicit_targets() -> dict[str, Set[str]]:
     return explicit_targets_dict
 
 
-def diff_only_query(
-    command: str, base: str, head: str, skip_long_tests: bool, skip_didc_checks: bool, skip_buf_checks: bool
-) -> str:
+def diff_only_query(command: str, base: str, head: str, skip_long_tests: bool) -> str:
     """
     Return a bazel query for all targets that have modified inputs in the specified git commit range. Taking into account:
     * To return all targets in case files matching ALL_TARGETS_BLOBS are modified.
@@ -146,12 +144,7 @@ def diff_only_query(
         query = f'kind(".*_test", {query})'
 
     # Exclude the long_tests if requested:
-    query = (
-        f"({query})"
-        + (" except attr(tags, long_test, //...)" if skip_long_tests else "")
-        + (" except attr(tags, didc, //...)" if skip_didc_checks else "")
-        + (" except attr(tags, buf, //...)" if skip_buf_checks else "")
-    )
+    query = f"({query})" + (" except attr(tags, long_test, //...)" if skip_long_tests else "")
 
     # Include all long_tests of which a "direct" source file has been modified.
     # We specify a depth of 2 since a system-test depends on the test binary (1st degree) which depends
@@ -189,20 +182,19 @@ def targets(
     # Otherwise return a query for all targets that have modified inputs in the specified
     # git commit range taking several factors into account:
     query = (
-        (
-            "//..."(" except attr(tags, long_test, //...)" if skip_long_tests else "")(
-                " except attr(tags, didc, //...)" if skip_didc_checks else ""
-            )(" except attr(tags, buf, //...)" if skip_buf_checks else "")
-        )
+        ("//..." + (" except attr(tags, long_test, //...)" if skip_long_tests else ""))
         if base is None
-        else diff_only_query(
-            command, base, "HEAD" if head is None else head, skip_long_tests, skip_didc_checks, skip_buf_checks
-        )
+        else diff_only_query(command, base, "HEAD" if head is None else head, skip_long_tests)
     )
 
     # Finally, exclude targets that have any of the excluded tags:
     excluded_tags_regex = "|".join(EXCLUDED_TAGS)
     query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...)'
+
+    if skip_didc_checks:
+        query = f"({query}) except attr(tags, didc, //...)"
+    if skip_buf_checks:
+        query = f"({query}) except attr(tags, buf, //...)"
 
     args = ["bazel", "query", "--keep_going", query]
     log(shlex.join(args))
