@@ -2,7 +2,11 @@ use std::time::Duration;
 
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_system_test_driver::{
-    driver::{nested::NestedVms, test_env::TestEnv, test_env_api::*},
+    driver::{
+        nested::{HasNestedVms, NestedNodes},
+        test_env::TestEnv,
+        test_env_api::*,
+    },
     retry_with_msg,
     util::block_on,
 };
@@ -13,8 +17,7 @@ pub mod util;
 use util::{
     check_hostos_version, elect_guestos_version, elect_hostos_version,
     get_blessed_guestos_versions, get_host_boot_id, get_unassigned_nodes_config,
-    setup_ic_infrastructure, setup_nested_vm_group, setup_vector_targets_for_vm,
-    start_nested_vm_group, update_nodes_hostos_version,
+    setup_ic_infrastructure, setup_vector_targets_for_vm, update_nodes_hostos_version,
     update_unassigned_nodes, wait_for_expected_guest_version, wait_for_guest_version,
     NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT,
 };
@@ -28,14 +31,18 @@ const HOST_VM_NAME: &str = "host-1";
 pub fn setup(env: TestEnv) {
     setup_ic_infrastructure(&env, None);
 
-    setup_nested_vm_group(env.clone(), &[HOST_VM_NAME]);
+    NestedNodes::new(&[HOST_VM_NAME])
+        .setup_and_start(&env)
+        .unwrap();
     setup_vector_targets_for_vm(&env, HOST_VM_NAME);
 }
 
 /// Minimal setup that only creates a nested VM without any IC infrastructure.
 /// This is much faster than the full config() setup.
 pub fn simple_setup(env: TestEnv) {
-    setup_nested_vm_group(env.clone(), &[HOST_VM_NAME]);
+    NestedNodes::new(&[HOST_VM_NAME])
+        .setup_and_start(&env)
+        .unwrap();
 }
 
 /// Allow the nested GuestOS to install and launch, and check that it can
@@ -52,8 +59,6 @@ pub fn registration(env: TestEnv) {
     // Check that there are initially no unassigned nodes.
     let num_unassigned_nodes = initial_topology.unassigned_nodes().count();
     assert_eq!(num_unassigned_nodes, 0);
-
-    start_nested_vm_group(env.clone());
 
     // Assert that the GuestOS was started with direct kernel boot.
     let guest_kernel_cmdline = env
@@ -98,7 +103,6 @@ pub fn upgrade_hostos(env: TestEnv) {
     let update_image_sha256 = get_hostos_update_img_sha256();
 
     let initial_topology = env.topology_snapshot();
-    start_nested_vm_group(env.clone());
     info!(logger, "Waiting for node to join ...");
     let new_topology = block_on(
         initial_topology.block_for_newer_registry_version_within_duration(
@@ -204,8 +208,6 @@ pub fn upgrade_hostos(env: TestEnv) {
 /// from the HostOS based on injected version/hash boot parameters.
 pub fn recovery_upgrader_test(env: TestEnv) {
     let logger = env.logger();
-
-    start_nested_vm_group(env.clone());
 
     let host = env
         .get_nested_vm(HOST_VM_NAME)
@@ -321,7 +323,6 @@ pub fn upgrade_guestos(env: TestEnv) {
     let logger = env.logger();
 
     let initial_topology = env.topology_snapshot();
-    start_nested_vm_group(env.clone());
     info!(logger, "Waiting for node to join ...");
     block_on(
         initial_topology.block_for_newer_registry_version_within_duration(

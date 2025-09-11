@@ -24,7 +24,7 @@ use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
         driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
-        nested::NestedVms,
+        nested::{HasNestedVms, NestedNodes},
         test_env::TestEnv,
         test_env_api::*,
     },
@@ -33,8 +33,8 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use nested::util::{
-    get_host_boot_id, setup_ic_infrastructure, setup_nested_vm_group, setup_vector_targets_for_vm,
-    start_nested_vm_group, NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT,
+    get_host_boot_id, setup_ic_infrastructure, setup_vector_targets_for_vm,
+    NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT,
 };
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
@@ -126,8 +126,9 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
     setup_ic_infrastructure(&env, Some(DKG_INTERVAL));
 
     let host_vm_names = get_host_vm_names(SUBNET_SIZE);
-    let host_vm_names_refs: Vec<&str> = host_vm_names.iter().map(|s| s.as_str()).collect();
-    setup_nested_vm_group(env.clone(), &host_vm_names_refs);
+    NestedNodes::new(&host_vm_names)
+        .setup_and_start(&env)
+        .unwrap();
 
     for vm_name in &host_vm_names {
         setup_vector_targets_for_vm(&env, vm_name);
@@ -156,8 +157,6 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
     // Check that there are initially no unassigned nodes.
     let num_unassigned_nodes = initial_topology.unassigned_nodes().count();
     assert_eq!(num_unassigned_nodes, 0);
-
-    start_nested_vm_group(env.clone());
 
     info!(logger, "Waiting for all nodes to join ...");
 
