@@ -1,5 +1,5 @@
 {
-  "checksum": "8302df3c8391e72434a266be9750616b83092ea0c3105f2b9bc5f8309144084c",
+  "checksum": "fe976bd9480678d6eb236f62a08fa6e782ce54db988ed7683bfb31fd27101766",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7119,6 +7119,135 @@
         "MIT"
       ],
       "license_file": "LICENSE.md"
+    },
+    "bindgen 0.59.2": {
+      "name": "bindgen",
+      "version": "0.59.2",
+      "package_url": "https://github.com/rust-lang/rust-bindgen",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/bindgen/0.59.2/download",
+          "sha256": "2bd2a9a458e8f4304c52c43ebb0cfbd520289f8379a52e329a38afda99bf8eb8"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bindgen",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "bindgen",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "runtime"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bindgen 0.59.2",
+              "target": "build_script_build"
+            },
+            {
+              "id": "bitflags 1.3.2",
+              "target": "bitflags"
+            },
+            {
+              "id": "cexpr 0.6.0",
+              "target": "cexpr"
+            },
+            {
+              "id": "clang-sys 1.6.1",
+              "target": "clang_sys"
+            },
+            {
+              "id": "lazy_static 1.5.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "lazycell 1.3.0",
+              "target": "lazycell"
+            },
+            {
+              "id": "peeking_take_while 0.1.2",
+              "target": "peeking_take_while"
+            },
+            {
+              "id": "proc-macro2 1.0.95",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.40",
+              "target": "quote"
+            },
+            {
+              "id": "regex 1.11.1",
+              "target": "regex"
+            },
+            {
+              "id": "rustc-hash 1.1.0",
+              "target": "rustc_hash"
+            },
+            {
+              "id": "shlex 1.3.0",
+              "target": "shlex"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.59.2"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "clang-sys 1.6.1",
+              "target": "clang_sys"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "BSD-3-Clause",
+      "license_ids": [
+        "BSD-3-Clause"
+      ],
+      "license_file": "LICENSE"
     },
     "bindgen 0.65.1": {
       "name": "bindgen",
@@ -21549,6 +21678,10 @@
             {
               "id": "scraper 0.17.1",
               "target": "scraper"
+            },
+            {
+              "id": "scrypt 0.11.0",
+              "target": "scrypt"
             },
             {
               "id": "secp256k1 0.22.2",
@@ -44089,7 +44222,7 @@
         "Git": {
           "remote": "https://github.com/dfinity-lab/lmdb-rs",
           "commitish": {
-            "Rev": "4d952c8f1dca79de855af892b444d7112567b58d"
+            "Rev": "f62018b2deb79ea0d53914d5502389433fc3e6da"
           }
         }
       },
@@ -44156,7 +44289,7 @@
         "Git": {
           "remote": "https://github.com/dfinity-lab/lmdb-rs",
           "commitish": {
-            "Rev": "4d952c8f1dca79de855af892b444d7112567b58d"
+            "Rev": "f62018b2deb79ea0d53914d5502389433fc3e6da"
           },
           "strip_prefix": "lmdb-sys",
           "patch_args": [
@@ -44239,6 +44372,10 @@
         ],
         "deps": {
           "common": [
+            {
+              "id": "bindgen 0.59.2",
+              "target": "bindgen"
+            },
             {
               "id": "cc 1.2.22",
               "target": "cc"
@@ -95101,6 +95238,7 @@
     "scoped_threadpool 0.1.9",
     "scopeguard 1.2.0",
     "scraper 0.17.1",
+    "scrypt 0.11.0",
     "secp256k1 0.22.2",
     "semver 1.0.26",
     "serde 1.0.219",
