@@ -401,7 +401,7 @@ mod tests {
             KeyPurpose::DkgDealingEncryption,
             KeyPurpose::CommitteeSigning,
         ] {
-            let n: u64 = rng.gen();
+            let n: u64 = rng.r#gen();
             let node_id = NodeId::from(PrincipalId::new_node_test_id(n));
             let crypto_node_key = make_crypto_node_key(node_id, *key_purpose);
             let parsed = maybe_parse_crypto_node_key(&crypto_node_key);

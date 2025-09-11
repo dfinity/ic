@@ -14,7 +14,7 @@ use serde::Serialize;
 use std::io::{stdin, stdout, Read, Write};
 
 macro_rules! debug_print {
-    ($opts:expr, $msg:expr $(,$args:expr)* $(,)*) => {
+    ($opts:expr_2021, $msg:expr_2021 $(,$args:expr_2021)* $(,)*) => {
         if $opts.debug {
             eprintln!($msg $(,$args)*);
         }

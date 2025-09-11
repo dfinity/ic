@@ -3760,6 +3760,7 @@ dependencies = [
  "scoped_threadpool",
  "scopeguard",
  "scraper",
+ "scrypt",
  "secp256k1 0.22.2",
  "semver",
  "serde",

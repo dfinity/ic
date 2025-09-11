@@ -213,7 +213,7 @@ impl MockEnvironment {
         }
     }
 
-    pub fn now_setter(&self) -> impl Fn(u64) {
+    pub fn now_setter(&self) -> impl Fn(u64) + use<> {
         let arc = self.now.clone();
         move |new_now| {
             let mut now = arc.lock().unwrap();

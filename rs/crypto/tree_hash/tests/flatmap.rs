@@ -83,7 +83,7 @@ fn from_key_values_randomized() {
     input_sizes.extend([1, 2, 3, 4]);
 
     for size in input_sizes {
-        let key_values: Vec<_> = (0..size).map(|_| (rng.gen(), rng.gen())).collect();
+        let key_values: Vec<_> = (0..size).map(|_| (rng.r#gen(), rng.r#gen())).collect();
 
         // random key values
         test_impl(key_values.clone());

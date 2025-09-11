@@ -7,7 +7,7 @@ use icp_ledger::Tokens;
 use rust_decimal::Decimal;
 use url::Url;
 
-pub mod nns_dapp;
+pub mod bootstrap;
 pub mod sns;
 pub mod utils;
 

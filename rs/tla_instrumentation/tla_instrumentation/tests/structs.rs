@@ -51,7 +51,7 @@ mod tla_stuff {
 
     // #[macro_export]
     macro_rules! tla_get_globals {
-        ($self:expr $(, $_:expr)*) => {{
+        ($self:expr_2021 $(, $_:expr_2021)*) => {{
             let raw_ptr = tla_instrumentation::UnsafeSendPtr($self as *const _);
             ::std::sync::Arc::new(::std::sync::Mutex::new(move || {
                 tla_stuff::tla_get_globals(&raw_ptr)

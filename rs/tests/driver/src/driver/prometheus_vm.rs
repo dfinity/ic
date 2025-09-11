@@ -278,14 +278,18 @@ fi
         let grafana_dashboards_dst = config_dir.join("grafana").join("dashboards");
         std::fs::create_dir_all(&grafana_dashboards_dst).unwrap();
         let grafana_dashboards_src = env.get_path(GRAFANA_DASHBOARDS);
-        if let Err(e) = Self::transform_dashboards_root_dir(log.clone(), &grafana_dashboards_src) {
-            warn!(
-                log,
-                "Failed to sync k8s dashboards to grafana. Error: {e:#}"
-            )
-        } else {
-            debug!(log, "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ...");
-            TestEnv::shell_copy_with_deref(grafana_dashboards_src, grafana_dashboards_dst).unwrap();
+        match Self::transform_dashboards_root_dir(log.clone(), &grafana_dashboards_src) {
+            Err(e) => {
+                warn!(
+                    log,
+                    "Failed to sync k8s dashboards to grafana. Error: {e:#}"
+                )
+            }
+            _ => {
+                debug!(log, "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ...");
+                TestEnv::shell_copy_with_deref(grafana_dashboards_src, grafana_dashboards_dst)
+                    .unwrap();
+            }
         }
 
         write_prometheus_config_dir(config_dir.clone(), self.scrape_interval).unwrap();

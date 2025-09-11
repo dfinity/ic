@@ -342,10 +342,13 @@ mod tests {
         pub fn get(&self) -> T {
             let mut guard = self.item.lock().unwrap();
             loop {
-                if let Some(item) = (*guard).take() {
-                    break item;
-                } else {
-                    guard = self.cond.wait(guard).unwrap();
+                match (*guard).take() {
+                    Some(item) => {
+                        break item;
+                    }
+                    _ => {
+                        guard = self.cond.wait(guard).unwrap();
+                    }
                 }
             }
         }

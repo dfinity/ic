@@ -453,6 +453,7 @@ members = [
     "rs/tests/message_routing/xnet",
     "rs/tests/message_routing/xnet/slo_test_lib",
     "rs/tests/nested",
+    "rs/tests/nested/nns_recovery",
     "rs/tests/networking",
     "rs/tests/networking/canister_http",
     "rs/tests/networking/canisters",

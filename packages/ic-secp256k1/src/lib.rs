@@ -571,7 +571,7 @@ impl PrivateKey {
              * situation where k or s of zero is generated. If this occurs, simply retry
              * with a new aux_rand
              */
-            let aux_rand = rng.gen::<[u8; 32]>();
+            let aux_rand = rng.r#gen::<[u8; 32]>();
             if let Some(sig) = self.sign_bip340_with_aux_rand(message, &aux_rand) {
                 return sig;
             }
@@ -991,10 +991,9 @@ impl PublicKey {
         let pt = self.serialize_sec1(true);
 
         // from_bytes takes just the x coordinate encoding:
-        if let Ok(bip340) = k256::schnorr::VerifyingKey::from_bytes(&pt[1..]) {
-            bip340.verify_prehash(message, &signature).is_ok()
-        } else {
-            false
+        match k256::schnorr::VerifyingKey::from_bytes(&pt[1..]) {
+            Ok(bip340) => bip340.verify_prehash(message, &signature).is_ok(),
+            _ => false,
         }
     }
 

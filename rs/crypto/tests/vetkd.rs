@@ -45,7 +45,7 @@ fn should_consistently_derive_the_same_vetkey_given_sufficient_shares() {
         .serialize();
 
     let transport_secret_key =
-        ic_vetkeys::TransportSecretKey::from_seed(rng.gen::<[u8; 32]>().to_vec())
+        ic_vetkeys::TransportSecretKey::from_seed(rng.r#gen::<[u8; 32]>().to_vec())
             .expect("failed to create transport secret key");
     let vetkd_args = VetKdArgs {
         ni_dkg_id: dkg_id,
