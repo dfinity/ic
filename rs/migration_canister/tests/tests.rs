@@ -49,16 +49,18 @@ pub enum ValidationError {
     CallFailed { reason: String },
 }
 
+pub struct Setup {
+    pub pic: PocketIc,
+    pub source: Principal,
+    pub target: Principal,
+    pub controllers: Vec<Principal>,
+    pub source_subnet: Principal,
+    pub target_subnet: Principal,
+}
+
 /// Sets up PocketIc with the registry canister, the migration canister and two canisters on different app subnets.
 /// Returns: (PocketIc, source subnet, target subnet, source canister, target canister, controllers)
-async fn setup() -> (
-    PocketIc,
-    Principal,      /* source subnet */
-    Principal,      /* target subnet */
-    Principal,      /* source canister */
-    Principal,      /* target canister */
-    Vec<Principal>, /* controllers */
-) {
+async fn setup() -> Setup {
     let state_dir = TempDir::new().unwrap();
     let state_dir = state_dir.path().to_path_buf();
 
@@ -126,19 +128,25 @@ async fn setup() -> (
         .await;
     pic.add_cycles(target, u128::MAX / 2).await;
 
-    (
+    Setup {
         pic,
-        source_subnet,
-        target_subnet,
         source,
         target,
         controllers,
-    )
+        source_subnet,
+        target_subnet,
+    }
 }
 
 #[tokio::test]
 async fn test_validation_succeeds() {
-    let (pic, _source_subnet, _target_subnet, source, target, controllers) = setup().await;
+    let Setup {
+        pic,
+        source,
+        target,
+        controllers,
+        ..
+    } = setup().await;
     let sender = controllers[0];
 
     // make migration canister controller of source
