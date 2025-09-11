@@ -91,9 +91,9 @@ impl CryptoMetrics {
                 .crypto_duration_seconds
                 .with_label_values(&[
                     method_name,
-                    &format!("{}", scope),
-                    &format!("{}", domain),
-                    &format!("{}", result),
+                    &format!("{scope}"),
+                    &format!("{domain}"),
+                    &format!("{result}"),
                 ])
                 .observe(start_time.elapsed().as_secs_f64());
 
@@ -123,7 +123,7 @@ impl CryptoMetrics {
         if let (Some(metrics), Some(start_time)) = (&self.metrics, start_time) {
             metrics
                 .crypto_iccsa_verification_duration_seconds
-                .with_label_values(&[&format!("{}", result)])
+                .with_label_values(&[&format!("{result}")])
                 .observe(start_time.elapsed().as_secs_f64());
         }
     }
@@ -137,7 +137,7 @@ impl CryptoMetrics {
         if let Some(metrics) = &self.metrics {
             metrics
                 .crypto_idkg_dealing_encryption_pubkey_count
-                .with_label_values(&[&format!("{}", result)])
+                .with_label_values(&[&format!("{result}")])
                 .set(idkg_dealing_encryption_pubkey_count as i64);
         }
     }
@@ -157,18 +157,18 @@ impl CryptoMetrics {
         if let Some(metrics) = &self.metrics {
             metrics
                 .crypto_key_counts
-                .with_label_values(&[&format!("{}", KeyType::PublicLocal), &format!("{}", result)])
+                .with_label_values(&[&format!("{}", KeyType::PublicLocal), &format!("{result}")])
                 .set(key_counts.get_pk_local() as i64);
             metrics
                 .crypto_key_counts
                 .with_label_values(&[
                     &format!("{}", KeyType::PublicRegistry),
-                    &format!("{}", result),
+                    &format!("{result}"),
                 ])
                 .set(key_counts.get_pk_registry() as i64);
             metrics
                 .crypto_key_counts
-                .with_label_values(&[&format!("{}", KeyType::SecretSKS), &format!("{}", result)])
+                .with_label_values(&[&format!("{}", KeyType::SecretSKS), &format!("{result}")])
                 .set(key_counts.get_sk_local() as i64);
         }
     }
@@ -178,7 +178,7 @@ impl CryptoMetrics {
         if let Some(metrics) = &self.metrics {
             metrics
                 .crypto_key_rotation_results
-                .with_label_values(&[&format!("{}", result)])
+                .with_label_values(&[&format!("{result}")])
                 .inc();
         }
     }
@@ -195,7 +195,7 @@ impl CryptoMetrics {
         if let Some(metrics) = &self.metrics {
             metrics
                 .crypto_boolean_results
-                .with_label_values(&[&format!("{}", operation), &format!("{}", result)])
+                .with_label_values(&[&format!("{operation}"), &format!("{result}")])
                 .inc();
         }
     }
@@ -222,8 +222,8 @@ impl CryptoMetrics {
                 .with_label_values(&[
                     method_name,
                     parameter_name,
-                    &format!("{}", domain),
-                    &format!("{}", result),
+                    &format!("{domain}"),
+                    &format!("{result}"),
                 ])
                 .observe(parameter_size as f64);
         }
@@ -239,9 +239,9 @@ impl CryptoMetrics {
         start_time: Option<Instant>,
     ) {
         if let Some(metrics) = &self.metrics {
-            let service_type_string = &format!("{}", service_type);
-            let message_type_string = &format!("{}", message_type);
-            let domain_string = &format!("{}", domain);
+            let service_type_string = &format!("{service_type}");
+            let message_type_string = &format!("{message_type}");
+            let domain_string = &format!("{domain}");
             metrics
                 .crypto_vault_message_sizes
                 .with_label_values(&[
@@ -635,7 +635,7 @@ impl Metrics {
             &["result"],
         );
         for result in MetricsResult::iter() {
-            idkg_dealing_encryption_pubkey_count.with_label_values(&[&format!("{}", result)]);
+            idkg_dealing_encryption_pubkey_count.with_label_values(&[&format!("{result}")]);
         }
         let key_counts = r.int_gauge_vec(
             "crypto_key_counts",
@@ -644,7 +644,7 @@ impl Metrics {
         );
         for key_type in KeyType::iter() {
             for result in MetricsResult::iter() {
-                key_counts.with_label_values(&[&format!("{}", key_type), &format!("{}", result)]);
+                key_counts.with_label_values(&[&format!("{key_type}"), &format!("{result}")]);
             }
         }
         let boolean_results = r.int_counter_vec(
@@ -655,7 +655,7 @@ impl Metrics {
         for operation in BooleanOperation::iter() {
             for result in BooleanResult::iter() {
                 boolean_results
-                    .with_label_values(&[&format!("{}", operation), &format!("{}", result)]);
+                    .with_label_values(&[&format!("{operation}"), &format!("{result}")]);
             }
         }
         let rotation_results = r.int_counter_vec(
@@ -664,7 +664,7 @@ impl Metrics {
             &["result"],
         );
         for result in KeyRotationResult::iter() {
-            rotation_results.with_label_values(&[&format!("{}", result)]);
+            rotation_results.with_label_values(&[&format!("{result}")]);
         }
         Self {
             crypto_lock_acquisition_duration_seconds: r.histogram_vec(

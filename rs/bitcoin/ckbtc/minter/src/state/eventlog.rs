@@ -297,8 +297,7 @@ pub fn replay<I: CheckInvariants>(
             EventType::Init(args) => CkBtcMinterState::from(args),
             payload => {
                 return Err(ReplayLogError::InconsistentLog(format!(
-                    "The first event is not Init: {:?}",
-                    payload
+                    "The first event is not Init: {payload:?}"
                 )));
             }
         },
@@ -340,8 +339,7 @@ pub fn replay<I: CheckInvariants>(
             EventType::RemovedRetrieveBtcRequest { block_index } => {
                 let request = state.remove_pending_request(block_index).ok_or_else(|| {
                     ReplayLogError::InconsistentLog(format!(
-                        "Attempted to remove a non-pending retrieve_btc request {}",
-                        block_index
+                        "Attempted to remove a non-pending retrieve_btc request {block_index}"
                     ))
                 })?;
 
@@ -363,8 +361,7 @@ pub fn replay<I: CheckInvariants>(
                 for block_index in request_block_indices {
                     let request = state.remove_pending_request(block_index).ok_or_else(|| {
                         ReplayLogError::InconsistentLog(format!(
-                            "Attempted to send a non-pending retrieve_btc request {}",
-                            block_index
+                            "Attempted to send a non-pending retrieve_btc request {block_index}"
                         ))
                     })?;
                     retrieve_btc_requests.insert(request);

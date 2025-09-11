@@ -56,7 +56,7 @@ impl ProtoPublicKeyStore {
             }
             Err(err) => match err.kind() {
                 ErrorKind::NotFound => None,
-                _ => panic!("Failed to read public key store data: {}", err),
+                _ => panic!("Failed to read public key store data: {err}"),
             },
         }
     }

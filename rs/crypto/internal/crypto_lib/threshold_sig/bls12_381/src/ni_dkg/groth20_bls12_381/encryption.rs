@@ -224,7 +224,7 @@ pub fn decrypt(
 ) -> Result<Scalar, DecryptError> {
     let index = usize::try_from(node_index).map_err(|_| {
         DecryptError::SizeError(SizeError {
-            message: format!("Node index is too large for this machine: {}", node_index),
+            message: format!("Node index is too large for this machine: {node_index}"),
         })
     })?;
     if index >= ciphertext.ciphertext_chunks.len() {
@@ -349,7 +349,7 @@ pub fn verify_zk_proofs(
                 let error = MalformedPublicKeyError {
                     algorithm: ALGORITHM_ID,
                     key_bytes: Some(public_key.as_bytes()[..].to_vec()),
-                    internal_error: format!("{:?}", parse_error),
+                    internal_error: format!("{parse_error:?}"),
                 };
                 CspDkgVerifyDealingError::MalformedFsPublicKeyError {
                     receiver_index,

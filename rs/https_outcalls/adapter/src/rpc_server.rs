@@ -254,7 +254,7 @@ impl CanisterHttp {
         }
 
         if let Some(last_error) = last_error {
-            Err(format!("{:?}", last_error))
+            Err(format!("{last_error:?}"))
         } else {
             Err("No SOCKS proxy addresses provided".to_string())
         }
@@ -279,7 +279,7 @@ impl HttpsOutcallsService for CanisterHttp {
                 .inc();
             Status::new(
                 tonic::Code::InvalidArgument,
-                format!("Failed to parse URL: {}", err),
+                format!("Failed to parse URL: {err}"),
             )
         })?;
 
@@ -318,7 +318,7 @@ impl HttpsOutcallsService for CanisterHttp {
                         .inc();
                     Err(Status::new(
                         tonic::Code::InvalidArgument,
-                        format!("Unsupported HTTP method {:?}", method),
+                        format!("Unsupported HTTP method {method:?}"),
                     ))
                 }
             })?;
@@ -362,8 +362,7 @@ impl HttpsOutcallsService for CanisterHttp {
                         .await
                         .map_err(|socks_err| {
                             format!(
-                                "Request failed direct connect {:?} and connect through socks {:?}",
-                                direct_err, socks_err
+                                "Request failed direct connect {direct_err:?} and connect through socks {socks_err:?}"
                             )
                         })
                 }
@@ -389,15 +388,14 @@ impl HttpsOutcallsService for CanisterHttp {
                         .await
                         .map_err(|socks_err| {
                             format!(
-                                "Request failed direct connect {:?} \
-                                and connect through socks {:?}. \
+                                "Request failed direct connect {direct_err:?} \
+                                and connect through socks {socks_err:?}. \
                                 (Please note that the canister HTTPS outcalls feature \
                                 is an IPv6-only feature. \
                                 While IPv4 is an experimental feature, \
                                 it cannot be relied upon for this functionality. \
                                 For more information, please consult \
-                                the Internet Computer developer documentation)",
-                                direct_err, socks_err
+                                the Internet Computer developer documentation)"
                             )
                         })
                 }
@@ -447,7 +445,7 @@ impl HttpsOutcallsService for CanisterHttp {
                     .inc();
                 Status::new(
                     tonic::Code::Unavailable,
-                    format!("Failed to parse headers: {}", err),
+                    format!("Failed to parse headers: {err}"),
                 )
             })?;
 
@@ -506,7 +504,7 @@ fn validate_headers(raw_headers: Vec<HttpHeader>) -> Result<HeaderMap, Status> {
     if raw_headers.len() > HEADERS_LIMIT {
         return Err(Status::new(
             tonic::Code::InvalidArgument,
-            format!("Too many headers. Maximum allowed: {}", HEADERS_LIMIT),
+            format!("Too many headers. Maximum allowed: {HEADERS_LIMIT}"),
         ));
     }
     // Check that header name and values are within limit.
@@ -517,8 +515,7 @@ fn validate_headers(raw_headers: Vec<HttpHeader>) -> Result<HeaderMap, Status> {
         return Err(Status::new(
             tonic::Code::InvalidArgument,
             format!(
-                "Header name or value exceeds size limit of {}",
-                HEADER_NAME_VALUE_LIMIT
+                "Header name or value exceeds size limit of {HEADER_NAME_VALUE_LIMIT}"
             ),
         ));
     }

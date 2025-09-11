@@ -854,8 +854,7 @@ fn check_mapping_correctness(mapping: &Mapping, path: &Path) -> Result<(), Persi
             return Err(PersistenceError::InvalidOverlay {
                 path: path.display().to_string(),
                 message: format!(
-                    "Broken overlay file: First PageIndexRange ({:?}) does not start at file_index 0",
-                    entry,
+                    "Broken overlay file: First PageIndexRange ({entry:?}) does not start at file_index 0",
                 ),
             });
         }

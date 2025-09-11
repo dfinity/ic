@@ -194,7 +194,7 @@ pub async fn call_canister(proposal: CallCanisterProposal) {
 
     let res = CdkRuntime::call_bytes_with_cleanup(*canister_id, method_name, payload)
         .await
-        .map_err(|(code, msg)| format!("Error: {}:{}", code, msg));
+        .map_err(|(code, msg)| format!("Error: {code}:{msg}"));
 
     print(format!(
         "Call {}::{} returned {:?}",

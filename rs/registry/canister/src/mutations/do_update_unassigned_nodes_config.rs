@@ -20,7 +20,7 @@ impl Registry {
         &mut self,
         payload: UpdateUnassignedNodesConfigPayload,
     ) {
-        println!("{}do_update_unassigned_nodes: {:?}", LOG_PREFIX, payload);
+        println!("{LOG_PREFIX}do_update_unassigned_nodes: {payload:?}");
 
         let unassigned_nodes_key = make_unassigned_nodes_config_record_key();
         let (current_ssh_readonly_access, current_replica_version) = match self

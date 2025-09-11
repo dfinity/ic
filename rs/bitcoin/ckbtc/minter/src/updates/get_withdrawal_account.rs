@@ -13,8 +13,7 @@ pub async fn get_withdrawal_account() -> Account {
     // Check that the computed subaccount doesn't collide with minting account.
     if &caller_subaccount == DEFAULT_SUBACCOUNT {
         panic!(
-            "Subaccount collision with principal {}. Please contact DFINITY support.",
-            caller
+            "Subaccount collision with principal {caller}. Please contact DFINITY support."
         );
     }
     Account {

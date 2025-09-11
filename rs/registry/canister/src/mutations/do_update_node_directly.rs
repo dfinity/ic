@@ -34,7 +34,7 @@ impl Registry {
         &mut self,
         payload: UpdateNodeDirectlyPayload,
     ) -> Result<(), String> {
-        println!("{}do_update_node_directly: {:?}", LOG_PREFIX, payload);
+        println!("{LOG_PREFIX}do_update_node_directly: {payload:?}");
         // We pull out the caller retrieval and determining of the current time, so that we can unit test the underlying function
         // with any node id.
         let node_id = NodeId::from(dfn_core::api::caller());
@@ -52,8 +52,7 @@ impl Registry {
         self
             .get(node_key.as_bytes(), self.latest_version())
             .ok_or_else(|| format!(
-            "{}do_update_node_directly: Node Id {:} not found in the registry, aborting node update.",
-            LOG_PREFIX, node_id))?;
+            "{LOG_PREFIX}do_update_node_directly: Node Id {node_id:} not found in the registry, aborting node update."))?;
 
         // 2. Disallow updating if the node is not on an signing subnet or key rotation is disabled.
         let subnet_record = self.get_subnet_from_node_id_or_panic(node_id);
@@ -76,15 +75,14 @@ impl Registry {
         // 3. Disallow updating if the existing key is sufficiently fresh.
         let duration_since_unix_epoch = now
             .duration_since(SystemTime::UNIX_EPOCH)
-            .map_err(|err| format!("couldn't get time since unix epoch: {}", err))?;
+            .map_err(|err| format!("couldn't get time since unix epoch: {err}"))?;
 
         let idkg_pk_key = make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption);
         let previous_timestamp_set = match self.get(idkg_pk_key.as_bytes(), self.latest_version()) {
             Some(record) => {
                 let pk = PublicKey::decode(record.value.as_slice()).map_err(|e| {
                     format!(
-                        "idkg_dealing_encryption_pk is not in the expected format: {:?}",
-                        e
+                        "idkg_dealing_encryption_pk is not in the expected format: {e:?}"
                     )
                 })?;
                 // If the timestamp exists, we reject if it's recent enough, otherwise we accept the
@@ -136,14 +134,13 @@ impl Registry {
             )
             .map_err(|e| {
                 format!(
-                    "idkg_dealing_encryption_pk is not in the expected format: {:?}",
-                    e
+                    "idkg_dealing_encryption_pk is not in the expected format: {e:?}"
                 )
             })?;
             // Set the key timestamp to the current time.
             pk.timestamp = Some(duration_since_unix_epoch.as_millis() as u64);
             ValidIDkgDealingEncryptionPublicKey::try_from(pk)
-                .map_err(|e| format!("key validation failed: {}", e))?
+                .map_err(|e| format!("key validation failed: {e}"))?
         };
 
         // 6. Create mutation for new record
@@ -167,8 +164,7 @@ impl Registry {
             .find(|subnet_record| subnet_record.membership.contains(&node_id.get().to_vec()))
             .unwrap_or_else(|| {
                 panic!(
-                    "{}subnet record for node {:} not found in the registry.",
-                    LOG_PREFIX, node_id
+                    "{LOG_PREFIX}subnet record for node {node_id:} not found in the registry."
                 )
             })
     }

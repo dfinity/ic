@@ -28,7 +28,7 @@ fn get_free_localhost_port() -> std::io::Result<SocketAddr> {
 
 async fn send_request(client: &Client, addr: SocketAddr) -> Result<Response, Error> {
     client
-        .request(Method::GET, format!("http://{}", addr))
+        .request(Method::GET, format!("http://{addr}"))
         .body(Body::from(""))
         .send()
         .await

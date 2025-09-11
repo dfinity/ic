@@ -133,7 +133,7 @@ impl Display for InvalidEventReason {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             InvalidEventReason::InvalidDeposit(reason) => {
-                write!(f, "Invalid deposit: {}", reason)
+                write!(f, "Invalid deposit: {reason}")
             }
             InvalidEventReason::QuarantinedDeposit => {
                 write!(f, "Quarantined deposit")
@@ -176,7 +176,7 @@ impl State {
     pub fn minter_address(&self) -> Option<Address> {
         let pubkey = PublicKey::deserialize_sec1(&self.ecdsa_public_key.as_ref()?.public_key)
             .unwrap_or_else(|e| {
-                ic_cdk::trap(format!("failed to decode minter's public key: {:?}", e))
+                ic_cdk::trap(format!("failed to decode minter's public key: {e:?}"))
             });
         Some(ecdsa_public_key_to_address(&pubkey))
     }
@@ -392,9 +392,7 @@ impl State {
         let entry = self.skipped_blocks.entry(contract_address).or_default();
         assert!(
             entry.insert(block_number),
-            "BUG: block {} was already skipped for contract {}",
-            block_number,
-            contract_address,
+            "BUG: block {block_number} was already skipped for contract {contract_address}",
         );
     }
 
@@ -435,7 +433,7 @@ impl State {
                     .ckerc20_tokens
                     .get_alt(erc20_contract)
                     .unwrap_or_else(|| {
-                        panic!("BUG: missing symbol for ERC-20 contract {}", erc20_contract)
+                        panic!("BUG: missing symbol for ERC-20 contract {erc20_contract}")
                     });
                 (symbol, balance)
             })
@@ -467,18 +465,18 @@ impl State {
         } = upgrade_args;
         if let Some(nonce) = next_transaction_nonce {
             let nonce = TransactionNonce::try_from(nonce)
-                .map_err(|e| InvalidStateError::InvalidTransactionNonce(format!("ERROR: {}", e)))?;
+                .map_err(|e| InvalidStateError::InvalidTransactionNonce(format!("ERROR: {e}")))?;
             self.eth_transactions.update_next_transaction_nonce(nonce);
         }
         if let Some(amount) = minimum_withdrawal_amount {
             let minimum_withdrawal_amount = Wei::try_from(amount).map_err(|e| {
-                InvalidStateError::InvalidMinimumWithdrawalAmount(format!("ERROR: {}", e))
+                InvalidStateError::InvalidMinimumWithdrawalAmount(format!("ERROR: {e}"))
             })?;
             self.cketh_minimum_withdrawal_amount = minimum_withdrawal_amount;
         }
         if let Some(address) = ethereum_contract_address {
             let eth_helper_contract_address = Address::from_str(&address).map_err(|e| {
-                InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {}", e))
+                InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e}"))
             })?;
             self.log_scrapings
                 .set_contract_address(
@@ -486,12 +484,12 @@ impl State {
                     eth_helper_contract_address,
                 )
                 .map_err(|e| {
-                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {:?}", e))
+                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e:?}"))
                 })?;
         }
         if let Some(address) = erc20_helper_contract_address {
             let erc20_helper_contract_address = Address::from_str(&address).map_err(|e| {
-                InvalidStateError::InvalidErc20HelperContractAddress(format!("ERROR: {}", e))
+                InvalidStateError::InvalidErc20HelperContractAddress(format!("ERROR: {e}"))
             })?;
             self.log_scrapings
                 .set_contract_address(
@@ -499,32 +497,32 @@ impl State {
                     erc20_helper_contract_address,
                 )
                 .map_err(|e| {
-                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {:?}", e))
+                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e:?}"))
                 })?;
         }
         if let Some(block_number) = last_erc20_scraped_block_number {
             self.log_scrapings.set_last_scraped_block_number(
                 LogScrapingId::Erc20DepositWithoutSubaccount,
                 BlockNumber::try_from(block_number).map_err(|e| {
-                    InvalidStateError::InvalidLastErc20ScrapedBlockNumber(format!("ERROR: {}", e))
+                    InvalidStateError::InvalidLastErc20ScrapedBlockNumber(format!("ERROR: {e}"))
                 })?,
             );
         }
         if let Some(address) = deposit_with_subaccount_helper_contract_address {
             let address = Address::from_str(&address).map_err(|e| {
-                InvalidStateError::InvalidErc20HelperContractAddress(format!("ERROR: {}", e))
+                InvalidStateError::InvalidErc20HelperContractAddress(format!("ERROR: {e}"))
             })?;
             self.log_scrapings
                 .set_contract_address(LogScrapingId::EthOrErc20DepositWithSubaccount, address)
                 .map_err(|e| {
-                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {:?}", e))
+                    InvalidStateError::InvalidEthereumContractAddress(format!("ERROR: {e:?}"))
                 })?;
         }
         if let Some(block_number) = last_deposit_with_subaccount_scraped_block_number {
             self.log_scrapings.set_last_scraped_block_number(
                 LogScrapingId::EthOrErc20DepositWithSubaccount,
                 BlockNumber::try_from(block_number).map_err(|e| {
-                    InvalidStateError::InvalidLastErc20ScrapedBlockNumber(format!("ERROR: {}", e))
+                    InvalidStateError::InvalidLastErc20ScrapedBlockNumber(format!("ERROR: {e}"))
                 })?,
             );
         }
@@ -617,7 +615,7 @@ pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
 
     fn to_public_key(response: &EcdsaPublicKeyResponse) -> PublicKey {
         PublicKey::deserialize_sec1(&response.public_key).unwrap_or_else(|e| {
-            ic_cdk::trap(format!("failed to decode minter's public key: {:?}", e))
+            ic_cdk::trap(format!("failed to decode minter's public key: {e:?}"))
         })
     }
 
@@ -640,8 +638,7 @@ pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
     .await
     .unwrap_or_else(|(error_code, message)| {
         ic_cdk::trap(format!(
-            "failed to get minter's public key: {} (error code = {:?})",
-            message, error_code,
+            "failed to get minter's public key: {message} (error code = {error_code:?})",
         ))
     });
     mutate_state(|s| s.ecdsa_public_key = Some(response.clone()));
@@ -752,8 +749,7 @@ impl Erc20Balances {
             Some(previous_value) => {
                 let new_value = previous_value.checked_add(deposit).unwrap_or_else(|| {
                     panic!(
-                        "BUG: overflow when adding {} to {}",
-                        deposit, previous_value
+                        "BUG: overflow when adding {deposit} to {previous_value}"
                     )
                 });
                 self.balance_by_erc20_contract
@@ -775,8 +771,7 @@ impl Erc20Balances {
             .checked_sub(withdrawal_amount)
             .unwrap_or_else(|| {
                 panic!(
-                    "BUG: underflow when subtracting {} from {}",
-                    withdrawal_amount, previous_value
+                    "BUG: underflow when subtracting {withdrawal_amount} from {previous_value}"
                 )
             });
         self.balance_by_erc20_contract

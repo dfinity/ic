@@ -174,7 +174,7 @@ pub(crate) fn get_node_record_from_snapshot(
     value
         .map(|bytes| {
             NodeRecord::decode(bytes.as_slice()).map_err(|err| InvariantCheckError {
-                msg: format!("Deserialize registry value failed with {}", err),
+                msg: format!("Deserialize registry value failed with {err}"),
                 source: None,
             })
         })

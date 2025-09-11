@@ -1046,7 +1046,7 @@ pub async fn sign_transaction<R: CanisterRuntime, F: Fn(&tx::OutPoint) -> Option
         let outpoint = &input.previous_output;
 
         let account = lookup_outpoint_account(outpoint)
-            .unwrap_or_else(|| panic!("bug: no account for outpoint {:?}", outpoint));
+            .unwrap_or_else(|| panic!("bug: no account for outpoint {outpoint:?}"));
 
         let path = derivation_path(&account);
         let pubkey = ByteBuf::from(derive_public_key(ecdsa_public_key, &account).public_key);

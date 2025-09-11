@@ -243,7 +243,7 @@ pub fn verify_resharing_dealing(
         individual_public_key(resharing_public_coefficients, dealer_resharing_index).map_err(
             |error| {
                 let error = InvalidArgumentError {
-                    message: format!("{}", error),
+                    message: format!("{error}"),
                 };
                 CspDkgVerifyDealingError::InvalidDealingError(error)
             },
@@ -289,8 +289,7 @@ pub fn verify_threshold(
     if threshold < min_threshold {
         return Err(InvalidArgumentError {
             message: format!(
-                "Threshold to small:\n  Threshold: {}\n  minimum: {}",
-                threshold, min_threshold
+                "Threshold to small:\n  Threshold: {threshold}\n  minimum: {min_threshold}"
             ),
         });
     }
@@ -298,8 +297,7 @@ pub fn verify_threshold(
     if threshold > number_of_receivers {
         return Err(InvalidArgumentError {
             message: format!(
-                "Threshold to large:\n  Threshold: {}\n  Number of receivers: {}",
-                threshold, number_of_receivers
+                "Threshold to large:\n  Threshold: {threshold}\n  Number of receivers: {number_of_receivers}"
             ),
         });
     }

@@ -550,7 +550,7 @@ impl CallContextManager {
         let mut context = self
             .call_contexts
             .remove(&call_context_id)
-            .unwrap_or_else(|| panic!("no call context with ID={}", call_context_id));
+            .unwrap_or_else(|| panic!("no call context with ID={call_context_id}"));
         // Update call context `instructions_executed += instructions_used`
         context.instructions_executed = context
             .instructions_executed

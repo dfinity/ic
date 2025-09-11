@@ -83,7 +83,7 @@ pub fn generate_systemd_config_files(
 ) -> Result<()> {
     let mut interfaces = get_interfaces()?;
     interfaces.sort_by_key(|v| Reverse(v.speed_mbps));
-    eprintln!("Interfaces sorted decending by speed: {:?}", interfaces);
+    eprintln!("Interfaces sorted decending by speed: {interfaces:?}");
 
     let ping_target = ipv6_config.gateway.to_string();
 
@@ -100,7 +100,7 @@ pub fn generate_systemd_config_files(
         })
         .context("Could not find any network interfaces")?;
 
-    eprintln!("Using fastest interface: {:?}", fastest_interface);
+    eprintln!("Using fastest interface: {fastest_interface:?}");
 
     // Format the IP address to include the subnet length. See `man systemd.network`.
     let ipv6_address = format!(

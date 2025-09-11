@@ -453,10 +453,9 @@ fn validate_ingress_expiry<C: HttpRequestContent>(
     if !(min_allowed_expiry <= provided_expiry && provided_expiry <= max_allowed_expiry) {
         let msg = format!(
             "Specified ingress_expiry not within expected range: \
-             Minimum allowed expiry: {}, \
-             Maximum allowed expiry: {}, \
-             Provided expiry:        {}",
-            min_allowed_expiry, max_allowed_expiry, provided_expiry
+             Minimum allowed expiry: {min_allowed_expiry}, \
+             Maximum allowed expiry: {max_allowed_expiry}, \
+             Provided expiry:        {provided_expiry}"
         );
         return Err(InvalidRequestExpiry(msg));
     }
@@ -491,9 +490,8 @@ fn validate_sender_delegation_expiry(
             if delegation.delegation().expiration() < current_time {
                 return Err(InvalidDelegationExpiry(format!(
                     "Specified sender delegation has expired:\n\
-                     Provided expiry:    {}\n\
-                     Local replica time: {}",
-                    expiry, current_time,
+                     Provided expiry:    {expiry}\n\
+                     Local replica time: {current_time}",
                 )));
             }
         }
@@ -653,8 +651,7 @@ fn ensure_delegations_does_not_contain_too_many_targets(
                 if number_of_targets > MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION =>
             {
                 Err(InvalidDelegation(DelegationTargetError(format!(
-                    "expected at most {} targets per delegation, but got {}",
-                    MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION, number_of_targets
+                    "expected at most {MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION} targets per delegation, but got {number_of_targets}"
                 ))))
             }
             _ => Ok(()),

@@ -35,8 +35,7 @@ impl Registry {
         // Get the caller ID and check if it is in the registry
         let caller_id = dfn_core::api::caller();
         println!(
-            "{}do_add_node started: {:?} caller: {:?}",
-            LOG_PREFIX, payload, caller_id
+            "{LOG_PREFIX}do_add_node started: {payload:?} caller: {caller_id:?}"
         );
         self.do_add_node_(payload, caller_id)
     }
@@ -47,13 +46,13 @@ impl Registry {
         caller_id: PrincipalId,
     ) -> Result<NodeId, String> {
         let mut node_operator_record = get_node_operator_record(self, caller_id)
-            .map_err(|err| format!("{}do_add_node: Aborting node addition: {}", LOG_PREFIX, err))?;
+            .map_err(|err| format!("{LOG_PREFIX}do_add_node: Aborting node addition: {err}"))?;
 
         // 1. Validate keys and get the node id
         let (node_id, valid_pks) = valid_keys_from_payload(&payload)
-            .map_err(|err| format!("{}do_add_node: {}", LOG_PREFIX, err))?;
+            .map_err(|err| format!("{LOG_PREFIX}do_add_node: {err}"))?;
 
-        println!("{}do_add_node: The node id is {:?}", LOG_PREFIX, node_id);
+        println!("{LOG_PREFIX}do_add_node: The node id is {node_id:?}");
 
         // 2. Clear out any nodes that already exist at this IP.
         // This will only succeed if the same NO was in control of the original nodes.
@@ -97,8 +96,7 @@ impl Registry {
         // 3. Check if adding one more node will get us over the cap for the Node Operator
         if node_operator_record.node_allowance + num_removed_nodes == 0 {
             return Err(format!(
-                "{}do_add_node: Node allowance for this Node Operator is exhausted",
-                LOG_PREFIX
+                "{LOG_PREFIX}do_add_node: Node allowance for this Node Operator is exhausted"
             ));
         }
 
@@ -109,8 +107,7 @@ impl Registry {
             .map(|t| {
                 validate_str_as_node_reward_type(t).map_err(|e| {
                     format!(
-                        "{}do_add_node: Error parsing node type from payload: {}",
-                        LOG_PREFIX, e
+                        "{LOG_PREFIX}do_add_node: Error parsing node type from payload: {e}"
                     )
                 })
             })
@@ -120,8 +117,7 @@ impl Registry {
         // 4a.  Conditionally enforce node_reward_type presence if node rewards are enabled
         if self.are_node_rewards_enabled() && node_reward_type.is_none() {
             return Err(format!(
-                "{}do_add_node: Node reward type is required.",
-                LOG_PREFIX
+                "{LOG_PREFIX}do_add_node: Node reward type is required."
             ));
         }
 
@@ -188,7 +184,7 @@ impl Registry {
         // 10. Check invariants and then apply mutations
         self.maybe_apply_mutation_internal(mutations);
 
-        println!("{}do_add_node finished: {:?}", LOG_PREFIX, payload);
+        println!("{LOG_PREFIX}do_add_node finished: {payload:?}");
 
         Ok(node_id)
     }
@@ -213,7 +209,7 @@ fn validate_str_as_node_reward_type<T: AsRef<str> + Display>(
         "type3" => NodeRewardType::Type3,
         "type3.1" => NodeRewardType::Type3dot1,
         "type1.1" => NodeRewardType::Type1dot1,
-        _ => return Err(format!("Invalid node type: {}", type_string)),
+        _ => return Err(format!("Invalid node type: {type_string}")),
     })
 }
 
@@ -223,8 +219,7 @@ fn validate_str_as_node_reward_type<T: AsRef<str> + Display>(
 pub fn connection_endpoint_from_string(endpoint: &str) -> ConnectionEndpoint {
     match endpoint.parse::<SocketAddr>() {
         Err(e) => panic!(
-            "Could not convert {:?} to a connection endpoint: {:?}",
-            endpoint, e
+            "Could not convert {endpoint:?} to a connection endpoint: {e:?}"
         ),
         Ok(sa) => ConnectionEndpoint {
             ip_addr: sa.ip().to_string(),
@@ -260,21 +255,19 @@ fn valid_keys_from_payload(
     // 2. get the keys for verification -- for that, we need to create
     // NodePublicKeys first
     let node_signing_pk = PublicKey::decode(&payload.node_signing_pk[..])
-        .map_err(|e| format!("node_signing_pk is not in the expected format: {:?}", e))?;
+        .map_err(|e| format!("node_signing_pk is not in the expected format: {e:?}"))?;
     let committee_signing_pk =
         PublicKey::decode(&payload.committee_signing_pk[..]).map_err(|e| {
             format!(
-                "committee_signing_pk is not in the expected format: {:?}",
-                e
+                "committee_signing_pk is not in the expected format: {e:?}"
             )
         })?;
     let tls_certificate = X509PublicKeyCert::decode(&payload.transport_tls_cert[..])
-        .map_err(|e| format!("transport_tls_cert is not in the expected format: {:?}", e))?;
+        .map_err(|e| format!("transport_tls_cert is not in the expected format: {e:?}"))?;
     let dkg_dealing_encryption_pk = PublicKey::decode(&payload.ni_dkg_dealing_encryption_pk[..])
         .map_err(|e| {
             format!(
-                "ni_dkg_dealing_encryption_pk is not in the expected format: {:?}",
-                e
+                "ni_dkg_dealing_encryption_pk is not in the expected format: {e:?}"
             )
         })?;
     // TODO(NNS1-1197): Refactor when nodes are provisioned for threshold ECDSA subnets
@@ -282,8 +275,7 @@ fn valid_keys_from_payload(
         if let Some(idkg_de_pk_bytes) = &payload.idkg_dealing_encryption_pk {
             Some(PublicKey::decode(&idkg_de_pk_bytes[..]).map_err(|e| {
                 format!(
-                    "idkg_dealing_encryption_pk is not in the expected format: {:?}",
-                    e
+                    "idkg_dealing_encryption_pk is not in the expected format: {e:?}"
                 )
             })?)
         } else {
@@ -293,8 +285,7 @@ fn valid_keys_from_payload(
     // 3. get the node id from the node_signing_pk
     let node_id = crypto_basicsig_conversions::derive_node_id(&node_signing_pk).map_err(|e| {
         format!(
-            "node signing public key couldn't be converted to a NodeId: {:?}",
-            e
+            "node signing public key couldn't be converted to a NodeId: {e:?}"
         )
     })?;
 
@@ -310,7 +301,7 @@ fn valid_keys_from_payload(
     // 5. validate the keys and the node_id
     match ValidNodePublicKeys::try_from(node_pks, node_id, now()?) {
         Ok(valid_pks) => Ok((node_id, valid_pks)),
-        Err(e) => Err(format!("Could not validate public keys, due to {:?}", e)),
+        Err(e) => Err(format!("Could not validate public keys, due to {e:?}")),
     }
 }
 
@@ -320,7 +311,7 @@ fn now() -> Result<Time, String> {
         .map_err(|e| format!("Could not get current time since UNIX_EPOCH: {e}"))?;
 
     let nanos = u64::try_from(duration.as_nanos())
-        .map_err(|e| format!("Current time cannot be converted to u64: {:?}", e))?;
+        .map_err(|e| format!("Current time cannot be converted to u64: {e:?}"))?;
 
     Ok(Time::from_nanos_since_unix_epoch(nanos))
 }

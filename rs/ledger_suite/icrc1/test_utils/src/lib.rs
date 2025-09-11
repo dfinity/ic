@@ -534,8 +534,7 @@ impl TransactionsAndBalances {
                                     .checked_sub(used_allowance)
                                     .unwrap_or_else(|| {
                                         panic!(
-                                            "Allowance {} not enough to cover amount and fee {} - from: {}, to: {}, spender: {}",
-                                            current_amount, used_allowance, from, to, spender_account
+                                            "Allowance {current_amount} not enough to cover amount and fee {used_allowance} - from: {from}, to: {to}, spender: {spender_account}"
                                         )
                                     }),
                             );
@@ -1104,14 +1103,12 @@ pub fn valid_transactions_strategy_with_excluded_transaction_types(
                         let allowance_max =
                             allowance_amount.checked_sub(fee_amount).unwrap_or_else(|| {
                                 panic!(
-                                    "allowance ({}) must be greater than or equal to the fee ({})",
-                                    allowance_amount, fee_amount,
+                                    "allowance ({allowance_amount}) must be greater than or equal to the fee ({fee_amount})",
                                 )
                             });
                         let balance_max = current_balance.checked_sub(fee_amount).unwrap_or_else(|| {
                             panic!(
-                                "current balance ({}) must be greater than or equal to the fee ({})",
-                                current_balance, fee_amount,
+                                "current balance ({current_balance}) must be greater than or equal to the fee ({fee_amount})",
                             )
                         });
 

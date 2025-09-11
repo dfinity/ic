@@ -97,16 +97,16 @@ fn upgrade_with_routing_table(num_canisters: u64) -> BenchResult {
             registry_storage.encode_to_vec()
         };
 
-        let new_registry = {
+        
+
+        {
             let _s2 = bench_scope("post_upgrade");
             let registry_storage = RegistryCanisterStableStorage::decode(bytes.as_slice())
                 .expect("Error decoding from stable.");
             let mut new_registry = Registry::new();
             canister_post_upgrade(&mut new_registry, registry_storage);
             new_registry
-        };
-
-        new_registry
+        }
     })
 }
 

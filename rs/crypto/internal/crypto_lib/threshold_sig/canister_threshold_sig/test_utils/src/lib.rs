@@ -201,7 +201,7 @@ impl ProtocolSetup {
 
         let seed = self
             .seed
-            .derive(&format!("ic-crypto-tecdsa-round-{}", round));
+            .derive(&format!("ic-crypto-tecdsa-round-{round}"));
 
         self.protocol_round.set(round + 1);
 
@@ -551,7 +551,7 @@ impl ProtocolRound {
                     receiver as NodeIndex,
                     &setup.sk[receiver],
                     &setup.pk[receiver],
-                    seed.derive(&format!("complaint-{}", receiver)),
+                    seed.derive(&format!("complaint-{receiver}")),
                 )
                 .expect("Unable to generate complaints");
 
@@ -889,7 +889,7 @@ pub fn compute_public_key(
         &master_public_key,
         path,
     )
-    .map_err(|e| CanisterThresholdError::InvalidArguments(format!("{:?}", e)))
+    .map_err(|e| CanisterThresholdError::InvalidArguments(format!("{e:?}")))
 }
 
 #[derive(Clone, Debug)]

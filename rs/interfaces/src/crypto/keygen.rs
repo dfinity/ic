@@ -109,7 +109,7 @@ impl From<CryptoError> for CheckKeysWithRegistryError {
                 registry_version,
             },
             _ => CheckKeysWithRegistryError::InternalError {
-                internal_error: format!("{}", crypto_error),
+                internal_error: format!("{crypto_error}"),
             },
         }
     }

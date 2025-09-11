@@ -123,8 +123,7 @@ impl From<ArtifactPoolTomlConfig> for ArtifactPoolConfig {
             }),
             _ => {
                 panic!(
-                    "Unsupported persistent_pool_backend: {}, must be either \"lmdb\" or \"rocksdb\".",
-                    backend
+                    "Unsupported persistent_pool_backend: {backend}, must be either \"lmdb\" or \"rocksdb\"."
                 );
             }
         };

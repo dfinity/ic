@@ -18,8 +18,7 @@ impl Registry {
     /// for modifying a subnet by adding nodes has been accepted.
     pub fn do_add_nodes_to_subnet(&mut self, payload: AddNodesToSubnetPayload) {
         println!(
-            "{}do_add_nodes_to_subnet started: {:?}",
-            LOG_PREFIX, payload
+            "{LOG_PREFIX}do_add_nodes_to_subnet started: {payload:?}"
         );
 
         // Validate payload
@@ -47,8 +46,7 @@ impl Registry {
         self.maybe_apply_mutation_internal(mutations);
 
         println!(
-            "{}do_add_nodes_to_subnet finished: {:?}",
-            LOG_PREFIX, payload
+            "{LOG_PREFIX}do_add_nodes_to_subnet finished: {payload:?}"
         );
     }
 

@@ -121,7 +121,7 @@ fn cleanup_devices(dev_mapper: &DM) {
     let devices = match dev_mapper.list_devices() {
         Ok(devices) => devices,
         Err(err) => {
-            eprintln!("Failed to list devices: {}", err);
+            eprintln!("Failed to list devices: {err}");
             return;
         }
     };

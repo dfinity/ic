@@ -764,7 +764,7 @@ impl SystemMetadata {
                     refund: request.payment,
                     response_payload: Payload::Reject(RejectContext::new(
                         RejectCode::SysTransient,
-                        format!("Canister {} migrated during a subnet split", canister_id),
+                        format!("Canister {canister_id} migrated during a subnet split"),
                     )),
                     deadline: request.deadline,
                 };
@@ -777,7 +777,7 @@ impl SystemMetadata {
                     time: self.time(),
                     state: IngressState::Failed(UserError::new(
                         ErrorCode::CanisterNotFound,
-                        format!("Canister {} migrated during a subnet split", canister_id),
+                        format!("Canister {canister_id} migrated during a subnet split"),
                     )),
                 };
 

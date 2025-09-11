@@ -28,7 +28,7 @@ use ic_registry_transport::pb::v1::{
 
 impl Registry {
     pub fn check_changelog_version_invariants(&self) {
-        println!("{}check_changelog_version_invariants", LOG_PREFIX);
+        println!("{LOG_PREFIX}check_changelog_version_invariants");
 
         let mut sorted_changelog_versions = self
             .changelog()
@@ -51,9 +51,7 @@ impl Registry {
             assert_eq!(
                 *version_a,
                 version_b - 1,
-                "Found a non-sequential version in the Registry changelog, between versions {} and {}",
-                version_a,
-                version_b
+                "Found a non-sequential version in the Registry changelog, between versions {version_a} and {version_b}"
             );
         }
     }

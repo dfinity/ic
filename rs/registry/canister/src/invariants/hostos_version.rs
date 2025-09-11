@@ -50,7 +50,7 @@ pub(crate) fn check_hostos_version_invariants(
 
 fn get_hostos_version_record(snapshot: &RegistrySnapshot, version: String) -> HostosVersionRecord {
     get_value_from_snapshot(snapshot, make_hostos_version_key(version.clone()))
-        .unwrap_or_else(|| panic!("Could not find HostOS version: {}", version))
+        .unwrap_or_else(|| panic!("Could not find HostOS version: {version}"))
 }
 
 /// Returns the list of HostOS versions where each version is referred to

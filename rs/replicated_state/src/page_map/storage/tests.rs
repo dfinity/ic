@@ -111,8 +111,7 @@ fn verify_overlays(
                 .metadata()
                 .map_or(0, |m| m.len()),
             size,
-            "Shard: {}",
-            shard
+            "Shard: {shard}"
         );
     }
     // Check that the content of expected page delta matches the overlays.
@@ -127,7 +126,7 @@ fn verify_overlays(
         ) {
             (Some(overlay), Some(delta)) => assert_eq!(overlay, delta),
             (None, Some(delta)) => assert_eq!(delta, &zeroes),
-            (Some(overlay), None) => panic!("Overlay: {:#?}", overlay),
+            (Some(overlay), None) => panic!("Overlay: {overlay:#?}"),
             (None, None) => (),
         }
     }

@@ -20,7 +20,7 @@ pub(crate) fn validate_webauthn_sig(
     let envelope = match WebAuthnEnvelope::try_from(webauthn_sig) {
         Ok(envelope) => envelope,
         Err(err) => {
-            return Err(format!("WebAuthn envelope creation failed: {}", err));
+            return Err(format!("WebAuthn envelope creation failed: {err}"));
         }
     };
 
@@ -55,15 +55,14 @@ fn basic_sig_from_webauthn_sig(
         AlgorithmId::EcdsaP256 => {
             // ECDSA signatures are DER wrapped, see https://www.w3.org/TR/webauthn-2/#sctn-signature-attestation-types
             ecdsa_p256_signature_from_der_bytes(&webauthn_sig.signature().0)
-                .map_err(|e| format!("Failed to parse EcdsaP256 signature: {}", e))
+                .map_err(|e| format!("Failed to parse EcdsaP256 signature: {e}"))
         }
         AlgorithmId::RsaSha256 => {
             // RSA signatures are not DER wrapped, see https://www.w3.org/TR/webauthn-2/#sctn-signature-attestation-types
             Ok(rsa_signature_from_bytes(&webauthn_sig.signature()))
         }
         _ => Err(format!(
-            "Only ECDSA on curve P-256 and RSA PKCS #1 v1.5 are supported for WebAuthn, given: {:?}",
-            algorithm_id
+            "Only ECDSA on curve P-256 and RSA PKCS #1 v1.5 are supported for WebAuthn, given: {algorithm_id:?}"
         )),
     }
 }

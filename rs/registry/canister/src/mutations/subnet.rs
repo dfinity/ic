@@ -40,7 +40,7 @@ impl Registry {
     pub fn get_subnet_or_panic(&self, subnet_id: SubnetId) -> SubnetRecord {
         self.get_subnet(subnet_id, self.latest_version())
             .unwrap_or_else(|err| {
-                panic!("{}Failed to get subnet record: {}", LOG_PREFIX, err);
+                panic!("{LOG_PREFIX}Failed to get subnet record: {err}");
             })
     }
 
@@ -58,8 +58,7 @@ impl Registry {
             .get(&make_subnet_record_key(subnet_id).into_bytes(), version)
             .ok_or_else(|| {
                 format!(
-                    "Subnet record for {:} not found in the registry.",
-                    subnet_id
+                    "Subnet record for {subnet_id:} not found in the registry."
                 )
             })?;
 
@@ -78,8 +77,7 @@ impl Registry {
                 timestamp_nanoseconds: _,
             }) => SubnetListRecord::decode(value.as_slice()).unwrap(),
             None => panic!(
-                "{}set_subnet_membership_mutation: subnet list record not found in the registry.",
-                LOG_PREFIX,
+                "{LOG_PREFIX}set_subnet_membership_mutation: subnet list record not found in the registry.",
             ),
         }
     }
@@ -119,8 +117,7 @@ impl Registry {
                 .collect::<HashSet<_>>();
             if !intersection.is_empty() {
                 panic!(
-                    "{}set_subnet_membership_mutation: Subnet {:} already contains some members that are to be added: {:?}",
-                    LOG_PREFIX, s_id, intersection
+                    "{LOG_PREFIX}set_subnet_membership_mutation: Subnet {s_id:} already contains some members that are to be added: {intersection:?}"
                 );
             }
         }
@@ -145,8 +142,7 @@ impl Registry {
         ) {
             Some(cup) => Ok(CatchUpPackageContents::decode(cup.value.as_slice()).unwrap()),
             None => Err(format!(
-                "{}CatchUpPackage not found for subnet: {}",
-                LOG_PREFIX, subnet_id
+                "{LOG_PREFIX}CatchUpPackage not found for subnet: {subnet_id}"
             )),
         }
     }
@@ -166,8 +162,7 @@ impl Registry {
                     let chain_key_config = ChainKeyConfig::try_from(chain_key_config)
                         .unwrap_or_else(|err| {
                             panic!(
-                                "{}Cannot interpret data as ChainKeyConfig: {}",
-                                LOG_PREFIX, err
+                                "{LOG_PREFIX}Cannot interpret data as ChainKeyConfig: {err}"
                             );
                         });
                     chain_key_config.key_ids().iter().for_each(|key_id| {
@@ -329,8 +324,7 @@ impl Registry {
                 let chain_key_config =
                     ChainKeyConfig::try_from(chain_key_config).unwrap_or_else(|err| {
                         panic!(
-                            "{}Cannot interpret data as ChainKeyConfig: {}",
-                            LOG_PREFIX, err
+                            "{LOG_PREFIX}Cannot interpret data as ChainKeyConfig: {err}"
                         );
                     });
                 chain_key_config.key_ids()
@@ -381,8 +375,7 @@ impl Registry {
 
             let Some(subnets_for_key) = keys_to_subnets.get(key_id) else {
                 return Err(format!(
-                    "The requested chain key '{}' was not found in any subnet.",
-                    key_id
+                    "The requested chain key '{key_id}' was not found in any subnet."
                 ));
             };
 
@@ -390,9 +383,8 @@ impl Registry {
             if let Some(own_subnet_id) = own_subnet_id {
                 if subnet_id == &own_subnet_id {
                     return Err(format!(
-                        "Attempted to recover chain key '{}' by requesting it from itself. \
+                        "Attempted to recover chain key '{key_id}' by requesting it from itself. \
                          Subnets cannot recover chain keys from themselves.",
-                        key_id,
                     ));
                 }
             }
@@ -401,8 +393,7 @@ impl Registry {
             let subnet_id = SubnetId::new(*subnet_id);
             if !subnets_for_key.contains(&subnet_id) {
                 return Err(format!(
-                    "The requested chain key '{}' is not available in targeted subnet '{}'.",
-                    key_id, subnet_id
+                    "The requested chain key '{key_id}' is not available in targeted subnet '{subnet_id}'."
                 ));
             }
         }
@@ -411,8 +402,7 @@ impl Registry {
 
         if has_duplicates(&key_ids) {
             return Err(format!(
-                "The requested chain keys {:?} have duplicates",
-                key_ids
+                "The requested chain keys {key_ids:?} have duplicates"
             ));
         }
 

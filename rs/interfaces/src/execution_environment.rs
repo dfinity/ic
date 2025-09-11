@@ -1474,9 +1474,9 @@ impl fmt::Display for WasmExecutionOutput {
         let wasm_result_str = match &self.wasm_result {
             Ok(result) => match result {
                 None => "None".to_string(),
-                Some(wasm_result) => format!("{}", wasm_result),
+                Some(wasm_result) => format!("{wasm_result}"),
             },
-            Err(err) => format!("{}", err),
+            Err(err) => format!("{err}"),
         };
         write!(
             f,

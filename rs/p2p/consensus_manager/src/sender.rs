@@ -47,7 +47,7 @@ fn panic_on_join_err<T>(result: Result<T, JoinError>) -> T {
             if err.is_panic() {
                 panic::resume_unwind(err.into_panic());
             } else {
-                panic!("Join error: {:?}", err);
+                panic!("Join error: {err:?}");
             }
         }
     }
@@ -323,7 +323,7 @@ async fn send_transmit_to_peer(
 
     loop {
         let request = Request::builder()
-            .uri(format!("/{}/update", route))
+            .uri(format!("/{route}/update"))
             .body(message.clone())
             .expect("Building from typed values");
 

@@ -231,7 +231,7 @@ fn parse_address(
 
     Address::try_from(array).map_err(|err| ReceivedEventError::InvalidEventSource {
         source: event_source,
-        error: EventSourceError::InvalidEvent(format!("Invalid address in log entry: {}", err)),
+        error: EventSourceError::InvalidEvent(format!("Invalid address in log entry: {err}")),
     })
 }
 

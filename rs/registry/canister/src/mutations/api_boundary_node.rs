@@ -32,8 +32,7 @@ impl Registry {
         self.get_api_boundary_node_record(node_id)
             .unwrap_or_else(|| {
                 panic!(
-                    "{}api_boundary_node record for {:} not found in the registry.",
-                    LOG_PREFIX, node_id
+                    "{LOG_PREFIX}api_boundary_node record for {node_id:} not found in the registry."
                 )
             })
     }

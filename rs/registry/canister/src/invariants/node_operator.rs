@@ -24,7 +24,7 @@ pub(crate) fn check_node_operator_invariants(
                 }
                 None => {
                     return Err(InvariantCheckError {
-                        msg: format!("Node operator {:} not in snapshot", node_operator_id),
+                        msg: format!("Node operator {node_operator_id:} not in snapshot"),
                         source: None,
                     });
                 }

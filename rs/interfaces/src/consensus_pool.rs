@@ -247,8 +247,7 @@ pub trait PoolSection<T> {
         pb::CatchUpPackage::from(
             &self.catch_up_package().get_highest().unwrap_or_else(|err| {
                 panic!(
-                    "Error getting highest CatchUpPackage in the validated pool: {:?}",
-                    err
+                    "Error getting highest CatchUpPackage in the validated pool: {err:?}"
                 )
             }),
         )

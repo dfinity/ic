@@ -133,7 +133,7 @@ fn frontend_smoke_test(frontend_canister_id: Principal, expected_str: &str) {
     // Start HTTP gateway and derive an endpoint to request the frontend canister via the HTTP gateway.
     let mut endpoint = pic.url().unwrap();
     assert_eq!(endpoint.host_str().unwrap(), "localhost");
-    let host = format!("{}.localhost", frontend_canister_id);
+    let host = format!("{frontend_canister_id}.localhost");
     endpoint.set_host(Some(&host)).unwrap();
 
     // A basic smoke test.
@@ -237,8 +237,7 @@ fn test_sns() {
             .0;
     let pic_time_seconds = pic.get_time().as_nanos_since_unix_epoch() / 1_000_000_000;
     assert!(health_status.contains(&format!(
-        "The last partial update was at: {}.  Last update cycle started at {}",
-        pic_time_seconds, pic_time_seconds
+        "The last partial update was at: {pic_time_seconds}.  Last update cycle started at {pic_time_seconds}"
     )));
 }
 
@@ -272,7 +271,7 @@ fn test_nns_governance() {
             match self {
                 NeuronResult::NeuronId(neuron_id) => neuron_id,
                 NeuronResult::Error(governance_error) => {
-                    panic!("Unexpected error: {:?}", governance_error)
+                    panic!("Unexpected error: {governance_error:?}")
                 }
             }
         }
@@ -769,9 +768,7 @@ fn test_cycles_ledger() {
         // Allow the actual ICP cycles balance to be less than the expected cycles balance by 10B cycles due to resource consumption.
         assert!(
             expected <= actual + 10 * B && actual <= expected,
-            "actual: {}; expected: {}",
-            actual,
-            expected
+            "actual: {actual}; expected: {expected}"
         );
     };
 

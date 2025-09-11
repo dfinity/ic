@@ -644,7 +644,7 @@ impl ToProto for Transaction {
                     }
                 }
             },
-            t => return Err(format!("Transaction lacked a required field: {:?}", t)),
+            t => return Err(format!("Transaction lacked a required field: {t:?}")),
         };
         Ok(Transaction {
             operation,

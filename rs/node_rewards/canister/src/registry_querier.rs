@@ -256,7 +256,7 @@ impl RegistryQuerier {
             version,
         )
         .map_err(|e| RegistryClientError::DecodeError {
-            error: format!("Failed to decode NodeOperatorRecord: {}", e),
+            error: format!("Failed to decode NodeOperatorRecord: {e}"),
         })?
         else {
             return Ok(None);
@@ -269,7 +269,7 @@ impl RegistryQuerier {
             version,
         )
         .map_err(|e| RegistryClientError::DecodeError {
-            error: format!("Failed to decode DataCenterRecord: {}", e),
+            error: format!("Failed to decode DataCenterRecord: {e}"),
         })?
         else {
             return Ok(None);

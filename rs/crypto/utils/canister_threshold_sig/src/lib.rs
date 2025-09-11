@@ -18,7 +18,7 @@ pub fn derive_threshold_public_key(
             CanisterThresholdGetPublicKeyError::InvalidArgument(s)
         }
         DeriveThresholdPublicKeyError::InternalError(e) => {
-            CanisterThresholdGetPublicKeyError::InternalError(format!("{:?}", e))
+            CanisterThresholdGetPublicKeyError::InternalError(format!("{e:?}"))
         }
     })
 }

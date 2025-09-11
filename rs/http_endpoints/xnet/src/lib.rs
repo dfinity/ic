@@ -213,7 +213,7 @@ fn start_server(
         metrics: Arc::clone(&metrics),
         semaphore: Arc::new(Semaphore::new(XNET_ENDPOINT_MAX_CONCURRENT_REQUESTS)),
         certified_stream_store,
-        base_url: Url::parse(&format!("http://{}/", address)).unwrap(),
+        base_url: Url::parse(&format!("http://{address}/")).unwrap(),
     };
 
     // Create a router that handles all requests by calling `enqueue_task`
@@ -375,8 +375,7 @@ fn route_request(
                 Ok(subnet_id) => SubnetId::from(subnet_id),
                 Err(_) => {
                     return bad_request(format!(
-                        "Invalid subnet ID: {} in {}",
-                        subnet_id_str, stream_url
+                        "Invalid subnet ID: {subnet_id_str} in {stream_url}"
                     ));
                 }
             };
@@ -389,7 +388,7 @@ fn route_request(
                 let value = match value.parse::<u64>() {
                     Ok(v) => v,
                     Err(_) => {
-                        return bad_request(format!("Invalid query param: {}", param));
+                        return bad_request(format!("Invalid query param: {param}"));
                     }
                 };
                 match param.as_ref() {
@@ -399,7 +398,7 @@ fn route_request(
                     "msg_limit" => msg_limit = Some(value as usize),
                     "byte_limit" => byte_limit = Some(value as usize),
                     _ => {
-                        return bad_request(format!("Unexpected query param: {}", param));
+                        return bad_request(format!("Unexpected query param: {param}"));
                     }
                 }
             }

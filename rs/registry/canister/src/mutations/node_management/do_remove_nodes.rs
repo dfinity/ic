@@ -15,7 +15,7 @@ use std::collections::HashMap;
 impl Registry {
     /// Removes an existing node from the registry.
     pub fn do_remove_nodes(&mut self, payload: RemoveNodesPayload) {
-        println!("{}do_remove_nodes started: {:?}", LOG_PREFIX, payload);
+        println!("{LOG_PREFIX}do_remove_nodes started: {payload:?}");
 
         // This hashmap tracks node operators for which mutations have already been
         // determined; increments to node allowance should not be idempotent
@@ -37,14 +37,14 @@ impl Registry {
                 // This tackles the race condition where a node is removed from the registry
                 // by another transaction before this transaction is processed.
                 if self.get_node(node_to_remove).is_none() {
-                    println!("{}do_remove_nodes: node {} not found in registry, skipping", LOG_PREFIX, node_to_remove);
+                    println!("{LOG_PREFIX}do_remove_nodes: node {node_to_remove} not found in registry, skipping");
                     return vec![];
                 };
 
                 // 5. Find the node operator id for this record
                 // and abort if the node record is not found
                 let node_operator_id = get_node_operator_id_for_node(self, node_to_remove)
-                    .map_err(|e| format!("{}do_remove_nodes: Aborting node removal: {}", LOG_PREFIX, e))
+                    .map_err(|e| format!("{LOG_PREFIX}do_remove_nodes: Aborting node removal: {e}"))
                     .unwrap();
 
                 // 6. Ensure node is not in a subnet
@@ -60,8 +60,7 @@ impl Registry {
                 let mut new_node_operator_record = get_node_operator_record(self, node_operator_id)
                     .map_err(|err| {
                         format!(
-                            "{}do_remove_nodes: Aborting node removal: {}",
-                            LOG_PREFIX, err
+                            "{LOG_PREFIX}do_remove_nodes: Aborting node removal: {err}"
                         )
                     })
                     .unwrap();
@@ -94,7 +93,7 @@ impl Registry {
         // 8. Apply mutations after checking invariants
         self.maybe_apply_mutation_internal(mutations);
 
-        println!("{}do_remove_nodes finished: {:?}", LOG_PREFIX, payload);
+        println!("{LOG_PREFIX}do_remove_nodes finished: {payload:?}");
     }
 }
 

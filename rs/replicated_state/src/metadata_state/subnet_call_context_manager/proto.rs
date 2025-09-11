@@ -320,8 +320,7 @@ impl TryFrom<(Time, pb_metadata::SetupInitialDkgContext)> for SetupInitialDkgCon
 fn try_into_array<const N: usize>(bytes: Vec<u8>, name: &str) -> Result<[u8; N], ProxyDecodeError> {
     if bytes.len() != N {
         return Err(ProxyDecodeError::Other(format!(
-            "{} is not {} bytes.",
-            name, N
+            "{name} is not {N} bytes."
         )));
     }
     let mut id = [0; N];

@@ -728,13 +728,12 @@ impl fmt::Display for TransferError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::BadFee { expected_fee } => {
-                write!(f, "transfer fee should be {}", expected_fee)
+                write!(f, "transfer fee should be {expected_fee}")
             }
             Self::InsufficientFunds { balance } => {
                 write!(
                     f,
-                    "the debit account doesn't have enough funds to complete the transaction, current balance: {}",
-                    balance
+                    "the debit account doesn't have enough funds to complete the transaction, current balance: {balance}"
                 )
             }
             Self::TxTooOld {
@@ -747,8 +746,7 @@ impl fmt::Display for TransferError {
             Self::TxCreatedInFuture => write!(f, "transaction's created_at_time is in future"),
             Self::TxDuplicate { duplicate_of } => write!(
                 f,
-                "transaction is a duplicate of another transaction in block {}",
-                duplicate_of
+                "transaction is a duplicate of another transaction in block {duplicate_of}"
             ),
         }
     }
@@ -1176,8 +1174,7 @@ pub fn get_blocks(
     // > 109 is an error
     if range_from < range_from_offset || requested_range_to > range_to {
         return GetBlocksRes(Err(format!(
-            "Requested blocks outside the range stored in the archive node. Requested [{} .. {}]. Available [{} .. {}].",
-            range_from, requested_range_to, range_from_offset, range_to
+            "Requested blocks outside the range stored in the archive node. Requested [{range_from} .. {requested_range_to}]. Available [{range_from_offset} .. {range_to}]."
         )));
     }
     // Example: If the node stores blocks [100 .. 109] then BLOCK_HEIGHT_OFFSET

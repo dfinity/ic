@@ -222,8 +222,7 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
                 }
                 Ordering::Greater => {
                     return Err(format!(
-                        "Registry version local {} > remote {}, this should never happen",
-                        current_local_version, remote_latest_version
+                        "Registry version local {current_local_version} > remote {remote_latest_version}, this should never happen"
                     ));
                 }
             }
@@ -232,7 +231,7 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
                 .registry
                 .registry_changes_since(current_local_version)
                 .await
-                .map_err(|e| format!("{:?}", e))?;
+                .map_err(|e| format!("{e:?}"))?;
 
             self.add_deltas(remote_deltas)?;
             // add_deltas updates latest version based on what was inserted.

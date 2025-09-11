@@ -193,7 +193,7 @@ impl TryFrom<u8> for TypeKey {
     type Error = String;
 
     fn try_from(byte: u8) -> Result<Self, Self::Error> {
-        Self::from_repr(byte).ok_or(format!("Failed to convert byte {:#x} to TypeKey", byte))
+        Self::from_repr(byte).ok_or(format!("Failed to convert byte {byte:#x} to TypeKey"))
     }
 }
 
@@ -400,8 +400,7 @@ fn create_db_env(path: &Path, read_only: bool, max_dbs: c_uint) -> Environment {
         .open_with_permissions(path, permission)
         .unwrap_or_else(|err| {
             panic!(
-                "Error opening LMDB environment with permissions at {:?}: {:?}",
-                path, err
+                "Error opening LMDB environment with permissions at {path:?}: {err:?}"
             )
         });
 
@@ -434,20 +433,20 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
         let meta = if read_only {
             db_env
                 .open_db(Some("META"))
-                .unwrap_or_else(|err| panic!("Error opening db for metadata: {:?}", err))
+                .unwrap_or_else(|err| panic!("Error opening db for metadata: {err:?}"))
         } else {
             db_env
                 .create_db(Some("META"), DatabaseFlags::empty())
-                .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err))
+                .unwrap_or_else(|err| panic!("Error creating db for metadata: {err:?}"))
         };
         let artifacts = if read_only {
             db_env
                 .open_db(Some("ARTS"))
-                .unwrap_or_else(|err| panic!("Error opening db for artifacts: {:?}", err))
+                .unwrap_or_else(|err| panic!("Error opening db for artifacts: {err:?}"))
         } else {
             db_env
                 .create_db(Some("ARTS"), DatabaseFlags::empty())
-                .unwrap_or_else(|err| panic!("Error creating db for artifacts: {:?}", err))
+                .unwrap_or_else(|err| panic!("Error creating db for artifacts: {err:?}"))
         };
         let indices = {
             Artifact::TYPE_KEYS
@@ -514,7 +513,7 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
         self.indices
             .iter()
             .find(|(key, _)| type_key == key)
-            .unwrap_or_else(|| panic!("Error in get_index_db: {:?} does not exist", type_key))
+            .unwrap_or_else(|| panic!("Error in get_index_db: {type_key:?} does not exist"))
             .1
     }
 
@@ -982,8 +981,7 @@ impl TryFrom<ArtifactKey> for ConsensusMessageId {
             }
             other => {
                 return Err(format!(
-                    "{:?} is not a valid ConsensusMessage TypeKey.",
-                    other
+                    "{other:?} is not a valid ConsensusMessage TypeKey."
                 ));
             }
         };
@@ -1370,8 +1368,7 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
         .next()
         .unwrap_or_else(|| {
             panic!(
-                "This should be impossible since we found a max height at {:?}",
-                h
+                "This should be impossible since we found a max height at {h:?}"
             )
         })
     }
@@ -1416,8 +1413,7 @@ impl TryFrom<ArtifactKey> for CertificationMessageId {
             TypeKey::CertificationShare => CertificationMessageHash::CertificationShare(h.into()),
             other => {
                 return Err(format!(
-                    "{:?} is not a valid CertificationMessage TypeKey.",
-                    other
+                    "{other:?} is not a valid CertificationMessage TypeKey."
                 ));
             }
         };
@@ -1941,7 +1937,7 @@ impl PersistentIDkgPoolSection {
         let mut path = config.persistent_pool_validated_persistent_db_path;
         path.push("idkg");
         if let Err(err) = std::fs::create_dir_all(path.as_path()) {
-            panic!("Error creating IDKG dir {:?}: {:?}", path, err)
+            panic!("Error creating IDKG dir {path:?}: {err:?}")
         }
         let db_env = Arc::new(create_db_env(
             path.as_path(),

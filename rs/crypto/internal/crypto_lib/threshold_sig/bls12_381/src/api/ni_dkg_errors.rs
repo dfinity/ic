@@ -556,24 +556,22 @@ pub mod dealing {
                     ),
                 },
                 InvalidDealingError::MissingShare { receiver_index } => InvalidArgumentError {
-                    message: format!("Missing share for receiver {}", receiver_index),
+                    message: format!("Missing share for receiver {receiver_index}"),
                 },
                 InvalidDealingError::MalformedShare { receiver_index } => InvalidArgumentError {
-                    message: format!("Malformed share for receiver {}", receiver_index),
+                    message: format!("Malformed share for receiver {receiver_index}"),
                 },
                 InvalidDealingError::ThresholdMismatch {
                     threshold,
                     public_coefficients_len,
                 } => InvalidArgumentError {
                     message: format!(
-                        "The reshared public coefficients don't match the threshold\n  Threshold: {}\n  Public coefficients len: {}",
-                        threshold, public_coefficients_len
+                        "The reshared public coefficients don't match the threshold\n  Threshold: {threshold}\n  Public coefficients len: {public_coefficients_len}"
                     ),
                 },
                 InvalidDealingError::ReshareMismatch { old, new } => InvalidArgumentError {
                     message: format!(
-                        "The reshared public key does not match the preexisting key.\n  Old: {:?}\n  New: {:?}",
-                        old, new
+                        "The reshared public key does not match the preexisting key.\n  Old: {old:?}\n  New: {new:?}"
                     ),
                 },
             }

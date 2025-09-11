@@ -118,7 +118,7 @@ impl LocalStoreImpl {
     fn get_path(&self, version: u64) -> PathBuf {
         assert!(version > 0);
 
-        let path_str = format!("{:016x}.pb", version);
+        let path_str = format!("{version:016x}.pb");
         // 00 01 02 03 04 / 05 / 06 / 07.pb
         let v_path = &[
             &path_str[0..10],
@@ -207,7 +207,7 @@ impl RegistryDataProvider for LocalStoreImpl {
     ) -> Result<Vec<RegistryRecord>, RegistryDataProviderError> {
         let changelog = self.get_changelog_since_version(version).map_err(|e| {
             RegistryDataProviderError::Transfer {
-                source: format!("Error when reading changelog from local storage: {:?}", e),
+                source: format!("Error when reading changelog from local storage: {e:?}"),
             }
         })?;
         let res: Vec<_> = changelog
@@ -290,7 +290,7 @@ pub fn compact_delta_to_changelog(source: &[u8]) -> std::io::Result<(RegistryVer
         .map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Protobuf encoding for registry delta failed: {:?}", e),
+                format!("Protobuf encoding for registry delta failed: {e:?}"),
             )
         })
         .and_then(|delta| {

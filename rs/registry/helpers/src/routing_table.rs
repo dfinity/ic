@@ -35,8 +35,7 @@ impl<T: RegistryClient + ?Sized> RoutingTableRegistry for T {
                 // This should never fail, as the keys all have values and should be valid
                 deserialize_registry_value::<pb::RoutingTable>(bytes)?.ok_or_else(|| DecodeError {
                     error: format!(
-                        "canister ranges key {} does not have a routing table shard",
-                        key
+                        "canister ranges key {key} does not have a routing table shard"
                     ),
                 })
             })
@@ -45,7 +44,7 @@ impl<T: RegistryClient + ?Sized> RoutingTableRegistry for T {
         RoutingTable::try_from(routing_table_shards)
             .map(Some)
             .map_err(|err| DecodeError {
-                error: format!("get_routing_table() failed with {}", err),
+                error: format!("get_routing_table() failed with {err}"),
             })
     }
 
@@ -75,7 +74,7 @@ impl<T: RegistryClient + ?Sized> RoutingTableRegistry for T {
                     .map(|pb_canister_migrations| {
                         CanisterMigrations::try_from(pb_canister_migrations).map_err(|err| {
                             DecodeError {
-                                error: format!("get_canister_migrations() failed with {}", err),
+                                error: format!("get_canister_migrations() failed with {err}"),
                             }
                         })
                     })

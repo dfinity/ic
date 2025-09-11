@@ -996,7 +996,7 @@ impl SysParam {
         }
         let mut f_h = Vec::with_capacity(LAMBDA_H);
         for i in 0..LAMBDA_H {
-            let s = format!("f_h{}", i);
+            let s = format!("f_h{i}");
             f_h.push(G2Affine::hash_with_precomputation(dst, s.as_bytes()));
         }
 

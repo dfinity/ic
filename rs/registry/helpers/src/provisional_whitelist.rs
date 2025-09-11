@@ -26,7 +26,7 @@ impl<T: RegistryClient + ?Sized> ProvisionalWhitelistRegistry for T {
                     .map(|pb_provisional_whitelist| {
                         ProvisionalWhitelist::try_from(pb_provisional_whitelist).map_err(|err| {
                             DecodeError {
-                                error: format!("get_provisional_whitelist() failed with {}", err),
+                                error: format!("get_provisional_whitelist() failed with {err}"),
                             }
                         })
                     })

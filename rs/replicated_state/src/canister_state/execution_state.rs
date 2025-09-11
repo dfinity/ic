@@ -197,8 +197,7 @@ impl Memory {
             Ok(())
         } else {
             Err(format!(
-                "The page map size {} exceeds the memory size {}",
-                page_map_bytes, memory_bytes
+                "The page map size {page_map_bytes} exceeds the memory size {memory_bytes}"
             ))
         }
     }

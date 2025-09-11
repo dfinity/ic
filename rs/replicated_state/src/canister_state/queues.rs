@@ -600,8 +600,7 @@ impl InboundMessageStore for MessageStoreImpl {
                     // Two or more of the above. This should never happen.
                     _ => {
                         return Err(format!(
-                            "CanisterQueues: Multiple responses for {:?}",
-                            reference
+                            "CanisterQueues: Multiple responses for {reference:?}"
                         ));
                     }
                 };
@@ -610,8 +609,7 @@ impl InboundMessageStore for MessageStoreImpl {
                     Ok(())
                 } else {
                     Err(format!(
-                        "CanisterQueues: Duplicate inbound response callback: {:?}",
-                        callback_id
+                        "CanisterQueues: Duplicate inbound response callback: {callback_id:?}"
                     ))
                 }
             })?;
@@ -853,8 +851,7 @@ impl CanisterQueues {
         // slot or an enqueued response.
         let Some((input_queue, _)) = self.canister_queues.get_mut(respondent) else {
             return Err(format!(
-                "No input queue for expired callback: {}",
-                callback_id
+                "No input queue for expired callback: {callback_id}"
             ));
         };
 
@@ -873,8 +870,7 @@ impl CanisterQueues {
             // should never happen.
             self.callbacks_with_enqueued_response.remove(&callback_id);
             return Err(format!(
-                "No reserved response slot for expired callback: {}",
-                callback_id
+                "No reserved response slot for expired callback: {callback_id}"
             ));
         }
 

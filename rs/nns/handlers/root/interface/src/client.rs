@@ -107,16 +107,14 @@ impl NnsRootCanisterClient for SpyNnsRootCanisterClient {
         let reply = self.replies.lock().unwrap().pop_front();
         let reply = reply.unwrap_or_else(|| {
             panic!(
-                "More calls were made to SpyNnsRootCanisterClient then expected. Last call change_canister_controllers({:?})",
-                change_canister_controllers_request
+                "More calls were made to SpyNnsRootCanisterClient then expected. Last call change_canister_controllers({change_canister_controllers_request:?})"
             )
         });
 
         match reply {
             SpyNnsRootCanisterClientReply::ChangeCanisterControllers(response) => response,
             reply => panic!(
-                "Expected a ChangeCanisterControllers reply. Instead have {:?}",
-                reply
+                "Expected a ChangeCanisterControllers reply. Instead have {reply:?}"
             ),
         }
     }
@@ -135,14 +133,13 @@ impl NnsRootCanisterClient for SpyNnsRootCanisterClient {
         let reply = self.replies.lock().unwrap().pop_front();
         let reply = reply.unwrap_or_else(|| {
             panic!(
-                "More calls were made to SpyNnsRootCanisterClient then expected. Last call canister_status({:?})",
-                canister_id_record
+                "More calls were made to SpyNnsRootCanisterClient then expected. Last call canister_status({canister_id_record:?})"
             )
         });
 
         match reply {
             SpyNnsRootCanisterClientReply::CanisterStatus(response) => response,
-            reply => panic!("Expected a CanisterStatus reply. Instead have {:?}", reply),
+            reply => panic!("Expected a CanisterStatus reply. Instead have {reply:?}"),
         }
     }
 }

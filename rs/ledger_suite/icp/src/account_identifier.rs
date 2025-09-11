@@ -346,7 +346,7 @@ pub enum AccountIdParseError {
 impl Display for AccountIdParseError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidChecksum(err) => write!(f, "{}", err),
+            Self::InvalidChecksum(err) => write!(f, "{err}"),
             Self::InvalidLength(input) => write!(
                 f,
                 "Received an invalid AccountIdentifier with length {} bytes instead of the expected 28 or 32.",

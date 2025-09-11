@@ -62,8 +62,7 @@ impl Registry {
                 .is_some()
             {
                 panic!(
-                    "{}HostOS version: {:?} already exists",
-                    LOG_PREFIX, version_id
+                    "{LOG_PREFIX}HostOS version: {version_id:?} already exists"
                 );
             }
 

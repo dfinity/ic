@@ -15,7 +15,7 @@ use ic_registry_keys::make_unassigned_nodes_config_record_key;
 pub(crate) fn check_unassigned_nodes_config_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
-    println!("{}check_unassigned_nodes_config_invariants", LOG_PREFIX);
+    println!("{LOG_PREFIX}check_unassigned_nodes_config_invariants");
 
     if let Some(config) = get_value_from_snapshot::<UnassignedNodesConfigRecord>(
         snapshot,

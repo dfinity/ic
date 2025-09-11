@@ -210,16 +210,14 @@ impl InputSchedule {
                 InputQueueType::LocalSubnet => {
                     if !local_schedule.remove(canister_id) {
                         return Err(format!(
-                            "Local canister with non-empty input queue ({:?}) absent from `local_sender_schedule`",
-                            canister_id
+                            "Local canister with non-empty input queue ({canister_id:?}) absent from `local_sender_schedule`"
                         ));
                     }
                 }
                 InputQueueType::RemoteSubnet => {
                     if !remote_schedule.remove(canister_id) && !local_schedule.remove(canister_id) {
                         return Err(format!(
-                            "Remote canister with non-empty input queue ({:?}) absent from `remote_sender_schedule`",
-                            canister_id
+                            "Remote canister with non-empty input queue ({canister_id:?}) absent from `remote_sender_schedule`"
                         ));
                     }
                 }

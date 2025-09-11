@@ -85,8 +85,7 @@ fn unix_socket_vault(
     }
     let vault = RemoteCspVault::new(socket_path, rt_handle, logger, metrics).unwrap_or_else(|e| {
         panic!(
-            "Could not connect to CspVault at socket {:?}: {:?}",
-            socket_path, e
+            "Could not connect to CspVault at socket {socket_path:?}: {e:?}"
         )
     });
     Arc::new(vault)

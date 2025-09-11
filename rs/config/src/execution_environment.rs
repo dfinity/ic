@@ -454,7 +454,7 @@ fn expect_canister_id<const N: usize>(ids: [&str; N]) -> [CanisterId; N] {
     let mut result = Vec::with_capacity(N);
     for id in ids {
         result.push(
-            CanisterId::from_str(id).unwrap_or_else(|e| panic!("BUG: Invalid canister id: {}", e)),
+            CanisterId::from_str(id).unwrap_or_else(|e| panic!("BUG: Invalid canister id: {e}")),
         );
     }
     result

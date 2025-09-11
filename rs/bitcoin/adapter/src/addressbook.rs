@@ -304,7 +304,7 @@ pub fn validate_services(services: &ServiceFlags) -> bool {
 /// This is a simple utility function for creating a string that is a valid string
 /// for ToSocketAddrs.
 fn format_addr(seed: &str, port: u16) -> String {
-    format!("{}:{}", seed, port)
+    format!("{seed}:{port}")
 }
 
 #[cfg(test)]

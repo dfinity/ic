@@ -20,14 +20,12 @@ impl Registry {
     pub fn do_remove_node_directly(&mut self, payload: RemoveNodeDirectlyPayload) {
         let caller_id = dfn_core::api::caller();
         println!(
-            "{}do_remove_node_directly started: {:?} caller: {:?}",
-            LOG_PREFIX, payload, caller_id
+            "{LOG_PREFIX}do_remove_node_directly started: {payload:?} caller: {caller_id:?}"
         );
         self.do_remove_node(payload.clone(), caller_id);
 
         println!(
-            "{}do_remove_node_directly finished: {:?}",
-            LOG_PREFIX, payload
+            "{LOG_PREFIX}do_remove_node_directly finished: {payload:?}"
         );
     }
 
@@ -66,8 +64,7 @@ impl Registry {
         let node_operator_id = get_node_operator_id_for_node(self, payload.node_id)
             .map_err(|e| {
                 format!(
-                    "{}do_remove_node_directly: Aborting node removal: {}",
-                    LOG_PREFIX, e
+                    "{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {e}"
                 )
             })
             .unwrap();
@@ -82,8 +79,7 @@ impl Registry {
             let node_operator_caller = get_node_operator_record(self, caller_id)
                 .map_err(|e| {
                     format!(
-                        "{}do_remove_node_directly: Aborting node removal: {}",
-                        LOG_PREFIX, e
+                        "{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {e}"
                     )
                 })
                 .unwrap();
@@ -91,29 +87,25 @@ impl Registry {
             let dc_orig_node_operator = get_node_operator_record(self, node_operator_id)
                 .map_err(|e| {
                     format!(
-                        "{}do_remove_node_directly: Aborting node removal: {}",
-                        LOG_PREFIX, e
+                        "{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {e}"
                     )
                 })
                 .unwrap()
                 .dc_id;
             assert_eq!(
                 dc_caller, dc_orig_node_operator,
-                "The DC {} of the caller {}, does not match the DC of the node {}.",
-                dc_caller, caller_id, dc_orig_node_operator
+                "The DC {dc_caller} of the caller {caller_id}, does not match the DC of the node {dc_orig_node_operator}."
             );
             let node_provider_caller = get_node_provider_id_for_operator_id(self, caller_id)
                 .map_err(|e| {
                     format!(
-                        "{}do_remove_node_directly: Aborting node removal: {}",
-                        LOG_PREFIX, e
+                        "{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {e}"
                     )
                 });
             let node_provider_of_the_node =
                 get_node_provider_id_for_operator_id(self, node_operator_id).map_err(|e| {
                     format!(
-                        "{}do_remove_node_directly: Aborting node removal: {}",
-                        LOG_PREFIX, e
+                        "{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {e}"
                     )
                 });
             assert_eq!(
@@ -189,8 +181,7 @@ impl Registry {
         let mut updated_node_operator_record = get_node_operator_record(self, node_operator_id)
             .map_err(|err| {
                 format!(
-                    "{}do_remove_node_directly: Aborting node removal: {}",
-                    LOG_PREFIX, err
+                    "{LOG_PREFIX}do_remove_node_directly: Aborting node removal: {err}"
                 )
             })
             .unwrap();

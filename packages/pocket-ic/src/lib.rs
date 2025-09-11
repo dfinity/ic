@@ -2087,7 +2087,7 @@ mod test {
         for ic_reject_code in ic_error_types::RejectCode::iter() {
             let reject_code: RejectCode = (ic_reject_code as u64).try_into().unwrap();
             assert_eq!(
-                format!("{:?}", reject_code),
+                format!("{reject_code:?}"),
                 format!("{:?}", ic_reject_code)
             );
         }
@@ -2101,7 +2101,7 @@ mod test {
         );
         for ic_error_code in ic_error_types::ErrorCode::iter() {
             let error_code: ErrorCode = (ic_error_code as u64).try_into().unwrap();
-            assert_eq!(format!("{:?}", error_code), format!("{:?}", ic_error_code));
+            assert_eq!(format!("{error_code:?}"), format!("{:?}", ic_error_code));
         }
     }
 }

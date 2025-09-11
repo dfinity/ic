@@ -21,7 +21,7 @@ pub struct AddApiBoundaryNodesPayload {
 impl Registry {
     /// Adds an ApiBoundaryNodeRecord to the registry
     pub fn do_add_api_boundary_nodes(&mut self, payload: AddApiBoundaryNodesPayload) {
-        println!("{}do_add_api_boundary_nodes: {:?}", LOG_PREFIX, payload);
+        println!("{LOG_PREFIX}do_add_api_boundary_nodes: {payload:?}");
 
         // Ensure payload is valid
         self.validate_add_api_boundary_nodes_payload(&payload);

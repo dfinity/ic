@@ -122,7 +122,7 @@ pub fn get_decoded_value<T: prost::Message + Default>(
         .get_value(key, version)?
         .map(|bytes| {
             T::decode(bytes.as_slice()).map_err(|e| DecodeError {
-                error: format!("{:?}", e),
+                error: format!("{e:?}"),
             })
         })
         .transpose()

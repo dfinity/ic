@@ -304,7 +304,7 @@ impl std::fmt::Display for GetExchangeRateError {
                 }
             }
             GetExchangeRateError::Call { code, message } => {
-                write!(f, "Code: {} Message: {}", code, message)
+                write!(f, "Code: {code} Message: {message}")
             }
         }
     }
@@ -329,15 +329,13 @@ impl std::fmt::Display for UpdateExchangeRateError {
             UpdateExchangeRateError::FailedToRetrieveRate(message) => {
                 write!(
                     f,
-                    "Failed to retrieve rate from exchange rate canister: {}",
-                    message
+                    "Failed to retrieve rate from exchange rate canister: {message}"
                 )
             }
             UpdateExchangeRateError::FailedToSetRate(message) => {
                 write!(
                     f,
-                    "Failed to set conversion rate from exchange rate canister: {}",
-                    message
+                    "Failed to set conversion rate from exchange rate canister: {message}"
                 )
             }
             UpdateExchangeRateError::Disabled => write!(
@@ -347,15 +345,13 @@ impl std::fmt::Display for UpdateExchangeRateError {
             UpdateExchangeRateError::InvalidRate(message) => {
                 write!(
                     f,
-                    "Rate from exchange rate canister failed to validate: {}",
-                    message
+                    "Rate from exchange rate canister failed to validate: {message}"
                 )
             }
             UpdateExchangeRateError::NotReadyToGetRate(timestamp) => {
                 write!(
                     f,
-                    "Waiting to reattempt calling the exchange rate canister again at {}",
-                    timestamp
+                    "Waiting to reattempt calling the exchange rate canister again at {timestamp}"
                 )
             }
         }
@@ -472,13 +468,11 @@ impl std::fmt::Display for ValidateExchangeRateError {
         match self {
             ValidateExchangeRateError::NotEnoughIcpSources { received, queried } => write!(
                 f,
-                "Not enough exchange sources for rate's ICP base asset. Expected: {} Received: {} Queried: {}",
-                MINIMUM_ICP_SOURCES, received, queried
+                "Not enough exchange sources for rate's ICP base asset. Expected: {MINIMUM_ICP_SOURCES} Received: {received} Queried: {queried}"
             ),
             ValidateExchangeRateError::NotEnoughCxdrSources { received, queried } => write!(
                 f,
-                "Not enough forex sources for rate's CXDR quote asset. Expected: {} Received: {} Queried: {}",
-                MINIMUM_CXDR_SOURCES, received, queried
+                "Not enough forex sources for rate's CXDR quote asset. Expected: {MINIMUM_CXDR_SOURCES} Received: {received} Queried: {queried}"
             ),
         }
     }

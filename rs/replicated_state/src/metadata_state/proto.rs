@@ -154,8 +154,7 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
                 |e| ProxyDecodeError::ValueOutOfRange {
                     typ: "CanisterCyclesCostSchedule",
                     err: format!(
-                        "Failed to convert CanisterCyclesCostSchedule type for SubnetTopology: {:?}",
-                        e
+                        "Failed to convert CanisterCyclesCostSchedule type for SubnetTopology: {e:?}"
                     ),
                 },
             )?,
@@ -371,8 +370,7 @@ impl TryFrom<(pb_metadata::SystemMetadata, &dyn CheckpointLoadingMetrics)> for S
                     if first_allocation_range.contains(&last_generated_canister_id) => {}
                 _ => {
                     return Err(ProxyDecodeError::Other(format!(
-                        "SystemMetadata::last_generated_canister_id ({}) not in the first SystemMetadata::canister_allocation_ranges range ({:?})",
-                        last_generated_canister_id, canister_allocation_ranges
+                        "SystemMetadata::last_generated_canister_id ({last_generated_canister_id}) not in the first SystemMetadata::canister_allocation_ranges range ({canister_allocation_ranges:?})"
                     )));
                 }
             }
@@ -530,8 +528,7 @@ impl TryFrom<pb_queues::Stream> for Stream {
         {
             if index >= next_index {
                 return Err(ProxyDecodeError::Other(format!(
-                    "reject signals not strictly sorted, received [{:?}, {:?}]",
-                    index, next_index,
+                    "reject signals not strictly sorted, received [{index:?}, {next_index:?}]",
                 )));
             }
         }

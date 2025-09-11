@@ -85,7 +85,7 @@ fn frontend_canister(
     let mut url = pic.url().unwrap();
     assert_eq!(url.host_str().unwrap(), "localhost");
     let maybe_raw = if raw { ".raw" } else { "" };
-    let host = format!("{}{}.localhost", canister_id, maybe_raw);
+    let host = format!("{canister_id}{maybe_raw}.localhost");
     url.set_host(Some(&host)).unwrap();
     url.set_path(&path.to_string());
     // Windows doesn't automatically resolve localhost subdomains.
@@ -405,7 +405,7 @@ fn test_multiple_large_xnet_payloads() {
                             let blob_len = Decode!(&reply, usize).unwrap();
                             assert_eq!(blob_len, size);
                         }
-                        _ => panic!("Unexpected update call result: {:?}", xnet_result),
+                        _ => panic!("Unexpected update call result: {xnet_result:?}"),
                     };
                 } else {
                     // An inter-canister call to a different subnet with 10M argument traps.
@@ -413,7 +413,7 @@ fn test_multiple_large_xnet_payloads() {
                         Err(reject_response) => {
                             assert_eq!(reject_response.error_code, ErrorCode::CanisterCalledTrap);
                         }
-                        _ => panic!("Unexpected update call result: {:?}", xnet_result),
+                        _ => panic!("Unexpected update call result: {xnet_result:?}"),
                     };
                 }
             }
@@ -620,7 +620,7 @@ async fn resume_killed_instance_impl(
         .path()
         .join(subnet_seed)
         .join("checkpoints")
-        .join(format!("{:016x}", expected_checkpoint_height));
+        .join(format!("{expected_checkpoint_height:016x}"));
     let start = Instant::now();
     loop {
         if start.elapsed() > Duration::from_secs(300) {
@@ -673,7 +673,7 @@ async fn resume_killed_instance_impl(
     }
     let instance_id = match response.json::<CreateInstanceResponse>().await.unwrap() {
         CreateInstanceResponse::Created { instance_id, .. } => instance_id,
-        CreateInstanceResponse::Error { message } => panic!("Unexpected error: {}", message),
+        CreateInstanceResponse::Error { message } => panic!("Unexpected error: {message}"),
     };
     let pic = PocketIcAsync::new_from_existing_instance(server_url, instance_id, None);
 
@@ -1166,7 +1166,7 @@ fn test_xnet_call_and_create_canister_with_specified_id() {
                         let identity = Decode!(&reply, String).unwrap();
                         assert_eq!(identity, canister_b.to_string());
                     }
-                    _ => panic!("Unexpected update call result: {:?}", xnet_result),
+                    _ => panic!("Unexpected update call result: {xnet_result:?}"),
                 };
             }
         }
@@ -1296,8 +1296,7 @@ fn test_schnorr() {
                         });
                         assert!(
                             verification_result.is_ok() == aux.is_none(),
-                            "{:?}",
-                            verification_result
+                            "{verification_result:?}"
                         );
                     }
                 };
@@ -1526,7 +1525,7 @@ impl HttpServer {
         let flag = Arc::new(AtomicBool::new(true));
 
         // Bind to port 0 (OS assigns a free port)
-        let listener = TcpListener::bind(format!("{}:0", bind_addr)).expect("Failed to bind");
+        let listener = TcpListener::bind(format!("{bind_addr}:0")).expect("Failed to bind");
 
         listener.set_nonblocking(true).unwrap();
 
@@ -1545,7 +1544,7 @@ impl HttpServer {
                         std::thread::sleep(Duration::from_millis(10));
                     }
                     Err(e) => {
-                        panic!("Unexpected error: {}", e);
+                        panic!("Unexpected error: {e}");
                     }
                 }
             }
@@ -1887,7 +1886,7 @@ fn test_canister_http_timeout() {
     let (reject_code, err) = http_response.unwrap_err();
     match reject_code {
         RejectionCode::SysTransient => (),
-        _ => panic!("Unexpected reject code {:?}", reject_code),
+        _ => panic!("Unexpected reject code {reject_code:?}"),
     };
     assert_eq!(err, "Canister http request timed out");
 }
@@ -2166,13 +2165,13 @@ fn test_get_default_effective_canister_id_invalid_url() {
         .build();
 
     let test_driver_pid = std::process::id();
-    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", test_driver_pid));
+    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{test_driver_pid}.port"));
     let port = std::fs::read_to_string(port_file_path).unwrap();
 
-    let server_url = format!("http://localhost:{}", port);
+    let server_url = format!("http://localhost:{port}");
     match pocket_ic::get_default_effective_canister_id(server_url).unwrap_err() {
         DefaultEffectiveCanisterIdError::ReqwestError(_) => (),
-        err => panic!("Unexpected error: {}", err),
+        err => panic!("Unexpected error: {err}"),
     };
 }
 
@@ -2495,7 +2494,7 @@ fn ingress_status() {
     // since the ingress status is not available, any caller can attempt to retrieve it
     match pic.ingress_status_as(msg_id.clone(), Principal::anonymous()) {
         IngressStatusResult::NotAvailable => (),
-        status => panic!("Unexpected ingress status: {:?}", status),
+        status => panic!("Unexpected ingress status: {status:?}"),
     }
 
     pic.tick();
@@ -2508,7 +2507,7 @@ fn ingress_status() {
     let expected_err = "The user tries to access Request ID not signed by the caller.";
     match pic.ingress_status_as(msg_id.clone(), Principal::anonymous()) {
         IngressStatusResult::Forbidden(msg) => assert_eq!(msg, expected_err,),
-        status => panic!("Unexpected ingress status: {:?}", status),
+        status => panic!("Unexpected ingress status: {status:?}"),
     }
 
     // confirm the behavior of read state requests
@@ -2716,7 +2715,7 @@ fn test_reject_response_type() {
                 if !certified && method == "update" {
                     continue;
                 }
-                let method_name = format!("{}_{}", action, method);
+                let method_name = format!("{action}_{method}");
                 let (err, msg_id) = if certified {
                     let msg_id = pic
                         .submit_call(
@@ -2753,7 +2752,7 @@ fn test_reject_response_type() {
                 }
                 assert!(
                     err.reject_message
-                        .contains(&format!("{} in {} method", action, method))
+                        .contains(&format!("{action} in {method} method"))
                 );
                 assert_eq!(err.certified, certified);
             }
@@ -3191,8 +3190,7 @@ fn test_invalid_specified_id() {
         .create_canister_with_id(None, None, specified_id)
         .unwrap_err();
     let expected_err = format!(
-        "The `specified_id` {} is invalid because it belongs to the canister allocation ranges of the test environment.\\nUse a `specified_id` that matches a canister ID on the ICP mainnet and a test environment that supports canister creation with `specified_id` (e.g., PocketIC).",
-        specified_id
+        "The `specified_id` {specified_id} is invalid because it belongs to the canister allocation ranges of the test environment.\\nUse a `specified_id` that matches a canister ID on the ICP mainnet and a test environment that supports canister creation with `specified_id` (e.g., PocketIC)."
     );
     assert!(err.contains(&expected_err));
 }
@@ -3304,7 +3302,7 @@ async fn assert_create_instance_failure(
         CreateInstanceResponse::Error { message } => {
             assert!(message.contains(expected_msg));
         }
-        _ => panic!("Unexpected result: {:?}", res),
+        _ => panic!("Unexpected result: {res:?}"),
     };
 }
 

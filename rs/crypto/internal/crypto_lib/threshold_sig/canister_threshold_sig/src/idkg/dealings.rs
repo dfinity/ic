@@ -32,7 +32,7 @@ impl Debug for SecretShares {
             if curves.windows(2).all(|w| w[0] == w[1]) {
                 format!("({:?})", curves[0])
             } else {
-                format!(" unsupported curve combination {:?}", curves)
+                format!(" unsupported curve combination {curves:?}")
             }
         }
 
@@ -47,7 +47,7 @@ impl Debug for SecretShares {
         };
 
         let redacted = if curve.is_empty() { "" } else { " - REDACTED" };
-        write!(f, "SecretShares::{}{}{}", name, curve, redacted)
+        write!(f, "SecretShares::{name}{curve}{redacted}")
     }
 }
 
@@ -495,8 +495,7 @@ impl IDkgDealingInternal {
     pub fn serialize(&self) -> CanisterThresholdSerializationResult<Vec<u8>> {
         serde_cbor::to_vec(self).map_err(|e| {
             CanisterThresholdSerializationError(format!(
-                "failed to serialize IDkgDealingInternal: {}",
-                e
+                "failed to serialize IDkgDealingInternal: {e}"
             ))
         })
     }
@@ -504,8 +503,7 @@ impl IDkgDealingInternal {
     pub fn deserialize(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(bytes).map_err(|e| {
             CanisterThresholdSerializationError(format!(
-                "failed to deserialize IDkgDealingInternal: {}",
-                e
+                "failed to deserialize IDkgDealingInternal: {e}"
             ))
         })
     }

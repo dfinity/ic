@@ -22,7 +22,7 @@ impl MetricsObservationsAssert {
     ) -> &Self {
         assert!(self.contains_crypto_gauge_vec_metric(
             "crypto_idkg_dealing_encryption_pubkey_count",
-            labels(&[("result", format!("{}", result))]),
+            labels(&[("result", format!("{result}"))]),
             idkg_dealing_encryption_public_key_count as f64,
         ));
         self
@@ -40,21 +40,21 @@ impl MetricsObservationsAssert {
                 "crypto_key_counts",
                 labels(&[
                     ("key_type", "public_registry"),
-                    ("result", &format!("{}", result))
+                    ("result", &format!("{result}"))
                 ]),
                 registry_public_key_count as f64,
             ) && self.contains_crypto_gauge_vec_metric(
                 "crypto_key_counts",
                 labels(&[
                     ("key_type", "public_local"),
-                    ("result", &format!("{}", result))
+                    ("result", &format!("{result}"))
                 ]),
                 local_public_key_count as f64,
             ) && self.contains_crypto_gauge_vec_metric(
                 "crypto_key_counts",
                 labels(&[
                     ("key_type", "secret_sks"),
-                    ("result", &format!("{}", result))
+                    ("result", &format!("{result}"))
                 ]),
                 secret_key_count as f64,
             )
@@ -73,7 +73,7 @@ impl MetricsObservationsAssert {
     pub fn contains_latest_key_exists_in_registry(&self, result: bool) -> &Self {
         let labels = labels(&[
             ("operation", "latest_local_idkg_key_exists_in_registry"),
-            ("result", &format!("{}", result)),
+            ("result", &format!("{result}")),
         ]);
         assert!(self.contains_crypto_boolean_counter_metric("crypto_boolean_results", labels,));
         self
@@ -113,8 +113,7 @@ impl MetricsObservationsAssert {
         match fetch_counter_vec(&self.metrics_registry, metric_name).get(&metric_labels) {
             None => {
                 println!(
-                    "no boolean counter found with name {} and labels {:?}",
-                    metric_name, metric_labels
+                    "no boolean counter found with name {metric_name} and labels {metric_labels:?}"
                 );
                 false
             }
@@ -123,8 +122,7 @@ impl MetricsObservationsAssert {
                     true
                 } else {
                     println!(
-                        "Expected boolean counter value ge 0, found {}",
-                        actual_value
+                        "Expected boolean counter value ge 0, found {actual_value}"
                     );
                     false
                 }
@@ -135,7 +133,7 @@ impl MetricsObservationsAssert {
     fn contains_crypto_counter_metric(&self, metric_name: &str, metric_value: u64) -> bool {
         match fetch_int_counter(&self.metrics_registry, metric_name) {
             None => {
-                println!("no int counter found with name {}", metric_name);
+                println!("no int counter found with name {metric_name}");
                 false
             }
             Some(actual_counter) => {
@@ -143,8 +141,7 @@ impl MetricsObservationsAssert {
                     true
                 } else {
                     println!(
-                        "Expected counter value {}, found {}",
-                        metric_value, actual_counter
+                        "Expected counter value {metric_value}, found {actual_counter}"
                     );
                     false
                 }
@@ -161,8 +158,7 @@ impl MetricsObservationsAssert {
         match fetch_gauge_vec(&self.metrics_registry, metric_name).get(&metric_labels) {
             None => {
                 println!(
-                    "no gauge found with name {} and labels {:?}",
-                    metric_name, metric_labels
+                    "no gauge found with name {metric_name} and labels {metric_labels:?}"
                 );
                 false
             }
@@ -171,8 +167,7 @@ impl MetricsObservationsAssert {
                     true
                 } else {
                     println!(
-                        "Expected gauge value {}, found {}",
-                        metric_value, actual_value
+                        "Expected gauge value {metric_value}, found {actual_value}"
                     );
                     false
                 }
@@ -183,7 +178,7 @@ impl MetricsObservationsAssert {
     fn contains_crypto_gauge_metric(&self, metric_name: &str, metric_value: f64) -> bool {
         match fetch_gauge(&self.metrics_registry, metric_name) {
             None => {
-                println!("no gauge found with name {}", metric_name);
+                println!("no gauge found with name {metric_name}");
                 false
             }
             Some(actual_value) => {

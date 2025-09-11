@@ -53,7 +53,7 @@ impl CspSigner for Csp {
                 result
             }
             _ => Err(CryptoError::InvalidArgument {
-                message: format!("Cannot sign with unsupported algorithm: {:?}", algorithm_id),
+                message: format!("Cannot sign with unsupported algorithm: {algorithm_id:?}"),
             }),
         }
     }

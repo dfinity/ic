@@ -119,14 +119,14 @@ impl CanisterAccess {
             .with_arg(arg)
             .call()
             .await
-            .map_err(|e| format!("{}", e))?;
+            .map_err(|e| format!("{e}"))?;
         ProtoBuf::from_bytes(bytes).map(|c| c.0)
     }
 
     pub async fn query_tip(&self) -> Result<TipOfChainRes, String> {
         self.query("tip_of_chain_pb", TipOfChainRequest {})
             .await
-            .map_err(|e| format!("In tip: {}", e))
+            .map_err(|e| format!("In tip: {e}"))
     }
 
     pub async fn query_raw_block(
@@ -136,7 +136,7 @@ impl CanisterAccess {
         let BlockRes(b) = self
             .query("block_pb", BlockArg(height))
             .await
-            .map_err(|e| format!("In block: {}", e))?;
+            .map_err(|e| format!("In block: {e}"))?;
         match b {
             // block not found
             None => Ok(None),
@@ -147,7 +147,7 @@ impl CanisterAccess {
                 let BlockRes(b) = self
                     .query_canister(canister_id, "get_block_pb", BlockArg(height))
                     .await
-                    .map_err(|e| format!("In block: {}", e))?;
+                    .map_err(|e| format!("In block: {e}"))?;
                 // get_block() on archive node will never return Ok(Err(canister_id))
                 Ok(b.map(|x| x.unwrap()))
             }
@@ -170,9 +170,9 @@ impl CanisterAccess {
                 },
             )
             .await
-            .map_err(|e| format!("In blocks: {}", e))?;
+            .map_err(|e| format!("In blocks: {e}"))?;
 
-        blocks.0.map_err(|e| format!("In blocks response: {}", e))
+        blocks.0.map_err(|e| format!("In blocks response: {e}"))
     }
 
     pub async fn clear_outstanding_queries(&self) {
@@ -220,7 +220,7 @@ impl CanisterAccess {
             ongoing.pop_front().unwrap()
         };
 
-        let res = jh.await.map_err(|e| format!("{}", e))??;
+        let res = jh.await.map_err(|e| format!("{e}"))??;
         let res_end = a + res.len() as u64;
         if res_end < b {
             let slf = self.clone();
@@ -273,7 +273,7 @@ impl CanisterAccess {
                 let al: ArchiveIndexResponse = self
                     .query("get_archive_index_pb", ())
                     .await
-                    .map_err(|e| format!("In get archive index: {}", e))?;
+                    .map_err(|e| format!("In get archive index: {e}"))?;
                 trace!("updating archive list to: {:?}", al);
                 *alist = Some(al);
                 archive_entry = locate_archive(&alist, start);

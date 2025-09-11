@@ -56,7 +56,7 @@ fn notify(notify_data: &NotifyData) -> Response {
             .write(true)
             .open("/dev/tty1")
             .map_err(|err| {
-                println!("Error opening terminal device file: {}", err);
+                println!("Error opening terminal device file: {err}");
                 err.to_string()
             })?;
 
@@ -65,7 +65,7 @@ fn notify(notify_data: &NotifyData) -> Response {
 
     let write_lambda = move || -> Result<(), String> {
         for _ in 0..message_output_count {
-            match terminal_device_file.write_all(format!("\n{}\n", message_clone).as_bytes()) {
+            match terminal_device_file.write_all(format!("\n{message_clone}\n").as_bytes()) {
                 Ok(_) => std::thread::sleep(std::time::Duration::from_secs(2)),
                 Err(err) => return Err(err.to_string()),
             }
@@ -112,8 +112,7 @@ fn run_upgrade() -> Response {
 
 async fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
     println!(
-        "Trying to fetch hostOS upgrade file from request: {:?}",
-        upgrade_data
+        "Trying to fetch hostOS upgrade file from request: {upgrade_data:?}"
     );
     create_hostos_upgrade_file(
         &upgrade_data.url,

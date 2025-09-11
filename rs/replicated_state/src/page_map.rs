@@ -243,12 +243,11 @@ impl std::fmt::Display for PersistenceError {
             } => {
                 write!(
                     f,
-                    "File system error for file {}: {} {}",
-                    path, context, internal_error
+                    "File system error for file {path}: {context} {internal_error}"
                 )
             }
             PersistenceError::MmapError { path, len, .. } => {
-                write!(f, "Failed to memory map file {} of length {}", path, len)
+                write!(f, "Failed to memory map file {path} of length {len}")
             }
             PersistenceError::InvalidHeapFile {
                 path,
@@ -256,16 +255,14 @@ impl std::fmt::Display for PersistenceError {
                 page_size,
             } => write!(
                 f,
-                "Size of heap file {} is {}, which is not a multiple of the page size {}",
-                path, file_size, page_size
+                "Size of heap file {path} is {file_size}, which is not a multiple of the page size {page_size}"
             ),
             PersistenceError::InvalidOverlay { path, message } => {
-                write!(f, "Overlay file {} is broken: {}", path, message)
+                write!(f, "Overlay file {path} is broken: {message}")
             }
             PersistenceError::BadPageSize { expected, actual } => write!(
                 f,
-                "Bad slice size: expected {}, actual {}",
-                expected, actual
+                "Bad slice size: expected {expected}, actual {actual}"
             ),
             PersistenceError::VersionMismatch {
                 path,
@@ -273,8 +270,7 @@ impl std::fmt::Display for PersistenceError {
                 supported,
             } => write!(
                 f,
-                "Unsupported overlay version for {}: file version {}, max supported {:?}",
-                path, file_version, supported,
+                "Unsupported overlay version for {path}: file version {file_version}, max supported {supported:?}",
             ),
         }
     }
@@ -1003,7 +999,7 @@ impl std::fmt::Debug for PageMap {
                 let idx = PageIndex::from(i as u64);
                 ic_utils::rle::display(self.get_page(idx))
             })
-            .try_for_each(|s| write!(f, "[{:?}]", s))?;
+            .try_for_each(|s| write!(f, "[{s:?}]"))?;
         write!(f, "}}")
     }
 }
@@ -1040,8 +1036,7 @@ impl PageAllocatorFileDescriptor for TestPageAllocatorFileDescriptorImpl {
             Ok(file) => file.into_raw_fd(),
             Err(err) => {
                 panic!(
-                    "TempPageAllocatorFileDescriptorImpl failed to create the backing file {}",
-                    err
+                    "TempPageAllocatorFileDescriptorImpl failed to create the backing file {err}"
                 )
             }
         }

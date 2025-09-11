@@ -345,7 +345,7 @@ async fn try_fetch_delegation_from_nns(
                 )
                 .into());
             }
-            Ok(Err(e)) => return Err(format!("Failed to read body from connection: {}", e).into()),
+            Ok(Err(e)) => return Err(format!("Failed to read body from connection: {e}").into()),
             Err(_) => return Err(format!(
                 "Timed out while receiving http body after {NNS_DELEGATION_BODY_RECEIVE_TIMEOUT:?}"
             )
@@ -357,22 +357,20 @@ async fn try_fetch_delegation_from_nns(
     })?;
 
     let parsed_delegation: Certificate = serde_cbor::from_slice(&response.certificate)
-        .map_err(|e| format!("Failed to parse delegation certificate: {}", e))?;
+        .map_err(|e| format!("Failed to parse delegation certificate: {e}"))?;
 
     let labeled_tree = LabeledTree::try_from(parsed_delegation.tree.clone())
-        .map_err(|e| format!("Invalid hash tree in the delegation certificate: {:?}", e))?;
+        .map_err(|e| format!("Invalid hash tree in the delegation certificate: {e:?}"))?;
 
     let own_public_key_from_registry = match registry_client
         .get_threshold_signing_public_key_for_subnet(subnet_id, registry_version)
     {
         Ok(Some(pk)) => Ok(pk),
         Ok(None) => Err(format!(
-            "subnet {} public key from registry is empty",
-            subnet_id
+            "subnet {subnet_id} public key from registry is empty"
         )),
         Err(err) => Err(format!(
-            "subnet {} public key could not be extracted from registry: {:?}",
-            subnet_id, err
+            "subnet {subnet_id} public key could not be extracted from registry: {err:?}"
         )),
     }?;
 
@@ -385,16 +383,14 @@ async fn try_fetch_delegation_from_nns(
 
             if public_key_from_certificate != own_public_key_from_registry {
                 Err(format!(
-                    "invalid public key type in certificate for subnet {}",
-                    subnet_id
+                    "invalid public key type in certificate for subnet {subnet_id}"
                 ))
             } else {
                 Ok(())
             }
         }
         _ => Err(format!(
-            "subnet {} public key could not be extracted from certificate",
-            subnet_id
+            "subnet {subnet_id} public key could not be extracted from certificate"
         )),
     }?;
 
@@ -408,7 +404,7 @@ async fn try_fetch_delegation_from_nns(
         &subnet_id,
         &root_threshold_public_key,
     )
-    .map_err(|err| format!("invalid subnet delegation certificate: {:?} ", err))?;
+    .map_err(|err| format!("invalid subnet delegation certificate: {err:?} "))?;
 
     info!(log, "Setting NNS delegation to: {:?}", response.certificate);
     let nns_delegation_builder = NNSDelegationBuilder::new(
@@ -443,12 +439,12 @@ async fn connect(
 
     let tls_client_config = tls_config
         .client_config(peer_id, registry_version)
-        .map_err(|err| format!("Retrieving TLS client config failed: {:?}.", err))?;
+        .map_err(|err| format!("Retrieving TLS client config failed: {err:?}."))?;
 
     info!(log, "Establishing TCP connection to {peer_id} @ {addr}");
     let tcp_stream: TcpStream = TcpStream::connect(addr)
         .await
-        .map_err(|err| format!("Could not connect to node {}. {:?}.", addr, err))?;
+        .map_err(|err| format!("Could not connect to node {addr}. {err:?}."))?;
 
     let tls_connector = TlsConnector::from(Arc::new(tls_client_config));
     let irrelevant_domain = "domain.is-irrelevant-as-hostname-verification-is.disabled";
@@ -468,8 +464,7 @@ async fn connect(
         .await
         .map_err(|err| {
             format!(
-                "Could not establish TLS stream to node {}. {:?}.",
-                addr, err
+                "Could not establish TLS stream to node {addr}. {err:?}."
             )
         })?;
 
@@ -501,24 +496,21 @@ fn get_random_node_from_nns_subnet(
     {
         Ok(Some(nns_nodes)) => Ok(nns_nodes),
         Ok(None) => Err("No nns nodes found.".to_string()),
-        Err(err) => Err(format!("Failed to get nns nodes from registry: {}", err)),
+        Err(err) => Err(format!("Failed to get nns nodes from registry: {err}")),
     }?;
 
     // Randomly choose a node from the nns subnet.
     let mut rng = rand::thread_rng();
     let nns_node = nns_nodes.choose(&mut rng).ok_or(format!(
-        "Failed to choose random nns node. NNS node list: {:?}",
-        nns_nodes
+        "Failed to choose random nns node. NNS node list: {nns_nodes:?}"
     ))?;
     match registry_client.get_node_record(*nns_node, registry_client.get_latest_version()) {
         Ok(Some(node)) => Ok((*nns_node, node.http.ok_or("No http endpoint for node")?)),
         Ok(None) => Err(format!(
-            "No transport info found for nns node. {}",
-            nns_node
+            "No transport info found for nns node. {nns_node}"
         )),
         Err(err) => Err(format!(
-            "failed to get node record for nns node {}. Err: {}",
-            nns_node, err
+            "failed to get node record for nns node {nns_node}. Err: {err}"
         )),
     }
 }

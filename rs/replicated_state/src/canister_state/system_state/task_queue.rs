@@ -131,17 +131,13 @@ impl TaskQueue {
                     assert_eq!(
                         current_round_type,
                         ExecutionRoundType::OrdinaryRound,
-                        "Unexpected paused execution {:?} after a checkpoint round in canister {:?}",
-                        paused_or_aborted_task,
-                        id
+                        "Unexpected paused execution {paused_or_aborted_task:?} after a checkpoint round in canister {id:?}"
                     );
 
                     assert_eq!(
                         deterministic_time_slicing,
                         FlagStatus::Enabled,
-                        "Unexpected paused execution {:?} with disabled DTS in canister: {:?}",
-                        paused_or_aborted_task,
-                        id
+                        "Unexpected paused execution {paused_or_aborted_task:?} with disabled DTS in canister: {id:?}"
                     );
                 }
                 ExecutionTask::AbortedExecution { .. }
@@ -161,14 +157,12 @@ impl TaskQueue {
             match task {
                 ExecutionTask::Heartbeat => {
                     panic!(
-                        "Unexpected heartbeat task after a round in canister {:?}",
-                        id
+                        "Unexpected heartbeat task after a round in canister {id:?}"
                     );
                 }
                 ExecutionTask::GlobalTimer => {
                     panic!(
-                        "Unexpected global timer task after a round in canister {:?}",
-                        id
+                        "Unexpected global timer task after a round in canister {id:?}"
                     );
                 }
                 ExecutionTask::OnLowWasmMemory
@@ -197,8 +191,7 @@ impl TaskQueue {
         for task in self.queue.iter() {
             debug_assert!(
                 *task == ExecutionTask::Heartbeat || *task == ExecutionTask::GlobalTimer,
-                "Unexpected task type {:?} in TaskQueue::queue.",
-                task
+                "Unexpected task type {task:?} in TaskQueue::queue."
             );
         }
 
@@ -286,9 +279,7 @@ pub fn is_low_wasm_memory_hook_condition_satisfied(
 
     debug_assert!(
         wasm_memory_usage <= memory_usage,
-        "Wasm memory usage {} is greater that memory usage {}.",
-        wasm_memory_usage,
-        memory_usage
+        "Wasm memory usage {wasm_memory_usage} is greater that memory usage {memory_usage}."
     );
 
     let memory_usage_without_wasm_memory = memory_usage.saturating_sub(&wasm_memory_usage);

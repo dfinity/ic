@@ -18,7 +18,7 @@ mod tests;
 
 fn invalid_size(error: std::num::TryFromIntError) -> CryptoError {
     CryptoError::InvalidArgument {
-        message: format!("{:?}", error),
+        message: format!("{error:?}"),
     }
 }
 

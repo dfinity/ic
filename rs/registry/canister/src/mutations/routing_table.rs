@@ -274,7 +274,7 @@ impl Registry {
             .map(|(_, record)| record);
 
         let Some(range_to_decode) = maybe_range_to_decode else {
-            return Err(format!("{}Could not find routing table shard", LOG_PREFIX));
+            return Err(format!("{LOG_PREFIX}Could not find routing table shard"));
         };
 
         match with_chunks(|chunks| {
@@ -282,8 +282,7 @@ impl Registry {
         }) {
             Some(rt) => RoutingTable::try_from(rt).map_err(|e| e.to_string()),
             None => Err(format!(
-                "{}Could not decode routing table shard",
-                LOG_PREFIX
+                "{LOG_PREFIX}Could not decode routing table shard"
             )),
         }
     }

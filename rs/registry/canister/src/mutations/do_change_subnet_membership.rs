@@ -18,8 +18,7 @@ impl Registry {
     /// for modifying a subnet by changing the membership (adding/removing) has been accepted.
     pub fn do_change_subnet_membership(&mut self, payload: ChangeSubnetMembershipPayload) {
         println!(
-            "{}do_change_subnet_membership started: {:?}",
-            LOG_PREFIX, payload
+            "{LOG_PREFIX}do_change_subnet_membership started: {payload:?}"
         );
 
         let nodes_to_add = payload.node_ids_add.clone();
@@ -68,8 +67,7 @@ impl Registry {
         self.maybe_apply_mutation_internal(mutations);
 
         println!(
-            "{}do_change_subnet_membership finished: {:?}",
-            LOG_PREFIX, payload
+            "{LOG_PREFIX}do_change_subnet_membership finished: {payload:?}"
         );
     }
 }

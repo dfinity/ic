@@ -741,7 +741,7 @@ impl MutablePool<ConsensusMessage> for ConsensusPoolImpl {
                     }
                     let msg_id = to_move.get_id();
                     let timestamp = self.unvalidated.get_timestamp(&msg_id).unwrap_or_else(|| {
-                        panic!("Timestamp is not found for MoveToValidated: {:?}", to_move)
+                        panic!("Timestamp is not found for MoveToValidated: {to_move:?}")
                     });
                     let validated = ValidatedConsensusArtifact {
                         msg: to_move,

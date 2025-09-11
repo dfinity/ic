@@ -53,7 +53,7 @@ impl fmt::Debug for KeyId {
 
 impl fmt::Display for KeyId {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -119,7 +119,7 @@ impl TryFrom<&MEGaPublicKey> for KeyId {
                 AlgorithmId::ThresholdEcdsaSecp256k1,
                 &public_key.serialize(),
             ))),
-            c => Err(format!("unsupported curve: {:?}", c)),
+            c => Err(format!("unsupported curve: {c:?}")),
         }
     }
 }
@@ -166,8 +166,7 @@ impl TryFrom<&CspPublicCoefficients> for KeyId {
         ));
         hash.write(&serde_cbor::to_vec(&coefficients).map_err(|err| {
             Self::Error::InvalidArguments(format!(
-                "Failed to serialize public coefficients: {}",
-                err
+                "Failed to serialize public coefficients: {err}"
             ))
         })?);
         Ok(KeyId::from(hash.finish()))
@@ -179,7 +178,7 @@ impl FromHex for KeyId {
 
     fn from_hex<T: AsRef<[u8]>>(data: T) -> Result<Self, Self::Error> {
         let bytes: [u8; 32] = hex::decode(data)
-            .map_err(|err| format!("Error decoding hex: {}", err))?
+            .map_err(|err| format!("Error decoding hex: {err}"))?
             .try_into()
             .map_err(|_err| "wrong size of array: expected 32 bytes")?;
         Ok(KeyId::from(bytes))

@@ -333,9 +333,7 @@ impl<M: Memory> Buf for SizeAwareReader<'_, M> {
         let remaining = self.remaining();
         assert!(
             cnt <= remaining,
-            "Trying to advance {} bytes while only {} bytes remaining",
-            cnt,
-            remaining
+            "Trying to advance {cnt} bytes while only {remaining} bytes remaining"
         );
 
         // Why below is correct:

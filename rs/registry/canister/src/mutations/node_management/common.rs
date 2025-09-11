@@ -49,8 +49,7 @@ pub fn get_subnet_list_record(registry: &Registry) -> SubnetListRecord {
             registry.latest_version(),
         )
         .ok_or(format!(
-            "{}do_remove_nodes: Subnet List not found in the registry, aborting node removal.",
-            LOG_PREFIX
+            "{LOG_PREFIX}do_remove_nodes: Subnet List not found in the registry, aborting node removal."
         ))
         .unwrap();
 
@@ -65,7 +64,7 @@ pub fn get_node_operator_id_for_node(
     registry
         .get(node_key.as_bytes(), registry.latest_version())
         .map_or(
-            Err(format!("Node Id {:} not found in the registry", node_id)),
+            Err(format!("Node Id {node_id:} not found in the registry")),
             |result| {
                 PrincipalId::try_from(
                     NodeRecord::decode(result.value.as_slice())
@@ -74,8 +73,7 @@ pub fn get_node_operator_id_for_node(
                 )
                 .map_err(|_| {
                     format!(
-                        "Could not decode node_record's node_operator_id for Node Id {}",
-                        node_id
+                        "Could not decode node_record's node_operator_id for Node Id {node_id}"
                     )
                 })
             },
@@ -91,24 +89,21 @@ pub fn get_node_provider_id_for_operator_id(
         .get(node_operator_key.as_bytes(), registry.latest_version())
         .map_or(
             Err(format!(
-                "Node Operator Id {:} not found in the registry.",
-                node_operator_key
+                "Node Operator Id {node_operator_key:} not found in the registry."
             )),
             |result| {
                 PrincipalId::try_from(
                     NodeOperatorRecord::decode(result.value.as_slice())
                         .map_err(|_| {
                             format!(
-                                "Could not decode node_operator_record for Node Operator Id {}",
-                                node_operator_id
+                                "Could not decode node_operator_record for Node Operator Id {node_operator_id}"
                             )
                         })?
                         .node_provider_principal_id,
                 )
                 .map_err(|_| {
                     format!(
-                        "Could not decode node_provider_id from the Node Operator Record for the Id {}",
-                        node_operator_id
+                        "Could not decode node_provider_id from the Node Operator Record for the Id {node_operator_id}"
                     )
                 })
             },
@@ -124,8 +119,7 @@ pub fn get_node_operator_record(
         .get(node_operator_key.as_bytes(), registry.latest_version())
         .map_or(
             Err(format!(
-                "Node Operator Id {:} not found in the registry.",
-                node_operator_key
+                "Node Operator Id {node_operator_key:} not found in the registry."
             )),
             |result| {
                 let decoded = NodeOperatorRecord::decode(result.value.as_slice()).unwrap();
@@ -214,7 +208,9 @@ pub fn make_remove_node_registry_mutations(
     ];
 
     let latest_version = registry.latest_version();
-    let mutations = keys_to_maybe_remove
+    
+
+    keys_to_maybe_remove
         .iter()
         .flat_map(|key| {
             // It is possible, for example, that IDkgMEGaEncryption key is not present
@@ -225,9 +221,7 @@ pub fn make_remove_node_registry_mutations(
                 .get(key.as_bytes(), latest_version)
                 .map(|_| delete(key))
         })
-        .collect::<Vec<_>>();
-
-    mutations
+        .collect::<Vec<_>>()
 }
 
 /// Scan through the registry, returning a list of any nodes with the given IP.

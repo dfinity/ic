@@ -68,7 +68,7 @@ impl<'a, const LABEL_COUNT: usize> HistogramVecTimer<'a, LABEL_COUNT> {
                 return;
             }
         }
-        panic!("No such label: {}", k);
+        panic!("No such label: {k}");
     }
 }
 

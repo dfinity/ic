@@ -1328,7 +1328,7 @@ impl SystemState {
     pub fn collect_controllers_as_string(&self) -> String {
         self.controllers
             .iter()
-            .map(|id| format!("{}", id))
+            .map(|id| format!("{id}"))
             .collect::<Vec<String>>()
             .join(" ")
     }
@@ -1386,7 +1386,7 @@ impl SystemState {
 
                     // This should not happen. Bail out and let Message Routing deal with it.
                     Err(e) => {
-                        debug_assert!(false, "Failed to induct message to self: {:?}", e);
+                        debug_assert!(false, "Failed to induct message to self: {e:?}");
                         return;
                     }
                 }

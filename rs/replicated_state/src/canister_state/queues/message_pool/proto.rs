@@ -13,8 +13,7 @@ where
             Ok(Reference(item, PhantomData))
         } else {
             Err(ProxyDecodeError::Other(format!(
-                "Mismatched reference context: {}",
-                item
+                "Mismatched reference context: {item}"
             )))
         }
     }

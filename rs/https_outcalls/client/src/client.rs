@@ -251,8 +251,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 
                             if transform_result_size as u64 > max_response_size_bytes {
                                 let err_msg = format!(
-                                    "Transformed http response exceeds limit: {}",
-                                    max_response_size_bytes
+                                    "Transformed http response exceeds limit: {max_response_size_bytes}"
                                 );
                                 return Err((RejectCode::SysFatal, err_msg));
                             }
@@ -264,8 +263,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                                 RejectCode::SysFatal,
                                 format!(
                                     "Failed to parse adapter http response \
-                                    to 'http_response' candid: {}",
-                                    encode_error
+                                    to 'http_response' candid: {encode_error}"
                                 ),
                             )
                         }),
@@ -338,8 +336,7 @@ async fn transform_adapter_response(
         (
             RejectCode::SysFatal,
             format!(
-                "Failed to parse http response to 'http_response' candid: {}",
-                encode_error
+                "Failed to parse http response to 'http_response' candid: {encode_error}"
             ),
         )
     })?;
@@ -708,7 +705,7 @@ mod tests {
 
         tokio::spawn(async move {
             let (req, rsp) = handle.next_request().await.unwrap();
-            println!("{:?}", req);
+            println!("{req:?}");
             rsp.send_response(Ok((
                 Ok(WasmResult::Reply(vec![
                     0;
@@ -752,8 +749,7 @@ mod tests {
                             UNIX_EPOCH,
                             RejectCode::SysFatal,
                             format!(
-                                "Transformed http response exceeds limit: {}",
-                                MAX_CANISTER_HTTP_RESPONSE_BYTES
+                                "Transformed http response exceeds limit: {MAX_CANISTER_HTTP_RESPONSE_BYTES}"
                             )
                         )
                     );

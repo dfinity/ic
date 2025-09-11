@@ -224,7 +224,7 @@ impl FileDownloader {
         let response = self
             .client
             .get(url)
-            .header("range", format!("bytes={}-", offset))
+            .header("range", format!("bytes={offset}-"))
             .timeout(self.overall_timeout)
             .send()
             .await?;
@@ -389,23 +389,23 @@ pub enum FileDownloadError {
 
 impl FileDownloadError {
     pub(crate) fn file_write_error(file_path: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(format!("Failed to write to file: {:?}", file_path), e)
+        FileDownloadError::IoError(format!("Failed to write to file: {file_path:?}"), e)
     }
 
     pub(crate) fn file_open_error(file_path: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(format!("Failed to open file: {:?}", file_path), e)
+        FileDownloadError::IoError(format!("Failed to open file: {file_path:?}"), e)
     }
 
     pub(crate) fn file_remove_error(file_path: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(format!("Failed to remove file: {:?}", file_path), e)
+        FileDownloadError::IoError(format!("Failed to remove file: {file_path:?}"), e)
     }
 
     pub(crate) fn untar_error(file_path: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(format!("Failed to unpack tar file: {:?}", file_path), e)
+        FileDownloadError::IoError(format!("Failed to unpack tar file: {file_path:?}"), e)
     }
 
     pub(crate) fn compute_hash_error(file_path: &Path, e: io::Error) -> Self {
-        FileDownloadError::IoError(format!("Failed to hash of: {:?}", file_path), e)
+        FileDownloadError::IoError(format!("Failed to hash of: {file_path:?}"), e)
     }
 }
 
@@ -413,10 +413,10 @@ impl fmt::Display for FileDownloadError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             FileDownloadError::IoError(msg, e) => {
-                write!(f, "IO error, message: {}, error: {:?}", msg, e)
+                write!(f, "IO error, message: {msg}, error: {e:?}")
             }
             FileDownloadError::ReqwestError(e) => {
-                write!(f, "Encountered error when making Http request: {}", e)
+                write!(f, "Encountered error when making Http request: {e}")
             }
             FileDownloadError::NonSuccessResponse(method, response) => write!(
                 f,
@@ -433,8 +433,7 @@ impl fmt::Display for FileDownloadError {
                 file_path,
             } => write!(
                 f,
-                "File failed hash validation: computed_hash: {}, expected_hash: {}, file: {:?}",
-                computed_hash, expected_hash, file_path
+                "File failed hash validation: computed_hash: {computed_hash}, expected_hash: {expected_hash}, file: {file_path:?}"
             ),
             FileDownloadError::TimeoutError => write!(f, "File downloader timed out."),
         }

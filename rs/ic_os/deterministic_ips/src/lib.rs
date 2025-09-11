@@ -48,7 +48,7 @@ fn prefix_octets(prefix: &str) -> Result<[u8; 8]> {
     let full_prefix = if prefix.contains("::") {
         prefix.to_string()
     } else {
-        format!("{}::", prefix)
+        format!("{prefix}::")
     };
 
     // Parse the prefix into an Ipv6Addr

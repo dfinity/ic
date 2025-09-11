@@ -44,7 +44,7 @@ impl Registry {
     /// Returns the ID of the new subnet. The subnet probably isn't ready for
     /// immediate use shortly after this returns.
     pub async fn do_create_subnet(&mut self, payload: CreateSubnetPayload) -> NewSubnet {
-        println!("{}do_create_subnet: {:?}", LOG_PREFIX, payload);
+        println!("{LOG_PREFIX}do_create_subnet: {payload:?}");
 
         self.validate_create_subnet_payload(&payload);
 
@@ -69,8 +69,7 @@ impl Registry {
 
         let response = SetupInitialDKGResponse::decode(&response_bytes).unwrap();
         println!(
-            "{}response from setup_initial_dkg successfully received",
-            LOG_PREFIX
+            "{LOG_PREFIX}response from setup_initial_dkg successfully received"
         );
 
         let generated_subnet_id = response.fresh_subnet_id;
@@ -79,8 +78,7 @@ impl Registry {
             .map(SubnetId::new)
             .unwrap_or(generated_subnet_id);
         println!(
-            "{}do_create_subnet: {{payload: {:?}, subnet_id: {}}}",
-            LOG_PREFIX, payload, subnet_id
+            "{LOG_PREFIX}do_create_subnet: {{payload: {payload:?}, subnet_id: {subnet_id}}}"
         );
 
         // 2b. Invoke reshare_chain_key on ic_00
@@ -142,8 +140,7 @@ impl Registry {
             .any(|x| *x == subnet_id.get().to_vec())
         {
             panic!(
-                "Subnet already present in subnet list record: {:?}",
-                subnet_id
+                "Subnet already present in subnet list record: {subnet_id:?}"
             );
         }
         subnet_list_record.subnets.push(subnet_id.get().to_vec());
@@ -200,7 +197,7 @@ impl Registry {
                     NodeRecord::decode(value.as_slice()).unwrap(),
                     NodeRecord::default()
                 ),
-                None => panic!("A NodeRecord for Node with id {} was not found", node_id),
+                None => panic!("A NodeRecord for Node with id {node_id} was not found"),
             };
         });
 
@@ -242,7 +239,7 @@ impl Registry {
         let prevalidated_initial_chain_key_config =
             InitialChainKeyConfigInternal::try_from(initial_chain_key_config.clone())
                 .unwrap_or_else(|err| {
-                    panic!("{}Cannot prevalidate ChainKeyConfig: {}", LOG_PREFIX, err);
+                    panic!("{LOG_PREFIX}Cannot prevalidate ChainKeyConfig: {err}");
                 });
 
         let own_subnet_id = None;
@@ -250,7 +247,7 @@ impl Registry {
             &prevalidated_initial_chain_key_config,
             own_subnet_id,
         )
-        .unwrap_or_else(|err| panic!("{}Cannot validate ChainKeyConfig: {}", LOG_PREFIX, err));
+        .unwrap_or_else(|err| panic!("{LOG_PREFIX}Cannot validate ChainKeyConfig: {err}"));
     }
 }
 
@@ -367,8 +364,7 @@ impl TryFrom<InitialChainKeyConfig> for InitialChainKeyConfigInternal {
         if !key_config_validation_errors.is_empty() {
             let key_config_validation_errors = key_config_validation_errors.join(", ");
             return Err(format!(
-                "Invalid InitialChainKeyConfig.key_configs: {}",
-                key_config_validation_errors
+                "Invalid InitialChainKeyConfig.key_configs: {key_config_validation_errors}"
             ));
         }
 
@@ -476,7 +472,7 @@ impl TryFrom<KeyConfigRequest> for KeyConfigRequestInternal {
         };
 
         let key_config = KeyConfigInternal::try_from(key_config)
-            .map_err(|err| format!("Invalid KeyConfigRequest.key_config: {}", err))?;
+            .map_err(|err| format!("Invalid KeyConfigRequest.key_config: {err}"))?;
 
         Ok(Self {
             key_config,

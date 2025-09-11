@@ -165,7 +165,7 @@ impl SignedIngressBuilder {
         let message_id = self.update.id();
         self.sender_sig = sender
             .sign_message_id(&message_id)
-            .map_err(|e| format!("failed to sign submit message: {}", e))
+            .map_err(|e| format!("failed to sign submit message: {e}"))
             .unwrap();
 
         self

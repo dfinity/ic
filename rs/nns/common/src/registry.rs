@@ -40,8 +40,7 @@ pub async fn get_value<T: Message + Default>(
 
     let Some(content) = response.content else {
         return Err(Error::MalformedMessage(format!(
-            "The `content` field of the get_value response is not populated (key = {:?}).",
-            key,
+            "The `content` field of the get_value response is not populated (key = {key:?}).",
         )));
     };
 
@@ -74,7 +73,7 @@ pub async fn mutate_registry(
         )
     })?;
     let response = RegistryAtomicMutateResponse::decode(response_bytes.as_slice())
-        .map_err(|e| format!("The registry's response to 'atomic_mutate' could not be decoded as a RegistryAtomicMutateResponse due to: {} ", e))?;
+        .map_err(|e| format!("The registry's response to 'atomic_mutate' could not be decoded as a RegistryAtomicMutateResponse due to: {e} "))?;
     match response.errors.len() {
         0 => Ok(response.version),
         _ => Err(format!(
@@ -83,7 +82,7 @@ pub async fn mutate_registry(
                 .errors
                 .into_iter()
                 .map(Error::from)
-                .map(|e| format!("{}", e))
+                .map(|e| format!("{e}"))
                 .collect::<Vec::<String>>()
                 .join(", ")
         )),
@@ -103,8 +102,7 @@ pub async fn get_subnet_list_record() -> Option<(SubnetListRecord, u64)> {
         Err(error) => match error {
             Error::KeyNotPresent(_) => None,
             _ => panic!(
-                "Error while fetching current subnet list record: {:?}",
-                error
+                "Error while fetching current subnet list record: {error:?}"
             ),
         },
     }

@@ -90,7 +90,7 @@ impl IDkgObjectPool {
     {
         Box::new(self.objects.iter().map(|(key, object)| {
             let inner = T::try_from(object.clone()).unwrap_or_else(|err| {
-                panic!("Failed to convert IDkgMessage to inner type: {:?}", err)
+                panic!("Failed to convert IDkgMessage to inner type: {err:?}")
             });
             (key.clone(), inner)
         }))
@@ -129,7 +129,7 @@ impl IDkgObjectPool {
                 .take_while(move |(key, _)| is_same_pattern_clone(key))
                 .map(|(key, object)| {
                     let inner = T::try_from(object.clone()).unwrap_or_else(|err| {
-                        panic!("Failed to convert IDkgMessage to inner type: {:?}", err)
+                        panic!("Failed to convert IDkgMessage to inner type: {err:?}")
                     });
                     (key.clone(), inner)
                 }),

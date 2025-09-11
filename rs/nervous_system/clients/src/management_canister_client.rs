@@ -270,8 +270,7 @@ impl ManagementCanisterClient for MockManagementCanisterClient {
             MockManagementCanisterClientReply::CanisterStatus(response) => response,
             err => panic!(
                 "Expected MockManagementCanisterClientReply::CanisterStatus to be at \
-                the front of the queue. Had {:?}",
-                err
+                the front of the queue. Had {err:?}"
             ),
         }
     }
@@ -293,8 +292,7 @@ impl ManagementCanisterClient for MockManagementCanisterClient {
             MockManagementCanisterClientReply::UpdateSettings(response) => response,
             err => panic!(
                 "Expected MockManagementCanisterClientReply::UpdateSettings to be at \
-                the front of the queue. Had {:?}",
-                err
+                the front of the queue. Had {err:?}"
             ),
         }
     }

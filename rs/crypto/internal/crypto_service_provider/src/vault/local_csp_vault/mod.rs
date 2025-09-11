@@ -206,7 +206,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         match &opening {
             Some(CspSecretKey::IDkgCommitmentOpening(bytes)) => CommitmentOpening::try_from(bytes)
                 .map_err(|e| {
-                    CombinedCommitmentOpeningFromSksError::SerializationError(format!("{:?}", e))
+                    CombinedCommitmentOpeningFromSksError::SerializationError(format!("{e:?}"))
                 }),
             Some(key_with_wrong_type) => {
                 Err(CombinedCommitmentOpeningFromSksError::WrongSecretKeyType(
@@ -269,8 +269,7 @@ fn ensure_unique_paths(paths: &[&Path]) {
     for path in paths {
         if !distinct_paths.insert(*path) {
             panic!(
-                "Expected key stores to use distinct files but {:?} is used more than once",
-                path
+                "Expected key stores to use distinct files but {path:?} is used more than once"
             )
         }
     }

@@ -64,8 +64,7 @@ pub(crate) fn check_canister_migrations_invariants(
                     {
                         return Err(InvariantCheckError {
                             msg: format!(
-                                "canister ID range {:?} in `canister_migrations` is not hosted by any subnet in trace {:?}.",
-                                canister_migrations_range, trace
+                                "canister ID range {canister_migrations_range:?} in `canister_migrations` is not hosted by any subnet in trace {trace:?}."
                             ),
                             source: None,
                         });
@@ -74,8 +73,7 @@ pub(crate) fn check_canister_migrations_invariants(
                 None => {
                     return Err(InvariantCheckError {
                         msg: format!(
-                            "canister ID range {:?} in `canister_migrations` is not hosted by any subnet in trace {:?}.",
-                            canister_migrations_range, trace
+                            "canister ID range {canister_migrations_range:?} in `canister_migrations` is not hosted by any subnet in trace {trace:?}."
                         ),
                         source: None,
                     });

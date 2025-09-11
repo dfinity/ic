@@ -140,8 +140,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
         let url_count = release_package_urls.len();
         if url_count == 0 {
             return Err(UpgradeError::GenericError(format!(
-                "No download URLs are provided for version {:?}",
-                version
+                "No download URLs are provided for version {version:?}"
             )));
         }
 
@@ -155,8 +154,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync>: Send +
         let mut error = UpgradeError::GenericError("unreachable".to_string());
         for release_package_url in release_package_urls.iter() {
             let req = format!(
-                "Request to download image {:?} from {}",
-                version, release_package_url
+                "Request to download image {version:?} from {release_package_url}"
             );
             let file_downloader =
                 FileDownloader::new_with_timeout(Some(self.log().clone()), Duration::from_secs(60));

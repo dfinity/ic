@@ -845,8 +845,7 @@ impl CkBtcMinterState {
             self.stuck_transactions.swap_remove(pos)
         } else {
             ic_cdk::trap(format!(
-                "Attempted to finalized a non-existent transaction {}",
-                txid
+                "Attempted to finalized a non-existent transaction {txid}"
             ));
         };
 
@@ -1332,8 +1331,7 @@ impl CkBtcMinterState {
 
         if let Some(tx_status) = self.requests_in_flight.get(&ledger_burn_index) {
             panic!(
-                "BUG: Cannot reimburse withdrawal request {} since there is a transaction for that withdrawal with status: {:?}",
-                ledger_burn_index, tx_status
+                "BUG: Cannot reimburse withdrawal request {ledger_burn_index} since there is a transaction for that withdrawal with status: {tx_status:?}"
             )
         }
 
@@ -1348,8 +1346,7 @@ impl CkBtcMinterState {
                 .any(|req| req.block_index == ledger_burn_index)
             {
                 panic!(
-                    "BUG: Cannot reimburse withdrawal request {} since there is a submitted transaction for that withdrawal: {:?}",
-                    ledger_burn_index, submitted_tx
+                    "BUG: Cannot reimburse withdrawal request {ledger_burn_index} since there is a submitted transaction for that withdrawal: {submitted_tx:?}"
                 );
             }
         }
@@ -1590,8 +1587,7 @@ impl CkBtcMinterState {
             .remove(&burn_index)
             .unwrap_or_else(|| {
                 panic!(
-                    "BUG: missing pending reimbursement of withdrawal {}.",
-                    burn_index
+                    "BUG: missing pending reimbursement of withdrawal {burn_index}."
                 )
             });
         let reimbursed = ReimbursedWithdrawal {
@@ -1604,8 +1600,7 @@ impl CkBtcMinterState {
             self.reimbursed_withdrawals
                 .insert(burn_index, Ok(reimbursed)),
             None,
-            "BUG: Reimbursement of withdrawal {:?} was already completed!",
-            reimbursement
+            "BUG: Reimbursement of withdrawal {reimbursement:?} was already completed!"
         );
     }
 }

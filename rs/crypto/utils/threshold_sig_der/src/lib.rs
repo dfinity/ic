@@ -34,13 +34,12 @@ pub fn public_key_from_der(bytes: &[u8]) -> Result<[u8; PUBLIC_KEY_SIZE], String
 
     let unexpected_struct_err = |s: &ASN1Block| {
         format!(
-            "unexpected ASN1 structure: {:?}, wanted: seq(seq(OID, OID), bitstring)",
-            s
+            "unexpected ASN1 structure: {s:?}, wanted: seq(seq(OID, OID), bitstring)"
         )
     };
 
     let asn1_values =
-        from_der(bytes).map_err(|e| format!("failed to deserialize DER blocks: {}", e))?;
+        from_der(bytes).map_err(|e| format!("failed to deserialize DER blocks: {e}"))?;
 
     match asn1_values[..] {
         [Sequence(_, ref seq)] => match &seq[..] {
@@ -50,7 +49,7 @@ pub fn public_key_from_der(bytes: &[u8]) -> Result<[u8; PUBLIC_KEY_SIZE], String
                 }
 
                 if *len != PUBLIC_KEY_SIZE * 8 {
-                    return Err(format!("unexpected key length: {} bits", len));
+                    return Err(format!("unexpected key length: {len} bits"));
                 }
 
                 if ids[0] == bls_algorithm_id() && ids[1] == bls_curve_id() {
@@ -67,8 +66,7 @@ pub fn public_key_from_der(bytes: &[u8]) -> Result<[u8; PUBLIC_KEY_SIZE], String
             _ => Err(unexpected_struct_err(&asn1_values[0])),
         },
         _ => Err(format!(
-            "expected exactly one ASN1 block, got sequence: {:?}",
-            asn1_values
+            "expected exactly one ASN1 block, got sequence: {asn1_values:?}"
         )),
     }
 }

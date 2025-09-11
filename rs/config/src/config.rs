@@ -188,7 +188,7 @@ impl Config {
         let default_config = Config::new(tmpdir);
 
         Config::load_with_default(&config_source, default_config).unwrap_or_else(|err| {
-            eprintln!("Failed to load config:\n  {}", err);
+            eprintln!("Failed to load config:\n  {err}");
             std::process::exit(1);
         })
     }

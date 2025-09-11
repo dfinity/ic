@@ -73,8 +73,7 @@ pub fn post_upgrade(upgrade_arg: Option<UpgradeArg>) {
             }
             Err(e) => {
                 ic_cdk::trap(format!(
-                    "[post_upgrade]: ERROR: invalid arguments to upgrade {:?}: {:?}",
-                    arg, e
+                    "[post_upgrade]: ERROR: invalid arguments to upgrade {arg:?}: {e:?}"
                 ));
             }
         }
@@ -95,8 +94,7 @@ pub fn add_erc20(token: AddErc20Arg) {
         }
         Err(e) => {
             ic_cdk::trap(format!(
-                "[add_erc20]: ERROR: invalid arguments to add erc20 token {:?}: {:?}",
-                token, e
+                "[add_erc20]: ERROR: invalid arguments to add erc20 token {token:?}: {e:?}"
             ));
         }
     }

@@ -21,5 +21,5 @@ pub(crate) fn verify_block_hash(
         &hash.into_bytes(),
     )
     .map(|_| ()) // we don't need the result so we discard it
-    .map_err(|e| format!("Certification error: {:?}", e))
+    .map_err(|e| format!("Certification error: {e:?}"))
 }

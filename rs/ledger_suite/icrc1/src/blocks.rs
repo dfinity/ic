@@ -130,7 +130,7 @@ fn icrc1_block_from_value(
                 .map(|(k, v)| {
                     let key = k
                         .into_text()
-                        .map_err(|k| ValueDecodingError::UnsupportedKeyType(format!("{:?}", k)))?;
+                        .map_err(|k| ValueDecodingError::UnsupportedKeyType(format!("{k:?}")))?;
                     Ok((key, icrc1_block_from_value(v, depth + 1)?))
                 })
                 .collect::<Result<BTreeMap<_, _>, _>>()?,

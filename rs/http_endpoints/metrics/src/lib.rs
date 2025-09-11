@@ -249,7 +249,7 @@ async fn map_box_error_to_response(err: BoxError) -> (StatusCode, String) {
     } else {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Unexpected error: {}", err),
+            format!("Unexpected error: {err}"),
         )
     }
 }

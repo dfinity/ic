@@ -432,7 +432,7 @@ impl Ledger {
     /// during canister migration or upgrade.
     pub fn add_block(&mut self, block: Block) -> Result<BlockIndex, String> {
         icp_ledger::apply_operation(self, &block.transaction.operation, block.timestamp)
-            .map_err(|e| format!("failed to execute transfer {:?}: {:?}", block, e))?;
+            .map_err(|e| format!("failed to execute transfer {block:?}: {e:?}"))?;
         self.blockchain.add_block(block)
     }
 
@@ -466,7 +466,7 @@ impl Ledger {
                 None,
                 timestamp,
             )
-            .expect(&format!("Creating account {:?} failed", to)[..]);
+            .expect(&format!("Creating account {to:?} failed")[..]);
         }
 
         self.send_whitelist = send_whitelist;
@@ -496,7 +496,7 @@ impl Ledger {
 
         match (is_notified, new_state) {
             (true, true) | (false, false) => {
-                Err(format!("The notification state is already {}", is_notified))
+                Err(format!("The notification state is already {is_notified}"))
             }
             (true, false) => {
                 self.blocks_notified.remove(height);

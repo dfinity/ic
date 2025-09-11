@@ -121,7 +121,7 @@ impl From<CspPublicKeyStoreError> for CryptoError {
         match e {
             CspPublicKeyStoreError::TransientInternalError(details) => {
                 CryptoError::TransientInternalError {
-                    internal_error: format!("Error retrieving public keys: {:?}", details),
+                    internal_error: format!("Error retrieving public keys: {details:?}"),
                 }
             }
         }

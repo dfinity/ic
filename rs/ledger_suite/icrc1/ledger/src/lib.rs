@@ -122,11 +122,11 @@ impl From<StoredValue> for Value {
         match v {
             StoredValue::NatBytes(num_bytes) => Self::Nat(
                 Nat::decode(&mut &num_bytes[..])
-                    .unwrap_or_else(|e| panic!("bug: invalid Nat encoding {:?}: {}", num_bytes, e)),
+                    .unwrap_or_else(|e| panic!("bug: invalid Nat encoding {num_bytes:?}: {e}")),
             ),
             StoredValue::IntBytes(int_bytes) => Self::Int(
                 Int::decode(&mut &int_bytes[..])
-                    .unwrap_or_else(|e| panic!("bug: invalid Int encoding {:?}: {}", int_bytes, e)),
+                    .unwrap_or_else(|e| panic!("bug: invalid Int encoding {int_bytes:?}: {e}")),
             ),
             StoredValue::Text(text) => Self::Text(text),
             StoredValue::Blob(bytes) => Self::Blob(bytes),
@@ -660,8 +660,7 @@ fn map_metadata_or_trap(arg_metadata: Vec<(String, Value)>) -> Vec<(String, Stor
         .map(|(k, v)| {
             if DISALLOWED_METADATA_FIELDS.contains(&k.as_str()) {
                 ic_cdk::trap(format!(
-                    "Metadata field {} is reserved and cannot be set",
-                    k
+                    "Metadata field {k} is reserved and cannot be set"
                 ));
             }
             (k, StoredValue::from(v))
@@ -706,8 +705,7 @@ impl Ledger {
             fee_collector: fee_collector_account.map(FeeCollector::from),
             transfer_fee: Tokens::try_from(transfer_fee.clone()).unwrap_or_else(|e| {
                 panic!(
-                    "failed to convert transfer fee {} to tokens: {}",
-                    transfer_fee, e
+                    "failed to convert transfer fee {transfer_fee} to tokens: {e}"
                 )
             }),
             token_symbol,
@@ -731,15 +729,13 @@ impl Ledger {
         for (account, balance) in initial_balances.into_iter() {
             let amount = Tokens::try_from(balance.clone()).unwrap_or_else(|e| {
                 panic!(
-                    "failed to convert initial balance {} to tokens: {}",
-                    balance, e
+                    "failed to convert initial balance {balance} to tokens: {e}"
                 )
             });
             let mint = Transaction::mint(account, amount, Some(now), None);
             apply_transaction(&mut ledger, mint, now, Tokens::ZERO).unwrap_or_else(|err| {
                 panic!(
-                    "failed to mint {} tokens to {}: {:?}",
-                    balance, account, err
+                    "failed to mint {balance} tokens to {account}: {err:?}"
                 )
             });
         }
@@ -962,8 +958,7 @@ impl Ledger {
         if let Some(transfer_fee) = args.transfer_fee {
             self.transfer_fee = Tokens::try_from(transfer_fee.clone()).unwrap_or_else(|e| {
                 ic_cdk::trap(format!(
-                    "failed to convert transfer fee {} to tokens: {}",
-                    transfer_fee, e
+                    "failed to convert transfer fee {transfer_fee} to tokens: {e}"
                 ))
             });
         }

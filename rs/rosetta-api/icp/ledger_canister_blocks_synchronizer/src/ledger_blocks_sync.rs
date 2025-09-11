@@ -140,7 +140,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 }
             }
             Err(e) => {
-                let msg = format!("Error loading genesis block: {:?}", e);
+                let msg = format!("Error loading genesis block: {e:?}");
                 error!("{}", msg);
                 return Err(Error::InternalError(msg));
             }
@@ -229,8 +229,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             }
             if retry == MAX_RETRIES_QUERY_TIP_BLOCK {
                 break Err(format!(
-                    "Failed to retrieve tip block after {} retries",
-                    MAX_RETRIES_QUERY_TIP_BLOCK
+                    "Failed to retrieve tip block after {MAX_RETRIES_QUERY_TIP_BLOCK} retries"
                 ));
             }
             retry += 1;
@@ -399,7 +398,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             }
             for raw_block in batch {
                 let block = Block::decode(raw_block.clone())
-                    .map_err(|err| Error::InternalError(format!("Cannot decode block: {}", err)))?;
+                    .map_err(|err| Error::InternalError(format!("Cannot decode block: {err}")))?;
                 if block.parent_hash != last_block_hash {
                     let err_msg = format!(
                         "Block at {}: parent hash mismatch. Expected: {:?}, got: {:?}",

@@ -178,8 +178,7 @@ impl TryFrom<pb::CallContextManager> for CallContextManager {
             .map(|callback_id| {
                 let callback = callbacks.get(&callback_id).ok_or_else(|| {
                     ProxyDecodeError::Other(format!(
-                        "Unexpired callback not found: {}",
-                        callback_id
+                        "Unexpired callback not found: {callback_id}"
                     ))
                 })?;
                 Ok(((callback.deadline, callback_id), ()))

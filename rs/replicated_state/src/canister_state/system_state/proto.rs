@@ -32,7 +32,7 @@ impl TryFrom<pb::CyclesUseCase> for CyclesUseCase {
         match item {
             pb::CyclesUseCase::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "CyclesUseCase",
-                err: format!("Unexpected value of cycles use case: {:?}", item),
+                err: format!("Unexpected value of cycles use case: {item:?}"),
             }),
             pb::CyclesUseCase::Memory => Ok(Self::Memory),
             pb::CyclesUseCase::ComputeAllocation => Ok(Self::ComputeAllocation),
@@ -119,7 +119,7 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
             | ExecutionTask::OnLowWasmMemory
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_) => {
-                panic!("Attempt to serialize ephemeral task: {:?}.", item);
+                panic!("Attempt to serialize ephemeral task: {item:?}.");
             }
             ExecutionTask::AbortedExecution {
                 input,
@@ -204,7 +204,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                         let task = CanisterTask::try_from(PbCanisterTask::try_from(val).map_err(
                             |_| ProxyDecodeError::ValueOutOfRange {
                                 typ: "CanisterTask",
-                                err: format!("Unexpected value of canister task: {}", val),
+                                err: format!("Unexpected value of canister task: {val}"),
                             },
                         )?)?;
                         CanisterMessageOrTask::Task(task)

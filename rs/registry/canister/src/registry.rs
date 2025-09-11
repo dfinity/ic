@@ -171,7 +171,7 @@ impl Registry {
         };
 
         let content = crate::storage::with_chunks(|chunks| chunks.get_chunk(&content_sha256))
-            .ok_or_else(|| format!("No chunk with SHA256 = {:X?}", content_sha256))?;
+            .ok_or_else(|| format!("No chunk with SHA256 = {content_sha256:X?}"))?;
 
         Ok(Chunk {
             content: Some(content),
@@ -282,8 +282,7 @@ impl Registry {
             // Convert to high_capacity_registry_value::Content.
             let mutation_type = Type::try_from(mutation_type).unwrap_or_else(|err| {
                 panic!(
-                    "Unable to convert mutation_type ({}): {}",
-                    mutation_type, err
+                    "Unable to convert mutation_type ({mutation_type}): {err}"
                 );
             });
             let content = if mutation_type.is_delete() {
@@ -344,7 +343,7 @@ impl Registry {
                 } = new_mutation;
 
                 let mutation_type = Type::try_from(*mutation_type).map_err(|err| {
-                    Error::MalformedMessage(format!("Unable to convert mutation_type: {}", err,))
+                    Error::MalformedMessage(format!("Unable to convert mutation_type: {err}",))
                 })?;
                 let presence_requirement = mutation_type.presence_requirement();
 
@@ -384,7 +383,7 @@ impl Registry {
                 LOG_PREFIX,
                 errors
                     .iter()
-                    .map(|e| format!("{}", e))
+                    .map(|e| format!("{e}"))
                     .collect::<Vec::<String>>()
                     .join(", ")
             );
@@ -429,8 +428,7 @@ impl Registry {
         let delta_size = version.as_ref().len() + bytes.len();
         if delta_size > MAX_REGISTRY_DELTAS_SIZE {
             panic!(
-                "{}Transaction rejected because delta would be too large: {} vs {}.",
-                LOG_PREFIX, delta_size, MAX_REGISTRY_DELTAS_SIZE
+                "{LOG_PREFIX}Transaction rejected because delta would be too large: {delta_size} vs {MAX_REGISTRY_DELTAS_SIZE}."
             );
         }
 

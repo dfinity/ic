@@ -146,7 +146,7 @@ pub fn i2d(i: u64) -> Decimal {
     // Convert to i64.
     let i = i
         .try_into()
-        .unwrap_or_else(|err| panic!("{} does not fit into i64: {:#?}", i, err));
+        .unwrap_or_else(|err| panic!("{i} does not fit into i64: {err:#?}"));
 
     Decimal::new(i, 0)
 }
@@ -358,7 +358,7 @@ impl FromStr for LogSeverity {
         let severity = match name {
             "Info" => Self::Info,
             "Error" => Self::Error,
-            _ => return Err(format!("Unknown log severity name: {}", name)),
+            _ => return Err(format!("Unknown log severity name: {name}")),
         };
 
         Ok(severity)
@@ -372,7 +372,7 @@ impl Display for LogSeverity {
             Self::Error => "Error",
         };
 
-        write!(formatter, "{}", s)
+        write!(formatter, "{s}")
     }
 }
 
@@ -601,8 +601,7 @@ impl TryFrom<HttpRequest> for LogsRequest {
             Ok(severity) => severity,
             Err(err) => {
                 defects.push(format!(
-                    "Invalid value for query parameter `severity` ({}): {}",
-                    severity, err,
+                    "Invalid value for query parameter `severity` ({severity}): {err}",
                 ));
                 // Dummy value; won't actually be used, because defects is now nonempty.
                 LogSeverity::Info
@@ -613,8 +612,7 @@ impl TryFrom<HttpRequest> for LogsRequest {
             Ok(time) => time,
             Err(err) => {
                 defects.push(format!(
-                    "Invalid value for query parameter `time` ({}): {}",
-                    time, err,
+                    "Invalid value for query parameter `time` ({time}): {err}",
                 ));
                 // Dummy value; won't actually be used, because defects is now nonempty.
                 0
@@ -724,7 +722,7 @@ pub fn serve_metrics(
             .with_body_and_content_length(writer.into_inner())
             .build(),
         Err(err) => {
-            HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err)).build()
+            HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}")).build()
         }
     }
 }
@@ -775,7 +773,7 @@ pub fn hash_to_hex_string(hash: &[u8]) -> String {
     use std::fmt::Write;
     let mut result_hash = String::new();
     for b in hash {
-        let _ = write!(result_hash, "{:02x}", b);
+        let _ = write!(result_hash, "{b:02x}");
     }
     result_hash
 }

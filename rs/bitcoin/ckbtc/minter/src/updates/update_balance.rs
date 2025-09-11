@@ -120,7 +120,7 @@ impl From<GetUtxosError> for UpdateBalanceError {
     fn from(e: GetUtxosError) -> Self {
         Self::GenericError {
             error_code: ErrorCode::ConfigurationError as u64,
-            error_message: format!("failed to get UTXOs from the Bitcoin canister: {}", e),
+            error_message: format!("failed to get UTXOs from the Bitcoin canister: {e}"),
         }
     }
 }
@@ -129,7 +129,7 @@ impl From<TransferError> for UpdateBalanceError {
     fn from(e: TransferError) -> Self {
         Self::GenericError {
             error_code: ErrorCode::ConfigurationError as u64,
-            error_message: format!("failed to mint tokens on the ledger: {:?}", e),
+            error_message: format!("failed to mint tokens on the ledger: {e:?}"),
         }
     }
 }
@@ -378,8 +378,7 @@ async fn check_utxo<R: CanisterRuntime>(
             .await
             .map_err(|call_err| {
                 UpdateBalanceError::TemporarilyUnavailable(format!(
-                    "Failed to call Bitcoin checker canister: {}",
-                    call_err
+                    "Failed to call Bitcoin checker canister: {call_err}"
                 ))
             })? {
             CheckTransactionResponse::Failed(addresses) => {
@@ -408,15 +407,14 @@ async fn check_utxo<R: CanisterRuntime>(
                     status
                 );
                 return Err(UpdateBalanceError::TemporarilyUnavailable(format!(
-                    "The Bitcoin checker canister is temporarily unavailable: {:?}",
-                    status
+                    "The Bitcoin checker canister is temporarily unavailable: {status:?}"
                 )));
             }
             CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(error)) => {
                 log!(P1, "Bitcoin checker error: {:?}", error);
                 return Err(UpdateBalanceError::GenericError {
                     error_code: ErrorCode::KytError as u64,
-                    error_message: format!("Bitcoin checker error: {:?}", error),
+                    error_message: format!("Bitcoin checker error: {error:?}"),
                 });
             }
         }
@@ -447,8 +445,7 @@ pub(crate) async fn mint(amount: u64, to: Account, memo: Memo) -> Result<u64, Up
         .await
         .map_err(|(code, msg)| {
             UpdateBalanceError::TemporarilyUnavailable(format!(
-                "cannot mint ckbtc: {} (reject_code = {})",
-                msg, code
+                "cannot mint ckbtc: {msg} (reject_code = {code})"
             ))
         })??;
     Ok(block_index.0.to_u64().expect("nat does not fit into u64"))

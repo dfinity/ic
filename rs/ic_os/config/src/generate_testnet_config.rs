@@ -254,7 +254,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
 /// Any required config fields that aren't specified will receive dummy values.
 pub fn generate_testnet_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSConfig> {
     let guestos_config = create_guestos_config(config)?;
-    println!("GuestOSConfig: {:?}", guestos_config);
+    println!("GuestOSConfig: {guestos_config:?}");
     Ok(guestos_config)
 }
 

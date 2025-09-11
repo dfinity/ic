@@ -244,8 +244,7 @@ impl ICRC1Ledger for SpyLedger {
         match ledger_reply {
             LedgerReply::TransferFunds(reply) => reply,
             reply => panic!(
-                "Expected LedgerReply::TransferFunds to be at the front of the queue. Had {:?}",
-                reply
+                "Expected LedgerReply::TransferFunds to be at the front of the queue. Had {reply:?}"
             ),
         }
     }
@@ -272,8 +271,7 @@ impl ICRC1Ledger for SpyLedger {
         match ledger_reply {
             LedgerReply::AccountBalance(reply) => reply,
             reply => panic!(
-                "Expected LedgerReply::AccountBalance to be at the front of the queue. Had {:?}",
-                reply
+                "Expected LedgerReply::AccountBalance to be at the front of the queue. Had {reply:?}"
             ),
         }
     }
@@ -337,8 +335,7 @@ impl IcpLedger for SpyLedger {
         match ledger_reply {
             LedgerReply::TransferFunds(reply) => reply,
             reply => panic!(
-                "Expected LedgerReply::TransferFunds to be at the front of the queue. Had {:?}",
-                reply
+                "Expected LedgerReply::TransferFunds to be at the front of the queue. Had {reply:?}"
             ),
         }
     }
@@ -366,8 +363,7 @@ impl IcpLedger for SpyLedger {
         match ledger_reply {
             LedgerReply::AccountBalance(reply) => reply,
             reply => panic!(
-                "Expected LedgerReply::AccountBalance to be at the front of the queue. Had {:?}",
-                reply
+                "Expected LedgerReply::AccountBalance to be at the front of the queue. Had {reply:?}"
             ),
         }
     }

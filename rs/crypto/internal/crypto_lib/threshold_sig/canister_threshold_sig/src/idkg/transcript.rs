@@ -16,8 +16,7 @@ impl IDkgTranscriptInternal {
     pub fn serialize(&self) -> CanisterThresholdSerializationResult<Vec<u8>> {
         serde_cbor::to_vec(self).map_err(|e| {
             CanisterThresholdSerializationError(format!(
-                "failed to serialize IDkgTranscriptInternal: {}",
-                e
+                "failed to serialize IDkgTranscriptInternal: {e}"
             ))
         })
     }
@@ -25,8 +24,7 @@ impl IDkgTranscriptInternal {
     pub fn deserialize(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(bytes).map_err(|e| {
             CanisterThresholdSerializationError(format!(
-                "failed to deserialize IDkgTranscriptInternal: {}",
-                e
+                "failed to deserialize IDkgTranscriptInternal: {e}"
             ))
         })
     }
@@ -97,8 +95,7 @@ impl CombinedCommitment {
     pub fn serialize(&self) -> CanisterThresholdSerializationResult<Vec<u8>> {
         serde_cbor::to_vec(self).map_err(|e| {
             CanisterThresholdSerializationError(format!(
-                "failed to serialize CombinedCommitment: {}",
-                e
+                "failed to serialize CombinedCommitment: {e}"
             ))
         })
     }
@@ -106,8 +103,7 @@ impl CombinedCommitment {
     pub fn deserialize(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(bytes).map_err(|e| {
             CanisterThresholdSerializationError(format!(
-                "failed to deserialize CombinedCommitment: {}",
-                e
+                "failed to deserialize CombinedCommitment: {e}"
             ))
         })
     }
@@ -466,7 +462,7 @@ impl CommitmentOpening {
                             )
                         }
                         e => IDkgComputeSecretSharesWithOpeningsInternalError::UnableToReconstruct(
-                            format!("{:?}", e),
+                            format!("{e:?}"),
                         ),
                     }
                 })?
@@ -506,7 +502,7 @@ impl CommitmentOpening {
                     )
                 }
                 e => IDkgComputeSecretSharesWithOpeningsInternalError::UnableToCombineOpenings(
-                    format!("{:?}", e),
+                    format!("{e:?}"),
                 ),
             },
         )
@@ -567,7 +563,7 @@ impl CommitmentOpening {
         }
 
         Self::combine_openings(&openings, transcript_commitment, receiver_index).map_err(|e| {
-            IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(format!("{:?}", e))
+            IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(format!("{e:?}"))
         })
     }
 

@@ -26,7 +26,7 @@ mod tests;
 const CURRENT_SKS_VERSION: u32 = 3;
 
 fn key_id_from_hex(key_id_hex: &str) -> KeyId {
-    KeyId::from_hex(key_id_hex).unwrap_or_else(|_| panic!("Error parsing hex KeyId {}", key_id_hex))
+    KeyId::from_hex(key_id_hex).unwrap_or_else(|_| panic!("Error parsing hex KeyId {key_id_hex}"))
 }
 
 /// The secret key store protobuf definitions
@@ -127,7 +127,7 @@ impl ProtoSecretKeyStore {
         if let Ok(true) = proto_file.try_exists() {
             Self::check_proto_file_is_regular_file_or_panic(&proto_file);
         }
-        let old_proto_file_to_zeroize = dir.join(format!("{}.old", file_name));
+        let old_proto_file_to_zeroize = dir.join(format!("{file_name}.old"));
         let secret_keys = Self::sks_data_from_disk_or_new(&proto_file);
         let logger = logger.unwrap_or_else(no_op_logger);
         let sks = ProtoSecretKeyStore {
@@ -211,7 +211,7 @@ impl ProtoSecretKeyStore {
                 "error(s) cleaning up old secret key store file: [{}]",
                 cleanup_error
                     .iter()
-                    .map(|e| format!("{}", e))
+                    .map(|e| format!("{e}"))
                     .collect::<Vec<String>>()
                     .join(", ")
             );
@@ -286,8 +286,7 @@ impl ProtoSecretKeyStore {
                 Ok(())
             }
             Err(e) => Err(SecretKeyStoreWriteError::TransientError(format!(
-                "Secret key store internal error writing protobuf using tmp file: {}",
-                e
+                "Secret key store internal error writing protobuf using tmp file: {e}"
             ))),
         }
     }
@@ -316,7 +315,7 @@ impl ProtoSecretKeyStore {
                 if err.kind() == ErrorKind::NotFound {
                     None
                 } else {
-                    panic!("Error reading SKS data: {}", err)
+                    panic!("Error reading SKS data: {err}")
                 }
             }
         };
@@ -352,7 +351,7 @@ impl ProtoSecretKeyStore {
 
     fn parse_csp_secret_key(key_bytes: &[u8], key_id: &KeyId) -> CspSecretKey {
         serde_cbor::from_slice(key_bytes).unwrap_or_else(|_ignored_so_that_no_data_is_leaked| {
-            panic!("Error deserializing key with ID {}", key_id)
+            panic!("Error deserializing key with ID {key_id}")
         })
     }
 
@@ -362,7 +361,7 @@ impl ProtoSecretKeyStore {
         } else {
             Some(
                 Scope::from_str(scope_proto)
-                    .unwrap_or_else(|_| panic!("Unknown scope: {}", scope_proto)),
+                    .unwrap_or_else(|_| panic!("Unknown scope: {scope_proto}")),
             )
         }
     }
@@ -382,7 +381,7 @@ impl ProtoSecretKeyStore {
     fn ensure_version_is_supported(version: u32) {
         let supported_versions = [1, 2, CURRENT_SKS_VERSION];
         if !supported_versions.contains(&version) {
-            panic!("Unexpected SecretKeyStore-proto version: {}", version)
+            panic!("Unexpected SecretKeyStore-proto version: {version}")
         }
     }
 
@@ -398,8 +397,7 @@ impl ProtoSecretKeyStore {
             let key_as_cbor =
                 serde_cbor::to_vec(&csp_key).map_err(|_ignored_so_that_no_data_is_leaked| {
                     SecretKeyStoreWriteError::SerializationError(format!(
-                        "Error serializing key with ID {}",
-                        key_id
+                        "Error serializing key with ID {key_id}"
                     ))
                 })?;
             let sk_pb = match maybe_scope {

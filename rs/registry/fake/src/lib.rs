@@ -42,7 +42,7 @@ impl FakeRegistryClient {
         {
             Ok(records) if !records.is_empty() => records,
             Ok(_) /*if version == cache_state.latest_version*/ => return,
-            Err(e) => panic!("Failed to query data provider: {}", e),
+            Err(e) => panic!("Failed to query data provider: {e}"),
         };
 
         // perform update

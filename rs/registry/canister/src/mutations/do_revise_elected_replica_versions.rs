@@ -154,8 +154,7 @@ impl Registry {
 
         if !in_use.is_empty() {
             panic!(
-                "{}Cannot retire versions {:?}, because they are currently deployed to a subnet!",
-                LOG_PREFIX, in_use
+                "{LOG_PREFIX}Cannot retire versions {in_use:?}, because they are currently deployed to a subnet!"
             );
         }
 
@@ -172,14 +171,12 @@ impl Registry {
 
         if let Some(version) = in_use {
             panic!(
-                "{}Cannot retire version {}, because it is currently deployed to unassigned nodes!",
-                LOG_PREFIX, version
+                "{LOG_PREFIX}Cannot retire version {version}, because it is currently deployed to unassigned nodes!"
             );
         }
 
         println!(
-            "{}Blessed versions before: {:?} and after: {:?}",
-            LOG_PREFIX, before_removal, after_removal
+            "{LOG_PREFIX}Blessed versions before: {before_removal:?} and after: {after_removal:?}"
         );
 
         after_removal

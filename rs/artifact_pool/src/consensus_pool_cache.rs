@@ -283,8 +283,7 @@ pub(crate) fn get_highest_finalized_block(
                     }
                 }
                 panic!(
-                    "Missing validated block proposal matching finalization {:?}",
-                    finalization
+                    "Missing validated block proposal matching finalization {finalization:?}"
                 )
             }
         }
@@ -331,8 +330,7 @@ pub(crate) fn update_summary_block(
                     });
                 *summary_block = block.unwrap_or_else(|| {
                     panic!(
-                        "Consensus pool has finalization {:?}, but its referenced block is not found",
-                        finalization
+                        "Consensus pool has finalization {finalization:?}, but its referenced block is not found"
                     )
                 });
                 return;

@@ -76,7 +76,7 @@ impl ThresholdSignatureCspClient for Csp {
                 ))
             }
             _ => Err(CryptoError::InvalidArgument {
-                message: format!("Unsupported algorithm: {:?}", algorithm_id),
+                message: format!("Unsupported algorithm: {algorithm_id:?}"),
             }),
         }
     }
@@ -98,7 +98,7 @@ impl ThresholdSignatureCspClient for Csp {
                 Ok(CspThresholdSigPublicKey::ThresBls12_381(public_key_bytes))
             }
             _ => Err(CryptoError::InvalidArgument {
-                message: format!("Unsupported algorithm: {:?}", algorithm_id),
+                message: format!("Unsupported algorithm: {algorithm_id:?}"),
             }),
         }
     }
@@ -117,7 +117,7 @@ impl ThresholdSignatureCspClient for Csp {
                 clib::api::verify_individual_signature(message, clib_signature, clib_public_key)
             }
             _ => Err(CryptoError::InvalidArgument {
-                message: format!("Unsupported algorithm: {:?}", algorithm_id),
+                message: format!("Unsupported algorithm: {algorithm_id:?}"),
             }),
         }
     }
@@ -137,7 +137,7 @@ impl ThresholdSignatureCspClient for Csp {
                 clib::api::verify_combined_signature(message, clib_signature, clib_public_key)
             }
             _ => Err(CryptoError::InvalidArgument {
-                message: format!("Unsupported algorithm: {:?}", algorithm_id),
+                message: format!("Unsupported algorithm: {algorithm_id:?}"),
             }),
         }
     }

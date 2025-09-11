@@ -48,8 +48,7 @@ impl Registry {
         payload: DeployGuestosToSomeApiBoundaryNodes,
     ) {
         println!(
-            "{}do_update_api_boundary_nodes_version: {:?}",
-            LOG_PREFIX, payload
+            "{LOG_PREFIX}do_update_api_boundary_nodes_version: {payload:?}"
         );
 
         // Ensure payload is valid

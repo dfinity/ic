@@ -136,8 +136,7 @@ fn verify_keygen_args(
     if threshold > receivers {
         return Err(InvalidArgumentError {
             message: format!(
-                "Threshold too high: (threshold={} !<= {}=num_shares)",
-                threshold, receivers,
+                "Threshold too high: (threshold={threshold} !<= {receivers}=num_shares)",
             ),
         });
     }

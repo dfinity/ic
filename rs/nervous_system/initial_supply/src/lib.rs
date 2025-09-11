@@ -41,8 +41,7 @@ pub async fn initial_supply_e8s<MyRuntime: Runtime>(
         let len = transactions.len();
         let len = u64::try_from(len).map_err(|err| {
             format!(
-                "Unable to convert transactions length ({}) to a u64: {:?}",
-                len, err,
+                "Unable to convert transactions length ({len}) to a u64: {err:?}",
             )
         })?;
 
@@ -64,8 +63,7 @@ pub async fn initial_supply_e8s<MyRuntime: Runtime>(
             // Bail if this scan seems to go on forever.
             if transaction_count >= max_transactions {
                 return Err(format!(
-                    "Unable to find the last initial transaction after scanning {} transactions.",
-                    transaction_count,
+                    "Unable to find the last initial transaction after scanning {transaction_count} transactions.",
                 ));
             }
 
@@ -83,8 +81,7 @@ pub async fn initial_supply_e8s<MyRuntime: Runtime>(
                 Some(ok) => ok,
                 None => {
                     return Err(format!(
-                        "Transaction {} was not a mint, even though its kind is \"mint\": {:#?}",
-                        transaction_count, transaction,
+                        "Transaction {transaction_count} was not a mint, even though its kind is \"mint\": {transaction:#?}",
                     ));
                 }
             };
@@ -115,8 +112,7 @@ pub async fn initial_supply_e8s<MyRuntime: Runtime>(
     // Convert to return type.
     let result = u64::try_from(result.0).map_err(|err| {
         format!(
-            "Failed to convert initial supply in e8s to u64. Reason: {:?}",
-            err,
+            "Failed to convert initial supply in e8s to u64. Reason: {err:?}",
         )
     })?;
 
@@ -187,7 +183,7 @@ impl ThickLedgerClient {
             (request.clone(),),
         )
         .await
-        .map_err(|err| format!("Failed to call ledger: {:?}", err))?;
+        .map_err(|err| format!("Failed to call ledger: {err:?}"))?;
 
         normalize_get_transactions_response(&request, &mut response)?;
 
@@ -244,8 +240,7 @@ impl ThickLedgerClient {
         .await
         .map_err(|err| {
             format!(
-                "Redirected to the {} method of {}, but calling that method failed: {:?}",
-                method, canister_id, err,
+                "Redirected to the {method} method of {canister_id}, but calling that method failed: {err:?}",
             )
         })?;
 
@@ -313,8 +308,7 @@ fn normalize_get_transactions_response(
         // Decrement length by the same amount.
         if length < archived_range.length {
             return Err(format!(
-                "An excess of transactions was returned in archived_range: {:?} vs. {:?}",
-                request, archived_range,
+                "An excess of transactions was returned in archived_range: {request:?} vs. {archived_range:?}",
             ));
         }
         length.sub_assign(archived_range.length.clone());

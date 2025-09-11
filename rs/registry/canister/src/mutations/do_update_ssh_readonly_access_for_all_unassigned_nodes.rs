@@ -19,8 +19,7 @@ impl Registry {
         payload: UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
     ) {
         println!(
-            "{}do_update_ssh_readonly_access_for_all_unassigned_nodes: {:?}",
-            LOG_PREFIX, payload
+            "{LOG_PREFIX}do_update_ssh_readonly_access_for_all_unassigned_nodes: {payload:?}"
         );
 
         let update_unassigned_nodes_config_payload = UpdateUnassignedNodesConfigPayload {

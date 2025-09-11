@@ -20,16 +20,14 @@ impl Registry {
         expected_hash: String,
     ) {
         println!(
-            "{}do_set_firewall_rules: scope: {:?}, rules: {:?}, expected_hash: {:?}",
-            LOG_PREFIX, scope, rules, expected_hash
+            "{LOG_PREFIX}do_set_firewall_rules: scope: {scope:?}, rules: {rules:?}, expected_hash: {expected_hash:?}"
         );
 
         // Compare hash
         let result_hash = compute_firewall_ruleset_hash(&rules);
         if result_hash != expected_hash {
             panic!(
-                "{}Provided expected hash for new firewall ruleset does not match. Expected hash: {:?}, actual hash: {:?}.",
-                LOG_PREFIX, expected_hash, result_hash
+                "{LOG_PREFIX}Provided expected hash for new firewall ruleset does not match. Expected hash: {expected_hash:?}, actual hash: {result_hash:?}."
             );
         }
 
@@ -130,7 +128,7 @@ pub fn compute_firewall_ruleset_hash(rules: &[FirewallRule]) -> String {
     let bytes = &hasher.finish();
     let mut result_hash = String::new();
     for b in bytes {
-        let _ = write!(result_hash, "{:02X}", b);
+        let _ = write!(result_hash, "{b:02X}");
     }
     result_hash
 }

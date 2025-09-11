@@ -151,7 +151,8 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         message: &[u8],
         key_id: KeyId,
     ) -> Result<CspSignature, CspThresholdSignError> {
-        let result = match algorithm_id {
+        
+        match algorithm_id {
             AlgorithmId::ThresBls12_381 => {
                 let maybe_csp_key = self.sks_read_lock().get(&key_id);
                 let csp_key = maybe_csp_key.ok_or({
@@ -170,7 +171,6 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             _ => Err(CspThresholdSignError::UnsupportedAlgorithm {
                 algorithm: algorithm_id,
             }),
-        };
-        result
+        }
     }
 }

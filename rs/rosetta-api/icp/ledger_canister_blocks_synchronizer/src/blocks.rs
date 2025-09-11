@@ -303,7 +303,7 @@ mod database_access {
         verified: Option<bool>,
     ) -> Result<HashedBlock, BlockStoreError> {
         let mut stmt = con.prepare_cached(&match verified {
-            Some(verified) => format!("SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp from blocks WHERE verified = {} ORDER BY block_idx ASC Limit 2",verified),
+            Some(verified) => format!("SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp from blocks WHERE verified = {verified} ORDER BY block_idx ASC Limit 2"),
             None => "SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp from blocks ORDER BY block_idx ASC Limit 2".to_string()
         }).map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut blocks = read_hashed_blocks(&mut stmt, params![])?.into_iter();
@@ -328,7 +328,7 @@ mod database_access {
         verified: Option<bool>,
     ) -> Result<HashedBlock, BlockStoreError> {
         let mut stmt = con.prepare_cached(&match verified {
-            Some(verified) => format!("SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp from blocks WHERE verified = {} ORDER BY block_idx DESC Limit 1",verified),
+            Some(verified) => format!("SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp from blocks WHERE verified = {verified} ORDER BY block_idx DESC Limit 1"),
             None => "SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp from blocks ORDER BY block_idx DESC Limit 1".to_string()
         }).map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut blocks = read_hashed_blocks(&mut stmt, params![])?.into_iter();
@@ -422,8 +422,7 @@ mod database_access {
 
                 let make_error = || {
                     Err(BlockStoreError::Other(format!(
-                        "Account {} does not have enough funds to pay for an approval",
-                        from
+                        "Account {from} does not have enough funds to pay for an approval"
                     )))
                 };
 
@@ -586,14 +585,12 @@ mod database_access {
             Some(limit) => match first_idx {
                 0 => {
                     format!(
-                        "SELECT block_idx,tokens from account_balances where account = ? AND block_idx<= {} ORDER BY block_idx DESC",
-                        limit
+                        "SELECT block_idx,tokens from account_balances where account = ? AND block_idx<= {limit} ORDER BY block_idx DESC"
                     )
                 }
                 _ => {
                     format!(
-                        "SELECT block_idx,tokens from account_balances where account = ? AND block_idx<= {} AND block_idx > {} ORDER BY block_idx DESC",
-                        limit, first_idx
+                        "SELECT block_idx,tokens from account_balances where account = ? AND block_idx<= {limit} AND block_idx > {first_idx} ORDER BY block_idx DESC"
                     )
                 }
             },
@@ -604,8 +601,7 @@ mod database_access {
 
                 _ => {
                     format!(
-                        "SELECT block_idx,tokens from account_balances where account = ? AND block_idx > {} ORDER BY block_idx DESC",
-                        first_idx
+                        "SELECT block_idx,tokens from account_balances where account = ? AND block_idx > {first_idx} ORDER BY block_idx DESC"
                     )
                 }
             },
@@ -786,7 +782,7 @@ impl Blocks {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
         let connection =
-            rusqlite::Connection::open(format!("file:memdb{}?mode=memory&cache=private", counter))
+            rusqlite::Connection::open(format!("file:memdb{counter}?mode=memory&cache=private"))
                 .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         Self::new(connection, config)
     }
@@ -806,12 +802,11 @@ impl Blocks {
             .execute("PRAGMA foreign_keys = 1", [])
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         store.create_tables(config).map_err(|e| {
-            BlockStoreError::Other(format!("Failed to initialize SQLite database: {}", e))
+            BlockStoreError::Other(format!("Failed to initialize SQLite database: {e}"))
         })?;
         store.cache_rosetta_blocks_mode().map_err(|e| {
             BlockStoreError::Other(format!(
-                "Failed to determine the Rosetta Blocks Mode: {}",
-                e
+                "Failed to determine the Rosetta Blocks Mode: {e}"
             ))
         })?;
 
@@ -1013,7 +1008,7 @@ impl Blocks {
         let mut connection = self.connection.lock().unwrap();
         connection
             .execute_batch("BEGIN TRANSACTION;")
-            .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+            .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
 
         database_access::prune_account_balances(&mut connection, &hb.index)?;
         connection
@@ -1025,7 +1020,7 @@ impl Blocks {
 
         connection
             .execute_batch("COMMIT TRANSACTION;")
-            .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+            .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
 
         Ok(())
     }
@@ -1235,11 +1230,11 @@ impl Blocks {
     pub fn push(&mut self, hb: &HashedBlock) -> Result<(), BlockStoreError> {
         let mut con = self.connection.lock().unwrap();
         con.execute_batch("BEGIN TRANSACTION;")
-            .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+            .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
         database_access::push_hashed_block(&mut con, hb)?;
         database_access::update_balance_book(&mut con, hb)?;
         con.execute_batch("COMMIT TRANSACTION;")
-            .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+            .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
         drop(con);
         self.sanity_check(hb)?;
         Ok(())
@@ -1253,7 +1248,7 @@ impl Blocks {
         let connection = self.connection.lock().unwrap();
         connection
             .execute_batch("BEGIN TRANSACTION;")
-            .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+            .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
         let mut stmt_hb = connection.prepare("INSERT INTO blocks (block_hash, encoded_block, parent_hash, block_idx, verified, timestamp, tx_hash, operation_type, from_account, to_account, spender_account, amount, allowance, expected_allowance, fee, created_at_time, expires_at, memo, icrc1_memo) VALUES (
             :block_hash, :encoded_block, :parent_hash, :block_idx, FALSE, :timestamp, :tx_hash, :operation_type, :from_account, :to_account, :spender_account, :amount, :allowance, :expected_allowance, :fee, :created_at_time, :expires_at, :memo, :icrc1_memo
             )").map_err(|e| BlockStoreError::Other(e.to_string()))?;
@@ -1270,7 +1265,7 @@ impl Blocks {
                 Err(e) => {
                     connection
                         .execute_batch("ROLLBACK TRANSACTION;")
-                        .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+                        .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
                     return Err(e);
                 }
             };
@@ -1283,14 +1278,14 @@ impl Blocks {
                 Err(e) => {
                     connection
                         .execute_batch("ROLLBACK TRANSACTION;")
-                        .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+                        .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
                     return Err(e);
                 }
             }
         }
         connection
             .execute_batch("COMMIT TRANSACTION;")
-            .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+            .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
         Ok(())
     }
 

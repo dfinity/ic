@@ -105,7 +105,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             algorithm_id,
         )
         .map_err(|e| ThresholdEcdsaCreateSigShareError::InternalError {
-            internal_error: format!("{:?}", e),
+            internal_error: format!("{e:?}"),
         })
     }
 }

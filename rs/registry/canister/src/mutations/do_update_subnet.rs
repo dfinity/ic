@@ -67,8 +67,7 @@ impl Registry {
         let payload_chain_key_config = payload.chain_key_config.clone().map(|chain_key_config| {
             ChainKeyConfigInternal::try_from(chain_key_config).unwrap_or_else(|err| {
                 panic!(
-                    "{}Invalid UpdateSubnetPayload.chain_key_config: {}",
-                    LOG_PREFIX, err
+                    "{LOG_PREFIX}Invalid UpdateSubnetPayload.chain_key_config: {err}"
                 );
             })
         });
@@ -78,8 +77,7 @@ impl Registry {
 
             if has_duplicates(&payload_key_ids) {
                 panic!(
-                    "{}The requested chain key IDs {:?} have duplicates.",
-                    LOG_PREFIX, payload_key_ids
+                    "{LOG_PREFIX}The requested chain key IDs {payload_key_ids:?} have duplicates."
                 );
             }
 
@@ -94,9 +92,8 @@ impl Registry {
 
             if !deleted_keys.is_empty() {
                 panic!(
-                    "{}Chain keys cannot be deleted. Attempted to delete chain keys {:?} \
-                    for subnet: '{}'",
-                    LOG_PREFIX, deleted_keys, subnet_id
+                    "{LOG_PREFIX}Chain keys cannot be deleted. Attempted to delete chain keys {deleted_keys:?} \
+                    for subnet: '{subnet_id}'"
                 );
             }
 
@@ -109,8 +106,7 @@ impl Registry {
             new_keys.iter().for_each(|key_id| {
                 if keys_to_subnet_map.contains_key(key_id) {
                     panic!(
-                        "{}Chain key with id '{}' already exists. IDs must be globally unique.",
-                        LOG_PREFIX, key_id,
+                        "{LOG_PREFIX}Chain key with id '{key_id}' already exists. IDs must be globally unique.",
                     );
                 }
             });
@@ -122,10 +118,9 @@ impl Registry {
             for key_id in chain_key_signing_enable {
                 if !current_keys.contains(key_id) {
                     panic!(
-                        "{}Proposal attempts to enable signing for chain key '{}' on Subnet '{}', \
+                        "{LOG_PREFIX}Proposal attempts to enable signing for chain key '{key_id}' on Subnet '{subnet_id}', \
                         but the subnet does not hold the given key. A proposal to add that key to \
-                        the subnet must first be separately submitted.",
-                        LOG_PREFIX, key_id, subnet_id
+                        the subnet must first be separately submitted."
                     );
                 }
             }
@@ -142,9 +137,8 @@ impl Registry {
             let intersection = enable_set.intersection(&disable_set).collect::<Vec<_>>();
             if !intersection.is_empty() {
                 panic!(
-                    "{}update_subnet aborted: Proposal attempts to enable and disable signing for \
-                    the same chain keys: {:?}",
-                    LOG_PREFIX, intersection,
+                    "{LOG_PREFIX}update_subnet aborted: Proposal attempts to enable and disable signing for \
+                    the same chain keys: {intersection:?}",
                 )
             }
         }
@@ -166,9 +160,8 @@ impl Registry {
 
         if let Some(sev_enabled) = features.sev_enabled {
             panic!(
-                "{}Proposal attempts to change sev_enabled for Subnet '{}' to {}, \
+                "{LOG_PREFIX}Proposal attempts to change sev_enabled for Subnet '{subnet_id}' to {sev_enabled}, \
                  but sev_enabled can only be set during subnet creation.",
-                LOG_PREFIX, subnet_id, sev_enabled,
             );
         }
     }

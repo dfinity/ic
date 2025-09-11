@@ -303,8 +303,7 @@ pub async fn retrieve_btc_with_approval(
         Err(error) => {
             return Err(RetrieveBtcWithApprovalError::GenericError {
                 error_message: format!(
-                    "Failed to call Bitcoin checker canister with error: {:?}",
-                    error
+                    "Failed to call Bitcoin checker canister with error: {error:?}"
                 ),
                 error_code: ErrorCode::CheckCallFailed as u64,
             });
@@ -371,8 +370,7 @@ async fn balance_of(user: Principal) -> Result<u64, RetrieveBtcError> {
         .await
         .map_err(|(code, msg)| {
             RetrieveBtcError::TemporarilyUnavailable(format!(
-                "cannot enqueue a balance_of request: {} (reject_code = {})",
-                msg, code
+                "cannot enqueue a balance_of request: {msg} (reject_code = {code})"
             ))
         })?;
     Ok(result.0.to_u64().expect("nat does not fit into u64"))
@@ -402,8 +400,7 @@ async fn burn_ckbtcs(user: Principal, amount: u64, memo: Memo) -> Result<u64, Re
         .await
         .map_err(|(code, msg)| {
             RetrieveBtcError::TemporarilyUnavailable(format!(
-                "cannot enqueue a burn transaction: {} (reject_code = {})",
-                msg, code
+                "cannot enqueue a burn transaction: {msg} (reject_code = {code})"
             ))
         })?;
 
@@ -426,16 +423,13 @@ async fn burn_ckbtcs(user: Principal, amount: u64, memo: Memo) -> Result<u64, Re
             error_code,
             message,
         }) => Err(RetrieveBtcError::TemporarilyUnavailable(format!(
-            "cannot burn ckBTC: the ledger fails with: {} (error code {})",
-            message, error_code
+            "cannot burn ckBTC: the ledger fails with: {message} (error code {error_code})"
         ))),
         Err(TransferError::BadFee { expected_fee }) => ic_cdk::trap(format!(
-            "unreachable: the ledger demands the fee of {} even though the fee field is unset",
-            expected_fee
+            "unreachable: the ledger demands the fee of {expected_fee} even though the fee field is unset"
         )),
         Err(TransferError::Duplicate { duplicate_of }) => ic_cdk::trap(format!(
-            "unreachable: the ledger reports duplicate ({}) even though the create_at_time field is unset",
-            duplicate_of
+            "unreachable: the ledger reports duplicate ({duplicate_of}) even though the create_at_time field is unset"
         )),
         Err(TransferError::CreatedInFuture { .. }) => ic_cdk::trap(
             "unreachable: the ledger reports CreatedInFuture even though the create_at_time field is unset",
@@ -479,8 +473,7 @@ async fn burn_ckbtcs_icrc2(
         .await
         .map_err(|(code, msg)| {
             RetrieveBtcWithApprovalError::TemporarilyUnavailable(format!(
-                "cannot enqueue a burn transaction: {} (reject_code = {})",
-                msg, code
+                "cannot enqueue a burn transaction: {msg} (reject_code = {code})"
             ))
         })?;
 
@@ -512,17 +505,14 @@ async fn burn_ckbtcs_icrc2(
             message,
         }) => Err(RetrieveBtcWithApprovalError::TemporarilyUnavailable(
             format!(
-                "cannot burn ckBTC: the ledger fails with: {} (error code {})",
-                message, error_code
+                "cannot burn ckBTC: the ledger fails with: {message} (error code {error_code})"
             ),
         )),
         Err(TransferFromError::BadFee { expected_fee }) => ic_cdk::trap(format!(
-            "unreachable: the ledger demands the fee of {} even though the fee field is unset",
-            expected_fee
+            "unreachable: the ledger demands the fee of {expected_fee} even though the fee field is unset"
         )),
         Err(TransferFromError::Duplicate { duplicate_of }) => ic_cdk::trap(format!(
-            "unreachable: the ledger reports duplicate ({}) even though the create_at_time field is unset",
-            duplicate_of
+            "unreachable: the ledger reports duplicate ({duplicate_of}) even though the create_at_time field is unset"
         )),
         Err(TransferFromError::CreatedInFuture { .. }) => ic_cdk::trap(
             "unreachable: the ledger reports CreatedInFuture even though the create_at_time field is unset",
@@ -554,8 +544,7 @@ async fn check_address(
         .await
         .map_err(|call_err| {
             RetrieveBtcError::TemporarilyUnavailable(format!(
-                "Failed to call Bitcoin checker canister: {}",
-                call_err
+                "Failed to call Bitcoin checker canister: {call_err}"
             ))
         })? {
         CheckAddressResponse::Failed => {

@@ -16,7 +16,7 @@ use ic_protobuf::registry::node::v1::NodeRecord;
 impl Registry {
     /// Remove node operators
     pub fn do_remove_node_operators(&mut self, payload: RemoveNodeOperatorsPayload) {
-        println!("{}do_remove_node_operators: {:?}", LOG_PREFIX, payload);
+        println!("{LOG_PREFIX}do_remove_node_operators: {payload:?}");
 
         let mut mutations = vec![];
 

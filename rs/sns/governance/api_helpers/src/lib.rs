@@ -60,7 +60,7 @@ pub fn neuron_id_subaccount_or_err(neuron_id: &NeuronId) -> Result<Subaccount, G
     let subaccount =
         Subaccount::try_from(neuron_id.id.as_slice()).map_err(|err| GovernanceError {
             error_type: i32::from(ErrorType::InvalidNeuronId),
-            error_message: format!("Could not convert NeuronId to Subaccount {}", err),
+            error_message: format!("Could not convert NeuronId to Subaccount {err}"),
         })?;
 
     Ok(subaccount)

@@ -148,8 +148,7 @@ where
         http_unchecked(handler)
     } else {
         panic!(
-            "Expected caller {:?} but found caller {:?}",
-            http_caller, caller
+            "Expected caller {http_caller:?} but found caller {caller:?}"
         )
     }
 }

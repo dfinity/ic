@@ -322,7 +322,7 @@ impl TryFrom<Amount> for Nat {
             Some(value) => value,
             None => &value.value,
         })
-        .with_context(|| format!("Failed to convert Amount to Nat: {:?}", value))
+        .with_context(|| format!("Failed to convert Amount to Nat: {value:?}"))
     }
 }
 

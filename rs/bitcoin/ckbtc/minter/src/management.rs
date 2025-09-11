@@ -74,9 +74,9 @@ impl fmt::Display for Reason {
         match self {
             Self::QueueIsFull => write!(fmt, "the canister queue is full"),
             Self::OutOfCycles => write!(fmt, "the canister is out of cycles"),
-            Self::CanisterError(msg) => write!(fmt, "canister error: {}", msg),
+            Self::CanisterError(msg) => write!(fmt, "canister error: {msg}"),
             Self::Rejected(msg) => {
-                write!(fmt, "the management canister rejected the call: {}", msg)
+                write!(fmt, "the management canister rejected the call: {msg}")
             }
         }
     }

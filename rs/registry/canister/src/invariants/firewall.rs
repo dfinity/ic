@@ -81,8 +81,7 @@ fn validate_firewall_rule_principals(
                 if !principal_ids.contains(&principal_id) && !firewall_rules.entries.is_empty() {
                     return Err(InvariantCheckError {
                         msg: format!(
-                            "Firewall rule entry refers to non-existing principal: {:?}",
-                            record_key
+                            "Firewall rule entry refers to non-existing principal: {record_key:?}"
                         ),
                         source: None,
                     });
@@ -132,14 +131,14 @@ fn validate_firewall_rule(rule: &FirewallRule) -> Result<(), InvariantCheckError
             ipv4_prefix
                 .parse::<Ipv4Net>()
                 .map_err(|e| InvariantCheckError {
-                    msg: format!("Failed to parse IPv4 prefix: {:?}", ipv4_prefix),
+                    msg: format!("Failed to parse IPv4 prefix: {ipv4_prefix:?}"),
                     source: Some(Box::new(e)),
                 })?;
         } else {
             ipv4_prefix
                 .parse::<Ipv4Addr>()
                 .map_err(|e| InvariantCheckError {
-                    msg: format!("Failed to parse IPv4 address: {:?}", ipv4_prefix),
+                    msg: format!("Failed to parse IPv4 address: {ipv4_prefix:?}"),
                     source: Some(Box::new(e)),
                 })?;
         }
@@ -152,14 +151,14 @@ fn validate_firewall_rule(rule: &FirewallRule) -> Result<(), InvariantCheckError
             ipv6_prefix
                 .parse::<Ipv6Net>()
                 .map_err(|e| InvariantCheckError {
-                    msg: format!("Failed to parse IPv6 prefix: {:?}", ipv6_prefix),
+                    msg: format!("Failed to parse IPv6 prefix: {ipv6_prefix:?}"),
                     source: Some(Box::new(e)),
                 })?;
         } else {
             ipv6_prefix
                 .parse::<Ipv6Addr>()
                 .map_err(|e| InvariantCheckError {
-                    msg: format!("Failed to parse IPv6 address: {:?}", ipv6_prefix),
+                    msg: format!("Failed to parse IPv6 address: {ipv6_prefix:?}"),
                     source: Some(Box::new(e)),
                 })?;
         }
@@ -176,7 +175,7 @@ fn validate_firewall_rule(rule: &FirewallRule) -> Result<(), InvariantCheckError
     // check that port number is <= 65535
     for &port in rule.ports.iter() {
         u16::try_from(port).map_err(|e| InvariantCheckError {
-            msg: format!("Port is outside of the allowed range: {:?}", port),
+            msg: format!("Port is outside of the allowed range: {port:?}"),
             source: Some(Box::new(e)),
         })?;
     }
@@ -206,7 +205,7 @@ fn validate_firewall_rule(rule: &FirewallRule) -> Result<(), InvariantCheckError
     if let Some(user) = &rule.user {
         if user.is_empty() || user.len() > USER_SIZE {
             return Err(InvariantCheckError {
-                msg: format!("User name {:?} is invalid", user),
+                msg: format!("User name {user:?} is invalid"),
                 source: None,
             });
         }
@@ -218,7 +217,7 @@ fn validate_firewall_rule(rule: &FirewallRule) -> Result<(), InvariantCheckError
             == FirewallRuleDirection::Unspecified
         {
             return Err(InvariantCheckError {
-                msg: format!("Direction {:?} is invalid", direction,),
+                msg: format!("Direction {direction:?} is invalid",),
                 source: None,
             });
         }
@@ -274,7 +273,7 @@ fn get_firewall_rules(snapshot: &RegistrySnapshot, record_key: String) -> Option
     if snapshot.contains_key(record_key.as_bytes()) {
         Some(
             get_value_from_snapshot(snapshot, record_key.clone())
-                .unwrap_or_else(|| panic!("Could not find firewall rules: {}", record_key)),
+                .unwrap_or_else(|| panic!("Could not find firewall rules: {record_key}")),
         )
     } else {
         None

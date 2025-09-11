@@ -33,8 +33,7 @@ pub(crate) fn check_subnet_invariants(
             .remove(&make_subnet_record_key(subnet_id).into_bytes())
             .unwrap_or_else(|| {
                 panic!(
-                    "Subnet {:} is in subnet list but no record exists",
-                    subnet_id
+                    "Subnet {subnet_id:} is in subnet list but no record exists"
                 )
             });
 
@@ -66,18 +65,18 @@ pub(crate) fn check_subnet_invariants(
             let node_key = make_node_record_key(k);
             let node_exists = snapshot.contains_key(node_key.as_bytes());
             if !node_exists {
-                panic!("Node {} does not exist in Subnet {}", k, subnet_id);
+                panic!("Node {k} does not exist in Subnet {subnet_id}");
             }
             node_exists
         });
 
         // Each node appears at most once in a subnet membership
         if num_nodes > subnet_members.len() {
-            panic!("Repeated nodes in subnet {:}", subnet_id);
+            panic!("Repeated nodes in subnet {subnet_id:}");
         }
         // Each subnet contains at least one node
         if subnet_members.is_empty() {
-            panic!("No node in subnet {:}", subnet_id);
+            panic!("No node in subnet {subnet_id:}");
         }
         let intersection = accumulated_nodes_in_subnets
             .intersection(&subnet_members)
@@ -86,8 +85,7 @@ pub(crate) fn check_subnet_invariants(
         if !intersection.is_empty() {
             return Err(InvariantCheckError {
                 msg: format!(
-                    "Nodes in subnet {:} also belong to other subnets",
-                    subnet_id
+                    "Nodes in subnet {subnet_id:} also belong to other subnets"
                 ),
                 source: None,
             });

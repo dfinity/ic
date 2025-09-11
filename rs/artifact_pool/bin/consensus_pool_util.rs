@@ -93,7 +93,7 @@ fn parse_artifact_names(names: &[&str]) -> Vec<&'static str> {
             .iter()
             .any(|x| x.eq_ignore_ascii_case(name))
         {
-            panic!("Unknown artifact name '{}'", name)
+            panic!("Unknown artifact name '{name}'")
         }
     }
     ALL_ARTIFACT_NAMES
@@ -251,7 +251,7 @@ fn import(path: &str) {
                 if let Ok(msg) = from_str(&s) {
                     certification_pool.validated.insert(msg)
                 } else {
-                    panic!("Failed to parse JSON: {}", s);
+                    panic!("Failed to parse JSON: {s}");
                 }
             }
         }
@@ -263,7 +263,7 @@ fn export_cup_proto(path: &str, matches: &clap::ArgMatches) {
         .get_one::<String>("output")
         .expect("Expect an output filename");
     let mut file = std::fs::File::create(filename)
-        .unwrap_or_else(|err| panic!("Cannot open file {} for write: {:?}", filename, err));
+        .unwrap_or_else(|err| panic!("Cannot open file {filename} for write: {err:?}"));
     let consensus_pool = open_consensus_pool(path, true);
     let mut buf = Vec::<u8>::new();
     let cup_proto = consensus_pool.validated().highest_catch_up_package_proto();
@@ -271,7 +271,7 @@ fn export_cup_proto(path: &str, matches: &clap::ArgMatches) {
     println!("{}", to_string(&cup));
     cup_proto
         .encode(&mut buf)
-        .unwrap_or_else(|err| panic!("Error encoding protobuf: {:?}", err));
+        .unwrap_or_else(|err| panic!("Error encoding protobuf: {err:?}"));
     file.write_all(&buf)
-        .unwrap_or_else(|err| panic!("Cannot write to file {}: {:?}", filename, err));
+        .unwrap_or_else(|err| panic!("Cannot write to file {filename}: {err:?}"));
 }

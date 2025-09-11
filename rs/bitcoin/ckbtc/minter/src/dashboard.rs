@@ -226,13 +226,12 @@ pub fn build_account_to_utxos_table(s: &CkBtcMinterState, start: u64, page_size:
                     page_count += 1;
                     if start <= line_count && line_count < start + page_size {
                         // Current page, do not show href link, only show page number.
-                        write!(pagination, "{}&nbsp;", page_count).unwrap();
+                        write!(pagination, "{page_count}&nbsp;").unwrap();
                     } else {
                         // Otherwise, show href link and page number.
                         write!(
                             pagination,
-                            "<a href='?account_to_utxos_start={}#account_to_utxos'>{}</a>&nbsp;",
-                            next_page_start, page_count
+                            "<a href='?account_to_utxos_start={next_page_start}#account_to_utxos'>{page_count}</a>&nbsp;"
                         )
                         .unwrap();
                     }
@@ -358,7 +357,7 @@ pub fn build_pending_request_tx(s: &CkBtcMinterState) -> String {
 pub fn build_requests_in_flight_tx(s: &CkBtcMinterState) -> String {
     with_utf8_buffer(|buf| {
         for (id, status) in &s.requests_in_flight {
-            write!(buf, "<tr><td>{}</td>", id).unwrap();
+            write!(buf, "<tr><td>{id}</td>").unwrap();
             match status {
                 state::InFlightStatus::Signing => {
                     write!(buf, "<td>Signing...</td>").unwrap();
@@ -392,7 +391,7 @@ pub fn build_submitted_transactions(s: &CkBtcMinterState) -> String {
                     )
                     .unwrap();
 
-                    write!(buf, "<td rowspan='{}'>", rowspan).unwrap();
+                    write!(buf, "<td rowspan='{rowspan}'>").unwrap();
                     for req in tx.requests.iter() {
                         write!(
                             buf,
@@ -546,7 +545,7 @@ pub fn build_unconfirmed_change(s: &CkBtcMinterState) -> String {
 pub fn build_update_balance_principals(s: &CkBtcMinterState) -> String {
     with_utf8_buffer(|buf| {
         for account in &s.update_balance_accounts {
-            writeln!(buf, "<li>{}</li>", account).unwrap();
+            writeln!(buf, "<li>{account}</li>").unwrap();
         }
     })
 }
@@ -554,7 +553,7 @@ pub fn build_update_balance_principals(s: &CkBtcMinterState) -> String {
 pub fn build_retrieve_btc_principals(s: &CkBtcMinterState) -> String {
     with_utf8_buffer(|buf| {
         for account in &s.retrieve_btc_accounts {
-            writeln!(buf, "<li>{}</li>", account).unwrap();
+            writeln!(buf, "<li>{account}</li>").unwrap();
         }
     })
 }
@@ -570,8 +569,7 @@ fn txid_link_on(txid: &Txid, btc_network: Network) -> String {
         "testnet4/"
     };
     format!(
-        "<a target='_blank' href='https://mempool.space/{0}tx/{1}'><code>{1}</code></a>",
-        net_prefix, txid,
+        "<a target='_blank' href='https://mempool.space/{net_prefix}tx/{txid}'><code>{txid}</code></a>",
     )
 }
 
