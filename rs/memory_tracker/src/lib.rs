@@ -489,7 +489,9 @@ pub fn sigsegv_fault_handler_old(
     // address down to page boundary
     let fault_address_page_boundary = fault_address as usize & !(PAGE_SIZE - 1);
 
-    let page_num = (fault_address_page_boundary - tracker.memory_area.addr()) / PAGE_SIZE;
+    let page_idx = PageIndex::new(
+        ((fault_address_page_boundary - tracker.memory_area.addr()) / PAGE_SIZE) as u64,
+    );
 
     // Ensure `fault_address` falls within tracked memory area
     if !tracker.memory_area.is_within(fault_address) {
@@ -504,11 +506,7 @@ pub fn sigsegv_fault_handler_old(
     );
 
     #[allow(clippy::branches_sharing_code)]
-    if tracker
-        .accessed_bitmap
-        .borrow()
-        .is_marked(PageIndex::new(page_num as u64))
-    {
+    if tracker.accessed_bitmap.borrow().is_marked(page_idx) {
         // This page has already been accessed, hence this fault must be for writing.
         // Upgrade its protection to read+write.
         unsafe {
@@ -520,10 +518,7 @@ pub fn sigsegv_fault_handler_old(
             .map_err(print_enomem_help)
             .unwrap()
         };
-        tracker
-            .dirty_pages
-            .borrow_mut()
-            .push(PageIndex::new(page_num as u64));
+        tracker.dirty_pages.borrow_mut().push(page_idx);
     } else {
         // This page has not been accessed yet.
         // The fault could be for reading or writing.
@@ -544,7 +539,7 @@ pub fn sigsegv_fault_handler_old(
         // is set up for a memory area mmap-ed to a file, the contents of each
         // page will be initialized by the kernel from that file.
 
-        let page = page_map.get_page(PageIndex::new(page_num as u64));
+        let page = page_map.get_page(page_idx);
         unsafe {
             std::ptr::copy_nonoverlapping(
                 page.as_ptr(),
@@ -562,10 +557,8 @@ pub fn sigsegv_fault_handler_old(
             .map_err(print_enomem_help)
             .unwrap()
         };
-        tracker
-            .accessed_bitmap
-            .borrow_mut()
-            .mark(PageIndex::new(page_num as u64));
+        tracker.accessed_bitmap.borrow_mut().mark(page_idx);
+        tracker.accessed_pages.borrow_mut().push(page_idx);
     };
     true
 }
