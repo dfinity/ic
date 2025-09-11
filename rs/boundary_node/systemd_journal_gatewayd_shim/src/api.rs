@@ -80,10 +80,8 @@ pub(crate) async fn entries(
             .into_iter()
             .map(|u| ("_SYSTEMD_UNIT".to_string(), u))
             .collect(),
-    ])
-    .into_iter()
-    .map(|(k, v)| format!("{k}={v}"))
-    .join("&");
+    ]);
+    let ps = ps.into_iter().map(|(k, v)| format!("{k}={v}")).join("&");
 
     u.set_query(Some(ps.as_str()));
 

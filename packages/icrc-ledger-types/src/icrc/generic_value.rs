@@ -449,7 +449,7 @@ fn test_leb128() {
         ),
     ] {
         let i = leb128(&mut buf, n);
-        assert_eq!(&buf[0..=i], b, "invalid encoding of integer {}", n);
+        assert_eq!(&buf[0..=i], b, "invalid encoding of integer {n}");
     }
 }
 
@@ -458,7 +458,7 @@ fn test_sleb128() {
     let mut buf = [0; INT128_BUF_SIZE];
     for (n, b) in [(0, &[0][..]), (-123456, &[0xc0, 0xbb, 0x78][..])] {
         let i = sleb128(&mut buf, n);
-        assert_eq!(&buf[0..=i], b, "invalid encoding of integer {}", n);
+        assert_eq!(&buf[0..=i], b, "invalid encoding of integer {n}");
     }
 }
 
@@ -517,8 +517,7 @@ fn test_test_vectors() {
         assert_eq!(
             input.hash().to_vec(),
             hex::decode(expected).unwrap(),
-            "input: {}",
-            input
+            "input: {input}"
         );
     }
 }
