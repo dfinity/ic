@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package ic_registry_canister.pb.v1;
 
-import "ic_registry_transport/pb/v1/transport.proto";
 import "ic_base_types/pb/v1/types.proto";
 
 message ChangelogEntry {
@@ -68,11 +67,12 @@ message RegistryStableStorage {
     // details.
     Version version = 2;
 
-    // Only present if version == VERSION_UNSPECIFIED.
-    repeated ic_registry_transport.pb.v1.RegistryDelta deltas = 1;
-
-    // Only present if version == VERSION_1.
+    // This replaced the deltas field in VERSION_1, which has been in place
+    // since at least mid 2021.
     repeated ChangelogEntry changelog = 3;
+
+    reserved "deltas";
+    reserved 1;
 }
 
 // A container for the what gets written to stable storage,
