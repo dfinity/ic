@@ -732,25 +732,23 @@ mod tests {
         fn get_config_media_path(&self) -> PathBuf {
             let domain = self.get_domain();
             let vm_config = domain.get_xml_desc(0).unwrap();
-            let config_media_path = PathBuf::from(
+            PathBuf::from(
                 &Regex::new("<source file='([^']+)'")
                     .unwrap()
                     .captures(&vm_config)
                     .expect("Config media path not found in VM config")[1],
-            );
-            config_media_path
+            )
         }
 
         fn get_kernel_path(&self) -> PathBuf {
             let domain = self.get_domain();
             let vm_config = domain.get_xml_desc(0).unwrap();
-            let kernel_path = PathBuf::from(
+            PathBuf::from(
                 &Regex::new("<kernel>([^']+)</kernel>")
                     .unwrap()
                     .captures(&vm_config)
                     .expect("Kernel path not found in VM config")[1],
-            );
-            kernel_path
+            )
         }
 
         fn get_kernel_cmdline(&self) -> String {

@@ -28,7 +28,7 @@ impl Funds {
 #[cfg(target_arch = "wasm32")]
 pub mod ic0 {
     #[link(wasm_import_module = "ic0")]
-    extern "C" {
+    unsafe extern "C" {
         pub fn canister_self_copy(dst: u32, offset: u32, size: u32);
         pub fn canister_self_size() -> u32;
         pub fn debug_print(offset: u32, size: u32);

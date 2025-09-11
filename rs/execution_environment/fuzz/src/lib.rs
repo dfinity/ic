@@ -22,7 +22,7 @@ use {
 use ic_canister_sandbox_backend_lib::{SANDBOX_MAGIC_BYTES, embed_sandbox_signature};
 
 #[allow(improper_ctypes)]
-extern "C" {
+unsafe extern "C" {
     fn LLVMFuzzerRunDriver(
         argc: *const isize,
         argv: *const *const *const u8,

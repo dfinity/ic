@@ -38,7 +38,7 @@ pub const DEFAULT_XDR_PERMYRIAD_PER_ICP_CONVERSION_RATE: u64 = 1_000_000; // 1 I
 
 #[cfg(target_arch = "wasm32")]
 #[link(wasm_import_module = "ic0")]
-extern "C" {
+unsafe extern "C" {
     pub fn mint_cycles128(amount_high: u64, amount_low: u64, dst: usize);
 }
 
