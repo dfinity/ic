@@ -1001,6 +1001,7 @@ fn test_record_neuron_vote() {
             name: "my known neuron".to_string(),
             description: Some("my known neuron description".to_string()),
             links: vec![],
+            committed_topics: vec![],
         }))
         .build();
     let neuron_id = neuron_store.add_neuron(neuron).unwrap();

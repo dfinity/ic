@@ -627,6 +627,7 @@ fn test_compute_neuron_metrics_public_neurons() {
         name: "Daniel Wong".to_string(),
         description: Some("Best engineer of all time. Of all time.".to_string()),
         links: vec![],
+        committed_topics: vec![],
     }))
     .with_voting_power_refreshed_timestamp_seconds(now_seconds)
     .build();
