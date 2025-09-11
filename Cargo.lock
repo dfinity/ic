@@ -6740,6 +6740,7 @@ dependencies = [
  "ic-btc-service",
  "ic-btc-validation",
  "ic-config",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-http-endpoints-async-utils",
  "ic-interfaces-adapter-client",
  "ic-logger",
@@ -6750,8 +6751,10 @@ dependencies = [
  "prometheus 0.13.4",
  "prost 0.13.4",
  "rand 0.8.5",
+ "scrypt",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "slog",
  "slog-async",
  "static_assertions",
@@ -11901,7 +11904,6 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-test-utils",
  "ic-node-rewards-canister-api",
- "ic-node-rewards-canister-protobuf",
  "ic-protobuf",
  "ic-registry-canister-client",
  "ic-registry-keys",
@@ -11924,22 +11926,8 @@ name = "ic-node-rewards-canister-api"
 version = "0.9.0"
 dependencies = [
  "candid",
- "ic-node-rewards-canister-protobuf",
- "rewards-calculation",
- "serde",
-]
-
-[[package]]
-name = "ic-node-rewards-canister-protobuf"
-version = "0.9.0"
-dependencies = [
- "candid",
  "ic-base-types",
- "ic-management-canister-types",
  "ic-nervous-system-proto",
- "ic-stable-structures 0.6.8",
- "prost 0.13.4",
- "rewards-calculation",
  "serde",
 ]
 

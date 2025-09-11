@@ -76,9 +76,20 @@ enum RejectionCode {
     Unknown,
 }
 
-fn resolving_client(pic: &PocketIc, host: String) -> Client {
+fn frontend_canister(
+    pic: &PocketIc,
+    canister_id: Principal,
+    raw: bool,
+    path: impl ToString,
+) -> (Client, Url) {
+    let mut url = pic.url().unwrap();
+    assert_eq!(url.host_str().unwrap(), "localhost");
+    let maybe_raw = if raw { ".raw" } else { "" };
+    let host = format!("{}{}.localhost", canister_id, maybe_raw);
+    url.set_host(Some(&host)).unwrap();
+    url.set_path(&path.to_string());
     // Windows doesn't automatically resolve localhost subdomains.
-    if cfg!(windows) {
+    let client = if cfg!(windows) {
         Client::builder()
             .resolve(
                 &host,
@@ -91,7 +102,8 @@ fn resolving_client(pic: &PocketIc, host: String) -> Client {
             .unwrap()
     } else {
         Client::new()
-    }
+    };
+    (client, url)
 }
 
 // Create a counter canister and charge it with 2T cycles.
@@ -1628,7 +1640,7 @@ fn test_canister_http_in_live_mode() {
         .build();
 
     // Enable the "live" mode.
-    let _ = pic.make_live(None);
+    pic.make_live(None);
 
     let http_server = HttpServer::new("127.0.0.1");
 
@@ -1939,25 +1951,18 @@ fn test_raw_gateway() {
     pic.install_canister(canister, test_canister_wasm(), vec![], None);
 
     // We start the HTTP gateway
-    let endpoint = pic.make_live(None);
+    pic.make_live(None);
 
     // We make two requests: the non-raw request fails because the test canister does not certify its response,
     // the raw request succeeds.
-    let client = Client::new();
-    let gateway_host = endpoint.host().unwrap();
-    for (host, expected) in [
+    for (raw, expected) in [
         (
-            format!("{}.{}", canister, gateway_host),
+            false,
             "The response from the canister failed verification and cannot be trusted.",
         ),
-        (
-            format!("{}.raw.{}", canister, gateway_host),
-            "My sample asset.",
-        ),
+        (true, "My sample asset."),
     ] {
-        let mut url = endpoint.clone();
-        url.set_host(Some(&host)).unwrap();
-        url.set_path("/asset.txt");
+        let (client, url) = frontend_canister(&pic, canister, raw, "/asset.txt");
         let res = client.get(url).send().unwrap();
         let page = String::from_utf8(res.bytes().unwrap().to_vec()).unwrap();
         assert!(page.contains(expected));
@@ -2895,15 +2900,10 @@ fn test_http_methods() {
     pic.install_canister(canister, test_canister_wasm(), vec![], None);
 
     // We start the HTTP gateway
-    let endpoint = pic.make_live(None);
+    pic.make_live(None);
 
     // We request the path `/` with various HTTP methods.
     // We use raw endpoints as the test canister does not support certification.
-    let gateway_host = endpoint.host().unwrap();
-    let host = format!("{}.raw.{}", canister, gateway_host);
-    let mut url = endpoint;
-    url.set_host(Some(&host)).unwrap();
-    url.set_path("/");
     for method in [
         Method::GET,
         Method::POST,
@@ -2912,7 +2912,7 @@ fn test_http_methods() {
         Method::HEAD,
         Method::PATCH,
     ] {
-        let client = resolving_client(&pic, host.clone());
+        let (client, url) = frontend_canister(&pic, canister, true, "/");
         let res = client.request(method.clone(), url.clone()).send().unwrap();
         // The test canister rejects all request to the path `/` with `StatusCode::BAD_REQUEST`
         // and the error message "The request is not supported by the test canister.".
@@ -3208,14 +3208,8 @@ fn with_http_gateway_config_but_no_auto_progress() {
     pic.add_cycles(canister_id, INIT_CYCLES);
     pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
 
-    let mut endpoint = pic.url().unwrap();
-    assert_eq!(endpoint.host_str().unwrap(), "localhost");
-    let host = format!("{}.raw.localhost", canister_id);
-    endpoint.set_host(Some(&host)).unwrap();
-    endpoint.set_path("/asset.txt");
-
-    let client = resolving_client(&pic, host);
-    let resp = client.get(endpoint.clone()).send().unwrap();
+    let (client, url) = frontend_canister(&pic, canister_id, true, "/asset.txt");
+    let resp = client.get(url).send().unwrap();
     assert!(resp.status().is_success());
     let msg = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
     assert_eq!(msg, "My sample asset.");
@@ -3475,4 +3469,141 @@ fn make_live_after_auto_progress() {
         .with_auto_progress()
         .build();
     pic.make_live(None);
+}
+
+#[test]
+fn canister_not_found() {
+    let http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: None,
+    };
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_http_gateway(http_gateway_config)
+        .build();
+
+    // Canister ID that cannot exist on the ICP mainnet.
+    let canister_id_not_found =
+        Principal::from_slice(&[0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x01]);
+    // Subnet ID that cannot exist in PocketIC (because it is not a self-authenticating principal).
+    let subnet_id_not_found = Principal::from_slice(&[42; 29]);
+
+    // API requests for canister via /instances API and proxied through HTTP gateway.
+    let instances_url = format!(
+        "{}instances/{}/api/v2/canister/{}/read_state",
+        pic.get_server_url(),
+        pic.instance_id(),
+        canister_id_not_found,
+    );
+    let gateway_url = format!(
+        "{}api/v2/canister/{}/read_state",
+        pic.url().unwrap(),
+        canister_id_not_found,
+    );
+    for url in [instances_url, gateway_url] {
+        let client = reqwest::blocking::Client::new();
+        let resp = client
+            .post(url)
+            .header(reqwest::header::CONTENT_TYPE, "application/cbor")
+            .send()
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+        assert!(
+            bytes.contains("canister_not_found\ndetails: The specified canister does not exist.")
+        );
+    }
+
+    // API requests for subnet via /instances API and proxied through HTTP gateway.
+    let instances_url = format!(
+        "{}instances/{}/api/v2/subnet/{}/read_state",
+        pic.get_server_url(),
+        pic.instance_id(),
+        subnet_id_not_found,
+    );
+    let gateway_url = format!(
+        "{}api/v2/subnet/{}/read_state",
+        pic.url().unwrap(),
+        subnet_id_not_found,
+    );
+    for url in [instances_url, gateway_url] {
+        let client = reqwest::blocking::Client::new();
+        let resp = client
+            .post(url)
+            .header(reqwest::header::CONTENT_TYPE, "application/cbor")
+            .send()
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+        assert!(bytes.contains("subnet_not_found\ndetails: The specified subnet cannot be found."));
+    }
+
+    // Frontend request for canister via HTTP gateway.
+    let (client, url) = frontend_canister(&pic, canister_id_not_found, false, "/index.html");
+    let resp = client.get(url).send().unwrap();
+
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+    assert!(bytes.contains("404 - canister not found"));
+}
+
+// This test times out on Windows.
+#[cfg(not(windows))]
+#[test]
+fn payload_too_large() {
+    let http_gateway_config = InstanceHttpGatewayConfig {
+        ip_addr: None,
+        port: None,
+        domains: None,
+        https_config: None,
+    };
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_http_gateway(http_gateway_config)
+        .build();
+
+    // Valid canister ID.
+    let canister_id = pic.create_canister();
+
+    // Too large API requests via /instances API and proxied through HTTP gateway.
+    let instances_url = format!(
+        "{}instances/{}/api/v2/canister/{}/read_state",
+        pic.get_server_url(),
+        pic.instance_id(),
+        canister_id,
+    );
+    let gateway_url = format!(
+        "{}api/v2/canister/{}/read_state",
+        pic.url().unwrap(),
+        canister_id,
+    );
+    for url in [instances_url, gateway_url] {
+        let client = reqwest::blocking::Client::new();
+        let resp = client
+            .post(url)
+            .header(reqwest::header::CONTENT_TYPE, "application/cbor")
+            .body(vec![42; 5 * 1024 * 1024])
+            .send()
+            .unwrap();
+
+        assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+        assert!(bytes.contains("error: payload_too_large\ndetails: Payload is too large: maximum body size is 4194304 bytes."));
+    }
+
+    // Too large frontend request for canister via HTTP gateway.
+    let (client, url) = frontend_canister(&pic, canister_id, false, "/index.html");
+    let resp = client
+        .post(url)
+        .body(vec![42; 5 * 1024 * 1024])
+        .send()
+        .unwrap();
+
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let bytes = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
+    assert!(bytes.contains("503 - upstream error"));
 }
