@@ -1,3 +1,4 @@
+use crate::api_conversion::to_candid_type;
 use crate::metrics::MetricsManager;
 use crate::registry_querier::RegistryQuerier;
 use crate::storage::VM;
@@ -271,7 +272,7 @@ impl NodeRewardsCanister {
             provider_id
         ))?;
 
-        Ok(node_provider_rewards.into())
+        Ok(to_candid_type(node_provider_rewards))
     }
 }
 
