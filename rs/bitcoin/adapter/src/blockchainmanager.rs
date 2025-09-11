@@ -129,7 +129,7 @@ impl GetHeadersRequest {
 struct GetDataRequestInfo {
     /// This field stores the socket address of the Bitcoin node to which the request was sent.
     socket: SocketAddr,
-    /// This field contains the time at which the getdata request was sent.  
+    /// This field contains the time at which the getdata request was sent.
     sent_at: Option<Instant>,
 }
 
@@ -154,7 +154,7 @@ pub struct BlockchainManager<Network: BlockchainNetwork> {
     /// - Check if peer is not responding to GetHeader request. In that case remove peer after timeout.
     getheaders_requests: HashMap<SocketAddr, GetHeadersRequest>,
 
-    /// A flag that is set for each peer when we receive a `inv` message while we have an outstanding `getheaders` request to the same peer.  
+    /// A flag that is set for each peer when we receive a `inv` message while we have an outstanding `getheaders` request to the same peer.
     /// It signals that we potentially missed some information from the peer. On tick we will send a catchup `getheaders` request to that
     /// peer and request headers till the end of the chain.
     catchup_headers: HashSet<SocketAddr>,

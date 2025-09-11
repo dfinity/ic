@@ -6728,6 +6728,7 @@ dependencies = [
  "bitcoin 0.32.5-doge.0",
  "clap 4.5.27",
  "criterion",
+ "flate2",
  "futures",
  "hashlink",
  "hex",

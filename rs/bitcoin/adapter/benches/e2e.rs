@@ -20,9 +20,9 @@ use ic_metrics::MetricsRegistry;
 use rand::{CryptoRng, Rng};
 use sha2::Digest;
 use std::net::SocketAddr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use tempfile::Builder;
 
 type BitcoinAdapterClient = Box<
@@ -181,6 +181,56 @@ fn random_header<const N: usize, R: Rng + CryptoRng>(rng: &mut R) -> [u8; N] {
     header
 }
 
+fn add_800k_block_headers(criterion: &mut Criterion) {
+    static BITCOIN_HEADERS: LazyLock<Vec<bitcoin::block::Header>> = LazyLock::new(|| {
+        let headers_data_path = PathBuf::from(
+            std::env::var("HEADERS_DATA_PATH").expect("Failed to get test data path env variable"),
+        );
+        retrieve_headers::<bitcoin::Network>(&headers_data_path)
+    });
+    // Retrieve instance 1 before benchmarking.
+    // Genesis block header is automatically added when instantiating BlockchainState
+    let bitcoin_headers_to_add = &BITCOIN_HEADERS.as_slice()[1..];
+    assert_eq!(bitcoin_headers_to_add.len(), 800_000);
+    let mut group = criterion.benchmark_group("bitcoin_800k");
+    group.sample_size(10);
+
+    group.bench_function("add_headers", |bench| {
+        bench.iter(|| {
+            let mut blockchain_state =
+                BlockchainState::new(Network::Bitcoin, &MetricsRegistry::default());
+            let (added_headers, error) = blockchain_state.add_headers(bitcoin_headers_to_add);
+            assert_eq!(error, None);
+            assert_eq!(added_headers.len(), bitcoin_headers_to_add.len())
+        })
+    });
+}
+
+fn retrieve_headers<Network: BlockchainNetwork>(file: &Path) -> Vec<Network::Header>
+where
+    Network::Header: for<'de> serde::Deserialize<'de>,
+{
+    let decompressed_headers = decompress(file);
+    serde_json::from_slice(&decompressed_headers).unwrap_or_else(|e| {
+        panic!(
+            "Failed to retrieve headers from {}: {}",
+            file.to_string_lossy(),
+            e
+        )
+    })
+}
+
+fn decompress<P: AsRef<Path>>(location: P) -> Vec<u8> {
+    use std::io::Read;
+
+    let bytes = std::fs::read(location).unwrap();
+    let mut dec = flate2::read::GzDecoder::new(bytes.as_slice());
+    let mut decompressed = Vec::new();
+    dec.read_to_end(&mut decompressed)
+        .expect("failed to decode gzip");
+    decompressed
+}
+
 fn ingest_block_header(criterion: &mut Criterion) {
     let mut bench = criterion.benchmark_group("received_headers_message");
     let message = NetworkMessage::Headers(vec![]);
@@ -214,7 +264,8 @@ fn create_blockchain_manager<Network: BlockchainNetwork>(
 // the request as being processed, with the aim to receive the last 25 blocks of each fork.
 // Performance metrics are captured from the sending of the deserialised request through
 // to receiving the response and its deserialisation.
-criterion_group!(benches, e2e, hash_block_header, ingest_block_header);
+criterion_group!(benches, add_800k_block_headers);
+// criterion_group!(benches, e2e, hash_block_header, ingest_block_header);
 
 // The benchmark can be run using:
 // bazel run //rs/bitcoin/adapter:e2e_bench

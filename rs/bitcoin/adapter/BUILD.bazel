@@ -158,6 +158,13 @@ rust_bench(
     name = "e2e_bench",
     testonly = True,
     srcs = ["benches/e2e.rs"],
+    data = [
+        # Keep sorted.
+        "@bitcoin_adapter_mainnet_headers//file",
+    ],
+    env = {
+        "HEADERS_DATA_PATH": "$(rootpath @bitcoin_adapter_mainnet_headers//file)",
+    },
     deps = [
         # Keep sorted.
         ":adapter",
@@ -175,6 +182,7 @@ rust_bench(
         "//rs/test_utilities/logger",
         "@crate_index//:bitcoin",
         "@crate_index//:criterion",
+        "@crate_index//:flate2",
         "@crate_index//:futures",
         "@crate_index//:hashlink",
         "@crate_index//:hex",
