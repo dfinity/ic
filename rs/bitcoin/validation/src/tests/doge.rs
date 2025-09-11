@@ -3,7 +3,7 @@ mod utils;
 
 use crate::doge::ALLOW_DIGISHIELD_MIN_DIFFICULTY_HEIGHT;
 use crate::doge::{DogecoinHeaderValidator, HeaderValidator};
-use crate::tests::utils::{deserialize_auxpow_header, doge_files, dogecoin_genesis_header};
+use crate::tests::utils::{deserialize_auxpow_header, dogecoin_genesis_header};
 use crate::tests::{
     verify_backdated_block_difficulty, verify_consecutive_headers,
     verify_consecutive_headers_auxpow, verify_difficulty_adjustment, verify_header_sequence,
@@ -95,9 +95,12 @@ fn test_basic_header_validation_auxpow_testnet() {
 
 #[test]
 fn test_sequential_header_validation_mainnet() {
+    let mainnet_headers_1_15000_parsed =
+        std::env::var("DOGE_MAINNET_HEADERS_1_15000_PARSED_DATA_PATH")
+            .expect("Failed to get test data path env variable");
     verify_header_sequence(
         &DogecoinHeaderValidator::mainnet(),
-        doge_files::MAINNET_HEADERS_1_2500_PARSED,
+        mainnet_headers_1_15000_parsed.as_str(),
         *dogecoin_genesis_block(DogecoinNetwork::Dogecoin).header,
         0,
     );
@@ -105,9 +108,12 @@ fn test_sequential_header_validation_mainnet() {
 
 #[test]
 fn test_sequential_header_validation_testnet() {
+    let testnet_headers_1_15000_parsed =
+        std::env::var("DOGE_TESTNET_HEADERS_1_15000_PARSED_DATA_PATH")
+            .expect("Failed to get test data path env variable");
     verify_header_sequence(
         &DogecoinHeaderValidator::testnet(),
-        doge_files::TESTNET_HEADERS_1_2500_PARSED,
+        testnet_headers_1_15000_parsed.as_str(),
         *dogecoin_genesis_block(DogecoinNetwork::Testnet).header,
         0,
     );
@@ -115,9 +121,12 @@ fn test_sequential_header_validation_testnet() {
 
 #[test]
 fn test_sequential_header_validation_mainnet_auxpow() {
+    let mainnet_headers_521337_522336_auxpow_parsed =
+        std::env::var("DOGE_MAINNET_HEADERS_521337_536336_AUXPOW_PARSED_DATA_PATH")
+            .expect("Failed to get test data path env variable");
     verify_header_sequence_auxpow(
         DogecoinHeaderValidator::mainnet(),
-        doge_files::MAINNET_HEADERS_521337_522336_PARSED,
+        mainnet_headers_521337_522336_auxpow_parsed.as_str(),
         *deserialize_auxpow_header(MAINNET_HEADER_DOGE_521335),
         521335,
         *deserialize_auxpow_header(MAINNET_HEADER_DOGE_521336),
@@ -126,9 +135,12 @@ fn test_sequential_header_validation_mainnet_auxpow() {
 
 #[test]
 fn test_sequential_header_validation_testnet_auxpow() {
+    let testnet_headers_293100_308099_auxpow_parsed =
+        std::env::var("DOGE_TESTNET_HEADERS_293100_308099_AUXPOW_PARSED_DATA_PATH")
+            .expect("Failed to get test data path env variable");
     verify_header_sequence_auxpow(
         DogecoinHeaderValidator::testnet(),
-        doge_files::TESTNET_HEADERS_293100_294099_PARSED,
+        testnet_headers_293100_308099_auxpow_parsed.as_str(),
         *deserialize_auxpow_header(TESTNET_HEADER_DOGE_293098),
         293098,
         *deserialize_auxpow_header(TESTNET_HEADER_DOGE_293099),
@@ -180,19 +192,24 @@ fn test_target_exceeds_maximum_mainnet() {
 
 #[test]
 fn test_difficulty_adjustments_mainnet() {
+    let mainnet_headers_0_700000_raw = std::env::var("DOGE_MAINNET_HEADERS_0_700000_RAW_DATA_PATH")
+        .expect("Failed to get test data path env variable");
     verify_difficulty_adjustment(
         &DogecoinHeaderValidator::mainnet(),
-        doge_files::MAINNET_HEADERS_0_2499_RAW,
-        2_499,
+        mainnet_headers_0_700000_raw.as_str(),
+        700_000,
     );
 }
 
 #[test]
 fn test_difficulty_adjustments_testnet() {
+    let mainnet_headers_0_2000000_raw =
+        std::env::var("DOGE_TESTNET_HEADERS_0_2000000_RAW_DATA_PATH")
+            .expect("Failed to get test data path env variable");
     verify_difficulty_adjustment(
         &DogecoinHeaderValidator::testnet(),
-        doge_files::TESTNET_HEADERS_0_2499_RAW,
-        2_499,
+        mainnet_headers_0_2000000_raw.as_str(),
+        2_000_000,
     );
 }
 

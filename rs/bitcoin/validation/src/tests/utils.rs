@@ -11,27 +11,7 @@ use bitcoin::hashes::hex::FromHex;
 use bitcoin::{BlockHash, CompactTarget, TxMerkleNode};
 use csv::{Reader, StringRecord};
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::str::FromStr;
-
-const TEST_DATA_FOLDER: &str = "tests/data";
-
-pub mod doge_files {
-    pub const MAINNET_HEADERS_0_2499_RAW: &str = "doge/headers_0_2499_mainnet_raw.csv";
-    pub const TESTNET_HEADERS_0_2499_RAW: &str = "doge/headers_0_2499_testnet_raw.csv";
-    pub const MAINNET_HEADERS_1_2500_PARSED: &str = "doge/headers_1_2500_mainnet_parsed.csv";
-    pub const TESTNET_HEADERS_1_2500_PARSED: &str = "doge/headers_1_2500_testnet_parsed.csv";
-    pub const MAINNET_HEADERS_521337_522336_PARSED: &str =
-        "doge/headers_521337_522336_mainnet_parsed_with_auxpow.csv";
-    pub const TESTNET_HEADERS_293100_294099_PARSED: &str =
-        "doge/headers_293100_294099_testnet_parsed_with_auxpow.csv";
-}
-
-pub fn test_data_file(file: &str) -> PathBuf {
-    PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-        .join(TEST_DATA_FOLDER)
-        .join(file)
-}
 
 pub fn deserialize_header(encoded_bytes: &str) -> Header {
     let bytes = Vec::from_hex(encoded_bytes).expect("failed to decoded bytes");
@@ -151,7 +131,7 @@ fn auxpow_from_csv_record(record: &StringRecord) -> AuxPow {
 
 /// This function reads all headers from the specified CSV file and returns them as a `Vec<Header>`.
 pub fn get_headers(file: &str) -> Vec<Header> {
-    let rdr = Reader::from_path(test_data_file(file));
+    let rdr = Reader::from_path(file);
     assert!(rdr.is_ok(), "Unable to find {file} file");
     let mut rdr = rdr.unwrap();
     let mut headers = vec![];
@@ -165,7 +145,7 @@ pub fn get_headers(file: &str) -> Vec<Header> {
 
 /// This function reads all auxpow headers from the specified CSV file and returns them as a `Vec<Header>`.
 pub fn get_auxpow_headers(file: &str) -> Vec<DogecoinHeader> {
-    let rdr = Reader::from_path(test_data_file(file));
+    let rdr = Reader::from_path(file);
     assert!(rdr.is_ok(), "Unable to find {file} file");
     let mut rdr = rdr.unwrap();
     let mut headers = vec![];

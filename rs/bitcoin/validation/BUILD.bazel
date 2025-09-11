@@ -18,14 +18,22 @@ rust_test(
     crate = ":validation",
     data = [
         # Keep sorted.
-        "tests/data/doge/headers_0_2499_mainnet_raw.csv",
-        "tests/data/doge/headers_0_2499_testnet_raw.csv",
-        "tests/data/doge/headers_1_2500_mainnet_parsed.csv",
-        "tests/data/doge/headers_1_2500_testnet_parsed.csv",
-        "tests/data/doge/headers_293100_294099_testnet_parsed_with_auxpow.csv",
-        "tests/data/doge/headers_521337_522336_mainnet_parsed_with_auxpow.csv",
+        "@dogecoin_adapter_mainnet_headers//file",
+        "@dogecoin_adapter_mainnet_headers_parsed//file",
+        "@dogecoin_adapter_mainnet_headers_auxpow_parsed//file",
+        "@dogecoin_adapter_testnet_headers//file",
+        "@dogecoin_adapter_testnet_headers_parsed//file",
+        "@dogecoin_adapter_testnet_headers_auxpow_parsed//file",
         "tests/data/headers.csv",
     ],
+    env = {
+       "DOGE_MAINNET_HEADERS_0_700000_RAW_DATA_PATH": "$(rootpath @dogecoin_adapter_mainnet_headers//file)",
+       "DOGE_MAINNET_HEADERS_1_15000_PARSED_DATA_PATH": "$(rootpath @dogecoin_adapter_mainnet_headers_parsed//file)",
+       "DOGE_MAINNET_HEADERS_521337_536336_AUXPOW_PARSED_DATA_PATH": "$(rootpath @dogecoin_adapter_mainnet_headers_auxpow_parsed//file)",
+       "DOGE_TESTNET_HEADERS_0_2000000_RAW_DATA_PATH": "$(rootpath @dogecoin_adapter_testnet_headers//file)",
+       "DOGE_TESTNET_HEADERS_1_15000_PARSED_DATA_PATH": "$(rootpath @dogecoin_adapter_testnet_headers_parsed//file)",
+       "DOGE_TESTNET_HEADERS_293100_308099_AUXPOW_PARSED_DATA_PATH": "$(rootpath @dogecoin_adapter_testnet_headers_auxpow_parsed//file)",
+    },
     deps = [
         # Keep sorted.
         "@crate_index//:csv",

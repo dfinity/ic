@@ -4,7 +4,7 @@ mod utils;
 use crate::header::AuxPowHeaderValidator;
 use crate::header::{is_timestamp_valid, HeaderValidator};
 use crate::tests::utils::{
-    deserialize_auxpow_header, get_auxpow_headers, get_headers, test_data_file,
+    deserialize_auxpow_header, get_auxpow_headers, get_headers,
 };
 use crate::ValidateHeaderError;
 use crate::{BlockHeight, HeaderStore};
@@ -167,7 +167,7 @@ fn verify_difficulty_adjustment<T: HeaderValidator>(
 ) {
     use bitcoin::consensus::Decodable;
     use std::io::BufRead;
-    let file = std::fs::File::open(test_data_file(headers_path)).unwrap();
+    let file = std::fs::File::open(headers_path).unwrap();
 
     let rdr = std::io::BufReader::new(file);
 
