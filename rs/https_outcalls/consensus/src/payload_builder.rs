@@ -387,7 +387,9 @@ impl CanisterHttpPayloadBuilderImpl {
             .set(unique_includable_responses);
 
         // Now that we have the candidates, aggregate the signatures and construct the payload
-        let payload = CanisterHttpPayload {
+        
+
+        CanisterHttpPayload {
             responses: candidates
                 .drain(..)
                 .filter_map(|(metadata, shares, content)| {
@@ -396,9 +398,7 @@ impl CanisterHttpPayloadBuilderImpl {
                 .collect(),
             timeouts,
             divergence_responses,
-        };
-
-        payload
+        }
     }
 
     fn validate_canister_http_payload_impl(

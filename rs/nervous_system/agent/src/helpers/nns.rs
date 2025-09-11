@@ -29,16 +29,15 @@ pub async fn propose_and_wait<C: CallCanistersWithStoppedCanisterError + Progres
     let command = ManageNeuronCommandRequest::MakeProposal(Box::new(proposal));
     let response = manage_neuron(agent, neuron_id, command)
         .await
-        .map_err(|err| format!("Error making proposal: {:#?}", err))?;
+        .map_err(|err| format!("Error making proposal: {err:#?}"))?;
     let response = match response.command {
         Some(Command::MakeProposal(response)) => response,
-        _ => return Err(format!("Proposal failed: {:#?}", response)),
+        _ => return Err(format!("Proposal failed: {response:#?}")),
     };
     match response.proposal_id {
         Some(proposal_id) => wait_for_proposal_execution(agent, proposal_id).await,
         None => Err(format!(
-            "Proposal response does not contain a proposal_id: {:#?}",
-            response
+            "Proposal response does not contain a proposal_id: {response:#?}"
         )),
     }
 }
@@ -66,12 +65,11 @@ pub async fn propose_to_deploy_sns_and_wait<
     let Some(GetDeployedSnsByProposalIdResult::DeployedSns(deployed_sns)) =
         get_deployed_sns_by_proposal_id(agent, nns_proposal_id)
             .await
-            .map_err(|err| format!("Error getting deployed SNS: {:#?}", err))?
+            .map_err(|err| format!("Error getting deployed SNS: {err:#?}"))?
             .get_deployed_sns_by_proposal_id_result
     else {
         return Err(format!(
-            "NNS proposal '{}' {:?} did not result in a successfully deployed SNS.",
-            title, nns_proposal_id,
+            "NNS proposal '{title}' {nns_proposal_id:?} did not result in a successfully deployed SNS.",
         ));
     };
     let sns = Sns::try_from(deployed_sns).expect("Failed to convert DeployedSns to Sns");
@@ -94,8 +92,7 @@ pub async fn wait_for_proposal_execution<
             Ok(Some(proposal_info)) => proposal_info,
             Ok(None) => {
                 return Err(format!(
-                    "Proposal {:?} doesn't have ProposalInfo",
-                    proposal_id
+                    "Proposal {proposal_id:?} doesn't have ProposalInfo"
                 ));
             }
             Err(user_error) => {
@@ -106,7 +103,7 @@ pub async fn wait_for_proposal_execution<
                 if agent.is_canister_stopped_error(&user_error) {
                     continue;
                 } else {
-                    return Err(format!("Error getting proposal info: {:#?}", user_error));
+                    return Err(format!("Error getting proposal info: {user_error:#?}"));
                 }
             }
         };
@@ -129,8 +126,7 @@ pub async fn wait_for_proposal_execution<
         last_proposal_info = Some(proposal_info);
     }
     Err(format!(
-        "Looks like proposal {:?} is never going to be executed: {:#?}",
-        proposal_id, last_proposal_info,
+        "Looks like proposal {proposal_id:?} is never going to be executed: {last_proposal_info:#?}",
     ))
 }
 
@@ -179,7 +175,7 @@ pub async fn add_wasm_via_nns_proposal<
     };
 
     let proposal = MakeProposalRequest {
-        title: Some(format!("Add WASM for SNS canister type {}", canister_type)),
+        title: Some(format!("Add WASM for SNS canister type {canister_type}")),
         summary: "summary".to_string(),
         url: "".to_string(),
         action: Some(ProposalActionRequest::ExecuteNnsFunction(
@@ -202,7 +198,7 @@ pub async fn get_nns_neuron_controller<C: CallCanisters>(
     };
     let response = list_neurons(agent, request)
         .await
-        .map_err(|err| format!("Failed to list neurons {}", err))?;
+        .map_err(|err| format!("Failed to list neurons {err}"))?;
     let neurons = response
         .full_neurons
         .into_iter()

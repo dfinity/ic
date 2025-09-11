@@ -147,15 +147,13 @@ pub fn construction_payloads(
 
     if ingress_start >= ingress_end {
         return Err(Error::processing_construction_failed(&format!(
-            "Ingress start should start before ingress end: Start: {}, End: {}",
-            ingress_start, ingress_end
+            "Ingress start should start before ingress end: Start: {ingress_start}, End: {ingress_end}"
         )));
     }
 
     if ingress_end < now + ingress_interval {
         return Err(Error::processing_construction_failed(&format!(
-            "Ingress end should be at least one interval from the current time: Current time: {}, End: {}",
-            now, ingress_end
+            "Ingress end should be at least one interval from the current time: Current time: {now}, End: {ingress_end}"
         )));
     }
 

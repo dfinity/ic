@@ -1510,8 +1510,7 @@ impl SystemApiImpl {
                 match outgoing_request {
                     None => Err(HypervisorError::ToolchainContractViolation {
                         error: format!(
-                            "{} called when no call is under construction.",
-                            method_name
+                            "{method_name} called when no call is under construction."
                         ),
                     }),
                     Some(request) => {
@@ -1636,8 +1635,8 @@ impl SystemApiImpl {
                 trap_code,
                 backtrace,
             } => match backtrace {
-                Some(bt) => Some(format!("[TRAP]: {}\n{}", trap_code, bt)),
-                None => Some(format!("[TRAP]: {}", trap_code)),
+                Some(bt) => Some(format!("[TRAP]: {trap_code}\n{bt}")),
+                None => Some(format!("[TRAP]: {trap_code}")),
             },
             HypervisorError::CalledTrap { message, backtrace } => {
                 let message = if message.is_empty() {
@@ -1646,8 +1645,8 @@ impl SystemApiImpl {
                     message
                 };
                 match backtrace {
-                    Some(bt) => Some(format!("[TRAP]: {}\n{}", message, bt)),
-                    None => Some(format!("[TRAP]: {}", message)),
+                    Some(bt) => Some(format!("[TRAP]: {message}\n{bt}")),
+                    None => Some(format!("[TRAP]: {message}")),
                 }
             }
             _ => None,
@@ -2660,8 +2659,7 @@ impl SystemApi for SystemApiImpl {
                     let payload_size = data.len().saturating_add(size) as u64;
                     if payload_size > max_reply_size.get() {
                         let string = format!(
-                            "ic0.msg_reply_data_append: application payload size ({}) cannot be larger than {}.",
-                            payload_size, max_reply_size,
+                            "ic0.msg_reply_data_append: application payload size ({payload_size}) cannot be larger than {max_reply_size}.",
                         );
                         return Err(UserContractViolation {
                             error: string,
@@ -2706,8 +2704,7 @@ impl SystemApi for SystemApiImpl {
                 ResponseStatus::NotRepliedYet => {
                     if size as u64 > max_reply_size.get() {
                         let string = format!(
-                            "ic0.msg_reject: application payload size ({}) cannot be larger than {}.",
-                            size, max_reply_size
+                            "ic0.msg_reject: application payload size ({size}) cannot be larger than {max_reply_size}."
                         );
                         return Err(UserContractViolation {
                             error: string,
@@ -3845,8 +3842,7 @@ impl SystemApi for SystemApiImpl {
                     return Err(UserContractViolation {
                         error: format!(
                             "ic0_certified_data_set failed because the passed data must be \
-                    no larger than {} bytes. Found {} bytes.",
-                            CERTIFIED_DATA_MAX_LENGTH, size
+                    no larger than {CERTIFIED_DATA_MAX_LENGTH} bytes. Found {size} bytes."
                         ),
                         suggestion: "Try certifying just the hash of your data instead of \
                         the full contents."

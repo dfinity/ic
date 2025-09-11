@@ -195,8 +195,7 @@ impl FractionalDeveloperVotingPower {
 
         if missing_developer_principals_count != 0 {
             return Err(format!(
-                "Error: {} developer_neurons are missing controllers",
-                missing_developer_principals_count
+                "Error: {missing_developer_principals_count} developer_neurons are missing controllers"
             ));
         }
 
@@ -248,8 +247,7 @@ impl FractionalDeveloperVotingPower {
         if !configured_at_least_one_voting_neuron {
             return Err(format!(
                 "Error: There needs to be at least one voting-eligible neuron configured. To be \
-                 eligible to vote, a neuron must have dissolve_delay_seconds of at least {}",
-                neuron_minimum_dissolve_delay_to_vote_seconds
+                 eligible to vote, a neuron must have dissolve_delay_seconds of at least {neuron_minimum_dissolve_delay_to_vote_seconds}"
             ));
         }
 
@@ -265,8 +263,7 @@ impl FractionalDeveloperVotingPower {
         if !misconfigured_dissolve_delay_principals.is_empty() {
             return Err(format!(
                 "Error: The following PrincipalIds have a dissolve_delay_seconds configured greater than \
-                 the allowed max_dissolve_delay_seconds ({}): {:?}",
-                max_dissolve_delay_seconds, misconfigured_dissolve_delay_principals
+                 the allowed max_dissolve_delay_seconds ({max_dissolve_delay_seconds}): {misconfigured_dissolve_delay_principals:?}"
             ));
         }
 

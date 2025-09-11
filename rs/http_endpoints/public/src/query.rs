@@ -195,7 +195,7 @@ pub(crate) async fn query(
         Ok(request) => request,
         Err(e) => {
             let status = StatusCode::BAD_REQUEST;
-            let text = format!("Malformed request: {:?}", e);
+            let text = format!("Malformed request: {e:?}");
             return (status, text).into_response();
         }
     };
@@ -203,8 +203,7 @@ pub(crate) async fn query(
     if canister_id != CanisterId::ic_00() && canister_id != effective_canister_id {
         let status = StatusCode::BAD_REQUEST;
         let text = format!(
-            "Specified CanisterId {} does not match effective canister id in URL {}",
-            canister_id, effective_canister_id
+            "Specified CanisterId {canister_id} does not match effective canister id in URL {effective_canister_id}"
         );
         return (status, text).into_response();
     }

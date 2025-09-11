@@ -173,8 +173,7 @@ impl Upgrade {
                     let subnet_id =
                         get_subnet_id(&*self.registry.registry_client, cup).map_err(|err| {
                             OrchestratorError::UpgradeError(format!(
-                                "Couldn't determine the subnet id: {:?}",
-                                err
+                                "Couldn't determine the subnet id: {err:?}"
                             ))
                         })?;
                     (subnet_id, maybe_proto, maybe_cup)
@@ -192,8 +191,7 @@ impl Upgrade {
                     let nidkg_id: NiDkgId = try_from_option_field(proto.signer.clone(), "NiDkgId")
                         .map_err(|err| {
                             OrchestratorError::UpgradeError(format!(
-                                "Couldn't deserialize NiDkgId to determine the subnet id: {:?}",
-                                err
+                                "Couldn't deserialize NiDkgId to determine the subnet id: {err:?}"
                             ))
                         })?;
 
@@ -728,14 +726,12 @@ async fn sync_and_trim_fs(logger: &ReplicaLogger) -> Result<(), String> {
                 Ok(())
             } else {
                 Err(format!(
-                    "Failed to run command '{:?}', return value: {}",
-                    fstrim_script, status
+                    "Failed to run command '{fstrim_script:?}', return value: {status}"
                 ))
             }
         }
         Err(err) => Err(format!(
-            "Failed to run command '{:?}', error: {}",
-            fstrim_script, err
+            "Failed to run command '{fstrim_script:?}', error: {err}"
         )),
     }
 }
@@ -752,7 +748,7 @@ fn remove_node_state(
     let tmpdir = tempfile::Builder::new()
         .prefix("ic_config")
         .tempdir()
-        .map_err(|err| format!("Couldn't create a temporary directory: {:?}", err))?;
+        .map_err(|err| format!("Couldn't create a temporary directory: {err:?}"))?;
     let config = Config::load_with_tmpdir(
         ConfigSource::File(replica_config_file),
         tmpdir.path().to_path_buf(),
@@ -761,8 +757,7 @@ fn remove_node_state(
     let consensus_pool_path = config.artifact_pool.consensus_pool_path;
     remove_dir_all(&consensus_pool_path).map_err(|err| {
         format!(
-            "Couldn't delete the consensus pool at {:?}: {:?}",
-            consensus_pool_path, err
+            "Couldn't delete the consensus pool at {consensus_pool_path:?}: {err:?}"
         )
     })?;
 
@@ -835,19 +830,17 @@ fn remove_node_state(
     }
 
     remove_file(&cup_path)
-        .map_err(|err| format!("Couldn't delete the CUP at {:?}: {:?}", cup_path, err))?;
+        .map_err(|err| format!("Couldn't delete the CUP at {cup_path:?}: {err:?}"))?;
 
     let key_changed_metric = orchestrator_data_directory.join(KEY_CHANGES_FILENAME);
     if key_changed_metric.try_exists().map_err(|err| {
         format!(
-            "Failed to check if {:?} exists, because {:?}",
-            key_changed_metric, err
+            "Failed to check if {key_changed_metric:?} exists, because {err:?}"
         )
     })? {
         remove_file(&key_changed_metric).map_err(|err| {
             format!(
-                "Couldn't delete the key changes metric at {:?}: {:?}",
-                key_changed_metric, err
+                "Couldn't delete the key changes metric at {key_changed_metric:?}: {err:?}"
             )
         })?;
     }
@@ -1229,7 +1222,7 @@ mod tests {
 
         fn generate_nidkg_key_transcript(&mut self, key_id: &MasterPublicKeyId) -> KeyTranscript {
             let MasterPublicKeyId::VetKd(vetkd_key_id) = key_id.clone() else {
-                panic!("Can't generate nidkg transcript for {}", key_id);
+                panic!("Can't generate nidkg transcript for {key_id}");
             };
             let mut config = RandomNiDkgConfig::builder()
                 .dkg_tag(NiDkgTag::HighThresholdForKey(

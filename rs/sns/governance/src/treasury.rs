@@ -15,7 +15,7 @@ use rust_decimal::Decimal;
 use std::time::{Duration, SystemTime};
 
 fn field_err(field_name: &str, child_message: String) -> String {
-    format!("invalid {}: {}", field_name, child_message,)
+    format!("invalid {field_name}: {child_message}",)
 }
 
 impl TryFrom<Valuation> for ValuationPb {
@@ -34,7 +34,7 @@ impl TryFrom<Valuation> for ValuationPb {
         let timestamp_seconds = Some(
             timestamp
                 .duration_since(SystemTime::UNIX_EPOCH)
-                .map_err(|err| field_err("timestamp", format!("{:?}: {:?}", timestamp, err)))?
+                .map_err(|err| field_err("timestamp", format!("{timestamp:?}: {err:?}")))?
                 .as_secs(),
         );
         let valuation_factors = Some(
@@ -54,15 +54,13 @@ impl TryFrom<Valuation> for ValuationPb {
 pub(crate) fn tokens_to_e8s(tokens: Decimal) -> Result<u64, String> {
     let e8s = tokens.checked_mul(Decimal::from(E8)).ok_or_else(|| {
         format!(
-            "Unable to convert {} tokens (Decimal) to e8s (u64) due to multiplication overflow.",
-            tokens,
+            "Unable to convert {tokens} tokens (Decimal) to e8s (u64) due to multiplication overflow.",
         )
     })?;
 
     let e8s = u64::try_from(e8s).map_err(|err| {
         format!(
-            "Unable to convert {} tokens (Decimal) to e8s (u64): {:?}",
-            tokens, err,
+            "Unable to convert {tokens} tokens (Decimal) to e8s (u64): {err:?}",
         )
     })?;
 
@@ -126,8 +124,7 @@ impl TryFrom<&ValuationPb> for Valuation {
         let account =
             Account::try_from(account.clone().unwrap_or_default()).unwrap_or_else(|err| {
                 defects.push(format!(
-                    "Unable to convert `account` {:?}: {:?}",
-                    account, err,
+                    "Unable to convert `account` {account:?}: {err:?}",
                 ));
                 // Ditto earlier comment.
                 Account {
@@ -140,8 +137,7 @@ impl TryFrom<&ValuationPb> for Valuation {
             .checked_add(Duration::from_secs(timestamp_seconds.unwrap_or_default()))
             .unwrap_or_else(|| {
                 defects.push(format!(
-                    "Unable to convert `timestamp` {:?}.",
-                    timestamp_seconds,
+                    "Unable to convert `timestamp` {timestamp_seconds:?}.",
                 ));
                 // Ditto earlier comment.
                 SystemTime::UNIX_EPOCH
@@ -161,7 +157,7 @@ impl TryFrom<&ValuationPb> for Valuation {
 
             Some(valuation_factors) => ValuationFactors::try_from(valuation_factors)
                 .unwrap_or_else(|err| {
-                    defects.push(format!("Invalid valuation_factors: {}", err));
+                    defects.push(format!("Invalid valuation_factors: {err}"));
                     garbage_valuation_factors
                 }),
         };
@@ -215,8 +211,7 @@ impl TryFrom<&ValuationFactorsPb> for ValuationFactors {
 
             Decimal::try_from(decimal).unwrap_or_else(|err| {
                 defects.push(format!(
-                    "Unable to convert `{}' {:?}: {:?}",
-                    name, value, err,
+                    "Unable to convert `{name}' {value:?}: {err:?}",
                 ));
                 // Ditto earlier comment.
                 Decimal::from(0)
@@ -276,8 +271,7 @@ pub(crate) async fn assess_treasury_balance(
         .await
         .map_err(|valuation_error| {
             format!(
-                "Unable to assess current treasury balance: {:?}",
-                valuation_error
+                "Unable to assess current treasury balance: {valuation_error:?}"
             )
         })?;
     Ok(valuation)
@@ -286,9 +280,9 @@ pub(crate) async fn assess_treasury_balance(
 pub(crate) fn interpret_token_code(token: i32) -> Result<Token, String> {
     // First, convert from i32 to TokePb.
     let token_pb = TokenPb::try_from(token)
-        .map_err(|err| format!("Unknown or unspecified token code {:?}: {:?}", token, err))?;
+        .map_err(|err| format!("Unknown or unspecified token code {token:?}: {err:?}"))?;
 
     // Then, convert from TokenPb to Token.
     Token::try_from(token_pb)
-        .map_err(|err| format!("Unknown or unspecified token code {:?}: {:?}", token, err,))
+        .map_err(|err| format!("Unknown or unspecified token code {token:?}: {err:?}",))
 }

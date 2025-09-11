@@ -63,7 +63,7 @@ where
     let len = field_value.len();
 
     if len < min {
-        let defect = &format!("too short (min = {} vs. observed = {})", min, len);
+        let defect = &format!("too short (min = {min} vs. observed = {len})");
 
         let bounded_field_value = field_value.to_string();
 
@@ -71,7 +71,7 @@ where
     }
 
     if len > max {
-        let defect = &format!("too long (max = {} vs. observed = {})", max, len);
+        let defect = &format!("too long (max = {max} vs. observed = {len})");
 
         let bounded_field_value = field_value
             .to_string()
@@ -131,13 +131,13 @@ fn validate_chars_count(
     let len = field_value.chars().count();
 
     if len < min {
-        let defect = &format!("too short (min = {} vs. observed = {})", min, len);
+        let defect = &format!("too short (min = {min} vs. observed = {len})");
 
         return field_err(field_name, field_value.to_string(), defect);
     }
 
     if len > max {
-        let defect = &format!("too long (max = {} vs. observed = {})", max, len);
+        let defect = &format!("too long (max = {max} vs. observed = {len})");
         let bounded_field_value = field_value.chars().take(max).collect::<String>();
 
         return field_err(field_name, bounded_field_value, defect);
@@ -152,7 +152,7 @@ fn validate_required_field<'a, Inner>(
 ) -> Result<&'a Inner, String> {
     field_value
         .as_ref()
-        .ok_or_else(|| format!("The {} field must be populated.", field_name))
+        .ok_or_else(|| format!("The {field_name} field must be populated."))
 }
 
 /// Return an Err whose inner value describes (in detail) what is wrong with `field_value`,

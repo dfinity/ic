@@ -407,8 +407,7 @@ impl<'a> QueryContext<'a> {
                 Err(UserError::new(
                     ErrorCode::CanisterOutOfCycles,
                     format!(
-                        "Canister {} is unable to process query calls because it's frozen. Please top up the canister with cycles and try again.",
-                        canister_id
+                        "Canister {canister_id} is unable to process query calls because it's frozen. Please top up the canister with cycles and try again."
                     ),
                 )),
             );
@@ -901,7 +900,7 @@ impl<'a> QueryContext<'a> {
             NoResponse { refund } => (
                 Some(Err(UserError::new(
                     ErrorCode::CanisterDidNotReply,
-                    format!("Canister {} did not produce a response", canister_id),
+                    format!("Canister {canister_id} did not produce a response"),
                 ))),
                 refund,
             ),
@@ -1048,7 +1047,7 @@ impl<'a> QueryContext<'a> {
     ) -> QueryResponse {
         let error = UserError::new(
             ErrorCode::CanisterDidNotReply,
-            format!("Canister {} did not produce a response", canister_id),
+            format!("Canister {canister_id} did not produce a response"),
         );
         match call_origin {
             CallOrigin::Ingress(_, _)

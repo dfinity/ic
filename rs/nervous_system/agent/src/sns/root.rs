@@ -39,7 +39,7 @@ impl TryFrom<ListSnsCanistersResponse> for SnsCanisters {
             extensions,
         } = src
         else {
-            return Err(format!("Some SNS canisters were missing: {:?}", src));
+            return Err(format!("Some SNS canisters were missing: {src:?}"));
         };
 
         let sns = Sns {

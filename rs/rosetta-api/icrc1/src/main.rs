@@ -244,7 +244,7 @@ async fn main() -> Result<()> {
                 let mut path = dir_path.clone();
                 path.push(format!("{}.db", PrincipalId::from(token_def.ledger_id)));
                 StorageClient::new_persistent(&path).unwrap_or_else(|err| {
-                    panic!("error creating persistent storage '{:?}': {}", path, err)
+                    panic!("error creating persistent storage '{path:?}': {err}")
                 })
             }
         };

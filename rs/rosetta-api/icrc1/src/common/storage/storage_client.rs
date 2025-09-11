@@ -74,7 +74,7 @@ impl StorageClient {
     /// Constructs a new SQLite in-memory store with a named DB that can be shared across instances.
     pub fn new_named_in_memory(name: &str) -> anyhow::Result<Self> {
         let connection = Connection::open_with_flags(
-            format!("'file:{}?mode=memory&cache=shared', uri=True", name),
+            format!("'file:{name}?mode=memory&cache=shared', uri=True"),
             OpenFlags::default(),
         )?;
         Self::new(connection)

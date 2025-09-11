@@ -1276,8 +1276,7 @@ where
             let prev = map.insert(Value::Integer(999), Value::Integer(999));
             assert!(
                 prev.is_none(),
-                "Expected no field with index 999, found {:?}",
-                prev
+                "Expected no field with index 999, found {prev:?}"
             );
             map
         };
@@ -1288,7 +1287,7 @@ where
     fn encode_without_field(t: T, field: usize) -> Result<Vec<u8>, serde_cbor::Error> {
         let remove_field = |mut map: MapValue| {
             map.remove(&Value::Integer(field as i128))
-                .unwrap_or_else(|| panic!("No such field: {}", field));
+                .unwrap_or_else(|| panic!("No such field: {field}"));
             map
         };
 
@@ -1307,7 +1306,7 @@ fn encode_with_mutation<T: serde::Serialize>(
 
     let value = match value {
         Value::Map(map) => Value::Map(mutate(map)),
-        other => panic!("Expected struct to serialize to a map, was {:?}", other),
+        other => panic!("Expected struct to serialize to a map, was {other:?}"),
     };
 
     serde_cbor::ser::to_vec_packed(&value)

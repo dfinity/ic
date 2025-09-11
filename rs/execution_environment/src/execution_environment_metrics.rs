@@ -212,7 +212,7 @@ impl ExecutionEnvironmentMetrics {
     ) {
         let (outcome_label, status_label) = match res {
             Ok(_) => (FINISHED_OUTCOME_LABEL.into(), SUCCESS_STATUS_LABEL.into()),
-            Err(err_code) => (ERROR_OUTCOME_LABEL.into(), format!("{:?}", err_code)),
+            Err(err_code) => (ERROR_OUTCOME_LABEL.into(), format!("{err_code:?}")),
         };
 
         self.observe_message_with_label(method_name, duration, outcome_label, status_label)
@@ -329,7 +329,7 @@ impl ExecutionEnvironmentMetrics {
                     | ic00::Method::BitcoinSendTransactionInternal
                     | ic00::Method::BitcoinGetSuccessors => String::from("slow"),
                 };
-                (format!("ic00_{}", method_name), speed_label)
+                (format!("ic00_{method_name}"), speed_label)
             }
             Err(_) => (
                 String::from("unknown_method"),

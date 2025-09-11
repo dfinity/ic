@@ -28,8 +28,7 @@ use std::str::FromStr;
 pub fn validate_principal(p: &str) -> Result<(), String> {
     let _ = PrincipalId::from_str(p).map_err(|x| {
         format!(
-            "Couldn't validate PrincipalId. String \"{}\" could not be converted to PrincipalId: {}",
-            p, x
+            "Couldn't validate PrincipalId. String \"{p}\" could not be converted to PrincipalId: {x}"
         )
     })?;
     Ok(())
@@ -38,8 +37,7 @@ pub fn validate_principal(p: &str) -> Result<(), String> {
 pub fn validate_canister_id(p: &str) -> Result<(), String> {
     let _pp = PrincipalId::from_str(p).map_err(|x| {
         format!(
-            "Couldn't validate CanisterId. String \"{}\" could not be converted to PrincipalId: {}",
-            p, x
+            "Couldn't validate CanisterId. String \"{p}\" could not be converted to PrincipalId: {x}"
         )
     })?;
     Ok(())
@@ -492,7 +490,7 @@ impl TryFrom<&Init> for Params {
     type Error = String;
     fn try_from(init: &Init) -> Result<Self, Self::Error> {
         let e = |field_name: &str| -> String {
-            format!("Type `Params` requires `Swap.init.{}`.", field_name)
+            format!("Type `Params` requires `Swap.init.{field_name}`.")
         };
         let min_participants = init.min_participants.ok_or_else(|| e("min_participants"))?;
         let min_participant_icp_e8s = init
@@ -1166,9 +1164,8 @@ impl TryFrom<crate::pb::v1::settle_neurons_fund_participation_response::NeuronsF
                 )
             }
             _ => Err(format!(
-                "Expected all fields to be set. nns_neuron_id({:?}), \
-                amount_icp_e8s({:?}), is_capped({:?})",
-                nns_neuron_id, amount_icp_e8s, is_capped
+                "Expected all fields to be set. nns_neuron_id({nns_neuron_id:?}), \
+                amount_icp_e8s({amount_icp_e8s:?}), is_capped({is_capped:?})"
             )),
         }
     }
@@ -1290,19 +1287,16 @@ mod tests {
         assert!(
             participants_per_message >= MAX_LIST_DIRECT_PARTICIPANTS_LIMIT as usize,
             "The currently compiled MAX_LIST_DIRECT_PARTICIPANTS_LIMIT is greater than what can \
-            fit in a single inter canister message. Calculated participants per message: {}. \
-            Configured limit: {}",
-            participants_per_message,
-            MAX_LIST_DIRECT_PARTICIPANTS_LIMIT
+            fit in a single inter canister message. Calculated participants per message: {participants_per_message}. \
+            Configured limit: {MAX_LIST_DIRECT_PARTICIPANTS_LIMIT}"
         );
 
         let remainder = participants_per_message - MAX_LIST_DIRECT_PARTICIPANTS_LIMIT as usize;
         assert!(
             remainder < 5000,
-            "An increment of more than 5000 participants ({}) can be added to the \
+            "An increment of more than 5000 participants ({remainder}) can be added to the \
             ListDirectParticipantsResponse without reaching the max message size. Update \
-            MAX_LIST_DIRECT_PARTICIPANTS_LIMIT and the corresponding API docs",
-            remainder
+            MAX_LIST_DIRECT_PARTICIPANTS_LIMIT and the corresponding API docs"
         );
     }
 
@@ -1469,13 +1463,13 @@ mod tests {
         let after_open = [Committed, Aborted];
 
         for lifecycle in before_open {
-            assert!(lifecycle.is_before_open(), "{:?}", lifecycle);
-            assert!(!lifecycle.is_after_open(), "{:?}", lifecycle);
+            assert!(lifecycle.is_before_open(), "{lifecycle:?}");
+            assert!(!lifecycle.is_after_open(), "{lifecycle:?}");
         }
 
         for lifecycle in after_open {
-            assert!(lifecycle.is_after_open(), "{:?}", lifecycle);
-            assert!(!lifecycle.is_before_open(), "{:?}", lifecycle);
+            assert!(lifecycle.is_after_open(), "{lifecycle:?}");
+            assert!(!lifecycle.is_before_open(), "{lifecycle:?}");
         }
 
         assert!(!Open.is_before_open());

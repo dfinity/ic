@@ -276,7 +276,7 @@ pub fn generate_ecdsa_presig_quadruple<R: RngCore + CryptoRng>(
         kappa_times_lambda_transcript,
         key_times_lambda_transcript,
     )
-    .unwrap_or_else(|error| panic!("failed to create pre-signature quadruple: {:?}", error))
+    .unwrap_or_else(|error| panic!("failed to create pre-signature quadruple: {error:?}"))
 }
 
 /// Creates a new `IDkgTranscriptParams` with all information copied from a
@@ -401,7 +401,7 @@ pub mod node {
 
         pub fn create_dealing_or_panic(&self, params: &IDkgTranscriptParams) -> SignedIDkgDealing {
             self.create_dealing(params).unwrap_or_else(|error| {
-                panic!("failed to create IDkg dealing for {:?}: {:?}", self, error)
+                panic!("failed to create IDkg dealing for {self:?}: {error:?}")
             })
         }
 
@@ -409,7 +409,7 @@ pub mod node {
             self.crypto_component
                 .load_transcript(transcript)
                 .unwrap_or_else(|error| {
-                    panic!("failed to load transcript for {:?}: {:?}", self, error)
+                    panic!("failed to load transcript for {self:?}: {error:?}")
                 });
         }
 
@@ -433,7 +433,7 @@ pub mod node {
         ) -> IDkgTranscript {
             self.create_transcript(params, dealings)
                 .unwrap_or_else(|error| {
-                    panic!("failed to create transcript for {:?}: {:?}", self, error)
+                    panic!("failed to create transcript for {self:?}: {error:?}")
                 })
         }
 
@@ -1331,7 +1331,7 @@ impl CanisterThresholdSigTestEnvironment {
             .crypto()
             .current_node_public_keys()
             .expect("Failed to retrieve node public keys");
-        assert!(self.nodes.insert(node), "failed adding node {:?}", node_id);
+        assert!(self.nodes.insert(node), "failed adding node {node_id:?}");
         self.registry_data
             .add(
                 &make_crypto_node_key(node_id, KeyPurpose::NodeSigning),
@@ -2759,7 +2759,7 @@ pub fn corrupt_dealings_and_generate_complaints<R: RngCore + CryptoRng>(
 
     let complainer_index = params
         .receiver_index(complainer.id())
-        .unwrap_or_else(|| panic!("Missing receiver {:?}", complainer));
+        .unwrap_or_else(|| panic!("Missing receiver {complainer:?}"));
     dealing_indices_to_corrupt
         .iter()
         .for_each(|index_to_corrupt| {
@@ -2831,7 +2831,7 @@ fn corrupt_signed_dealing_for_one_receiver<R: Rng + CryptoRng>(
 ) {
     let signed_dealing = dealings
         .get_mut(&dealing_index_to_corrupt)
-        .unwrap_or_else(|| panic!("Missing dealing at index {:?}", dealing_index_to_corrupt));
+        .unwrap_or_else(|| panic!("Missing dealing at index {dealing_index_to_corrupt:?}"));
     let invalidated_internal_dealing_raw = {
         let internal_dealing =
             IDkgDealingInternal::deserialize(&signed_dealing.idkg_dealing().internal_dealing_raw)

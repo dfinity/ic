@@ -300,7 +300,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
                 break (
                     StatusCode::BAD_REQUEST,
                     ApiResponse::Error {
-                        message: format!("{:?}", e),
+                        message: format!("{e:?}"),
                     },
                 );
             }
@@ -377,7 +377,7 @@ impl<T: TryFrom<OpOut>> FromOpOut for T {
             OpOut::Error(e) => (
                 StatusCode::BAD_REQUEST,
                 ApiResponse::Error {
-                    message: format!("{:?}", e),
+                    message: format!("{e:?}"),
                 },
             ),
             val => match T::try_from(val) {
@@ -606,7 +606,7 @@ pub async fn handler_json_query(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -679,7 +679,7 @@ pub async fn handler_get_controllers(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -701,7 +701,7 @@ pub async fn handler_get_cycles(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -723,7 +723,7 @@ pub async fn handler_get_stable_memory(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -745,7 +745,7 @@ pub async fn handler_get_subnet(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -1097,7 +1097,7 @@ pub async fn handler_submit_ingress_message(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -1119,7 +1119,7 @@ pub async fn handler_await_ingress_message(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -1146,7 +1146,7 @@ pub async fn handler_ingress_status(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -1195,7 +1195,7 @@ pub async fn handler_add_cycles(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -1220,7 +1220,7 @@ pub async fn handler_set_stable_memory(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -1288,7 +1288,7 @@ pub async fn create_instance(
                     return (
                         StatusCode::BAD_REQUEST,
                         Json(rest::CreateInstanceResponse::Error {
-                            message: format!("Subnet config failed to validate: {}", e),
+                            message: format!("Subnet config failed to validate: {e}"),
                         }),
                     );
                 }
@@ -1298,7 +1298,7 @@ pub async fn create_instance(
             return (
                 StatusCode::BAD_REQUEST,
                 Json(rest::CreateInstanceResponse::Error {
-                    message: format!("Subnet config failed to validate: {:?}", e),
+                    message: format!("Subnet config failed to validate: {e:?}"),
                 }),
             );
         }
@@ -1320,7 +1320,7 @@ pub async fn create_instance(
                 return (
                     StatusCode::BAD_REQUEST,
                     Json(rest::CreateInstanceResponse::Error {
-                        message: format!("Failed to parse log level: {:?}", e),
+                        message: format!("Failed to parse log level: {e:?}"),
                     }),
                 );
             }
@@ -1377,8 +1377,7 @@ pub async fn create_instance(
                         StatusCode::BAD_REQUEST,
                         Json(rest::CreateInstanceResponse::Error {
                             message: format!(
-                                "The `nns_ui` feature requires the `{}` feature to be enabled, too.",
-                                icp_feature_str
+                                "The `nns_ui` feature requires the `{icp_feature_str}` feature to be enabled, too."
                             ),
                         }),
                     );

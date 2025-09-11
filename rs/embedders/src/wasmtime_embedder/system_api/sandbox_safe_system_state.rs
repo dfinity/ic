@@ -180,7 +180,7 @@ impl SystemStateModifications {
         );
         system_state
             .reject_subnet_output_request(msg, reject_context, subnet_ids)
-            .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {:?}", e)))?;
+            .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {e:?}")))?;
         Ok(())
     }
 
@@ -202,7 +202,7 @@ impl SystemStateModifications {
         let reject_context = RejectContext::new(err.code().into(), err.to_string());
         system_state
             .reject_subnet_output_request(msg, reject_context, subnet_ids)
-            .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {:?}", e)))?;
+            .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {e:?}")))?;
         Ok(())
     }
 
@@ -216,7 +216,7 @@ impl SystemStateModifications {
         let msg_receiver = msg.receiver;
         system_state
             .push_output_request(msg.into(), time)
-            .map_err(|e| Self::error(format!("Failed to push output request: {:?}", e)))?;
+            .map_err(|e| Self::error(format!("Failed to push output request: {e:?}")))?;
         if sent_cycles > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
             info!(
                 logger,
@@ -308,8 +308,7 @@ impl SystemStateModifications {
                     Err(UserError::new(
                         ErrorCode::CanisterContractViolation,
                         format!(
-                            "Management canister call payload includes sender canister version {:?} that does not match the actual sender canister version {}.",
-                            sender_canister_version, canister_version_from_system
+                            "Management canister call payload includes sender canister version {sender_canister_version:?} that does not match the actual sender canister version {canister_version_from_system}."
                         ),
                     ))
                 }
@@ -955,9 +954,7 @@ impl SandboxSafeSystemState {
         let old_balance = self.cycles_balance();
         assert!(
             new_balance <= old_balance,
-            "Unexpected increase of cycles balances {} => {}",
-            old_balance,
-            new_balance
+            "Unexpected increase of cycles balances {old_balance} => {new_balance}"
         );
 
         self.system_state_modifications

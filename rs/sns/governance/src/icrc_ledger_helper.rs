@@ -83,15 +83,13 @@ impl<'a> ICRCLedgerHelper<'a> {
 
         let Some(timestamp) = map_val.get(TIMESTAMP) else {
             return Err(format!(
-                "Error parsing the block: missing timestamp attribute `{}`",
-                TIMESTAMP
+                "Error parsing the block: missing timestamp attribute `{TIMESTAMP}`"
             ));
         };
 
         let ICRC3Value::Nat(timestamp) = timestamp else {
             return Err(format!(
-                "Error parsing the block: timestamp attribute `{}` must be Nat.",
-                TIMESTAMP
+                "Error parsing the block: timestamp attribute `{TIMESTAMP}` must be Nat."
             ));
         };
 

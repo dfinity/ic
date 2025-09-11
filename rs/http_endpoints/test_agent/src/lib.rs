@@ -22,7 +22,7 @@ pub const APPLICATION_CBOR: &str = "application/cbor";
 pub async fn wait_for_status_healthy(addr: &SocketAddr) -> Result<(), &'static str> {
     let fut = async {
         loop {
-            let url = format!("http://{}/api/v2/status", addr);
+            let url = format!("http://{addr}/api/v2/status");
 
             let response = reqwest::Client::new()
                 .get(url)
@@ -247,7 +247,7 @@ impl CanisterReadState {
     }
 
     pub async fn read_state(self, addr: SocketAddr) -> reqwest::Response {
-        let url_string = format!("http://{}", addr);
+        let url_string = format!("http://{addr}");
         let url = Url::parse(&url_string).unwrap();
         self.read_state_at_url(url).await
     }

@@ -435,14 +435,12 @@ impl StreamHandlerImpl {
                     assert_eq!(
                         stream_slice.header().signals_end(),
                         StreamIndex::from(0),
-                        "Cannot garbage collect a stream for subnet {} that does not exist",
-                        remote_subnet
+                        "Cannot garbage collect a stream for subnet {remote_subnet} that does not exist"
                     );
                     assert_eq!(
                         stream_slice.header().begin(),
                         StreamIndex::from(0),
-                        "Signals from subnet {} do not start from 0 in the first communication attempt",
-                        remote_subnet
+                        "Signals from subnet {remote_subnet} do not start from 0 in the first communication attempt"
                     );
                 }
             }
@@ -1198,10 +1196,7 @@ fn assert_valid_signals(
         iter.clone()
             .zip(iter.skip(1).chain(std::iter::once(signals_end)))
             .all(|(x, y)| x < y),
-        "Invalid {}: signals_end {}, signals {:?}",
-        stream_component,
-        signals_end,
-        reject_signals
+        "Invalid {stream_component}: signals_end {signals_end}, signals {reject_signals:?}"
     );
 }
 
@@ -1214,11 +1209,7 @@ fn assert_valid_signals_for_messages(
 ) {
     assert!(
         messages_begin <= signals_end && signals_end <= messages_end,
-        "Invalid {}: signals_end {}, messages [{}, {})",
-        stream_component,
-        signals_end,
-        messages_begin,
-        messages_end,
+        "Invalid {stream_component}: signals_end {signals_end}, messages [{messages_begin}, {messages_end})",
     );
 }
 
@@ -1252,13 +1243,13 @@ impl std::fmt::Display for StreamComponent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             StreamComponent::SignalsFrom(subnet) => {
-                write!(f, "signal indices in stream slice from subnet {}", subnet)
+                write!(f, "signal indices in stream slice from subnet {subnet}")
             }
             StreamComponent::SignalsTo(subnet) => {
-                write!(f, "signal indices in stream to subnet {}", subnet)
+                write!(f, "signal indices in stream to subnet {subnet}")
             }
             StreamComponent::MessagesFrom(subnet) => {
-                write!(f, "message indices in stream slice from subnet {}", subnet)
+                write!(f, "message indices in stream slice from subnet {subnet}")
             }
         }
     }

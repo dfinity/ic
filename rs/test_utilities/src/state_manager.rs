@@ -228,14 +228,13 @@ impl StateManager for FakeStateManager {
         // should have a matching commit_and_certify.(#4618)
         assert!(
             tip.is_none(),
-            "Attempt to submit a state not borrowed from this StateManager Height {}",
-            height
+            "Attempt to submit a state not borrowed from this StateManager Height {height}"
         );
         *tip = Some((height, state));
     }
 
     fn report_diverged_checkpoint(&self, height: Height) {
-        panic!("Diverged at height {}", height)
+        panic!("Diverged at height {height}")
     }
 }
 

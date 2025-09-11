@@ -238,8 +238,7 @@ impl TryFrom<&models::Request> for Request {
         let pid =
             PrincipalId::try_from(payload.update_content().sender.clone().0).map_err(|e| {
                 ApiError::internal_error(format!(
-                    "Could not parse envelope sender's public key: {}",
-                    e
+                    "Could not parse envelope sender's public key: {e}"
                 ))
             })?;
 
@@ -252,7 +251,7 @@ impl TryFrom<&models::Request> for Request {
                     ic_nns_governance_api::ManageNeuron
                 )
                 .map_err(|e| {
-                    ApiError::invalid_request(format!("Could not parse manage_neuron: {}", e))
+                    ApiError::invalid_request(format!("Could not parse manage_neuron: {e}"))
                 })
             }
             .map(|m| m.command)
@@ -339,8 +338,7 @@ impl TryFrom<&models::Request> for Request {
                     let recipient = if let Some(a) = to_account {
                         Some((&a).try_into().map_err(|e| {
                             ApiError::invalid_request(format!(
-                                "Could not parse recipient account identifier: {}",
-                                e
+                                "Could not parse recipient account identifier: {e}"
                             ))
                         })?)
                     } else {

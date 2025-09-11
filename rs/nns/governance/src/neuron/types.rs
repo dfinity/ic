@@ -46,7 +46,7 @@ impl TryFrom<i32> for Visibility {
         } else if src == Visibility::Public as i32 {
             Ok(Visibility::Public)
         } else {
-            Err(format!("Invalid visibility code: {:?}.", src,))
+            Err(format!("Invalid visibility code: {src:?}.",))
         }
     }
 }
@@ -707,8 +707,7 @@ impl Neuron {
                     Err(GovernanceError::new_with_message(
                         ErrorType::NotAuthorized,
                         format!(
-                            "Caller '{:?}' must be the controller or hotkey of the neuron to join or leave the neuron fund.",
-                            caller,
+                            "Caller '{caller:?}' must be the controller or hotkey of the neuron to join or leave the neuron fund.",
                         ),
                     ))
                 }
@@ -722,8 +721,7 @@ impl Neuron {
                     Err(GovernanceError::new_with_message(
                         ErrorType::NotAuthorized,
                         format!(
-                            "Caller '{:?}' must be the controller of the neuron to perform this operation:\n{:#?}",
-                            caller, configure,
+                            "Caller '{caller:?}' must be the controller of the neuron to perform this operation:\n{configure:#?}",
                         ),
                     ))
                 }
@@ -1458,7 +1456,7 @@ impl TryFrom<Neuron> for DecomposedNeuron {
             recent_ballots_next_entry_index: recent_ballots_next_entry_index
                 .map(|x| {
                     u32::try_from(x).map_err(|e| NeuronStoreError::InvalidData {
-                        reason: format!("Failed to convert recent_ballots_next_entry_index: {}", e),
+                        reason: format!("Failed to convert recent_ballots_next_entry_index: {e}"),
                     })
                 })
                 .transpose()?,

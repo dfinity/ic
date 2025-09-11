@@ -1389,8 +1389,7 @@ pub mod test {
             .collect::<Vec<_>>();
         assert_eq!(
             enqueued_blocks, next_hashes,
-            "{:#?} != {:#?}",
-            enqueued_blocks, next_hashes
+            "{enqueued_blocks:#?} != {next_hashes:#?}"
         );
     }
 
@@ -1422,7 +1421,7 @@ pub mod test {
         {
             let mut blockchain = blockchain_manager.blockchain.lock().unwrap();
             let (headers_added, maybe_err) = blockchain.add_headers(&next_headers);
-            assert_eq!(headers_added.len(), next_headers.len(), "{:#?}", maybe_err);
+            assert_eq!(headers_added.len(), next_headers.len(), "{maybe_err:#?}");
             blockchain.add_block(block).expect("unable to add block");
         }
         blockchain_manager.enqueue_new_blocks_to_download(next_headers);
@@ -1435,8 +1434,7 @@ pub mod test {
             .collect::<Vec<_>>();
         assert_eq!(
             enqueued_blocks, next_hashes,
-            "{:#?} != {:#?}",
-            enqueued_blocks, next_hashes
+            "{enqueued_blocks:#?} != {next_hashes:#?}"
         );
     }
 
@@ -1460,7 +1458,7 @@ pub mod test {
         {
             let mut blockchain = blockchain_manager.blockchain.lock().unwrap();
             let (headers_added, maybe_err) = blockchain.add_headers(&next_headers);
-            assert_eq!(headers_added.len(), next_headers.len(), "{:#?}", maybe_err);
+            assert_eq!(headers_added.len(), next_headers.len(), "{maybe_err:#?}");
             blockchain.add_block(block_3).expect("unable to add block");
         }
 
@@ -1519,7 +1517,7 @@ pub mod test {
         {
             let mut blockchain = blockchain_manager.blockchain.lock().unwrap();
             let (headers_added, maybe_err) = blockchain.add_headers(&next_headers);
-            assert_eq!(headers_added.len(), next_headers.len(), "{:#?}", maybe_err);
+            assert_eq!(headers_added.len(), next_headers.len(), "{maybe_err:#?}");
             blockchain.add_block(block_5).expect("unable to add block");
         }
 
@@ -1633,7 +1631,7 @@ pub mod test {
             let request = blockchain_manager
                 .getheaders_requests
                 .get_mut(&addr)
-                .unwrap_or_else(|| panic!("{} should have a request", addr));
+                .unwrap_or_else(|| panic!("{addr} should have a request"));
             request.sent_at = None;
         }
 

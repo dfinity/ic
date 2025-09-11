@@ -41,7 +41,7 @@ fn diff_checkpoints(path_a: PathBuf, path_b: PathBuf) -> Result<Changes, Checkpo
 
 /// `cdiff` command entry point.
 pub fn do_diff(path_a: PathBuf, path_b: PathBuf) -> Result<(), String> {
-    let d = diff_checkpoints(path_a, path_b).map_err(|err| format!("✗ Diff FAILED:\n\t{}", err))?;
+    let d = diff_checkpoints(path_a, path_b).map_err(|err| format!("✗ Diff FAILED:\n\t{err}"))?;
     if d.is_empty() {
         println!("✓ Snapshots are identical");
     } else {

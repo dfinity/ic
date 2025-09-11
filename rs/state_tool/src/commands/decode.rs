@@ -44,7 +44,7 @@ pub fn do_decode(path: PathBuf) -> Result<(), String> {
         CANISTER_FILE => {
             display_proto::<pb_canister::CanisterStateBits, CanisterStateBits>(path.clone())
         }
-        _ => Err(format!("don't know how to decode {}", fname)),
+        _ => Err(format!("don't know how to decode {fname}")),
     }
 }
 
@@ -61,7 +61,7 @@ where
     <RustType as TryFrom<(ProtoType, &'a dyn CheckpointLoadingMetrics)>>::Error: std::fmt::Display,
 {
     let f: ProtoFileWith<ProtoType, ReadOnly> = path.into();
-    let pb = f.deserialize().map_err(|e| format!("{:?}", e))?;
+    let pb = f.deserialize().map_err(|e| format!("{e:?}"))?;
     let t = RustType::try_from((pb, metrics)).map_err(|e| {
         format!(
             "failed to decode rust type {} from protobuf {}: {}",
@@ -70,7 +70,7 @@ where
             e
         )
     })?;
-    println!("{:#?}", t);
+    println!("{t:#?}");
     Ok(())
 }
 
@@ -82,7 +82,7 @@ where
     <RustType as TryFrom<ProtoType>>::Error: std::fmt::Display,
 {
     let f: ProtoFileWith<ProtoType, ReadOnly> = path.into();
-    let pb = f.deserialize().map_err(|e| format!("{:?}", e))?;
+    let pb = f.deserialize().map_err(|e| format!("{e:?}"))?;
     let t = RustType::try_from(pb).map_err(|e| {
         format!(
             "failed to decode rust type {} from protobuf {}: {}",
@@ -91,6 +91,6 @@ where
             e
         )
     })?;
-    println!("{:#?}", t);
+    println!("{t:#?}");
     Ok(())
 }

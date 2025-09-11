@@ -38,8 +38,7 @@ impl<M: Memory> NeuronAccountIdIndex<M> {
                 Err(GovernanceError::new_with_message(
                     ErrorType::PreconditionFailed,
                     format!(
-                        "AccountIdentifier {:?} already exists in the index",
-                        account_id
+                        "AccountIdentifier {account_id:?} already exists in the index"
                     ),
                 ))
             }
@@ -63,8 +62,7 @@ impl<M: Memory> NeuronAccountIdIndex<M> {
                     Err(GovernanceError::new_with_message(
                         ErrorType::PreconditionFailed,
                         format!(
-                            "AccountIdentifier ({}) exists in the index with a different neuron id {}",
-                            account_identifier, previous_neuron_id
+                            "AccountIdentifier ({account_identifier}) exists in the index with a different neuron id {previous_neuron_id}"
                         ),
                     ))
                 }
@@ -72,8 +70,7 @@ impl<M: Memory> NeuronAccountIdIndex<M> {
             None => Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "AccountIdentifier ({}) already absent in the index",
-                    account_identifier
+                    "AccountIdentifier ({account_identifier}) already absent in the index"
                 ),
             )),
         }

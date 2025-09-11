@@ -425,7 +425,7 @@ impl CanisterHttpPoolManagerImpl {
                     self.metrics.shares_marked_invalid.inc();
                     Some(CanisterHttpChangeAction::HandleInvalid(
                         share.clone(),
-                        format!("Unable to verify signature of share, {}", err),
+                        format!("Unable to verify signature of share, {err}"),
                     ))
                 } else {
                     // Update the set of existing signed requests.

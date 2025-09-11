@@ -95,8 +95,8 @@ enum WatConst {
 impl fmt::Display for WatConst {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            WatConst::I32(value) => write!(f, "(i32.const {})", value),
-            WatConst::I64(value) => write!(f, "(i64.const {})", value),
+            WatConst::I32(value) => write!(f, "(i32.const {value})"),
+            WatConst::I64(value) => write!(f, "(i64.const {value})"),
         }
     }
 }
@@ -197,7 +197,7 @@ impl WatData {
 fn format_bytes(bytes: &[u8]) -> String {
     bytes
         .iter()
-        .map(|b| format!("\\{:02X}", b))
+        .map(|b| format!("\\{b:02X}"))
         .collect::<Vec<String>>()
         .join("")
 }

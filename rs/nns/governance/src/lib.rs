@@ -329,8 +329,7 @@ impl Clock for IcClock {
         // Step 3: Convert back to u64.
         u64::try_from(modified_timestamp_seconds).unwrap_or_else(|err| {
             panic!(
-                "Timestamp no longer fits in u64 {} + {}. err: {}",
-                real_timestamp_seconds, delta_s, err,
+                "Timestamp no longer fits in u64 {real_timestamp_seconds} + {delta_s}. err: {err}",
             );
         })
     }
@@ -1018,71 +1017,61 @@ impl NeuronSubsetMetricsPb {
         } = self;
 
         w.encode_gauge(
-            &format!("governance_{}_neurons_count", neuron_subset_name),
+            &format!("governance_{neuron_subset_name}_neurons_count"),
             count.unwrap_or_default() as f64,
-            &format!("The number of neurons that {}.", neuron_subset_description,),
+            &format!("The number of neurons that {neuron_subset_description}.",),
         )?;
 
         w.encode_gauge(
-            &format!("governance_total_staked_e8s_{}", neuron_subset_name),
+            &format!("governance_total_staked_e8s_{neuron_subset_name}"),
             total_staked_e8s.unwrap_or_default() as f64,
             &format!(
-                "The total amount of staked ICP (in e8s) in neurons that {}.",
-                neuron_subset_description,
+                "The total amount of staked ICP (in e8s) in neurons that {neuron_subset_description}.",
             ),
         )?;
         w.encode_gauge(
             &format!(
-                "governance_total_staked_maturity_e8s_equivalent_{}",
-                neuron_subset_name
+                "governance_total_staked_maturity_e8s_equivalent_{neuron_subset_name}"
             ),
             total_staked_maturity_e8s_equivalent.unwrap_or_default() as f64,
             &format!(
-                "The total amount of staked maturity (in e8s equivalent) in neurons that {}.",
-                neuron_subset_description,
+                "The total amount of staked maturity (in e8s equivalent) in neurons that {neuron_subset_description}.",
             ),
         )?;
         w.encode_gauge(
             &format!(
-                "governance_total_maturity_e8s_equivalent_{}",
-                neuron_subset_name
+                "governance_total_maturity_e8s_equivalent_{neuron_subset_name}"
             ),
             total_maturity_e8s_equivalent.unwrap_or_default() as f64,
             &format!(
-                "The total amount of unstaked maturity (in e8s equivalent) in neurons that {}.",
-                neuron_subset_description,
+                "The total amount of unstaked maturity (in e8s equivalent) in neurons that {neuron_subset_description}.",
             ),
         )?;
 
         w.encode_gauge(
-            &format!("governance_total_voting_power_{}", neuron_subset_name),
+            &format!("governance_total_voting_power_{neuron_subset_name}"),
             total_voting_power.unwrap_or_default() as f64,
             &format!(
-                "Deprecated. Use governance_total_deciding_voting_power_{} or \
-                 governance_total_potential_voting_power_{} instead.",
-                neuron_subset_name, neuron_subset_name,
+                "Deprecated. Use governance_total_deciding_voting_power_{neuron_subset_name} or \
+                 governance_total_potential_voting_power_{neuron_subset_name} instead.",
             ),
         )?;
         w.encode_gauge(
             &format!(
-                "governance_total_deciding_voting_power_{}",
-                neuron_subset_name
+                "governance_total_deciding_voting_power_{neuron_subset_name}"
             ),
             total_deciding_voting_power.unwrap_or_default() as f64,
             &format!(
-                "The total amount of deciding voting power of all neurons that {}.",
-                neuron_subset_description,
+                "The total amount of deciding voting power of all neurons that {neuron_subset_description}.",
             ),
         )?;
         w.encode_gauge(
             &format!(
-                "governance_total_potential_voting_power_{}",
-                neuron_subset_name
+                "governance_total_potential_voting_power_{neuron_subset_name}"
             ),
             total_potential_voting_power.unwrap_or_default() as f64,
             &format!(
-                "The total amount of potential voting power of all neurons that {}.",
-                neuron_subset_description,
+                "The total amount of potential voting power of all neurons that {neuron_subset_description}.",
             ),
         )?;
 
@@ -1090,10 +1079,9 @@ impl NeuronSubsetMetricsPb {
 
         encode_dissolve_delay_buckets(
             w.gauge_vec(
-                &format!("governance_{}_neurons_count_buckets", neuron_subset_name),
+                &format!("governance_{neuron_subset_name}_neurons_count_buckets"),
                 &format!(
-                    "Number of neurons that {}, grouped by dissolve delay.",
-                    neuron_subset_description,
+                    "Number of neurons that {neuron_subset_description}, grouped by dissolve delay.",
                 ),
             )?,
             count_buckets,
@@ -1105,11 +1093,10 @@ impl NeuronSubsetMetricsPb {
                 // does not contain "staked"). This is to maintain consistency with existing
                 // metrics. Whereas, the name of the field is consistent with the analogous
                 // singular field, total_staked_e8s.
-                &format!("governance_{}_neurons_e8s_buckets", neuron_subset_name),
+                &format!("governance_{neuron_subset_name}_neurons_e8s_buckets"),
                 &format!(
-                    "The total amount of staked ICP (in e8s) in neurons that {}, \
+                    "The total amount of staked ICP (in e8s) in neurons that {neuron_subset_description}, \
                      grouped by dissolve delay.",
-                    neuron_subset_description,
                 ),
             )?,
             staked_e8s_buckets,
@@ -1117,13 +1104,11 @@ impl NeuronSubsetMetricsPb {
         encode_dissolve_delay_buckets(
             w.gauge_vec(
                 &format!(
-                    "governance_{}_neurons_staked_maturity_e8s_equivalent_buckets",
-                    neuron_subset_name
+                    "governance_{neuron_subset_name}_neurons_staked_maturity_e8s_equivalent_buckets"
                 ),
                 &format!(
-                    "The total amount of staked maturity (in e8s equivalent) in neurons that {}, \
+                    "The total amount of staked maturity (in e8s equivalent) in neurons that {neuron_subset_description}, \
                          grouped by dissolve delay.",
-                    neuron_subset_description,
                 ),
             )?,
             staked_maturity_e8s_equivalent_buckets,
@@ -1131,13 +1116,11 @@ impl NeuronSubsetMetricsPb {
         encode_dissolve_delay_buckets(
             w.gauge_vec(
                 &format!(
-                    "governance_{}_neurons_maturity_e8s_equivalent_buckets",
-                    neuron_subset_name
+                    "governance_{neuron_subset_name}_neurons_maturity_e8s_equivalent_buckets"
                 ),
                 &format!(
-                    "The total amount of unstaked maturity (in e8s equivalent) in neurons that {}, \
+                    "The total amount of unstaked maturity (in e8s equivalent) in neurons that {neuron_subset_description}, \
                          grouped by dissolve delay.",
-                    neuron_subset_description,
                 ),
             )?,
             maturity_e8s_equivalent_buckets,
@@ -1146,13 +1129,11 @@ impl NeuronSubsetMetricsPb {
         encode_dissolve_delay_buckets(
             w.gauge_vec(
                 &format!(
-                    "governance_{}_neurons_voting_power_buckets",
-                    neuron_subset_name
+                    "governance_{neuron_subset_name}_neurons_voting_power_buckets"
                 ),
                 &format!(
-                    "Deprecated. Use either governance_{}_deciding_voting_power_buckets, \
-                     or governance_{}_potential_voting_power_buckets instead.",
-                    neuron_subset_name, neuron_subset_name,
+                    "Deprecated. Use either governance_{neuron_subset_name}_deciding_voting_power_buckets, \
+                     or governance_{neuron_subset_name}_potential_voting_power_buckets instead.",
                 ),
             )?,
             voting_power_buckets,
@@ -1160,13 +1141,11 @@ impl NeuronSubsetMetricsPb {
         encode_dissolve_delay_buckets(
             w.gauge_vec(
                 &format!(
-                    "governance_{}_deciding_voting_power_buckets",
-                    neuron_subset_name
+                    "governance_{neuron_subset_name}_deciding_voting_power_buckets"
                 ),
                 &format!(
                     "The total amount of deciding voting power (used to decide proposals) \
-                     in neurons that {}, grouped by dissolve delay.",
-                    neuron_subset_description,
+                     in neurons that {neuron_subset_description}, grouped by dissolve delay.",
                 ),
             )?,
             deciding_voting_power_buckets,
@@ -1174,13 +1153,11 @@ impl NeuronSubsetMetricsPb {
         encode_dissolve_delay_buckets(
             w.gauge_vec(
                 &format!(
-                    "governance_{}_potential_voting_power_buckets",
-                    neuron_subset_name
+                    "governance_{neuron_subset_name}_potential_voting_power_buckets"
                 ),
                 &format!(
                     "The total amount of potential voting power (used to decide \
-                     voting rewards) in neurons that {}, grouped by dissolve delay.",
-                    neuron_subset_description,
+                     voting rewards) in neurons that {neuron_subset_description}, grouped by dissolve delay.",
                 ),
             )?,
             potential_voting_power_buckets,

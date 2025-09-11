@@ -137,10 +137,10 @@ impl RenderablePayload for Precise {
             candid_str
         } else {
             // Fallback in case Candid serialization crashes.
-            format!("{:#?}", self)
+            format!("{self:#?}")
         };
 
-        format!("#### Raw Payload\n\n{}", render)
+        format!("#### Raw Payload\n\n{render}")
     }
 }
 
@@ -237,7 +237,7 @@ async fn validate_deposit_operation_impl(
             subaccount: sns_subaccount,
         })
         .await
-        .map_err(|e| format!("Failed to get SNS treasury balance: {:?}", e))?;
+        .map_err(|e| format!("Failed to get SNS treasury balance: {e:?}"))?;
     let icp_balance = governance
         .nns_ledger
         .account_balance(Account {
@@ -245,7 +245,7 @@ async fn validate_deposit_operation_impl(
             subaccount: icp_subaccount,
         })
         .await
-        .map_err(|e| format!("Failed to get ICP treasury balance: {:?}", e))?;
+        .map_err(|e| format!("Failed to get ICP treasury balance: {e:?}"))?;
 
     let icp_requested = Tokens::from_e8s(structurally_valid.treasury_allocation_icp_e8s);
     let sns_requested = Tokens::from_e8s(structurally_valid.treasury_allocation_sns_e8s);
@@ -253,15 +253,13 @@ async fn validate_deposit_operation_impl(
     // Unwrap is safe, only fails if divisor is zero, which we don't do.
     if sns_requested > sns_balance.checked_div(2).unwrap() {
         return Err(format!(
-            "SNS treasury deposit request of {} exceeds 50% of current SNS Token balance of {}",
-            sns_requested, sns_balance
+            "SNS treasury deposit request of {sns_requested} exceeds 50% of current SNS Token balance of {sns_balance}"
         ));
     }
 
     if icp_requested > icp_balance.checked_div(2).unwrap() {
         return Err(format!(
-            "ICP treasury deposit request of {} exceeds 50% of current ICP balance of {}",
-            icp_requested, icp_balance
+            "ICP treasury deposit request of {icp_requested} exceeds 50% of current ICP balance of {icp_balance}"
         ));
     }
 
@@ -291,8 +289,7 @@ lazy_static! {
             let key = spec.name();
             assert!(
                 !map.contains_key(&key),
-                "Duplicate operation name detected: '{}'. Each operation must have a unique name.",
-                key
+                "Duplicate operation name detected: '{key}'. Each operation must have a unique name."
             );
             map.insert(key, spec);
         }
@@ -317,8 +314,7 @@ pub fn get_extension_operation_spec_from_cache(
     let extension_canister_id =
         CanisterId::try_from_principal_id(*extension_canister_id).map_err(|err| {
             format!(
-                "Cannot interpret extension_canister_id as canister ID: {}",
-                err
+                "Cannot interpret extension_canister_id as canister ID: {err}"
             )
         })?;
 
@@ -329,9 +325,8 @@ pub fn get_extension_operation_spec_from_cache(
     get_registered_extension_from_cache(extension_canister_id)
         .and_then(|spec| spec.get_operation(operation_name))
         .ok_or(format!(
-            "No operation found called '{}' for extension with \
-                canister id: {}",
-            operation_name, extension_canister_id
+            "No operation found called '{operation_name}' for extension with \
+                canister id: {extension_canister_id}"
         ))
 }
 
@@ -489,7 +484,7 @@ impl ValidatedRegisterExtension {
                     .map_err(|err| {
                         GovernanceError::new_with_message(
                             ErrorType::InvalidProposal,
-                            format!("Error constructing TreasuryManagerInit payload: {}", err),
+                            format!("Error constructing TreasuryManagerInit payload: {err}"),
                         )
                     })?;
 
@@ -626,8 +621,7 @@ impl Governance {
             return Err(GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "Root.register_extension failed with code {}: {}",
-                    code, description
+                    "Root.register_extension failed with code {code}: {description}"
                 ),
             ));
         }
@@ -672,7 +666,7 @@ impl Governance {
             .map_err(|e| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!("Error making SNS Token treasury transfer: {}", e),
+                    format!("Error making SNS Token treasury transfer: {e}"),
                 )
             })?;
 
@@ -690,7 +684,7 @@ impl Governance {
             .map_err(|e| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!("Error making ICP Token treasury transfer: {}", e),
+                    format!("Error making ICP Token treasury transfer: {e}"),
                 )
             })?;
 
@@ -744,13 +738,12 @@ pub mod treasury_manager {
             value: Some(precise::Value::Map(PreciseMap { mut map })),
         } = arg
         else {
-            return Err(format!("{}Top-level type must be PreciseMap.", PREFIX));
+            return Err(format!("{PREFIX}Top-level type must be PreciseMap."));
         };
 
         if map.len() != 2 {
             return Err(format!(
-                "{}Top-level type must be PreciseMap with exactly 2 entries.",
-                PREFIX
+                "{PREFIX}Top-level type must be PreciseMap with exactly 2 entries."
             ));
         }
 
@@ -763,7 +756,7 @@ pub mod treasury_manager {
                         None
                     }
                 })
-                .ok_or_else(|| format!("{}{} must contain a precise value.", PREFIX, field_name))
+                .ok_or_else(|| format!("{PREFIX}{field_name} must contain a precise value."))
         };
 
         let sns_token_amount_e8s = token_amount_e8s("treasury_allocation_sns_e8s")?;
@@ -842,8 +835,7 @@ async fn list_extensions(
             GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "Canister method call Root.list_sns_canisters failed: {:?}",
-                    err
+                    "Canister method call Root.list_sns_canisters failed: {err:?}"
                 ),
             )
         })
@@ -851,7 +843,7 @@ async fn list_extensions(
             Decode!(&blob, ListSnsCanistersResponse).map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!("Error decoding Root.list_sns_canisters response: {:?}", err),
+                    format!("Error decoding Root.list_sns_canisters response: {err:?}"),
                 )
             })
         })?;
@@ -868,17 +860,17 @@ async fn canister_module_hash_impl(
     canister_id: CanisterId,
 ) -> Result<Option<Vec<u8>>, String> {
     let canister_info_arg = Encode!(&CanisterInfoRequest::new(canister_id, Some(1),))
-        .map_err(|err| format!("Error encoding canister_info request.\n{}", err))?;
+        .map_err(|err| format!("Error encoding canister_info request.\n{err}"))?;
 
     let response = env
         .call_canister(CanisterId::ic_00(), "canister_info", canister_info_arg)
         .await
         .map_err(|err: (Option<i32>, String)| {
-            format!("Canister method call IC00.canister_info failed: {:?}", err)
+            format!("Canister method call IC00.canister_info failed: {err:?}")
         })
         .and_then(|blob| {
             Decode!(&blob, CanisterInfoResponse)
-                .map_err(|err| format!("Error decoding IC00.canister_info response:\n{}", err))
+                .map_err(|err| format!("Error decoding IC00.canister_info response:\n{err}"))
         })?;
 
     Ok(response.module_hash())
@@ -935,7 +927,7 @@ fn construct_treasury_manager_deposit_allowances(
             subaccount: treasury_icp_subaccount,
         },
     )
-    .map_err(|err| format!("Error extracting initial allowances: {}", err))?;
+    .map_err(|err| format!("Error extracting initial allowances: {err}"))?;
 
     Ok(allowances)
 }
@@ -948,13 +940,13 @@ fn construct_treasury_manager_init_payload(
     let allowances = construct_treasury_manager_deposit_allowances(context, value)?;
 
     let arg = TreasuryManagerArg::Init(TreasuryManagerInit { allowances });
-    candid::encode_one(&arg).map_err(|err| format!("Error encoding TreasuryManagerArg: {}", err))
+    candid::encode_one(&arg).map_err(|err| format!("Error encoding TreasuryManagerArg: {err}"))
 }
 
 fn construct_treasury_manager_upgrade_payload() -> Result<Vec<u8>, String> {
     let arg = TreasuryManagerArg::Upgrade(TreasuryManagerUpgrade {});
 
-    candid::encode_one(&arg).map_err(|err| format!("Error encoding TreasuryManagerArg: {}", err))
+    candid::encode_one(&arg).map_err(|err| format!("Error encoding TreasuryManagerArg: {err}"))
 }
 
 /// Returns `arg_blob` in the Ok result.
@@ -966,7 +958,7 @@ fn construct_treasury_manager_deposit_payload(
 
     let arg = DepositRequest { allowances };
     let arg = candid::encode_one(&arg)
-        .map_err(|err| format!("Error encoding DepositRequest: {}", err))?;
+        .map_err(|err| format!("Error encoding DepositRequest: {err}"))?;
 
     Ok(arg)
 }
@@ -977,7 +969,7 @@ fn construct_treasury_manager_withdraw_payload(_value: Precise) -> Result<Vec<u8
         withdraw_accounts: None,
     };
     let arg = candid::encode_one(&arg)
-        .map_err(|err| format!("Error encoding WithdrawRequest: {}", err))?;
+        .map_err(|err| format!("Error encoding WithdrawRequest: {err}"))?;
 
     Ok(arg)
 }
@@ -1006,13 +998,13 @@ pub async fn validate_register_extension(
     };
 
     let store_canister_id = CanisterId::try_from_principal_id(store_canister_id)
-        .map_err(|err| format!("Invalid store_canister_id: {}", err))?;
+        .map_err(|err| format!("Invalid store_canister_id: {err}"))?;
 
     // Use the store canister to install the extension itself.
     let extension_canister_id = store_canister_id;
 
     let spec = validate_extension_wasm(&wasm_module_hash)
-        .map_err(|err| format!("Invalid extension wasm: {}", err))?;
+        .map_err(|err| format!("Invalid extension wasm: {err}"))?;
 
     let wasm = Wasm::Chunked {
         wasm_module_hash,
@@ -1027,7 +1019,7 @@ pub async fn validate_register_extension(
     let init = spec
         .validate_init_arg(governance, init)
         .await
-        .map_err(|err| format!("Invalid init argument: {}", err))?;
+        .map_err(|err| format!("Invalid init argument: {err}"))?;
 
     if spec.supports_extension_type(ExtensionType::TreasuryManager) {
         // We validate that the canister is running on a fiduciary subnet.
@@ -1129,14 +1121,13 @@ pub async fn validate_upgrade_extension(
     };
 
     let extension_canister_id = CanisterId::try_from_principal_id(*extension_canister_id)
-        .map_err(|err| format!("Invalid extension_canister_id: {}", err))?;
+        .map_err(|err| format!("Invalid extension_canister_id: {err}"))?;
 
     // Validate that the extension is registered
     let current_extension =
         get_registered_extension_from_cache(extension_canister_id).ok_or_else(|| {
             format!(
-                "Extension canister {} is not registered",
-                extension_canister_id
+                "Extension canister {extension_canister_id} is not registered"
             )
         })?;
 
@@ -1146,20 +1137,20 @@ pub async fn validate_upgrade_extension(
     };
 
     let wasm =
-        Wasm::try_from(pb_wasm).map_err(|err| format!("Invalid WASM specification: {}", err))?;
+        Wasm::try_from(pb_wasm).map_err(|err| format!("Invalid WASM specification: {err}"))?;
 
     // Get the WASM hash for validation against ALLOWED_EXTENSIONS
     let wasm_module_hash = wasm.sha256sum();
 
     // Validate the new WASM against ALLOWED_EXTENSIONS
     let new_spec = validate_extension_wasm(&wasm_module_hash)
-        .map_err(|err| format!("Invalid extension wasm: {}", err))?;
+        .map_err(|err| format!("Invalid extension wasm: {err}"))?;
 
     // Validate the typed upgrade argument using the extension spec first
     let upgrade_arg = new_spec
         .validate_upgrade_arg(governance, canister_upgrade_arg.clone())
         .await
-        .map_err(|err| format!("Invalid upgrade argument: {}", err))?;
+        .map_err(|err| format!("Invalid upgrade argument: {err}"))?;
 
     // Note: upgrade_arg is validated and will be serialized during execution
     // No need to generate bytes here since WASM validation was removed
@@ -1221,21 +1212,20 @@ async fn get_subnet_for_canister(
     };
 
     let payload = Encode!(&request)
-        .map_err(|e| format!("Failed to encode GetSubnetForCanisterRequest: {}", e))?;
+        .map_err(|e| format!("Failed to encode GetSubnetForCanisterRequest: {e}"))?;
 
     let response_blob = env
         .call_canister(REGISTRY_CANISTER_ID, "get_subnet_for_canister", payload)
         .await
         .map_err(|(code, err)| {
             format!(
-                "Registry.get_subnet_for_canister failed with code {:?}: {}",
-                code, err
+                "Registry.get_subnet_for_canister failed with code {code:?}: {err}"
             )
         })?;
 
     let response = Decode!(&response_blob, Result<SubnetForCanister, String>)
-        .map_err(|e| format!("Failed to decode get_subnet_for_canister response: {}", e))?
-        .map_err(|e| format!("Registry.get_subnet_for_canister returned error: {}", e))?;
+        .map_err(|e| format!("Failed to decode get_subnet_for_canister response: {e}"))?
+        .map_err(|e| format!("Registry.get_subnet_for_canister returned error: {e}"))?;
 
     let subnet_id = response
         .subnet_id
@@ -1253,7 +1243,7 @@ pub struct SubnetTypesToSubnetsResponse {
 async fn get_subnet_types_to_subnets(
     env: &dyn Environment,
 ) -> Result<SubnetTypesToSubnetsResponse, String> {
-    let payload = Encode!(&()).map_err(|e| format!("Failed to encode empty request: {}", e))?;
+    let payload = Encode!(&()).map_err(|e| format!("Failed to encode empty request: {e}"))?;
 
     let response_blob = env
         .call_canister(
@@ -1264,15 +1254,13 @@ async fn get_subnet_types_to_subnets(
         .await
         .map_err(|(code, err)| {
             format!(
-                "CMC.get_subnet_types_to_subnets failed with code {:?}: {}",
-                code, err
+                "CMC.get_subnet_types_to_subnets failed with code {code:?}: {err}"
             )
         })?;
 
     let response = Decode!(&response_blob, SubnetTypesToSubnetsResponse).map_err(|e| {
         format!(
-            "Failed to decode get_subnet_types_to_subnets response: {}",
-            e
+            "Failed to decode get_subnet_types_to_subnets response: {e}"
         )
     })?;
 
@@ -1316,8 +1304,7 @@ async fn get_extension_spec_and_update_cache(
         return Err(GovernanceError::new_with_message(
             ErrorType::NotFound,
             format!(
-                "Extension canister {} is not registered with the SNS.",
-                extension_canister_id
+                "Extension canister {extension_canister_id} is not registered with the SNS."
             ),
         ));
     }
@@ -1326,8 +1313,7 @@ async fn get_extension_spec_and_update_cache(
         return Err(GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
             format!(
-                "Extension canister {} does not have a Wasm module installed.",
-                extension_canister_id
+                "Extension canister {extension_canister_id} does not have a Wasm module installed."
             ),
         ));
     };
@@ -1336,9 +1322,8 @@ async fn get_extension_spec_and_update_cache(
         GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
             format!(
-                "Extension canister {} does not have an extension spec \
-                    despite being registered with Root: {}",
-                extension_canister_id, err,
+                "Extension canister {extension_canister_id} does not have an extension spec \
+                    despite being registered with Root: {err}",
             ),
         )
     });
@@ -1375,8 +1360,7 @@ pub(crate) async fn validate_execute_extension_operation(
             GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 format!(
-                    "Cannot interpret extension_canister_id as canister ID: {}",
-                    err
+                    "Cannot interpret extension_canister_id as canister ID: {err}"
                 ),
             )
         })?;
@@ -1414,8 +1398,7 @@ pub(crate) async fn validate_execute_extension_operation(
         return Err(GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
             format!(
-                "Extension canister {} does not have an operation named {}",
-                extension_canister_id, operation_name
+                "Extension canister {extension_canister_id} does not have an operation named {operation_name}"
             ),
         ));
     };
@@ -1427,8 +1410,7 @@ pub(crate) async fn validate_execute_extension_operation(
             GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 format!(
-                    "Extension canister {} operation {} validation failed: {}",
-                    extension_canister_id, operation_name, err
+                    "Extension canister {extension_canister_id} operation {operation_name} validation failed: {err}"
                 ),
             )
         })?;
@@ -1458,8 +1440,7 @@ async fn execute_treasury_manager_deposit(
             GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "Failed to construct treasury manager deposit payload: {}",
-                    err
+                    "Failed to construct treasury manager deposit payload: {err}"
                 ),
             )
         })?;
@@ -1482,8 +1463,7 @@ async fn execute_treasury_manager_deposit(
             GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "Canister method call {}.deposit failed with code {:?}: {}",
-                    extension_canister_id, code, err
+                    "Canister method call {extension_canister_id}.deposit failed with code {code:?}: {err}"
                 ),
             )
         })
@@ -1491,14 +1471,14 @@ async fn execute_treasury_manager_deposit(
             Decode!(&blob, sns_treasury_manager::TreasuryManagerResult).map_err(|err| {
                 GovernanceError::new_with_message(
                     ErrorType::External,
-                    format!("Error decoding TreasuryManager.deposit response: {:?}", err),
+                    format!("Error decoding TreasuryManager.deposit response: {err:?}"),
                 )
             })
         })?
         .map_err(|err| {
             GovernanceError::new_with_message(
                 ErrorType::External,
-                format!("TreasuryManager.deposit failed: {:?}", err),
+                format!("TreasuryManager.deposit failed: {err:?}"),
             )
         })?;
 
@@ -1521,8 +1501,7 @@ async fn execute_treasury_manager_withdraw(
         GovernanceError::new_with_message(
             ErrorType::PreconditionFailed,
             format!(
-                "Failed to construct treasury manager withdraw payload: {}",
-                err
+                "Failed to construct treasury manager withdraw payload: {err}"
             ),
         )
     })?;
@@ -1535,8 +1514,7 @@ async fn execute_treasury_manager_withdraw(
             GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "Canister method call {}.withdraw failed with code {:?}: {}",
-                    extension_canister_id, code, err
+                    "Canister method call {extension_canister_id}.withdraw failed with code {code:?}: {err}"
                 ),
             )
         })
@@ -1545,8 +1523,7 @@ async fn execute_treasury_manager_withdraw(
                 GovernanceError::new_with_message(
                     ErrorType::External,
                     format!(
-                        "Error decoding TreasuryManager.withdraw response: {:?}",
-                        err
+                        "Error decoding TreasuryManager.withdraw response: {err:?}"
                     ),
                 )
             })
@@ -1554,7 +1531,7 @@ async fn execute_treasury_manager_withdraw(
         .map_err(|err| {
             GovernanceError::new_with_message(
                 ErrorType::External,
-                format!("TreasuryManager.withdraw failed: {:?}", err),
+                format!("TreasuryManager.withdraw failed: {err:?}"),
             )
         })?;
 
@@ -1678,8 +1655,7 @@ pub async fn get_sns_token_symbol(
             GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "Canister method call {}.deposit failed with code {:?}: {}",
-                    ledger_canister_id, code, err
+                    "Canister method call {ledger_canister_id}.deposit failed with code {code:?}: {err}"
                 ),
             )
         })
@@ -1688,8 +1664,7 @@ pub async fn get_sns_token_symbol(
                 GovernanceError::new_with_message(
                     ErrorType::External,
                     format!(
-                        "Error decoding {}.icrc1_symbol response: {}",
-                        ledger_canister_id, err
+                        "Error decoding {ledger_canister_id}.icrc1_symbol response: {err}"
                     ),
                 )
             })

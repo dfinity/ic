@@ -291,7 +291,7 @@ impl Environment for MockEnvironment {
 
         let decode_request_bytes = |bytes| match method_name {
             "get_state" => match Decode!(bytes, sns_swap_pb::GetStateRequest) {
-                Ok(ok) => format!("{:#?}", ok),
+                Ok(ok) => format!("{ok:#?}"),
                 Err(err) => format!(
                     "Unable to decode request bytes as GetStateRequest because of {:?}: {}",
                     err,
@@ -300,7 +300,7 @@ impl Environment for MockEnvironment {
             },
 
             "list_deployed_snses" => match Decode!(bytes, ListDeployedSnsesRequest) {
-                Ok(ok) => format!("{:#?}", ok),
+                Ok(ok) => format!("{ok:#?}"),
                 Err(err) => format!(
                     "Unable to decode request bytes as ListDeployedSnsesRequest because of {:?}: {}",
                     err,
@@ -314,9 +314,9 @@ impl Environment for MockEnvironment {
             let truncated = if bytes.len() > 16 {
                 let head = &bytes[..8];
                 let tail = &bytes[(bytes.len() - 8)..];
-                format!("head = {:?}, tail = {:?}", head, tail)
+                format!("head = {head:?}, tail = {tail:?}")
             } else {
-                format!("content = {:?}", bytes)
+                format!("content = {bytes:?}")
             };
 
             format!("<len = {}, {}>", bytes.len(), truncated)

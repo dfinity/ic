@@ -148,7 +148,7 @@ impl NNSRecoveryFailoverNodes {
     pub fn get_local_store_tar(&self) -> PathBuf {
         self.recovery
             .work_dir
-            .join(format!("{}.tar.zst", IC_REGISTRY_LOCAL_STORE))
+            .join(format!("{IC_REGISTRY_LOCAL_STORE}.tar.zst"))
     }
 }
 
@@ -351,11 +351,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
             StepType::ProposeCUP => {
                 let url = if let Some(aux_ip) = self.params.aux_ip {
                     let url_str = format!(
-                        "http://[{}]:8081/tmp/recovery_registry/{}.tar.zst",
-                        aux_ip, IC_REGISTRY_LOCAL_STORE
+                        "http://[{aux_ip}]:8081/tmp/recovery_registry/{IC_REGISTRY_LOCAL_STORE}.tar.zst"
                     );
                     Some(Url::parse(&url_str).map_err(|e| {
-                        RecoveryError::invalid_output_error(format!("Failed to parse Url: {}", e))
+                        RecoveryError::invalid_output_error(format!("Failed to parse Url: {e}"))
                     })?)
                 } else {
                     self.params.registry_url.clone()

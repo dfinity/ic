@@ -228,8 +228,7 @@ impl RegistryHelper {
                 let replica_version = ReplicaVersion::try_from(record.replica_version.as_ref())
                     .map_err(|err| {
                         OrchestratorError::UpgradeError(format!(
-                            "Couldn't parse the replica version: {}",
-                            err
+                            "Couldn't parse the replica version: {err}"
                         ))
                     })?;
                 Ok(replica_version)
@@ -295,8 +294,7 @@ impl RegistryHelper {
             .map(|node_record| {
                 HostosVersion::try_from(node_record).map_err(|err| {
                     OrchestratorError::UpgradeError(format!(
-                        "Could not parse HostOS version: {}",
-                        err
+                        "Could not parse HostOS version: {err}"
                     ))
                 })
             })

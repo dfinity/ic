@@ -114,7 +114,7 @@ impl SshAccessManager {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()
-            .map_err(|e| format!("Failed to spawn child process: {}", e))?;
+            .map_err(|e| format!("Failed to spawn child process: {e}"))?;
 
         let mut stdin = cmd
             .stdin
@@ -123,7 +123,7 @@ impl SshAccessManager {
         let key_list = keys.join("\n");
         stdin
             .write_all(key_list.as_bytes())
-            .map_err(|e| format!("Failed to write to stdin: {}", e))?;
+            .map_err(|e| format!("Failed to write to stdin: {e}"))?;
         drop(stdin);
 
         match cmd.wait_with_output() {

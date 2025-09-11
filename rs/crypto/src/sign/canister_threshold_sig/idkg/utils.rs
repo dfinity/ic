@@ -122,8 +122,7 @@ pub(crate) fn index_and_dealing_of_dealer(
     let internal_dealing = IDkgDealingInternal::try_from(signed_dealing).map_err(|e| {
         IDkgDealingExtractionError::SerializationError {
             internal_error: format!(
-                "Error deserializing a signed dealing: {:?} of dealer {:?}",
-                e, dealer_id
+                "Error deserializing a signed dealing: {e:?} of dealer {dealer_id:?}"
             ),
         }
     })?;

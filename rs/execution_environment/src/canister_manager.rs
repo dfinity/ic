@@ -169,7 +169,7 @@ impl CanisterManager {
             // `RenameCanister` can only be called from the NNS subnet.
             | Ok(Ic00Method::RenameCanister) => Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
-                format!("Only canisters can call ic00 method {}", method_name),
+                format!("Only canisters can call ic00 method {method_name}"),
             )),
 
             // These methods are only valid if they are sent by the controller
@@ -198,22 +198,21 @@ impl CanisterManager {
                     Some(canister_id) => {
                         let canister = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
                             ErrorCode::CanisterNotFound,
-                            format!("Canister {} not found", canister_id),
+                            format!("Canister {canister_id} not found"),
                         ))?;
                         match canister.controllers().contains(&sender.get()) {
                             true => Ok(()),
                             false => Err(UserError::new(
                                 ErrorCode::CanisterInvalidController,
                                 format!(
-                                    "Only controllers of canister {} can call ic00 method {}",
-                                    canister_id, method_name,
+                                    "Only controllers of canister {canister_id} can call ic00 method {method_name}",
                                 ),
                             )),
                         }
                     },
                     None => Err(UserError::new(
                         ErrorCode::InvalidManagementPayload,
-                        format!("Failed to decode payload for ic00 method: {}", method_name),
+                        format!("Failed to decode payload for ic00 method: {method_name}"),
                     )),
                 }
             },
@@ -234,7 +233,7 @@ impl CanisterManager {
                 } else {
                     Err(UserError::new(
                         ErrorCode::CanisterRejectedMessage,
-                        format!("Caller {} is not allowed to call ic00 method {}", sender, method_name)
+                        format!("Caller {sender} is not allowed to call ic00 method {method_name}")
                     ))
                 }
             },
@@ -1512,7 +1511,7 @@ impl CanisterManager {
                 WasmExecutionMode::Wasm32,
             )
             .map_err(|err| CanisterManagerError::WasmChunkStoreError {
-                message: format!("Error charging for 'upload_chunk': {}", err),
+                message: format!("Error charging for 'upload_chunk': {err}"),
             })?;
 
         let validated_chunk = match canister
@@ -2188,8 +2187,7 @@ impl CanisterManager {
                 return (
                     Err(CanisterManagerError::CanisterSnapshotInconsistent {
                         message: format!(
-                            "Hook status ({:?}) of uploaded snapshot is inconsistent with the canister's state (hook condition satisfied: {}).",
-                            snapshot_hook_status, hook_condition
+                            "Hook status ({snapshot_hook_status:?}) of uploaded snapshot is inconsistent with the canister's state (hook condition satisfied: {hook_condition})."
                         ),
                     }),
                     instructions_used,
@@ -2434,12 +2432,12 @@ impl CanisterManager {
             CanisterSnapshotDataKind::WasmChunk { hash } => {
                 let Ok(hash) = <WasmChunkHash>::try_from(hash.clone()) else {
                     return Err(CanisterManagerError::WasmChunkStoreError {
-                        message: format!("Bytes {:02x?} are not a valid WasmChunkHash.", hash),
+                        message: format!("Bytes {hash:02x?} are not a valid WasmChunkHash."),
                     });
                 };
                 let Some(chunk) = snapshot.chunk_store().get_chunk_complete(&hash) else {
                     return Err(CanisterManagerError::WasmChunkStoreError {
-                        message: format!("WasmChunkHash {:02x?} not found.", hash),
+                        message: format!("WasmChunkHash {hash:02x?} not found."),
                     });
                 };
                 Ok(chunk)
@@ -2483,7 +2481,7 @@ impl CanisterManager {
             ValidatedSnapshotMetadata::validate(args.clone(), wasm_mode).map_err(|e| {
                 UserError::new(
                     ErrorCode::InvalidManagementPayload,
-                    format!("Snapshot Metadata contains invalid data: {:?}", e),
+                    format!("Snapshot Metadata contains invalid data: {e:?}"),
                 )
             })?;
 
@@ -2936,7 +2934,9 @@ pub fn uninstall_canister(
     };
 
     let canister_id = canister.canister_id();
-    let reject_responses = canister
+    
+
+    canister
         .system_state
         .delete_all_call_contexts(|call_context| {
             // Generate reject responses for ingress and canister messages.
@@ -2977,9 +2977,7 @@ pub fn uninstall_canister(
                     None
                 }
             }
-        });
-
-    reject_responses
+        })
 }
 
 fn globals_match(g1: &[Global], g2: &[Global]) -> bool {

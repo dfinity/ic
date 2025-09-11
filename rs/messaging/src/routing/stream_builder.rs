@@ -471,7 +471,7 @@ impl StreamBuilderImpl {
                 &mut state,
                 &req,
                 RejectCode::DestinationInvalid,
-                format!("No route to canister {}", dst_canister_id),
+                format!("No route to canister {dst_canister_id}"),
             );
         }
 

@@ -135,7 +135,7 @@ mod get_master_public_key_from_transcript {
             )
             .expect("deserialization of valid internal transcript raw bytes should succeed"),
             unexpected => {
-                panic!("Unexpected canister threshold algorithm {}", unexpected);
+                panic!("Unexpected canister threshold algorithm {unexpected}");
             }
         }
     }
@@ -171,7 +171,7 @@ mod get_master_public_key_from_transcript {
                 .expect("hex decoding of public key bytes should succeed"),
             },
             unexpected => {
-                panic!("Unexpected threshold ECDSA algorithm {}", unexpected);
+                panic!("Unexpected threshold ECDSA algorithm {unexpected}");
             }
         }
     }

@@ -345,8 +345,7 @@ impl ExecutionTest {
         match &self.xnet_messages[index] {
             RequestOrResponse::Request(request) => {
                 panic!(
-                    "Expected the xnet message to be a Response, but got a Request: {:?}",
-                    request
+                    "Expected the xnet message to be a Response, but got a Request: {request:?}"
                 )
             }
             RequestOrResponse::Response(response) => response,
@@ -628,7 +627,7 @@ impl ExecutionTest {
                 Ok(CanisterIdRecord::decode(&data).unwrap().get_canister_id())
             }
             Ok(WasmResult::Reject(error)) => {
-                panic!("Expected reply, got: {:?}", error);
+                panic!("Expected reply, got: {error:?}");
             }
             Err(error) => Err(error),
         }
@@ -2320,7 +2319,7 @@ impl ExecutionTestBuilder {
             Some(caller_canister) => RoutingTable::try_from(btreemap! {
                 CanisterIdRange { start: caller_canister, end: caller_canister } => self.caller_subnet_id.unwrap(),
                 own_range => self.own_subnet_id,
-            }).unwrap_or_else(|_| panic!("Unable to create routing table - sender canister {} is in the range {:?}", caller_canister, own_range)),
+            }).unwrap_or_else(|_| panic!("Unable to create routing table - sender canister {caller_canister} is in the range {own_range:?}")),
         });
 
         self.build_common(routing_table)

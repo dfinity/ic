@@ -40,7 +40,7 @@ pub(crate) fn get_tschnorr_master_public_key_from_internal_transcript(
         EccCurveType::Ed25519 => AlgorithmId::Ed25519,
         x => {
             return Err(MasterPublicKeyExtractionError::UnsupportedAlgorithm(
-                format!("Schnorr does not support curve {:?}", x),
+                format!("Schnorr does not support curve {x:?}"),
             ));
         }
     };
@@ -316,7 +316,7 @@ fn internal_bip340_sig_shares_by_index_from_sig_shares(
                 &share.sig_share_raw,
             )
             .map_err(|e| {
-                ThresholdSchnorrCombineSigSharesError::SerializationError(format!("{:?}", e))
+                ThresholdSchnorrCombineSigSharesError::SerializationError(format!("{e:?}"))
             })?;
             Ok((index, internal_share))
         })

@@ -341,13 +341,13 @@ fn require_field_set_and_in_range(
     let value = match value {
         Some(value) => value,
         None => {
-            result.push(format!("{} is required.", field_name));
+            result.push(format!("{field_name} is required."));
             return result;
         }
     };
 
     if !valid_range.contains(value) {
-        result.push(format!("{} not in {:#?}.", field_name, valid_range));
+        result.push(format!("{field_name} not in {valid_range:#?}."));
     }
 
     result

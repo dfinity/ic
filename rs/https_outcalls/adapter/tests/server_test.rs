@@ -79,10 +79,10 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         // Store self signed cert
         let cert_file_path = dir.path().join("cert.crt");
         let mut cert_file = std::fs::File::create(cert_file_path).unwrap();
-        writeln!(cert_file, "{}", CERT).unwrap();
+        writeln!(cert_file, "{CERT}").unwrap();
         let key_file_path = dir.path().join("key.pem");
         let mut key_file = std::fs::File::create(key_file_path).unwrap();
-        writeln!(key_file, "{}", KEY).unwrap();
+        writeln!(key_file, "{KEY}").unwrap();
 
         // The Nix environment with OpenSSL set NIX_SSL_CERT_FILE which seems to take presedence over SSL_CERT_FILE.
         // https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/libraries/openssl/1.1/nix-ssl-cert-file.patch
@@ -168,12 +168,12 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                         let url = url.clone();
                         tokio::spawn(async move {
                             if let Err(e) = handle_client(stream, url).await {
-                                eprintln!("[SOCKS5] Error in client handler: {:?}", e);
+                                eprintln!("[SOCKS5] Error in client handler: {e:?}");
                             }
                         });
                     }
                     Err(e) => {
-                        eprintln!("[SOCKS5] Error accepting: {:?}", e);
+                        eprintln!("[SOCKS5] Error accepting: {e:?}");
                         break;
                     }
                 }
@@ -373,7 +373,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
         let mut client = spawn_grpc_server(server_config);
 
         let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("https://{}/get", url),
+            url: format!("https://{url}/get"),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
@@ -553,7 +553,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             url: format!("https://{}/size", &url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
-            body: format!("{}", response_size).as_bytes().to_vec(),
+            body: format!("{response_size}").as_bytes().to_vec(),
             max_response_size_bytes: response_size * 2,
             socks_proxy_allowed: false,
             ..Default::default()
@@ -581,7 +581,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             url: format!("https://{}/delay", &url),
             headers: Vec::new(),
             method: HttpMethod::Get as i32,
-            body: format!("{}", delay).as_bytes().to_vec(),
+            body: format!("{delay}").as_bytes().to_vec(),
             max_response_size_bytes: 512,
             socks_proxy_allowed: false,
             ..Default::default()
@@ -638,9 +638,7 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
         assert!(
             actual_error_message.contains(expected_error_message),
-            "Expected error message to contain, {}, got: {}",
-            expected_error_message,
-            actual_error_message
+            "Expected error message to contain, {expected_error_message}, got: {actual_error_message}"
         );
     }
 

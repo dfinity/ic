@@ -132,7 +132,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             compute_allocation: ComputeAllocation::try_from(value.compute_allocation).map_err(
                 |e| ProxyDecodeError::ValueOutOfRange {
                     typ: "ComputeAllocation",
-                    err: format!("{:?}", e),
+                    err: format!("{e:?}"),
                 },
             )?,
             accumulated_priority: value.accumulated_priority.into(),
@@ -146,7 +146,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             memory_allocation: MemoryAllocation::try_from(NumBytes::from(value.memory_allocation))
                 .map_err(|e| ProxyDecodeError::ValueOutOfRange {
                     typ: "MemoryAllocation",
-                    err: format!("{:?}", e),
+                    err: format!("{e:?}"),
                 })?,
             wasm_memory_threshold: NumBytes::new(value.wasm_memory_threshold.unwrap_or(0)),
             freeze_threshold: NumSeconds::from(value.freeze_threshold),
@@ -252,7 +252,7 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
                 .try_into()
                 .map_err(|e| ProxyDecodeError::ValueOutOfRange {
                     typ: "BinaryHash",
-                    err: format!("Expected a 32-byte long module hash, got {:?}", e),
+                    err: format!("Expected a 32-byte long module hash, got {e:?}"),
                 })?;
 
         Ok(Self {
@@ -316,7 +316,7 @@ impl TryFrom<pb_canister_snapshot_bits::CanisterSnapshotBits> for CanisterSnapsh
                 .try_into()
                 .map_err(|e| ProxyDecodeError::ValueOutOfRange {
                     typ: "BinaryHash",
-                    err: format!("Expected a 32-byte long module hash, got {:?}", e),
+                    err: format!("Expected a 32-byte long module hash, got {e:?}"),
                 })?;
 
         let mut exported_globals = Vec::with_capacity(item.exported_globals.len());

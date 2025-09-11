@@ -87,8 +87,7 @@ impl RequestInPrep {
             if method_name_len > max_sum_exported_function_name_lengths {
                 return Err(HypervisorError::UserContractViolation {
                     error: format!(
-                        "Size of method_name {} exceeds the allowed limit of {}.",
-                        method_name_len, max_sum_exported_function_name_lengths
+                        "Size of method_name {method_name_len} exceeds the allowed limit of {max_sum_exported_function_name_lengths}."
                     ),
                     suggestion: LARGE_NAME_SUGGESTION.to_string(),
                     doc_link: doc_ref(LARGE_NAME_LINK),
@@ -100,8 +99,7 @@ impl RequestInPrep {
             if method_name_len as u64 > max_size_local_subnet.get() {
                 return Err(HypervisorError::UserContractViolation {
                     error: format!(
-                        "Size of method_name {} exceeds the allowed limit of {}.",
-                        method_name_len, max_size_local_subnet
+                        "Size of method_name {method_name_len} exceeds the allowed limit of {max_size_local_subnet}."
                     ),
                     suggestion: LARGE_NAME_SUGGESTION.to_string(),
                     doc_link: doc_ref(LARGE_NAME_LINK),
@@ -238,8 +236,7 @@ pub(crate) fn into_request(
         if payload_size > max_size_local_subnet.get() {
             return Err(HypervisorError::UserContractViolation {
                 error: format!(
-                    "Request to {}:{} has a payload size of {}, which exceeds the allowed limit of {}.",
-                    destination_canister, method_name, payload_size, max_size_remote_subnet
+                    "Request to {destination_canister}:{method_name} has a payload size of {payload_size}, which exceeds the allowed limit of {max_size_remote_subnet}."
                 ),
                 suggestion: PAYLOAD_SIZE_SUGGESTION.to_string(),
                 doc_link: doc_ref(PAYLOAD_SIZE_LINK),
@@ -259,10 +256,7 @@ pub(crate) fn into_request(
                 debug_assert!(false);
                 return Err(HypervisorError::UserContractViolation {
                     error: format!(
-                        "Request to {}:{} has a timeout of {} seconds, which exceeds the allowed timeout duration.",
-                        destination_canister,
-                        method_name,
-                        timeout_seconds
+                        "Request to {destination_canister}:{method_name} has a timeout of {timeout_seconds} seconds, which exceeds the allowed timeout duration."
                     ).to_string(),
                     suggestion: "".to_string(),
                     doc_link: "".to_string(),

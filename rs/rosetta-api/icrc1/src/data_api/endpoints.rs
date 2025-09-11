@@ -45,7 +45,7 @@ pub async fn network_options(
     request: Json<NetworkRequest>,
 ) -> Result<Json<NetworkOptionsResponse>> {
     let state = get_state_from_network_id(&request.0.network_identifier, &state)
-        .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
+        .map_err(|err| Error::invalid_network_id(&format!("{err:?}")))?;
     Ok(Json(services::network_options(
         &state.icrc1_agent.ledger_canister_id,
     )))
@@ -56,7 +56,7 @@ pub async fn network_status(
     request: Json<NetworkRequest>,
 ) -> Result<Json<NetworkStatusResponse>> {
     let state = get_state_from_network_id(&request.0.network_identifier, &state)
-        .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
+        .map_err(|err| Error::invalid_network_id(&format!("{err:?}")))?;
     Ok(Json(services::network_status(&state.storage)?))
 }
 
@@ -65,7 +65,7 @@ pub async fn block(
     request: Json<BlockRequest>,
 ) -> Result<Json<BlockResponse>> {
     let state = get_state_from_network_id(&request.network_identifier, &state)
-        .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
+        .map_err(|err| Error::invalid_network_id(&format!("{err:?}")))?;
     Ok(Json(services::block(
         &state.storage,
         &request.0.block_identifier,
@@ -79,7 +79,7 @@ pub async fn block_transaction(
     request: Json<BlockTransactionRequest>,
 ) -> Result<Json<BlockTransactionResponse>> {
     let state = get_state_from_network_id(&request.0.network_identifier, &state)
-        .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
+        .map_err(|err| Error::invalid_network_id(&format!("{err:?}")))?;
     Ok(Json(services::block_transaction(
         &state.storage,
         &request.0.block_identifier,
@@ -94,7 +94,7 @@ pub async fn mempool(
     request: Json<NetworkRequest>,
 ) -> Result<Json<MempoolResponse>> {
     get_state_from_network_id(&request.0.network_identifier, &state)
-        .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
+        .map_err(|err| Error::invalid_network_id(&format!("{err:?}")))?;
     Ok(Json(MempoolResponse::new(vec![])))
 }
 
@@ -103,7 +103,7 @@ pub async fn mempool_transaction(
     request: Json<MempoolTransactionRequest>,
 ) -> Result<Json<MempoolTransactionResponse>> {
     get_state_from_network_id(&request.0.network_identifier, &state)
-        .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
+        .map_err(|err| Error::invalid_network_id(&format!("{err:?}")))?;
     Err(Error::mempool_transaction_missing().into())
 }
 
@@ -112,7 +112,7 @@ pub async fn account_balance(
     Json(request): Json<AccountBalanceRequest>,
 ) -> Result<Json<AccountBalanceResponse>> {
     let state = get_state_from_network_id(&request.network_identifier, &state)
-        .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
+        .map_err(|err| Error::invalid_network_id(&format!("{err:?}")))?;
     Ok(Json(services::account_balance_with_metadata(
         &state.storage,
         &request.account_identifier,
@@ -128,7 +128,7 @@ pub async fn search_transactions(
     Json(request): Json<SearchTransactionsRequest>,
 ) -> Result<Json<SearchTransactionsResponse>> {
     let state = get_state_from_network_id(&request.network_identifier, &state)
-        .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
+        .map_err(|err| Error::invalid_network_id(&format!("{err:?}")))?;
     Ok(Json(services::search_transactions(
         &state.storage,
         request,
@@ -142,7 +142,7 @@ pub async fn call(
     Json(request): Json<CallRequest>,
 ) -> Result<Json<CallResponse>> {
     let state = get_state_from_network_id(&request.network_identifier, &state)
-        .map_err(|err| Error::invalid_network_id(&format!("{:?}", err)))?;
+        .map_err(|err| Error::invalid_network_id(&format!("{err:?}")))?;
     Ok(Json(services::call(
         &state.storage,
         &request.method_name,

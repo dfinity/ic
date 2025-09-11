@@ -69,8 +69,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentImpl<C> {
                         );
                         Err(CryptoError::InternalError {
                             internal_error: format!(
-                                "Error calling pks_and_sks_contains: {:?}",
-                                node_keys_errors
+                                "Error calling pks_and_sks_contains: {node_keys_errors:?}"
                             ),
                         })
                     }
@@ -79,8 +78,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentImpl<C> {
                         self.observe_all_key_counts(&KeyCounts::ZERO, MetricsResult::Err);
                         Err(CryptoError::TransientInternalError {
                             internal_error: format!(
-                                "Transient error calling pks_and_sks_contains: {:?}",
-                                internal_error
+                                "Transient error calling pks_and_sks_contains: {internal_error:?}"
                             ),
                         })
                     }

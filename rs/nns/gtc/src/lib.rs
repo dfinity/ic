@@ -227,15 +227,13 @@ impl GovernanceCanister {
 
         let result = result.map_err(|(code, msg)| {
             format!(
-                "Error calling method 'claim_gtc_neurons' of the Governance canister. Code: {:?}. Message: {}",
-                code, msg
+                "Error calling method 'claim_gtc_neurons' of the Governance canister. Code: {code:?}. Message: {msg}"
             )
         })?;
 
         result.map_err(|e| {
             format!(
-                "Error returned by 'claim_gtc_neurons' of the Governance canister: {:?}",
-                e
+                "Error returned by 'claim_gtc_neurons' of the Governance canister: {e:?}"
             )
         })
     }
@@ -256,15 +254,13 @@ impl GovernanceCanister {
         let result = result.map_err(|(code, msg)| {
             format!(
                 "Error calling method 'transfer_gtc_neuron' of the Governance canister. \
-                 Code: {:?}. Message: {}",
-                code, msg
+                 Code: {code:?}. Message: {msg}"
             )
         })?;
 
         result.map_err(|e| {
             format!(
-                "Error returned by 'transfer_gtc_neuron' of the Governance canister: {:?}",
-                e
+                "Error returned by 'transfer_gtc_neuron' of the Governance canister: {e:?}"
             )
         })
     }

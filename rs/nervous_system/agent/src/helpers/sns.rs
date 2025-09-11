@@ -81,7 +81,7 @@ pub async fn wait_for_proposal_execution<
                 } else {
                     return Err(SnsProposalError::ProposalError(
                         proposal_id,
-                        format!("Error getting proposal: {:#?}", user_error),
+                        format!("Error getting proposal: {user_error:#?}"),
                     ));
                 }
             }
@@ -95,7 +95,7 @@ pub async fn wait_for_proposal_execution<
             get_proposal_response::Result::Error(err) => {
                 return Err(SnsProposalError::ProposalError(
                     proposal_id,
-                    format!("Proposal data cannot be found: {:?}", err),
+                    format!("Proposal data cannot be found: {err:?}"),
                 ));
             }
             get_proposal_response::Result::Proposal(proposal_data) => proposal_data,
@@ -113,8 +113,7 @@ pub async fn wait_for_proposal_execution<
     Err(SnsProposalError::ProposalError(
         proposal_id,
         format!(
-            "Looks like the SNS proposal is never going to be decided: {:#?}",
-            last_proposal_data
+            "Looks like the SNS proposal is never going to be decided: {last_proposal_data:#?}"
         ),
     ))
 }
@@ -173,8 +172,7 @@ pub async fn await_swap_lifecycle<C: CallCanisters + ProgressNetwork>(
         last_lifecycle = Some(lifecycle);
     }
     Err(format!(
-        "Looks like the SNS lifecycle {:?} is never going to be reached: {:?}",
-        expected_lifecycle, last_lifecycle,
+        "Looks like the SNS lifecycle {expected_lifecycle:?} is never going to be reached: {last_lifecycle:?}",
     ))
 }
 

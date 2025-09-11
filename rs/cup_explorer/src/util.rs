@@ -22,7 +22,7 @@ pub(crate) fn http_url(n: &NodeRecord) -> Url {
 
 pub fn subnet_id_from_str(s: &str) -> Result<SubnetId, String> {
     PrincipalId::from_str(s)
-        .map_err(|e| format!("Unable to parse subnet_id {:?}", e))
+        .map_err(|e| format!("Unable to parse subnet_id {e:?}"))
         .map(SubnetId::from)
 }
 

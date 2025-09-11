@@ -134,7 +134,7 @@ impl NodeRegistration {
         .unwrap()
         {
             warn!(self.log, "Node keys are not setup: {:?}", e);
-            UtilityCommand::notify_host(format!("Node keys are not setup: {:?}", e).as_str(), 1);
+            UtilityCommand::notify_host(format!("Node keys are not setup: {e:?}").as_str(), 1);
             self.retry_register_node().await;
         }
         // postcondition: node keys are registered
@@ -277,7 +277,7 @@ impl NodeRegistration {
             self.metrics.observe_key_rotation_error();
             warn!(self.log, "Failed to check keys with registry: {e:?}");
             UtilityCommand::notify_host(
-                format!("Failed to check keys with registry: {:?}", e).as_str(),
+                format!("Failed to check keys with registry: {e:?}").as_str(),
                 1,
             );
         }
@@ -310,7 +310,7 @@ impl NodeRegistration {
             Err(e) => {
                 self.metrics.observe_key_rotation_error();
                 warn!(self.log, "Key rotation error: {e:?}");
-                UtilityCommand::notify_host(format!("Key rotation error: {:?}", e).as_str(), 1);
+                UtilityCommand::notify_host(format!("Key rotation error: {e:?}").as_str(), 1);
             }
         }
     }
@@ -540,7 +540,7 @@ impl NodeRegistration {
             Err(e) => {
                 warn!(self.log, "Node keys are not setup: {:?}", e);
                 UtilityCommand::notify_host(
-                    format!("Node keys are not setup: {:?}", e).as_str(),
+                    format!("Node keys are not setup: {e:?}").as_str(),
                     1,
                 );
                 false
@@ -626,8 +626,7 @@ fn metrics_config_to_endpoint(
 fn get_endpoint(log: &ReplicaLogger, ip_addr: String, port: u16) -> OrchestratorResult<String> {
     let parsed_ip_addr: IpAddr = ip_addr.parse().map_err(|err| {
         OrchestratorError::invalid_configuration_error(format!(
-            "Could not parse IP-address {}: {}",
-            ip_addr, err
+            "Could not parse IP-address {ip_addr}: {err}"
         ))
     })?;
     if parsed_ip_addr.is_loopback() {
@@ -638,9 +637,9 @@ fn get_endpoint(log: &ReplicaLogger, ip_addr: String, port: u16) -> Orchestrator
     }
     let ip_addr_str = match parsed_ip_addr {
         IpAddr::V4(_) => ip_addr,
-        IpAddr::V6(_) => format!("[{}]", ip_addr),
+        IpAddr::V6(_) => format!("[{ip_addr}]"),
     };
-    Ok(format!("{}:{}", ip_addr_str, port))
+    Ok(format!("{ip_addr_str}:{port}"))
 }
 
 fn process_ipv4_config(
@@ -731,7 +730,7 @@ mod tests {
     fn capturing_echo_succeeds() {
         // echo `test` | sha256sum
         let input = "f2ca1bb6c7e907d06dafe4687e579fce76b37e4e93b7605022da52e6ccc26fd2".to_string();
-        let expected = format!("{}\n", input).as_bytes().to_vec();
+        let expected = format!("{input}\n").as_bytes().to_vec();
 
         let utility_command = UtilityCommand::new(
             "sh".to_string(),

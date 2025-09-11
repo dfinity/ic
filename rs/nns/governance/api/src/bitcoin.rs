@@ -16,8 +16,7 @@ impl FromStr for BitcoinNetwork {
             "mainnet" => Ok(Self::Mainnet),
             "testnet" => Ok(Self::Testnet),
             other => Err(format!(
-                "Unknown bitcoin network {}. Valid bitcoin networks are \"mainnet\" and \"testnet\".",
-                other
+                "Unknown bitcoin network {other}. Valid bitcoin networks are \"mainnet\" and \"testnet\"."
             )),
         }
     }

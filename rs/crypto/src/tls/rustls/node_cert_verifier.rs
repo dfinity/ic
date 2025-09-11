@@ -268,8 +268,7 @@ fn ensure_node_id_in_allowed_nodes(
 ) -> Result<(), TLSError> {
     if !allowed_nodes.contains(node_id) {
         return Err(TLSError::General(format!(
-            "The peer certificate with node ID {} is not allowed. Allowed node IDs: {:?}",
-            node_id, allowed_nodes
+            "The peer certificate with node ID {node_id} is not allowed. Allowed node IDs: {allowed_nodes:?}"
         )));
     }
     Ok(())
@@ -282,8 +281,7 @@ fn node_cert_from_registry(
 ) -> Result<TlsPublicKeyCert, TLSError> {
     tls_cert_from_registry(registry_client, node_id, registry_version).map_err(|e| {
         TLSError::General(format!(
-            "Failed to retrieve TLS certificate for node ID {} from the registry at registry version {}: {:?}",
-            node_id, registry_version, e
+            "Failed to retrieve TLS certificate for node ID {node_id} from the registry at registry version {registry_version}: {e:?}"
         ))
     })
 }
@@ -295,8 +293,7 @@ fn ensure_certificates_equal(
 ) -> Result<(), TLSError> {
     if node_cert_from_registry != end_entity_cert {
         return Err(TLSError::General(format!(
-            "The peer certificate is not trusted since it differs from the registry certificate. NodeId of presented cert: {}",
-            node_id
+            "The peer certificate is not trusted since it differs from the registry certificate. NodeId of presented cert: {node_id}"
         )));
     }
     Ok(())
@@ -312,7 +309,7 @@ fn ensure_node_certificate_is_valid(
         cert_node_id,
         current_time,
     ))
-    .map_err(|e| TLSError::General(format!("The peer certificate is invalid: {}", e)))?;
+    .map_err(|e| TLSError::General(format!("The peer certificate is invalid: {e}")))?;
     Ok(())
 }
 

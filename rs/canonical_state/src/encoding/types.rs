@@ -352,15 +352,13 @@ pub(crate) fn try_from_deltas(
                 // Reject signal deltas are invalid; a delta of `0` is forbidden since it would
                 // lead to duplicates or a stream_index of `signals_end`.
                 return Err(ProxyDecodeError::Other(format!(
-                    "StreamHeader: {:?} found bad delta: `0` is not allowed in `reject_signal_deltas` {:?}",
-                    reason, deltas,
+                    "StreamHeader: {reason:?} found bad delta: `0` is not allowed in `reject_signal_deltas` {deltas:?}",
                 )));
             }
             if stream_index < StreamIndex::new(*delta) {
                 // Reject signal deltas are invalid.
                 return Err(ProxyDecodeError::Other(format!(
-                    "StreamHeader: {:?} reject signals are invalid, got `signals_end` {:?}, `reject_signal_deltas` {:?}",
-                    reason, signals_end, deltas,
+                    "StreamHeader: {reason:?} reject signals are invalid, got `signals_end` {signals_end:?}, `reject_signal_deltas` {deltas:?}",
                 )));
             }
             stream_index -= StreamIndex::new(*delta);
@@ -414,8 +412,7 @@ impl TryFrom<RequestOrResponse> for ic_types::messages::RequestOrResponse {
                 response: Some(response),
             } => Ok(Self::Response(Arc::new(response.try_into()?))),
             other => Err(ProxyDecodeError::Other(format!(
-                "RequestOrResponse: expected exactly one of `request` or `response` to be `Some(_)`, got `{:?}`",
-                other
+                "RequestOrResponse: expected exactly one of `request` or `response` to be `Some(_)`, got `{other:?}`"
             ))),
         }
     }
@@ -614,8 +611,7 @@ impl TryFrom<Payload> for ic_types::messages::Payload {
                 reject: Some(reject),
             } => Ok(Self::Reject(reject.try_into()?)),
             other => Err(ProxyDecodeError::Other(format!(
-                "Payload: expected exactly one of `data` or `reject` to be `Some(_)`, got `{:?}`",
-                other
+                "Payload: expected exactly one of `data` or `reject` to be `Some(_)`, got `{other:?}`"
             ))),
         }
     }

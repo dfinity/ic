@@ -48,7 +48,7 @@ impl Versions {
         let mut seen = std::collections::HashSet::new();
         for version in &self.versions {
             if !seen.insert(version) {
-                return Err(format!("{} occurres more than once.", version));
+                return Err(format!("{version} occurres more than once."));
             }
         }
         Ok(())
@@ -74,8 +74,7 @@ impl TryFrom<&CachedUpgradeStepsPb> for CachedUpgradeSteps {
         // Check for duplicate versions in the response
         upgrade_steps.validate_no_duplicates().map_err(|err| {
             format!(
-                "CachedUpgradeSteps.upgrade_steps must not contain duplicates: {}",
-                err
+                "CachedUpgradeSteps.upgrade_steps must not contain duplicates: {err}"
             )
         })?;
 
@@ -101,7 +100,7 @@ impl TryFrom<&CachedUpgradeStepsPb> for CachedUpgradeSteps {
 pub fn format_short_hash(hash: &[u8]) -> String {
     hash.iter()
         .take(3)
-        .map(|b| format!("{:02x}", b))
+        .map(|b| format!("{b:02x}"))
         .collect::<Vec<_>>()
         .join("")
 }
@@ -148,7 +147,7 @@ impl std::fmt::Display for SnsCanisterType {
             SnsCanisterType::Ledger => "Ledger",
             SnsCanisterType::Archive => "Archive",
         };
-        write!(f, "{}", value)
+        write!(f, "{value}")
     }
 }
 
@@ -219,7 +218,7 @@ impl CachedUpgradeSteps {
         requested_timestamp_seconds: u64,
         response_timestamp_seconds: u64,
     ) -> Result<Self, String> {
-        let response_str = format!("{:?}", sns_w_response);
+        let response_str = format!("{sns_w_response:?}");
 
         let ListUpgradeStepsResponse { steps } = sns_w_response;
 
@@ -230,8 +229,7 @@ impl CachedUpgradeSteps {
                     version: Some(version),
                 } => Ok(version.into()),
                 _ => Err(format!(
-                    "SnsW.list_upgrade_steps response had invalid fields: {}",
-                    response_str
+                    "SnsW.list_upgrade_steps response had invalid fields: {response_str}"
                 )),
             })
             .collect::<Result<_, _>>()?;
@@ -240,8 +238,7 @@ impl CachedUpgradeSteps {
 
         versions.validate_no_duplicates().map_err(|err| {
             format!(
-                "ListUpgradeStepsResponse.steps must not contain duplicates: {}",
-                err
+                "ListUpgradeStepsResponse.steps must not contain duplicates: {err}"
             )
         })?;
 
@@ -287,10 +284,10 @@ impl CachedUpgradeSteps {
     /// Returns `Err` if at least one of the versions `left` or `right` are not in `self`.
     pub fn contains_in_order(&self, left: &Version, right: &Version) -> Result<bool, String> {
         if !self.contains(left) {
-            return Err(format!("{:?} does not contain {:?}", self, left));
+            return Err(format!("{self:?} does not contain {left:?}"));
         }
         if !self.contains(right) {
-            return Err(format!("{:?} does not contain {:?}", self, right));
+            return Err(format!("{self:?} does not contain {right:?}"));
         }
 
         // Check if we have `current_version` -> ... -> `left` -> `right` -> ...
@@ -353,8 +350,7 @@ impl CachedUpgradeSteps {
         }
 
         Err(format!(
-            "Cannot take_from {} that is not one of the cached upgrade steps.",
-            new_current_version
+            "Cannot take_from {new_current_version} that is not one of the cached upgrade steps."
         ))
     }
 
@@ -550,7 +546,7 @@ impl GovernancePb {
         };
 
         let cached_upgrade_steps = CachedUpgradeSteps::try_from(cached_upgrade_steps)
-            .map_err(|err| format!("Internal error: {}", err))?;
+            .map_err(|err| format!("Internal error: {err}"))?;
 
         Ok(cached_upgrade_steps)
     }
@@ -580,8 +576,7 @@ impl GovernancePb {
                 return Err(format!(
                     "Currently, the SNS does not have pending upgrades. \
                      You may need to wait for the upgrade steps to be refreshed. \
-                     This shouldn't take more than {} seconds.",
-                    UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS
+                     This shouldn't take more than {UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS} seconds."
                 ));
             }
         };
@@ -599,8 +594,7 @@ impl GovernancePb {
                 upgrade_steps.contains_in_order(&new_target, current_target_version)?;
             if new_target_is_not_ahead_of_current_target {
                 return Err(format!(
-                    "SNS target already set to {}.",
-                    current_target_version
+                    "SNS target already set to {current_target_version}."
                 ));
             }
         }

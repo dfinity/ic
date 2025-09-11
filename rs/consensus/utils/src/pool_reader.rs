@@ -99,7 +99,7 @@ impl<'a> PoolReader<'a> {
             {
                 Ok(block) => Some(block),
                 Err(OnlyError::NoneAvailable) => None,
-                Err(OnlyError::MultipleValues) => panic!("Multiple parents found for {:?}", child),
+                Err(OnlyError::MultipleValues) => panic!("Multiple parents found for {child:?}"),
             },
             _ => None,
         }
@@ -191,8 +191,7 @@ impl<'a> PoolReader<'a> {
                 let mut iterator = self.get_notarized_blocks(h);
                 match (iterator.next(), iterator.next()) {
                     (None, None) => panic!(
-                        "No notarized blocks at height {:?} found, which is below the finalization tip",
-                        h
+                        "No notarized blocks at height {h:?} found, which is below the finalization tip"
                     ),
                     // If we have exactly one notarized block, return it. This
                     // always works, because we know that we have validated
@@ -347,7 +346,7 @@ impl<'a> PoolReader<'a> {
     pub fn get_random_beacon_tip(&self) -> RandomBeacon {
         let height = self.get_random_beacon_height();
         self.get_random_beacon(height)
-            .unwrap_or_else(|| panic!("Can't find latest random beacon at height {}", height))
+            .unwrap_or_else(|| panic!("Can't find latest random beacon at height {height}"))
     }
 
     /// Get the round start time of a given height, which is the max timestamp

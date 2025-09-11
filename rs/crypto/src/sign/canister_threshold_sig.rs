@@ -29,7 +29,7 @@ pub fn get_master_public_key_from_transcript(
             Unmasked(_) => {
                 let internal_transcript = IDkgTranscriptInternal::try_from(idkg_transcript)
                     .map_err(|e| {
-                        MasterPublicKeyExtractionError::SerializationError(format!("{:?}", e))
+                        MasterPublicKeyExtractionError::SerializationError(format!("{e:?}"))
                     })?;
                 ecdsa::get_tecdsa_master_public_key_from_internal_transcript(&internal_transcript)
             }
@@ -40,7 +40,7 @@ pub fn get_master_public_key_from_transcript(
             Unmasked(_) => {
                 let internal_transcript = IDkgTranscriptInternal::try_from(idkg_transcript)
                     .map_err(|e| {
-                        MasterPublicKeyExtractionError::SerializationError(format!("{:?}", e))
+                        MasterPublicKeyExtractionError::SerializationError(format!("{e:?}"))
                     })?;
                 schnorr::get_tschnorr_master_public_key_from_internal_transcript(
                     &internal_transcript,

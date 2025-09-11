@@ -319,8 +319,7 @@ impl SandboxManager {
         let mut guard = self.repr.lock().unwrap();
         assert!(
             !guard.caches.contains_key(&wasm_id),
-            "Failed to open wasm session {}: id is already in use",
-            wasm_id,
+            "Failed to open wasm session {wasm_id}: id is already in use",
         );
         let deserialization_timer = Instant::now();
         let instance_pre = self
@@ -343,8 +342,7 @@ impl SandboxManager {
         let mut guard = self.repr.lock().unwrap();
         assert!(
             !guard.caches.contains_key(&wasm_id),
-            "Failed to open wasm session {}: id is already in use",
-            wasm_id,
+            "Failed to open wasm session {wasm_id}: id is already in use",
         );
         let deserialization_timer = Instant::now();
         let instance_pre = self
@@ -365,8 +363,7 @@ impl SandboxManager {
         let removed = guard.caches.remove(&wasm_id);
         assert!(
             removed.is_some(),
-            "Failed to close wasm session {}: id not found",
-            wasm_id
+            "Failed to close wasm session {wasm_id}: id not found"
         );
     }
 
@@ -388,8 +385,7 @@ impl SandboxManager {
         let removed = guard.memories.remove(&memory_id);
         assert!(
             removed.is_some(),
-            "Failed to close state {}: id not found",
-            memory_id
+            "Failed to close state {memory_id}: id not found"
         );
         // Dropping memory may be expensive. Do it on a worker thread to avoid
         // blocking the main thread of the sandbox process.
@@ -516,7 +512,7 @@ impl SandboxManager {
                         0,
                     )
                 }
-                .unwrap_or_else(|err| panic!("Reading InitialStateData failed: {:?}", err))
+                .unwrap_or_else(|err| panic!("Reading InitialStateData failed: {err:?}"))
                     as *mut u8;
                 // SAFETY: We've mmapped `mmap_size` and gotten a succesful
                 // reply at address `mmap_ptr` and the mapping is readonly
@@ -599,8 +595,7 @@ impl SandboxManagerInt {
     fn add_memory(&mut self, memory_id: MemoryId, memory: Memory) {
         assert!(
             !self.memories.contains_key(&memory_id),
-            "Failed to open memory {}: id is already in use",
-            memory_id
+            "Failed to open memory {memory_id}: id is already in use"
         );
         let memory = Arc::new(memory);
         self.memories.insert(memory_id, memory);

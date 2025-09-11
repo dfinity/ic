@@ -61,7 +61,7 @@ async fn dashboard(
             Err(err) => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Internal Error: {}", err),
+                    format!("Internal Error: {err}"),
                 )
                     .into_response();
             }
@@ -86,7 +86,7 @@ async fn dashboard(
         // therefore we don't attach the header
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Internal error: {}", e),
+            format!("Internal error: {e}"),
         )
             .into_response(),
     }

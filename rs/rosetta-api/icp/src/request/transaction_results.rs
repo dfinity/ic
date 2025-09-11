@@ -46,12 +46,10 @@ impl TryFrom<TransactionResults> for ObjectMap {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => Ok(o),
             Ok(o) => Err(ApiError::internal_error(format!(
-                "Could not convert TransactionResults to ObjectMap. Expected type Object but received: {:?}",
-                o
+                "Could not convert TransactionResults to ObjectMap. Expected type Object but received: {o:?}"
             ))),
             Err(err) => Err(ApiError::internal_error(format!(
-                "Could not convert TransactionResults to ObjectMap: {:?}",
-                err
+                "Could not convert TransactionResults to ObjectMap: {err:?}"
             ))),
         }
     }
@@ -62,8 +60,7 @@ impl TryFrom<ObjectMap> for TransactionResults {
     fn try_from(o: ObjectMap) -> Result<Self, ApiError> {
         serde_json::from_value(serde_json::Value::Object(o)).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse TransactionResults from Object: {}",
-                e
+                "Could not parse TransactionResults from Object: {e}"
             ))
         })
     }

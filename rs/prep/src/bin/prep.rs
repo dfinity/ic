@@ -356,7 +356,7 @@ impl CliArgs {
                         .iter()
                         .map(|s| {
                             PrincipalId::from_str(s)
-                                .with_context(|| format!("could not convert {} to principal", s))
+                                .with_context(|| format!("could not convert {s} to principal"))
                         })
                         .collect::<Result<BTreeSet<PrincipalId>>>()?;
 
@@ -539,7 +539,7 @@ mod test_flag_node_parser {
     /// Verifies that unknown fields return an Err
     #[test]
     fn unknown_fields() {
-        let flag = format!("new_field:0,{}", GOOD_FLAG);
+        let flag = format!("new_field:0,{GOOD_FLAG}");
         assert_matches!(Node::from_json5_without_braces(&flag), Err(_));
     }
 

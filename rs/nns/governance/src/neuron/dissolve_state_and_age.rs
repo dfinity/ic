@@ -85,12 +85,11 @@ impl DissolveStateAndAge {
         let stored_dissolve_state_and_age = StoredDissolveStateAndAge::from(self);
 
         let validated_dissolve_state_and_age = Self::try_from(stored_dissolve_state_and_age)
-            .map_err(|e| format!("Invalid dissolve state and age: {}", e))?;
+            .map_err(|e| format!("Invalid dissolve state and age: {e}"))?;
 
         if validated_dissolve_state_and_age != original {
             return Err(format!(
-                "Dissolve state and age is not valid, as roundtrip conversion did not result in same value. In: {:?}, Out: {:?}",
-                original, validated_dissolve_state_and_age
+                "Dissolve state and age is not valid, as roundtrip conversion did not result in same value. In: {original:?}, Out: {validated_dissolve_state_and_age:?}"
             ));
         }
         Ok(self)

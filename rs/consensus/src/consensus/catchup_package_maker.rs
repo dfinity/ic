@@ -201,14 +201,12 @@ impl CatchUpPackageMaker {
                 // This should never happen as we don't want to remove the state
                 // for CUP before the hash is fetched.
                 panic!(
-                    "State at height {} had disappeared before we had a chance to make a CUP. This should not happen.",
-                    height,
+                    "State at height {height} had disappeared before we had a chance to make a CUP. This should not happen.",
                 );
             }
             Err(StateHashError::Permanent(StateNotFullyCertified(_))) => {
                 panic!(
-                    "Height {} is not a fully certified height. This should not happen.",
-                    height,
+                    "Height {height} is not a fully certified height. This should not happen.",
                 );
             }
             Ok(state_hash) => {

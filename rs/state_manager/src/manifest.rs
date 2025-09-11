@@ -106,10 +106,9 @@ impl fmt::Display for ManifestValidationError {
                 max_supported_version,
             } => write!(
                 f,
-                "manifest version {} not supported, maximum supported version {}",
-                manifest_version, max_supported_version,
+                "manifest version {manifest_version} not supported, maximum supported version {max_supported_version}",
             ),
-            Self::InconsistentManifest { reason } => write!(f, "inconsistent manifest: {}", reason),
+            Self::InconsistentManifest { reason } => write!(f, "inconsistent manifest: {reason}"),
         }
     }
 }
@@ -154,16 +153,14 @@ impl fmt::Display for ChunkValidationError {
                 actual_size,
             } => write!(
                 f,
-                "chunk {} size mismatch, expected {}, got {}",
-                chunk_ix, expected_size, actual_size
+                "chunk {chunk_ix} size mismatch, expected {expected_size}, got {actual_size}"
             ),
             Self::InvalidChunkIndex {
                 chunk_ix,
                 actual_length,
             } => write!(
                 f,
-                "chunk index {} is out of the vector length {}",
-                chunk_ix, actual_length
+                "chunk index {chunk_ix} is out of the vector length {actual_length}"
             ),
         }
     }
@@ -1286,7 +1283,7 @@ pub fn diff_manifest(
         let chunk_info = manifest_old
             .chunk_table
             .get(*chunk_index)
-            .unwrap_or_else(|| panic!("Invalid chunk index {}", chunk_index));
+            .unwrap_or_else(|| panic!("Invalid chunk index {chunk_index}"));
 
         chunk_info.file_index as usize
     };
@@ -1390,7 +1387,7 @@ pub fn manifest_from_path(path: &Path) -> Result<Manifest, CheckpointError> {
             .map_err(|v| CheckpointError::ProtoError {
                 path: path.to_path_buf(),
                 field: "SystemMetadata::state_sync_version".into(),
-                proto_err: format!("Replica does not implement state sync version {}", v),
+                proto_err: format!("Replica does not implement state sync version {v}"),
             })?,
         &cp_layout,
         DEFAULT_CHUNK_SIZE,

@@ -89,7 +89,7 @@ impl From<InitiateMaturityDisbursementError> for GovernanceError {
             InitiateMaturityDisbursementError::InvalidDestination { reason } => {
                 GovernanceError::new_with_message(
                     ErrorType::InvalidCommand,
-                    format!("Invalid disbursement destination: {}", reason),
+                    format!("Invalid disbursement destination: {reason}"),
                 )
             }
             InitiateMaturityDisbursementError::NeuronSpawning => GovernanceError::new_with_message(
@@ -106,8 +106,7 @@ impl From<InitiateMaturityDisbursementError> for GovernanceError {
                 GovernanceError::new_with_message(
                     ErrorType::PreconditionFailed,
                     format!(
-                        "Too many disbursements in progress. Max: {}",
-                        MAX_NUM_DISBURSEMENTS,
+                        "Too many disbursements in progress. Max: {MAX_NUM_DISBURSEMENTS}",
                     ),
                 )
             }
@@ -247,8 +246,7 @@ fn percentage_of_maturity(
         })
         .ok_or_else(|| InitiateMaturityDisbursementError::Unknown {
             reason: format!(
-                "Failed to calculate percentage of maturity: {}% of {} e8s",
-                percentage_to_disburse, total_maturity_e8s
+                "Failed to calculate percentage of maturity: {percentage_to_disburse}% of {total_maturity_e8s} e8s"
             ),
         })
 }
@@ -405,13 +403,12 @@ impl Display for FinalizeMaturityDisbursementError {
                 write!(f, "No maturity modulation")
             }
             FinalizeMaturityDisbursementError::NeuronNotFound(neuron_id) => {
-                write!(f, "Neuron not found: {:?}", neuron_id)
+                write!(f, "Neuron not found: {neuron_id:?}")
             }
             FinalizeMaturityDisbursementError::NoMaturityDisbursement(neuron_id) => {
                 write!(
                     f,
-                    "No maturity disbursement found for neuron: {:?}",
-                    neuron_id
+                    "No maturity disbursement found for neuron: {neuron_id:?}"
                 )
             }
             FinalizeMaturityDisbursementError::NotTimeToFinalizeMaturityDisbursement {
@@ -420,9 +417,8 @@ impl Display for FinalizeMaturityDisbursementError {
                 now_seconds,
             } => write!(
                 f,
-                "Not time to finalize maturity disbursement for neuron {:?}: \
-                finalize_disbursement_timestamp_seconds: {}, now_seconds: {}",
-                neuron_id, finalize_disbursement_timestamp_seconds, now_seconds
+                "Not time to finalize maturity disbursement for neuron {neuron_id:?}: \
+                finalize_disbursement_timestamp_seconds: {finalize_disbursement_timestamp_seconds}, now_seconds: {now_seconds}"
             ),
             FinalizeMaturityDisbursementError::MaturityModulationFailure {
                 maturity_before_modulation_e8s,
@@ -430,35 +426,31 @@ impl Display for FinalizeMaturityDisbursementError {
                 reason,
             } => write!(
                 f,
-                "Failed to apply maturity modulation of {} basis points to {} e8s: {}",
-                maturity_modulation_basis_points, maturity_before_modulation_e8s, reason
+                "Failed to apply maturity modulation of {maturity_modulation_basis_points} basis points to {maturity_before_modulation_e8s} e8s: {reason}"
             ),
             FinalizeMaturityDisbursementError::NoAccountToDisburseTo(neuron_id) => {
-                write!(f, "No account to disburse to for neuron: {:?}", neuron_id)
+                write!(f, "No account to disburse to for neuron: {neuron_id:?}")
             }
             FinalizeMaturityDisbursementError::AccountConversionFailure { reason } => {
-                write!(f, "Failed to convert account identifier: {}", reason)
+                write!(f, "Failed to convert account identifier: {reason}")
             }
             FinalizeMaturityDisbursementError::FailToAcquireNeuronLock(neuron_id) => {
                 write!(
                     f,
-                    "Failed to acquire neuron lock for neuron: {:?} even though we just \
-                    checked the neuron is not locked",
-                    neuron_id
+                    "Failed to acquire neuron lock for neuron: {neuron_id:?} even though we just \
+                    checked the neuron is not locked"
                 )
             }
             FinalizeMaturityDisbursementError::FailToPopMaturityDisbursement(neuron_id) => {
                 write!(
                     f,
-                    "Failed to pop maturity disbursement in progress for neuron id {:?} \
-                    even though we just found it",
-                    neuron_id
+                    "Failed to pop maturity disbursement in progress for neuron id {neuron_id:?} \
+                    even though we just found it"
                 )
             }
             FinalizeMaturityDisbursementError::FailToMintIcp { neuron_id, reason } => write!(
                 f,
-                "Failed to mint ICP for neuron id {:?}: {}",
-                neuron_id, reason
+                "Failed to mint ICP for neuron id {neuron_id:?}: {reason}"
             ),
             FinalizeMaturityDisbursementError::FailToRestoreMaturityDisbursement {
                 neuron_id,
@@ -466,9 +458,8 @@ impl Display for FinalizeMaturityDisbursementError {
             } => {
                 write!(
                     f,
-                    "Maturity disbursement was removed from the neuron {:?}, ICP minting failed \
-                    but the disbursement cannot be reversed because of {}. Neuron lock is retained.",
-                    neuron_id, reason
+                    "Maturity disbursement was removed from the neuron {neuron_id:?}, ICP minting failed \
+                    but the disbursement cannot be reversed because of {reason}. Neuron lock is retained."
                 )
             }
         }

@@ -192,7 +192,7 @@ fn run_raw(fname: Option<PathBuf>) -> io::Result<()> {
     let mut arr: [u8; PrincipalId::MAX_LENGTH_IN_BYTES] = Default::default();
     arr.copy_from_slice(&buffer[0..PrincipalId::MAX_LENGTH_IN_BYTES]);
     let pid = PrincipalId::new(num_bytes, arr);
-    println!("{:?}", pid);
+    println!("{pid:?}");
     Ok(())
 }
 
@@ -200,7 +200,7 @@ fn main() -> io::Result<()> {
     let args = match CliArgs::try_parse_from(env::args()) {
         Ok(args) => args,
         Err(e) => {
-            eprintln!("{}", e);
+            eprintln!("{e}");
             std::process::exit(1);
         }
     };

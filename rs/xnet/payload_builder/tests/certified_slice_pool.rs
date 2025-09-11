@@ -306,8 +306,7 @@ fn invalid_slice(
         match UnpackedStreamSlice::try_from(invalid_slice) {
             Err(CertifiedSliceError::InvalidPayload(reason)) => assert_eq!(expected, reason),
             actual => panic!(
-                "Expected Err(CertifiedSliceError::InvalidPayload((\"{:?}\")), got {:?}",
-                expected, actual
+                "Expected Err(CertifiedSliceError::InvalidPayload((\"{expected:?}\")), got {actual:?}"
             ),
         }
     }
@@ -385,8 +384,7 @@ fn invalid_slice(
                 }) {
                     Err(CertifiedSliceError::WitnessPruningFailed(_)) => {}
                     actual => panic!(
-                        "Expected Err(CertifiedSliceError::WitnessPruningFailed(_), got {:?}",
-                        actual
+                        "Expected Err(CertifiedSliceError::WitnessPruningFailed(_), got {actual:?}"
                     ),
                 }
 
@@ -395,8 +393,7 @@ fn invalid_slice(
                 match unpacked.take_prefix(Some(1), None) {
                     Err(CertifiedSliceError::WitnessPruningFailed(_)) => {}
                     actual => panic!(
-                        "Expected Err(CertifiedSliceError::WitnessPruningFailed(_), got {:?}",
-                        actual
+                        "Expected Err(CertifiedSliceError::WitnessPruningFailed(_), got {actual:?}"
                     ),
                 }
             } else {
@@ -404,8 +401,7 @@ fn invalid_slice(
                 match UnpackedStreamSlice::try_from(slice_with_extra_message) {
                     Err(CertifiedSliceError::InvalidPayload(InvalidSlice::InvalidBounds)) => {}
                     actual => panic!(
-                        "Expected Err(CertifiedSliceError::InvalidPayload(InvalidBounds), got {:?}",
-                        actual
+                        "Expected Err(CertifiedSliceError::InvalidPayload(InvalidBounds), got {actual:?}"
                     ),
                 }
             }
@@ -442,11 +438,7 @@ fn slice_accurate_count_bytes(
         let expected_max = expected * (100 + error_percent) / 100 + absolute_error;
         assert!(
             expected_min <= actual && actual <= expected_max,
-            "Expecting estimated size to be within {}% + {} of {}, was {}",
-            error_percent,
-            absolute_error,
-            expected,
-            actual,
+            "Expecting estimated size to be within {error_percent}% + {absolute_error} of {expected}, was {actual}",
         );
     }
 

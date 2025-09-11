@@ -616,10 +616,7 @@ fn get_xnet_payload_byte_limit_exceeded(
             .sum();
         assert!(
             msg_count < msg_count1 + msg_count2,
-            "Expected fewer than {} + {} messages, got {}",
-            msg_count1,
-            msg_count2,
-            msg_count
+            "Expected fewer than {msg_count1} + {msg_count2} messages, got {msg_count}"
         );
 
         assert_eq!(
@@ -835,8 +832,7 @@ fn system_subnet_stream_throttling(
                 );
             } else {
                 panic!(
-                    "Expecting a slice of length min({}, {}), got an empty slice",
-                    msg_count, max_slice_len
+                    "Expecting a slice of length min({msg_count}, {max_slice_len}), got an empty slice"
                 );
             }
 
@@ -854,8 +850,7 @@ fn system_subnet_stream_throttling(
             assert_eq!(1, xnet_payload_builder.slice_payload_size_stats().count);
         } else {
             panic!(
-                "Expecting payload with a single slice, from {}",
-                REMOTE_SUBNET
+                "Expecting payload with a single slice, from {REMOTE_SUBNET}"
             );
         }
     });

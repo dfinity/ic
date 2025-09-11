@@ -235,7 +235,7 @@ pub fn request_id_signature_and_public_key_with_domain_separator(
                     signing_key.sign_message(&bytes_to_sign).to_vec(),
                 )
             }
-            _ => panic!["unexpected algorithm id {:?}", algorithm_id],
+            _ => panic!["unexpected algorithm id {algorithm_id:?}"],
         }
     };
     let signature: BasicSigOf<MessageId> = BasicSigOf::new(BasicSig(signature_bytes_vec));

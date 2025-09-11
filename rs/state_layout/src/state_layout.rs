@@ -761,7 +761,7 @@ impl StateLayout {
             } else {
                 LayoutError::IoError {
                     path: scratchpad.to_path_buf(),
-                    message: format!("Failed to rename scratchpad to checkpoint {}", height),
+                    message: format!("Failed to rename scratchpad to checkpoint {height}"),
                     io_err: err,
                 }
             }
@@ -784,7 +784,7 @@ impl StateLayout {
                 } else {
                     LayoutError::IoError {
                         path: dst,
-                        message: format!("Failed to clone checkpoint {} to {}", from, to),
+                        message: format!("Failed to clone checkpoint {from} to {to}"),
                         io_err,
                     }
                 }
@@ -871,7 +871,7 @@ impl StateLayout {
         let mut checkpoint_ref_registry = self.checkpoint_ref_registry.lock().unwrap();
         match checkpoint_ref_registry.get_mut(&height) {
             None => {
-                debug_assert!(false, "Double removal at height {}", height);
+                debug_assert!(false, "Double removal at height {height}");
                 return;
             }
             Some(ref mut data) => {
@@ -1193,7 +1193,7 @@ impl StateLayout {
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
             other => other.map_err(|err| LayoutError::IoError {
                 path: cp_path,
-                message: format!("Failed to mark checkpoint {} diverged", height),
+                message: format!("Failed to mark checkpoint {height} diverged"),
                 io_err: err,
             }),
         }
@@ -1241,16 +1241,14 @@ impl StateLayout {
             .map_err(|err| LayoutError::IoError {
                 path: cp_path.clone(),
                 message: format!(
-                    "failed to rename diverged checkpoint {} to tmp path",
-                    height
+                    "failed to rename diverged checkpoint {height} to tmp path"
                 ),
                 io_err: err,
             })?;
         std::fs::remove_dir_all(&tmp_path).map_err(|err| LayoutError::IoError {
             path: cp_path,
             message: format!(
-                "failed to remove diverged checkpoint {} from tmp path",
-                height
+                "failed to remove diverged checkpoint {height} from tmp path"
             ),
             io_err: err,
         })
@@ -1275,7 +1273,7 @@ impl StateLayout {
         self.copy_and_sync_checkpoint(&cp_name, cp_path.as_path(), dst.as_path(), None)
             .map_err(|err| LayoutError::IoError {
                 path: cp_path,
-                message: format!("Failed to backup checkpoint {}", height),
+                message: format!("Failed to backup checkpoint {height}"),
                 io_err: err,
             })?;
         sync_path(&backups_dir).map_err(|err| LayoutError::IoError {
@@ -1296,12 +1294,12 @@ impl StateLayout {
         self.rename_to_tmp_path(&backup_path, &tmp_path)
             .map_err(|err| LayoutError::IoError {
                 path: backup_path.clone(),
-                message: format!("failed to rename backup {} to tmp path", height),
+                message: format!("failed to rename backup {height} to tmp path"),
                 io_err: err,
             })?;
         std::fs::remove_dir_all(&tmp_path).map_err(|err| LayoutError::IoError {
             path: backup_path,
-            message: format!("failed to remove backup {} from tmp path", height),
+            message: format!("failed to remove backup {height} from tmp path"),
             io_err: err,
         })
     }
@@ -1330,7 +1328,7 @@ impl StateLayout {
 
         std::fs::rename(&cp_path, &dst).map_err(|err| LayoutError::IoError {
             path: cp_path,
-            message: format!("failed to archive checkpoint {}", height),
+            message: format!("failed to archive checkpoint {height}"),
             io_err: err,
         })?;
 
@@ -1388,7 +1386,7 @@ impl StateLayout {
         dst: &Path,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> std::io::Result<()> {
-        let scratch_name = format!("scratchpad_{}", name);
+        let scratch_name = format!("scratchpad_{name}");
         let scratchpad = self.fs_tmp().join(scratch_name);
         self.ensure_dir_exists(&scratchpad)?;
 
@@ -1533,14 +1531,13 @@ where
 fn parse_canister_id(hex: &str) -> Result<CanisterId, String> {
     let blob = hex::decode(hex).map_err(|err| {
         format!(
-            "failed to convert directory name {} into a canister ID: {}",
-            hex, err
+            "failed to convert directory name {hex} into a canister ID: {err}"
         )
     })?;
 
     Ok(CanisterId::unchecked_from_principal(
         PrincipalId::try_from(&blob[..])
-            .map_err(|err| format!("failed to parse principal ID: {}", err))?,
+            .map_err(|err| format!("failed to parse principal ID: {err}"))?,
     ))
 }
 
@@ -1549,12 +1546,11 @@ fn parse_canister_id(hex: &str) -> Result<CanisterId, String> {
 fn parse_snapshot_id(hex: &str) -> Result<SnapshotId, String> {
     let blob = hex::decode(hex).map_err(|err| {
         format!(
-            "failed to convert directory name {} into a snapshot ID: {}",
-            hex, err
+            "failed to convert directory name {hex} into a snapshot ID: {err}"
         )
     })?;
 
-    SnapshotId::try_from(&blob).map_err(|err| format!("failed to parse snapshot ID: {}", err))
+    SnapshotId::try_from(&blob).map_err(|err| format!("failed to parse snapshot ID: {err}"))
 }
 
 /// Parses the canister ID from a relative path, if it is the path of a canister or snapshot
@@ -1583,8 +1579,7 @@ fn parse_and_sort_checkpoint_heights(names: &[String]) -> Result<Vec<Height>, La
                 .map_err(|e| LayoutError::CorruptedLayout {
                     path: name.into(),
                     message: format!(
-                        "failed to convert checkpoint name {} into a number: {}",
-                        name, e
+                        "failed to convert checkpoint name {name} into a number: {e}"
                     ),
                 })
         })
@@ -2021,8 +2016,7 @@ impl<Permissions: AccessPolicy> PageMapLayout<Permissions> {
                 LayoutError::IoError {
                     path: dst.base(),
                     message: format!(
-                        "Cannot copy or hardlink file {:?} to {:?}",
-                        overlay, dst_path
+                        "Cannot copy or hardlink file {overlay:?} to {dst_path:?}"
                     ),
                     io_err: err,
                 }
@@ -2085,7 +2079,7 @@ impl<Permissions: AccessPolicy> StorageLayout for PageMapLayout<Permissions> {
             .map_err(|err| {
                 Box::new(LayoutError::CorruptedLayout {
                     path: overlay.to_path_buf(),
-                    message: format!("failed to get height for overlay {}: {}", hex, err),
+                    message: format!("failed to get height for overlay {hex}: {err}"),
                 }) as Box<dyn std::error::Error + Send>
             })
     }
@@ -2113,7 +2107,7 @@ impl<Permissions: AccessPolicy> StorageLayout for PageMapLayout<Permissions> {
         u64::from_str_radix(hex, 16).map(Shard::new).map_err(|err| {
             Box::new(LayoutError::CorruptedLayout {
                 path: overlay.to_path_buf(),
-                message: format!("failed to get shard for overlay {}: {}", hex, err),
+                message: format!("failed to get shard for overlay {hex}: {err}"),
             }) as Box<dyn std::error::Error + Send>
         })
     }
@@ -2590,8 +2584,7 @@ where
         std::fs::hard_link(src_path, dst_path).map_err(|err| LayoutError::IoError {
             path: src_path.to_path_buf(),
             message: format!(
-                "Failed to hardlink {:?} to {:?} while making a canister snapshot",
-                src_path, dst_path,
+                "Failed to hardlink {src_path:?} to {dst_path:?} while making a canister snapshot",
             ),
             io_err: err,
         })?;
@@ -2649,7 +2642,7 @@ fn dir_file_names(p: &Path) -> std::io::Result<Vec<String>> {
         let string = e?.file_name().into_string().map_err(|file_name| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("failed to convert file name {:?} to string", file_name),
+                format!("failed to convert file name {file_name:?} to string"),
             )
         })?;
         result.push(string);

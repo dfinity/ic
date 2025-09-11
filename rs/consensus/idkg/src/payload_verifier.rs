@@ -590,7 +590,7 @@ fn validate_reshare_dealings(
 
 fn decode_initial_dealings(data: &[u8]) -> Result<InitialIDkgDealings, InvalidIDkgPayloadReason> {
     let reshare_chain_key_response = ReshareChainKeyResponse::decode(data)
-        .map_err(|err| InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err)))?;
+        .map_err(|err| InvalidIDkgPayloadReason::DecodingError(format!("{err:?}")))?;
 
     let initial_dealings = match reshare_chain_key_response {
         ReshareChainKeyResponse::IDkg(initial_idkg_dealings) => initial_idkg_dealings,
@@ -602,7 +602,7 @@ fn decode_initial_dealings(data: &[u8]) -> Result<InitialIDkgDealings, InvalidID
     };
 
     InitialIDkgDealings::try_from(&initial_dealings)
-        .map_err(|err| InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err)))
+        .map_err(|err| InvalidIDkgPayloadReason::DecodingError(format!("{err:?}")))
 }
 
 // Validate new signature agreements in the current payload.
@@ -635,7 +635,7 @@ fn validate_new_signature_agreements(
                 match input {
                     ThresholdSigInputs::Ecdsa(input) => {
                         let reply = SignWithECDSAReply::decode(data).map_err(|err| {
-                            InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
+                            InvalidIDkgPayloadReason::DecodingError(format!("{err:?}"))
                         })?;
                         let signature = ThresholdEcdsaCombinedSignature {
                             signature: reply.signature,
@@ -645,7 +645,7 @@ fn validate_new_signature_agreements(
                     }
                     ThresholdSigInputs::Schnorr(input) => {
                         let reply = SignWithSchnorrReply::decode(data).map_err(|err| {
-                            InvalidIDkgPayloadReason::DecodingError(format!("{:?}", err))
+                            InvalidIDkgPayloadReason::DecodingError(format!("{err:?}"))
                         })?;
                         let signature = ThresholdSchnorrCombinedSignature {
                             signature: reply.signature,

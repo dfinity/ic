@@ -182,7 +182,7 @@ impl IDkgPreSignerImpl {
                     .pre_sign_errors_inc("duplicate_dealing_in_batch");
                 ret.push(IDkgChangeAction::HandleInvalid(
                     id,
-                    format!("Duplicate dealing in unvalidated batch: {}", signed_dealing),
+                    format!("Duplicate dealing in unvalidated batch: {signed_dealing}"),
                 ));
                 continue;
             }
@@ -214,8 +214,7 @@ impl IDkgPreSignerImpl {
                             ret.push(IDkgChangeAction::HandleInvalid(
                                 id,
                                 format!(
-                                    "validate_dealings(): failed to translate transcript_params_ref: {}",
-                                    signed_dealing
+                                    "validate_dealings(): failed to translate transcript_params_ref: {signed_dealing}"
                                 ),
                             ));
                             continue;
@@ -230,7 +229,7 @@ impl IDkgPreSignerImpl {
                         self.metrics.pre_sign_errors_inc("unexpected_dealing");
                         ret.push(IDkgChangeAction::HandleInvalid(
                             id,
-                            format!("Dealing from unexpected node: {}", signed_dealing),
+                            format!("Dealing from unexpected node: {signed_dealing}"),
                         ))
                     } else if self.has_dealer_issued_dealing(
                         idkg_pool,
@@ -241,7 +240,7 @@ impl IDkgPreSignerImpl {
                         self.metrics.pre_sign_errors_inc("duplicate_dealing");
                         ret.push(IDkgChangeAction::HandleInvalid(
                             id,
-                            format!("Duplicate dealing: {}", signed_dealing),
+                            format!("Duplicate dealing: {signed_dealing}"),
                         ))
                     } else {
                         let action =
@@ -403,8 +402,7 @@ impl IDkgPreSignerImpl {
                 ret.push(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
-                        "Duplicate dealing support in unvalidated batch: {}",
-                        support
+                        "Duplicate dealing support in unvalidated batch: {support}"
                     ),
                 ));
                 continue;
@@ -414,7 +412,7 @@ impl IDkgPreSignerImpl {
                 self.metrics.pre_sign_errors_inc("xnet_reshare_support");
                 ret.push(IDkgChangeAction::HandleInvalid(
                     id,
-                    format!("Support for xnet reshare transcript: {}", support),
+                    format!("Support for xnet reshare transcript: {support}"),
                 ));
                 continue;
             }
@@ -445,7 +443,7 @@ impl IDkgPreSignerImpl {
                         None => {
                             ret.push(IDkgChangeAction::HandleInvalid(
                                 id,
-                                format!("Failed to translate transcript_params_ref: {}", support),
+                                format!("Failed to translate transcript_params_ref: {support}"),
                             ));
                             continue;
                         }
@@ -465,7 +463,7 @@ impl IDkgPreSignerImpl {
                         self.metrics.pre_sign_errors_inc("unexpected_support");
                         ret.push(IDkgChangeAction::HandleInvalid(
                             id,
-                            format!("Support from unexpected node: {}", support),
+                            format!("Support from unexpected node: {support}"),
                         ))
                     } else if let Some(signed_dealing) = valid_dealings.get(&support.dealing_hash) {
                         let dealing = signed_dealing.idkg_dealing();
@@ -480,7 +478,7 @@ impl IDkgPreSignerImpl {
                             self.metrics.pre_sign_errors_inc("duplicate_support");
                             ret.push(IDkgChangeAction::HandleInvalid(
                                 id,
-                                format!("Duplicate support: {}", support),
+                                format!("Duplicate support: {support}"),
                             ))
                         } else if support.transcript_id != dealing.transcript_id
                             || support.dealer_id != signed_dealing.dealer_id()
@@ -711,8 +709,7 @@ impl IDkgPreSignerImpl {
                 Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
-                        "Dealing validation(permanent error): {}, error = {:?}",
-                        signed_dealing, error
+                        "Dealing validation(permanent error): {signed_dealing}, error = {error:?}"
                     ),
                 ))
             }
@@ -758,8 +755,7 @@ impl IDkgPreSignerImpl {
                 return Some(IDkgChangeAction::HandleInvalid(
                     id.clone(),
                     format!(
-                        "Dealing private verification(permanent error): {}, error = {:?}",
-                        dealing, error
+                        "Dealing private verification(permanent error): {dealing}, error = {error:?}"
                     ),
                 ));
             } else {
@@ -831,8 +827,7 @@ impl IDkgPreSignerImpl {
                 Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
-                        "Support validation failed: {}, error = {:?}",
-                        support, error
+                        "Support validation failed: {support}, error = {error:?}"
                     ),
                 ))
             }
@@ -1391,8 +1386,7 @@ impl TranscriptState {
             Ok(())
         } else {
             Err(format!(
-                "TranscriptState::add_dealing_support(): dealing not found: {:}",
-                support
+                "TranscriptState::add_dealing_support(): dealing not found: {support:}"
             ))
         }
     }

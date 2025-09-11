@@ -681,7 +681,7 @@ impl Proposal {
         let Some(action) = &self.action else {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                format!("No action in proposal: {:#?}", self),
+                format!("No action in proposal: {self:#?}"),
             ));
         };
 
@@ -748,7 +748,7 @@ impl Proposal {
                         );
                         NnsFunction::Unspecified.as_str_name()
                     };
-                return format!("{}-{}", action_name, nns_function_name);
+                return format!("{action_name}-{nns_function_name}");
             }
             action_name.to_string()
         } else {
@@ -1695,14 +1695,14 @@ impl Governance {
     fn neuron_not_found_error(nid: &NeuronId) -> GovernanceError {
         GovernanceError::new_with_message(
             ErrorType::NotFound,
-            format!("Neuron not found: {:?}", nid),
+            format!("Neuron not found: {nid:?}"),
         )
     }
 
     fn no_neuron_for_subaccount_error(subaccount: &[u8]) -> GovernanceError {
         GovernanceError::new_with_message(
             ErrorType::NotFound,
-            format!("No neuron found for subaccount {:?}", subaccount),
+            format!("No neuron found for subaccount {subaccount:?}"),
         )
     }
 
@@ -1767,7 +1767,7 @@ impl Governance {
             if new_neuron.subaccount() != subaccount {
                 return Err(GovernanceError::new_with_message(
                     ErrorType::PreconditionFailed,
-                    format!("Cannot change the subaccount {} of a neuron.", subaccount),
+                    format!("Cannot change the subaccount {subaccount} of a neuron."),
                 ));
             }
             *old_neuron = new_neuron;
@@ -1799,8 +1799,7 @@ impl Governance {
                 return Err(GovernanceError::new_with_message(
                     ErrorType::PreconditionFailed,
                     format!(
-                        "The neuron's ID {} does not match the provided ID {}",
-                        neuron_real_id, neuron_id
+                        "The neuron's ID {neuron_real_id} does not match the provided ID {neuron_id}"
                     ),
                 ));
             }
@@ -1819,8 +1818,7 @@ impl Governance {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "Cannot add neuron. There is already a neuron with id: {:?}",
-                    neuron_id
+                    "Cannot add neuron. There is already a neuron with id: {neuron_id:?}"
                 ),
             ));
         }
@@ -1855,8 +1853,7 @@ impl Governance {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotFound,
                 format!(
-                    "Cannot remove neuron. Can't find a neuron with id: {:?}",
-                    neuron_id
+                    "Cannot remove neuron. Can't find a neuron with id: {neuron_id:?}"
                 ),
             ));
         }
@@ -2231,7 +2228,7 @@ impl Governance {
             Some(ai_pb) => AccountIdentifier::try_from(ai_pb).map_err(|e| {
                 GovernanceError::new_with_message(
                     ErrorType::InvalidCommand,
-                    format!("The recipient's subaccount is invalid due to: {}", e),
+                    format!("The recipient's subaccount is invalid due to: {e}"),
                 )
             })?,
         };
@@ -3529,8 +3526,7 @@ impl Governance {
                 GovernanceError::new_with_message(
                     ErrorType::PreconditionFailed,
                     format!(
-                        "Proposal data for {:?} is missing the `proposal` field.",
-                        proposal_id
+                        "Proposal data for {proposal_id:?} is missing the `proposal` field."
                     ),
                 )
             })?
@@ -3540,8 +3536,7 @@ impl Governance {
                 GovernanceError::new_with_message(
                     ErrorType::PreconditionFailed,
                     format!(
-                        "Proposal data for {:?} is missing `proposal.action`.",
-                        proposal_id,
+                        "Proposal data for {proposal_id:?} is missing `proposal.action`.",
                     ),
                 )
             })?;
@@ -3549,8 +3544,7 @@ impl Governance {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "Proposal {:?} is not of type CreateServiceNervousSystem.",
-                    proposal_id,
+                    "Proposal {proposal_id:?} is not of type CreateServiceNervousSystem.",
                 ),
             ));
         }
@@ -4002,7 +3996,7 @@ impl Governance {
                     Some(to_account) => AccountIdentifier::try_from(to_account).map_err(|e| {
                         GovernanceError::new_with_message(
                             ErrorType::InvalidCommand,
-                            format!("The recipient's subaccount is invalid due to: {}", e),
+                            format!("The recipient's subaccount is invalid due to: {e}"),
                         )
                     })?,
                     None => AccountIdentifier::new(*np_principal, None),
@@ -4045,7 +4039,7 @@ impl Governance {
                 {
                     Err(GovernanceError::new_with_message(
                         ErrorType::NotFound,
-                        format!("Node provider with id {} not found.", np_principal),
+                        format!("Node provider with id {np_principal} not found."),
                     ))
                 } else {
                     // Check that the amount to distribute is not above
@@ -4422,7 +4416,7 @@ impl Governance {
             proposal_id,
             Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                format!("Proposal action {:?} is obsolete.", obsolete_action),
+                format!("Proposal action {obsolete_action:?} is obsolete."),
             )),
         );
     }
@@ -4513,8 +4507,7 @@ impl Governance {
             Err((code, message)) => Err(GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "Error calling external canister for proposal {}. Rejection code: {:?} message: {}",
-                    proposal_id, code, message
+                    "Error calling external canister for proposal {proposal_id}. Rejection code: {code:?} message: {message}"
                 ),
             )),
         }
@@ -4527,7 +4520,7 @@ impl Governance {
     {
         Err(GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
-            format!("Proposal action {:?} is obsolete.", obsolete_action),
+            format!("Proposal action {obsolete_action:?} is obsolete."),
         ))
     }
 
@@ -4676,8 +4669,7 @@ impl Governance {
             GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 format!(
-                    "Failed to convert CreateServiceNervousSystem proposal to SnsInitPayload: {}",
-                    err,
+                    "Failed to convert CreateServiceNervousSystem proposal to SnsInitPayload: {err}",
                 ),
             )
         })?;
@@ -4686,7 +4678,7 @@ impl Governance {
         sns_init_payload.validate_post_execution().map_err(|err| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                format!("Failed to validate SnsInitPayload: {}", err),
+                format!("Failed to validate SnsInitPayload: {err}"),
             )
         })?;
 
@@ -4726,7 +4718,7 @@ impl Governance {
                 &proposal_id,
                 initial_neurons_fund_participation_snapshot,
             );
-            err.error_message += &format!(" refund result: {:#?}", refund_result);
+            err.error_message += &format!(" refund result: {refund_result:#?}");
         }
         let deploy_new_sns_response = deploy_new_sns_response?;
 
@@ -4976,7 +4968,7 @@ impl Governance {
         let action = proposal
             .action
             .as_ref()
-            .ok_or(format!("Proposal lacks an action: {:?}", proposal))?;
+            .ok_or(format!("Proposal lacks an action: {proposal:?}"))?;
 
         // Finally, perform Action-specific validation.
         match action {
@@ -5044,8 +5036,7 @@ impl Governance {
             .check_obsolete()
             .map_err(|obsolete_error_message| {
                 invalid_proposal_error(format!(
-                    "Proposal is obsolete because {}",
-                    obsolete_error_message,
+                    "Proposal is obsolete because {obsolete_error_message}",
                 ))
             })?;
 
@@ -5081,7 +5072,7 @@ impl Governance {
     fn validate_subnet_rental_proposal(&self, payload: &[u8]) -> Result<(), String> {
         // Must be able to parse the payload.
         if let Err(e) = Decode!([decoder_config()]; &payload, SubnetRentalRequest) {
-            return Err(format!("Invalid SubnetRentalRequest: {}", e));
+            return Err(format!("Invalid SubnetRentalRequest: {e}"));
         }
 
         // No concurrent subnet rental requests are allowed.
@@ -5094,8 +5085,7 @@ impl Governance {
         });
         if !other_proposal_ids.is_empty() {
             return Err(format!(
-                "There is another open SubnetRentalRequest proposal: {:?}",
-                other_proposal_ids,
+                "There is another open SubnetRentalRequest proposal: {other_proposal_ids:?}",
             ));
         }
 
@@ -5110,8 +5100,7 @@ impl Governance {
             Ok(payload) => payload,
             Err(e) => {
                 return Err(format!(
-                    "The payload could not be decoded into a AddNodeOperatorPayload: {}",
-                    e
+                    "The payload could not be decoded into a AddNodeOperatorPayload: {e}"
                 ));
             }
         };
@@ -5156,8 +5145,7 @@ impl Governance {
                     return Err(GovernanceError::new_with_message(
                         ErrorType::InvalidProposal,
                         format!(
-                            "AddOrRemoveNodeProvider cannot add already existing Node Provider: {}",
-                            np_id
+                            "AddOrRemoveNodeProvider cannot add already existing Node Provider: {np_id}"
                         ),
                     ));
                 }
@@ -5166,7 +5154,7 @@ impl Governance {
                     validate_account_identifier(account_identifier).map_err(|e| {
                         GovernanceError::new_with_message(
                             ErrorType::InvalidProposal,
-                            format!("The account_identifier field is invalid: {}", e),
+                            format!("The account_identifier field is invalid: {e}"),
                         )
                     })?;
                 }
@@ -5194,8 +5182,7 @@ impl Governance {
                         ErrorType::InvalidProposal,
                         format!(
                             "AddOrRemoveNodeProvider ToRemove must target an existing Node Provider \
-                              but targeted {}",
-                            np_id
+                              but targeted {np_id}"
                         ),
                     ));
                 }
@@ -5211,16 +5198,14 @@ impl Governance {
             Ok(payload) => payload,
             Err(e) => {
                 return Err(format!(
-                    "The payload could not be decoded into a AddOrRemoveDataCentersProposalPayload: {}",
-                    e
+                    "The payload could not be decoded into a AddOrRemoveDataCentersProposalPayload: {e}"
                 ));
             }
         };
 
         decoded_payload.validate().map_err(|e| {
             format!(
-                "The given AddOrRemoveDataCentersProposalPayload is invalid: {}",
-                e
+                "The given AddOrRemoveDataCentersProposalPayload is invalid: {e}"
             )
         })
     }
@@ -5237,7 +5222,7 @@ impl Governance {
         let validated = conversion_result.map_err(|e| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                format!("Invalid CreateServiceNervousSystem: {}", e),
+                format!("Invalid CreateServiceNervousSystem: {e}"),
             )
         })?;
 
@@ -5379,8 +5364,7 @@ impl Governance {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
                 format!(
-                    "Neuron doesn't have enough minted stake to submit proposal: {}",
-                    proposer_minted_stake_e8s,
+                    "Neuron doesn't have enough minted stake to submit proposal: {proposer_minted_stake_e8s}",
                 ),
             ));
         }
@@ -5691,7 +5675,7 @@ impl Governance {
         let action = proposal.action.as_ref().ok_or_else(|| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                format!("Proposal lacks an action: {:?}", proposal),
+                format!("Proposal lacks an action: {proposal:?}"),
             )
         })?;
         match *action {
@@ -5713,7 +5697,7 @@ impl Governance {
         let action = proposal.action.as_ref().ok_or_else(|| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
-                format!("Proposal lacks an action: {:?}", proposal),
+                format!("Proposal lacks an action: {proposal:?}"),
             )
         })?;
         match *action {
@@ -5916,7 +5900,7 @@ impl Governance {
         let topic = Topic::try_from(follow_request.topic).map_err(|_| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
-                format!("Not a known topic number. Follow:\n{:#?}", follow_request),
+                format!("Not a known topic number. Follow:\n{follow_request:#?}"),
             )
         })?;
 
@@ -6239,8 +6223,7 @@ impl Governance {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotAuthorized,
                 format!(
-                    "The maximum length for a neuron's name, which is {}, has been exceeded",
-                    KNOWN_NEURON_NAME_MAX_LEN
+                    "The maximum length for a neuron's name, which is {KNOWN_NEURON_NAME_MAX_LEN}, has been exceeded"
                 ),
             ));
         }
@@ -6251,8 +6234,7 @@ impl Governance {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotAuthorized,
                 format!(
-                    "The maximum length for a neuron's description, which is {}, has been exceeded",
-                    KNOWN_NEURON_DESCRIPTION_MAX_LEN
+                    "The maximum length for a neuron's description, which is {KNOWN_NEURON_DESCRIPTION_MAX_LEN}, has been exceeded"
                 ),
             ));
         }
@@ -7113,7 +7095,7 @@ impl Governance {
             .ok_or_else(|| {
                 GovernanceError::new_with_message(
                     ErrorType::NotFound,
-                    format!("Node Provider {} is not known by the NNS", node_provider_id),
+                    format!("Node Provider {node_provider_id} is not known by the NNS"),
                 )
             })?;
 
@@ -7122,8 +7104,7 @@ impl Governance {
                 GovernanceError::new_with_message(
                     ErrorType::PreconditionFailed,
                     format!(
-                        "Invalid reward_account for Node Provider {}: {}",
-                        node_provider_id, e
+                        "Invalid reward_account for Node Provider {node_provider_id}: {e}"
                     ),
                 )
             })?;
@@ -7146,7 +7127,7 @@ impl Governance {
         let Some(proposal_data) = self.get_proposal_data(*proposal_id) else {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotFound,
-                format!("Proposal {:?} not found ({})", proposal_id, context),
+                format!("Proposal {proposal_id:?} not found ({context})"),
             ));
         };
         Ok(proposal_data)
@@ -7160,7 +7141,7 @@ impl Governance {
         let Some(proposal_data) = self.mut_proposal_data(*proposal_id) else {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotFound,
-                format!("Proposal {:?} not found ({})", proposal_id, context),
+                format!("Proposal {proposal_id:?} not found ({context})"),
             ));
         };
         Ok(proposal_data)
@@ -7176,7 +7157,7 @@ impl Governance {
         else {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotFound,
-                format!("Proposal {:?} not found ({})", proposal_id, context),
+                format!("Proposal {proposal_id:?} not found ({context})"),
             ));
         };
         Ok((proposal_data, neuron_store))
@@ -7235,9 +7216,8 @@ impl Governance {
             GovernanceError::new_with_message(
                 ErrorType::NotAuthorized,
                 format!(
-                    "Caller {} is not a valid CanisterId and is not authorized to \
-                        settle Neuron's Fund participation in a decentralization swap. Err: {:?}",
-                    caller, err,
+                    "Caller {caller} is not a valid CanisterId and is not authorized to \
+                        settle Neuron's Fund participation in a decentralization swap. Err: {err:?}",
                 ),
             )
         })?;
@@ -7247,9 +7227,8 @@ impl Governance {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotAuthorized,
                 format!(
-                    "Caller {} is not authorized to settle Neurons' Fund \
-                    participation in a decentralization swap. Err: {:?}",
-                    caller, err_msg,
+                    "Caller {caller} is not authorized to settle Neurons' Fund \
+                    participation in a decentralization swap. Err: {err_msg:?}",
                 ),
             ));
         }
@@ -7612,9 +7591,8 @@ impl Governance {
                 return Err(GovernanceError::new_with_message(
                     ErrorType::InvalidProposal,
                     format!(
-                        "The maximum number of Neurons' Fund participants ({}) must not exceed \
-                        MAX_NEURONS_FUND_PARTICIPANTS ({}).",
-                        maximum_neurons_fund_participants, MAX_NEURONS_FUND_PARTICIPANTS,
+                        "The maximum number of Neurons' Fund participants ({maximum_neurons_fund_participants}) must not exceed \
+                        MAX_NEURONS_FUND_PARTICIPANTS ({MAX_NEURONS_FUND_PARTICIPANTS}).",
                     ),
                 ));
             };
@@ -7629,8 +7607,7 @@ impl Governance {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 format!(
-                    "ProposalData must be present for proposal {:?}.",
-                    proposal_id
+                    "ProposalData must be present for proposal {proposal_id:?}."
                 ),
             ));
         }
@@ -7730,8 +7707,7 @@ impl Governance {
                 GovernanceError::new_with_message(
                     ErrorType::External,
                     format!(
-                        "Minting ICP from the Neuron's Fund failed with error: {:#?}",
-                        err
+                        "Minting ICP from the Neuron's Fund failed with error: {err:#?}"
                     ),
                 )
             })?;
@@ -7753,7 +7729,7 @@ impl Governance {
             .ok_or_else(|| {
                 GovernanceError::new_with_message(
                     ErrorType::NotFound,
-                    format!("Node Provider {} is not known by the NNS", node_provider_id),
+                    format!("Node Provider {node_provider_id} is not known by the NNS"),
                 )
             })
     }
@@ -7837,8 +7813,7 @@ impl Governance {
                 GovernanceError::new_with_message(
                     ErrorType::External,
                     format!(
-                        "Error calling 'get_node_providers_monthly_xdr_rewards': code: {:?}, message: {}",
-                        code, msg
+                        "Error calling 'get_node_providers_monthly_xdr_rewards': code: {code:?}, message: {msg}"
                     ),
                 )
             })?;
@@ -7849,8 +7824,7 @@ impl Governance {
                     ErrorType::External,
                     format!(
                         "Cannot decode return type from get_node_providers_monthly_xdr_rewards \
-                        as GetNodeProvidersMonthlyXdrRewardsResponse'. Error: {}",
-                        err,
+                        as GetNodeProvidersMonthlyXdrRewardsResponse'. Error: {err}",
                     ),
                 )
             })?;
@@ -7861,8 +7835,7 @@ impl Governance {
             return Err(GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "Error calling 'get_node_providers_monthly_xdr_rewards': {}",
-                    err_msg
+                    "Error calling 'get_node_providers_monthly_xdr_rewards': {err_msg}"
                 ),
             ));
         }
@@ -7903,8 +7876,7 @@ impl Governance {
                 GovernanceError::new_with_message(
                     ErrorType::External,
                     format!(
-                        "Error calling 'get_average_icp_xdr_conversion_rate': code: {:?}, message: {}",
-                        code, msg
+                        "Error calling 'get_average_icp_xdr_conversion_rate': code: {code:?}, message: {msg}"
                     ),
                 )
             })?;
@@ -7913,8 +7885,7 @@ impl Governance {
             .map_err(|err| GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "Cannot decode return type from get_average_icp_xdr_conversion_rate'. Error: {}",
-                    err,
+                    "Cannot decode return type from get_average_icp_xdr_conversion_rate'. Error: {err}",
                 ),
             ))
     }
@@ -8160,8 +8131,7 @@ async fn call_deploy_new_sns(
             ErrorType::External,
             format!(
                 "Failed to encode request for deploy_new_sns Candid \
-                     method call: {}\nrequest: {:#?}",
-                err, request,
+                     method call: {err}\nrequest: {request:#?}",
             ),
         )
     })?;
@@ -8174,8 +8144,7 @@ async fn call_deploy_new_sns(
             GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "Failed to send deploy_new_sns request to SNS_WASM canister: {:?}",
-                    err,
+                    "Failed to send deploy_new_sns request to SNS_WASM canister: {err:?}",
                 ),
             )
         })?;
@@ -8185,7 +8154,7 @@ async fn call_deploy_new_sns(
         Decode!(&deploy_new_sns_response, DeployNewSnsResponse).map_err(|err| {
             GovernanceError::new_with_message(
                 ErrorType::External,
-                format!("Failed to decode deploy_new_sns response: {}", err),
+                format!("Failed to decode deploy_new_sns response: {err}"),
             )
         })?;
 
@@ -8193,7 +8162,7 @@ async fn call_deploy_new_sns(
     match deploy_new_sns_response.error {
         Some(err) => Err(GovernanceError::new_with_message(
             ErrorType::External,
-            format!("Error in deploy_new_sns response: {:?}", err),
+            format!("Error in deploy_new_sns response: {err:?}"),
         )),
         None => Ok(deploy_new_sns_response),
     }
@@ -8225,7 +8194,7 @@ fn validate_account_identifier(
     }
 
     AccountIdentifier::try_from(account_identifier)
-        .map_err(|e| format!("The account identifier is not valid: {}", e))?;
+        .map_err(|e| format!("The account identifier is not valid: {e}"))?;
 
     Ok(())
 }
@@ -8245,16 +8214,14 @@ async fn is_canister_id_valid_swap_canister_id(
         .await
         .map_err(|err| {
             format!(
-                "Failed to call the list_deployed_snses method on sns_wasm ({}): {:?}",
-                SNS_WASM_CANISTER_ID, err,
+                "Failed to call the list_deployed_snses method on sns_wasm ({SNS_WASM_CANISTER_ID}): {err:?}",
             )
         })?;
 
     let list_deployed_snses_response =
         Decode!(&list_deployed_snses_response, ListDeployedSnsesResponse).map_err(|err| {
             format!(
-                "Unable to decode response as ListDeployedSnsesResponse: {}. reply_bytes = {:#?}",
-                err, list_deployed_snses_response,
+                "Unable to decode response as ListDeployedSnsesResponse: {err}. reply_bytes = {list_deployed_snses_response:#?}",
             )
         })?;
 
@@ -8264,8 +8231,7 @@ async fn is_canister_id_valid_swap_canister_id(
         .any(|sns| sns.swap_canister_id == Some(target_canister_id.into()));
     if !is_swap {
         return Err(format!(
-            "target_swap_canister_id is not the ID of any swap canister known to sns_wasm: {}",
-            target_canister_id
+            "target_swap_canister_id is not the ID of any swap canister known to sns_wasm: {target_canister_id}"
         ));
     }
 

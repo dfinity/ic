@@ -66,8 +66,7 @@ impl TryFrom<RequestOrResponseV19> for ic_types::messages::RequestOrResponse {
                 response: Some(response),
             } => Ok(Self::Response(Arc::new(response.try_into()?))),
             other => Err(ProxyDecodeError::Other(format!(
-                "RequestOrResponse: expected exactly one of `request` or `response` to be `Some(_)`, got `{:?}`",
-                other
+                "RequestOrResponse: expected exactly one of `request` or `response` to be `Some(_)`, got `{other:?}`"
             ))),
         }
     }

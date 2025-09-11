@@ -228,8 +228,7 @@ impl CatchUpPackageProvider {
     ) -> Result<Option<(pb::CatchUpPackage, CatchUpPackage)>, String> {
         let http = node_record.clone().http.ok_or_else(|| {
             format!(
-                "Node {} record's http endpoint is None: {:?}",
-                node_id, node_record
+                "Node {node_id} record's http endpoint is None: {node_record:?}"
             )
         })?;
         let mut uri = https_endpoint_to_url(&http)?;
@@ -247,7 +246,7 @@ impl CatchUpPackageProvider {
             return Ok(None);
         };
         let cup = CatchUpPackage::try_from(&protobuf)
-            .map_err(|e| format!("Failed to read CUP from peer at url {}: {:?}", uri, e))?;
+            .map_err(|e| format!("Failed to read CUP from peer at url {uri}: {e:?}"))?;
 
         self.crypto
             .verify_combined_threshold_sig_by_public_key(
@@ -256,7 +255,7 @@ impl CatchUpPackageProvider {
                 subnet_id,
                 cup.content.block.get_value().context.registry_version,
             )
-            .map_err(|e| format!("Failed to verify CUP signature at: {:?} with: {:?}", uri, e))?;
+            .map_err(|e| format!("Failed to verify CUP signature at: {uri:?} with: {e:?}"))?;
 
         Ok(Some((protobuf, cup)))
     }
@@ -282,8 +281,7 @@ impl CatchUpPackageProvider {
             .client_config(*node_id, self.registry.get_latest_version())
             .map_err(|e| {
                 format!(
-                    "Failed to create tls client config for {}: {:?}",
-                    node_id, e
+                    "Failed to create tls client config for {node_id}: {e:?}"
                 )
             })?;
 
@@ -305,14 +303,14 @@ impl CatchUpPackageProvider {
                     .header(hyper::header::CONTENT_TYPE, "application/cbor")
                     .uri(&url)
                     .body(Full::from(body))
-                    .map_err(|e| format!("Failed to create request to {}: {:?}", url, e))?,
+                    .map_err(|e| format!("Failed to create request to {url}: {e:?}"))?,
             ),
         );
 
         let res = req
             .await
-            .map_err(|e| format!("Querying CUP endpoint at {} timed out: {:?}", url, e))?
-            .map_err(|e| format!("Failed to query CUP endpoint at {}: {:?}", url, e))?;
+            .map_err(|e| format!("Querying CUP endpoint at {url} timed out: {e:?}"))?
+            .map_err(|e| format!("Failed to query CUP endpoint at {url}: {e:?}"))?;
 
         let status = res.status();
         let mut backoff = self.backoff.lock().await;
@@ -326,8 +324,7 @@ impl CatchUpPackageProvider {
                     Ok(bytes) => bytes.to_bytes(),
                     Err(e) => {
                         return Err(format!(
-                            "Failed to convert the response body to bytes: {:?}",
-                            e
+                            "Failed to convert the response body to bytes: {e:?}"
                         ));
                     }
                 }
@@ -349,9 +346,9 @@ impl CatchUpPackageProvider {
             // Replicas should return `NO_CONTENT` if their own CUP isn't higher than `param`
             StatusCode::NO_CONTENT => Ok(None),
             StatusCode::OK => pb::CatchUpPackage::decode(&bytes[..])
-                .map_err(|e| format!("Failed to deserialize CUP from protobuf: {:?}", e))
+                .map_err(|e| format!("Failed to deserialize CUP from protobuf: {e:?}"))
                 .map(Some),
-            other_status => Err(format!("Status: {}, body: {:?}", other_status, bytes)),
+            other_status => Err(format!("Status: {other_status}, body: {bytes:?}")),
         }
     }
 
@@ -768,7 +765,7 @@ mod tests {
     async fn test_fetch_catch_up_package_body_request_times_out() {
         let send_cup = Arc::new(Mutex::new(false));
         let server_addr = start_server(TestService::SendBodyOrStall(send_cup.clone())).await;
-        let url = format!("https://{}", server_addr);
+        let url = format!("https://{server_addr}");
         let tmp_dir = tempfile::tempdir().unwrap();
         let node_id = node_test_id(1);
 
@@ -813,7 +810,7 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_catch_up_package_unresponsive_times_out() {
         let server_addr = start_server(TestService::Unresponsive).await;
-        let url = format!("https://{}", server_addr);
+        let url = format!("https://{server_addr}");
         let tmp_dir = tempfile::tempdir().unwrap();
         let node_id = node_test_id(1);
 
@@ -834,7 +831,7 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_catch_up_package_no_content() {
         let server_addr = start_server(TestService::NoContent).await;
-        let url = format!("https://{}", server_addr);
+        let url = format!("https://{server_addr}");
         let tmp_dir = tempfile::tempdir().unwrap();
         let node_id = node_test_id(1);
 
@@ -855,7 +852,7 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_catch_up_package_bad_request() {
         let server_addr = start_server(TestService::BadRequest).await;
-        let url = format!("https://{}", server_addr);
+        let url = format!("https://{server_addr}");
         let tmp_dir = tempfile::tempdir().unwrap();
         let node_id = node_test_id(1);
 

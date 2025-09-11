@@ -82,8 +82,7 @@ impl SetFollowing {
                 GovernanceError::new_with_message(
                     ErrorType::InvalidCommand,
                     format!(
-                        "The operation specified an invalid topic code ({:?}): {}",
-                        topic, err,
+                        "The operation specified an invalid topic code ({topic:?}): {err}",
                     ),
                 )
             })?;
@@ -95,8 +94,7 @@ impl SetFollowing {
                 return Err(GovernanceError::new_with_message(
                     ErrorType::InvalidCommand,
                     format!(
-                        "The operation specified the same topic ({:?}) more than once.",
-                        topic,
+                        "The operation specified the same topic ({topic:?}) more than once.",
                     ),
                 ));
             }

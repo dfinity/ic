@@ -1383,7 +1383,7 @@ mod tests {
             })
             .sync()
             .unwrap();
-        assert!(rep.0.is_ok(), "{:?}", rep);
+        assert!(rep.0.is_ok(), "{rep:?}");
 
         let wasm_memory = PageMap::new_for_testing();
         let wasm_memory_id = open_memory(&srv, &wasm_memory, 1);

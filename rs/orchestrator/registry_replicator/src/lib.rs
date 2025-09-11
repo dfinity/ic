@@ -158,7 +158,7 @@ impl RegistryReplicator {
         ));
 
         if let Err(e) = registry_client.fetch_and_start_polling() {
-            panic!("fetch_and_start_polling failed: {}", e);
+            panic!("fetch_and_start_polling failed: {e}");
         };
 
         registry_client

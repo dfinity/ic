@@ -295,7 +295,7 @@ fn sync_until_end_block<T: RpcClientType>(
                 panic!("Wrong type of response")
             }
             Err(RpcError::Unavailable(_)) | Err(RpcError::Cancelled(_)) => (), // Adapter still syncing headers or likely a timeout
-            Err(err) => panic!("{:?}", err),
+            Err(err) => panic!("{err:?}"),
         }
         tries += 1;
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -340,7 +340,7 @@ fn sync_blocks<T: RpcClientType>(
                 panic!("Wrong type of response")
             }
             Err(RpcError::Unavailable(_)) | Err(RpcError::Cancelled(_)) => (), // Adapter still syncing headers or likely a timeout
-            Err(err) => panic!("{:?}", err),
+            Err(err) => panic!("{err:?}"),
         }
         tries += 1;
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -375,7 +375,7 @@ fn sync_blocks_at_once<T: RpcClientType>(
                 panic!("Wrong type of response")
             }
             Err(RpcError::Unavailable(_)) | Err(RpcError::Cancelled(_)) => (), // Adapter still syncing headers or likely a timeout
-            Err(err) => panic!("{:?}", err),
+            Err(err) => panic!("{err:?}"),
         }
         tries += 1;
         std::thread::sleep(std::time::Duration::from_secs(1));
@@ -494,7 +494,7 @@ fn sync_headers_until_checkpoint(adapter_client: &AdapterClient, anchor: Vec<u8>
                 // Checkpoint has not been surpassed, adapter still syncing headers
                 std::thread::sleep(std::time::Duration::from_secs(10));
             }
-            Err(err) => panic!("{:?}", err),
+            Err(err) => panic!("{err:?}"),
             _ => return,
         }
     }

@@ -493,8 +493,7 @@ mod test {
         let (_, maybe_err) = state.add_headers(&chain);
         assert!(
             maybe_err.is_none(),
-            "unsuccessfully added first chain: {:?}",
-            maybe_err
+            "unsuccessfully added first chain: {maybe_err:?}"
         );
 
         // Create a fork chain forking from chain_hashes[10] and adding to the BlockchainState.
@@ -508,8 +507,7 @@ mod test {
         let (_, maybe_err) = state.add_headers(&fork_chain);
         assert!(
             maybe_err.is_none(),
-            "unsuccessfully added fork chain: {:?}",
-            maybe_err
+            "unsuccessfully added fork chain: {maybe_err:?}"
         );
 
         assert_eq!(state.tips.len(), 2);

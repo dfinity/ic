@@ -202,8 +202,7 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
         {
             Nat(balance.0.checked_sub(&amount.0).with_context(|| {
                 format!(
-                    "Underflow while debiting account {} for amount {} at index {} (balance: {})",
-                    account, amount, index, balance
+                    "Underflow while debiting account {account} for amount {amount} at index {index} (balance: {balance})"
                 )
             })?)
         } else {
@@ -232,8 +231,7 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
         {
             Nat(balance.0.checked_add(&amount.0).with_context(|| {
                 format!(
-                    "Overflow while crediting an account {} for amount {} at index {} (balance: {})",
-                    account, amount, index, balance
+                    "Overflow while crediting an account {account} for amount {amount} at index {index} (balance: {balance})"
                 )
             })?)
         } else {
@@ -550,8 +548,7 @@ pub fn get_block_at_idx(
     block_idx: u64,
 ) -> anyhow::Result<Option<RosettaBlock>> {
     let command = format!(
-        "SELECT idx,serialized_block FROM blocks WHERE idx = {}",
-        block_idx
+        "SELECT idx,serialized_block FROM blocks WHERE idx = {block_idx}"
     );
     let mut stmt = connection.prepare_cached(&command)?;
     read_single_block(&mut stmt, params![])
@@ -565,8 +562,7 @@ fn get_block_at_next_idx(
     block_idx: u64,
 ) -> anyhow::Result<Option<RosettaBlock>> {
     let command = format!(
-        "SELECT idx,serialized_block FROM blocks WHERE idx > {} ORDER BY idx ASC LIMIT 1",
-        block_idx
+        "SELECT idx,serialized_block FROM blocks WHERE idx > {block_idx} ORDER BY idx ASC LIMIT 1"
     );
     let mut stmt = connection.prepare_cached(&command)?;
     read_single_block(&mut stmt, params![])
@@ -704,8 +700,7 @@ pub fn get_account_balance_at_block_idx(
         .transpose()
         .with_context(|| {
             format!(
-                "Unable to fetch balance of account {} at index {}",
-                account, block_idx
+                "Unable to fetch balance of account {account} at index {block_idx}"
             )
         })?
         .map(|x: String| Nat::from_str(&x))

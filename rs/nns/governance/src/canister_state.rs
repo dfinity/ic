@@ -222,9 +222,7 @@ impl Environment for CanisterEnv {
                 Err(GovernanceError::new_with_message(
                     ErrorType::External,
                     format!(
-                        "Error executing ExecuteNnsFunction proposal. Error Code: {}. Rejection message: {}",
-                        code,
-                        msg
+                        "Error executing ExecuteNnsFunction proposal. Error Code: {code}. Rejection message: {msg}"
                     ),
                 )),
             );

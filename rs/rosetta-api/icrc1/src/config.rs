@@ -45,8 +45,7 @@ impl TokenDef {
         let parts: Vec<&str> = token_description.split(':').collect();
         if parts.is_empty() || parts.len() > 3 {
             return Err(anyhow::Error::msg(format!(
-                "Invalid token description: {}",
-                token_description
+                "Invalid token description: {token_description}"
             )));
         }
 
@@ -61,27 +60,24 @@ impl TokenDef {
             if let Some(symbol) = part.strip_prefix("s=") {
                 if icrc1_symbol.is_some() {
                     return Err(anyhow::Error::msg(format!(
-                        "Invalid token description: {}. Symbol (s=) can only be specified once",
-                        token_description
+                        "Invalid token description: {token_description}. Symbol (s=) can only be specified once"
                     )));
                 }
                 icrc1_symbol = Some(symbol.to_string());
             } else if let Some(decimals) = part.strip_prefix("d=") {
                 if icrc1_decimals.is_some() {
                     return Err(anyhow::Error::msg(format!(
-                        "Invalid token description: {}. Decimals (d=) can only be specified once",
-                        token_description
+                        "Invalid token description: {token_description}. Decimals (d=) can only be specified once"
                     )));
                 }
                 icrc1_decimals = Some(
                     decimals
                         .parse()
-                        .context(format!("Failed to parse u8 from {}", part))?,
+                        .context(format!("Failed to parse u8 from {part}"))?,
                 );
             } else {
                 return Err(anyhow::Error::msg(format!(
-                    "Invalid token description: {}. It must be canister_id[:s=symbol][:d=decimals]",
-                    token_description
+                    "Invalid token description: {token_description}. It must be canister_id[:s=symbol][:d=decimals]"
                 )));
             }
         }
@@ -212,7 +208,7 @@ impl ParsedConfig {
         });
 
         let network_url = Url::parse(&network_url_str)
-            .context(format!("Failed to parse network URL: {}", network_url_str))?;
+            .context(format!("Failed to parse network URL: {network_url_str}"))?;
 
         // Construct the appropriate store type
         let store = match args.store_type {

@@ -274,7 +274,7 @@ impl Player {
         log: ReplicaLogger,
         _async_log_guard: AsyncGuard,
     ) -> Self {
-        println!("Setting default replica version {}", replica_version);
+        println!("Setting default replica version {replica_version}");
         if ReplicaVersion::set_default_version(replica_version.clone()).is_err() {
             println!("Failed to set default replica version");
         }
@@ -285,8 +285,7 @@ impl Player {
                 SubnetType::try_from(record.subnet_type).expect("Failed to decode subnet type")
             }
             err => panic!(
-                "Failed to extract subnet type of {:?} from registry: {:?}",
-                subnet_id, err
+                "Failed to extract subnet type of {subnet_id:?} from registry: {err:?}"
             ),
         };
 
@@ -503,7 +502,7 @@ impl Player {
         )?);
         if !invalid_artifacts.is_empty() {
             println!("Invalid artifacts:");
-            invalid_artifacts.iter().for_each(|a| println!("{:?}", a));
+            invalid_artifacts.iter().for_each(|a| println!("{a:?}"));
         }
 
         let last_batch_height = self.deliver_batches(
@@ -549,7 +548,7 @@ impl Player {
             }
             let certification = certification_pool
                 .certification_at_height(h)
-                .unwrap_or_else(|| panic!("Missing certification at height {:?}", h));
+                .unwrap_or_else(|| panic!("Missing certification at height {h:?}"));
             validator
                 .verify_certification(&certification)
                 .map_err(|e| {
@@ -563,7 +562,7 @@ impl Player {
                 .ok();
             self.state_manager
                 .deliver_state_certification(certification);
-            print!(" {}", h);
+            print!(" {h}");
         }
         println!();
 
@@ -695,13 +694,13 @@ impl Player {
     pub fn update_registry_local_store(&self) {
         println!("RegistryLocalStore path: {:?}", &self.local_store_path);
         let latest_version = self.registry.get_latest_version();
-        println!("RegistryLocalStore latest version: {}", latest_version);
+        println!("RegistryLocalStore latest version: {latest_version}");
         let records = self
             .get_changes_since(
                 latest_version.get(),
                 current_time() + Duration::from_secs(60),
             )
-            .unwrap_or_else(|err| panic!("Error in get_certified_changes_since: {}", err));
+            .unwrap_or_else(|err| panic!("Error in get_certified_changes_since: {err}"));
         write_records_to_local_store(&self.local_store_path, latest_version, records)
     }
 
@@ -765,7 +764,7 @@ impl Player {
                         .unwrap_or_else(|| finalized_height),
                 );
                 let last_block = pool.get_finalized_block(target_height).unwrap_or_else(|| {
-                    panic!("Finalized block is not found at height {}", target_height)
+                    panic!("Finalized block is not found at height {target_height}")
                 });
 
                 (
@@ -923,10 +922,10 @@ impl Player {
             Ok((Ok(wasm_result), _)) => match wasm_result {
                 WasmResult::Reply(v) => deserialize_get_latest_version_response(v)
                     .map(RegistryVersion::from)
-                    .map_err(|err| format!("{}", err)),
-                WasmResult::Reject(e) => Err(format!("Query rejected: {}", e)),
+                    .map_err(|err| format!("{err}")),
+                WasmResult::Reject(e) => Err(format!("Query rejected: {e}")),
             },
-            Ok((Err(err), _)) => Err(format!("Query failed: {:?}", err)),
+            Ok((Err(err), _)) => Err(format!("Query failed: {err:?}")),
             Err(QueryExecutionError::CertifiedStateUnavailable) => {
                 panic!("Certified state unavailable for query call.")
             }
@@ -974,17 +973,16 @@ impl Player {
         let start_height = Height::from(start_height);
         let mut height_to_batches =
             backup::heights_to_artifacts_metadata(&backup_dir, start_height)
-                .unwrap_or_else(|err| panic!("File scanning failed: {:?}", err));
+                .unwrap_or_else(|err| panic!("File scanning failed: {err:?}"));
         println!(
-            "Restoring the replica state of subnet {:?} starting from the height {:?}",
-            backup_dir, start_height
+            "Restoring the replica state of subnet {backup_dir:?} starting from the height {start_height:?}"
         );
 
         // Assert consistent initial state
         if let Err(err) = self.verify_latest_cup() {
             if let ReplayError::CUPVerificationFailed(height) = err {
                 let file = cup_file_name(&backup_dir, height);
-                println!("Invalid CUP detected: {:?}", file);
+                println!("Invalid CUP detected: {file:?}");
                 rename_file(&file);
             }
             return Err(err);
@@ -1027,7 +1025,7 @@ impl Player {
             self.wait_for_state(last_batch_height);
             if let Some(height) = target_height {
                 if last_batch_height >= height {
-                    println!("Target height {} reached.", height);
+                    println!("Target height {height} reached.");
                     return Ok(self.get_latest_state_params(None, invalid_artifacts));
                 }
             }
@@ -1072,8 +1070,7 @@ impl Player {
                 }
                 Err(backup::ExitPoint::ValidationIncomplete(last_validated_height)) => {
                     println!(
-                        "Validation of artifacts at height {:?} is not complete",
-                        last_validated_height
+                        "Validation of artifacts at height {last_validated_height:?} is not complete"
                     );
                     return Err(ReplayError::ValidationIncomplete(
                         last_validated_height,
@@ -1260,7 +1257,7 @@ async fn get_changes_since(
         Ok((Ok(wasm_result), _time)) => match wasm_result {
             WasmResult::Reply(v) => {
                 let (high_capacity_deltas, _version) = deserialize_get_changes_since_response(v)
-                    .map_err(|err| format!("{:?}", err))?;
+                    .map_err(|err| format!("{err:?}"))?;
 
                 // Dechunkify deltas.
                 let mut inlined_deltas = vec![];
@@ -1269,18 +1266,18 @@ async fn get_changes_since(
 
                     let delta = dechunkify_delta(delta, &get_chunk)
                         .await
-                        .map_err(|err| format!("{:?}", err))?;
+                        .map_err(|err| format!("{err:?}"))?;
 
                     inlined_deltas.push(delta);
                 }
 
                 registry_deltas_to_registry_records(inlined_deltas)
-                    .map_err(|err| format!("{:?}", err))
+                    .map_err(|err| format!("{err:?}"))
             }
 
-            WasmResult::Reject(e) => Err(format!("Query rejected: {}", e)),
+            WasmResult::Reject(e) => Err(format!("Query rejected: {e}")),
         },
-        Ok((Err(err), _)) => Err(format!("Query failed: {:?}", err)),
+        Ok((Err(err), _)) => Err(format!("Query failed: {err:?}")),
         Err(QueryExecutionError::CertifiedStateUnavailable) => {
             Err("Certified state unavailable for query call.".to_string())
         }
@@ -1303,8 +1300,7 @@ impl<PerformQueryImpl: PerformQuery + Sync> GetChunk for GetChunkImpl<'_, Perfor
         };
         let request = Encode!(&request).map_err(|err| {
             format!(
-                "Unable to call get_chunk, because unable to encode request: {}",
-                err
+                "Unable to call get_chunk, because unable to encode request: {err}"
             )
         })?;
         let request = Query {
@@ -1334,25 +1330,24 @@ impl<PerformQueryImpl: PerformQuery + Sync> GetChunk for GetChunkImpl<'_, Perfor
         };
 
         // Handle more problems...
-        let result: WasmResult = result.map_err(|err| format!("Query failed: {:?}", err))?;
+        let result: WasmResult = result.map_err(|err| format!("Query failed: {err:?}"))?;
 
         // Handle canister replied vs. rejected.
         let result: Vec<u8> = match result {
             WasmResult::Reply(ok) => ok,
             WasmResult::Reject(err) => {
-                return Err(format!("Query rejected: {}", err));
+                return Err(format!("Query rejected: {err}"));
             }
         };
 
         // Unpack reply.
         let result = Decode!(&result, Result<Chunk, String>).map_err(|err| {
             format!(
-                "Unable to decode get_chunk response from the Registry canister: {}",
-                err
+                "Unable to decode get_chunk response from the Registry canister: {err}"
             )
         })?;
         let Chunk { content } = result
-            .map_err(|err| format!("The Registry canister replied, but with an Err: {}", err))?;
+            .map_err(|err| format!("The Registry canister replied, but with an Err: {err}"))?;
         let content = content.ok_or_else(|| {
             "The Registry canister replied Ok, but did not include chunk content.".to_string()
         })?;
@@ -1388,8 +1383,7 @@ where
     )
     .map_err(|err| {
         format!(
-            "Failed to serialize get_value request where key={}: {}",
-            key, err,
+            "Failed to serialize get_value request where key={key}: {err}",
         )
     })?;
     let query = Query {
@@ -1411,8 +1405,7 @@ where
         Ok((Ok(WasmResult::Reply(reply)), _)) => reply,
         garbage => {
             return Err(format!(
-                "Did not get reply from Registry get_value call where key={}: {:?}",
-                key, garbage,
+                "Did not get reply from Registry get_value call where key={key}: {garbage:?}",
             ));
         }
     };
@@ -1421,15 +1414,13 @@ where
     let reply = deserialize_get_value_response(reply).map_err(|err| {
         format!(
             "Unable to deserialize the reply from a Registry canister get_value \
-             method call where key={}: {:?}",
-            key, err,
+             method call where key={key}: {err:?}",
         )
     })?;
     let Some(content) = reply.content else {
         return Err(format!(
             "Got a reply from Registry to get_value call, and was able to \
-             deserialize it, but no content field was populated. key={}",
-            key,
+             deserialize it, but no content field was populated. key={key}",
         ));
     };
     let get_chunk = GetChunkImpl { perform_query };
@@ -1437,18 +1428,16 @@ where
         .await
         .map_err(|err| {
             format!(
-                "Unable to dechunkify get_value response where key={}: {:?}",
-                key, err,
+                "Unable to dechunkify get_value response where key={key}: {err:?}",
             )
         })?;
     let record: Record = deserialize_registry_value::<Record>(Ok(Some(record)))
         .map_err(|err| {
             format!(
-                "Failed to deserialize content of Registry record with key={}: {}",
-                key, err,
+                "Failed to deserialize content of Registry record with key={key}: {err}",
             )
         })?
-        .ok_or_else(|| format!("Registry key {} does not exist", key))?;
+        .ok_or_else(|| format!("Registry key {key} does not exist"))?;
 
     // Nice reply!
     Ok(record)
@@ -1609,7 +1598,7 @@ fn write_records_to_local_store(
         .enumerate()
         .try_for_each(|(i, cle)| {
             let v = latest_version + RegistryVersion::from(i as u64 + 1);
-            println!("Writing data of registry version {}", v);
+            println!("Writing data of registry version {v}");
             local_store.store(v, cle)
         })
         .expect("Writing to the file system failed: Stop.");
@@ -1623,7 +1612,7 @@ fn setup_registry(
 
     let registry = Arc::new(RegistryClientImpl::new(data_provider, metrics_registry));
     if let Err(e) = registry.fetch_and_start_polling() {
-        panic!("fetch_and_start_polling failed: {}", e);
+        panic!("fetch_and_start_polling failed: {e}");
     }
     registry
 }
@@ -1662,7 +1651,7 @@ fn get_state_hash<T>(
                 return None;
             }
             Err(err) => {
-                panic!("State hash computation failed: {}", err)
+                panic!("State hash computation failed: {err}")
             }
         }
 

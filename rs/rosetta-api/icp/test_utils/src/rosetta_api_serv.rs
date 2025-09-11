@@ -70,8 +70,8 @@ impl RosettaApiHandle {
             .unwrap();
 
         let api_addr = "127.0.0.1";
-        let api_port = format!("{}", port);
-        let api_url = format!("{}:{}", api_addr, api_port);
+        let api_port = format!("{port}");
+        let api_url = format!("{api_addr}:{api_port}");
 
         let mut args = Vec::new();
         args.push("--ic-url".to_string());
@@ -188,12 +188,12 @@ impl RosettaApiHandle {
             .body(body)
             .send()
             .await
-            .map_err(|err| format!("sending post request failed with {}: ", err))?;
+            .map_err(|err| format!("sending post request failed with {err}: "))?;
         let resp_status = resp.status();
         let resp_body = resp
             .bytes()
             .await
-            .map_err(|err| format!("receive post response failed with {}: ", err))?
+            .map_err(|err| format!("receive post response failed with {err}: "))?
             .to_vec();
         Ok((resp_body, resp_status))
     }

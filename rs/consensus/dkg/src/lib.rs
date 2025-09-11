@@ -213,8 +213,7 @@ impl DkgImpl {
                 return get_handle_invalid_change_action(
                     message,
                     format!(
-                        "No DKG configuration for Id={:?} was found.",
-                        message_dkg_id
+                        "No DKG configuration for Id={message_dkg_id:?} was found."
                     ),
                 )
                 .into();
@@ -245,7 +244,7 @@ impl DkgImpl {
             Err(DkgPayloadValidationError::InvalidArtifact(err)) => {
                 get_handle_invalid_change_action(
                     message,
-                    format!("Dealing verification failed: {:?}", err),
+                    format!("Dealing verification failed: {err:?}"),
                 )
                 .into()
             }

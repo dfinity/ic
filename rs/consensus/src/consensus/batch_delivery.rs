@@ -488,7 +488,7 @@ fn generate_dkg_response_payload(
         }
         (Some(Err(err_str1)), Some(Err(err_str2))) => Some(Payload::Reject(RejectContext::new(
             RejectCode::CanisterReject,
-            format!("{}{}", err_str1, err_str2),
+            format!("{err_str1}{err_str2}"),
         ))),
         (Some(Err(err_str)), _) | (_, Some(Err(err_str))) => Some(Payload::Reject(
             RejectContext::new(RejectCode::CanisterReject, err_str),

@@ -109,7 +109,7 @@ impl HostosUpgrader {
         let url_count = release_package_urls.len();
         release_package_urls.rotate_right(self.get_load_balance_number() % url_count);
 
-        let mut error = format!("No download URLs are provided for version {:?}", version);
+        let mut error = format!("No download URLs are provided for version {version:?}");
 
         for release_package_url in release_package_urls.iter() {
             // We only ever expect this command to exit in error. If the

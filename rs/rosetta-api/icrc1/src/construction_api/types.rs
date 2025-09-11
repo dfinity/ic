@@ -36,7 +36,7 @@ impl TryFrom<Option<ObjectMap>> for ConstructionMetadataRequestOptions {
     type Error = String;
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default()))
-            .map_err(|e| format!("Could not parse MetadataOptions from JSON object: {}", e))
+            .map_err(|e| format!("Could not parse MetadataOptions from JSON object: {e}"))
     }
 }
 
@@ -229,6 +229,6 @@ impl TryFrom<Option<ObjectMap>> for ConstructionPayloadsRequestMetadata {
     type Error = String;
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default()))
-            .map_err(|e| format!("Could not parse MetadataOptions from JSON object: {}", e))
+            .map_err(|e| format!("Could not parse MetadataOptions from JSON object: {e}"))
     }
 }

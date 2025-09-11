@@ -28,7 +28,7 @@ fn build_serialized_bytes<T: serde::Serialize + std::fmt::Debug>(
 ) -> anyhow::Result<Vec<u8>> {
     let mut buf = vec![];
     ciborium::ser::into_writer(&object, &mut buf)
-        .with_context(|| format!("Failed to serialize object {:?}", object))?;
+        .with_context(|| format!("Failed to serialize object {object:?}"))?;
     Ok(buf)
 }
 
@@ -111,7 +111,7 @@ pub fn build_icrc1_transaction_from_canister_method_args(
                 memo,
                 created_at_time,
             } = Decode!(&candid_bytes, ApproveArgs).with_context(|| {
-                format!("Could not decode approve args from: {:?} ", candid_bytes)
+                format!("Could not decode approve args from: {candid_bytes:?} ")
             })?;
 
             let operation = crate::common::storage::types::IcrcOperation::Approve {
@@ -142,8 +142,7 @@ pub fn build_icrc1_transaction_from_canister_method_args(
                 created_at_time,
             } = Decode!(&candid_bytes, TransferFromArgs).with_context(|| {
                 format!(
-                    "Could not decode transfer from args from: {:?} ",
-                    candid_bytes
+                    "Could not decode transfer from args from: {candid_bytes:?} "
                 )
             })?;
 
@@ -172,7 +171,7 @@ pub fn build_icrc1_transaction_from_canister_method_args(
                 memo,
                 created_at_time,
             } = Decode!(&candid_bytes, TransferArg).with_context(|| {
-                format!("Could not decode transfer args from: {:?} ", candid_bytes)
+                format!("Could not decode transfer args from: {candid_bytes:?} ")
             })?;
 
             let operation = crate::common::storage::types::IcrcOperation::Transfer {

@@ -80,7 +80,7 @@ async fn cup(
             }
             Err(e) => {
                 let code = StatusCode::BAD_REQUEST;
-                let text = format!("Could not parse body as CatchUpPackage param: {}", e);
+                let text = format!("Could not parse body as CatchUpPackage param: {e}");
                 (code, text).into_response()
             }
         }

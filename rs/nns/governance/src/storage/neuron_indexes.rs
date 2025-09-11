@@ -126,22 +126,22 @@ impl Display for NeuronIndexDefect {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self {
             Self::Subaccount { reason } => {
-                write!(f, "Neuron subaccount index is corrupted: {}", reason)
+                write!(f, "Neuron subaccount index is corrupted: {reason}")
             }
             Self::Principal { reason } => {
-                write!(f, "Neuron principal index is corrupted: {}", reason)
+                write!(f, "Neuron principal index is corrupted: {reason}")
             }
             Self::Following { reason } => {
-                write!(f, "Neuron following index is corrupted: {}", reason)
+                write!(f, "Neuron following index is corrupted: {reason}")
             }
             Self::KnownNeuron { reason } => {
-                write!(f, "Known neuron index is corrupted: {}", reason)
+                write!(f, "Known neuron index is corrupted: {reason}")
             }
             Self::AccountId { reason } => {
-                write!(f, "AccountId index is corrupted: {}", reason)
+                write!(f, "AccountId index is corrupted: {reason}")
             }
             Self::MaturityDisbursement { reason } => {
-                write!(f, "Maturity disbursement index is corrupted: {}", reason)
+                write!(f, "Maturity disbursement index is corrupted: {reason}")
             }
         }
     }
@@ -488,8 +488,7 @@ where
             .map_err(|error| match error {
                 RemoveKnownNeuronError::AlreadyAbsent => NeuronIndexDefect::KnownNeuron {
                     reason: format!(
-                        "Known neuron name {} cannot be removed as it does not exist",
-                        known_neuron_name
+                        "Known neuron name {known_neuron_name} cannot be removed as it does not exist"
                     ),
                 },
                 RemoveKnownNeuronError::NameExistsWithDifferentNeuronId(existing_neuron_id) => {

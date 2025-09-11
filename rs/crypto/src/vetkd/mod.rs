@@ -562,14 +562,14 @@ enum MasterPubkeyFromCoeffsError {
 
 fn log_err<T: fmt::Display>(error_option: Option<&T>) -> String {
     if let Some(error) = error_option {
-        return format!("{}", error);
+        return format!("{error}");
     }
     "none".to_string()
 }
 
 pub fn log_ok_content<T: fmt::Display, E>(result: &Result<T, E>) -> String {
     if let Ok(content) = result {
-        return format!("{}", content);
+        return format!("{content}");
     }
     "none".to_string()
 }

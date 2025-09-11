@@ -75,19 +75,19 @@ fn do_copy_with_state_layouts(
         }
 
         if src_layout.checkpoint_verified(*src_height).is_err() {
-            return Err(format!("Checkpoint {} does not exist at src", src_height));
+            return Err(format!("Checkpoint {src_height} does not exist at src"));
         }
     }
 
     let src_metadata = load_metadata_proto(&src_layout.states_metadata())
-        .map_err(|e| format!("Failed to read metadata: {}", e))?;
+        .map_err(|e| format!("Failed to read metadata: {e}"))?;
     let mut dst_metadata = load_metadata_proto(&dst_layout.states_metadata())
-        .map_err(|e| format!("Failed to read metadata: {}", e))?;
+        .map_err(|e| format!("Failed to read metadata: {e}"))?;
 
     for (src_height, dst_height) in heights {
         dst_layout
             .copy_and_sync_checkpoint(
-                &format!("import_{}", dst_height),
+                &format!("import_{dst_height}"),
                 &src_layout
                     .checkpoints()
                     .join(StateLayout::checkpoint_name(src_height)),
@@ -96,7 +96,7 @@ fn do_copy_with_state_layouts(
                     .join(StateLayout::checkpoint_name(dst_height)),
                 None,
             )
-            .map_err(|e| format!("Failed to copy checkpoint. Not all states might have been copied and some metadata might be missing: {}", e))?;
+            .map_err(|e| format!("Failed to copy checkpoint. Not all states might have been copied and some metadata might be missing: {e}"))?;
 
         if let Some(src_metadata_entry) = src_metadata.by_height.get(&src_height.get()) {
             dst_metadata
@@ -107,8 +107,7 @@ fn do_copy_with_state_layouts(
 
     write_metadata_proto(&dst_layout.states_metadata(), &dst_metadata).map_err(|e| {
         format!(
-            "Failed to write metadata. Metadata might be missing or corrupted in destination: {}",
-            e
+            "Failed to write metadata. Metadata might be missing or corrupted in destination: {e}"
         )
     })?;
 

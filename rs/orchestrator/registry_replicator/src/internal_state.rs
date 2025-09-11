@@ -145,8 +145,7 @@ impl InternalState {
                 Err(e) => {
                     self.failed_poll_count += 1;
                     return Err(format!(
-                        "Error when trying to fetch updates from NNS: {:?}",
-                        e
+                        "Error when trying to fetch updates from NNS: {e:?}"
                     ));
                 }
             };
@@ -206,7 +205,7 @@ impl InternalState {
         };
 
         fn map_to_str<E: Debug>(msg: &str, v: RegistryVersion, e: E) -> String {
-            format!("{} at version {}: {:?}", msg, v, e)
+            format!("{msg} at version {v}: {e:?}")
         }
 
         let (subnet_id, subnet_record) = match self
@@ -302,12 +301,10 @@ impl InternalState {
         match self.registry_client.get_root_subnet_id(version) {
             Ok(Some(v)) => Ok(v),
             Ok(_) => Err(format!(
-                "No NNS subnet id configured at version {}",
-                version
+                "No NNS subnet id configured at version {version}"
             )),
             Err(e) => Err(format!(
-                "Could not fetch nns subnet id at version {}: {:?}",
-                version, e
+                "Could not fetch nns subnet id at version {version}: {e:?}"
             )),
         }
     }
@@ -323,12 +320,10 @@ impl InternalState {
         {
             Ok(Some(v)) => Ok(v),
             Ok(None) => Err(format!(
-                "Public key for subnet {} not set at version {}",
-                subnet_id, version
+                "Public key for subnet {subnet_id} not set at version {version}"
             )),
             Err(e) => Err(format!(
-                "Error when retrieving public key for subnet {} at version {}: {:?}",
-                subnet_id, version, e
+                "Error when retrieving public key for subnet {subnet_id} at version {version}: {e:?}"
             )),
         }
     }
@@ -345,14 +340,12 @@ impl InternalState {
             Ok(Some(v)) => v,
             Ok(None) => {
                 return Err(format!(
-                    "Missing or incomplete transport infos for subnet {} at version {}.",
-                    subnet_id, version
+                    "Missing or incomplete transport infos for subnet {subnet_id} at version {version}."
                 ));
             }
             Err(e) => {
                 return Err(format!(
-                    "Error retrieving transport infos for subnet {} at version {}: {:?}.",
-                    subnet_id, version, e
+                    "Error retrieving transport infos for subnet {subnet_id} at version {version}: {e:?}."
                 ));
             }
         };
@@ -374,7 +367,7 @@ impl InternalState {
         let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
             Ok(v) => {
                 if v.is_ipv6() {
-                    format!("[{}]", v)
+                    format!("[{v}]")
                 } else {
                     v.to_string()
                 }

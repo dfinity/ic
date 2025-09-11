@@ -31,8 +31,7 @@ impl TryFrom<&Module> for SerializedModuleBytes {
     fn try_from(module: &Module) -> Result<Self, Self::Error> {
         module.serialize().map(Self).map_err(|e| {
             HypervisorError::WasmEngineError(WasmEngineError::FailedToSerializeModule(format!(
-                "{:?}",
-                e
+                "{e:?}"
             )))
         })
     }
@@ -257,8 +256,7 @@ impl OnDiskSerializedModule {
         }
         .unwrap_or_else(|err| {
             panic!(
-                "Reading OnDiskSerializedModule initial_state failed: {:?}",
-                err
+                "Reading OnDiskSerializedModule initial_state failed: {err:?}"
             )
         }) as *mut u8;
         // Safety: allocation was made with length `mmap_size`.

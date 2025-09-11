@@ -51,7 +51,7 @@ pub async fn make_proposal<C: CallCanisters>(
             .command
             .expect("ManageNeuronResponse.command must be set");
         let manage_neuron_response::Command::MakeProposal(make_proposal_response) = command else {
-            panic!("Unexpected response while making proposal: {:?}", command);
+            panic!("Unexpected response while making proposal: {command:?}");
         };
         make_proposal_response
             .proposal_id
@@ -61,7 +61,7 @@ pub async fn make_proposal<C: CallCanisters>(
 
 fn sns_canister_type_code_to_name(sns_canister_type: i32) -> String {
     let Ok(sns_canister_type) = SnsCanisterType::try_from(sns_canister_type) else {
-        return format!("Unknown ({})", sns_canister_type);
+        return format!("Unknown ({sns_canister_type})");
     };
     match sns_canister_type {
         SnsCanisterType::Unspecified => "Unspecified".to_string(),
@@ -125,7 +125,7 @@ pub async fn insert_sns_wasm_upgrade_path_entries<C: CallCanisters>(
     };
 
     let sns_selector_str = if let Some(canister_id) = sns_governance_canister_id {
-        format!("SNS with Governance canister ID {}", canister_id)
+        format!("SNS with Governance canister ID {canister_id}")
     } else {
         "all SNSs".to_string()
     };
@@ -133,8 +133,7 @@ pub async fn insert_sns_wasm_upgrade_path_entries<C: CallCanisters>(
     let proposal = MakeProposalRequest {
         title: Some("Insert SNS-Wasm upgrade path entries".into()),
         summary: format!(
-            "Insert SNS-Wasm upgrade path entries {} for {}.",
-            upgrade_path_summary_str, sns_selector_str,
+            "Insert SNS-Wasm upgrade path entries {upgrade_path_summary_str} for {sns_selector_str}.",
         ),
         url: url.to_string(),
         action: Some(ProposalActionRequest::ExecuteNnsFunction(

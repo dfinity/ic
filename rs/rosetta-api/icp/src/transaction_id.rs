@@ -92,7 +92,7 @@ impl From<String> for TransactionIdentifier {
 impl From<&HashOf<Transaction>> for TransactionIdentifier {
     fn from(hash: &HashOf<Transaction>) -> Self {
         TransactionIdentifier(crate::models::TransactionIdentifier {
-            hash: (format!("{}", hash)),
+            hash: (format!("{hash}")),
         })
     }
 }

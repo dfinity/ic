@@ -628,15 +628,13 @@ mod test {
             let (_, maybe_err) = blockchain.add_headers(&main_chain);
             assert!(
                 maybe_err.is_none(),
-                "Error was found in main chain: {:#?}",
-                maybe_err
+                "Error was found in main chain: {maybe_err:#?}"
             );
 
             let (_, maybe_err) = blockchain.add_headers(&side_chain);
             assert!(
                 maybe_err.is_none(),
-                "Error was found in side chain: {:#?}",
-                maybe_err
+                "Error was found in side chain: {maybe_err:#?}"
             );
             blockchain.add_block(main_block_2).expect("invalid block");
 
@@ -812,8 +810,7 @@ mod test {
         assert!(
             bitcoin::Network::Bitcoin
                 .are_multiple_blocks_allowed(BTC_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT),
-            "Multiple blocks are allowed at {}",
-            BTC_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT
+            "Multiple blocks are allowed at {BTC_MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT}"
         );
         assert!(
             !bitcoin::Network::Bitcoin.are_multiple_blocks_allowed(900_000),

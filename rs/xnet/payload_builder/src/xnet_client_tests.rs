@@ -91,8 +91,7 @@ async fn query_garbage_response() {
     match result {
         Err(XNetClientError::ProxyDecodeError(ProxyDecodeError::DecodeError(_))) => (),
         _ => panic!(
-            "Expecting Err(ProxyDecodeError(DecodeError(_))), got {:?}",
-            result
+            "Expecting Err(ProxyDecodeError(DecodeError(_))), got {result:?}"
         ),
     }
     assert_eq!(
@@ -121,8 +120,7 @@ async fn query_invalid_proto() {
     match result {
         Err(XNetClientError::ProxyDecodeError(ProxyDecodeError::MissingField(_))) => (),
         _ => panic!(
-            "Expecting Err(ProxyDecodeError(MissingField(_))), got {:?}",
-            result
+            "Expecting Err(ProxyDecodeError(MissingField(_))), got {result:?}"
         ),
     }
     assert_eq!(
@@ -147,7 +145,7 @@ async fn query_no_content() {
 
     match result {
         Err(XNetClientError::NoContent) => (),
-        _ => panic!("Expecting Err(NoContent), got {:?}", result),
+        _ => panic!("Expecting Err(NoContent), got {result:?}"),
     }
     assert_eq!(
         metric_vec(&[
@@ -172,7 +170,7 @@ async fn query_error_response() {
 
     match result {
         Err(XNetClientError::ErrorResponse(hyper::StatusCode::INTERNAL_SERVER_ERROR, _)) => (),
-        _ => panic!("Expecting Err(ErrorResponse(_)), got {:?}", result),
+        _ => panic!("Expecting Err(ErrorResponse(_)), got {result:?}"),
     }
     assert_eq!(
         metric_vec(&[
@@ -198,7 +196,7 @@ async fn query_request_timeout() {
 
     match result {
         Err(XNetClientError::Timeout) => (),
-        _ => panic!("Expected Err(Timeout(_)), got {:?}", result),
+        _ => panic!("Expected Err(Timeout(_)), got {result:?}"),
     }
     assert_eq!(
         metric_vec(&[
@@ -235,7 +233,7 @@ async fn query_request_failed() {
     let sa = getsockname::<SockaddrIn>(socket).expect("getsockname() failed");
 
     // URL to query a server that would be running on the allocated port.
-    let url = format!("http://{}", sa).parse::<Uri>().unwrap();
+    let url = format!("http://{sa}").parse::<Uri>().unwrap();
 
     let result = with_test_replica_logger(|log| async {
         do_async_query(make_xnet_client(metrics, log), url).await
@@ -244,7 +242,7 @@ async fn query_request_failed() {
 
     match result {
         Err(XNetClientError::RequestFailed(_)) => (),
-        _ => panic!("Expected Err(RequestFailed(_)), got {:?}", result),
+        _ => panic!("Expected Err(RequestFailed(_)), got {result:?}"),
     }
     assert_eq!(
         metric_vec(&[

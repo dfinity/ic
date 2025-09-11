@@ -310,7 +310,7 @@ impl InstallCodeContext {
     ) -> Result<Self, InstallCodeContextError> {
         let canister_id = args.target_canister_id();
         let wasm_module_hash = args.wasm_module_hash.try_into().map_err(|hash| {
-            InstallCodeContextError::InvalidHash(format!("Invalid wasm hash {:?}", hash))
+            InstallCodeContextError::InvalidHash(format!("Invalid wasm hash {hash:?}"))
         })?;
         Ok(InstallCodeContext {
             origin,
@@ -686,7 +686,7 @@ impl AsErrorHelp for CanisterManagerError {
                 doc_link: "".to_string(),
             },
             CanisterManagerError::SliceTooLarge { .. } => ErrorHelp::UserError {
-                suggestion: format!("Use a slice size at most {}", MAX_SLICE_SIZE_BYTES),
+                suggestion: format!("Use a slice size at most {MAX_SLICE_SIZE_BYTES}"),
                 doc_link: "".to_string(),
             },
             CanisterManagerError::InvalidSpecifiedId { .. } => ErrorHelp::UserError {
@@ -740,8 +740,7 @@ impl From<CanisterManagerError> for UserError {
             CanisterAlreadyExists(canister_id) => Self::new(
                 ErrorCode::CanisterAlreadyInstalled,
                 format!(
-                    "Canister {} is already installed.{additional_help}",
-                    canister_id
+                    "Canister {canister_id} is already installed.{additional_help}"
                 ),
             ),
             SubnetComputeCapacityOverSubscribed {
@@ -750,8 +749,7 @@ impl From<CanisterManagerError> for UserError {
             } => Self::new(
                 ErrorCode::SubnetOversubscribed,
                 format!(
-                    "Canister requested a compute allocation of {} which cannot be satisfied because the Subnet's remaining compute capacity is {}%.{additional_help}",
-                    requested, available
+                    "Canister requested a compute allocation of {requested} which cannot be satisfied because the Subnet's remaining compute capacity is {available}%.{additional_help}"
                 ),
             ),
             CanisterNotFound(canister_id) => Self::new(
@@ -761,8 +759,7 @@ impl From<CanisterManagerError> for UserError {
             CanisterIdAlreadyExists(canister_id) => Self::new(
                 ErrorCode::CanisterIdAlreadyExists,
                 format!(
-                    "Unsuccessful canister creation: canister id {} already exists.{additional_help}",
-                    canister_id
+                    "Unsuccessful canister creation: canister id {canister_id} already exists.{additional_help}"
                 ),
             ),
             Hypervisor(canister_id, err) => err.into_user_error(&canister_id),
@@ -791,8 +788,7 @@ impl From<CanisterManagerError> for UserError {
             CanisterNonEmpty(canister_id) => Self::new(
                 ErrorCode::CanisterNonEmpty,
                 format!(
-                    "Canister {} cannot be installed because the canister is not empty. Try installing with mode='reinstall' instead.{additional_help}",
-                    canister_id
+                    "Canister {canister_id} cannot be installed because the canister is not empty. Try installing with mode='reinstall' instead.{additional_help}"
                 ),
             ),
             CanisterInvalidController {
@@ -802,39 +798,35 @@ impl From<CanisterManagerError> for UserError {
             } => {
                 let controllers_expected = controllers_expected
                     .iter()
-                    .map(|id| format!("{}", id))
+                    .map(|id| format!("{id}"))
                     .collect::<Vec<String>>()
                     .join(" ");
                 Self::new(
                     ErrorCode::CanisterInvalidController,
                     format!(
-                        "Only the controllers of the canister {} can control it.\n\
-                        Canister's controllers: {}\n\
-                        Sender's ID: {}{additional_help}",
-                        canister_id, controllers_expected, controller_provided
+                        "Only the controllers of the canister {canister_id} can control it.\n\
+                        Canister's controllers: {controllers_expected}\n\
+                        Sender's ID: {controller_provided}{additional_help}"
                     ),
                 )
             }
             DeleteCanisterNotStopped(canister_id) => Self::new(
                 ErrorCode::CanisterNotStopped,
                 format!(
-                    "Canister {} must be stopped before it is deleted.{additional_help}",
-                    canister_id,
+                    "Canister {canister_id} must be stopped before it is deleted.{additional_help}",
                 ),
             ),
             DeleteCanisterQueueNotEmpty(canister_id) => Self::new(
                 ErrorCode::CanisterQueueNotEmpty,
                 format!(
-                    "Canister {} has messages in its queues and cannot be \
+                    "Canister {canister_id} has messages in its queues and cannot be \
                         deleted now. Please retry after some time.{additional_help}",
-                    canister_id,
                 ),
             ),
             DeleteCanisterSelf(canister_id) => Self::new(
                 ErrorCode::CanisterInvalidController,
                 format!(
-                    "Canister {} cannot delete itself.{additional_help}",
-                    canister_id,
+                    "Canister {canister_id} cannot delete itself.{additional_help}",
                 ),
             ),
             SenderNotInWhitelist(_) => {
@@ -852,15 +844,13 @@ impl From<CanisterManagerError> for UserError {
             } => Self::new(
                 ErrorCode::InsufficientMemoryAllocation,
                 format!(
-                    "Canister was given {} memory allocation but at least {} of memory is needed.{additional_help}",
-                    memory_allocation_given, memory_usage_needed,
+                    "Canister was given {memory_allocation_given} memory allocation but at least {memory_usage_needed} of memory is needed.{additional_help}",
                 ),
             ),
             CreateCanisterNotEnoughCycles { sent, required } => Self::new(
                 ErrorCode::InsufficientCyclesForCreateCanister,
                 format!(
-                    "Creating a canister requires a fee of {} that is deducted from the canister's initial balance but only {} cycles were received with the create_canister request.{additional_help}",
-                    required, sent,
+                    "Creating a canister requires a fee of {required} that is deducted from the canister's initial balance but only {sent} cycles were received with the create_canister request.{additional_help}",
                 ),
             ),
             InvalidSenderSubnet(_subnet_id) => Self::new(
@@ -871,15 +861,13 @@ impl From<CanisterManagerError> for UserError {
             InstallCodeNotEnoughCycles(err) => Self::new(
                 ErrorCode::CanisterOutOfCycles,
                 format!(
-                    "Canister installation failed with `{}`.{additional_help}",
-                    err
+                    "Canister installation failed with `{err}`.{additional_help}"
                 ),
             ),
             InstallCodeRateLimited(canister_id) => Self::new(
                 ErrorCode::CanisterInstallCodeRateLimited,
                 format!(
-                    "Canister {} is rate limited because it executed too many instructions in the previous install_code messages. Please retry installation after several minutes.{additional_help}",
-                    canister_id
+                    "Canister {canister_id} is rate limited because it executed too many instructions in the previous install_code messages. Please retry installation after several minutes.{additional_help}"
                 ),
             ),
             SubnetOutOfCanisterIds => Self::new(
@@ -889,8 +877,7 @@ impl From<CanisterManagerError> for UserError {
             InvalidSettings { message } => Self::new(
                 ErrorCode::CanisterContractViolation,
                 format!(
-                    "Could not validate the settings: {} {additional_help}",
-                    message
+                    "Could not validate the settings: {message} {additional_help}"
                 ),
             ),
             MaxNumberOfCanistersReached {
@@ -899,15 +886,13 @@ impl From<CanisterManagerError> for UserError {
             } => Self::new(
                 ErrorCode::MaxNumberOfCanistersReached,
                 format!(
-                    "Subnet {} has reached the allowed canister limit of {} canisters. Retry creating the canister.{additional_help}",
-                    subnet_id, max_number_of_canisters
+                    "Subnet {subnet_id} has reached the allowed canister limit of {max_number_of_canisters} canisters. Retry creating the canister.{additional_help}"
                 ),
             ),
             CanisterNotHostedBySubnet { message } => Self::new(
                 ErrorCode::CanisterNotHostedBySubnet,
                 format!(
-                    "Unsuccessful validation of specified ID: {}{additional_help}",
-                    message
+                    "Unsuccessful validation of specified ID: {message}{additional_help}"
                 ),
             ),
             InsufficientCyclesInComputeAllocation {
@@ -978,14 +963,13 @@ impl From<CanisterManagerError> for UserError {
             ReservedCyclesLimitIsTooLow { cycles, limit } => Self::new(
                 ErrorCode::ReservedCyclesLimitIsTooLow,
                 format!(
-                    "Cannot set the reserved cycles limit {} below the reserved cycles balance of \
-                        the canister {}.{additional_help}",
-                    limit, cycles,
+                    "Cannot set the reserved cycles limit {limit} below the reserved cycles balance of \
+                        the canister {cycles}.{additional_help}",
                 ),
             ),
             WasmChunkStoreError { message } => Self::new(
                 ErrorCode::CanisterContractViolation,
-                format!("Error from Wasm chunk store: {}.{additional_help}", message),
+                format!("Error from Wasm chunk store: {message}.{additional_help}"),
             ),
             CanisterSnapshotNotFound {
                 canister_id,
@@ -993,8 +977,7 @@ impl From<CanisterManagerError> for UserError {
             } => Self::new(
                 ErrorCode::CanisterSnapshotNotFound,
                 format!(
-                    "Could not find the snapshot ID {} for canister {}.{additional_help}",
-                    snapshot_id, canister_id,
+                    "Could not find the snapshot ID {snapshot_id} for canister {canister_id}.{additional_help}",
                 ),
             ),
             CanisterHeapDeltaRateLimited {
@@ -1004,8 +987,7 @@ impl From<CanisterManagerError> for UserError {
             } => Self::new(
                 ErrorCode::CanisterHeapDeltaRateLimited,
                 format!(
-                    "Canister {} is heap delta rate limited: current delta debit is {}, but limit is {}.{additional_help}",
-                    canister_id, value, limit
+                    "Canister {canister_id} is heap delta rate limited: current delta debit is {value}, but limit is {limit}.{additional_help}"
                 ),
             ),
             CanisterSnapshotInvalidOwnership {
@@ -1014,29 +996,25 @@ impl From<CanisterManagerError> for UserError {
             } => Self::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "The snapshot {} does not belong to canister {}.{additional_help}",
-                    snapshot_id, canister_id,
+                    "The snapshot {snapshot_id} does not belong to canister {canister_id}.{additional_help}",
                 ),
             ),
             CanisterSnapshotExecutionStateNotFound { canister_id } => Self::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "Failed to create snapshot for empty canister {}:",
-                    canister_id,
+                    "Failed to create snapshot for empty canister {canister_id}:",
                 ),
             ),
             CanisterSnapshotLimitExceeded { canister_id, limit } => Self::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "Canister {} has reached the maximum number of snapshots allowed: {}.{additional_help}",
-                    canister_id, limit,
+                    "Canister {canister_id} has reached the maximum number of snapshots allowed: {limit}.{additional_help}",
                 ),
             ),
             CanisterSnapshotNotEnoughCycles(err) => Self::new(
                 ErrorCode::CanisterOutOfCycles,
                 format!(
-                    "Canister snapshotting failed with: `{}`{additional_help}",
-                    err
+                    "Canister snapshotting failed with: `{err}`{additional_help}"
                 ),
             ),
             CanisterSnapshotImmutable => Self::new(
@@ -1046,41 +1024,37 @@ impl From<CanisterManagerError> for UserError {
             LongExecutionAlreadyInProgress { canister_id } => Self::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "The canister {} is currently executing a long-running message.",
-                    canister_id,
+                    "The canister {canister_id} is currently executing a long-running message.",
                 ),
             ),
             MissingUpgradeOptionError { message } => Self::new(
                 ErrorCode::CanisterContractViolation,
-                format!("Missing upgrade option: {}", message),
+                format!("Missing upgrade option: {message}"),
             ),
             InvalidUpgradeOptionError { message } => Self::new(
                 ErrorCode::CanisterContractViolation,
-                format!("Invalid upgrade option: {}", message),
+                format!("Invalid upgrade option: {message}"),
             ),
             InvalidSlice { offset, size } => Self::new(
                 ErrorCode::InvalidManagementPayload,
                 format!(
-                    "Invalid subslice into wasm module / main memory / stable memory: offset: {}, size: {}",
-                    offset, size
+                    "Invalid subslice into wasm module / main memory / stable memory: offset: {offset}, size: {size}"
                 ),
             ),
             CanisterManagerError::SliceTooLarge { requested, allowed } => Self::new(
                 ErrorCode::InvalidManagementPayload,
-                format!("Requested slice too large: {} > {}", requested, allowed),
+                format!("Requested slice too large: {requested} > {allowed}"),
             ),
             RenameCanisterNotStopped(canister_id) => Self::new(
                 ErrorCode::CanisterNotStopped,
                 format!(
-                    "Canister {} must be stopped before it is renamed.{additional_help}",
-                    canister_id,
+                    "Canister {canister_id} must be stopped before it is renamed.{additional_help}",
                 ),
             ),
             RenameCanisterHasSnapshot(canister_id) => Self::new(
                 ErrorCode::CanisterNonEmpty,
                 format!(
-                    "Canister {} must not have any snapshots before it is renamed.{additional_help}",
-                    canister_id,
+                    "Canister {canister_id} must not have any snapshots before it is renamed.{additional_help}",
                 ),
             ),
             InvalidSpecifiedId { specified_id } => Self::new(
@@ -1094,7 +1068,7 @@ impl From<CanisterManagerError> for UserError {
             }
             EnvironmentVariablesTooMany { max, count } => Self::new(
                 ErrorCode::InvalidManagementPayload,
-                format!("Too many environment variables: {} (max: {})", count, max),
+                format!("Too many environment variables: {count} (max: {max})"),
             ),
             EnvironmentVariablesNameTooLong {
                 name,
@@ -1102,8 +1076,7 @@ impl From<CanisterManagerError> for UserError {
             } => Self::new(
                 ErrorCode::InvalidManagementPayload,
                 format!(
-                    "Environment variable name \"{}\" exceeds the maximum allowed length of {}.",
-                    name, max_name_length
+                    "Environment variable name \"{name}\" exceeds the maximum allowed length of {max_name_length}."
                 ),
             ),
             EnvironmentVariablesValueTooLong {
@@ -1112,8 +1085,7 @@ impl From<CanisterManagerError> for UserError {
             } => Self::new(
                 ErrorCode::InvalidManagementPayload,
                 format!(
-                    "Environment variable value \"{}\" exceeds the maximum allowed length of {}.",
-                    value, max_value_length
+                    "Environment variable value \"{value}\" exceeds the maximum allowed length of {max_value_length}."
                 ),
             ),
         }

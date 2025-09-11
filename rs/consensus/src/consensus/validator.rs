@@ -1007,7 +1007,7 @@ impl Validator {
                 if let Err(ValidationError::InvalidArtifact(e)) = verification {
                     change_set.push(ChangeAction::HandleInvalid(
                         notarization.into_message(),
-                        format!("{:?}", e),
+                        format!("{e:?}"),
                     ));
                 } else if verification.is_ok() {
                     if get_notarized_parent(pool_reader, &proposal).is_ok() {
@@ -1602,7 +1602,7 @@ impl Validator {
                         )
                     }
                     Err(ValidationError::InvalidArtifact(err)) => Some(
-                        ChangeAction::HandleInvalid(share.into_message(), format!("{:?}", err)),
+                        ChangeAction::HandleInvalid(share.into_message(), format!("{err:?}")),
                     ),
                     Err(ValidationError::ValidationFailed(err)) => {
                         if self.unvalidated_for_too_long(pool_reader, &share.get_id()) {
@@ -1814,7 +1814,7 @@ impl Validator {
                 Some(ChangeAction::RemoveFromUnvalidated(message))
             }
             ValidationError::InvalidArtifact(s) => {
-                Some(ChangeAction::HandleInvalid(message, format!("{:?}", s)))
+                Some(ChangeAction::HandleInvalid(message, format!("{s:?}")))
             }
             ValidationError::ValidationFailed(err) => {
                 if self.unvalidated_for_too_long(pool_reader, &message.get_id()) {

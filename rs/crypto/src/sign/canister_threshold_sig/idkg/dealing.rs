@@ -95,7 +95,7 @@ fn sign_dealing<S: CspSigner>(
             content: dealing,
         })
         .map_err(|crypto_error| IDkgCreateDealingError::SignatureError {
-            internal_error: format!("{}", crypto_error),
+            internal_error: format!("{crypto_error}"),
         })
 }
 
@@ -194,14 +194,14 @@ pub fn verify_dealing_public<C: CspSigner>(
     let internal_dealing =
         IDkgDealingInternal::deserialize(&signed_dealing.idkg_dealing().internal_dealing_raw)
             .map_err(|e| IDkgVerifyDealingPublicError::InvalidDealing {
-                reason: format!("{:?}", e),
+                reason: format!("{e:?}"),
             })?;
 
     // Compute CSP operation. Same of IDKM operation type, but wrapping the polynomial commitment from the transcripts.
 
     let internal_operation = IDkgTranscriptOperationInternal::try_from(params.operation_type())
         .map_err(|e| IDkgVerifyDealingPublicError::InvalidDealing {
-            reason: format!("{:?}", e),
+            reason: format!("{e:?}"),
         })?;
 
     let dealer_index =
@@ -223,7 +223,7 @@ pub fn verify_dealing_public<C: CspSigner>(
         &params.context_data(),
     )
     .map_err(|e| IDkgVerifyDealingPublicError::InvalidDealing {
-        reason: format!("{:?}", e),
+        reason: format!("{e:?}"),
     })
 }
 

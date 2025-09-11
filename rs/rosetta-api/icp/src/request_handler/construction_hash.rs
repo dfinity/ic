@@ -14,7 +14,7 @@ impl RosettaRequestHandler {
     ) -> Result<ConstructionHashResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         let signed_transaction = SignedTransaction::from_str(&msg.signed_transaction)
-            .map_err(|err| ApiError::invalid_transaction(format!("{:?}", err)))?;
+            .map_err(|err| ApiError::invalid_transaction(format!("{err:?}")))?;
         let transaction_identifier = if let Some((request_type, envelope_pairs)) =
             signed_transaction
                 .requests

@@ -393,7 +393,7 @@ impl TestAgent {
                     AccountIdentifier::new(expected_destination_principal_id, None)
                 );
             }
-            _ => panic!("unexpected block {:?}", txn),
+            _ => panic!("unexpected block {txn:?}"),
         }
 
         let block = self.get_block(refund_block + 1).await.unwrap().unwrap();
@@ -410,7 +410,7 @@ impl TestAgent {
                 assert_eq!(balance, Tokens::ZERO, "All funds should have been burned");
                 assert_eq!(spender, None);
             }
-            _ => panic!("unexpected block {:?}", txn),
+            _ => panic!("unexpected block {txn:?}"),
         }
     }
 }

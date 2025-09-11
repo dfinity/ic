@@ -100,7 +100,7 @@ pub fn network_status(storage_client: &StorageClient) -> Result<NetworkStatusRes
     let genesis_block = storage_client
         .get_block_at_idx(0)
         .map_err(|e| {
-            Error::unable_to_find_block(&format!("Error retrieving genesis block: {:?}", e))
+            Error::unable_to_find_block(&format!("Error retrieving genesis block: {e:?}"))
         })?
         .ok_or_else(|| {
             Error::unable_to_find_block(
@@ -365,7 +365,7 @@ pub fn search_transactions(
         .unwrap_or(rosetta_block_with_highest_block_index.index as i64)
         .try_into()
         .map_err(|err| {
-            Error::request_processing_error(&format!("Max block has to be a valid u64: {}", err))
+            Error::request_processing_error(&format!("Max block has to be a valid u64: {err}"))
         })?;
 
     let limit: u64 = request
@@ -373,11 +373,11 @@ pub fn search_transactions(
         .unwrap_or(MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST as i64)
         .try_into()
         .map_err(|err| {
-            Error::request_processing_error(&format!("Limit has to be a valid u64: {}", err))
+            Error::request_processing_error(&format!("Limit has to be a valid u64: {err}"))
         })?;
 
     let offset: u64 = request.offset.unwrap_or(0).try_into().map_err(|err| {
-        Error::request_processing_error(&format!("Offset has to be a valid u64: {}", err))
+        Error::request_processing_error(&format!("Offset has to be a valid u64: {err}"))
     })?;
 
     if max_block < offset {
@@ -391,8 +391,7 @@ pub fn search_transactions(
         .map(|op| {
             op.parse::<OperationType>().map_err(|err| {
                 Error::request_processing_error(&format!(
-                    "Operation type has to be a valid OperationType: {}",
-                    err
+                    "Operation type has to be a valid OperationType: {err}"
                 ))
             })
         })
@@ -403,8 +402,7 @@ pub fn search_transactions(
         .map(|acc| {
             Account::try_from(acc).map_err(|err| {
                 Error::request_processing_error(&format!(
-                    "Account identifier has to be a valid AccountIdentifier: {}",
-                    err
+                    "Account identifier has to be a valid AccountIdentifier: {err}"
                 ))
             })
         })
@@ -436,8 +434,7 @@ pub fn search_transactions(
         let tx_hash = serde_bytes::ByteBuf::try_from(transaction_identifier)
             .map_err(|err| {
                 Error::request_processing_error(&format!(
-                    "Transaction identifier hash has to be a valid ByteBuf: {}",
-                    err
+                    "Transaction identifier hash has to be a valid ByteBuf: {err}"
                 ))
             })?
             .as_slice()
@@ -482,7 +479,7 @@ pub fn search_transactions(
                 .collect::<Vec<_>>()
                 .as_slice(),
         )
-        .map_err(|e| Error::unable_to_find_block(&format!("Error fetching blocks: {:?}", e)))?;
+        .map_err(|e| Error::unable_to_find_block(&format!("Error fetching blocks: {e:?}")))?;
 
     let mut transactions = vec![];
     for rosetta_block in rosetta_blocks.iter_mut() {
@@ -600,8 +597,7 @@ pub fn call(
             ))
         }
         _ => Err(Error::processing_construction_failed(&format!(
-            "Method {} not supported",
-            method_name
+            "Method {method_name} not supported"
         ))),
     }
 }

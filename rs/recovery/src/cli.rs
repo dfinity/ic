@@ -238,7 +238,7 @@ pub fn read_input(logger: &Logger, prompt: &str) -> String {
 /// Request and read input from the user with the given prompt. Convert empty
 /// input to `None`.
 fn read_optional_input(logger: &Logger, prompt: &str) -> Option<String> {
-    let input = read_input(logger, &format!("(Optional) {}", prompt));
+    let input = read_input(logger, &format!("(Optional) {prompt}"));
     if input.is_empty() { None } else { Some(input) }
 }
 

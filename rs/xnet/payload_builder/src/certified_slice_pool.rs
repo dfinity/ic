@@ -472,8 +472,7 @@ impl Payload {
         let prefix = self.take_messages_prefix(&cutoff)?;
         assert!(
             self.messages.is_some(),
-            "`take_messages_prefix()` produced an empty postfix for existing key {}",
-            cutoff
+            "`take_messages_prefix()` produced an empty postfix for existing key {cutoff}"
         );
 
         // Return (possibly empty) prefix, retain non-empty postfix.
@@ -1052,7 +1051,7 @@ impl CertifiedSliceError {
 
 impl std::fmt::Display for CertifiedSliceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 

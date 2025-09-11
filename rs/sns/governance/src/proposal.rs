@@ -151,9 +151,8 @@ pub(crate) fn get_action_auxiliary(
             return Err(GovernanceError::new_with_message(
                 ErrorType::InconsistentInternalData,
                 format!(
-                    "Unable to find action_auxiliary for proposal {:?}, \
+                    "Unable to find action_auxiliary for proposal {proposal_id:?}, \
                      because proposal not found.",
-                    proposal_id,
                 ),
             ));
         }
@@ -167,8 +166,7 @@ pub(crate) fn get_action_auxiliary(
             GovernanceError::new_with_message(
                 ErrorType::InconsistentInternalData,
                 format!(
-                    "Invalid action_auxiliary {:?} in ProposalData (id={:?}): {}",
-                    action_auxiliary, proposal_id, err,
+                    "Invalid action_auxiliary {action_auxiliary:?} in ProposalData (id={proposal_id:?}): {err}",
                 ),
             )
         })
@@ -191,8 +189,7 @@ impl ActionAuxiliary {
                 ErrorType::InconsistentInternalData,
                 format!(
                     "Missing supporting information. Specifically, \
-                     no treasury valuation factors: {:#?}",
-                    wrong,
+                     no treasury valuation factors: {wrong:#?}",
                 ),
             )),
         }
@@ -206,8 +203,7 @@ impl ActionAuxiliary {
                 ErrorType::InconsistentInternalData,
                 format!(
                     "Missing supporting information. Specifically, \
-                     no new target version: {:#?}",
-                    wrong,
+                     no new target version: {wrong:#?}",
                 ),
             )),
         }
@@ -262,7 +258,7 @@ impl TryFrom<&Option<ActionAuxiliaryPb>> for ActionAuxiliary {
                 let TransferSnsTreasuryFundsActionAuxiliary { valuation } = action_auxiliary;
 
                 let valuation = Valuation::try_from(valuation.as_ref().unwrap_or_default())
-                    .map_err(|err| format!("Invalid ActionAuxiliaryPb {:?}: {}", src, err))?;
+                    .map_err(|err| format!("Invalid ActionAuxiliaryPb {src:?}: {err}"))?;
 
                 ActionAuxiliary::TransferSnsTreasuryFunds(valuation)
             }
@@ -270,7 +266,7 @@ impl TryFrom<&Option<ActionAuxiliaryPb>> for ActionAuxiliary {
                 let MintSnsTokensActionAuxiliary { valuation } = action_auxiliary;
 
                 let valuation = Valuation::try_from(valuation.as_ref().unwrap_or_default())
-                    .map_err(|err| format!("Invalid ActionAuxiliaryPb {:?}: {}", src, err))?;
+                    .map_err(|err| format!("Invalid ActionAuxiliaryPb {src:?}: {err}"))?;
 
                 ActionAuxiliary::MintSnsTokens(valuation)
             }
@@ -285,7 +281,7 @@ impl TryFrom<&Option<ActionAuxiliaryPb>> for ActionAuxiliary {
                 };
 
                 let target_version = Version::try_from(target_version.clone())
-                    .map_err(|err| format!("Invalid ActionAuxiliaryPb {:?}: {}", src, err))?;
+                    .map_err(|err| format!("Invalid ActionAuxiliaryPb {src:?}: {err}"))?;
 
                 ActionAuxiliary::AdvanceSnsTargetVersion(target_version)
             }
@@ -648,8 +644,7 @@ fn locally_validate_and_render_transfer_sns_treasury_funds(
     };
     if transfer.amount_e8s < minimum_transaction {
         defects.push(format!(
-            "For transactions from {}, the fee and minimum transaction is {} e8s",
-            from, minimum_transaction
+            "For transactions from {from}, the fee and minimum transaction is {minimum_transaction} e8s"
         ))
     }
 
@@ -798,15 +793,14 @@ where
     let max_tokens = MyTokenProposalAction::recent_amount_total_upper_bound_tokens(&valuation)
         // Err is most likely a bug.
         .map_err(|treasury_limit_error| {
-            format!("Unable to validate amount: {:?}", treasury_limit_error,)
+            format!("Unable to validate amount: {treasury_limit_error:?}",)
         })?;
 
     // Finally, inspect the proposal's amount: it must not exceed max - spent (remainder). Or if
     // you prefer, equivalently, amount + spent must be <= max.
     let allowance_remainder_tokens = max_tokens.checked_sub(spent_tokens).ok_or_else(|| {
         format!(
-            "Arithmetic error while performing {} - {}",
-            max_tokens, spent_tokens,
+            "Arithmetic error while performing {max_tokens} - {spent_tokens}",
         )
     })?;
     let proposal_amount_tokens = action.proposal_amount_tokens()?;
@@ -814,11 +808,10 @@ where
         // Although it might not be obvious to the user, their proposal is invalid, and we
         // consider it to be "their fault".
         return Err(format!(
-            "Amount is too large. Within the past 7 days, a total of {} tokens has already \
-             been executed in like proposals. Whereas, at most {} is allowed. An additional \
-             {} tokens from this proposal would cause that upper bound to be exceeded. \
-             Maybe, try again in a few days?",
-            spent_tokens, max_tokens, proposal_amount_tokens
+            "Amount is too large. Within the past 7 days, a total of {spent_tokens} tokens has already \
+             been executed in like proposals. Whereas, at most {max_tokens} is allowed. An additional \
+             {proposal_amount_tokens} tokens from this proposal would cause that upper bound to be exceeded. \
+             Maybe, try again in a few days?"
         ));
     }
 
@@ -840,8 +833,7 @@ impl TokenProposalAction for TransferSnsTreasuryFunds {
             TransferFrom::SnsTokenTreasury => Ok(Token::SnsToken),
             TransferFrom::Unspecified => Err(format!(
                 "Invalid TransferSnsTreasuryFunds: \
-                 The `from_treasury` field holds the Unspecified value: {:#?}",
-                self,
+                 The `from_treasury` field holds the Unspecified value: {self:#?}",
             )),
         }
     }
@@ -874,7 +866,7 @@ impl TokenProposalAction for TransferSnsTreasuryFunds {
         transfer_sns_treasury_funds_7_day_total_upper_bound_tokens(*valuation)
             // Err is most likely a bug.
             .map_err(|treasury_limit_error| {
-                format!("Unable to validate amount: {:?}", treasury_limit_error,)
+                format!("Unable to validate amount: {treasury_limit_error:?}",)
             })
     }
 }
@@ -1021,8 +1013,7 @@ impl TokenProposalAction for MintSnsTokens {
             // positive number (E8).
             .ok_or_else(|| {
                 format!(
-                    "Unable to convert proposal amount {} e8s to tokens.",
-                    amount_e8s,
+                    "Unable to convert proposal amount {amount_e8s} e8s to tokens.",
                 )
             })
     }
@@ -1074,7 +1065,7 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
     // Make sure `mode` is not None, and not an invalid/unknown value.
     if let Some(mode) = mode {
         if let Err(err) = CanisterInstallMode::try_from(*mode) {
-            defects.push(format!("Invalid mode: {}", err));
+            defects.push(format!("Invalid mode: {err}"));
         }
     }
     // Assume mode is the default if it is not set
@@ -1090,8 +1081,7 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
             Ok(canister_id) => Some(canister_id),
             Err(err) => {
                 let defect = format!(
-                    "UpgradeSnsControlledCanister.canister_id is invalid: {:?}",
-                    err
+                    "UpgradeSnsControlledCanister.canister_id is invalid: {err:?}"
                 );
                 defects.push(defect);
                 None
@@ -1199,8 +1189,7 @@ async fn validate_and_render_upgrade_sns_to_next_version(
         .await
         .map_err(|e| {
             format!(
-                "UpgradeSnsToNextVersion was invalid for the following reason: {}\n",
-                e
+                "UpgradeSnsToNextVersion was invalid for the following reason: {e}\n"
             )
         })?;
 
@@ -1212,8 +1201,7 @@ async fn validate_and_render_upgrade_sns_to_next_version(
         .flatten()
         .map(|id| {
             format!(
-                "## Proposal ID of the NNS proposal that blessed this WASM version: NNS Proposal {}",
-                id
+                "## Proposal ID of the NNS proposal that blessed this WASM version: NNS Proposal {id}"
             )
         })
         .unwrap_or_default();
@@ -1263,7 +1251,7 @@ fn validate_canister_id(
 ) -> Option<CanisterId> {
     match canister_id {
         None => {
-            defects.push(format!("{} field was not populated.", field_name));
+            defects.push(format!("{field_name} field was not populated."));
             None
         }
         Some(canister_id) => Some(CanisterId::unchecked_from_principal(*canister_id)),
@@ -1348,7 +1336,7 @@ impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
                 }
 
                 let topic = topic.map(|topic| -> Result<pb_api::topics::Topic, String> {
-                    let topic = TopicPb::try_from(topic).map_err(|e| format!("{:?}", e))?;
+                    let topic = TopicPb::try_from(topic).map_err(|e| format!("{e:?}"))?;
                     let topic = pb_api::topics::Topic::try_from(topic)?;
                     Ok(topic)
                 });
@@ -1356,7 +1344,7 @@ impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
                     None => None,
                     Some(Ok(topic)) => Some(topic),
                     Some(Err(e)) => {
-                        defects.push(format!("topic field is not valid: {:?}", e));
+                        defects.push(format!("topic field is not valid: {e:?}"));
                         None
                     }
                 };
@@ -1426,8 +1414,7 @@ pub fn validate_and_render_add_generic_nervous_system_function(
 
 ## Function:
 
-{:#?}",
-        add
+{add:#?}"
     ))
 }
 
@@ -1437,14 +1424,13 @@ pub fn validate_and_render_remove_nervous_generic_system_function(
     existing_functions: &BTreeMap<u64, NervousSystemFunction>,
 ) -> Result<String, String> {
     match existing_functions.get(&remove) {
-        None => Err(format!("NervousSystemFunction: {} doesn't exist", remove)),
+        None => Err(format!("NervousSystemFunction: {remove} doesn't exist")),
         Some(function) => Ok(format!(
             r"# Proposal to remove existing NervousSystemFunction:
 
 ## Function:
 
-{:#?}",
-            function
+{function:#?}"
         )),
     }
 }
@@ -1458,11 +1444,11 @@ pub async fn validate_and_render_execute_nervous_system_function(
 ) -> Result<String, String> {
     let id = execute.function_id;
     match existing_functions.get(&execute.function_id) {
-        None => Err(format!("There is no NervousSystemFunction with id: {}", id)),
+        None => Err(format!("There is no NervousSystemFunction with id: {id}")),
         Some(function) => {
             // Make sure this isn't a NervousSystemFunction which has been deleted.
             if function == &*NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER {
-                Err(format!("There is no NervousSystemFunction with id: {}", id))
+                Err(format!("There is no NervousSystemFunction with id: {id}"))
             } else {
                 // To validate the proposal we try and call the validation method,
                 // which should produce a payload rendering if the proposal is valid
@@ -1543,7 +1529,7 @@ async fn validate_and_render_register_extension(
 
     let wasm_info = wasm.description();
 
-    let extension_init = format!("{:#?}", init);
+    let extension_init = format!("{init:#?}");
 
     Ok(format!(
         r"# Proposal to Register {spec}
@@ -1646,7 +1632,7 @@ fn validate_and_render_register_dapp_canisters(
         let canister_list = register_dapp_canisters.canister_ids.iter().fold(
             String::new(),
             |mut out, canister_id| {
-                let _ = write!(out, "\n- {}", canister_id);
+                let _ = write!(out, "\n- {canister_id}");
                 out
             },
         );
@@ -1661,7 +1647,7 @@ fn validate_and_render_register_dapp_canisters(
             error_canister_ids
                 .iter()
                 .fold(String::new(), |mut out, canister_id| {
-                    let _ = write!(out, "\n- {}", canister_id);
+                    let _ = write!(out, "\n- {canister_id}");
                     out
                 });
 
@@ -1714,13 +1700,13 @@ fn validate_and_render_deregister_dapp_canisters(
             deregister_dapp_canisters
                 .new_controllers
                 .iter()
-                .map(|c| format!("{}", c))
+                .map(|c| format!("{c}"))
                 .collect::<Vec<_>>()
                 .join("\n- "),
             deregister_dapp_canisters
                 .canister_ids
                 .iter()
-                .map(|c| format!("{}", c))
+                .map(|c| format!("{c}"))
                 .collect::<Vec<_>>()
                 .join("\n- ")
         );
@@ -1731,7 +1717,7 @@ fn validate_and_render_deregister_dapp_canisters(
             error_canister_ids
                 .iter()
                 .fold(String::new(), |mut out, canister_id| {
-                    let _ = write!(out, "\n- {}", canister_id);
+                    let _ = write!(out, "\n- {canister_id}");
                     out
                 });
 
@@ -1751,22 +1737,22 @@ pub fn validate_and_render_manage_sns_metadata(
     let mut render = "# Proposal to upgrade sns metadata:\n".to_string();
     if let Some(new_url) = &manage_sns_metadata.url {
         SnsMetadata::validate_url(new_url)?;
-        render += &format!("# New url: {} \n", new_url);
+        render += &format!("# New url: {new_url} \n");
         no_change = false;
     }
     if let Some(new_name) = &manage_sns_metadata.name {
         SnsMetadata::validate_name(new_name)?;
-        render += &format!("# New name: {} \n", new_name);
+        render += &format!("# New name: {new_name} \n");
         no_change = false;
     }
     if let Some(new_description) = &manage_sns_metadata.description {
         SnsMetadata::validate_description(new_description)?;
-        render += &format!("# New description: {} \n", new_description);
+        render += &format!("# New description: {new_description} \n");
         no_change = false;
     }
     if let Some(new_logo) = &manage_sns_metadata.logo {
         SnsMetadata::validate_logo(new_logo)?;
-        render += &format!("# New logo (base64 encoding): \n {}", new_logo);
+        render += &format!("# New logo (base64 encoding): \n {new_logo}");
         no_change = false;
     }
     if no_change {
@@ -1850,24 +1836,22 @@ fn validate_and_render_manage_dapp_canister_settings(
 
     let mut no_change = true;
     if let Some(compute_allocation) = &manage_dapp_canister_settings.compute_allocation {
-        render += &format!("# Set compute allocation to: {}%\n", compute_allocation);
+        render += &format!("# Set compute allocation to: {compute_allocation}%\n");
         no_change = false;
     }
     if let Some(memory_allocation) = &manage_dapp_canister_settings.memory_allocation {
-        render += &format!("# Set memory allocation to: {} bytes\n", memory_allocation);
+        render += &format!("# Set memory allocation to: {memory_allocation} bytes\n");
         no_change = false;
     }
     if let Some(freezing_threshold) = &manage_dapp_canister_settings.freezing_threshold {
         render += &format!(
-            "# Set freezing threshold to: {} seconds\n",
-            freezing_threshold
+            "# Set freezing threshold to: {freezing_threshold} seconds\n"
         );
         no_change = false;
     }
     if let Some(reserved_cycles_limit) = &manage_dapp_canister_settings.reserved_cycles_limit {
         render += &format!(
-            "# Set reserved cycles limit to: {} \n",
-            reserved_cycles_limit
+            "# Set reserved cycles limit to: {reserved_cycles_limit} \n"
         );
         no_change = false;
     }
@@ -1879,7 +1863,7 @@ fn validate_and_render_manage_dapp_canister_settings(
         no_change = false;
     }
     if let Some(wasm_memory_limit) = &manage_dapp_canister_settings.wasm_memory_limit {
-        render += &format!("# Set Wasm memory limit to: {}\n", wasm_memory_limit);
+        render += &format!("# Set Wasm memory limit to: {wasm_memory_limit}\n");
         no_change = false;
     }
 
@@ -1922,8 +1906,7 @@ fn validate_and_render_advance_sns_target_version_proposal(
         render_two_versions_as_markdown_table(upgrade_steps.current(), &target_version);
 
     let upgrade_journal_url_render = format!(
-        "https://{}.raw.icp0.io/journal/json",
-        sns_governance_canister_id,
+        "https://{sns_governance_canister_id}.raw.icp0.io/journal/json",
     );
 
     let render = format!(
@@ -2633,8 +2616,7 @@ pub(crate) fn transfer_sns_treasury_funds_amount_is_small_enough_at_execution_ti
                 ErrorType::InconsistentInternalData,
                 format!(
                     "Unable to determined upper bound on the amount of \
-                     TransferSnsTreasuryFunds proposals: {:?}\nvaluation:{:?}",
-                    err, valuation,
+                     TransferSnsTreasuryFunds proposals: {err:?}\nvaluation:{valuation:?}",
                 ),
             )
         })?;
@@ -2669,12 +2651,11 @@ pub(crate) fn transfer_sns_treasury_funds_amount_is_small_enough_at_execution_ti
             ErrorType::PreconditionFailed,
             format!(
                 "Executing this proposal is not allowed at this time, because doing \
-                 so would cause the 7 day upper bound of {} tokens to be exceeded. \
+                 so would cause the 7 day upper bound of {allowance_tokens} tokens to be exceeded. \
                  Maybe, try again later? The total amount transferred in the past \
-                 7 days stands at {} tokens, and the amount in this proposal is {} \
+                 7 days stands at {spent_tokens} tokens, and the amount in this proposal is {transfer_amount_tokens} \
                  tokens. The upper bound is based on treasury valuation factors at \
-                 the time of proposal submission: {:?}",
-                allowance_tokens, spent_tokens, transfer_amount_tokens, valuation,
+                 the time of proposal submission: {valuation:?}",
             ),
         ));
     }
@@ -2720,7 +2701,7 @@ fn total_treasury_transfer_amount_tokens<'a>(
 
     total_proposal_amounts_tokens(
         proposals,
-        &format!("{:?} transfer", filter_from_treasury),
+        &format!("{filter_from_treasury:?} transfer"),
         filter_proposal_action_amount_e8s,
         min_executed_timestamp_seconds,
     )
@@ -2773,8 +2754,7 @@ fn total_proposal_amounts_tokens<'a>(
         // Filter based on action.
         let Some(proposal) = &proposal.proposal else {
             return Err(format!(
-                "ProposalData {:?} is invalid, because its `proposal` field is empty!",
-                proposal_id,
+                "ProposalData {proposal_id:?} is invalid, because its `proposal` field is empty!",
             ));
         };
         let Some(proposal_amount_e8s) = proposal
@@ -2790,9 +2770,8 @@ fn total_proposal_amounts_tokens<'a>(
             // This Err is impossible, because we are dividing a u64 by a positive number.
             .ok_or_else(|| {
                 format!(
-                    "Failed to total amount in recent {} proposals: \
-                     Unable to convert amount {} e8s to whole tokens in proposal {:?}.",
-                    proposal_type_description, proposal_amount_e8s, proposal_id,
+                    "Failed to total amount in recent {proposal_type_description} proposals: \
+                     Unable to convert amount {proposal_amount_e8s} e8s to whole tokens in proposal {proposal_id:?}.",
                 )
             })?;
 
@@ -2804,8 +2783,7 @@ fn total_proposal_amounts_tokens<'a>(
             .ok_or_else(|| {
                 format!(
                     "Failed to total amount in recent TransferSnsTreasuryFunds proposals: \
-                     overflow while performing {} + {}.",
-                    total_tokens, proposal_amount_tokens,
+                     overflow while performing {total_tokens} + {proposal_amount_tokens}.",
                 )
             })?;
     }

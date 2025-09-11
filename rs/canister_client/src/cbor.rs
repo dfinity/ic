@@ -18,8 +18,7 @@ pub fn parse_query_response(message: &CBOR) -> Result<RequestStatus, String> {
     let content = match message {
         CBOR::Map(content) => Ok(content),
         cbor => Err(format!(
-            "Expected a Map in the reply root but found {:?}",
-            cbor
+            "Expected a Map in the reply root but found {cbor:?}"
         )),
     }?;
 
@@ -27,8 +26,7 @@ pub fn parse_query_response(message: &CBOR) -> Result<RequestStatus, String> {
     let status = match &content.get(status_key) {
         Some(CBOR::Text(t)) => Ok(t.to_string()),
         Some(cbor) => Err(format!(
-            "Expected Text at key '{:?}', but found '{:?}'",
-            status_key, cbor
+            "Expected Text at key '{status_key:?}', but found '{cbor:?}'"
         )),
         None => Err(format!(
             "Key '{:?}' not found in '{:?}'",
@@ -40,8 +38,7 @@ pub fn parse_query_response(message: &CBOR) -> Result<RequestStatus, String> {
     let reply = match &content.get(&reply_key) {
         Some(CBOR::Map(btree)) => Ok(Some(btree)),
         Some(cbor) => Err(format!(
-            "Expected Map at key '{:?}' but found '{:?}'",
-            reply_key, cbor
+            "Expected Map at key '{reply_key:?}' but found '{cbor:?}'"
         )),
         None => Ok(None),
     }?;
@@ -53,8 +50,7 @@ pub fn parse_query_response(message: &CBOR) -> Result<RequestStatus, String> {
             match r.get(&arg_key) {
                 Some(CBOR::Bytes(bytes)) => Ok(Some(bytes.to_vec())),
                 Some(cbor) => Err(format!(
-                    "Expected the value of key '{:?}' to be bytes, but found '{:?}'",
-                    arg_key, cbor
+                    "Expected the value of key '{arg_key:?}' to be bytes, but found '{cbor:?}'"
                 )),
                 None => Ok(None),
             }

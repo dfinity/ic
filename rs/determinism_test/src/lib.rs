@@ -78,7 +78,7 @@ fn wait_for_ingress_message(
             IngressStatus::Known { state, .. } => match state {
                 IngressState::Completed(WasmResult::Reject(msg)) => panic!("{}", msg),
                 IngressState::Completed(WasmResult::Reply(bytes)) => return bytes,
-                IngressState::Failed(error) => panic!("{:?}", error),
+                IngressState::Failed(error) => panic!("{error:?}"),
                 IngressState::Done => {
                     panic!("The call has completed but the reply/reject data has been pruned.")
                 }
@@ -141,7 +141,7 @@ fn get_state_hash(
                 sleep(Duration::from_millis(5))
             }
             Err(err) => {
-                panic!("{:?}", err)
+                panic!("{err:?}")
             }
         }
     }
@@ -197,7 +197,7 @@ fn install_canister(
                 IngressState::Completed(_) => {
                     break;
                 }
-                IngressState::Failed(error) => panic!("{:?}", error),
+                IngressState::Failed(error) => panic!("{error:?}"),
                 IngressState::Done => {
                     panic!("The call has completed but the reply/reject data has been pruned.")
                 }
@@ -236,7 +236,7 @@ pub fn determinism_test(msgs: Vec<&str>) {
     let _enter_guard = rt.enter();
     let mut hashes = vec![];
     for i in 0..10 {
-        println!("iteration {}", i);
+        println!("iteration {i}");
         let mut nonce = 0;
         let (message_routing, state_manager, ingress_history_reader, _config, subnet_config) =
             setup();

@@ -47,7 +47,7 @@ pub fn create_transcript<R: CryptoComponentRng>(
     crypto_for(node_id, crypto_components)
         .create_transcript(ni_dkg_config, dealings)
         .unwrap_or_else(|error| {
-            panic!("failed to create transcript for {:?}: {:?}", node_id, error)
+            panic!("failed to create transcript for {node_id:?}: {error:?}")
         })
 }
 
@@ -58,7 +58,7 @@ pub fn load_transcript<R: CryptoComponentRng>(
 ) {
     crypto_for(node_id, crypto_components)
         .load_transcript(transcript)
-        .unwrap_or_else(|error| panic!("failed to load transcript for {:?}: {:?}", node_id, error));
+        .unwrap_or_else(|error| panic!("failed to load transcript for {node_id:?}: {error:?}"));
 }
 
 /// Load transcript on each node (if resharing), create all dealings, and build
@@ -121,8 +121,7 @@ pub fn create_dealing<R: CryptoComponentRng>(
         .create_dealing(ni_dkg_config)
         .unwrap_or_else(|error| {
             panic!(
-                "failed to create NI-DKG dealing for {:?}: {:?}",
-                node_id, error
+                "failed to create NI-DKG dealing for {node_id:?}: {error:?}"
             )
         })
 }
@@ -150,8 +149,7 @@ pub fn verify_dealing<R: CryptoComponentRng>(
         .verify_dealing(ni_dkg_config, dealer_node_id, dealing)
         .unwrap_or_else(|error| {
             panic!(
-                "failed to verify NI-DKG dealing by {:?} for {:?}: {:?}",
-                dealer_node_id, verifier_node_id, error
+                "failed to verify NI-DKG dealing by {dealer_node_id:?} for {verifier_node_id:?}: {error:?}"
             )
         });
 }
@@ -165,8 +163,7 @@ pub fn retain_only_active_keys<R: CryptoComponentRng>(
         .retain_only_active_keys(retained_transcripts)
         .unwrap_or_else(|error| {
             panic!(
-                "failed to retain active keys for {:?}: {:?}",
-                node_id, error
+                "failed to retain active keys for {node_id:?}: {error:?}"
             )
         });
 }
@@ -182,7 +179,7 @@ pub fn sign_threshold_for_each<H: Signable, R: CryptoComponentRng>(
         .map(|signer| {
             let sig_share = crypto_for(*signer, crypto_components)
                 .sign_threshold(msg, dkg_id)
-                .unwrap_or_else(|_| panic!("signing by node {:?} failed", signer));
+                .unwrap_or_else(|_| panic!("signing by node {signer:?} failed"));
             (*signer, sig_share)
         })
         .collect()
@@ -950,5 +947,5 @@ impl Default for NiDkgTestEnvironment {
 fn crypto_for<T>(node_id: NodeId, crypto_components: &BTreeMap<NodeId, T>) -> &T {
     crypto_components
         .get(&node_id)
-        .unwrap_or_else(|| panic!("missing crypto component for {:?}", node_id))
+        .unwrap_or_else(|| panic!("missing crypto component for {node_id:?}"))
 }

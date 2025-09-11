@@ -106,7 +106,7 @@ async fn install_code(
     .map_err(|err| {
         let err = GovernanceError::new_with_message(
             ErrorType::External,
-            format!("Failed to install code into the target canister: {:?}", err),
+            format!("Failed to install code into the target canister: {err:?}"),
         );
         log!(ERROR, "{}{:?}", log_prefix(), err);
         err
@@ -129,7 +129,7 @@ async fn start_canister(
     .map_err(|err| {
         let err = GovernanceError::new_with_message(
             ErrorType::External,
-            format!("Failed to restart the target canister: {:?}", err),
+            format!("Failed to restart the target canister: {err:?}"),
         );
         log!(ERROR, "{}{:?}", log_prefix(), err);
         err
@@ -154,7 +154,7 @@ async fn stop_canister(
         .map_err(|err| {
             let err = GovernanceError::new_with_message(
                 ErrorType::External,
-                format!("Unable to stop the target canister: {:?}", err),
+                format!("Unable to stop the target canister: {err:?}"),
             );
             log!(ERROR, "{}{:?}", log_prefix(), err);
             err
@@ -229,8 +229,7 @@ async fn canister_status(
             let err = GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "An error occurred while waiting for the target canister to stop: {:?}",
-                    err
+                    "An error occurred while waiting for the target canister to stop: {err:?}"
                 ),
             );
             log!(ERROR, "{}{:?}", log_prefix(), err);
@@ -266,11 +265,10 @@ pub async fn perform_execute_generic_nervous_system_function_validate_and_render
             let result = Decode!(&reply, Result<String,String>);
             match result {
                 Err(e) => Err(format!(
-                    "Error decoding reply from proposal payload validate and render call: {}",
-                    e
+                    "Error decoding reply from proposal payload validate and render call: {e}"
                 )),
                 Ok(value) => match value {
-                    Err(e) => Err(format!("Invalid proposal: {}", e)),
+                    Err(e) => Err(format!("Invalid proposal: {e}")),
                     Ok(rendering) => Ok(rendering),
                 },
             }
@@ -300,7 +298,7 @@ pub async fn perform_execute_generic_nervous_system_function_call(
     match result {
         Err(err) => Err(GovernanceError::new_with_message(
             ErrorType::External,
-            format!("Canister method call to execute proposal failed: {:?}", err),
+            format!("Canister method call to execute proposal failed: {err:?}"),
         )),
 
         Ok(_reply) => {

@@ -1974,9 +1974,7 @@ impl StateManagerImpl {
     ) {
         debug_assert!(
             last_height_to_keep >= last_checkpoint_to_keep,
-            "last_height_to_keep: {}, last_checkpoint_to_keep: {}",
-            last_height_to_keep,
-            last_checkpoint_to_keep
+            "last_height_to_keep: {last_height_to_keep}, last_checkpoint_to_keep: {last_checkpoint_to_keep}"
         );
 
         // In debug builds we store the latest_state_height here so
@@ -2630,8 +2628,7 @@ impl StateManager for StateManagerImpl {
         match self.get_state_hash_at(height) {
             Ok(hash) => assert_eq!(
                 hash, root_hash,
-                "The hash of requested state {:?} at height {} doesn't match the locally computed hash {:?}",
-                root_hash, height, hash
+                "The hash of requested state {root_hash:?} at height {height} doesn't match the locally computed hash {hash:?}"
             ),
             Err(StateHashError::Transient(HashNotComputedYet(_))) => {
                 // The state is already available, but we haven't finished
@@ -2755,8 +2752,7 @@ impl StateManager for StateManagerImpl {
                             Ordering::Equal => {
                                 assert_eq!(
                                     *prev_hash, root_hash,
-                                    "Requested to fetch the same state {} twice with different hashes: first {:?}, then {:?}",
-                                    height, prev_hash, root_hash
+                                    "Requested to fetch the same state {height} twice with different hashes: first {prev_hash:?}, then {root_hash:?}"
                                 );
                             }
                             Ordering::Greater => {
@@ -3101,8 +3097,7 @@ impl StateManager for StateManagerImpl {
             let hash = &certification_metadata.certified_state_hash;
             assert_eq!(
                 prev_hash, hash,
-                "Committed state @{} twice with different hashes: first with {:?}, then with {:?}",
-                height, prev_hash, hash,
+                "Committed state @{height} twice with different hashes: first with {prev_hash:?}, then with {hash:?}",
             );
         }
 
@@ -3487,11 +3482,11 @@ impl CertifiedStreamStore for StateManagerImpl {
         let tree = stream_encoding::decode_labeled_tree(&certified_slice.payload)?;
 
         let witness = v1::Witness::proxy_decode(&certified_slice.merkle_proof).map_err(|e| {
-            DecodeStreamError::SerializationError(format!("Failed to deserialize witness: {:?}", e))
+            DecodeStreamError::SerializationError(format!("Failed to deserialize witness: {e:?}"))
         })?;
 
         let digest = recompute_digest(&tree, &witness).map_err(|e| {
-            DecodeStreamError::SerializationError(format!("Failed to recompute digest: {:?}", e))
+            DecodeStreamError::SerializationError(format!("Failed to recompute digest: {e:?}"))
         })?;
 
         if !verify_recomputed_digest(
@@ -3621,23 +3616,21 @@ impl std::fmt::Display for CheckpointError {
 
             CheckpointError::AlreadyExists(height) => write!(
                 f,
-                "failed to create checkpoint at height {} because it already exists",
-                height
+                "failed to create checkpoint at height {height} because it already exists"
             ),
 
             CheckpointError::NotFound(height) => {
-                write!(f, "checkpoint at height {} not found", height)
+                write!(f, "checkpoint at height {height} not found")
             }
 
-            CheckpointError::Persistence(err) => write!(f, "persistence error: {}", err),
+            CheckpointError::Persistence(err) => write!(f, "persistence error: {err}"),
 
             CheckpointError::LatestCheckpoint(height) => write!(
                 f,
-                "Trying to remove the latest checkpoint at height @{}",
-                height
+                "Trying to remove the latest checkpoint at height @{height}"
             ),
             CheckpointError::CheckpointUnverified(height) => {
-                write!(f, "Checkpoint at height @{} is unverified", height)
+                write!(f, "Checkpoint at height @{height} is unverified")
             }
         }
     }
@@ -3738,8 +3731,7 @@ impl PageAllocatorFileDescriptorImpl {
             .open(&file_path)
         {
             Err(why) => panic!(
-                "MmapPageAllocatorCore failed to create the backing file {}",
-                why
+                "MmapPageAllocatorCore failed to create the backing file {why}"
             ),
             Ok(file) => {
                 let crnt_fd = file.into_raw_fd();
@@ -3770,8 +3762,7 @@ impl PageAllocatorFileDescriptorImpl {
             Ok(fd) => fd,
             Err(err) => {
                 panic!(
-                    "MmapPageAllocatorCore failed to create the memory backing file {}",
-                    err
+                    "MmapPageAllocatorCore failed to create the memory backing file {err}"
                 )
             }
         }
@@ -3787,8 +3778,7 @@ impl PageAllocatorFileDescriptorImpl {
             Ok(file) => file.into_raw_fd(),
             Err(err) => {
                 panic!(
-                    "MmapPageAllocatorCore failed to create the MacOS/WSL backing file {}",
-                    err
+                    "MmapPageAllocatorCore failed to create the MacOS/WSL backing file {err}"
                 )
             }
         }

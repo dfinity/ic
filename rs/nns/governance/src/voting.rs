@@ -113,7 +113,7 @@ fn proposal_ballots(
                 "{} Proposal {} not found, cannot operate on ballots",
                 LOG_PREFIX, proposal_id
             );
-            Err(format!("Proposal {} not found.", proposal_id))
+            Err(format!("Proposal {proposal_id} not found."))
         }
     }
 }

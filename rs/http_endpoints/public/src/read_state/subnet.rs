@@ -135,7 +135,7 @@ pub(crate) async fn read_state_subnet(
         Ok(request) => request,
         Err(e) => {
             let status = StatusCode::BAD_REQUEST;
-            let text = format!("Malformed request: {:?}", e);
+            let text = format!("Malformed request: {e:?}");
             return (status, text).into_response();
         }
     };

@@ -11,7 +11,7 @@ use std::sync::Arc;
 /// Computes and prints partial state hash used for certification.
 pub fn do_hash(path: PathBuf) -> Result<(), String> {
     let cp_layout = CompleteCheckpointLayout::new_untracked(path.clone(), Height::new(0))
-        .map_err(|e| format!("failed to create checkpoint layout: {}", e))?;
+        .map_err(|e| format!("failed to create checkpoint layout: {e}"))?;
 
     let dummy_metrics_registry = ic_metrics::MetricsRegistry::new();
     let dummy_metrics = CheckpointMetrics::new(&dummy_metrics_registry, crate::commands::logger());

@@ -203,7 +203,7 @@ impl NeuronBasketConstructionParameters {
 pub fn apportion_approximately_equally(total: u64, len: u64) -> Result<Vec<u64>, String> {
     let quotient = total
         .checked_div(len)
-        .ok_or_else(|| format!("Unable to divide total={} by len={}", total, len))?;
+        .ok_or_else(|| format!("Unable to divide total={total} by len={len}"))?;
     let remainder = total % len; // For unsigned integers, % cannot overflow.
 
     // So far, we have only apportioned quotient * len. To reach the desired
@@ -231,8 +231,7 @@ pub fn apportion_approximately_equally(total: u64, len: u64) -> Result<Vec<u64>,
             // Therefore, this expect will never panic.
             .ok_or_else(|| {
                 format!(
-                    "Ran out of elements to increment. total={}, len={}",
-                    total, len,
+                    "Ran out of elements to increment. total={total}, len={len}",
                 )
             })?;
 
@@ -240,8 +239,7 @@ pub fn apportion_approximately_equally(total: u64, len: u64) -> Result<Vec<u64>,
         // will not panic.
         *element = element.checked_add(1).ok_or_else(|| {
             format!(
-                "Incrementing element by 1 resulted in overflow. total={}, len={}",
-                total, len,
+                "Incrementing element by 1 resulted in overflow. total={total}, len={len}",
             )
         })?;
     }
@@ -285,8 +283,7 @@ impl fmt::Display for IcpTargetError {
         if let Self::TargetExceededBy(excess_amount_e8s) = self {
             write!(
                 f,
-                "Total amount of ICP e8s committed exceeds the target by {} ICP e8s",
-                excess_amount_e8s
+                "Total amount of ICP e8s committed exceeds the target by {excess_amount_e8s} ICP e8s"
             )
         } else {
             write!(f, "ICP target undefined")
@@ -358,8 +355,7 @@ mod swap_participation {
                 Ok(())
             } else {
                 Err(format!(
-                    "Participation is possible only when the Swap is in the OPEN state. Current state is {:?}.",
-                    lifecycle,
+                    "Participation is possible only when the Swap is in the OPEN state. Current state is {lifecycle:?}.",
                 ))
             }
         }
@@ -1196,14 +1192,11 @@ impl Swap {
                 > MAX_NEURONS_FOR_DIRECT_PARTICIPANTS
             {
                 return Err(format!(
-                    "The swap has reached the maximum number of direct participants ({}) and does \
+                    "The swap has reached the maximum number of direct participants ({num_direct_participants}) and does \
                      not accept new participants; existing participants may still increase their \
                      ICP participation amount. This constraint ensures that SNS neuron baskets can \
-                     be created for all existing participants (SNS neuron basket size: {}, \
-                     MAX_NEURONS_FOR_DIRECT_PARTICIPANTS: {}).",
-                    num_direct_participants,
-                    num_sns_neurons_per_basket,
-                    MAX_NEURONS_FOR_DIRECT_PARTICIPANTS,
+                     be created for all existing participants (SNS neuron basket size: {num_sns_neurons_per_basket}, \
+                     MAX_NEURONS_FOR_DIRECT_PARTICIPANTS: {MAX_NEURONS_FOR_DIRECT_PARTICIPANTS}).",
                 ));
             }
         }
@@ -1288,8 +1281,7 @@ impl Swap {
             insert_buyer_into_buyers_list_index(buyer)
                 .map_err(|grow_failed| {
                     format!(
-                        "Failed to add buyer {} to state, the canister's stable memory could not grow: {}",
-                        buyer, grow_failed
+                        "Failed to add buyer {buyer} to state, the canister's stable memory could not grow: {grow_failed}"
                     )
                 })?;
         }
@@ -1954,8 +1946,7 @@ impl Swap {
             } => source_principal_id,
             _ => {
                 return ErrorRefundIcpResponse::new_invalid_request_error(format!(
-                    "Invalid request. Must have source_principal_id. Request:\n{:#?}",
-                    request,
+                    "Invalid request. Must have source_principal_id. Request:\n{request:#?}",
                 ));
             }
         };
@@ -1995,8 +1986,7 @@ impl Swap {
             Ok(balance) => balance.get_e8s(),
             Err(err) => {
                 return ErrorRefundIcpResponse::new_external_error(format!(
-                    "Unable to get the balance for the subaccount of {}: {:?}",
-                    source_principal_id, err,
+                    "Unable to get the balance for the subaccount of {source_principal_id}: {err:?}",
                 ));
             }
         };
@@ -2039,8 +2029,7 @@ impl Swap {
                     err,
                 );
                 ErrorRefundIcpResponse::new_external_error(format!(
-                    "Transfer request failed: {}",
-                    err,
+                    "Transfer request failed: {err}",
                 ))
             }
         }
@@ -2456,7 +2445,7 @@ impl Swap {
             let np = match NeuronsFundNeuron::try_from(np.clone()) {
                 Ok(np) => np,
                 Err(message) => {
-                    defects.push(format!("NNS governance returned an invalid NeuronsFundNeuron. Struct: {:?}, Reason: {}", np, message));
+                    defects.push(format!("NNS governance returned an invalid NeuronsFundNeuron. Struct: {np:?}, Reason: {message}"));
                     continue;
                 }
             };
@@ -2470,7 +2459,7 @@ impl Swap {
             ) {
                 Ok(cfn) => cfn,
                 Err(message) => {
-                    defects.push(format!("NNS governance returned an invalid NeuronsFundNeuron. It cannot be converted to CfNeuron. Struct: {:?}, Reason: {}", np, message));
+                    defects.push(format!("NNS governance returned an invalid NeuronsFundNeuron. It cannot be converted to CfNeuron. Struct: {np:?}, Reason: {message}"));
                     continue;
                 }
             };
@@ -2480,8 +2469,7 @@ impl Swap {
         // Collect all errors into an error
         if !defects.is_empty() {
             return SettleNeuronsFundParticipationResult::new_error(format!(
-                "NNS Governance returned invalid NeuronsFundNeurons. Could not settle_neurons_fund_participation. Defects: {:?}",
-                defects
+                "NNS Governance returned invalid NeuronsFundNeurons. Could not settle_neurons_fund_participation. Defects: {defects:?}"
             ));
         }
 
@@ -2492,7 +2480,7 @@ impl Swap {
             .map(|(nf_neuron_nns_controller, cf_neurons)| CfParticipant {
                 controller: Some(nf_neuron_nns_controller),
                 // TODO(NNS1-3198): Remove once hotkey_principal is removed
-                hotkey_principal: format!("Field `hotkey_principal` is obsolete as a misnomer, as it used to hold the *controller* principal ID of the (Neurons' Fund-participating) NNS neuron, and not NNS neuron hotkeys. Please use field `controller` instead for the NNS neuron controller. If you must know now, the NNS neuron's controller of this neuron is `{}`.", nf_neuron_nns_controller),
+                hotkey_principal: format!("Field `hotkey_principal` is obsolete as a misnomer, as it used to hold the *controller* principal ID of the (Neurons' Fund-participating) NNS neuron, and not NNS neuron hotkeys. Please use field `controller` instead for the NNS neuron controller. If you must know now, the NNS neuron's controller of this neuron is `{nf_neuron_nns_controller}`."),
                 cf_neurons,
             })
             .collect();
@@ -2785,7 +2773,7 @@ impl Swap {
 
         for (k, b) in &self.buyers {
             if !is_valid_principal(k) {
-                return Err(format!("Invalid principal {}", k));
+                return Err(format!("Invalid principal {k}"));
             }
             b.validate()?;
         }
@@ -3184,8 +3172,7 @@ impl Swap {
                     // return to the caller to determine how to handle the error.
                     insert_buyer_into_buyers_list_index(buyer_principal).map_err(|grow_failed| {
                         format!(
-                            "Failed to add buyer {} to state, the canister's stable memory could not grow: {}",
-                            buyer_principal, grow_failed
+                            "Failed to add buyer {buyer_principal} to state, the canister's stable memory could not grow: {grow_failed}"
                         )
                     })?;
                 }
@@ -3467,7 +3454,7 @@ impl SnsNeuronRecipe {
         let investor = investor.as_ref().ok_or_else(|| {
             (
                 ConversionError::Invalid,
-                format!("Missing investor information for neuron recipe {:?}", self),
+                format!("Missing investor information for neuron recipe {self:?}"),
             )
         })?;
 
@@ -3477,8 +3464,7 @@ impl SnsNeuronRecipe {
             (
                 ConversionError::Invalid,
                 format!(
-                    "Missing neuron_attributes information for neuron recipe {:?}",
-                    self
+                    "Missing neuron_attributes information for neuron recipe {self:?}"
                 ),
             )
         })?;
@@ -3488,8 +3474,7 @@ impl SnsNeuronRecipe {
             (
                 ConversionError::Invalid,
                 format!(
-                    "Missing transferable_amount (field `sns`) for neuron recipe {:?}",
-                    self
+                    "Missing transferable_amount (field `sns`) for neuron recipe {self:?}"
                 ),
             )
         })?;
@@ -3500,8 +3485,7 @@ impl SnsNeuronRecipe {
                 (
                     ConversionError::Invalid,
                     format!(
-                        "Missing claimed_status information for neuron recipe {:?}",
-                        self
+                        "Missing claimed_status information for neuron recipe {self:?}"
                     ),
                 )
             })?;
@@ -3509,9 +3493,8 @@ impl SnsNeuronRecipe {
                 (
                     ConversionError::Invalid,
                     format!(
-                        "Error interpreting claimed_status `{}` as ClaimedStatus for neuron recipe \
-                    {:?}: {}",
-                        claimed_status, self, err
+                        "Error interpreting claimed_status `{claimed_status}` as ClaimedStatus for neuron recipe \
+                    {self:?}: {err}"
                     ),
                 )
             })?;
@@ -3520,9 +3503,8 @@ impl SnsNeuronRecipe {
                     return Err((
                         ConversionError::AlreadyProcessed,
                         format!(
-                            "Recipe {:?} was claimed in previous invocation of \
+                            "Recipe {self:?} was claimed in previous invocation of \
                              claim_swap_neurons(). Skipping",
-                            self,
                         ),
                     ));
                 }
@@ -3533,9 +3515,8 @@ impl SnsNeuronRecipe {
                     return Err((
                         ConversionError::Invalid,
                         format!(
-                            "Recipe {:?} was invalid in a previous invocation of claim_swap_neurons(). \
-                        Skipping",
-                            self
+                            "Recipe {self:?} was invalid in a previous invocation of claim_swap_neurons(). \
+                        Skipping"
                         ),
                     ));
                 }
@@ -3564,8 +3545,7 @@ impl SnsNeuronRecipe {
                         return Err((
                             ConversionError::Invalid,
                             format!(
-                                "Invalid principal: recipe={:?} principal={}",
-                                self, buyer_principal
+                                "Invalid principal: recipe={self:?} principal={buyer_principal}"
                             ),
                         ));
                     }
@@ -3580,8 +3560,7 @@ impl SnsNeuronRecipe {
                         return Err((
                             ConversionError::Invalid,
                             format!(
-                                "Invalid Neurons' Fund neuron: recipe={:?} error={}",
-                                self, e
+                                "Invalid Neurons' Fund neuron: recipe={self:?} error={e}"
                             ),
                         ));
                     }
@@ -4336,8 +4315,7 @@ mod tests {
                 assert!(
                     lower_bound_e8s <= scheduled_vesting_event.amount_e8s
                         && scheduled_vesting_event.amount_e8s <= upper_bound_e8s,
-                    "{:#?}",
-                    vesting_schedule,
+                    "{vesting_schedule:#?}",
                 );
             }
 
@@ -4552,7 +4530,7 @@ mod tests {
                 };
                 let ticket = match swap.new_sale_ticket(&request, principal, 0).result.unwrap() {
                     new_sale_ticket_response::Result::Ok(Ok { ticket }) => ticket.unwrap(),
-                    new_sale_ticket_response::Result::Err(e) => panic!("{:?}", e),
+                    new_sale_ticket_response::Result::Err(e) => panic!("{e:?}"),
                 };
                 assert_eq!(ticket_ids.replace(ticket.ticket_id), None);
             }

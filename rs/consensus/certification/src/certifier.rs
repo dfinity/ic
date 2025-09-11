@@ -500,7 +500,7 @@ impl CertifierImpl {
         ) {
             Ok(()) => Some(ChangeAction::MoveToValidated(msg)),
             Err(ValidationError::InvalidArtifact(err)) => {
-                Some(ChangeAction::HandleInvalid(msg, format!("{:?}", err)))
+                Some(ChangeAction::HandleInvalid(msg, format!("{err:?}")))
             }
             Err(ValidationError::ValidationFailed(err)) => {
                 debug!(
@@ -575,7 +575,7 @@ impl CertifierImpl {
                     {
                         Ok(()) => ChangeAction::MoveToValidated(msg),
                         Err(ValidationError::InvalidArtifact(err)) => {
-                            ChangeAction::HandleInvalid(msg, format!("{:?}", err))
+                            ChangeAction::HandleInvalid(msg, format!("{err:?}"))
                         }
                         Err(ValidationError::ValidationFailed(err)) => {
                             debug!(self.log, "Couldn't verify share signature: {:?}", err);

@@ -213,8 +213,7 @@ impl GovernanceCanisterInitPayloadBuilder {
             assert_eq!(
                 self.proto.neurons.insert(id, neuron),
                 None,
-                "There is more than one neuron with the same id ({:?}).",
-                id
+                "There is more than one neuron with the same id ({id:?})."
             );
         }
         self
@@ -257,7 +256,7 @@ impl GovernanceCanisterInitPayloadBuilder {
         let mut reader = ReaderBuilder::new()
             .delimiter(b';')
             .from_path(csv_file)
-            .unwrap_or_else(|_| panic!("error creating a csv reader at path: {:?}", csv_file));
+            .unwrap_or_else(|_| panic!("error creating a csv reader at path: {csv_file:?}"));
 
         {
             let headers = reader.headers().expect("error reading CSV header row");
@@ -310,7 +309,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 })
                 .collect();
             if followees.len() > 1 {
-                println!("followees of {:?} : {:?}", principal_id, followees)
+                println!("followees of {principal_id:?} : {followees:?}")
             }
 
             let neuron_id = NeuronIdProto::from(neuron_id);

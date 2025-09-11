@@ -192,7 +192,7 @@ pub fn decode_stream_slice(
 /// Decodes a labeled tree from a byte buffer.
 pub fn decode_labeled_tree(bytes: &[u8]) -> Result<LabeledTree<Vec<u8>>, DecodeStreamError> {
     v1::LabeledTree::proxy_decode(bytes).map_err(|err| {
-        DecodeStreamError::SerializationError(format!("failed to decode stream: {}", err))
+        DecodeStreamError::SerializationError(format!("failed to decode stream: {err}"))
     })
 }
 
@@ -234,8 +234,7 @@ pub fn decode_slice_from_tree(
     let streams = EncodedStreams::deserialize(tree_deserializer::LabeledTreeDeserializer::new(t))
         .map_err(|err| {
         DecodeStreamError::SerializationError(format!(
-            "failed to deserialize encoded streams: {}",
-            err
+            "failed to deserialize encoded streams: {err}"
         ))
     })?;
 
@@ -251,8 +250,7 @@ pub fn decode_slice_from_tree(
     let header: StreamHeader =
         decode_stream_header(encoded_stream.header.as_ref()).map_err(|err| {
             DecodeStreamError::SerializationError(format!(
-                "failed to deserialize stream header from CBOR: {}",
-                err
+                "failed to deserialize stream header from CBOR: {err}"
             ))
         })?;
 
@@ -266,8 +264,7 @@ pub fn decode_slice_from_tree(
         for (idx, bytes) in encoded_stream.messages.into_iter() {
             let msg = decode_message(bytes.as_ref()).map_err(|err| {
                 DecodeStreamError::SerializationError(format!(
-                    "failed to deserialize message {} from subnet {}: {}",
-                    idx, subnet, err
+                    "failed to deserialize message {idx} from subnet {subnet}: {err}"
                 ))
             })?;
 

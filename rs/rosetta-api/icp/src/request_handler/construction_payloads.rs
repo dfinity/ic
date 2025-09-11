@@ -314,8 +314,7 @@ fn handle_transfer_operation(
 ) -> Result<(), ApiError> {
     let pk = pks_map.get(&from).ok_or_else(|| {
         ApiError::internal_error(format!(
-            "Cannot find public key for account identifier {}",
-            from,
+            "Cannot find public key for account identifier {from}",
         ))
     })?;
 
@@ -373,8 +372,7 @@ fn handle_neuron_info(
     // we can use the same logic for controller or hotkey.
     let pk = pks_map.get(&account).ok_or_else(|| {
         ApiError::internal_error(format!(
-            "NeuronInfo - Cannot find public key for account {}",
-            account,
+            "NeuronInfo - Cannot find public key for account {account}",
         ))
     })?;
     let sender = principal_id_from_public_key(pk)
@@ -421,8 +419,7 @@ fn handle_list_neurons(
     // we can use the same logic for controller or hotkey.
     let pk = pks_map.get(&account).ok_or_else(|| {
         ApiError::internal_error(format!(
-            "NeuronInfo - Cannot find public key for account {}",
-            account,
+            "NeuronInfo - Cannot find public key for account {account}",
         ))
     })?;
     let sender = principal_id_from_public_key(pk)
@@ -536,8 +533,7 @@ fn handle_stake(
     let neuron_index = req.neuron_index;
     let pk = pks_map.get(&account).ok_or_else(|| {
         ApiError::internal_error(format!(
-            "Cannot find public key for account identifier {}",
-            account,
+            "Cannot find public key for account identifier {account}",
         ))
     })?;
 
@@ -941,8 +937,7 @@ fn add_neuron_management_payload(
     // we can use the same logic for controller or hotkey.
     let pk = pks_map.get(&account).ok_or_else(|| {
         ApiError::internal_error(format!(
-            "Neuron management - Cannot find public key for account {}",
-            account,
+            "Neuron management - Cannot find public key for account {account}",
         ))
     })?;
 
@@ -1031,8 +1026,7 @@ fn neuron_subaccount(
                 .get(&account)
                 .ok_or_else(|| {
                     ApiError::internal_error(format!(
-                        "Cannot find public key for account {}",
-                        account,
+                        "Cannot find public key for account {account}",
                     ))
                 })
                 .unwrap();

@@ -160,7 +160,7 @@ impl FailedChangeCanisterControllersResult {
             .iter()
             .map(
                 |FailedChangeCanisterControllersRequest { canister, reason }| {
-                    format!("Canister: {:?}. Failure Reason: {:?}.", canister, reason)
+                    format!("Canister: {canister:?}. Failure Reason: {reason:?}.")
                 },
             )
             .collect::<Vec<String>>()
@@ -331,7 +331,7 @@ where
             let hash = <[u8; 32]>::try_from(get_wasm_metadata_payload)?;
 
             let Some(SnsWasmStableIndex { metadata, .. }) = self.wasm_indexes.get(&hash) else {
-                return Err(format!("Cannot find WASM index for hash `{:?}`.", hash));
+                return Err(format!("Cannot find WASM index for hash `{hash:?}`."));
             };
             let metadata = match metadata
                 .iter()
@@ -342,8 +342,7 @@ where
                 Ok(metadata) => metadata,
                 Err(err) => {
                     let err = format!(
-                        "Inconsistent state detected in WASM metadata for hash `{:?}`: {}",
-                        hash, err
+                        "Inconsistent state detected in WASM metadata for hash `{hash:?}`: {err}"
                     );
                     println!("{}{}", LOG_PREFIX, err);
                     return Err(err);
@@ -363,7 +362,7 @@ where
         // We don't care for symbol names in the WASM module as we just want the custom sections
         // containing the metadata.
         let wasm_module = utils::parse_wasm(&wasm.wasm, false)
-            .map_err(|err| format!("Cannot parse WASM: {}", err))?;
+            .map_err(|err| format!("Cannot parse WASM: {err}"))?;
 
         let sections = metadata::list_metadata(&wasm_module);
 
@@ -444,7 +443,7 @@ where
                 println!("err = {}, wasm = `{:?}`", err, wasm);
                 return AddWasmResponse {
                     result: Some(add_wasm_response::Result::Error(SnsWasmError {
-                        message: format!("Cannot read metadata sections from WASM: {}", err),
+                        message: format!("Cannot read metadata sections from WASM: {err}"),
                     })),
                 };
             }
@@ -464,7 +463,7 @@ where
             Err(err) => {
                 return AddWasmResponse {
                     result: Some(add_wasm_response::Result::Error(SnsWasmError {
-                        message: format!("Cannot validate metadata sections from WASM: {}", err),
+                        message: format!("Cannot validate metadata sections from WASM: {err}"),
                     })),
                 };
             }
@@ -507,7 +506,7 @@ where
                 println!("{}add_wasm unable to persist WASM: {}", LOG_PREFIX, e);
 
                 add_wasm_response::Result::Error(SnsWasmError {
-                    message: format!("Unable to persist WASM: {}", e),
+                    message: format!("Unable to persist WASM: {e}"),
                 })
             }
         };
@@ -532,9 +531,8 @@ where
                 Ok(canister_id) => Some(canister_id),
                 Err(_) => {
                     return InsertUpgradePathEntriesResponse::error(format!(
-                        "Request.sns_governance_canister_id ({}) \
-                        could not be converted to a canister ID",
-                        id
+                        "Request.sns_governance_canister_id ({id}) \
+                        could not be converted to a canister ID"
                     ));
                 }
             },
@@ -589,9 +587,8 @@ where
                         == sns_governance_canister_id.into()
             }) {
                 return InsertUpgradePathEntriesResponse::error(format!(
-                    "Cannot add custom upgrade path for non-existent SNS.  Governance canister {} \
-                     not found in list of deployed SNSes.",
-                    sns_governance_canister_id
+                    "Cannot add custom upgrade path for non-existent SNS.  Governance canister {sns_governance_canister_id} \
+                     not found in list of deployed SNSes."
                 ));
             }
         }
@@ -905,7 +902,7 @@ where
             // ensure this can never be triggered where validate() would succeed.
             .map_err(|e| {
                 DeployError::Reversible(ReversibleDeployError {
-                    message: format!("build_canister_payloads failed: {}", e),
+                    message: format!("build_canister_payloads failed: {e}"),
                     canisters_to_delete: Some(sns_canisters),
                     subnet: Some(subnet_id),
                     dapp_canisters_to_restore: dapp_canisters_original_controllers.to_owned(),
@@ -1047,7 +1044,7 @@ where
                 canister_api
                     .send_cycles_to_canister(canister_id, cycles_to_provide)
                     .await
-                    .map_err(|e| format!("Could not fund {} canister: {}", label, e))
+                    .map_err(|e| format!("Could not fund {label} canister: {e}"))
             },
         ))
         .await;
@@ -1076,8 +1073,7 @@ where
                 .await
                 .map_err(|err| {
                     format!(
-                        "Unable to set SNS-W and Root as Governance canister controller: {}",
-                        err
+                        "Unable to set SNS-W and Root as Governance canister controller: {err}"
                     )
                 }),
             // Set Root as controller of Ledger.
@@ -1089,8 +1085,7 @@ where
                 .await
                 .map_err(|err| {
                     format!(
-                        "Unable to set SNS-W and Root as Ledger canister controller: {}",
-                        err
+                        "Unable to set SNS-W and Root as Ledger canister controller: {err}"
                     )
                 }),
             // Set Root as controller of Index.
@@ -1102,8 +1097,7 @@ where
                 .await
                 .map_err(|err| {
                     format!(
-                        "Unable to set SNS-W and Root as Index canister controller: {}",
-                        err
+                        "Unable to set SNS-W and Root as Index canister controller: {err}"
                     )
                 }),
             // Set Governance as controller of Root.
@@ -1115,8 +1109,7 @@ where
                 .await
                 .map_err(|err| {
                     format!(
-                        "Unable to set SNS-W and Governance as Root canister controller: {}",
-                        err
+                        "Unable to set SNS-W and Governance as Root canister controller: {err}"
                     )
                 }),
             // Set Root as the controller of Swap.
@@ -1128,8 +1121,7 @@ where
                 .await
                 .map_err(|err| {
                     format!(
-                        "Unable to set SNS-W and Root as Swap canister controller: {}",
-                        err
+                        "Unable to set SNS-W and Root as Swap canister controller: {err}"
                     )
                 }),
         ];
@@ -1151,7 +1143,7 @@ where
                 )
                 .await
                 .map_err(|err| {
-                    format!("Unable to remove SNS-W as Governance's controller: {}", err)
+                    format!("Unable to remove SNS-W as Governance's controller: {err}")
                 }),
             // Removing SNS-W, leaving SNS Root.
             canister_api
@@ -1160,7 +1152,7 @@ where
                     vec![canisters.root.unwrap()],
                 )
                 .await
-                .map_err(|err| format!("Unable to remove SNS-W as Ledger's controller: {}", err)),
+                .map_err(|err| format!("Unable to remove SNS-W as Ledger's controller: {err}")),
             // Removing SNS-W, leaving SNS Governance.
             canister_api
                 .set_controllers(
@@ -1168,7 +1160,7 @@ where
                     vec![canisters.governance.unwrap()],
                 )
                 .await
-                .map_err(|err| format!("Unable to remove SNS-W as Root's controller: {}", err)),
+                .map_err(|err| format!("Unable to remove SNS-W as Root's controller: {err}")),
             // Removing SNS-W, leaving SNS Root and NNS Root.
             canister_api
                 .set_controllers(
@@ -1176,7 +1168,7 @@ where
                     vec![canisters.root.unwrap()],
                 )
                 .await
-                .map_err(|err| format!("Unable to remove SNS-W as Swap's controller: {}", err)),
+                .map_err(|err| format!("Unable to remove SNS-W as Swap's controller: {err}")),
             // Removing SNS-W, leaving Root.
             canister_api
                 .set_controllers(
@@ -1184,7 +1176,7 @@ where
                     vec![canisters.root.unwrap()],
                 )
                 .await
-                .map_err(|err| format!("Unable to remove SNS-W as Index's controller: {}", err)),
+                .map_err(|err| format!("Unable to remove SNS-W as Index's controller: {err}")),
         ];
 
         join_errors_or_ok(set_controllers_results)
@@ -1229,7 +1221,7 @@ where
             .await,
         )
         .map(|(label, result)| {
-            result.map_err(|e| format!("Error installing {} WASM: {}", label, e))
+            result.map_err(|e| format!("Error installing {label} WASM: {e}"))
         })
         .collect();
 
@@ -1355,7 +1347,7 @@ where
         let delete_canisters_errors = delete_canisters_results
             .into_iter()
             .map(|(name, result)| {
-                result.map_err(|e| format!("Could not delete {} canister: {}", name, e))
+                result.map_err(|e| format!("Could not delete {name} canister: {e}"))
             })
             .flat_map(|result| result.err())
             .collect::<Vec<_>>();
@@ -1539,8 +1531,7 @@ where
         let target_canister_id = target_canister.id.ok_or_else(||
                 // In practice, validation ensures that this is unreachable.
                 format!(
-                    "Could not change the controllers of {:?} due to no id field being present.",
-                    target_canister,
+                    "Could not change the controllers of {target_canister:?} due to no id field being present.",
                 ))?;
 
         let request = ChangeCanisterControllersRequest {
@@ -1555,18 +1546,16 @@ where
         let change_canister_controllers_response =
             call_response.map_err(|(code, description)| {
                 format!(
-                    "Could not change the controllers of {:?} \
-                    due to an error from the replica. {:?}:{:?}",
-                    target_canister_id, code, description
+                    "Could not change the controllers of {target_canister_id:?} \
+                    due to an error from the replica. {code:?}:{description:?}"
                 )
             })?;
 
         match change_canister_controllers_response.change_canister_controllers_result {
             ChangeCanisterControllersResult::Ok(_ok) => Ok(()),
             ChangeCanisterControllersResult::Err(err) => Err(format!(
-                "Could not change the controllers of {:?} \
-                due to an error from NNS Root: {:?}",
-                target_canister_id, err
+                "Could not change the controllers of {target_canister_id:?} \
+                due to an error from NNS Root: {err:?}"
             )),
         }
     }
@@ -1618,8 +1607,7 @@ where
         let target_principal_id = target_canister.id.ok_or_else(||
             // In practice, validation ensures that this is unreachable.
             format!(
-                "Could not get the controllers of {:?} due to no id field being present.",
-                target_canister,
+                "Could not get the controllers of {target_canister:?} due to no id field being present.",
             ))?;
 
         let target_canister_id = CanisterId::unchecked_from_principal(target_principal_id);
@@ -1632,9 +1620,8 @@ where
 
         let canister_status_result = call_response.map_err(|(code, description)| {
             format!(
-                "Could not get the controllers of {:?} \
-                    due to an error from the replica. {:?}:{:?}",
-                target_canister_id, code, description
+                "Could not get the controllers of {target_canister_id:?} \
+                    due to an error from the replica. {code:?}:{description:?}"
             )
         })?;
 
@@ -1897,15 +1884,13 @@ impl UpgradePath {
 
         if self.upgrade_path.contains_key(&new_latest_version) {
             return Err(format!(
-                "Version {} already exists along the upgrade path - cannot add it again",
-                new_latest_version
+                "Version {new_latest_version} already exists along the upgrade path - cannot add it again"
             ));
         }
 
         if self.latest_version == new_latest_version {
             return Err(format!(
-                "Version {} is already the latest version",
-                new_latest_version
+                "Version {new_latest_version} is already the latest version"
             ));
         }
 

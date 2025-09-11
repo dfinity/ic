@@ -611,8 +611,7 @@ mod canister_id_set {
         // Probability of collision is negligible (around 10^(-60)).
         assert!(
             intersection.is_empty(),
-            "expected {:?} to be empty but was not",
-            intersection
+            "expected {intersection:?} to be empty but was not"
         )
     }
 

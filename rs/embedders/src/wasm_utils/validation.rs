@@ -1001,8 +1001,7 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
                         },
                         None => {
                             return Err(WasmValidationError::InvalidImportSection(format!(
-                                "Module imports function '{}' from '{}' that is not exported by the runtime.",
-                                field, import_module,
+                                "Module imports function '{field}' from '{import_module}' that is not exported by the runtime.",
                             )));
                         }
                     }
@@ -1098,8 +1097,7 @@ fn validate_export_section(
                     // can be exported.
                     if !WASM_VALID_SYSTEM_FUNCTIONS.contains(&func_name) {
                         return Err(WasmValidationError::InvalidExportSection(format!(
-                            "Exporting reserved function '{}' with \"canister_\" prefix",
-                            func_name
+                            "Exporting reserved function '{func_name}' with \"canister_\" prefix"
                         )));
                     }
                 }
@@ -1118,8 +1116,7 @@ fn validate_export_section(
                     };
                     let CompositeInnerType::Func(func_ty) = &composite_type.inner else {
                         return Err(WasmValidationError::InvalidExportSection(format!(
-                            "Function export doesn't have a function type. Type found: {:?}",
-                            composite_type
+                            "Function export doesn't have a function type. Type found: {composite_type:?}"
                         )));
                     };
                     validate_function_signature(valid_signature, export.name, func_ty)?;
@@ -1163,8 +1160,7 @@ fn validate_data_section(module: &Module) -> Result<(), WasmValidationError> {
             ) => match offset_expr {
                 Operator::I32Const { .. } => Ok(()),
                 _ => Err(WasmValidationError::InvalidDataSection(format!(
-                    "Invalid offset expression in data segment for 32bit memory: {:?}",
-                    offset_expr
+                    "Invalid offset expression in data segment for 32bit memory: {offset_expr:?}"
                 ))),
             },
             (
@@ -1176,8 +1172,7 @@ fn validate_data_section(module: &Module) -> Result<(), WasmValidationError> {
             ) => match offset_expr {
                 Operator::I64Const { .. } => Ok(()),
                 _ => Err(WasmValidationError::InvalidDataSection(format!(
-                    "Invalid offset expression in data segment for 64bit memory: {:?}",
-                    offset_expr
+                    "Invalid offset expression in data segment for 64bit memory: {offset_expr:?}"
                 ))),
             },
         }
@@ -1288,8 +1283,7 @@ pub fn extract_custom_section_name(
     }
 
     Err(WasmValidationError::InvalidCustomSection(format!(
-        "Invalid custom section: Custom section '{}' has no public/private scope defined.",
-        section_name
+        "Invalid custom section: Custom section '{section_name}' has no public/private scope defined."
     )))
 }
 
@@ -1364,8 +1358,7 @@ fn validate_custom_section(
         if let Some((name, visibility)) = extract_custom_section_name(section_name)? {
             if validated_custom_sections.contains_key(name) {
                 return Err(WasmValidationError::InvalidCustomSection(format!(
-                    "Invalid custom section: name {} already exists",
-                    name
+                    "Invalid custom section: name {name} already exists"
                 )));
             }
 
@@ -1655,8 +1648,7 @@ fn can_compile(
     let engine = wasmtime::Engine::new(&config).expect("Failed to create wasmtime::Engine");
     wasmtime::Module::validate(&engine, wasm.as_slice()).map_err(|err| {
         WasmValidationError::WasmtimeValidation(format!(
-            "wasmtime::Module::validate() failed with {}",
-            err
+            "wasmtime::Module::validate() failed with {err}"
         ))
     })
 }
@@ -1670,7 +1662,7 @@ fn check_code_section_size(wasm: &BinaryEncodedWasm) -> Result<NumBytes, WasmVal
             range: _,
             size,
         } = payload.map_err(|e| {
-            WasmValidationError::DecodingError(format!("Error finding code section: {}", e))
+            WasmValidationError::DecodingError(format!("Error finding code section: {e}"))
         })? {
             if size > MAX_CODE_SECTION_SIZE_IN_BYTES {
                 return Err(WasmValidationError::CodeSectionTooLarge {
@@ -1707,7 +1699,7 @@ pub(super) fn validate_wasm_binary<'a>(
     let code_section_size = check_code_section_size(wasm)?;
     can_compile(wasm, config)?;
     let module = Module::parse(wasm.as_slice(), false)
-        .map_err(|err| WasmValidationError::DecodingError(format!("{}", err)))?;
+        .map_err(|err| WasmValidationError::DecodingError(format!("{err}")))?;
     let imports_details = validate_import_section(&module)?;
     validate_export_section(
         &module,

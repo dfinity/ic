@@ -190,14 +190,13 @@ impl HttpClient {
     fn build_uri(&self, url: &Url, end_point: &str) -> Result<HyperUri, String> {
         let url = url.join(end_point).map_err(|e| {
             format!(
-                "HttpClient: Failed to create URI for {}: {:?}",
-                end_point, e
+                "HttpClient: Failed to create URI for {end_point}: {e:?}"
             )
         })?;
 
         url.as_str()
             .parse::<HyperUri>()
-            .map_err(|e| format!("HttpClient: Failed to parse {:?}: {:?}", url, e))
+            .map_err(|e| format!("HttpClient: Failed to parse {url:?}: {e:?}"))
     }
 
     fn build_post_request(&self, uri: HyperUri, http_body: Vec<u8>) -> Result<HyperFuture, String> {
@@ -208,8 +207,7 @@ impl HttpClient {
             .body(Full::new(Bytes::from(http_body)))
             .map_err(|e| {
                 format!(
-                    "HttpClient: Failed to create POST request for {:?}: {:?}",
-                    uri, e
+                    "HttpClient: Failed to create POST request for {uri:?}: {e:?}"
                 )
             })?;
         Ok(self.hyper.request(req))
@@ -222,8 +220,8 @@ impl HttpClient {
     ) -> Result<Vec<u8>, String> {
         let result = tokio::time::timeout_at(deadline, response_future)
             .await
-            .map_err(|e| format!("HttpClient: Request timed out for {:?}: {:?}", uri, e))?;
-        let response = result.map_err(|e| format!("Request failed for {:?}: {:?}", uri, e))?;
+            .map_err(|e| format!("HttpClient: Request timed out for {uri:?}: {e:?}"))?;
+        let response = result.map_err(|e| format!("Request failed for {uri:?}: {e:?}"))?;
         let status = response.status();
         let parsed_body = tokio::time::timeout_at(deadline, response.collect())
             .await
@@ -292,26 +290,26 @@ impl HttpClient {
     ) -> Result<(Vec<u8>, hyper::StatusCode), String> {
         let uri = url
             .parse::<HyperUri>()
-            .map_err(|e| format!("HttpClient: Failed to parse URL {:?}: {:?}", url, e))?;
+            .map_err(|e| format!("HttpClient: Failed to parse URL {url:?}: {e:?}"))?;
         let req = hyper::Request::builder()
             .method(Method::POST)
             .uri(uri.clone())
             .header(CONTENT_TYPE, "application/cbor")
             .body(Full::new(Bytes::from(http_body)))
-            .map_err(|e| format!("HttpClient: Failed to fill body {:?}: {:?}", url, e))?;
+            .map_err(|e| format!("HttpClient: Failed to fill body {url:?}: {e:?}"))?;
         let response_future = self.hyper.request(req);
 
         let response = tokio::time::timeout_at(deadline, response_future)
             .await
-            .map_err(|e| format!("HttpClient: Request timed out for {:?}: {:?}", uri, e))?;
+            .map_err(|e| format!("HttpClient: Request timed out for {uri:?}: {e:?}"))?;
         let response_body = response
-            .map_err(|e| format!("HttpClient: Request failed out for {:?}: {:?}", uri, e))?;
+            .map_err(|e| format!("HttpClient: Request failed out for {uri:?}: {e:?}"))?;
         let status_code = response_body.status();
         let response_bytes = tokio::time::timeout_at(deadline, response_body.collect())
             .await
-            .map_err(|e| format!("HttpClient: Request timed out for {:?}: {:?}", uri, e))?
+            .map_err(|e| format!("HttpClient: Request timed out for {uri:?}: {e:?}"))?
             .map(|collected| collected.to_bytes().to_vec())
-            .map_err(|e| format!("HttpClient: Failed to get bytes for {:?}: {:?}", uri, e))?;
+            .map_err(|e| format!("HttpClient: Failed to get bytes for {uri:?}: {e:?}"))?;
 
         Ok((response_bytes, status_code))
     }

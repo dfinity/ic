@@ -11,7 +11,7 @@ pub fn handle_disburse_maturity(
     bytes: Vec<u8>,
 ) -> Result<Result<Option<OperationOutput>, ApiError>, String> {
     let response: ManageNeuronResponse = candid::decode_one(bytes.as_ref())
-        .map_err(|err| format!("Could not decode ManageNeuronResponse : {}", err))?;
+        .map_err(|err| format!("Could not decode ManageNeuronResponse : {err}"))?;
     match &response.command {
         Some(Command::DisburseMaturity(NnsDisburseMaturityResponse {
             amount_disbursed_e8s,
@@ -22,7 +22,7 @@ pub fn handle_disburse_maturity(
         )))),
         Some(Command::Error(err)) => Ok(Err(ApiError::TransactionRejected(
             false,
-            format!("Could not disburse maturity: {}", err).into(),
+            format!("Could not disburse maturity: {err}").into(),
         ))),
         _ => panic!(
             "Unexpected disburse maturity result: {:?}",

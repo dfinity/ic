@@ -140,7 +140,7 @@ impl ShareAggregator {
                 let block = pool
                     .get_block(&share.content.block, height)
                     .unwrap_or_else(|err| {
-                        panic!("Block not found for {:?}, error: {:?}", share, err)
+                        panic!("Block not found for {share:?}, error: {err:?}")
                     });
                 Signed {
                     content: CatchUpContent::from_share_content(share.content, block.into_inner()),

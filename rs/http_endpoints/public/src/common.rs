@@ -87,7 +87,7 @@ pub(crate) async fn map_box_error_to_response(err: BoxError) -> Response<Body> {
     } else {
         make_plaintext_response(
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Unexpected error: {}", err),
+            format!("Unexpected error: {err}"),
         )
     }
 }
@@ -178,7 +178,7 @@ where
         } else {
             Err((
                 StatusCode::BAD_REQUEST,
-                format!("Unexpected content-type, expected {}.", CONTENT_TYPE_CBOR),
+                format!("Unexpected content-type, expected {CONTENT_TYPE_CBOR}."),
             ))
         }
     }
@@ -253,7 +253,7 @@ pub(crate) fn validation_error_to_http_error<C: std::fmt::Debug + HttpRequestCon
     match err {
         RequestValidationError::InvalidRequestExpiry(_)
         | RequestValidationError::InvalidSignature(_) => {
-            let request_ellipsized = format!("{:?}", request).ellipsize(1024, 90);
+            let request_ellipsized = format!("{request:?}").ellipsize(1024, 90);
             info!(
                 log,
                 "msg_id: {}, err: {}, request: {}", message_id, err, request_ellipsized,

@@ -30,8 +30,7 @@ impl AddErc20TokenFlow {
                 || match self.setup.call_orchestrator_canister_ids(&contract) {
                     Some(ids) if ids.ledger.is_some() && ids.index.is_some() => Ok(ids),
                     incomplete_ids => Err(format!(
-                        "Not all canister IDs are available for ERC-20 {:?}: {:?}",
-                        contract, incomplete_ids
+                        "Not all canister IDs are available for ERC-20 {contract:?}: {incomplete_ids:?}"
                     )),
                 },
             );
@@ -154,8 +153,7 @@ impl ManagedCanistersAssert {
         let canister_info = caller.canister_info(self.ledger_canister_id());
         assert!(
             predicate(&canister_info),
-            "BUG: ledger canister info does not satisfy predicate. Canister info: {:?}",
-            canister_info
+            "BUG: ledger canister info does not satisfy predicate. Canister info: {canister_info:?}"
         );
         self
     }
@@ -168,8 +166,7 @@ impl ManagedCanistersAssert {
         let canister_info = caller.canister_info(self.index_canister_id());
         assert!(
             predicate(&canister_info),
-            "BUG: index canister info does not satisfy predicate. Canister info: {:?}",
-            canister_info
+            "BUG: index canister info does not satisfy predicate. Canister info: {canister_info:?}"
         );
         self
     }
@@ -187,8 +184,7 @@ impl ManagedCanistersAssert {
             let canister_info = caller.canister_info(archive);
             assert!(
                 predicate(&canister_info),
-                "BUG: archive canister info does not satisfy predicate. Canister info: {:?}",
-                canister_info
+                "BUG: archive canister info does not satisfy predicate. Canister info: {canister_info:?}"
             );
         }
         self

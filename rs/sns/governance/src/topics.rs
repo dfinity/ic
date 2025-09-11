@@ -475,7 +475,7 @@ impl fmt::Display for pb::Topic {
             Self::TreasuryAssetManagement => "TreasuryAssetManagement",
             Self::CriticalDappOperations => "CriticalDappOperations",
         };
-        write!(f, "{}", topic_str)
+        write!(f, "{topic_str}")
     }
 }
 

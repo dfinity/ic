@@ -231,7 +231,7 @@ impl RosettaRequestHandler {
             }
             "query_block_range" => {
                 let query_block_range = QueryBlockRangeRequest::try_from(msg.parameters)
-                    .map_err(|err| ApiError::internal_error(format!("{:?}", err)))?;
+                    .map_err(|err| ApiError::internal_error(format!("{err:?}")))?;
                 let mut blocks = vec![];
 
                 let storage = self.ledger.read_blocks().await;
@@ -244,7 +244,7 @@ impl RosettaRequestHandler {
                         .saturating_sub(1),
                     );
                     if storage.contains_block(&lowest_index).map_err(|err| {
-                        ApiError::InvalidBlockId(false, format!("{:?}", err).into())
+                        ApiError::InvalidBlockId(false, format!("{err:?}").into())
                     })? {
                         // TODO: Use block range with rosetta blocks
                         for hb in storage
@@ -270,7 +270,7 @@ impl RosettaRequestHandler {
                 let block_range_response = QueryBlockRangeResponse { blocks };
                 Ok(CallResponse::new(
                     ObjectMap::try_from(block_range_response)
-                        .map_err(|err| ApiError::internal_error(format!("{:?}", err)))?,
+                        .map_err(|err| ApiError::internal_error(format!("{err:?}")))?,
                     idempotent,
                 ))
             }
@@ -616,7 +616,7 @@ impl RosettaRequestHandler {
                     .map_err(|err: TryFromIntError| {
                         ApiError::InternalError(
                             false,
-                            Details::from(format!("Cannot convert timestamp to u64: {}", err)),
+                            Details::from(format!("Cannot convert timestamp to u64: {err}")),
                         )
                     })?,
                     convert::block_id(&genesis_block)?,
@@ -730,14 +730,14 @@ impl RosettaRequestHandler {
 
         let block_with_highest_block_index = block_storage
             .get_latest_verified_hashed_block()
-            .map_err(|e| ApiError::InvalidBlockId(false, format!("{:?}", e).into()))?;
+            .map_err(|e| ApiError::InvalidBlockId(false, format!("{e:?}").into()))?;
 
         let max_block: u64 = request
             .max_block
             .unwrap_or(block_with_highest_block_index.index as i64)
             .try_into()
             .map_err(|err| {
-                ApiError::invalid_request(format!("Max block has to be a valid u64: {}", err))
+                ApiError::invalid_request(format!("Max block has to be a valid u64: {err}"))
             })?;
 
         let limit: u64 = request
@@ -745,11 +745,11 @@ impl RosettaRequestHandler {
             .unwrap_or(MAX_SEARCH_LIMIT as i64)
             .try_into()
             .map_err(|err| {
-                ApiError::invalid_request(format!("Limit has to be a valid u64: {}", err))
+                ApiError::invalid_request(format!("Limit has to be a valid u64: {err}"))
             })?;
 
         let offset: u64 = request.offset.unwrap_or(0).try_into().map_err(|err| {
-            ApiError::invalid_request(format!("Offset has to be a valid u64: {}", err))
+            ApiError::invalid_request(format!("Offset has to be a valid u64: {err}"))
         })?;
 
         if max_block < offset {
@@ -765,8 +765,7 @@ impl RosettaRequestHandler {
             .map(|acc| {
                 icp_ledger::AccountIdentifier::try_from(acc).map_err(|err| {
                     ApiError::invalid_request(format!(
-                        "Account identifier has to be a valid AccountIdentifier: {}",
-                        err
+                        "Account identifier has to be a valid AccountIdentifier: {err}"
                     ))
                 })
             })
@@ -796,8 +795,7 @@ impl RosettaRequestHandler {
             let tx_hash = serde_bytes::ByteBuf::try_from(transaction_identifier)
                 .map_err(|err| {
                     ApiError::invalid_request(format!(
-                        "Transaction identifier hash has to be a valid ByteBuf: {}",
-                        err
+                        "Transaction identifier hash has to be a valid ByteBuf: {err}"
                     ))
                 })?
                 .as_slice()
@@ -832,7 +830,7 @@ impl RosettaRequestHandler {
                     .collect::<Vec<_>>()
                     .as_slice(),
             )
-            .map_err(|e| ApiError::invalid_block_id(format!("Error fetching blocks: {:?}", e)))?;
+            .map_err(|e| ApiError::invalid_block_id(format!("Error fetching blocks: {e:?}")))?;
 
         let mut transactions = vec![];
         for block in blocks.clone().into_iter() {
@@ -923,7 +921,7 @@ fn verify_network_id(canister_id: &CanisterId, net_id: &NetworkIdentifier) -> Re
     verify_network_blockchain(net_id)?;
     let id: CanisterId = net_id
         .try_into()
-        .map_err(|err| ApiError::InvalidNetworkId(false, format!("{:?}", err).into()))?;
+        .map_err(|err| ApiError::InvalidNetworkId(false, format!("{err:?}").into()))?;
     if *canister_id != id {
         return Err(ApiError::InvalidNetworkId(false, "unknown network".into()));
     }
@@ -954,7 +952,7 @@ fn hashed_block_to_rosetta_core_block(
     token_symbol: &str,
 ) -> Result<rosetta_core::objects::Block, ApiError> {
     let block = Block::decode(hashed_block.block.clone())
-        .map_err(|err| ApiError::internal_error(format!("Cannot decode block: {}", err)))?;
+        .map_err(|err| ApiError::internal_error(format!("Cannot decode block: {err}")))?;
     let block_id = convert::block_id(&hashed_block)?;
     let transactions = vec![convert::hashed_block_to_rosetta_core_transaction(
         &hashed_block,

@@ -92,8 +92,7 @@ pub fn split_manifest(
             } else {
                 return Err(ManifestValidationError::InconsistentManifest {
                     reason: format!(
-                        "canister {} is mapped to neither subnet A' ({}) nor subnet B ({})",
-                        canister_id, subnet_a, subnet_b
+                        "canister {canister_id} is mapped to neither subnet A' ({subnet_a}) nor subnet B ({subnet_b})"
                     ),
                 });
             }

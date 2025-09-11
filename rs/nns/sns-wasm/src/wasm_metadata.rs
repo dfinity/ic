@@ -47,19 +47,17 @@ impl MetadataSection {
         }
         if self.name.len() > MAX_METADATA_SECTION_NAME_BYTES {
             errs.push(format!(
-                ".name must fit into at most {} bytes.",
-                MAX_METADATA_SECTION_NAME_BYTES
+                ".name must fit into at most {MAX_METADATA_SECTION_NAME_BYTES} bytes."
             ));
         }
         if self.contents.len() > MAX_METADATA_SECTION_CONTENTS_BYTES {
             errs.push(format!(
-                ".contents must fit into at most {} bytes.",
-                MAX_METADATA_SECTION_CONTENTS_BYTES
+                ".contents must fit into at most {MAX_METADATA_SECTION_CONTENTS_BYTES} bytes."
             ));
         }
         if !errs.is_empty() {
             let errs = errs.join(", ");
-            return Err(format!("Invalid MetadataSection: {}", errs));
+            return Err(format!("Invalid MetadataSection: {errs}"));
         }
 
         Ok(())

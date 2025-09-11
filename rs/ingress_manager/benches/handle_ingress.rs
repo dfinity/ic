@@ -329,7 +329,7 @@ fn handle_ingress(criterion: &mut Criterion) {
              manager: &mut IngressManager| {
                 let messages = prepare(time_source.as_ref(), expiry_range, total_messages as usize);
                 let (pool, message_ids) = setup(time_source.as_ref(), pool_config, log, messages);
-                group.bench_function(format!("handle_ingress({})", ingress_rate), |bench| {
+                group.bench_function(format!("handle_ingress({ingress_rate})"), |bench| {
                     bench.iter_custom(|iters| {
                         let mut elapsed = Duration::from_secs(0);
                         for _ in 0..iters {

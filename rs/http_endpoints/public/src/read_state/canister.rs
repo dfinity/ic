@@ -173,7 +173,7 @@ pub(crate) async fn canister_read_state(
         Ok(request) => request,
         Err(e) => {
             let status = StatusCode::BAD_REQUEST;
-            let text = format!("Malformed request: {:?}", e);
+            let text = format!("Malformed request: {e:?}");
             return (status, text).into_response();
         }
     };
@@ -287,7 +287,7 @@ fn verify_paths(
             [b"canister", canister_id, b"metadata", name] => {
                 let name = String::from_utf8(Vec::from(*name)).map_err(|err| HttpError {
                     status: StatusCode::BAD_REQUEST,
-                    message: format!("Could not parse the custom section name: {}.", err),
+                    message: format!("Could not parse the custom section name: {err}."),
                 })?;
 
                 // Get principal id from byte slice.
@@ -325,7 +325,7 @@ fn verify_paths(
             ] => {
                 let message_id = MessageId::try_from(*request_id).map_err(|_| HttpError {
                     status: StatusCode::BAD_REQUEST,
-                    message: format!("Invalid request id in paths. Maybe the request ID is not of {} bytes in length?!", EXPECTED_MESSAGE_ID_LENGTH)
+                    message: format!("Invalid request id in paths. Maybe the request ID is not of {EXPECTED_MESSAGE_ID_LENGTH} bytes in length?!")
                 })?;
 
                 if let Some(x) = last_request_status_id {
@@ -333,8 +333,7 @@ fn verify_paths(
                         return Err(HttpError {
                             status: StatusCode::BAD_REQUEST,
                             message: format!(
-                                "More than one non-unique request ID exists in request_status paths: {} and {}.",
-                                x, message_id
+                                "More than one non-unique request ID exists in request_status paths: {x} and {message_id}."
                             ),
                         });
                     }
@@ -406,8 +405,7 @@ fn can_read_canister_metadata(
                 return Err(HttpError {
                     status: StatusCode::FORBIDDEN,
                     message: format!(
-                        "Custom section {:.100} can only be requested by the controllers of the canister.",
-                        custom_section_name
+                        "Custom section {custom_section_name:.100} can only be requested by the controllers of the canister."
                     ),
                 });
             }

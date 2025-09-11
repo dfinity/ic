@@ -12,7 +12,7 @@ pub fn handle_stop_dissolve(
     request_type: &RequestType,
 ) -> Result<Result<Option<OperationOutput>, ApiError>, String> {
     let response: ManageNeuronResponse = candid::decode_one(bytes.as_ref())
-        .map_err(|err| format!("Could not decode start/stop disburse response: {}", err))?;
+        .map_err(|err| format!("Could not decode start/stop disburse response: {err}"))?;
     match &response.command {
         Some(Command::Configure(_)) => Ok(Ok(None)),
         Some(Command::Error(err)) => {
@@ -24,7 +24,7 @@ pub fn handle_stop_dissolve(
             } else {
                 Ok(Err(ApiError::TransactionRejected(
                     false,
-                    format!("Could not stop dissolving: {}", err).into(),
+                    format!("Could not stop dissolving: {err}").into(),
                 )))
             }
         }

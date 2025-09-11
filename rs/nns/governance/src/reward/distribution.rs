@@ -95,8 +95,7 @@ impl<Memory: ic_stable_structures::Memory> RewardsDistributionStateMachine<Memor
     ) -> Result<(), String> {
         if self.distributions.contains_key(&day_after_genesis) {
             return Err(format!(
-                "{}Rewards distribution already exists for day_after_genesis: {}",
-                LOG_PREFIX, day_after_genesis
+                "{LOG_PREFIX}Rewards distribution already exists for day_after_genesis: {day_after_genesis}"
             ));
         }
         self.distributions.insert(

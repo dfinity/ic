@@ -717,7 +717,7 @@ impl PocketXNetImpl {
                     }
                 }
                 Err(EncodeStreamError::NoStreamForSubnet(_)) => (),
-                Err(err) => panic!("Unexpected XNetClient error: {}", err),
+                Err(err) => panic!("Unexpected XNetClient error: {err}"),
             }
         }
     }
@@ -2371,7 +2371,7 @@ impl StateMachine {
     ) {
         let mut payload = PayloadBuilder::new();
         let contexts = self.canister_http_request_contexts();
-        assert!(!contexts.is_empty(), "expected '{}' HTTP request", name);
+        assert!(!contexts.is_empty(), "expected '{name}' HTTP request");
         for (id, context) in &contexts {
             let response = f(context);
             payload = payload.http_response(*id, &response);
@@ -2619,8 +2619,7 @@ impl StateMachine {
         }
         if !reached_completion {
             panic!(
-                "The state machine did not reach completion after {} ticks",
-                max_ticks
+                "The state machine did not reach completion after {max_ticks} ticks"
             );
         }
     }
@@ -2630,7 +2629,7 @@ impl StateMachine {
         let error_counter_vec = fetch_counter_vec(&self.metrics_registry, "critical_errors");
         if let Some((metric, _)) = error_counter_vec.into_iter().find(|(_, v)| *v != 0.0) {
             let err: String = metric.get("error").unwrap().to_string();
-            panic!("Critical error {} occurred.", err);
+            panic!("Critical error {err} occurred.");
         }
     }
 
@@ -2858,7 +2857,7 @@ impl StateMachine {
         loop {
             let elapsed = started_at.elapsed();
             if elapsed > Duration::from_secs(5 * 60) {
-                panic!("State hash computation took too long ({:?})", elapsed);
+                panic!("State hash computation took too long ({elapsed:?})");
             }
             match self.state_manager.get_state_hash_at(h) {
                 Ok(hash) => return hash,
@@ -2867,7 +2866,7 @@ impl StateMachine {
                     continue;
                 }
                 Err(e @ StateHashError::Permanent(_)) => {
-                    panic!("Failed to compute state hash: {}", e)
+                    panic!("Failed to compute state hash: {e}")
                 }
             }
         }
@@ -3079,8 +3078,7 @@ impl StateMachine {
             return Ok(());
         }
         Err(format!(
-            "No canister state for canister id {}.",
-            canister_id
+            "No canister state for canister id {canister_id}."
         ))
     }
 
@@ -3154,7 +3152,7 @@ impl StateMachine {
             WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
                 .expect("failed to decode canister ID record")
                 .get_canister_id(),
-            WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+            WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
         }
     }
 
@@ -3326,7 +3324,7 @@ impl StateMachine {
         .map(|res| match res {
             WasmResult::Reply(data) => CanisterSnapshotResponse::decode(&data),
             WasmResult::Reject(reason) => {
-                panic!("take_canister_snapshot call rejected: {}", reason)
+                panic!("take_canister_snapshot call rejected: {reason}")
             }
         })?
     }
@@ -3346,7 +3344,7 @@ impl StateMachine {
         .map(|res| match res {
             WasmResult::Reply(data) => Ok(data),
             WasmResult::Reject(reason) => {
-                panic!("load_canister_snapshot call rejected: {}", reason)
+                panic!("load_canister_snapshot call rejected: {reason}")
             }
         })?
     }
@@ -3365,7 +3363,7 @@ impl StateMachine {
         .map(|res| match res {
             WasmResult::Reply(data) => ReadCanisterSnapshotMetadataResponse::decode(&data),
             WasmResult::Reject(reason) => {
-                panic!("read_canister_snapshot_metadata call rejected: {}", reason)
+                panic!("read_canister_snapshot_metadata call rejected: {reason}")
             }
         })?
     }
@@ -3384,7 +3382,7 @@ impl StateMachine {
         .map(|res| match res {
             WasmResult::Reply(data) => ReadCanisterSnapshotDataResponse::decode(&data),
             WasmResult::Reject(reason) => {
-                panic!("read_canister_snapshot_data call rejected: {}", reason)
+                panic!("read_canister_snapshot_data call rejected: {reason}")
             }
         })?
     }
@@ -3489,8 +3487,7 @@ impl StateMachine {
             WasmResult::Reply(data) => UploadCanisterSnapshotMetadataResponse::decode(&data),
             WasmResult::Reject(reason) => {
                 panic!(
-                    "upload_canister_snapshot_metadata call rejected: {}",
-                    reason
+                    "upload_canister_snapshot_metadata call rejected: {reason}"
                 )
             }
         })?
@@ -3510,7 +3507,7 @@ impl StateMachine {
         .map(|res| match res {
             WasmResult::Reply(data) => Decode!(&data, ()).unwrap(),
             WasmResult::Reject(reason) => {
-                panic!("upload_canister_snapshot_data call rejected: {}", reason)
+                panic!("upload_canister_snapshot_data call rejected: {reason}")
             }
         })
     }
@@ -3638,7 +3635,7 @@ impl StateMachine {
             .map(|res| match res {
                 WasmResult::Reply(data) => UploadChunkReply::decode(&data),
                 WasmResult::Reject(reason) => {
-                    panic!("upload_chunk call rejected: {}", reason)
+                    panic!("upload_chunk call rejected: {reason}")
                 }
             })?
     }
@@ -4172,10 +4169,10 @@ impl StateMachine {
         let replicated_state = self.state_manager.get_latest_state().take();
         let memory = &replicated_state
             .canister_state(&canister_id)
-            .unwrap_or_else(|| panic!("Canister {} does not exist", canister_id))
+            .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"))
             .execution_state
             .as_ref()
-            .unwrap_or_else(|| panic!("Canister {} has no module", canister_id))
+            .unwrap_or_else(|| panic!("Canister {canister_id} has no module"))
             .stable_memory;
 
         let mut dst = vec![0u8; memory.size.get() * WASM_PAGE_SIZE_IN_BYTES];
@@ -4189,7 +4186,7 @@ impl StateMachine {
         let replicated_state = self.state_manager.get_latest_state().take();
         let canister_state = replicated_state
             .canister_state(&canister_id)
-            .unwrap_or_else(|| panic!("Canister {} does not exist", canister_id));
+            .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"));
         canister_state.system_state.canister_log.clone()
     }
 
@@ -4214,13 +4211,13 @@ impl StateMachine {
         let (height, mut replicated_state) = self.state_manager.take_tip();
         let canister_state = replicated_state
             .canister_state_mut(&canister_id)
-            .unwrap_or_else(|| panic!("Canister {} does not exist", canister_id));
+            .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"));
         let size = data.len().div_ceil(WASM_PAGE_SIZE_IN_BYTES);
         let memory = Memory::new(PageMap::from(data), NumWasmPages::new(size));
         canister_state
             .execution_state
             .as_mut()
-            .unwrap_or_else(|| panic!("Canister {} has no module", canister_id))
+            .unwrap_or_else(|| panic!("Canister {canister_id} has no module"))
             .stable_memory = memory;
         self.state_manager.commit_and_certify(
             replicated_state,
@@ -4239,7 +4236,7 @@ impl StateMachine {
         let state = self.state_manager.get_latest_state().take();
         state
             .canister_state(canister_id)
-            .unwrap_or_else(|| panic!("Canister {} not found", canister_id))
+            .unwrap_or_else(|| panic!("Canister {canister_id} not found"))
             .scheduler_state
             .total_query_stats
             .clone()
@@ -4254,7 +4251,7 @@ impl StateMachine {
         let (h, mut state) = self.state_manager.take_tip();
         state
             .canister_state_mut(canister_id)
-            .unwrap_or_else(|| panic!("Canister {} not found", canister_id))
+            .unwrap_or_else(|| panic!("Canister {canister_id} not found"))
             .scheduler_state
             .total_query_stats = total_query_stats;
 
@@ -4275,7 +4272,7 @@ impl StateMachine {
         let state = self.state_manager.get_latest_state().take();
         state
             .canister_state(&canister_id)
-            .unwrap_or_else(|| panic!("Canister {} not found", canister_id))
+            .unwrap_or_else(|| panic!("Canister {canister_id} not found"))
             .system_state
             .balance()
             .get()
@@ -4290,7 +4287,7 @@ impl StateMachine {
         let (height, mut state) = self.state_manager.take_tip();
         let canister_state = state
             .canister_state_mut(&canister_id)
-            .unwrap_or_else(|| panic!("Canister {} not found", canister_id));
+            .unwrap_or_else(|| panic!("Canister {canister_id} not found"));
         canister_state
             .system_state
             .add_cycles(Cycles::from(amount), CyclesUseCase::NonConsumed);

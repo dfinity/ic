@@ -156,8 +156,7 @@ mod tests {
             assert_eq!(
                 expected_traversal,
                 traverse(&state, visitor).0,
-                "unexpected traversal for certification_version: {:?}",
-                certification_version
+                "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
     }
@@ -233,8 +232,7 @@ mod tests {
             assert_eq!(
                 expected_traversal,
                 traverse(&state, visitor).0,
-                "unexpected traversal for certification_version: {:?}",
-                certification_version
+                "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
     }
@@ -349,8 +347,7 @@ mod tests {
             assert_eq!(
                 expected_traversal,
                 traverse(&state, visitor).0,
-                "unexpected traversal for certification_version: {:?}",
-                certification_version
+                "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
     }
@@ -450,8 +447,7 @@ mod tests {
             assert_eq!(
                 expected_traversal,
                 traverse(&state, visitor).0,
-                "unexpected traversal for certification_version: {:?}",
-                certification_version
+                "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
     }
@@ -617,8 +613,7 @@ mod tests {
             assert_eq!(
                 expected_traversal,
                 traverse(&state, visitor).0,
-                "unexpected traversal for certification_version: {:?}",
-                certification_version
+                "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
     }
@@ -673,8 +668,7 @@ mod tests {
             assert_eq!(
                 expected_traversal,
                 traverse(&state, visitor).0,
-                "unexpected traversal for certification_version: {:?}",
-                certification_version
+                "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
     }
@@ -847,8 +841,7 @@ mod tests {
             assert_eq!(
                 expected_traversal,
                 traverse(&state, visitor).0,
-                "unexpected traversal for certification_version: {:?}",
-                certification_version
+                "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
     }
@@ -1075,8 +1068,7 @@ mod tests {
             assert_eq!(
                 expected_traversal,
                 traverse(&state, visitor).0,
-                "unexpected traversal for certification_version: {:?}",
-                certification_version
+                "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
     }
@@ -1168,8 +1160,7 @@ mod tests {
             assert_eq!(
                 expected_traversal,
                 traverse(&state, visitor).0,
-                "unexpected traversal for certification_version: {:?}",
-                certification_version
+                "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
     }

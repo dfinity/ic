@@ -133,10 +133,7 @@ fn compute_message_sizes(state: &ReplicatedState, begin: u64, end: u64) -> usize
         // Messages should be at least 35 bytes.
         assert!(
             size as u64 > (end - begin) * 35,
-            "size {}, begin {}, end {}",
-            size,
-            begin,
-            end
+            "size {size}, begin {begin}, end {end}"
         );
     } else {
         assert_eq!(begin, end);

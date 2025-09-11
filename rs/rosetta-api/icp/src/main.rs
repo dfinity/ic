@@ -95,12 +95,12 @@ impl ParsedNetworkConfig {
                 Environment::Production | Environment::Test => MAINNET_URL,
             },
         };
-        let ic_url = Url::parse(url_str).map_err(|e| format!("Unable to parse --ic-url: {}", e))?;
+        let ic_url = Url::parse(url_str).map_err(|e| format!("Unable to parse --ic-url: {e}"))?;
 
         let root_key = match config.root_key {
             Some(root_key_path) => Some(
                 parse_threshold_sig_key(root_key_path.as_path())
-                    .map_err(|e| format!("Unable to parse root key from file: {}", e))?,
+                    .map_err(|e| format!("Unable to parse root key from file: {e}"))?,
             ),
             None => {
                 match environment {
@@ -144,15 +144,14 @@ impl ParsedCanisterConfig {
         let ledger_canister_id = match config.ledger_canister_id {
             Some(explicit_value) => CanisterId::unchecked_from_principal(
                 PrincipalId::from_str(&explicit_value).map_err(|e| {
-                    format!("Invalid ledger canister ID '{}': {}", explicit_value, e)
+                    format!("Invalid ledger canister ID '{explicit_value}': {e}")
                 })?,
             ),
             None => match environment {
                 Environment::Test => CanisterId::unchecked_from_principal(
                     PrincipalId::from_str(TEST_LEDGER_CANISTER_ID).map_err(|e| {
                         format!(
-                            "Invalid test ledger canister ID '{}': {}",
-                            TEST_LEDGER_CANISTER_ID, e
+                            "Invalid test ledger canister ID '{TEST_LEDGER_CANISTER_ID}': {e}"
                         )
                     })?,
                 ),
@@ -173,7 +172,7 @@ impl ParsedCanisterConfig {
         let governance_canister_id = match config.governance_canister_id {
             Some(explicit_value) => CanisterId::unchecked_from_principal(
                 PrincipalId::from_str(&explicit_value).map_err(|e| {
-                    format!("Invalid governance canister ID '{}': {}", explicit_value, e)
+                    format!("Invalid governance canister ID '{explicit_value}': {e}")
                 })?,
             ),
             None => GOVERNANCE_CANISTER_ID,
@@ -396,7 +395,7 @@ async fn main() -> std::io::Result<()> {
         } else {""};
         (e, msg)
     })
-    .unwrap_or_else(|(e, is_403)| panic!("Failed to initialize ledger client{}: {:?}", is_403, e));
+    .unwrap_or_else(|(e, is_403)| panic!("Failed to initialize ledger client{is_403}: {e:?}"));
 
     let ledger = Arc::new(client);
     let canister_id_str = canister_config.ledger_canister_id.to_string();

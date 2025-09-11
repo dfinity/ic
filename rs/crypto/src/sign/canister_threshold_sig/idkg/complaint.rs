@@ -28,7 +28,7 @@ pub fn verify_complaint(
     let complainer_index = index_of_complainer(complainer_id, transcript)?;
     let internal_complaint = IDkgComplaintInternal::try_from(complaint).map_err(|e| {
         IDkgVerifyComplaintError::SerializationError {
-            internal_error: format!("failed to deserialize complaint: {:?}", e),
+            internal_error: format!("failed to deserialize complaint: {e:?}"),
         }
     })?;
     let (dealer_index, internal_dealing) =

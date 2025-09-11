@@ -67,7 +67,7 @@ impl WasmCompilerProxy {
         argv: &[String],
     ) -> HypervisorResult<Self> {
         let (socket_a, socket_b) = UnixStream::pair()
-            .map_err(|e| unexpected(&format!("Failed to create a socket: {}", e)))?;
+            .map_err(|e| unexpected(&format!("Failed to create a socket: {e}")))?;
         use std::os::unix::io::AsRawFd;
 
         let _ignore = launcher
@@ -115,8 +115,7 @@ impl WasmCompilerProxy {
                 })
                 .map_err(|e| {
                     unexpected(&format!(
-                        "Compiler proxy failed to spawn socket reader thread: {}",
-                        e
+                        "Compiler proxy failed to spawn socket reader thread: {e}"
                     ))
                 })?
         };

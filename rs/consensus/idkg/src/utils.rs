@@ -149,15 +149,13 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
                     idkg_payload
                 } else {
                     return Err(format!(
-                        "transcript(): chain look up failed {:?}: IDkgPayload not found",
-                        transcript_ref
+                        "transcript(): chain look up failed {transcript_ref:?}: IDkgPayload not found"
                     ));
                 }
             }
             Err(err) => {
                 return Err(format!(
-                    "transcript(): chain look up failed {:?}: {:?}",
-                    transcript_ref, err
+                    "transcript(): chain look up failed {transcript_ref:?}: {err:?}"
                 ));
             }
         };
@@ -166,8 +164,7 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
             .idkg_transcripts
             .get(&transcript_ref.transcript_id)
             .ok_or(format!(
-                "transcript(): missing idkg_transcript: {:?}",
-                transcript_ref
+                "transcript(): missing idkg_transcript: {transcript_ref:?}"
             ))
             .cloned()
     }
@@ -383,14 +380,14 @@ pub fn inspect_idkg_chain_key_initializations(
             .clone()
             .ok_or("Failed to find key_id in ecdsa_initializations")?
             .try_into()
-            .map_err(|err| format!("Error reading ECDSA key_id: {:?}", err))?;
+            .map_err(|err| format!("Error reading ECDSA key_id: {err:?}"))?;
 
         let dealings = ecdsa_init
             .dealings
             .as_ref()
             .ok_or("Failed to find dealings in ecdsa_initializations")?
             .try_into()
-            .map_err(|err| format!("Error reading ECDSA dealings: {:?}", err))?;
+            .map_err(|err| format!("Error reading ECDSA dealings: {err:?}"))?;
 
         initial_dealings_per_key_id.insert(
             MasterPublicKeyId::Ecdsa(ecdsa_key_id).try_into().unwrap(),
@@ -404,7 +401,7 @@ pub fn inspect_idkg_chain_key_initializations(
             .clone()
             .ok_or("Failed to find key_id in chain_key_initializations")?
             .try_into()
-            .map_err(|err| format!("Error reading Master public key_id: {:?}", err))?;
+            .map_err(|err| format!("Error reading Master public key_id: {err:?}"))?;
 
         // Skip non-idkg keys
         let key_id = match key_id.try_into() {
@@ -423,7 +420,7 @@ pub fn inspect_idkg_chain_key_initializations(
 
         let dealings = dealings
             .try_into()
-            .map_err(|err| format!("Error reading initial IDkg dealings: {:?}", err))?;
+            .map_err(|err| format!("Error reading initial IDkg dealings: {err:?}"))?;
 
         initial_dealings_per_key_id.insert(key_id, dealings);
     }

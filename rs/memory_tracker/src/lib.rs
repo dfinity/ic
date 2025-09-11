@@ -748,9 +748,7 @@ fn map_unaccessed_pages(
     debug_assert!(
         min_prefetch_range.start >= max_prefetch_range.start
             && min_prefetch_range.end <= max_prefetch_range.end,
-        "Error checking min_prefetch_range:{:?} ⊆ max_prefetch_range:{:?}",
-        min_prefetch_range,
-        max_prefetch_range
+        "Error checking min_prefetch_range:{min_prefetch_range:?} ⊆ max_prefetch_range:{max_prefetch_range:?}"
     );
 
     let instructions = tracker

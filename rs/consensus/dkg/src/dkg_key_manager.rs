@@ -484,7 +484,7 @@ impl DkgKeyManager {
             .set(summary.registry_version.get() as i64);
 
         for (tag, current_transcript) in summary.current_transcripts() {
-            let metric_label = &format!("{:?}", tag);
+            let metric_label = &format!("{tag:?}");
 
             self.metrics
                 .dkg_instance_id
@@ -545,7 +545,7 @@ fn dkg_id_log_msg(id: &NiDkgId) -> String {
     // If the target is local (which it is usually), we don't log the target
     let remote = match id.target_subnet {
         NiDkgTargetSubnet::Local => String::from(""),
-        NiDkgTargetSubnet::Remote(remote_id) => format!(", remote_target: {:?}", remote_id),
+        NiDkgTargetSubnet::Remote(remote_id) => format!(", remote_target: {remote_id:?}"),
     };
 
     format!(

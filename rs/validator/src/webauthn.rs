@@ -241,7 +241,7 @@ mod tests {
                 RSA_PK_COSE_DER_WRAPPED_HEX.as_ref(),
                 RSA_WEBAUTHN_SIG_HELLO_HEX.as_bytes(),
             );
-            println!("{}", pk);
+            println!("{pk}");
             // Replace the correct signature with a malformed one.
             let sig = WebAuthnSignature::new(
                 sig.authenticator_data(),

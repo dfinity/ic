@@ -330,7 +330,7 @@ pub mod internal {
                 .generate_idkg_dealing_encryption_keys
                 .then(|| {
                     generate_idkg_dealing_encryption_keys(local_vault.as_ref()).unwrap_or_else(
-                        |e| panic!("Error generating I-DKG dealing encryption keys: {:?}", e),
+                        |e| panic!("Error generating I-DKG dealing encryption keys: {e:?}"),
                     )
                 });
             let tls_certificate = node_keys_to_generate

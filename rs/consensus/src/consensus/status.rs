@@ -61,7 +61,7 @@ pub fn should_halt(
 ) -> Option<bool> {
     let registry_version = pool.registry_version(height).warn_if_none(
         logger,
-        format!("Failed to get the registry version at height {}", height),
+        format!("Failed to get the registry version at height {height}"),
     )?;
 
     let upgrading = lookup_replica_version(registry_client, subnet_id, logger, registry_version)
@@ -75,8 +75,7 @@ pub fn should_halt(
         .warn_if_none(
             logger,
             format!(
-                "Failed to check if the registry version at height {} instructs the subnet to halt!",
-                height,
+                "Failed to check if the registry version at height {height} instructs the subnet to halt!",
             ),
         );
 

@@ -147,14 +147,14 @@ impl std::fmt::Display for IngressMessageValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             IngressMessageValidationError::IngressMessageTooLarge { max, actual } => {
-                write!(f, "Ingress Message is too large {} > {}", actual, max)
+                write!(f, "Ingress Message is too large {actual} > {max}")
             }
             IngressMessageValidationError::IngressMessageAlreadyKnown => write!(
                 f,
                 "Ingress Message is already known to the IngressHistoryReader",
             ),
             IngressMessageValidationError::InvalidRequest(error) => {
-                write!(f, "Ingress Message failed validation: {}", error)
+                write!(f, "Ingress Message failed validation: {error}")
             }
         }
     }

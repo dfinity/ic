@@ -366,7 +366,7 @@ pub fn encode_manifest(manifest: &Manifest) -> Vec<u8> {
 /// Deserializes the manifest from a byte array.
 pub fn decode_manifest(bytes: &[u8]) -> Result<Manifest, String> {
     pb::Manifest::proxy_decode(bytes)
-        .map_err(|err| format!("failed to convert Manifest proto into an object: {}", err))
+        .map_err(|err| format!("failed to convert Manifest proto into an object: {err}"))
 }
 
 pub fn encode_meta_manifest(meta_manifest: &MetaManifest) -> Vec<u8> {
@@ -376,8 +376,7 @@ pub fn encode_meta_manifest(meta_manifest: &MetaManifest) -> Vec<u8> {
 pub fn decode_meta_manifest(bytes: Chunk) -> Result<MetaManifest, String> {
     pb::MetaManifest::proxy_decode(bytes.as_bytes()).map_err(|err| {
         format!(
-            "failed to convert MetaManifest proto into an object: {}",
-            err
+            "failed to convert MetaManifest proto into an object: {err}"
         )
     })
 }
@@ -503,7 +502,7 @@ impl StateSyncMessage {
                             encoded_manifest.len(),
                         );
                         let sub_manifest = encoded_manifest.get(start..end).unwrap_or_else(||
-                            panic!("We cannot get the {}th piece of the encoded manifest. The manifest and/or meta-manifest must be in abnormal state.", index)
+                            panic!("We cannot get the {index}th piece of the encoded manifest. The manifest and/or meta-manifest must be in abnormal state.")
                         );
                         payload = sub_manifest.to_vec();
                     } else {

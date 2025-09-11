@@ -62,7 +62,7 @@ impl std::fmt::Display for CyclesAccountManagerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CyclesAccountManagerError::ContractViolation(msg) => {
-                write!(f, "Contract violation: {}", msg)
+                write!(f, "Contract violation: {msg}")
             }
         }
     }
@@ -1178,8 +1178,7 @@ impl CyclesAccountManager {
     ) -> Result<Cycles, CyclesAccountManagerError> {
         if canister_id != CYCLES_MINTING_CANISTER_ID {
             let error_str = format!(
-                "ic0.mint_cycles128 cannot be executed on non Cycles Minting Canister: {} != {}",
-                canister_id, CYCLES_MINTING_CANISTER_ID
+                "ic0.mint_cycles128 cannot be executed on non Cycles Minting Canister: {canister_id} != {CYCLES_MINTING_CANISTER_ID}"
             );
             Err(CyclesAccountManagerError::ContractViolation(error_str))
         } else {
@@ -1444,9 +1443,7 @@ mod tests {
 
         assert!(
             payload_size <= MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE,
-            "Payload size: {}, is greater than MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: {}.",
-            payload_size,
-            MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE
+            "Payload size: {payload_size}, is greater than MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: {MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE}."
         );
     }
 

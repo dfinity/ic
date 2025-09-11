@@ -40,7 +40,7 @@ pub fn remove_neuron_from_follower_index(index: &mut FollowerIndex, neuron: &Neu
                 let Some(followee_id) = followee_id else {
                     let alias = alias
                         .as_ref()
-                        .map(|alias| format!(" ({})", alias))
+                        .map(|alias| format!(" ({alias})"))
                         .unwrap_or_default();
                     log!(
                         ERROR,
@@ -107,7 +107,7 @@ pub fn add_neuron_to_follower_index(
             let Some(followee_id) = followee_id else {
                 let alias = alias
                     .as_ref()
-                    .map(|alias| format!(" ({})", alias))
+                    .map(|alias| format!(" ({alias})"))
                     .unwrap_or_default();
                 log!(
                     ERROR,

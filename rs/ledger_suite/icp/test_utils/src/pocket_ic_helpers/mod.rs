@@ -36,8 +36,7 @@ pub fn install_canister(
     pocket_ic.add_cycles(canister_id, STARTING_CYCLES_PER_CANISTER);
     let subnet_id = pocket_ic.get_subnet(canister_id).unwrap();
     println!(
-        "Installed the {} canister ({}) onto {}",
-        name, canister_id, subnet_id
+        "Installed the {name} canister ({canister_id}) onto {subnet_id}"
     );
 }
 
@@ -59,7 +58,7 @@ where
             panic!("{canister_id}.{method} query failed with error {err} (caller: {caller})");
         }
         Ok(res) => Decode!(&res, O)
-            .unwrap_or_else(|_| panic!("error decoding response to {} query", method)),
+            .unwrap_or_else(|_| panic!("error decoding response to {method} query")),
     }
 }
 
@@ -81,6 +80,6 @@ where
             panic!("{canister_id}.{method} failed with error {err} (caller: {caller})");
         }
         Ok(res) => Decode!(&res, O)
-            .unwrap_or_else(|_| panic!("error decoding response to {} call", method)),
+            .unwrap_or_else(|_| panic!("error decoding response to {method} call")),
     }
 }

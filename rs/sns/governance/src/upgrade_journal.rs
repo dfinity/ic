@@ -224,7 +224,7 @@ pub fn serve_journal(journal: UpgradeJournal) -> ic_http_types::HttpResponse {
 
     match serialize_journal_entries(&journal) {
         Err(err) => {
-            HttpResponseBuilder::server_error(format!("Failed to encode journal: {}", err)).build()
+            HttpResponseBuilder::server_error(format!("Failed to encode journal: {err}")).build()
         }
         Ok(body) => HttpResponseBuilder::ok()
             .header("Content-Type", "application/json")

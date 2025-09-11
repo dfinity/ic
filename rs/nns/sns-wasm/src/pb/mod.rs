@@ -122,9 +122,9 @@ impl std::fmt::Display for SnsVersion {
         versions_str.insert("Archive", hex::encode(&self.archive_wasm_hash));
 
         let json = serde_json::to_string(&versions_str)
-            .unwrap_or_else(|e| format!("Unable to serialize SnsVersion: {}", e));
+            .unwrap_or_else(|e| format!("Unable to serialize SnsVersion: {e}"));
 
-        write!(f, "{}", json)
+        write!(f, "{json}")
     }
 }
 
@@ -339,8 +339,7 @@ impl FromStr for SnsCanisterType {
             "archive" => Ok(SnsCanisterType::Archive),
             "index" => Ok(SnsCanisterType::Index),
             _ => Err(format!(
-                "from_str is not yet implemented or that is not a valid type: {}",
-                input
+                "from_str is not yet implemented or that is not a valid type: {input}"
             )),
         }
     }

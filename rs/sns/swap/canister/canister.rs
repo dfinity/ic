@@ -185,8 +185,7 @@ async fn do_get_canister_status(
         .map(CanisterStatusResultV2::from)
         .unwrap_or_else(|err| {
             panic!(
-                "Couldn't get canister_status of {}. Err: {:#?}",
-                canister_id, err
+                "Couldn't get canister_status of {canister_id}. Err: {err:#?}"
             )
         })
 }
@@ -357,8 +356,7 @@ fn reset_timers(_request: ResetTimersRequest) -> ResetTimersResponse {
                 < reset_timers_cool_down_interval_seconds
             {
                 panic!(
-                    "Reset has already been called within the past {:?} seconds",
-                    reset_timers_cool_down_interval_seconds
+                    "Reset has already been called within the past {reset_timers_cool_down_interval_seconds:?} seconds"
                 );
             }
         }
@@ -450,8 +448,7 @@ fn canister_post_upgrade() {
         Err(err) => {
             panic!(
                 "Error deserializing canister state post-upgrade. \
-                CANISTER HAS BROKEN STATE!!!!. Error: {:?}",
-                err
+                CANISTER HAS BROKEN STATE!!!!. Error: {err:?}"
             );
         }
         Ok(proto) => set_state(proto),
@@ -461,8 +458,7 @@ fn canister_post_upgrade() {
     // rolls back.
     swap().rebuild_indexes().unwrap_or_else(|err| {
         panic!(
-            "Error rebuilding the Swap canister indexes. The stable memory has been exhausted: {}",
-            err
+            "Error rebuilding the Swap canister indexes. The stable memory has been exhausted: {err}"
         )
     });
 

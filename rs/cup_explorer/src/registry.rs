@@ -31,7 +31,7 @@ impl RegistryCanisterClient {
         });
 
         let content = std::fs::read_to_string(nns_pem_path.as_path()).unwrap();
-        println!("NNS public key being used: \n{}", content);
+        println!("NNS public key being used: \n{content}");
 
         let nns_public_key = parse_threshold_sig_key(nns_pem_path.as_path()).unwrap();
 
@@ -49,8 +49,7 @@ impl RegistryClient for RegistryCanisterClient {
         version: RegistryVersion,
     ) -> RegistryClientVersionedResult<Vec<u8>> {
         println!(
-            "Getting registry value of key {} at version {}...",
-            key, version
+            "Getting registry value of key {key} at version {version}..."
         );
 
         let canister = self.0.clone();
@@ -121,9 +120,9 @@ pub(crate) async fn get_nodes(
                         Some(version),
                     )
                     .await
-                    .unwrap_or_else(|e| panic!("failed to get node record {}: {}", node_id, e));
+                    .unwrap_or_else(|e| panic!("failed to get node record {node_id}: {e}"));
                 let record = NodeRecord::decode(&node_record_bytes[..]).unwrap_or_else(|e| {
-                    panic!("failed to deserialize node record {}: {}", node_id, e)
+                    panic!("failed to deserialize node record {node_id}: {e}")
                 });
                 (node_id, record)
             })

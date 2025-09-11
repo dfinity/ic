@@ -83,7 +83,7 @@ async fn run<Network: BlockchainNetwork>(network: Network, uds_path: PathBuf) {
             Err(status) => match status.code() {
                 tonic::Code::Cancelled | tonic::Code::Unavailable => continue,
                 _ => {
-                    println!("status = {:?}", status);
+                    println!("status = {status:?}");
                     sleep(interval_sleep_ms).await;
                     continue;
                 }

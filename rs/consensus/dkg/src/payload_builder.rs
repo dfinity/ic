@@ -502,8 +502,7 @@ pub fn get_dkg_summary_from_cup_contents(
             .map_err(|err| format!("IDkg key combined with NiDkg initialization: {err}"))?;
         let transcript = initial_ni_dkg_transcript_from_registry_record(record).map_err(|err| {
             format!(
-                "Decoding high-threshold DKG for key-id {} failed: {}",
-                key_id, err
+                "Decoding high-threshold DKG for key-id {key_id} failed: {err}"
             )
         })?;
         transcripts.insert(NiDkgTag::HighThresholdForKey(key_id), transcript);
@@ -624,8 +623,7 @@ fn get_dkg_interval_length(
         .map_err(DkgPayloadCreationError::FailedToGetDkgIntervalSettingFromRegistry)?
         .ok_or_else(|| {
             panic!(
-                "No subnet record found for registry version={:?} and subnet_id={:?}",
-                version, subnet_id,
+                "No subnet record found for registry version={version:?} and subnet_id={subnet_id:?}",
             )
         })
 }
@@ -808,8 +806,7 @@ fn get_node_list(
         .map_err(DkgPayloadCreationError::FailedToGetSubnetMemberListFromRegistry)?
         .unwrap_or_else(|| {
             panic!(
-                "No subnet record found for registry version={:?} and subnet_id={:?}",
-                registry_version, subnet_id,
+                "No subnet record found for registry version={registry_version:?} and subnet_id={subnet_id:?}",
             )
         })
         .into_iter()
@@ -966,7 +963,7 @@ fn create_remote_dkg_config_for_key_id(
         registry_version,
         Some(resharing_transcript.clone()),
     )
-    .map_err(|err| Box::new((dkg_id, format!("{:?}", err))))
+    .map_err(|err| Box::new((dkg_id, format!("{err:?}"))))
 }
 
 fn create_remote_dkg_config(

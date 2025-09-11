@@ -559,7 +559,7 @@ impl IngressManager {
                 }
                 err => InvalidIngressPayloadReason::IngressValidationError(
                     message_id,
-                    format!("{}", err),
+                    format!("{err}"),
                 ),
             }));
         }

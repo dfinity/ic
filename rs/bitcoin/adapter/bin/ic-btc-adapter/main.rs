@@ -21,7 +21,7 @@ pub async fn main() {
     let config = match cli.get_config() {
         Ok(config) => config,
         Err(err) => {
-            panic!("An error occurred while getting the config: {}", err);
+            panic!("An error occurred while getting the config: {err}");
         }
     };
     let (log, _async_log_guard) = new_replica_logger_from_config(&config.logger);

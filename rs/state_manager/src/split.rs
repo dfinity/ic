@@ -41,7 +41,7 @@ pub fn resolve_ranges_and_split(
     metrics_registry: &MetricsRegistry,
     log: ReplicaLogger,
 ) -> Result<(), String> {
-    let canister_id_ranges = resolve(retain, drop).map_err(|e| format!("{:?}", e))?;
+    let canister_id_ranges = resolve(retain, drop).map_err(|e| format!("{e:?}"))?;
 
     split(
         root,
@@ -89,7 +89,7 @@ pub fn split(
     let mut routing_table = RoutingTable::new();
     routing_table
         .assign_ranges(canister_id_ranges, subnet_id)
-        .map_err(|e| format!("{:?}", e))?;
+        .map_err(|e| format!("{e:?}"))?;
 
     // Split the state.
     let split_state = state.split(subnet_id, &routing_table, new_subnet_batch_time)?;
@@ -211,7 +211,7 @@ fn write_checkpoint(
         &metrics.checkpoint_metrics,
         fd_factory.clone(),
     )
-    .map_err(|e| format!("Failed to write checkpoint: {}", e))?;
+    .map_err(|e| format!("Failed to write checkpoint: {e}"))?;
 
     validate_and_finalize_checkpoint_and_remove_unverified_marker(
         &cp_layout,
@@ -221,7 +221,7 @@ fn write_checkpoint(
         &metrics.checkpoint_metrics,
         Some(thread_pool),
     )
-    .map_err(|e| format!("Failed to validate checkpoint: {}", e))?;
+    .map_err(|e| format!("Failed to validate checkpoint: {e}"))?;
 
     Ok(())
 }

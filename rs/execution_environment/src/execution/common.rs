@@ -53,7 +53,7 @@ pub(crate) fn validate_canister(canister: &CanisterState) -> Result<(), UserErro
             CanisterStatusType::Stopping => ErrorCode::CanisterStopping,
             CanisterStatusType::Stopped => ErrorCode::CanisterStopped,
         };
-        let err_msg = format!("Canister {} is not running", canister_id);
+        let err_msg = format!("Canister {canister_id} is not running");
         return Err(UserError::new(err_code, err_msg));
     }
     Ok(())
@@ -157,7 +157,7 @@ pub(crate) fn action_to_ingress_response(
                 time,
                 state: IngressState::Failed(UserError::new(
                     ErrorCode::CanisterDidNotReply,
-                    format!("Canister {} did not reply to the call", canister_id),
+                    format!("Canister {canister_id} did not reply to the call"),
                 )),
             })
         }

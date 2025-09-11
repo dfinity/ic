@@ -57,8 +57,7 @@ pub fn get_state_from_network_id(
 pub fn convert_timestamp_to_millis(timestamp_nanos: u64) -> anyhow::Result<u64> {
     let millis = Duration::from_nanos(timestamp_nanos).as_millis();
     u64::try_from(millis).context(format!(
-        "Failed to convert timestamp to milliseconds: {}",
-        millis
+        "Failed to convert timestamp to milliseconds: {millis}"
     ))
 }
 
@@ -83,23 +82,23 @@ pub fn get_rosetta_block_from_partial_block_identifier(
         ) {
             (None, Some(hash)) => {
                 let hash_bytes = hex::decode(hash)
-                    .with_context(|| format!("Invalid block hash provided: {:?}", hash))?;
+                    .with_context(|| format!("Invalid block hash provided: {hash:?}"))?;
                 let hash_buf = ByteBuf::from(hash_bytes);
                 storage_client
                     .get_block_by_hash(hash_buf.clone())
-                    .with_context(|| format!("Unable to retrieve block with hash: {:?}", hash_buf))?
-                    .with_context(|| format!("Block with hash {} could not be found", hash))?
+                    .with_context(|| format!("Unable to retrieve block with hash: {hash_buf:?}"))?
+                    .with_context(|| format!("Block with hash {hash} could not be found"))?
             }
 
             (Some(block_idx), None) => storage_client
                 .get_block_at_idx(block_idx)
-                .with_context(|| format!("Unable to retrieve block with idx: {}", block_idx))?
-                .with_context(|| format!("Block at index {} could not be found", block_idx))?,
+                .with_context(|| format!("Unable to retrieve block with idx: {block_idx}"))?
+                .with_context(|| format!("Block at index {block_idx} could not be found"))?,
             (Some(block_idx), Some(hash)) => {
                 let rosetta_block = storage_client
                     .get_block_at_idx(block_idx)
-                    .with_context(|| format!("Unable to retrieve block with idx: {}", block_idx))?
-                    .with_context(|| format!("Block at index {} could not be found", block_idx))?;
+                    .with_context(|| format!("Unable to retrieve block with idx: {block_idx}"))?
+                    .with_context(|| format!("Block at index {block_idx} could not be found"))?;
                 if &hex::encode(rosetta_block.clone().get_block_hash()) != hash {
                     bail!(
                         "Both index {} and hash {} were provided but they do not match the same block. Actual index {} and hash {}",

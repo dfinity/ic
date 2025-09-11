@@ -471,8 +471,7 @@ fn reset_timers(_request: ResetTimersRequest) -> ResetTimersResponse {
                 assert!(
                     now_seconds().saturating_sub(last_reset_timestamp_seconds)
                         >= reset_timers_cool_down_interval_seconds,
-                    "Reset has already been called within the past {:?} seconds",
-                    reset_timers_cool_down_interval_seconds
+                    "Reset has already been called within the past {reset_timers_cool_down_interval_seconds:?} seconds"
                 );
             }
         }

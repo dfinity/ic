@@ -515,7 +515,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
             crypto.is_ok => result.is_ok(),
             crypto.error => log_err(result.as_ref().err()),
             crypto.complaint => if let Ok(ref content) = result {
-                Some(format!("{:?}", content))
+                Some(format!("{content:?}"))
             } else {
                 None
             },

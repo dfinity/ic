@@ -225,8 +225,7 @@ mod tests {
                 !mapped_devices
                     .iter()
                     .any(|p| p.file_name() == Some(device.as_ref())),
-                "Device {} should be cleaned up",
-                device
+                "Device {device} should be cleaned up"
             );
         }
     }

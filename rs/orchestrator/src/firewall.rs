@@ -132,16 +132,14 @@ impl Firewall {
             (Err(err), Ok(None)) => Err(OrchestratorError::RoleError(
                 format!(
                     "The node is not assigned to any subnet \
-                    but we failed to retrieve the `boundary_node_record` from the registry: {}",
-                    err
+                    but we failed to retrieve the `boundary_node_record` from the registry: {err}"
                 ),
                 registry_version,
             )),
             (Err(err_1), Err(err_2)) => Err(OrchestratorError::RoleError(
                 format!(
                     "Failed to retrieve both the `boundary_node_record` \
-                    and the `subnet_id` from the registry: \n{}\n{}",
-                    err_1, err_2
+                    and the `subnet_id` from the registry: \n{err_1}\n{err_2}"
                 ),
                 registry_version,
             )),
@@ -933,7 +931,7 @@ mod tests {
 
         let golden = String::from_utf8(golden_bytes.to_vec()).unwrap();
         let nftables = std::fs::read_to_string(&nftables_config_path).unwrap();
-        let file_name = format!("nftables_{}.conf", label);
+        let file_name = format!("nftables_{label}.conf");
         if nftables != golden {
             maybe_write_golden(nftables, &file_name);
             panic!(

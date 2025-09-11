@@ -115,8 +115,7 @@ impl Orchestrator {
         );
         UtilityCommand::notify_host(
             format!(
-                "node-id {}: starting with version {}",
-                node_id, replica_version
+                "node-id {node_id}: starting with version {replica_version}"
             )
             .as_str(),
             1,
@@ -265,7 +264,7 @@ impl Orchestrator {
             .await
             .and_then(|v| {
                 HostosVersion::try_from(v)
-                    .map_err(|e| format!("Unable to parse HostOS version: {:?}", e))
+                    .map_err(|e| format!("Unable to parse HostOS version: {e:?}"))
             });
 
         let hostos_upgrade = match hostos_version.clone() {

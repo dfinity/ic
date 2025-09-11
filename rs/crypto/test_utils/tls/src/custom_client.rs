@@ -186,15 +186,13 @@ impl CustomClient {
             let error = result.expect_err("expected error");
             if !error.to_string().contains(expected_error) {
                 panic!(
-                    "expected the client error to contain \"{}\" but got error: {:?}",
-                    expected_error, error
+                    "expected the client error to contain \"{expected_error}\" but got error: {error:?}"
                 )
             }
         } else {
             match result {
                 Err(error) => panic!(
-                    "expected the client result to be ok but got error: {}",
-                    error
+                    "expected the client result to be ok but got error: {error}"
                 ),
                 Ok(_tls_stream) => (),
             }

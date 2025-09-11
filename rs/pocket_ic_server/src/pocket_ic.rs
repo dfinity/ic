@@ -250,7 +250,7 @@ fn compute_subnet_seed(
         ranges.push(range);
     }
     ranges.sort();
-    hasher.write(format!("{:?}", ranges).as_bytes());
+    hasher.write(format!("{ranges:?}").as_bytes());
     hasher.finish()
 }
 
@@ -335,8 +335,7 @@ impl BitcoinAdapterParts {
             }
             if start.elapsed() > MAX_START_SERVER_DURATION {
                 panic!(
-                    "Bitcoin adapter server took more than {:?} to start.",
-                    MAX_START_SERVER_DURATION
+                    "Bitcoin adapter server took more than {MAX_START_SERVER_DURATION:?} to start."
                 );
             }
             std::thread::sleep(std::time::Duration::from_millis(10));
@@ -385,8 +384,7 @@ impl CanisterHttpAdapterParts {
             }
             if start.elapsed() > MAX_START_SERVER_DURATION {
                 panic!(
-                    "Canister http adapter server took more than {:?} to start.",
-                    MAX_START_SERVER_DURATION
+                    "Canister http adapter server took more than {MAX_START_SERVER_DURATION:?} to start."
                 );
             }
             std::thread::sleep(std::time::Duration::from_millis(10));
@@ -1753,7 +1751,7 @@ impl PocketIcSubnets {
                 match inner_res {
                     AddWasmResult::Hash(hash) => assert_eq!(hash, sns_canister_wasm_hash),
                     AddWasmResult::Error(err) => {
-                        panic!("Unexpected error when calling add_wasm on SNS-W: {:?}", err)
+                        panic!("Unexpected error when calling add_wasm on SNS-W: {err:?}")
                     }
                 }
             }
@@ -2030,7 +2028,7 @@ impl PocketIcSubnets {
             struct CanisterArguments {
                 args: Vec<(String, String)>,
             }
-            let localhost_url = format!("http://localhost:{}", gateway_port);
+            let localhost_url = format!("http://localhost:{gateway_port}");
             let args = vec![
               ("API_HOST".to_string(), localhost_url.clone()),
               ("CYCLES_MINTING_CANISTER_ID".to_string(), CYCLES_MINTING_CANISTER_ID.to_string()),
@@ -2040,15 +2038,15 @@ impl PocketIcSubnets {
               ("GOVERNANCE_CANISTER_ID".to_string(), GOVERNANCE_CANISTER_ID.to_string()),
               ("HOST".to_string(), localhost_url.clone()),
               /* ICP swap canister is not deployed by PocketIC! */
-              ("ICP_SWAP_URL".to_string(), format!("http://uvevg-iyaaa-aaaak-ac27q-cai.raw.localhost:{}/", gateway_port)),
-              ("IDENTITY_SERVICE_URL".to_string(), format!("http://{}.localhost:{}", IDENTITY_CANISTER_ID, gateway_port)),
+              ("ICP_SWAP_URL".to_string(), format!("http://uvevg-iyaaa-aaaak-ac27q-cai.raw.localhost:{gateway_port}/")),
+              ("IDENTITY_SERVICE_URL".to_string(), format!("http://{IDENTITY_CANISTER_ID}.localhost:{gateway_port}")),
               ("INDEX_CANISTER_ID".to_string(), LEDGER_INDEX_CANISTER_ID.to_string()),
               ("LEDGER_CANISTER_ID".to_string(), LEDGER_CANISTER_ID.to_string()),
               ("OWN_CANISTER_ID".to_string(), NNS_UI_CANISTER_ID.to_string()),
               /* plausible.io API might not work anyway so the value of `PLAUSIBLE_DOMAIN` is pretty much arbitrary */
-              ("PLAUSIBLE_DOMAIN".to_string(), format!("{}.localhost", NNS_UI_CANISTER_ID)),
+              ("PLAUSIBLE_DOMAIN".to_string(), format!("{NNS_UI_CANISTER_ID}.localhost")),
               ("ROBOTS".to_string(), "".to_string()),
-              ("SNS_AGGREGATOR_URL".to_string(), format!("http://{}.localhost:{}", SNS_AGGREGATOR_CANISTER_ID, gateway_port)),
+              ("SNS_AGGREGATOR_URL".to_string(), format!("http://{SNS_AGGREGATOR_CANISTER_ID}.localhost:{gateway_port}")),
               ("STATIC_HOST".to_string(), localhost_url.clone()),
               ("TVL_CANISTER_ID".to_string(), NNS_UI_CANISTER_ID.to_string()),
               ("WASM_CANISTER_ID".to_string(), SNS_WASM_CANISTER_ID.to_string()),
@@ -2088,16 +2086,13 @@ impl PocketIcSubnets {
                 IngressStatus::Known { state, .. } => match state {
                     IngressState::Completed(WasmResult::Reply(reply)) => return reply,
                     IngressState::Completed(WasmResult::Reject(error)) => panic!(
-                        "Failed to execute method {} on canister {}: {}",
-                        method, canister_id, error
+                        "Failed to execute method {method} on canister {canister_id}: {error}"
                     ),
                     IngressState::Failed(error) => panic!(
-                        "Failed to execute method {} on canister {}: {}",
-                        method, canister_id, error
+                        "Failed to execute method {method} on canister {canister_id}: {error}"
                     ),
                     IngressState::Done => panic!(
-                        "Failed to execute method {} on canister {}: response has been pruned",
-                        method, canister_id,
+                        "Failed to execute method {method} on canister {canister_id}: response has been pruned",
                     ),
                     IngressState::Received | IngressState::Processing => (),
                 },
@@ -2105,8 +2100,7 @@ impl PocketIcSubnets {
             }
         }
         panic!(
-            "Failed to complete execution of method {} on canister {} after 100 rounds.",
-            method, canister_id
+            "Failed to complete execution of method {method} on canister {canister_id} after 100 rounds."
         );
     }
 }
@@ -2392,8 +2386,7 @@ impl PocketIc {
                         subnet_kind_ranges.sort();
                         if !is_subset_of(subnet_kind_ranges.iter(), sorted_ranges.iter()) {
                             return Err(format!(
-                                "The actual subnet canister ranges {:?} do not contain the canister ranges {:?} expected for the subnet kind {:?}.",
-                                sorted_ranges, subnet_kind_ranges, subnet_kind
+                                "The actual subnet canister ranges {sorted_ranges:?} do not contain the canister ranges {subnet_kind_ranges:?} expected for the subnet kind {subnet_kind:?}."
                             ));
                         }
                     }
@@ -2408,11 +2401,7 @@ impl PocketIc {
                                     sorted_ranges.iter(),
                                 ) {
                                     return Err(format!(
-                                        "The actual subnet canister ranges {:?} for the subnet kind {:?} are not disjoint from the canister ranges {:?} for a different subnet kind {:?}.",
-                                        sorted_ranges,
-                                        subnet_kind,
-                                        other_subnet_kind_ranges,
-                                        other_subnet_kind
+                                        "The actual subnet canister ranges {sorted_ranges:?} for the subnet kind {subnet_kind:?} are not disjoint from the canister ranges {other_subnet_kind_ranges:?} for a different subnet kind {other_subnet_kind:?}."
                                     ));
                                 }
                             }
@@ -3238,11 +3227,11 @@ impl Operation for SubmitIngressMessage {
                     self.0.payload.clone(),
                 ) {
                     Err(SubmitIngressError::HttpError(e)) => {
-                        eprintln!("Failed to submit ingress message: {}", e);
+                        eprintln!("Failed to submit ingress message: {e}");
                         OpOut::Error(PocketIcError::BadIngressMessage(e))
                     }
                     Err(SubmitIngressError::UserError(e)) => {
-                        eprintln!("Failed to submit ingress message: {:?}", e);
+                        eprintln!("Failed to submit ingress message: {e:?}");
                         OpOut::CanisterResult(Err(user_error_to_reject_response(e, false)))
                     }
                     Ok(msg_id) => OpOut::MessageId((
@@ -3468,7 +3457,7 @@ impl Operation for DashboardRequest {
             Ok(content) => Html(content).into_response(),
             Err(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Internal error: {}", e),
+                format!("Internal error: {e}"),
             )
                 .into_response(),
         };
@@ -3528,7 +3517,7 @@ impl Operation for StatusRequest {
         let mut hasher = Sha256::new();
         self.bytes.hash(&mut hasher);
         let hash = Digest(hasher.finish());
-        OpId(format!("status({})", hash,))
+        OpId(format!("status({hash})",))
     }
 }
 
@@ -4261,14 +4250,14 @@ struct Digest([u8; 32]);
 impl std::fmt::Debug for Digest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Digest(")?;
-        self.0.iter().try_for_each(|b| write!(f, "{:02X}", b))?;
+        self.0.iter().try_for_each(|b| write!(f, "{b:02X}"))?;
         write!(f, ")")
     }
 }
 
 impl std::fmt::Display for Digest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -4400,7 +4389,7 @@ fn route_call(
                         &canister_call.payload,
                         ProvisionalCreateCanisterWithCyclesArgs
                     )
-                    .map_err(|e| format!("Error decoding candid: {:?}", e))?;
+                    .map_err(|e| format!("Error decoding candid: {e:?}"))?;
                     if let Some(specified_id) = payload.specified_id {
                         EffectivePrincipal::CanisterId(CanisterId::unchecked_from_principal(
                             specified_id,
@@ -4414,7 +4403,7 @@ fn route_call(
                     // Management canister calls that do not create a canister strictly require
                     // an effective principal. We derive it from the Candid payload.
                     let payload = Decode!(&canister_call.payload, CanisterIdRecord)
-                        .map_err(|e| format!("Error decoding candid: {:?}", e))?;
+                        .map_err(|e| format!("Error decoding candid: {e:?}"))?;
                     EffectivePrincipal::CanisterId(payload.get_canister_id())
                 }
             } else {

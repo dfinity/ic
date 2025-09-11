@@ -143,8 +143,7 @@ fn stream_header_unique_encoding(
         }
         assert!(
             results.len() > results_before,
-            "No supported encodings for certification version {:?}",
-            version
+            "No supported encodings for certification version {version:?}"
         );
     }
 
@@ -153,8 +152,7 @@ fn stream_header_unique_encoding(
         for (version, name, bytes) in &results {
             assert_eq!(
                 &current_bytes, bytes,
-                "Different encodings: {}@{:?} and {}@{:?}",
-                current_name, current_version, name, version
+                "Different encodings: {current_name}@{current_version:?} and {name}@{version:?}"
             );
         }
     }
@@ -275,8 +273,7 @@ fn message_unique_encoding(
         }
         assert!(
             results.len() > results_before,
-            "No supported encodings for certification version {:?}",
-            version
+            "No supported encodings for certification version {version:?}"
         );
     }
 
@@ -285,8 +282,7 @@ fn message_unique_encoding(
         for (version, name, bytes) in &results {
             assert_eq!(
                 &current_bytes, bytes,
-                "Different encodings: {}@{:?} and {}@{:?}",
-                current_name, current_version, name, version
+                "Different encodings: {current_name}@{current_version:?} and {name}@{version:?}"
             );
         }
     }
@@ -393,8 +389,7 @@ fn system_metadata_unique_encoding(
         }
         assert!(
             results.len() > results_before,
-            "No supported encodings for certification version {:?}",
-            version
+            "No supported encodings for certification version {version:?}"
         );
     }
 
@@ -403,8 +398,7 @@ fn system_metadata_unique_encoding(
         for (version, name, bytes) in &results {
             assert_eq!(
                 &current_bytes, bytes,
-                "Different encodings: {}@{:?} and {}@{:?}",
-                current_name, current_version, name, version
+                "Different encodings: {current_name}@{current_version:?} and {name}@{version:?}"
             );
         }
     }
@@ -457,8 +451,7 @@ fn subnet_metrics_unique_encoding(
         }
         assert!(
             results.len() > results_before,
-            "No supported encodings for certification version {:?}",
-            version
+            "No supported encodings for certification version {version:?}"
         );
     }
 
@@ -467,8 +460,7 @@ fn subnet_metrics_unique_encoding(
         for (version, name, bytes) in &results {
             assert_eq!(
                 &current_bytes, bytes,
-                "Different encodings: {}@{:?} and {}@{:?}",
-                current_name, current_version, name, version
+                "Different encodings: {current_name}@{current_version:?} and {name}@{version:?}"
             );
         }
     }

@@ -422,10 +422,7 @@ pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
     assert!(
         MIN_SUPPORTED_CERTIFICATION_VERSION <= certification_version
             && certification_version <= MAX_SUPPORTED_CERTIFICATION_VERSION,
-        "Unable to certify state with version {:?}. Supported certification versions are {:?}..={:?}",
-        certification_version,
-        MIN_SUPPORTED_CERTIFICATION_VERSION,
-        MAX_SUPPORTED_CERTIFICATION_VERSION,
+        "Unable to certify state with version {certification_version:?}. Supported certification versions are {MIN_SUPPORTED_CERTIFICATION_VERSION:?}..={MAX_SUPPORTED_CERTIFICATION_VERSION:?}",
     );
     let own_subnet_id = state.metadata.own_subnet_id;
     let inverted_routing_table = Arc::new(invert_routing_table(

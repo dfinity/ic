@@ -90,13 +90,13 @@ fn make_signed_ingress(
         .with_arg(payload)
         .expire_at(
             OffsetDateTime::from_unix_timestamp_nanos(expiry.as_nanos_since_unix_epoch().into())
-                .map_err(|err| format!("Error preparing update message: {:?}", err))?,
+                .map_err(|err| format!("Error preparing update message: {err:?}"))?,
         )
         .sign()
-        .map_err(|err| format!("Error preparing update message: {:?}", err))?;
+        .map_err(|err| format!("Error preparing update message: {err:?}"))?;
 
     SignedIngress::try_from(SignedRequestBytes::from(signed_update))
-        .map_err(|err| format!("Error converting to SignedIngress: {:?}", err))
+        .map_err(|err| format!("Error converting to SignedIngress: {err:?}"))
 }
 
 pub(crate) fn agent_with_principal_as_sender(principal: &PrincipalId) -> Result<Agent, String> {
@@ -172,7 +172,7 @@ pub fn cmd_add_neuron(time: Time, cmd: &WithNeuronCmd) -> Result<Vec<IngressWith
                         refreshed_neuron_id: Some(NeuronId { id }),
                     },
                 )) => {
-                    println!("neuron_id={:?}", id)
+                    println!("neuron_id={id:?}")
                 }
                 val => unreachable!("unexpected response: {:?}", val),
             }
@@ -307,7 +307,7 @@ pub(crate) fn cmd_add_and_bless_replica_version(
     let replica_version_id = cmd.replica_version_id.clone();
     let replica_version_record =
         serde_json::from_str::<ReplicaVersionRecord>(&cmd.replica_version_value)
-            .unwrap_or_else(|err| panic!("Error parsing replica version JSON value: {:?}", err));
+            .unwrap_or_else(|err| panic!("Error parsing replica version JSON value: {err:?}"));
     let mut msgs = vec![
         add_replica_version(
             agent,
@@ -357,7 +357,7 @@ pub fn cmd_add_registry_content(
                         if key == make_subnet_record_key(subnet_id) {
                             let mut subnet_record = SubnetRecord::decode(mutation.value.as_slice())
                                 .unwrap_or_else(|err| {
-                                    panic!("Unable to decode SubnetRecord for {}: {}", key, err)
+                                    panic!("Unable to decode SubnetRecord for {key}: {err}")
                                 });
                             subnet_record.subnet_type = SubnetType::System as i32;
                             subnet_record.is_halted = false;
@@ -409,7 +409,7 @@ pub(crate) fn cmd_remove_subnet(
 ) -> Result<Option<SignedIngress>, String> {
     let mut subnet_record = player.get_subnet_record(context_time)?;
     let nodes = get_node_ids_from_subnet_record(&subnet_record)
-        .map_err(|err| format!("get_node_ids_from_subnet_record() failed with {}", err))?;
+        .map_err(|err| format!("get_node_ids_from_subnet_record() failed with {err}"))?;
     if nodes.is_empty() {
         println!("Subnet {} has empty membership", player.subnet_id);
         Ok(None)
@@ -462,7 +462,7 @@ pub(crate) fn bless_replica_version(
     let mut buf = Vec::new();
     match blessed_versions.encode(&mut buf) {
         Ok(_) => mutation.value = buf,
-        Err(error) => panic!("Error encoding the value to protobuf: {:?}", error),
+        Err(error) => panic!("Error encoding the value to protobuf: {error:?}"),
     }
     atomic_mutate(
         agent,
@@ -487,7 +487,7 @@ pub fn add_replica_version(
     let mut buf = Vec::new();
     match record.encode(&mut buf) {
         Ok(_) => mutation.value = buf,
-        Err(error) => panic!("Error encoding the value to protobuf: {:?}", error),
+        Err(error) => panic!("Error encoding the value to protobuf: {error:?}"),
     }
     atomic_mutate(
         agent,
@@ -512,7 +512,7 @@ pub fn update_subnet_record(
     let mut buf = Vec::new();
     match record.encode(&mut buf) {
         Ok(_) => mutation.value = buf,
-        Err(error) => panic!("Error encoding the value to protobuf: {:?}", error),
+        Err(error) => panic!("Error encoding the value to protobuf: {error:?}"),
     }
     atomic_mutate(
         agent,

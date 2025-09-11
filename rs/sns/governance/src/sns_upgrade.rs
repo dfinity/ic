@@ -68,7 +68,7 @@ pub(crate) async fn get_wasm(
             SNS_WASM_CANISTER_ID,
             "get_wasm",
             Encode!(&GetWasmRequest { hash: wasm_hash })
-                .map_err(|e| format!("Could not encode GetWasmRequest: {:?}", e))?,
+                .map_err(|e| format!("Could not encode GetWasmRequest: {e:?}"))?,
         )
         .await
         .map_err(|(code, message)| {
@@ -80,23 +80,21 @@ pub(crate) async fn get_wasm(
         })?;
 
     let response = Decode!(&response, GetWasmResponse)
-        .map_err(|e| format!("Decoding GetWasmResponse failed: {:?}", e))?;
+        .map_err(|e| format!("Decoding GetWasmResponse failed: {e:?}"))?;
     let wasm = response
         .wasm
         .ok_or_else(|| "No WASM found using hash returned from SNS-WASM canister.".to_string())?;
 
     let returned_canister_type = SnsCanisterType::try_from(wasm.canister_type).map_err(|err| {
         format!(
-            "Could not convert response from SNS-WASM to valid SnsCanisterType: {}",
-            err
+            "Could not convert response from SNS-WASM to valid SnsCanisterType: {err}"
         )
     })?;
 
     if returned_canister_type != expected_sns_canister_type {
         return Err(format!(
             "WASM returned from SNS-WASM is not intended for the same canister type. \
-            Expected: {:?}.  Received: {:?}.",
-            expected_sns_canister_type, returned_canister_type
+            Expected: {expected_sns_canister_type:?}.  Received: {returned_canister_type:?}."
         ));
     }
 
@@ -113,8 +111,7 @@ pub(crate) async fn get_proposal_id_that_added_wasm(
             "get_proposal_id_that_added_wasm",
             Encode!(&GetProposalIdThatAddedWasmRequest { hash: wasm_hash }).map_err(|e| {
                 format!(
-                    "Could not encode GetProposalIdThatAddedWasmRequest: {:?}",
-                    e
+                    "Could not encode GetProposalIdThatAddedWasmRequest: {e:?}"
                 )
             })?,
         )
@@ -129,8 +126,7 @@ pub(crate) async fn get_proposal_id_that_added_wasm(
 
     let response = Decode!(&response, GetProposalIdThatAddedWasmResponse).map_err(|e| {
         format!(
-            "Decoding GetProposalIdThatAddedWasmResponse failed: {:?}",
-            e
+            "Decoding GetProposalIdThatAddedWasmResponse failed: {e:?}"
         )
     })?;
     let proposal_id = response.proposal_id;
@@ -166,8 +162,7 @@ pub(crate) async fn get_canisters_to_upgrade(
             maybe_principal
                 .ok_or_else(|| {
                     format!(
-                        "Did not receive {} CanisterId from list_sns_canisters call",
-                        label
+                        "Did not receive {label} CanisterId from list_sns_canisters call"
                     )
                 })
                 .map(CanisterId::unchecked_from_principal)
@@ -184,8 +179,7 @@ pub(crate) fn canister_type_and_wasm_hash_for_upgrade(
     // This should be impossible due to upstream constraints.
     if differences.is_empty() {
         return Err(format!(
-            "No difference was found between the current SNS version {:?} and the next SNS version {:?}",
-            current_version, next_version
+            "No difference was found between the current SNS version {current_version:?} and the next SNS version {next_version:?}"
         ));
     }
 
@@ -219,19 +213,18 @@ pub(crate) async fn get_running_version(
     } = response
     else {
         return Err(format!(
-            "CanisterSummary could not be fetched for all canisters: {:?}",
-            response
+            "CanisterSummary could not be fetched for all canisters: {response:?}"
         ));
     };
 
     let get_hash = |canister_status: CanisterSummary, label: &str| {
         canister_status
             .status
-            .ok_or_else(|| format!("{} had no status", label))
+            .ok_or_else(|| format!("{label} had no status"))
             .and_then(|status| {
                 status
                     .module_hash
-                    .ok_or_else(|| format!("{} Status had no module hash", label))
+                    .ok_or_else(|| format!("{label} Status had no module hash"))
             })
     };
 
@@ -264,15 +257,15 @@ async fn sns_canisters_summary(
     let arg = Encode!(&GetSnsCanistersSummaryRequest {
         update_canister_list: Some(true)
     })
-    .map_err(|e| format!("Could not encode GetSnsCanistersSummaryRequest: {:?}", e))?;
+    .map_err(|e| format!("Could not encode GetSnsCanistersSummaryRequest: {e:?}"))?;
 
     let response = env
         .call_canister(root_canister_id, "get_sns_canisters_summary", arg)
         .await
-        .map_err(|e| format!("Request failed for get_sns_canisters_summary: {:?}", e))?;
+        .map_err(|e| format!("Request failed for get_sns_canisters_summary: {e:?}"))?;
 
     Decode!(&response, GetSnsCanistersSummaryResponse)
-        .map_err(|e| format!("Failed to decode response: {:?}", e))
+        .map_err(|e| format!("Failed to decode response: {e:?}"))
 }
 
 /// Get the next version of the SNS based on a given version.
@@ -304,19 +297,18 @@ pub(crate) async fn get_upgrade_steps(
         limit: 0,
     };
     let arg = Encode!(&request)
-        .map_err(|err| format!("Could not encode ListUpgradeStepsRequest: {:?}", err))?;
+        .map_err(|err| format!("Could not encode ListUpgradeStepsRequest: {err:?}"))?;
 
     let requested_timestamp_seconds = env.now();
 
     let response = env
         .call_canister(SNS_WASM_CANISTER_ID, "list_upgrade_steps", arg)
         .await
-        .map_err(|err| format!("Request failed for get_next_sns_version: {:?}", err))?;
+        .map_err(|err| format!("Request failed for get_next_sns_version: {err:?}"))?;
 
     let response = Decode!(&response, ListUpgradeStepsResponse).map_err(|err| {
         format!(
-            "Could not decode the response from SnsW.list_upgrade_steps: {}",
-            err
+            "Could not decode the response from SnsW.list_upgrade_steps: {err}"
         )
     })?;
 

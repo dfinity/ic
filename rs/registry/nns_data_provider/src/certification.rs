@@ -101,8 +101,7 @@ fn validate_version_range(
         .try_fold(since_version, |prev_version, next_version| {
             if *next_version != prev_version + 1 {
                 Err(CertificationError::InvalidDeltas(format!(
-                    "version range not continuous: {} follows {}",
-                    next_version, prev_version,
+                    "version range not continuous: {next_version} follows {prev_version}",
                 )))
             } else {
                 Ok(*next_version)
@@ -128,8 +127,7 @@ pub async fn decode_hash_tree(
     // Extract structured deltas from their tree representation.
     let labeled_tree = LabeledTree::<Vec<u8>>::try_from(hash_tree).map_err(|err| {
         CertificationError::MalformedHashTree(format!(
-            "failed to convert hash tree to labeled tree: {:?}",
-            err
+            "failed to convert hash tree to labeled tree: {err:?}"
         ))
     })?;
 
@@ -138,8 +136,7 @@ pub async fn decode_hash_tree(
     ))
     .map_err(|err| {
         CertificationError::DeserError(format!(
-            "failed to unpack certified payload from the labeled tree: {}",
-            err
+            "failed to unpack certified payload from the labeled tree: {err}"
         ))
     })?;
 
@@ -183,8 +180,7 @@ pub(crate) async fn decode_certified_deltas(
 ) -> Result<(Vec<RegistryRecord>, RegistryVersion, Time), CertificationError> {
     let certified_response = CertifiedResponse::decode(payload).map_err(|err| {
         CertificationError::DeserError(format!(
-            "failed to decode certified response from {}: {:?}",
-            canister_id, err
+            "failed to decode certified response from {canister_id}: {err:?}"
         ))
     })?;
 
@@ -196,8 +192,7 @@ pub(crate) async fn decode_certified_deltas(
     })?;
     let mixed_hash_tree = MixedHashTree::try_from(hash_tree).map_err(|err| {
         CertificationError::DeserError(format!(
-            "failed to deserialize MixedHashTree from {}: {:?}",
-            canister_id, err
+            "failed to deserialize MixedHashTree from {canister_id}: {err:?}"
         ))
     })?;
 

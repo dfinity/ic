@@ -618,10 +618,9 @@ fn registry_error(
 ) -> ReadRegistryError {
     let errmsg = match subnet_id {
         Some(subnet_id) => format!(
-            "'{} [for subnet {}]', RegistryClientError: {}",
-            what, subnet_id, err
+            "'{what} [for subnet {subnet_id}]', RegistryClientError: {err}"
         ),
-        None => format!("'{}', RegistryClientError: {}", what, err),
+        None => format!("'{what}', RegistryClientError: {err}"),
     };
     if err.is_reproducible() {
         ReadRegistryError::Persistent(errmsg)
@@ -634,8 +633,8 @@ fn registry_error(
 /// absent. This error is always considered persistent.
 fn not_found_error(what: &str, subnet_id: Option<SubnetId>) -> ReadRegistryError {
     let errmsg = match subnet_id {
-        Some(subnet_id) => format!("'{} for subnet {}' not found", what, subnet_id),
-        None => format!("'{}' not found", what),
+        Some(subnet_id) => format!("'{what} for subnet {subnet_id}' not found"),
+        None => format!("'{what}' not found"),
     };
     ReadRegistryError::Persistent(errmsg)
 }
@@ -848,8 +847,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         let nodes = get_node_ids_from_subnet_record(&subnet_record)
             .map_err(|err| {
                 ReadRegistryError::Persistent(format!(
-                    "'nodes from subnet record for subnet {}', err: {}",
-                    own_subnet_id, err
+                    "'nodes from subnet record for subnet {own_subnet_id}', err: {err}"
                 ))
             })?
             .into_iter()
@@ -863,8 +861,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         let chain_key_settings = if let Some(chain_key_config) = subnet_record.chain_key_config {
             let chain_key_config = ChainKeyConfig::try_from(chain_key_config).map_err(|err| {
                 ReadRegistryError::Persistent(format!(
-                    "'failed to read chain key config', err: {:?}",
-                    err
+                    "'failed to read chain key config', err: {err:?}"
                 ))
             })?;
 
@@ -1120,7 +1117,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 .registry
                 .get_crypto_key_for_node(*node_id, KeyPurpose::NodeSigning, registry_version)
                 .map_err(|err| {
-                    registry_error(&format!("public key of node {}", node_id), None, err)
+                    registry_error(&format!("public key of node {node_id}"), None, err)
                 })?;
 
             // If the public key is missing, we continue without stalling the subnet.
@@ -1190,29 +1187,26 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 .registry
                 .get_node_record(api_bn_id, registry_version)
                 .map_err(|err| {
-                    registry_error(&format!("NodeRecord for node_id {}", api_bn_id), None, err)
+                    registry_error(&format!("NodeRecord for node_id {api_bn_id}"), None, err)
                 })?;
 
             let Some(node_record) = node_record else {
                 raise_critical_error_for_api_boundary_nodes(&format!(
-                    "NodeRecord for node_id {} is missing in registry.",
-                    api_bn_id,
+                    "NodeRecord for node_id {api_bn_id} is missing in registry.",
                 ));
                 continue;
             };
 
             let Some(domain) = node_record.domain else {
                 raise_critical_error_for_api_boundary_nodes(&format!(
-                    "domain field in NodeRecord for node_id {} is None.",
-                    api_bn_id,
+                    "domain field in NodeRecord for node_id {api_bn_id} is None.",
                 ));
                 continue;
             };
 
             let Some(http) = node_record.http else {
                 raise_critical_error_for_api_boundary_nodes(&format!(
-                    "http field in NodeRecord for node_id {} is None.",
-                    api_bn_id,
+                    "http field in NodeRecord for node_id {api_bn_id} is None.",
                 ));
                 continue;
             };

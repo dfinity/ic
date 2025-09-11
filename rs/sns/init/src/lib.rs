@@ -101,8 +101,7 @@ impl std::fmt::Display for MinDirectParticipationThresholdValidationError {
             Self::Unspecified => {
                 write!(
                     f,
-                    "{}min_direct_participation_threshold_icp_e8s must be specified.",
-                    prefix
+                    "{prefix}min_direct_participation_threshold_icp_e8s must be specified."
                 )
             }
             Self::BelowSwapDirectIcpMin {
@@ -111,11 +110,8 @@ impl std::fmt::Display for MinDirectParticipationThresholdValidationError {
             } => {
                 write!(
                     f,
-                    "{}min_direct_participation_threshold_icp_e8s ({}) should be greater \
-                    than or equal min_direct_participation_icp_e8s ({}).",
-                    prefix,
-                    min_direct_participation_threshold_icp_e8s,
-                    min_direct_participation_icp_e8s,
+                    "{prefix}min_direct_participation_threshold_icp_e8s ({min_direct_participation_threshold_icp_e8s}) should be greater \
+                    than or equal min_direct_participation_icp_e8s ({min_direct_participation_icp_e8s}).",
                 )
             }
             Self::AboveSwapDirectIcpMax {
@@ -124,11 +120,8 @@ impl std::fmt::Display for MinDirectParticipationThresholdValidationError {
             } => {
                 write!(
                     f,
-                    "{}min_direct_participation_threshold_icp_e8s ({}) should be less \
-                    than or equal max_direct_participation_icp_e8s ({}).",
-                    prefix,
-                    min_direct_participation_threshold_icp_e8s,
-                    max_direct_participation_icp_e8s,
+                    "{prefix}min_direct_participation_threshold_icp_e8s ({min_direct_participation_threshold_icp_e8s}) should be less \
+                    than or equal max_direct_participation_icp_e8s ({max_direct_participation_icp_e8s}).",
                 )
             }
         }
@@ -157,8 +150,7 @@ impl std::fmt::Display for MaxNeuronsFundParticipationValidationError {
             Self::Unspecified => {
                 write!(
                     f,
-                    "{}max_neurons_fund_participation_icp_e8s must be specified.",
-                    prefix
+                    "{prefix}max_neurons_fund_participation_icp_e8s must be specified."
                 )
             }
             Self::BelowSingleParticipationLimit {
@@ -167,9 +159,8 @@ impl std::fmt::Display for MaxNeuronsFundParticipationValidationError {
             } => {
                 write!(
                     f,
-                    "{}max_neurons_fund_participation_icp_e8s ({} > 0) \
-                    should be greater than or equal min_participant_icp_e8s ({}).",
-                    prefix, max_neurons_fund_participation_icp_e8s, min_participant_icp_e8s,
+                    "{prefix}max_neurons_fund_participation_icp_e8s ({max_neurons_fund_participation_icp_e8s} > 0) \
+                    should be greater than or equal min_participant_icp_e8s ({min_participant_icp_e8s}).",
                 )
             }
             Self::AboveSwapMaxDirectIcp {
@@ -178,11 +169,8 @@ impl std::fmt::Display for MaxNeuronsFundParticipationValidationError {
             } => {
                 write!(
                     f,
-                    "{}max_neurons_fund_participation_icp_e8s ({}) \
-                    should be less than or equal max_direct_participation_icp_e8s ({}).",
-                    prefix,
-                    max_neurons_fund_participation_icp_e8s,
-                    max_direct_participation_icp_e8s,
+                    "{prefix}max_neurons_fund_participation_icp_e8s ({max_neurons_fund_participation_icp_e8s}) \
+                    should be less than or equal max_direct_participation_icp_e8s ({max_direct_participation_icp_e8s}).",
                 )
             }
         }
@@ -208,21 +196,20 @@ impl std::fmt::Display for NeuronsFundParticipationConstraintsValidationError {
             Self::SetBeforeProposalExecution => {
                 write!(
                     f,
-                    "{}neurons_fund_participation_constraints must not be set before \
-                    the CreateServiceNervousSystem proposal is executed.",
-                    prefix
+                    "{prefix}neurons_fund_participation_constraints must not be set before \
+                    the CreateServiceNervousSystem proposal is executed."
                 )
             }
             Self::RelatedFieldUnspecified(related_field_name) => {
-                write!(f, "{}{} must be specified.", prefix, related_field_name,)
+                write!(f, "{prefix}{related_field_name} must be specified.",)
             }
             Self::MinDirectParticipationThresholdValidationError(error) => {
-                write!(f, "{}{}", prefix, error)
+                write!(f, "{prefix}{error}")
             }
             Self::MaxNeuronsFundParticipationValidationError(error) => {
-                write!(f, "{}{}", prefix, error)
+                write!(f, "{prefix}{error}")
             }
-            Self::Local(error) => write!(f, "{}{}", prefix, error),
+            Self::Local(error) => write!(f, "{prefix}{error}"),
         }
     }
 }
@@ -303,12 +290,10 @@ impl std::fmt::Display for NeuronBasketConstructionParametersValidationError {
                 )
             }
             Self::BasketSizeTooSmall => format!(
-                "basket count must be at least {}",
-                MIN_SNS_NEURONS_PER_BASKET
+                "basket count must be at least {MIN_SNS_NEURONS_PER_BASKET}"
             ),
             Self::BasketSizeTooBig => format!(
-                "basket count must be at most {}",
-                MAX_SNS_NEURONS_PER_BASKET
+                "basket count must be at most {MAX_SNS_NEURONS_PER_BASKET}"
             ),
             Self::InadequateDissolveDelay => {
                 "dissolve_delay_interval_seconds must be at least 1".to_string()
@@ -549,7 +534,7 @@ impl SnsInitPayload {
             ..self.clone()
         };
         serde_yaml::to_string(&self_without_logos)
-            .map_err(|e| format!("Could not create initialization parameters {}", e))
+            .map_err(|e| format!("Could not create initialization parameters {e}"))
     }
 
     /// Construct the params used to initialize a SNS Governance canister.
@@ -1066,9 +1051,8 @@ impl SnsInitPayload {
 
         if neuron_minimum_dissolve_delay_to_vote_seconds > max_dissolve_delay_seconds {
             return Err(format!(
-                "The minimum dissolve delay to vote ({}) cannot be greater than the max \
-                dissolve delay ({})",
-                neuron_minimum_dissolve_delay_to_vote_seconds, max_dissolve_delay_seconds
+                "The minimum dissolve delay to vote ({neuron_minimum_dissolve_delay_to_vote_seconds}) cannot be greater than the max \
+                dissolve delay ({max_dissolve_delay_seconds})"
             ));
         }
 
@@ -1188,8 +1172,7 @@ impl SnsInitPayload {
             .ok_or("Error: final_reward_rate_basis_points must be specified")?;
         if final_reward_rate_basis_points > initial_reward_rate_basis_points {
             Err(format!(
-                "Error: final_reward_rate_basis_points ({}) must be less than or equal to initial_reward_rate_basis_points ({})",
-                final_reward_rate_basis_points, initial_reward_rate_basis_points
+                "Error: final_reward_rate_basis_points ({final_reward_rate_basis_points}) must be less than or equal to initial_reward_rate_basis_points ({initial_reward_rate_basis_points})"
             ))
         } else {
             Ok(())
@@ -1325,7 +1308,7 @@ impl SnsInitPayload {
 
         for (index, canister) in dapp_canisters.canisters.iter().enumerate() {
             if canister.id.is_none() {
-                return Err(format!("Error: dapp_canisters[{}] id field is None", index));
+                return Err(format!("Error: dapp_canisters[{index}] id field is None"));
             }
         }
 
@@ -1371,8 +1354,7 @@ impl SnsInitPayload {
         if !nns_canisters_listed_as_dapp.is_empty() {
             return Err(format!(
                 "Error: The following canisters are listed as dapp canisters, but are \
-                NNS canisters: {:?}",
-                nns_canisters_listed_as_dapp
+                NNS canisters: {nns_canisters_listed_as_dapp:?}"
             ));
         }
 
@@ -1391,14 +1373,12 @@ impl SnsInitPayload {
             let confirmation_text_length = confirmation_text.chars().count();
             if confirmation_text_length < MIN_CONFIRMATION_TEXT_LENGTH {
                 return Err(format!(
-                    "NervousSystemParameters.confirmation_text must be greater than {} characters, given character count: {}",
-                    MIN_CONFIRMATION_TEXT_LENGTH, confirmation_text_length,
+                    "NervousSystemParameters.confirmation_text must be greater than {MIN_CONFIRMATION_TEXT_LENGTH} characters, given character count: {confirmation_text_length}",
                 ));
             }
             if MAX_CONFIRMATION_TEXT_LENGTH < confirmation_text_length {
                 return Err(format!(
-                    "NervousSystemParameters.confirmation_text must be fewer than {} characters, given character count: {}",
-                    MAX_CONFIRMATION_TEXT_LENGTH, confirmation_text_length,
+                    "NervousSystemParameters.confirmation_text must be fewer than {MAX_CONFIRMATION_TEXT_LENGTH} characters, given character count: {confirmation_text_length}",
                 ));
             }
         }
@@ -1584,32 +1564,28 @@ impl SnsInitPayload {
         // (3)
         if max_direct_participation_icp_e8s < min_direct_participation_icp_e8s {
             return Err(format!(
-                "Error: max_direct_participation_icp_e8s ({}) \
-                 must be >= min_direct_participation_icp_e8s ({})",
-                max_direct_participation_icp_e8s, min_direct_participation_icp_e8s
+                "Error: max_direct_participation_icp_e8s ({max_direct_participation_icp_e8s}) \
+                 must be >= min_direct_participation_icp_e8s ({min_direct_participation_icp_e8s})"
             ));
         }
         if max_participant_icp_e8s < min_participant_icp_e8s {
             return Err(format!(
-                "Error: max_participant_icp_e8s ({}) must be >= min_participant_icp_e8s ({})",
-                max_participant_icp_e8s, min_participant_icp_e8s
+                "Error: max_participant_icp_e8s ({max_participant_icp_e8s}) must be >= min_participant_icp_e8s ({min_participant_icp_e8s})"
             ));
         }
 
         // (4)
         if max_participant_icp_e8s > max_direct_participation_icp_e8s {
             return Err(format!(
-                "Error: max_participant_icp_e8s ({}) \
-                 must be <= max_direct_participation_icp_e8s ({})",
-                max_participant_icp_e8s, max_direct_participation_icp_e8s
+                "Error: max_participant_icp_e8s ({max_participant_icp_e8s}) \
+                 must be <= max_direct_participation_icp_e8s ({max_direct_participation_icp_e8s})"
             ));
         }
 
         // (5)
         if max_direct_participation_icp_e8s > MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP {
             return Err(format!(
-                "Error: max_direct_participation_icp_e8s ({}) can be at most {} ICP E8s",
-                max_direct_participation_icp_e8s, MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP
+                "Error: max_direct_participation_icp_e8s ({max_direct_participation_icp_e8s}) can be at most {MAX_DIRECT_ICP_CONTRIBUTION_TO_SWAP} ICP E8s"
             ));
         }
 
@@ -1618,18 +1594,16 @@ impl SnsInitPayload {
             < min_participants.saturating_mul(min_participant_icp_e8s)
         {
             return Err(format!(
-                "Error: max_direct_participation_icp_e8s ({}) \
-                 must be >= min_participants ({}) * min_participant_icp_e8s ({})",
-                max_direct_participation_icp_e8s, min_participants, min_participant_icp_e8s
+                "Error: max_direct_participation_icp_e8s ({max_direct_participation_icp_e8s}) \
+                 must be >= min_participants ({min_participants}) * min_participant_icp_e8s ({min_participant_icp_e8s})"
             ));
         }
 
         // (7)
         if neuron_minimum_stake_e8s <= sns_transaction_fee_e8s {
             return Err(format!(
-                "Error: neuron_minimum_stake_e8s ({}) is too small. It needs to be \
-                 greater than the transaction fee ({} e8s)",
-                neuron_minimum_stake_e8s, sns_transaction_fee_e8s
+                "Error: neuron_minimum_stake_e8s ({neuron_minimum_stake_e8s}) is too small. It needs to be \
+                 greater than the transaction fee ({sns_transaction_fee_e8s} e8s)"
             ));
         }
 
@@ -1644,26 +1618,21 @@ impl SnsInitPayload {
 
         if !min_participant_icp_e8s_big_enough {
             return Err(format!(
-                "Error: min_participant_icp_e8s ({}) is too small. It needs to be \
+                "Error: min_participant_icp_e8s ({min_participant_icp_e8s}) is too small. It needs to be \
                  large enough to ensure that participants will end up with \
-                 enough SNS tokens to form {} SNS neurons, each of which \
-                 require at least {} SNS e8s, plus {} e8s in transaction \
+                 enough SNS tokens to form {neuron_basket_construction_parameters_count} SNS neurons, each of which \
+                 require at least {neuron_minimum_stake_e8s} SNS e8s, plus {sns_transaction_fee_e8s} e8s in transaction \
                  fees. More precisely, the following inequality must hold: \
                  min_participant_icp_e8s >= neuron_basket_count \
                  * (neuron_minimum_stake_e8s + transaction_fee_e8s) \
                  * max_direct_participation_icp_e8s / initial_swap_amount_e8s",
-                min_participant_icp_e8s,
-                neuron_basket_construction_parameters_count,
-                neuron_minimum_stake_e8s,
-                sns_transaction_fee_e8s,
             ));
         }
 
         // (9)
         if min_participant_icp_e8s < MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S {
             return Err(format!(
-                "Error: min_participant_icp_e8s ({}) is too small. It must be at least as large as {}",
-                min_participant_icp_e8s, MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S
+                "Error: min_participant_icp_e8s ({min_participant_icp_e8s}) is too small. It must be at least as large as {MIN_PARTICIPANT_ICP_LOWER_BOUND_E8S}"
             ));
         }
 
@@ -1728,8 +1697,7 @@ impl SnsInitPayload {
 
         if swap_due_timestamp_seconds < swap_start_timestamp_seconds {
             return Err(format!(
-                "Error: swap_due_timestamp_seconds({}) must be after swap_start_timestamp_seconds({})",
-                swap_due_timestamp_seconds, swap_start_timestamp_seconds,
+                "Error: swap_due_timestamp_seconds({swap_due_timestamp_seconds}) must be after swap_start_timestamp_seconds({swap_start_timestamp_seconds})",
             ));
         }
 
@@ -2135,7 +2103,7 @@ mod test {
         let build_result = sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false);
         let sns_canisters_init_payloads = match build_result {
             Ok(payloads) => payloads,
-            Err(e) => panic!("Could not build canister init payloads: {}", e),
+            Err(e) => panic!("Could not build canister init payloads: {e}"),
         };
 
         // Assert that the various canister's created have been used
@@ -3058,8 +3026,7 @@ initial_token_distribution: !FractionalDeveloperVotingPower
             let errors_set = errors.clone().into_iter().collect::<HashSet<_>>();
             assert!(
                 errors.len() == errors_set.len(),
-                "Errors not unique: {:?}",
-                errors
+                "Errors not unique: {errors:?}"
             );
         }
         {
@@ -3067,8 +3034,7 @@ initial_token_distribution: !FractionalDeveloperVotingPower
             let errors_set = errors.clone().into_iter().collect::<HashSet<_>>();
             assert!(
                 errors.len() == errors_set.len(),
-                "Errors not unique: {:?}",
-                errors
+                "Errors not unique: {errors:?}"
             );
         }
     }
@@ -3488,9 +3454,7 @@ initial_token_distribution: !FractionalDeveloperVotingPower
                 let expected_error_fragment_a = "min_participant_icp_e8s (1) is too small.";
                 assert!(
                     error.contains(expected_error_fragment_a),
-                    "Unexpected error: `{}`\nExpected `{}`",
-                    error,
-                    expected_error_fragment_a,
+                    "Unexpected error: `{error}`\nExpected `{expected_error_fragment_a}`",
                 );
 
                 let expecrted_error_fragment_b = "the following inequality must hold: \
@@ -3499,9 +3463,7 @@ initial_token_distribution: !FractionalDeveloperVotingPower
                      * max_direct_participation_icp_e8s / initial_swap_amount_e8s";
                 assert!(
                     error.contains(expecrted_error_fragment_b),
-                    "Unexpected error: `{}`\nExpected `{}`",
-                    error,
-                    expecrted_error_fragment_b,
+                    "Unexpected error: `{error}`\nExpected `{expecrted_error_fragment_b}`",
                 );
             }
         }
@@ -3545,9 +3507,7 @@ initial_token_distribution: !FractionalDeveloperVotingPower
         let expected_error_prefix = "Error: min_participant_icp_e8s (999999) is too small.";
         assert!(
             error.contains(expected_error_prefix),
-            "Unexpected error `{}`\n Expected `{}`",
-            error,
-            expected_error_prefix
+            "Unexpected error `{error}`\n Expected `{expected_error_prefix}`"
         );
     }
 }

@@ -93,8 +93,7 @@ pub fn execute_command(cmd: Command) -> Result<Value> {
             let mut f = File::create(path)?;
             f.write_all(&pb)?;
             Value::String(format!(
-                "Successfully written registry delta protbobuf for version range {}-{} to: {}",
-                start_version, latest_registry_version_in_pb, pb_path
+                "Successfully written registry delta protbobuf for version range {start_version}-{latest_registry_version_in_pb} to: {pb_path}"
             ))
         }
         Command::ShowDiff {

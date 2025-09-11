@@ -208,7 +208,7 @@ fn bootstrap_idkg_summary_from_cup_contents(
         initial_dealings,
         logger,
     )
-    .map_err(|err| format!("Failed to create IDKG summary block: {:?}", err))
+    .map_err(|err| format!("Failed to create IDKG summary block: {err:?}"))
 }
 
 fn bootstrap_idkg_summary(
@@ -225,7 +225,7 @@ fn bootstrap_idkg_summary(
     }
 
     match get_idkg_chain_key_config_if_enabled(subnet_id, registry_version, registry_client)
-        .map_err(|err| format!("Failed getting the chain key config: {:?}", err))?
+        .map_err(|err| format!("Failed getting the chain key config: {err:?}"))?
     {
         Some(chain_key_config) => Ok(make_bootstrap_summary(
             subnet_id,

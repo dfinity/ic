@@ -174,7 +174,7 @@ pub fn get_tla_globals(p: &UnsafeSendPtr<Governance>) -> GlobalState {
 fn extract_common_constants(pid: &str, trace: &[ResolvedStatePair]) -> Vec<(String, TlaValue)> {
     vec![
         (
-            format!("{}_Process_Ids", pid),
+            format!("{pid}_Process_Ids"),
             BTreeSet::from([pid]).to_tla_value(),
         ),
         (
@@ -357,7 +357,7 @@ pub fn perform_trace_check(traces: Vec<UpdateTrace>) {
     let apalache = PathBuf::from(apalache);
 
     if !apalache.as_path().is_file() {
-        panic!("bad apalache bin from 'TLA_APALACHE_BIN': '{:?}'", apalache);
+        panic!("bad apalache bin from 'TLA_APALACHE_BIN': '{apalache:?}'");
     }
 
     // A poor man's parallel_map; process up to MAX_THREADS state pairs in parallel. Use mpsc channels
@@ -383,7 +383,7 @@ pub fn perform_trace_check(traces: Vec<UpdateTrace>) {
         let constants = constants.clone();
         let pair = pair.clone();
         // NOTE: We adopt the convention to reuse the 'process_id" as the tla module name
-        let tla_module = format!("{}_Apalache.tla", model_name);
+        let tla_module = format!("{model_name}_Apalache.tla");
         let tla_module = get_tla_module_path(&tla_module);
 
         running_threads += 1;

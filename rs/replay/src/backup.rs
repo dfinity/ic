@@ -45,9 +45,9 @@ pub(super) struct HeightArtifacts {
 fn read_file(path: &Path) -> Vec<u8> {
     let mut buffer = Vec::new();
     let mut file = fs::File::open(path)
-        .unwrap_or_else(|err| panic!("Couldn't open file {:?}: {:?}", path, err));
+        .unwrap_or_else(|err| panic!("Couldn't open file {path:?}: {err:?}"));
     file.read_to_end(&mut buffer)
-        .unwrap_or_else(|err| panic!("Couldn't read file {:?}: {:?}", path, err));
+        .unwrap_or_else(|err| panic!("Couldn't read file {path:?}: {err:?}"));
     buffer
 }
 
@@ -58,8 +58,8 @@ pub(crate) fn rename_file(original_file: &Path) {
         .expect("File name is missing")
         .to_str()
         .expect("File name is not a proper string");
-    let renamed_file = original_file.with_file_name(format!("invalid_{}", file_name));
-    println!("Renaming {:?} to {:?}", original_file, renamed_file);
+    let renamed_file = original_file.with_file_name(format!("invalid_{file_name}"));
+    println!("Renaming {original_file:?} to {renamed_file:?}");
     fs::rename(original_file, renamed_file).expect("Error renaming a file");
 }
 
@@ -269,7 +269,7 @@ pub(crate) fn deserialize_consensus_artifacts(
             let file = &path.join("catch_up_package.bin");
             if let Some(cup) = read_cup_file(file) {
                 if cup.height() != height {
-                    println!("A CUP with an unexpected height detected: {:?}", file);
+                    println!("A CUP with an unexpected height detected: {file:?}");
                     rename_file(file);
                     return Ok(());
                 }
@@ -281,8 +281,7 @@ pub(crate) fn deserialize_consensus_artifacts(
 
         if height_artifacts.proposals.is_empty() {
             println!(
-                "Stopping deserialization at height {:?} as this height contains no proposals.",
-                height,
+                "Stopping deserialization at height {height:?} as this height contains no proposals.",
             );
             return Ok(());
         }
@@ -316,7 +315,7 @@ pub(crate) fn deserialize_consensus_artifacts(
                 unique_signers,
                 registry_version,
             ) {
-                println!("Cannot verify the signature on the finalization: {:?}", err);
+                println!("Cannot verify the signature on the finalization: {err:?}");
                 rename_file(&file);
             } else {
                 let message = finalization.into_message();
@@ -365,8 +364,7 @@ pub(crate) fn deserialize_consensus_artifacts(
         let rb_path = path.join("random_beacon.bin");
         if !rb_path.exists() {
             println!(
-                "Stopping deserialization at height {:?} as this height contains no random beacon.",
-                height,
+                "Stopping deserialization at height {height:?} as this height contains no random beacon.",
             );
             return Ok(());
         }
@@ -380,8 +378,7 @@ pub(crate) fn deserialize_consensus_artifacts(
         let rt_path = path.join("random_tape.bin");
         if !rt_path.exists() {
             println!(
-                "Stopping deserialization at height {:?} as this height contains no random tape.",
-                height,
+                "Stopping deserialization at height {height:?} as this height contains no random tape.",
             );
             return Ok(());
         }
@@ -426,7 +423,7 @@ pub(crate) fn deserialize_consensus_artifacts(
                 Ok(artifacts) => (artifacts, None),
                 Err(ReplayError::ValidationIncomplete(h, artifacts)) => (artifacts, Some(h)),
                 Err(other) => {
-                    println!("Unexpected failure during validation: {:?}", other);
+                    println!("Unexpected failure during validation: {other:?}");
                     (Vec::new(), Some(last_finalized_height))
                 }
             };
@@ -442,7 +439,7 @@ pub(crate) fn deserialize_consensus_artifacts(
                     rename_file(&artifact_path);
                     return Err(ExitPoint::ValidationIncomplete(height));
                 }
-                None => println!("Failed to get path for invalid artifact: {:?}", i),
+                None => println!("Failed to get path for invalid artifact: {i:?}"),
             }
         }
         invalid_artifacts.append(&mut invalid);
@@ -450,7 +447,7 @@ pub(crate) fn deserialize_consensus_artifacts(
         // All the artifacts that we expect to be validated and hence removed from the collection.
         // If they weren't we remove them here and hopefully rsync the correct ones next time.
         for (_, artifact_path) in expected {
-            println!("Artifact couldn't be validated: {:?}", artifact_path);
+            println!("Artifact couldn't be validated: {artifact_path:?}");
             rename_file(&artifact_path);
         }
 
@@ -463,8 +460,7 @@ pub(crate) fn deserialize_consensus_artifacts(
         if let Some(cup_height) = last_cup_height {
             if height >= cup_height && !height_artifacts.finalizations.is_empty() {
                 println!(
-                    "Found a CUP at height {:?}, finalized at height {:?}",
-                    cup_height, height
+                    "Found a CUP at height {cup_height:?}, finalized at height {height:?}"
                 );
                 return Err(ExitPoint::CUPHeightWasFinalized(cup_height));
             }
@@ -473,5 +469,5 @@ pub(crate) fn deserialize_consensus_artifacts(
 }
 
 fn deserialization_error(file: &Path, err: ProxyDecodeError) -> String {
-    format!("Couldn't deserialize artifact {:?}: {}", file, err)
+    format!("Couldn't deserialize artifact {file:?}: {err}")
 }

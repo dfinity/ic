@@ -197,7 +197,7 @@ impl ProgressNetwork for PocketIc {
         } else {
             // Otherwise, we have to wait for the time to pass "naturally".
             if duration > Duration::from_secs(5) {
-                eprintln!("Warning: waiting for {:?}, this may take a while", duration);
+                eprintln!("Warning: waiting for {duration:?}, this may take a while");
                 eprintln!("Consider using shorter duration in 'progress' method calls");
             }
             std::thread::sleep(duration);

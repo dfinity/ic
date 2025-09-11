@@ -18,7 +18,7 @@ impl RosettaRequestHandler {
     ) -> Result<ConstructionSubmitResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         let envelopes = SignedTransaction::from_str(&msg.signed_transaction).map_err(|e| {
-            ApiError::invalid_transaction(format!("Failed to parse signed transaction: {}", e))
+            ApiError::invalid_transaction(format!("Failed to parse signed transaction: {e}"))
         })?;
         let results = self.ledger.submit(envelopes).await?;
         let transaction_identifier = transaction_identifier(&results);

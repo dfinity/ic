@@ -48,7 +48,7 @@ pub trait RecoveryIterator<
             if skipped_steps.contains(&current_step) {
                 self.next_step()
             } else {
-                super::cli::print_step(self.get_logger(), &format!("{:?}", current_step));
+                super::cli::print_step(self.get_logger(), &format!("{current_step:?}"));
                 if let Some(explanation) = current_step.get_documentation() {
                     info!(self.get_logger(), "\n\n{}\n", explanation);
                 }

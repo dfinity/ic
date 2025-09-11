@@ -14,7 +14,7 @@ pub fn handle_neuron_info(
 ) -> Result<Result<Option<OperationOutput>, ApiError>, String> {
     // Check the response from governance call.
     let response: Result<Neuron, GovernanceError> = candid::decode_one(bytes.as_ref())
-        .map_err(|err| format!("Could not decode NEURON_INFO response: {}", err))?;
+        .map_err(|err| format!("Could not decode NEURON_INFO response: {err}"))?;
     match response {
         Err(e) => Ok(Err(ApiError::InvalidRequest(
             false,

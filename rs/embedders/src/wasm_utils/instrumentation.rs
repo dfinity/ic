@@ -1039,7 +1039,7 @@ fn export_mutable_globals<'a>(
 
     for (ix, (mutable, exported)) in mutable_exported.iter().enumerate() {
         if *mutable && !exported {
-            extra_data.push(format!("__persistent_mutable_global_{}", ix));
+            extra_data.push(format!("__persistent_mutable_global_{ix}"));
         }
     }
     let mut iy = 0;

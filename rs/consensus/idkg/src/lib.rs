@@ -393,8 +393,7 @@ fn get_active_transcripts(
 
     if error_count > 0 {
         return Err(format!(
-            "Received {} errors when resolving transcipts",
-            error_count
+            "Received {error_count} errors when resolving transcipts"
         ));
     }
 

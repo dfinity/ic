@@ -31,7 +31,7 @@ pub(crate) fn get_tecdsa_master_public_key_from_internal_transcript(
         EccCurveType::P256 => AlgorithmId::EcdsaP256,
         x => {
             return Err(MasterPublicKeyExtractionError::UnsupportedAlgorithm(
-                format!("ECDSA does not support curve {:?}", x),
+                format!("ECDSA does not support curve {x:?}"),
             ));
         }
     };
@@ -71,7 +71,7 @@ pub fn sign_share(
 
     let sig_share_raw = internal_sig_share.serialize().map_err(|e| {
         ThresholdEcdsaCreateSigShareError::SerializationError {
-            internal_error: format!("{:?}", e),
+            internal_error: format!("{e:?}"),
         }
     })?;
 
@@ -240,7 +240,7 @@ pub fn combine_sig_shares(
         inputs.algorithm_id(),
     )
     .map_err(|e| ThresholdEcdsaCombineSigSharesError::InternalError {
-        internal_error: format!("{:?}", e),
+        internal_error: format!("{e:?}"),
     })?;
 
     Ok(ThresholdEcdsaCombinedSignature {

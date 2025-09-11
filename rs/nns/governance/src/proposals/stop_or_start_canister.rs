@@ -84,7 +84,7 @@ impl CallCanister for StopOrStartCanister {
             canister_id,
             action,
         })
-        .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {}", e)))
+        .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {e}")))
     }
 }
 

@@ -99,8 +99,7 @@ fn signature_verification_should_pass_test_vectors() {
         assert_eq!(
             result.is_ok(),
             vector.valid,
-            "Unexpected result for test vector {}",
-            index
+            "Unexpected result for test vector {index}"
         );
     }
 }

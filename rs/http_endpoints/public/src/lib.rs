@@ -205,9 +205,9 @@ fn create_port_file(path: PathBuf, port: u16) {
         )
     });
     let mut port_file = NamedTempFile::new_in(dir)
-        .unwrap_or_else(|err| panic!("Could not open temporary port report file: {}", err));
+        .unwrap_or_else(|err| panic!("Could not open temporary port report file: {err}"));
     port_file
-        .write_all(format!("{}", port).as_bytes())
+        .write_all(format!("{port}").as_bytes())
         .unwrap_or_else(|err| {
             panic!(
                 "Could not write to temporary port report file {}: {}",
@@ -696,7 +696,7 @@ async fn verify_cbor_content_header(
     {
         return make_plaintext_response(
             StatusCode::BAD_REQUEST,
-            format!("Unexpected content-type, expected {}.", CONTENT_TYPE_CBOR),
+            format!("Unexpected content-type, expected {CONTENT_TYPE_CBOR}."),
         );
     }
 

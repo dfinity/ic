@@ -2634,7 +2634,7 @@ impl ExecutionEnvironment {
             None => {
                 return Err(UserError::new(
                     ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", old_id),
+                    format!("Canister {old_id} not found."),
                 ));
             }
             Some(canister) => canister,
@@ -2892,7 +2892,7 @@ impl ExecutionEnvironment {
                 Some(canister) => Ok(canister),
                 None => Err(UserError::new(
                     ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found", canister_id),
+                    format!("Canister {canister_id} not found"),
                 )),
             }
         };
@@ -3123,7 +3123,7 @@ impl ExecutionEnvironment {
                             time,
                             state: IngressState::Failed(UserError::new(
                                 ErrorCode::CanisterStoppingCancelled,
-                                format!("Canister {}'s stop request was cancelled.", canister_id),
+                                format!("Canister {canister_id}'s stop request was cancelled."),
                             )),
                         },
                     );
@@ -3146,7 +3146,7 @@ impl ExecutionEnvironment {
                         refund: cycles,
                         response_payload: Payload::Reject(RejectContext::new(
                             RejectCode::CanisterError,
-                            format!("Canister {}'s stop request cancelled", canister_id),
+                            format!("Canister {canister_id}'s stop request cancelled"),
                         )),
                         deadline,
                     };
@@ -3205,7 +3205,7 @@ impl ExecutionEnvironment {
                 derivation_path,
             },
         )
-        .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, format!("{}", err)))
+        .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, format!("{err}")))
     }
 
     fn get_vetkd_public_key(
@@ -3225,7 +3225,7 @@ impl ExecutionEnvironment {
             |err| {
                 UserError::new(
                     ErrorCode::CanisterRejectedMessage,
-                    format!("Invalid VetKD subnet key: {:?}", err),
+                    format!("Invalid VetKD subnet key: {err:?}"),
                 )
             },
         )?;
@@ -3325,7 +3325,7 @@ impl ExecutionEnvironment {
                     if !aux.is_empty() && aux.len() != 32 {
                         return Err(UserError::new(
                             ErrorCode::CanisterRejectedMessage,
-                            format!("Invalid aux field for {}", alg),
+                            format!("Invalid aux field for {alg}"),
                         ));
                     }
                 }
@@ -3333,7 +3333,7 @@ impl ExecutionEnvironment {
                 (_, Some(_)) => {
                     return Err(UserError::new(
                         ErrorCode::CanisterRejectedMessage,
-                        format!("Schnorr algorithm {} does not support aux input", alg),
+                        format!("Schnorr algorithm {alg} does not support aux input"),
                     ));
                 }
             }
@@ -3504,7 +3504,7 @@ impl ExecutionEnvironment {
             other => {
                 return Err(UserError::new(
                     ErrorCode::UnknownManagementMessage,
-                    format!("Expected an install code message, but found {}", other),
+                    format!("Expected an install code message, but found {other}"),
                 ));
             }
         };
@@ -3573,8 +3573,7 @@ impl ExecutionEnvironment {
                 debug_assert_eq!(
                     dts_status,
                     DtsInstallCodeStatus::StartingFirstExecution,
-                    "Dts status mismatch: expected StartingFirstExecution, got {}",
-                    dts_status
+                    "Dts status mismatch: expected StartingFirstExecution, got {dts_status}"
                 );
                 // Keep track of all existing long running install code messages.
                 // During a subnet split, the requests are rejected if the target canister moved to a new subnet.
@@ -3799,8 +3798,7 @@ impl ExecutionEnvironment {
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::AbortedExecution { .. } => {
                 panic!(
-                    "Unexpected task {:?} in `resume_install_code` (broken precondition).",
-                    task
+                    "Unexpected task {task:?} in `resume_install_code` (broken precondition)."
                 );
             }
             ExecutionTask::PausedInstallCode(id) => {
@@ -4194,7 +4192,7 @@ impl ExecutionEnvironment {
         ExecuteSubnetMessageResult::Finished {
             response: Err(UserError::new(
                 ErrorCode::CanisterContractViolation,
-                format!("{} cannot be called by a user.", method),
+                format!("{method} cannot be called by a user."),
             )),
             refund: Cycles::zero(),
         }
@@ -4494,8 +4492,7 @@ fn get_master_public_key<'a>(
         None => Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
             format!(
-                "Subnet {} does not hold threshold key {}.",
-                subnet_id, key_id
+                "Subnet {subnet_id} does not hold threshold key {key_id}."
             ),
         )),
         Some(master_key) => Ok(master_key),

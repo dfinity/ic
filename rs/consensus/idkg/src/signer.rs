@@ -226,7 +226,7 @@ impl ThresholdSignerImpl {
                     .sign_errors_inc("duplicate_sig_shares_in_batch");
                 ret.push(IDkgChangeAction::HandleInvalid(
                     id,
-                    format!("Duplicate share in unvalidated batch: {}", share),
+                    format!("Duplicate share in unvalidated batch: {share}"),
                 ));
                 continue;
             }
@@ -267,7 +267,7 @@ impl ThresholdSignerImpl {
             self.metrics.sign_errors_inc("duplicate_sig_share");
             return Some(IDkgChangeAction::HandleInvalid(
                 id,
-                format!("Duplicate signature share: {}", share),
+                format!("Duplicate signature share: {share}"),
             ));
         }
 
@@ -278,8 +278,7 @@ impl ThresholdSignerImpl {
                 Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
-                        "Signature share validation(permanent error): {}, error = {:?}",
-                        share_string, error
+                        "Signature share validation(permanent error): {share_string}, error = {error:?}"
                     ),
                 ))
             }

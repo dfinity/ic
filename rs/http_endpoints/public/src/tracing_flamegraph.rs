@@ -54,7 +54,7 @@ pub(crate) async fn tracing_flamegraph_handle(
     let data = rx.await.map_err(|err| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Internal error: {}", err),
+            format!("Internal error: {err}"),
         )
             .into_response()
     })?;
@@ -65,7 +65,7 @@ pub(crate) async fn tracing_flamegraph_handle(
         .map_err(|err| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Internal error: {}", err),
+                format!("Internal error: {err}"),
             )
                 .into_response()
         })

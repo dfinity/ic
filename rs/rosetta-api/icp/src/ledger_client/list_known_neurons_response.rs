@@ -14,12 +14,10 @@ impl TryFrom<ListKnownNeuronsResponse> for ObjectMap {
         match serde_json::to_value(d) {
             Ok(Value::Object(o)) => Ok(o),
             Ok(o) => Err(ApiError::internal_error(format!(
-                "Could not convert ListKnownNeuronsResponse to ObjectMap. Expected type Object but received: {:?}",
-                o
+                "Could not convert ListKnownNeuronsResponse to ObjectMap. Expected type Object but received: {o:?}"
             ))),
             Err(err) => Err(ApiError::internal_error(format!(
-                "Could not convert ListKnownNeuronsResponse to ObjectMap: {:?}",
-                err
+                "Could not convert ListKnownNeuronsResponse to ObjectMap: {err:?}"
             ))),
         }
     }
@@ -37,8 +35,7 @@ impl TryFrom<Option<ObjectMap>> for ListKnownNeuronsResponse {
     fn try_from(o: Option<ObjectMap>) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
             ApiError::internal_error(format!(
-                "Could not parse a `ListKnownNeuronsResponse` from JSON object: {}",
-                e
+                "Could not parse a `ListKnownNeuronsResponse` from JSON object: {e}"
             ))
         })
     }

@@ -537,7 +537,7 @@ impl CheckpointLoader {
         let on_disk_canister_ids = self
             .checkpoint_layout
             .canister_ids()
-            .map_err(|err| format!("Canister Validation: failed to load canister ids: {}", err))?;
+            .map_err(|err| format!("Canister Validation: failed to load canister ids: {err}"))?;
         let ref_canister_ids: Vec<_> = ref_canister_states.keys().copied().collect();
         debug_assert!(on_disk_canister_ids.is_sorted());
         debug_assert!(ref_canister_ids.is_sorted());
@@ -553,8 +553,7 @@ impl CheckpointLoader {
             )
             .map_err(|err| {
                 format!(
-                    "Failed to load canister state for validation for key #{}: {}",
-                    canister_id, err
+                    "Failed to load canister state for validation for key #{canister_id}: {err}"
                 )
             })?
             .0
@@ -608,8 +607,7 @@ impl CheckpointLoader {
     ) -> Result<(), String> {
         let mut on_disk_snapshot_ids = self.checkpoint_layout.snapshot_ids().map_err(|err| {
             format!(
-                "Snapshot validation: failed to load list of snapshot ids: {}",
-                err
+                "Snapshot validation: failed to load list of snapshot ids: {err}"
             )
         })?;
         let mut ref_snapshot_ids: Vec<_> = ref_canister_snapshots.iter().map(|x| *x.0).collect();
@@ -626,8 +624,7 @@ impl CheckpointLoader {
             )
             .map_err(|err| {
                 format!(
-                    "Failed to load canister snapshot {} for validation: {}",
-                    snapshot_id, err
+                    "Failed to load canister snapshot {snapshot_id} for validation: {err}"
                 )
             })?
             .0
@@ -720,7 +717,7 @@ fn validate_eq_checkpoint_internal(
     checkpoint_loader.validate_eq_canister_states(thread_pool, canister_states)?;
     checkpoint_loader
         .load_system_metadata()
-        .map_err(|err| format!("Failed to load system metadata: {}", err))?
+        .map_err(|err| format!("Failed to load system metadata: {err}"))?
         .validate_eq(metadata)?;
     if !metadata.unflushed_checkpoint_ops.is_empty() {
         return Err("Metadata has unflushed changes after checkpoint".to_string());
@@ -774,7 +771,7 @@ pub fn load_canister_state(
     let canister_state_bits: CanisterStateBits =
         CanisterStateBits::try_from(canister_layout.canister().deserialize()?).map_err(|err| {
             into_checkpoint_error(
-                format!("canister_states[{}]::canister_state_bits", canister_id),
+                format!("canister_states[{canister_id}]::canister_state_bits"),
                 err,
             )
         })?;
@@ -844,7 +841,7 @@ pub fn load_canister_state(
     ))
     .map_err(|err| {
         into_checkpoint_error(
-            format!("canister_states[{}]::system_state::queues", canister_id),
+            format!("canister_states[{canister_id}]::system_state::queues"),
             err,
         )
     })?;
@@ -957,7 +954,7 @@ pub fn load_snapshot(
     )
     .map_err(|err| {
         into_checkpoint_error(
-            format!("canister_snapshot[{}]::canister_snapshot_bits", snapshot_id),
+            format!("canister_snapshot[{snapshot_id}]::canister_snapshot_bits"),
             err,
         )
     })?;

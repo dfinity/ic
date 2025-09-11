@@ -71,8 +71,7 @@ impl FulfillSubnetRentalRequest {
 
         if !is_potential_full_git_commit_id(replica_version_id) {
             defects.push(format!(
-                "The `replica_version_id` is not a 40 character hexidecimal string (it was {:?})",
-                replica_version_id,
+                "The `replica_version_id` is not a 40 character hexidecimal string (it was {replica_version_id:?})",
             ));
         }
 
@@ -143,10 +142,9 @@ impl FulfillSubnetRentalRequest {
                 GovernanceError::new_with_message(
                     ErrorType::External,
                     format!(
-                        "Unable to verify that user {} has a rental request, because \
+                        "Unable to verify that user {user} has a rental request, because \
                          unable call SubnetRentalCanister.list_rental_requests \
-                         (while executing a FulfillSubnetRentalRequest proposal): {:?}: {}",
-                        user, code, message,
+                         (while executing a FulfillSubnetRentalRequest proposal): {code:?}: {message}",
                     ),
                 )
             })?;
@@ -163,9 +161,8 @@ impl FulfillSubnetRentalRequest {
             GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "Unable to verify that user {} has a rental request, because \
-                     unable to decode SubnetRentalCanister.list_rental_requests response: {}",
-                    user, err,
+                    "Unable to verify that user {user} has a rental request, because \
+                     unable to decode SubnetRentalCanister.list_rental_requests response: {err}",
                 ),
             )
         })?;
@@ -178,11 +175,10 @@ impl FulfillSubnetRentalRequest {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 format!(
-                    "The user ({}) of this FulfillSubnetRentalRequest proposal \
+                    "The user ({user}) of this FulfillSubnetRentalRequest proposal \
                      is not the user of any existing rental request in the Subnet\
                      Rental canister. Thus, we cannot proceed with executing this \
                      FulfillSubnetRentalRequest proposal.",
-                    user,
                 ),
             ));
         }
@@ -275,8 +271,7 @@ impl FulfillSubnetRentalRequest {
                 GovernanceError::new_with_message(
                     ErrorType::External,
                     format!(
-                        "Unable to call the Registry.create_subnet: {:?}: {}",
-                        code, message,
+                        "Unable to call the Registry.create_subnet: {code:?}: {message}",
                     ),
                 )
             })?;
@@ -287,8 +282,7 @@ impl FulfillSubnetRentalRequest {
                 GovernanceError::new_with_message(
                     ErrorType::External,
                     format!(
-                        "Unable to decode the response from Registry.create_subnet: {}",
-                        err,
+                        "Unable to decode the response from Registry.create_subnet: {err}",
                     ),
                 )
             })?
@@ -296,8 +290,7 @@ impl FulfillSubnetRentalRequest {
                 GovernanceError::new_with_message(
                     ErrorType::External,
                     format!(
-                        "create_subnet reply from the Registry canister was an Err: {}",
-                        err,
+                        "create_subnet reply from the Registry canister was an Err: {err}",
                     ),
                 )
             })?;
@@ -315,8 +308,7 @@ impl FulfillSubnetRentalRequest {
                 ErrorType::External,
                 format!(
                     "Was able to decode Registry.create_subnet response, but the new_subnet_id \
-                 value could not be converted into a SubnetId: {}",
-                    err,
+                 value could not be converted into a SubnetId: {err}",
                 ),
             )
         })
@@ -369,8 +361,7 @@ impl FulfillSubnetRentalRequest {
             GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "Unable to call SubnetRentalCanister.execute_create_rental_agreement: {:?}: {}",
-                    code, message,
+                    "Unable to call SubnetRentalCanister.execute_create_rental_agreement: {code:?}: {message}",
                 ),
             )
         })?;

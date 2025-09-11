@@ -355,8 +355,7 @@ impl Neuron {
 
             debug_assert!(
                 followee_vote.is_ok(),
-                "Cannot convert ballot vote to Vote for {:?}",
-                ballot
+                "Cannot convert ballot vote to Vote for {ballot:?}"
             );
 
             let Ok(followee_vote) = Vote::try_from(ballot.vote) else {
@@ -775,8 +774,7 @@ impl Neuron {
             return Err(GovernanceError::new_with_message(
                 ErrorType::AccessControlList,
                 format!(
-                    "PrincipalId {} was missing permissions {:?} when removing {:?}",
-                    principal_id, missing_permissions, permission_types_to_remove
+                    "PrincipalId {principal_id} was missing permissions {missing_permissions:?} when removing {permission_types_to_remove:?}"
                 ),
             ));
         }
@@ -848,7 +846,7 @@ impl NeuronId {
             Ok(subaccount) => Ok(subaccount),
             Err(e) => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidNeuronId,
-                format!("Could not convert NeuronId to Subaccount {}", e),
+                format!("Could not convert NeuronId to Subaccount {e}"),
             )),
         }
     }
@@ -884,7 +882,7 @@ impl FromStr for NeuronId {
             Ok(id) => Ok(NeuronId { id }),
             Err(e) => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidNeuronId,
-                format!("Could not convert {} to NeuronId", e),
+                format!("Could not convert {e} to NeuronId"),
             )),
         }
     }

@@ -25,11 +25,10 @@ pub async fn download_binary(
     target_dir: &Path,
 ) -> RecoveryResult<PathBuf> {
     let binary_url = format!(
-        "https://download.dfinity.systems/ic/{}/release/{}.gz",
-        replica_version, binary_name
+        "https://download.dfinity.systems/ic/{replica_version}/release/{binary_name}.gz"
     );
 
-    let mut file = target_dir.join(format!("{}.gz", binary_name));
+    let mut file = target_dir.join(format!("{binary_name}.gz"));
 
     info!(
         logger,
@@ -147,7 +146,7 @@ where
 {
     let mut rsync = Command::new("rsync");
     rsync.arg("--delete").arg("-acP").arg("--no-g");
-    rsync.args(excludes.into_iter().map(|e| format!("--exclude={}", e)));
+    rsync.args(excludes.into_iter().map(|e| format!("--exclude={e}")));
     rsync.arg(src).arg(target);
     rsync.arg("-e").arg(ssh_helper::get_rsync_ssh_arg(key_file));
 
@@ -156,7 +155,7 @@ where
 
 pub fn write_file(file: &Path, content: String) -> RecoveryResult<()> {
     let mut f = File::create(file).map_err(|e| RecoveryError::file_error(file, e))?;
-    write!(f, "{}", content).map_err(|e| RecoveryError::file_error(file, e))?;
+    write!(f, "{content}").map_err(|e| RecoveryError::file_error(file, e))?;
     Ok(())
 }
 

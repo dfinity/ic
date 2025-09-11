@@ -1401,10 +1401,8 @@ fn handle_compute_manifest_request(
 
     assert!(
         state_sync_version <= MAX_SUPPORTED_STATE_SYNC_VERSION,
-        "Unable to compute a manifest with version {:?}. \
-                    Maximum supported StateSync version is {:?}",
-        state_sync_version,
-        MAX_SUPPORTED_STATE_SYNC_VERSION
+        "Unable to compute a manifest with version {state_sync_version:?}. \
+                    Maximum supported StateSync version is {MAX_SUPPORTED_STATE_SYNC_VERSION:?}"
     );
 
     // According to the current checkpointing workflow, encountering a checkpoint with the unverified marker should not happen.

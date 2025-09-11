@@ -123,8 +123,7 @@ impl IDkgComplaintHandlerImpl {
                 ret.push(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
-                        "Duplicate complaint in unvalidated batch: {}",
-                        signed_complaint
+                        "Duplicate complaint in unvalidated batch: {signed_complaint}"
                     ),
                 ));
                 continue;
@@ -146,7 +145,7 @@ impl IDkgComplaintHandlerImpl {
                         self.metrics.complaint_errors_inc("duplicate_complaint");
                         ret.push(IDkgChangeAction::HandleInvalid(
                             id,
-                            format!("Duplicate complaint: {}", signed_complaint),
+                            format!("Duplicate complaint: {signed_complaint}"),
                         ));
                     } else {
                         match self.resolve_ref(transcript_ref, block_reader, "validate_complaints")
@@ -163,8 +162,7 @@ impl IDkgComplaintHandlerImpl {
                                 ret.push(IDkgChangeAction::HandleInvalid(
                                     id,
                                     format!(
-                                        "validate_complaints(): failed to resolve: {}",
-                                        signed_complaint
+                                        "validate_complaints(): failed to resolve: {signed_complaint}"
                                     ),
                                 ));
                             }
@@ -246,7 +244,7 @@ impl IDkgComplaintHandlerImpl {
                     .complaint_errors_inc("duplicate_openings_in_batch");
                 ret.push(IDkgChangeAction::HandleInvalid(
                     id,
-                    format!("Duplicate opening in unvalidated batch: {}", signed_opening),
+                    format!("Duplicate opening in unvalidated batch: {signed_opening}"),
                 ));
                 continue;
             }
@@ -268,7 +266,7 @@ impl IDkgComplaintHandlerImpl {
                         self.metrics.complaint_errors_inc("duplicate_opening");
                         ret.push(IDkgChangeAction::HandleInvalid(
                             id,
-                            format!("Duplicate opening: {}", signed_opening),
+                            format!("Duplicate opening: {signed_opening}"),
                         ));
                     } else if let Some(signed_complaint) =
                         self.get_complaint_for_opening(idkg_pool, &signed_opening)
@@ -290,8 +288,7 @@ impl IDkgComplaintHandlerImpl {
                                 ret.push(IDkgChangeAction::HandleInvalid(
                                     id,
                                     format!(
-                                        "validate_openings(): failed to resolve: {}",
-                                        signed_opening
+                                        "validate_openings(): failed to resolve: {signed_opening}"
                                     ),
                                 ));
                             }
@@ -444,8 +441,7 @@ impl IDkgComplaintHandlerImpl {
                 return Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
-                        "Complaint signature validation(permanent error): {}, error = {:?}",
-                        signed_complaint, error
+                        "Complaint signature validation(permanent error): {signed_complaint}, error = {error:?}"
                     ),
                 ));
             } else {
@@ -473,8 +469,7 @@ impl IDkgComplaintHandlerImpl {
                 Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
-                        "Complaint validation(permanent error): {}, error = {:?}",
-                        signed_complaint, error
+                        "Complaint validation(permanent error): {signed_complaint}, error = {error:?}"
                     ),
                 ))
             }
@@ -571,8 +566,7 @@ impl IDkgComplaintHandlerImpl {
                 return Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
-                        "Opening signature validation(permanent error): {}, error = {:?}",
-                        signed_opening, error
+                        "Opening signature validation(permanent error): {signed_opening}, error = {error:?}"
                     ),
                 ));
             } else {
@@ -601,8 +595,7 @@ impl IDkgComplaintHandlerImpl {
                 Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
-                        "Opening validation(permanent error): {}, error = {:?}",
-                        signed_opening, error
+                        "Opening validation(permanent error): {signed_opening}, error = {error:?}"
                     ),
                 ))
             }

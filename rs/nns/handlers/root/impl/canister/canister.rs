@@ -70,12 +70,12 @@ fn new_management_canister_client() -> impl ManagementCanisterClient {
 // messages are quite obscure.
 #[unsafe(export_name = "canister_init")]
 fn canister_init() {
-    println!("{}canister_init", LOG_PREFIX);
+    println!("{LOG_PREFIX}canister_init");
 }
 
 #[post_upgrade]
 fn canister_post_upgrade() {
-    println!("{}canister_post_upgrade", LOG_PREFIX);
+    println!("{LOG_PREFIX}canister_post_upgrade");
 }
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}

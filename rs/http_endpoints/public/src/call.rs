@@ -128,8 +128,7 @@ fn get_registry_data(
         Ok(Some(settings)) => settings,
         Ok(None) => {
             let message = format!(
-                "No subnet record found for registry_version={:?} and subnet_id={:?}",
-                registry_version, subnet_id
+                "No subnet record found for registry_version={registry_version:?} and subnet_id={subnet_id:?}"
             );
             warn!(log, "{}", message);
             return Err(HttpError {
@@ -139,8 +138,7 @@ fn get_registry_data(
         }
         Err(err) => {
             let message = format!(
-                "max_ingress_bytes_per_message not found for registry_version={:?} and subnet_id={:?}. {:?}",
-                registry_version, subnet_id, err
+                "max_ingress_bytes_per_message not found for registry_version={registry_version:?} and subnet_id={subnet_id:?}. {err:?}"
             );
             error!(log, "{}", message);
             return Err(HttpError {
@@ -227,7 +225,7 @@ impl IngressValidator {
 
         let msg: SignedIngress = request.try_into().map_err(|e| HttpError {
             status: StatusCode::BAD_REQUEST,
-            message: format!("Could not parse body as call message: {}", e),
+            message: format!("Could not parse body as call message: {e}"),
         })?;
 
         // Reject requests where `canister_id` != `effective_canister_id` for non mgmt canister calls.

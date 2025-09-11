@@ -511,8 +511,7 @@ mod verify_threshold_sig_share {
             verification_result.unwrap_err(),
             CryptoError::InvalidArgument {
                 message: format!(
-                    "There is no node index for dkg id \"{:?}\" and node id \"{}\" in the transcript data.",
-                    NI_DKG_ID_1, NODE_ID
+                    "There is no node index for dkg id \"{NI_DKG_ID_1:?}\" and node id \"{NODE_ID}\" in the transcript data."
                 )
             }
         );
@@ -835,8 +834,7 @@ mod combine_threshold_sig_shares {
             result.unwrap_err(),
             CryptoError::InvalidArgument {
                 message: format!(
-                    "There is no node index for dkg id \"{:?}\" and node id \"{}\" in the transcript data.",
-                    NI_DKG_ID_1, NODE_1
+                    "There is no node index for dkg id \"{NI_DKG_ID_1:?}\" and node id \"{NODE_1}\" in the transcript data."
                 )
             }
         );

@@ -708,7 +708,7 @@ mod verify_dealing {
         csp.expect_verify_dealing()
             .withf(
                 move |_algorithm_id, _dealer_index, _threshold, _epoch, receiver_keys, _dealing| {
-                    println!("{:?}", receiver_keys);
+                    println!("{receiver_keys:?}");
                     *receiver_keys == expected_receiver_keys
                 },
             )

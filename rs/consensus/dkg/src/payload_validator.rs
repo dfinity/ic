@@ -111,8 +111,7 @@ pub fn validate_payload(
                 .map_err(DkgPayloadValidationFailure::FailedToGetMaxDealingsPerBlock)?
                 .unwrap_or_else(|| {
                     panic!(
-                        "No subnet record found for registry version={} and subnet_id={}",
-                        registry_version, subnet_id
+                        "No subnet record found for registry version={registry_version} and subnet_id={subnet_id}"
                     )
                 });
 

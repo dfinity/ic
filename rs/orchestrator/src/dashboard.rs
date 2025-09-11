@@ -110,7 +110,7 @@ impl OrchestratorDashboard {
 
     fn get_authorized_keys(&self, account: &str) -> String {
         try_to_get_authorized_keys(account).unwrap_or_else(|e| {
-            let error = format!("Failed to read the keys of the account {}: {}", account, e);
+            let error = format!("Failed to read the keys of the account {account}: {e}");
             warn!(self.logger, "{}", error);
             error
         })
@@ -186,8 +186,7 @@ impl OrchestratorDashboard {
             }
         };
         format!(
-            "cup height: {}\ncup signed: {}\ncup state hash: {}\ncup timestamp: {}",
-            height, signed, hash, timestamp
+            "cup height: {height}\ncup signed: {signed}\ncup state hash: {hash}\ncup timestamp: {timestamp}"
         )
     }
 }
@@ -202,7 +201,7 @@ fn try_to_get_authorized_keys(account: &str) -> Result<String, String> {
     let output = Command::new("/opt/ic/bin/read-ssh-keys.sh")
         .arg(account)
         .output()
-        .map_err(|e| format!("Failed to execute \"read-ssh-keys.sh\" : {}", e))?;
+        .map_err(|e| format!("Failed to execute \"read-ssh-keys.sh\" : {e}"))?;
     match output.status.success() {
         true => Ok(stringify(&output.stdout)?),
         false => Err(stringify(&output.stderr)?),

@@ -127,8 +127,7 @@ impl AdminHelper {
             .add_argument(
                 SUMMARY_ARG,
                 quote(format!(
-                    "Elect new replica binary revision (commit {})",
-                    upgrade_version,
+                    "Elect new replica binary revision (commit {upgrade_version})",
                 )),
             );
 
@@ -150,7 +149,7 @@ impl AdminHelper {
             .add_positional_argument(upgrade_version)
             .add_argument(
                 SUMMARY_ARG,
-                quote(format!("Upgrade replica version of subnet {}.", subnet_id)),
+                quote(format!("Upgrade replica version of subnet {subnet_id}.")),
             );
 
         self.add_proposer_args(&mut ic_admin);
@@ -190,13 +189,13 @@ impl AdminHelper {
                 })
                 .collect::<Vec<_>>();
             let key_requests_string = serde_json::to_string(&key_requests)
-                .map_err(|err| eprintln!("Generating key_requests_string failed with {}", err))
+                .map_err(|err| eprintln!("Generating key_requests_string failed with {err}"))
                 .unwrap_or_default();
 
             if !key_requests.is_empty() {
                 ic_admin.add_argument(
                     "initial-chain-key-configs-to-request",
-                    format!("'{}'", key_requests_string),
+                    format!("'{key_requests_string}'"),
                 );
             }
             if let Some(idkg_key_rotation_period_ms) = config.idkg_key_rotation_period_ms {
@@ -226,7 +225,7 @@ impl AdminHelper {
                 .add_argument("registry-version", params.registry_version);
         }
 
-        ic_admin.add_argument(SUMMARY_ARG, quote(format!("Recover subnet {}.", subnet_id)));
+        ic_admin.add_argument(SUMMARY_ARG, quote(format!("Recover subnet {subnet_id}.")));
 
         let since_the_epoch = time
             .duration_since(UNIX_EPOCH)
@@ -258,7 +257,7 @@ impl AdminHelper {
             .add_argument("subnet-type", "system")
             .add_argument(
                 SUMMARY_ARG,
-                format!("Create subnet with id {}", subnet_id_override),
+                format!("Create subnet with id {subnet_id_override}"),
             );
 
         for node_id in node_ids {
@@ -334,7 +333,7 @@ fn prepend_if_necessary(argument: impl ToString, prefix: &str) -> String {
 
 /// Wraps a string in escaped quotation marks.
 pub fn quote(text: impl Display) -> String {
-    format!("\"{}\"", text)
+    format!("\"{text}\"")
 }
 
 #[cfg(test)]

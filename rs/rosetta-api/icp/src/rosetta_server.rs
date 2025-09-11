@@ -296,8 +296,7 @@ impl RosettaApiServer {
                         .limit(4 * 1024 * 1024)
                         .error_handler(move |e, _| {
                             errors::convert_to_error(&ApiError::invalid_request(format!(
-                                "{:#?}",
-                                e
+                                "{e:#?}"
                             )))
                             .into()
                         }),
@@ -340,7 +339,7 @@ impl RosettaApiServer {
                 &listen_port_file,
                 &server.addrs().first().unwrap().port().to_string(),
             )
-            .unwrap_or_else(|e| panic!("Unable to write to listen_port_file! Error: {}", e));
+            .unwrap_or_else(|e| panic!("Unable to write to listen_port_file! Error: {e}"));
         }
 
         let server = server.run();
