@@ -3,9 +3,7 @@ mod utils;
 
 use crate::header::AuxPowHeaderValidator;
 use crate::header::{is_timestamp_valid, HeaderValidator};
-use crate::tests::utils::{
-    deserialize_auxpow_header, get_auxpow_headers, get_headers,
-};
+use crate::tests::utils::{deserialize_auxpow_header, get_auxpow_headers, get_headers};
 use crate::ValidateHeaderError;
 use crate::{BlockHeight, HeaderStore};
 use bitcoin::block::{Header, Version};
