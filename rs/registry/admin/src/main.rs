@@ -51,7 +51,6 @@ use ic_nns_governance_api::{
         SwapParameters,
     },
     install_code::CanisterInstallMode as GovernanceInstallMode,
-    proposal::Action,
     proposal_submission_helpers::{
         create_external_update_proposal_candid, create_make_proposal_payload,
         decode_make_proposal_response,
@@ -5316,7 +5315,7 @@ where
 
     let action = cmd.action().await;
 
-    print_proposal(&Action::from(action.clone()), &cmd);
+    print_proposal(&action, &cmd);
 
     if cmd.is_dry_run() {
         return;
