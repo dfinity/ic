@@ -1,7 +1,4 @@
-use std::{
-    cell::{Cell, RefCell},
-    collections::BTreeSet,
-};
+use std::cell::{Cell, RefCell};
 
 #[cfg(any(test, feature = "canbench-rs"))]
 use ic_nervous_system_temporary::Temporary;
@@ -16,8 +13,8 @@ thread_local! {
     // These are needed for the phased rollout approach in order
     // allow granular rolling out of the feature to specific subnets
     // to specific subset of callers.
-    static NODE_SWAPPING_WHITELISTED_CALLERS: RefCell<BTreeSet<PrincipalId>> = const { RefCell::new(BTreeSet::new())};
-    static NODE_SWAPPING_ENABLED_SUBNETS: RefCell<BTreeSet<SubnetId>> = const { RefCell::new(BTreeSet::new()) };
+    static NODE_SWAPPING_WHITELISTED_CALLERS: RefCell<Vec<PrincipalId>> = const { RefCell::new(Vec::new())};
+    static NODE_SWAPPING_ENABLED_SUBNETS: RefCell<Vec<SubnetId>> = const { RefCell::new(Vec::new()) };
 }
 
 pub(crate) fn is_chunkifying_large_values_enabled() -> bool {
@@ -56,11 +53,11 @@ pub mod temporary_overrides {
         IS_NODE_SWAPPING_ENABLED.replace(override_value);
     }
 
-    pub fn test_set_swapping_whitelisted_callers(override_callers: BTreeSet<PrincipalId>) {
+    pub fn test_set_swapping_whitelisted_callers(override_callers: Vec<PrincipalId>) {
         NODE_SWAPPING_WHITELISTED_CALLERS.replace(override_callers.into_iter().collect());
     }
 
-    pub fn test_set_swapping_enabled_subnets(override_subnets: BTreeSet<SubnetId>) {
+    pub fn test_set_swapping_enabled_subnets(override_subnets: Vec<SubnetId>) {
         NODE_SWAPPING_ENABLED_SUBNETS.replace(override_subnets.into_iter().collect());
     }
 }
@@ -76,11 +73,11 @@ pub(crate) fn is_node_swapping_enabled_for_caller(caller: PrincipalId) -> bool {
 }
 
 #[cfg(test)]
-pub(crate) fn enable_swapping_on_subnets(subnets: BTreeSet<SubnetId>) {
+pub(crate) fn enable_swapping_on_subnets(subnets: Vec<SubnetId>) {
     NODE_SWAPPING_ENABLED_SUBNETS.replace(subnets);
 }
 
 #[cfg(test)]
-pub(crate) fn enable_swapping_for_callers(callers: BTreeSet<PrincipalId>) {
+pub(crate) fn enable_swapping_for_callers(callers: Vec<PrincipalId>) {
     NODE_SWAPPING_WHITELISTED_CALLERS.replace(callers);
 }

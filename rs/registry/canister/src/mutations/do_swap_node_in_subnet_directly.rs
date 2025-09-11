@@ -159,10 +159,15 @@ mod tests {
     use ic_types::PrincipalId;
 
     use crate::{
-        flags::{temporarily_disable_node_swapping, temporarily_enable_node_swapping},
+        common::compliant_registry_helpers::TestableRegistry,
+        flags::{
+            enable_swapping_for_callers, enable_swapping_on_subnets,
+            temporarily_disable_node_swapping, temporarily_enable_node_swapping,
+        },
         mutations::do_swap_node_in_subnet_directly::{SwapError, SwapNodeInSubnetDirectlyPayload},
         registry::Registry,
     };
+    use test_registry_builder::builder::CompliantRegistryMutationsBuilder;
 
     fn invalid_payloads_with_expected_errors() -> Vec<(SwapNodeInSubnetDirectlyPayload, SwapError)>
     {
@@ -226,9 +231,13 @@ mod tests {
 
         let payload = valid_payload();
 
-        assert!(registry
-            .swap_nodes_inner(payload, PrincipalId::new_user_test_id(1))
-            .is_ok())
+        let result = registry.swap_nodes_inner(payload, PrincipalId::new_user_test_id(1));
+
+        // First error that occurs after validation
+        assert!(result.is_err_and(|err| err
+            == SwapError::FeatureDisabledForCaller {
+                caller: PrincipalId::new_user_test_id(1)
+            }));
     }
 
     #[test]
@@ -246,5 +255,114 @@ mod tests {
                 "Expected: {expected:?} but found result: {output:?}"
             );
         }
+    }
+
+    #[test]
+    fn feature_enabled_for_caller() {
+        let _temp_enable_feat = temporarily_enable_node_swapping();
+
+        let compliant_registry = CompliantRegistryMutationsBuilder::default()
+            .with_operator("operator", "dc", "provider")
+            .with_node("node-1", "operator", None)
+            .with_node("node-2", "operator", Some("subnet"))
+            .build();
+        let mut test_registry = TestableRegistry::from(compliant_registry);
+
+        let operator = test_registry.compliant_mutations().operator_id("operator");
+        let subnet = test_registry.compliant_mutations().subnet_id("subnet");
+        enable_swapping_on_subnets(vec![subnet]);
+
+        let payload = SwapNodeInSubnetDirectlyPayload {
+            new_node_id: Some(test_registry.compliant_mutations().node_id("node-1").get()),
+            old_node_id: Some(test_registry.compliant_mutations().node_id("node-2").get()),
+        };
+
+        // First make a call and expect to fail because
+        // the feature is not enabled for this caller.
+        let response = test_registry.run_mut(|reg| reg.swap_nodes_inner(payload.clone(), operator));
+        let expected_err = SwapError::FeatureDisabledForCaller { caller: operator };
+        assert!(
+            response.as_ref().is_err_and(|err| err == &expected_err),
+            "Expected error {expected_err:?} but got {response:?}"
+        );
+
+        // Enable the feature for the caller
+        enable_swapping_for_callers(vec![operator]);
+        let response = test_registry.run_mut(|reg| reg.swap_nodes_inner(payload.clone(), operator));
+
+        // Expect the first next error which is the missing
+        // subnet in the registry.
+        assert!(response.is_ok(), "Expected OK but got {response:?}");
+    }
+
+    #[test]
+    fn feature_enabled_for_subnet() {
+        let _temp_enable_feat = temporarily_enable_node_swapping();
+        let compliant_registry = CompliantRegistryMutationsBuilder::default()
+            .with_operator("operator", "dc", "provider")
+            .with_node("node-1", "operator", Some("subnet"))
+            .with_node("node-2", "operator", None)
+            .build();
+
+        let mut test_registry = TestableRegistry::from(compliant_registry);
+
+        let subnet = test_registry.compliant_mutations().subnet_id("subnet");
+        let operator = test_registry.compliant_mutations().operator_id("operator");
+        enable_swapping_for_callers(vec![operator]);
+
+        let payload = SwapNodeInSubnetDirectlyPayload {
+            new_node_id: Some(test_registry.compliant_mutations().node_id("node-2").get()),
+            old_node_id: Some(test_registry.compliant_mutations().node_id("node-1").get()),
+        };
+
+        let response = test_registry.run_mut(|reg| reg.swap_nodes_inner(payload.clone(), operator));
+
+        let expected_err = SwapError::FeatureDisabledOnSubnet { subnet_id: subnet };
+
+        // First call when the feature isn't enabled on the subnet.
+        assert!(
+            response.as_ref().is_err_and(|err| err == &expected_err),
+            "Expected to get error {expected_err:?} but got {response:?}"
+        );
+
+        // Now enable the feature and call again.
+        enable_swapping_on_subnets(vec![subnet]);
+        let response = test_registry.run_mut(|reg| reg.swap_nodes_inner(payload.clone(), operator));
+
+        assert!(
+            response.is_ok(),
+            "Expected the result to be OK but got {response:?}"
+        );
+    }
+
+    #[test]
+    fn e2e_valid_swap() {
+        let _temp_enable_feat = temporarily_enable_node_swapping();
+        let compliant_registry = CompliantRegistryMutationsBuilder::default()
+            .with_operator("operator", "dc", "provider")
+            .with_node("node-1", "operator", None)
+            .with_node("node-2", "operator", Some("subnet"))
+            .build();
+
+        let mut test_registry = TestableRegistry::from(compliant_registry);
+
+        let payload = SwapNodeInSubnetDirectlyPayload {
+            old_node_id: Some(test_registry.compliant_mutations().node_id("node-2").get()),
+            new_node_id: Some(test_registry.compliant_mutations().node_id("node-1").get()),
+        };
+
+        let operator = test_registry.compliant_mutations().operator_id("operator");
+        let subnet = test_registry.compliant_mutations().subnet_id("subnet");
+
+        enable_swapping_for_callers(vec![operator]);
+        enable_swapping_on_subnets(vec![subnet]);
+
+        let response = test_registry.run_mut(|reg| reg.swap_nodes_inner(payload.clone(), operator));
+        assert!(
+            response.is_ok(),
+            "Expected OK response but got: {response:?}"
+        );
+
+        //TODO(DRE-548): Add assertions that the swap has been made
     }
 }

@@ -19,8 +19,8 @@ pub struct RegistryCanisterInitPayload {
     // Note: these flags are temporary and will
     // go away once the feature is fully deployed.
     pub is_swapping_feature_enabled: bool,
-    pub swapping_whitelisted_callers: BTreeSet<PrincipalId>,
-    pub swapping_enabled_subnets: BTreeSet<SubnetId>,
+    pub swapping_whitelisted_callers: Vec<PrincipalId>,
+    pub swapping_enabled_subnets: Vec<SubnetId>,
 }
 
 impl fmt::Display for RegistryCanisterInitPayload {
@@ -70,8 +70,12 @@ impl RegistryCanisterInitPayloadBuilder {
         RegistryCanisterInitPayload {
             mutations: self.initial_mutations.clone(),
             is_swapping_feature_enabled: self.is_swapping_feature_enabled,
-            swapping_whitelisted_callers: self.swapping_whitelisted_callers.clone(),
-            swapping_enabled_subnets: self.swapping_enabled_subnets.clone(),
+            swapping_whitelisted_callers: self
+                .swapping_whitelisted_callers
+                .clone()
+                .into_iter()
+                .collect(),
+            swapping_enabled_subnets: self.swapping_enabled_subnets.clone().into_iter().collect(),
         }
     }
 

@@ -183,7 +183,6 @@ fn canister_init() {
 
     #[cfg(feature = "test")]
     {
-        use itertools::Itertools;
         use registry_canister::flags::temporary_overrides::{
             test_set_swapping_enabled_subnets, test_set_swapping_status,
             test_set_swapping_whitelisted_callers,
@@ -196,21 +195,13 @@ fn canister_init() {
         );
         test_set_swapping_status(init_payload.is_swapping_feature_enabled);
         println!(
-            "{LOG_PREFIX}canister_init: Swapping whietlisted callers: [{}]",
-            init_payload
-                .swapping_whitelisted_callers
-                .iter()
-                .map(|c| c.to_string())
-                .join(", ")
+            "{LOG_PREFIX}canister_init: Swapping whietlisted callers: {:?}",
+            init_payload.swapping_whitelisted_callers
         );
         test_set_swapping_whitelisted_callers(init_payload.swapping_whitelisted_callers);
         println!(
-            "{LOG_PREFIX}canister_init: Swapping enabled on subnets: [{}]",
-            init_payload
-                .swapping_enabled_subnets
-                .iter()
-                .map(|c| c.to_string())
-                .join(", ")
+            "{LOG_PREFIX}canister_init: Swapping enabled on subnets: {:?}",
+            init_payload.swapping_enabled_subnets
         );
         test_set_swapping_enabled_subnets(init_payload.swapping_enabled_subnets);
     }
