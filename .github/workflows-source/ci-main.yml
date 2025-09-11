@@ -217,7 +217,7 @@ jobs:
               echo "${bazel_cmd}ing $num_targets targets ..."
               # the target list can get quite big, so we wrap it in details/summary
               {
-                echo '<details><summary>Tested '"$num_targets"' targets</summary>';
+                echo '<details><summary>'"$bazel_cmd"' '"$num_targets"' targets</summary>';
                 echo
                 echo '```'
                 cat "$target_pattern_file"
