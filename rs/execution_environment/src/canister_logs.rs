@@ -1,6 +1,6 @@
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
-    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2,
+    FetchCanisterLogsRequest, FetchCanisterLogsResponse, IndexRange, LogVisibilityV2,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::PrincipalId;

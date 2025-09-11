@@ -5,7 +5,7 @@ use ic_config::subnet_config::SubnetConfig;
 use ic_management_canister_types_private::{
     self as ic00, BoundedAllowedViewers, CanisterIdRecord, CanisterInstallMode, CanisterLogRecord,
     CanisterSettingsArgs, CanisterSettingsArgsBuilder, DataSize, EmptyBlob,
-    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2, Payload,
+    FetchCanisterLogsRequest, FetchCanisterLogsResponse, IndexRange, LogVisibilityV2, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
@@ -463,6 +463,45 @@ fn test_fetch_canister_logs_via_composite_query_call_inter_canister_calls_enable
         "Expected: {}\nActual: {}",
         expected_error_message,
         error.description()
+    );
+}
+
+#[test]
+fn test_fetch_canister_logs_with_filtering() {
+    // Test fetch_canister_logs API call with filtering by record index range.
+    let filter = IndexRange { start: 3, end: 5 };
+    let (log_visibility, user) = (LogVisibilityV2::Public, PrincipalId::new_anonymous());
+    let env = setup_env();
+    let canister_a = create_and_install_canister(
+        &env,
+        CanisterSettingsArgsBuilder::new()
+            .with_log_visibility(log_visibility)
+            .build(),
+        wat_canister()
+            .update("test", wat_fn().debug_print(b"message"))
+            .build_wasm(),
+    );
+    // Record some logs.
+    let mut timestamps = vec![];
+    for _ in 0..10 {
+        env.advance_time(Duration::from_secs(1));
+        timestamps.push(env.time());
+        let _ = env.execute_ingress(canister_a, "test", vec![]);
+    }
+
+    let result = env.query_as(
+        user,
+        CanisterId::ic_00(),
+        "fetch_canister_logs",
+        FetchCanisterLogsRequest::new_with_filter(canister_a, filter).encode(),
+    );
+    assert_eq!(
+        readable_logs_without_backtraces(result),
+        vec![
+            (3, timestamps[3], "message".to_string()),
+            (4, timestamps[4], "message".to_string()),
+            (5, timestamps[5], "message".to_string()),
+        ]
     );
 }
 

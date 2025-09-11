@@ -3327,6 +3327,13 @@ impl FetchCanisterLogsRequest {
         }
     }
 
+    pub fn new_with_filter(canister_id: CanisterId, filter: IndexRange) -> Self {
+        Self {
+            canister_id: canister_id.into(),
+            filter_by_idx: Some(filter),
+        }
+    }
+
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
