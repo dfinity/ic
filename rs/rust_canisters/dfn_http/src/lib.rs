@@ -120,7 +120,7 @@ pub enum Method {
 ///
 /// ```no_run
 /// # use dfn_http::*;
-/// #[export_name = "canister_query http_query"]
+/// #[unsafe(export_name = "canister_query http_query")]
 /// pub fn main() {
 ///     http(handler)
 /// }
