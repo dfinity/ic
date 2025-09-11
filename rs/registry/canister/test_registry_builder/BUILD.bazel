@@ -34,5 +34,5 @@ rust_test(
     name = "unit_tests",
     srcs = LIB_SRCS,
     crate_name = "test_registry_builder",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
