@@ -128,7 +128,6 @@ where
             })
             .err();
 
-        // Sort the tips by the total work
         let num_tips = self.header_cache.get_num_tips();
         self.metrics.tips.set(num_tips as i64);
         self.metrics
