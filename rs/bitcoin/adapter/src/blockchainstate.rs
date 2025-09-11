@@ -3,7 +3,8 @@
 use crate::{
     common::{BlockHeight, BlockchainBlock, BlockchainHeader, BlockchainNetwork},
     header_cache::{
-        AddHeaderError, AddHeaderResult, HeaderCache, HeaderNode, InMemoryHeaderCache, Tip,
+        AddHeaderError, AddHeaderResult, HeaderCache, HeaderNode, InMemoryHeaderCache,
+        LmdbHeaderCache, Tip,
     },
     metrics::BlockchainStateMetrics,
 };
@@ -53,11 +54,27 @@ impl<Network: BlockchainNetwork> BlockchainState<Network>
 where
     Network::Header: Send + Sync,
 {
-    /// This function is used to create a new BlockChainState object.  
+    /// Create a new BlockChainState object with in-memory cache.
     pub fn new(network: Network, metrics_registry: &MetricsRegistry) -> Self {
-        // Create a header cache and inserting dummy header corresponding the `adapter_genesis_hash`.
         let genesis_block_header = network.genesis_block_header();
         let header_cache = Box::new(InMemoryHeaderCache::new(genesis_block_header));
+        let block_cache = HashMap::new();
+        BlockchainState {
+            header_cache,
+            block_cache,
+            network,
+            metrics: BlockchainStateMetrics::new(metrics_registry),
+        }
+    }
+
+    /// Create a new BlockChainState with on-disk cache.
+    pub fn new_with_cache_dir(
+        network: Network,
+        metrics_registry: &MetricsRegistry,
+        cache_dir: &str,
+    ) -> Self {
+        let genesis_block_header = network.genesis_block_header();
+        let header_cache = Box::new(LmdbHeaderCache::new(genesis_block_header, cache_dir));
         let block_cache = HashMap::new();
         BlockchainState {
             header_cache,

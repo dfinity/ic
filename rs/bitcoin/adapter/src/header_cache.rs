@@ -193,3 +193,49 @@ impl<Header: BlockchainHeader + Send + Sync> HeaderCache for RwLock<InMemoryHead
         self.read().unwrap().tips.clone()
     }
 }
+
+pub struct LmdbHeaderCache<Header> {
+    genesis: Header,
+}
+
+impl<Header: BlockchainHeader> LmdbHeaderCache<Header> {
+    /// Load the cache with a genesis header and cache directory.
+    pub fn new(genesis: Header, cache_dir: &str) -> Self {
+        LmdbHeaderCache { genesis }
+    }
+}
+
+impl<Header: BlockchainHeader + Send + Sync> HeaderCache for LmdbHeaderCache<Header> {
+    type Header = Header;
+
+    fn get_genesis(&self) -> PureHeader {
+        unimplemented!()
+    }
+
+    fn get_header(&self, hash: &BlockHash) -> Option<HeaderNode<Header>> {
+        unimplemented!()
+    }
+
+    fn add_header(
+        &self,
+        block_hash: BlockHash,
+        header: Header,
+    ) -> Result<AddHeaderResult, AddHeaderError> {
+        unimplemented!()
+    }
+
+    /// This method returns the tip header with the highest cumulative work.
+    fn get_active_chain_tip(&self) -> Tip<Header> {
+        unimplemented!()
+    }
+
+    /// Sort the tips by the total work, return the total number of tips
+    fn sort_tips_by_work(&self) -> usize {
+        unimplemented!()
+    }
+
+    #[cfg(test)]
+    fn get_tips(&self) -> Vec<Tip<Header>> {
+        unimplemented!()
+    }
+}

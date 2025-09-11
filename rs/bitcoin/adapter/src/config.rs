@@ -48,6 +48,8 @@ pub struct Config<Network> {
     /// Specifies the address limits used by the `AddressBook`.
     #[serde(default)]
     pub address_limits: (usize, usize),
+    /// Directory that stores cached data
+    pub cache_dir: Option<String>,
 }
 
 /// Set the default idle seconds to one hour.
@@ -97,6 +99,7 @@ impl<Network> Config<Network> {
             logger: self.logger,
             incoming_source: self.incoming_source,
             address_limits: self.address_limits,
+            cache_dir: self.cache_dir,
         }
     }
 }
@@ -114,6 +117,7 @@ impl<Network: Copy + Into<AdapterNetwork>> Config<Network> {
             logger: LoggerConfig::default(),
             incoming_source: Default::default(),
             address_limits: address_limits(network.into()),
+            cache_dir: None,
         }
     }
 }

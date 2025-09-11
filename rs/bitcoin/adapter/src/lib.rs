@@ -209,10 +209,13 @@ fn start_server_helper<Network>(
     let _enter = rt_handle.enter();
     let (adapter_state, tx) = AdapterState::new(config.idle_seconds);
     let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
-    let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(
-        config.network,
-        metrics_registry,
-    )));
+    let blockchain_state = if let Some(cache_dir) = &config.cache_dir {
+        BlockchainState::new_with_cache_dir(config.network, metrics_registry, cache_dir)
+    } else {
+        BlockchainState::new(config.network, metrics_registry)
+    };
+    let blockchain_state = Arc::new(Mutex::new(blockchain_state));
+
     let (transaction_manager_tx, transaction_manager_rx) = channel(100);
     start_grpc_server(
         config.network,
