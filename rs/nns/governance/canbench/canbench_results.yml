@@ -51,7 +51,7 @@ benches:
   distribute_rewards_with_stable_neurons:
     total:
       calls: 1
-      instructions: 2780559
+      instructions: 2120000
       heap_increase: 0
       stable_memory_increase: 256
     scopes: {}
@@ -100,7 +100,7 @@ benches:
   neuron_data_validation:
     total:
       calls: 1
-      instructions: 205505866
+      instructions: 178000000
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
@@ -121,7 +121,7 @@ benches:
   record_known_neuron_vote:
     total:
       calls: 1
-      instructions: 178465
+      instructions: 159000
       heap_increase: 0
       stable_memory_increase: 128
     scopes: {}
@@ -180,7 +180,7 @@ benches:
   voting_power_snapshots_latest_snapshot_timestamp_seconds:
     total:
       calls: 1
-      instructions: 7626
+      instructions: 7165
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}

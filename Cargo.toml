@@ -680,7 +680,7 @@ ic-management-canister-types = "0.3.0"
 ic-response-verification = "3"
 ic-secp256k1 = "0.2.0"
 ic-sha3 = "1.0.0"
-ic-stable-structures = "0.6.8"
+ic-stable-structures = "0.6.9"
 ic-transport-types = { version = "0.40.1" }
 ic-utils = { version = "0.40.1", features = ["raw"] }
 ic-vetkeys = "0.4.0"
@@ -830,6 +830,7 @@ ssh2 = "0.9.4"
 static_assertions = "1.1.0"
 strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"
+subnet_rental_canister = { git = "https://github.com/dfinity/subnet-rental-canister", rev = "9e370001a5d51271f797b6b85295780701989cc6", default-feature = false } # DO NOT MERGE
 subtle = "2.6.1"
 syn = { version = "1.0.109", features = ["fold", "full"] }
 sys-mount = "3.0"
@@ -895,4 +896,3 @@ zstd = "0.13.2"
 default-features = false
 features = ["exe"]
 version = "^0.8.1"
-
