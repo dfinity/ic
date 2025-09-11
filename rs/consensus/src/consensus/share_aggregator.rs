@@ -160,25 +160,22 @@ impl ShareAggregator {
                 return to_messages(result);
             }
 
-            match pool.get_finalized_block(start_block.height.decrement()) {
-                Some(block_from_last_interval) => {
-                    let next_start_height = block_from_last_interval
-                        .payload
-                        .as_ref()
-                        .dkg_interval_start_height();
-                    match pool.get_finalized_block(next_start_height) {
-                        Some(new_start_block) => {
-                            start_block = new_start_block;
-                        }
-                        _ => {
-                            break;
-                        }
-                    }
-                }
-                _ => {
-                    break;
-                }
-            }
+            let Some(block_from_last_interval) =
+                pool.get_finalized_block(start_block.height.decrement())
+            else {
+                break;
+            };
+
+            let next_start_height = block_from_last_interval
+                .payload
+                .as_ref()
+                .dkg_interval_start_height();
+
+            let Some(new_start_block) = pool.get_finalized_block(next_start_height) else {
+                break;
+            };
+
+            start_block = new_start_block;
         }
         Vec::new()
     }
