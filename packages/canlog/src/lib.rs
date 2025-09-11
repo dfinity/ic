@@ -78,7 +78,7 @@ pub use canlog_derive::LogPriorityLevels;
 /// trait. See the example in the crate documentation.
 #[macro_export]
 macro_rules! log {
-    ($enum_variant:expr, $($args:tt)*) => {
+    ($enum_variant:expr_2021, $($args:tt)*) => {
         {
             use ::canlog::LogPriorityLevels;
             ::canlog::raw_log!($enum_variant.get_sink(), $($args)*);
@@ -231,8 +231,8 @@ fn debug_print<S: std::convert::AsRef<str>>(s: S) {
 /// Format and then print the formatted message
 #[cfg(not(target_family = "wasm"))]
 macro_rules! ic_cdk_println {
-     ($fmt:expr) => (std::println!($fmt));
-     ($fmt:expr, $($arg:tt)*) => (std::println!($fmt, $($arg)*));
+     ($fmt:expr_2021) => (std::println!($fmt));
+     ($fmt:expr_2021, $($arg:tt)*) => (std::println!($fmt, $($arg)*));
  }
 
 #[doc(hidden)]

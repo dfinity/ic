@@ -32,7 +32,7 @@ async fn change_state(seed: u32) -> Result<u64, String> {
     let mut rng = SmallRng::seed_from_u64(seed as u64);
 
     for index in (0..VECTOR_LENGTH).step_by(1023) {
-        state[index] = rng.gen();
+        state[index] = rng.r#gen();
     }
     *num_changed += 1;
     Ok(*num_changed)

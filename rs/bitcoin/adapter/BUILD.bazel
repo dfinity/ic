@@ -133,6 +133,7 @@ rust_test(
         "TESTNET_HEADERS_DATA_PATH": "$(rootpath @bitcoin_adapter_testnet_headers//file)",
         "TESTNET_BLOCKS_DATA_PATH": "$(rootpath @bitcoin_adapter_testnet_blocks//file)",
     },
+    flaky = True,
     tags = ["requires-network"],
     # Because dogecoind binary package is not available on darwin or arm64.
     target_compatible_with = [

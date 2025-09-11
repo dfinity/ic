@@ -9,7 +9,7 @@ pub fn jaeger_exporter(
     jaeger_addr: &str,
     service_name: &'static str,
     rt_handle: &tokio::runtime::Handle,
-) -> Result<impl Layer<Registry> + Send + Sync, anyhow::Error> {
+) -> Result<impl Layer<Registry> + Send + Sync + use<>, anyhow::Error> {
     if jaeger_addr.is_empty() {
         return Err(anyhow!("Empty jaeger addr."));
     }

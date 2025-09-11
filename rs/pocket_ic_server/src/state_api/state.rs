@@ -240,7 +240,8 @@ pub enum PocketIcError {
     CanisterIsEmpty(CanisterId),
     BadIngressMessage(String),
     SubnetNotFound(candid::Principal),
-    RequestRoutingError(String),
+    CanisterRequestRoutingError(String),
+    SubnetRequestRoutingError(String),
     InvalidCanisterHttpRequestId((SubnetId, CanisterHttpRequestId)),
     InvalidMockCanisterHttpResponses((usize, usize)),
     InvalidRejectCode(u64),
@@ -283,8 +284,11 @@ impl std::fmt::Debug for OpOut {
             OpOut::Error(PocketIcError::BlockmakerContainedInFailed(nid)) => {
                 write!(f, "BlockmakerContainedInFailed({})", nid)
             }
-            OpOut::Error(PocketIcError::RequestRoutingError(msg)) => {
-                write!(f, "RequestRoutingError({:?})", msg)
+            OpOut::Error(PocketIcError::CanisterRequestRoutingError(msg)) => {
+                write!(f, "CanisterRequestRoutingError({:?})", msg)
+            }
+            OpOut::Error(PocketIcError::SubnetRequestRoutingError(msg)) => {
+                write!(f, "SubnetRequestRoutingError({:?})", msg)
             }
             OpOut::Error(PocketIcError::InvalidCanisterHttpRequestId((
                 subnet_id,

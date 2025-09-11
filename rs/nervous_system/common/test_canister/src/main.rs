@@ -15,7 +15,7 @@ struct State {
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
 
 /// Sets an internal integer variable.
-#[export_name = "canister_update set_integer"]
+#[unsafe(export_name = "canister_update set_integer")]
 fn set_integer() {
     over(candid_one, set_integer_);
 }
@@ -30,7 +30,7 @@ fn set_integer_(new_integer: i32) {
 }
 
 /// Retrieves the value of the integer variable set by set_integer.
-#[export_name = "canister_query get_integer"]
+#[unsafe(export_name = "canister_query get_integer")]
 fn get_integer() {
     over(candid_one, get_integer_);
 }
@@ -42,7 +42,7 @@ fn get_integer_(_: ()) -> i32 {
 }
 
 /// Panics with the given message.
-#[export_name = "canister_query explode"]
+#[unsafe(export_name = "canister_query explode")]
 fn explode() {
     over(candid_one, explode_);
 }

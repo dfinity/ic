@@ -69,7 +69,7 @@ fn should_offer_methods_of_rng_trait() {
 
     let mut rng = Csprng::from_seed_and_purpose(&seed, &CommitteeSampling);
 
-    assert_eq!(rng.gen::<u32>(), 196_996_056);
+    assert_eq!(rng.r#gen::<u32>(), 196_996_056);
 }
 
 #[test]

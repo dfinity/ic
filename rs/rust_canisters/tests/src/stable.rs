@@ -5,7 +5,7 @@ use rand::{
 };
 use rand_pcg::Pcg64Mcg;
 
-#[export_name = "canister_query stable"]
+#[unsafe(export_name = "canister_query stable")]
 fn main() {
     over(bytes, |_| {
         // This is a poor mans quick check
