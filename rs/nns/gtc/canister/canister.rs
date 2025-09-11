@@ -92,7 +92,7 @@ fn canister_post_upgrade() {
     }
 }
 
-unsafe(ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {})
+ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
 
 /// Returns the sum of all token balances in the internal ledger
 #[unsafe(export_name = "canister_query total")]

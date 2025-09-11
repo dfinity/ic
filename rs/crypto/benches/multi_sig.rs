@@ -20,7 +20,7 @@ fn bench_multi_sig(criterion: &mut Criterion) {
 }
 
 fn bench_multi_sig_n_signers(criterion: &mut Criterion, num_of_signers: usize) {
-    let group_name = format!("crypto_multi_sig_{}_signers", num_of_signers);
+    let group_name = format!("crypto_multi_sig_{num_of_signers}_signers");
     let group = &mut criterion.benchmark_group(group_name);
 
     let rng = &mut reproducible_rng();

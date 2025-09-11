@@ -85,8 +85,7 @@ impl CanisterApi for CanisterApiImpl {
 
         result
             .map_err(handle_call_error(format!(
-                "Creating canister in subnet {} failed",
-                target_subnet
+                "Creating canister in subnet {target_subnet} failed"
             )))
             .map(|record| record.0.get_canister_id())
     }
@@ -105,8 +104,7 @@ impl CanisterApi for CanisterApiImpl {
         .await;
 
         response.map_err(handle_call_error(format!(
-            "Failed to delete canister {}",
-            canister
+            "Failed to delete canister {canister}"
         )))
     }
 
@@ -128,8 +126,7 @@ impl CanisterApi for CanisterApiImpl {
             ic_cdk::call(CanisterId::ic_00().get().0, "install_code", (install_args,)).await;
 
         install_res.map_err(handle_call_error(format!(
-            "Failed to install WASM on canister {}",
-            target_canister
+            "Failed to install WASM on canister {target_canister}"
         )))
     }
 
@@ -151,8 +148,7 @@ impl CanisterApi for CanisterApiImpl {
             ic_cdk::call(CanisterId::ic_00().get().0, "update_settings", (args,)).await;
 
         result.map_err(handle_call_error(format!(
-            "Failed to update controllers for canister {}",
-            canister
+            "Failed to update controllers for canister {canister}"
         )))
     }
 
@@ -161,8 +157,7 @@ impl CanisterApi for CanisterApiImpl {
 
         if available < required_cycles {
             return Err(format!(
-                "Message execution requires at least {} cycles, but canister only has {} cycles.",
-                required_cycles, available,
+                "Message execution requires at least {required_cycles} cycles, but canister only has {available} cycles.",
             ));
         }
         Ok(available)
@@ -173,8 +168,7 @@ impl CanisterApi for CanisterApiImpl {
 
         if available < required_cycles {
             return Err(format!(
-                "Message execution requires at least {} cycles, but only {} cycles were sent.",
-                required_cycles, available,
+                "Message execution requires at least {required_cycles} cycles, but only {available} cycles were sent.",
             ));
         }
         Ok(available)
@@ -198,8 +192,7 @@ impl CanisterApi for CanisterApiImpl {
         .await;
 
         response.map_err(handle_call_error(format!(
-            "Failed to send cycles to canister {}",
-            target
+            "Failed to send cycles to canister {target}"
         )))
     }
 }
@@ -237,8 +230,7 @@ impl CanisterApiImpl {
                     .map(CanisterStatusResultV2::from)
                     .map_err(|(code, msg)| {
                         format!(
-                            "Unable to get target canister status: error code {}: {}",
-                            code, msg
+                            "Unable to get target canister status: error code {code}: {msg}"
                         )
                     })?;
 
@@ -249,8 +241,7 @@ impl CanisterApiImpl {
             count += 1;
             if count > 100 {
                 return Err(format!(
-                    "Canister {} never stopped.  Waited 100 iterations",
-                    canister
+                    "Canister {canister} never stopped.  Waited 100 iterations"
                 ));
             }
 

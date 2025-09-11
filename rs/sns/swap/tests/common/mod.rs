@@ -56,7 +56,7 @@ pub fn select_direct_investment_neurons<'a>(
         }
     }
     if neurons.is_empty() {
-        panic!("Cannot find principal {}", buyer_principal);
+        panic!("Cannot find principal {buyer_principal}");
     }
 
     neurons

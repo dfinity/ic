@@ -172,8 +172,7 @@ impl SnsGovernanceClient for SpySnsGovernanceClient {
             SnsGovernanceClientReply::SetMode(reply) => Ok(reply),
             SnsGovernanceClientReply::CanisterCallError(error) => Err(error),
             unexpected_reply => panic!(
-                "Unexpected reply in the SnsGovernanceClientCall queue. Expected SetMode | CanisterCallError: {:?}",
-                unexpected_reply
+                "Unexpected reply in the SnsGovernanceClientCall queue. Expected SetMode | CanisterCallError: {unexpected_reply:?}"
             ),
         }
     }
@@ -192,8 +191,7 @@ impl SnsGovernanceClient for SpySnsGovernanceClient {
             SnsGovernanceClientReply::ClaimSwapNeurons(reply) => Ok(reply),
             SnsGovernanceClientReply::CanisterCallError(error) => Err(error),
             unexpected_reply => panic!(
-                "Unexpected reply in the SnsGovernanceClientCall queue: {:?}",
-                unexpected_reply
+                "Unexpected reply in the SnsGovernanceClientCall queue: {unexpected_reply:?}"
             ),
         }
     }
@@ -298,11 +296,10 @@ impl ICRC1Ledger for MockLedger {
                 assert_eq!(from_subaccount_, from_subaccount);
                 assert_eq!(to_, to);
                 assert_eq!(memo_, memo);
-                return result.map_err(|x| NervousSystemError::new_with_message(format!("{}", x)));
+                return result.map_err(|x| NervousSystemError::new_with_message(format!("{x}")));
             }
             x => panic!(
-                "Received transfer_funds({}, {}, {:?}, {}, {}), expected {:?}",
-                amount_e8s, fee_e8s, from_subaccount, to, memo, x
+                "Received transfer_funds({amount_e8s}, {fee_e8s}, {from_subaccount:?}, {to}, {memo}), expected {x:?}"
             ),
         }
     }
@@ -315,9 +312,9 @@ impl ICRC1Ledger for MockLedger {
         match self.pop() {
             Some(LedgerExpect::AccountBalance(account_, result)) => {
                 assert_eq!(account_, account);
-                return result.map_err(|x| NervousSystemError::new_with_message(format!("{}", x)));
+                return result.map_err(|x| NervousSystemError::new_with_message(format!("{x}")));
             }
-            x => panic!("Received account_balance({}), expected {:?}", account, x),
+            x => panic!("Received account_balance({account}), expected {x:?}"),
         }
     }
 

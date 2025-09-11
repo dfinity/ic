@@ -225,7 +225,7 @@ fn create_generic_committed_swap() -> Swap {
 fn fallback_controller_principal_ids_must_not_be_empty() {
     let mut init = init();
     init.fallback_controller_principal_ids.clear();
-    assert!(init.validate().is_err(), "{:#?}", init);
+    assert!(init.validate().is_err(), "{init:#?}");
 }
 
 #[test]
@@ -1051,7 +1051,7 @@ fn test_scenario_happy() {
                 }
             );
         } else {
-            panic!("Finalization failed: {:#?}", response);
+            panic!("Finalization failed: {response:#?}");
         }
     };
 
@@ -1397,27 +1397,27 @@ async fn test_finalize_swap_ok_matched_funding() {
         .as_ref()
         .expect("Transaction fee not known.");
     let icp_ledger_calls = clients.icp_ledger.get_calls_snapshot();
-    assert_eq!(icp_ledger_calls.len(), 3, "{:#?}", icp_ledger_calls);
+    assert_eq!(icp_ledger_calls.len(), 3, "{icp_ledger_calls:#?}");
     for call in icp_ledger_calls.iter() {
         let (&fee_e8s, &memo) = match call {
             LedgerCall::TransferFundsICRC1 { fee_e8s, memo, .. } => (fee_e8s, memo),
-            call => panic!("Unexpected call on the queue: {:?}", call),
+            call => panic!("Unexpected call on the queue: {call:?}"),
         };
 
-        assert_eq!(fee_e8s, DEFAULT_TRANSFER_FEE.get_e8s(), "{:#?}", call);
-        assert_eq!(memo, 0, "{:#?}", call);
+        assert_eq!(fee_e8s, DEFAULT_TRANSFER_FEE.get_e8s(), "{call:#?}");
+        assert_eq!(memo, 0, "{call:#?}");
     }
 
     let sns_ledger_calls = clients.sns_ledger.get_calls_snapshot();
-    assert_eq!(sns_ledger_calls.len(), 12, "{:#?}", sns_ledger_calls);
+    assert_eq!(sns_ledger_calls.len(), 12, "{sns_ledger_calls:#?}");
     for call in sns_ledger_calls.iter() {
         let (&fee_e8s, &memo) = match call {
             LedgerCall::TransferFundsICRC1 { fee_e8s, memo, .. } => (fee_e8s, memo),
-            call => panic!("Unexpected call on the queue: {:?}", call),
+            call => panic!("Unexpected call on the queue: {call:?}"),
         };
 
-        assert_eq!(fee_e8s, sns_transaction_fee_e8s, "{:#?}", call);
-        assert_eq!(memo, 0, "{:#?}", call);
+        assert_eq!(fee_e8s, sns_transaction_fee_e8s, "{call:#?}");
+        assert_eq!(memo, 0, "{call:#?}");
     }
 
     // ICP should be sent to SNS governance (from various swap subaccounts.)
@@ -2747,18 +2747,15 @@ async fn test_sweep_sns_handles_invalid_neuron_recipes() {
             (Err((_, observed_err)), Some(expected_err_substring)) => {
                 assert!(
                     observed_err.contains(expected_err_substring),
-                    "Observed error `{}` does not contain the expected substring `{}`.",
-                    observed_err,
-                    expected_err_substring
+                    "Observed error `{observed_err}` does not contain the expected substring `{expected_err_substring}`."
                 );
             }
             (Err((_, observed_err)), None) => {
-                panic!("Expected valid neuron recipe, observed {:?}.", observed_err);
+                panic!("Expected valid neuron recipe, observed {observed_err:?}.");
             }
             (Ok(_), Some(expected_err_substring)) => {
                 panic!(
-                    "Expected neuron recipe validation error matching `{}`, got ok.",
-                    expected_err_substring
+                    "Expected neuron recipe validation error matching `{expected_err_substring}`, got ok."
                 );
             }
             (Ok(_), None) => (), // all good
@@ -4596,7 +4593,7 @@ fn test_rebuild_indexes_correctly_rebuilds_buyers_list_index() {
 
     // Execute the code under test
     swap.rebuild_indexes()
-        .unwrap_or_else(|err| panic!("rebuild_indexes failed due to {}", err));
+        .unwrap_or_else(|err| panic!("rebuild_indexes failed due to {err}"));
 
     // Inspect results
 
@@ -4651,7 +4648,7 @@ fn test_rebuild_indexes_ignores_existing_index() {
 
     // Execute the code under test
     swap.rebuild_indexes()
-        .unwrap_or_else(|err| panic!("rebuild_indexes failed due to {}", err));
+        .unwrap_or_else(|err| panic!("rebuild_indexes failed due to {err}"));
 
     // Inspect results
 
@@ -4719,9 +4716,7 @@ fn buy_token_err(swap: &mut Swap, user: &PrincipalId, balance_icp: &u64, error_m
         .unwrap_err();
     assert!(
         observed.contains(error_message),
-        "Expected substring `{}` not found in observed error `{}`.",
-        error_message,
-        observed,
+        "Expected substring `{error_message}` not found in observed error `{observed}`.",
     );
 }
 
@@ -5532,7 +5527,7 @@ fn test_refresh_buyer_tokens_without_neurons_fund_matched_funding() {
                 ),
             }),
         });
-        println!("{:#?}", neurons_fund_participation_constraints);
+        println!("{neurons_fund_participation_constraints:#?}");
         init = Init {
             neurons_fund_participation_constraints,
             neurons_fund_participation: Some(false),

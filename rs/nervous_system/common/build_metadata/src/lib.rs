@@ -38,7 +38,7 @@ const BUILD_INFO_FORMAT: &str = r#"
 pub fn define_get_build_metadata_candid_method(_: TokenStream) -> TokenStream {
     format!(
         r#"
-            #[export_name = "canister_query get_build_metadata"]
+            #[unsafe(export_name = "canister_query get_build_metadata")]
             fn get_build_metadata() {{
                 dfn_core::over(dfn_candid::candid_one, |()| get_build_metadata_())
             }}
