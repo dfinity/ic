@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use axum::{
     Extension,
     body::Bytes,
@@ -12,6 +10,7 @@ use ic_interfaces::p2p::state_sync::StateSyncArtifactId;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::p2p::v1 as pb;
 use prost::Message;
+use std::sync::Arc;
 
 pub const STATE_SYNC_ADVERT_PATH: &str = "/state-sync/advert";
 
