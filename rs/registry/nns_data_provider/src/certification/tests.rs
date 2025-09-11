@@ -10,9 +10,8 @@ use ic_interfaces_registry::RegistryRecord;
 use ic_registry_transport::{
     MockGetChunk, delete,
     pb::v1::{
-        CertifiedResponse, HighCapacityRegistryMutation, LargeValueChunkKeys,
-        RegistryAtomicMutateRequest, RegistryMutation, high_capacity_registry_mutation,
-        registry_mutation,
+        CertifiedResponse, HighCapacityRegistryMutation, LargeValueChunkKeys, RegistryMutation,
+        high_capacity_registry_mutation, registry_mutation,
     },
     upsert,
 };
@@ -59,15 +58,11 @@ fn decode_certified_deltas_no_chunks(
     .unwrap()
 }
 
-fn make_certified_delta<AtomicMutation>(
-    deltas: Vec<AtomicMutation>,
+fn make_certified_delta(
+    deltas: Vec<HighCapacityRegistryAtomicMutateRequest>,
     selection: impl std::ops::RangeBounds<u64>,
     garble_response: GarbleResponse,
-) -> (CanisterId, ThresholdSigPublicKey, EncodedResponse)
-where
-    // TODO(NNS1-3679): No generic; just HighCapacityRegistryAtomicMutateRequest.
-    AtomicMutation: prost::Message,
-{
+) -> (CanisterId, ThresholdSigPublicKey, EncodedResponse) {
     let cid = CanisterId::from_u64(1);
 
     let mut encoded_version = vec![];
@@ -161,10 +156,15 @@ fn rem_key(version: u64, k: impl ToString) -> RegistryRecord {
     }
 }
 
-fn make_change(mutations: Vec<RegistryMutation>) -> RegistryAtomicMutateRequest {
-    RegistryAtomicMutateRequest {
+fn make_change(mutations: Vec<RegistryMutation>) -> HighCapacityRegistryAtomicMutateRequest {
+    let mutations = mutations
+        .into_iter()
+        .map(HighCapacityRegistryMutation::from)
+        .collect();
+    HighCapacityRegistryAtomicMutateRequest {
         mutations,
         preconditions: vec![],
+        timestamp_nanoseconds: 0,
     }
 }
 
