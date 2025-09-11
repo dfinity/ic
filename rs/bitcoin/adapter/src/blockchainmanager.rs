@@ -383,6 +383,10 @@ impl<Network: BlockchainNetwork> BlockchainManager<Network> {
                 Some(AddHeaderError::PrevHeaderNotCached(stop_hash)) => {
                     Some((blockchain_state.locator_hashes(), stop_hash))
                 }
+                Some(AddHeaderError::Internal(_)) => {
+                    // Error writing the header cache, stop getting more headers
+                    None
+                }
                 None => {
                     if let Some(last) = maybe_last_header {
                         // If the headers length is less than the max headers size (2000), it is likely that the end

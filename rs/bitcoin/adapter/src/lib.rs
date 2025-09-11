@@ -210,7 +210,12 @@ fn start_server_helper<Network>(
     let (adapter_state, tx) = AdapterState::new(config.idle_seconds);
     let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
     let blockchain_state = if let Some(cache_dir) = &config.cache_dir {
-        BlockchainState::new_with_cache_dir(config.network, metrics_registry, cache_dir)
+        BlockchainState::new_with_cache_dir(
+            config.network,
+            cache_dir,
+            metrics_registry,
+            log.clone(),
+        )
     } else {
         BlockchainState::new(config.network, metrics_registry)
     };
