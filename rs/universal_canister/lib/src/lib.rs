@@ -706,6 +706,11 @@ impl PayloadBuilder {
         self
     }
 
+    pub fn data_certificate_present(mut self) -> Self {
+        self.0.push(Ops::DataCertificatePresent as u8);
+        self
+    }
+
     pub fn data_certificate(mut self) -> Self {
         self.0.push(Ops::DataCertificate as u8);
         self
