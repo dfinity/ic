@@ -12,8 +12,9 @@ use ic_ledger_suite_state_machine_tests::{
     balance_of, convert_to_fields_args, default_approve_args, default_transfer_from_args,
     expect_icrc2_disabled, extract_icrc21_fields_message, extract_icrc21_message_string,
     icrc21_consent_message, modify_field, send_approval, send_transfer, send_transfer_from, setup,
-    supported_standards, total_supply, transfer, AllowanceProvider, FEE, MINTER,
+    supported_standards, total_supply, transfer, AllowanceProvider, MINTER,
 };
+use ic_ledger_suite_state_machine_tests_types::FEE;
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError};
 use icp_ledger::{
     AccountIdBlob, AccountIdentifier, AccountIdentifierByteBuf, Allowances, ArchiveOptions,
