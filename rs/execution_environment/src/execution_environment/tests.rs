@@ -4,13 +4,13 @@ use ic_btc_interface::NetworkInRequest;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_management_canister_types_private::{
     self as ic00, BitcoinGetUtxosArgs, BoundedHttpHeaders, CanisterChange, CanisterHttpRequestArgs,
-    CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType,
-    ClearChunkStoreArgs, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob,
-    FetchCanisterLogsRequest, HttpMethod, LogVisibilityV2, MasterPublicKeyId, Method,
-    OnLowWasmMemoryHookStatus, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    ProvisionalTopUpCanisterArgs, SchnorrAlgorithm, SchnorrKeyId, TakeCanisterSnapshotArgs,
-    TransformContext, TransformFunc, UpdateSettingsArgs, UploadChunkArgs, VetKdCurve, VetKdKeyId,
-    IC_00,
+    CanisterIdRecord, CanisterMetadataRequest, CanisterMetadataResponse,
+    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType, ClearChunkStoreArgs,
+    DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, FetchCanisterLogsRequest, HttpMethod,
+    LogVisibilityV2, MasterPublicKeyId, Method, OnLowWasmMemoryHookStatus, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SchnorrAlgorithm,
+    SchnorrKeyId, TakeCanisterSnapshotArgs, TransformContext, TransformFunc, UpdateSettingsArgs,
+    UploadChunkArgs, VetKdCurve, VetKdKeyId, IC_00,
 };
 use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -1070,6 +1070,40 @@ fn get_canister_status_memory_metrics_snapshots_size() {
         get_canister_status(&mut test, canister_id).snapshots_size(),
         csr.snapshots_size()
     );
+}
+
+// A Wasm module with custom sections
+const CUSTOM_SECTIONS_WAT: &str = r#"(module
+(memory $memory 1)
+(export "memory" (memory $memory))
+(@custom "icp:public my_public_section" "my_public_section_value")
+(@custom "icp:private my_private_section" "my_private_section_value")
+)"#;
+
+#[test]
+fn get_canister_metadata_success() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister = test.canister_from_wat(CUSTOM_SECTIONS_WAT).unwrap();
+    let caller = test.universal_canister().unwrap();
+
+    let canister_metadata_args = Encode!(&CanisterMetadataRequest::new(
+        canister,
+        "my_public_section".to_string()
+    ))
+    .unwrap();
+    let get_canister_metadata = wasm()
+        .call_simple(
+            ic00::IC_00,
+            Method::CanisterMetadata,
+            call_args().other_side(canister_metadata_args),
+        )
+        .build();
+    let result = test.ingress(caller, "update", get_canister_metadata);
+    let reply = get_reply(result);
+    let response = CanisterMetadataResponse::decode(&reply).unwrap();
+
+    assert_eq!(response.value(), b"my_public_section_value");
 }
 
 #[test]

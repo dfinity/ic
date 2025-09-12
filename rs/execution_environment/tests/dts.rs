@@ -12,7 +12,7 @@ use ic_config::{
 use ic_cycles_account_manager::IngressInductionCost;
 use ic_error_types::UserError;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInfoRequest, CanisterInstallMode, CanisterInstallModeV2,
+    CanisterIdRecord, CanisterInfoRequest, CanisterMetadataRequest, CanisterInstallMode, CanisterInstallModeV2,
     CanisterSettingsArgsBuilder, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
     ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, EmptyBlob, GlobalTimer,
     InstallChunkedCodeArgs, InstallCodeArgs, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
@@ -1125,6 +1125,10 @@ fn dts_aborted_execution_does_not_block_subnet_messages() {
             }
             Method::CanisterInfo => test_supported(|aborted_canister_id| {
                 let args = CanisterInfoRequest::new(aborted_canister_id, None).encode();
+                (method, call_args().other_side(args))
+            }),
+            Method::CanisterMetadata => test_supported(|aborted_canister_id| {
+                let args = CanisterMetadataRequest::new(aborted_canister_id, "test".to_string()).encode();
                 (method, call_args().other_side(args))
             }),
             // No effective canister id.
