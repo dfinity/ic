@@ -33,6 +33,7 @@ pub const NNS_CANISTER_NAME_TO_ID: [(&str, CanisterId); 11] = [
 
 struct ExternalCanisterInfo<'a> {
     repository: &'a str,
+    tag_name_prefix: Option<&'a str>,
     canister_id: CanisterId,
     filename: &'a str,
     test_filename: Option<&'a str>,
@@ -43,6 +44,7 @@ const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 4] = [
         "cycles_ledger",
         ExternalCanisterInfo {
             repository: "dfinity/cycles-ledger",
+            tag_name_prefix: None,
             filename: "cycles-ledger.wasm.gz",
             test_filename: None,
             canister_id: CYCLES_LEDGER_CANISTER_ID,
@@ -52,6 +54,7 @@ const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 4] = [
         "internet_identity_test",
         ExternalCanisterInfo {
             repository: "dfinity/internet-identity",
+            tag_name_prefix: None,
             filename: "internet_identity_production.wasm.gz",
             test_filename: Some("internet_identity_dev.wasm.gz"),
             canister_id: IDENTITY_CANISTER_ID,
@@ -61,6 +64,7 @@ const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 4] = [
         "nns_dapp_test",
         ExternalCanisterInfo {
             repository: "dfinity/nns-dapp",
+            tag_name_prefix: Some("proposal-"),
             filename: "nns-dapp_production.wasm.gz",
             test_filename: Some("nns-dapp_test.wasm.gz"),
             canister_id: NNS_UI_CANISTER_ID,
@@ -70,6 +74,7 @@ const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 4] = [
         "sns_aggregator_test",
         ExternalCanisterInfo {
             repository: "dfinity/nns-dapp",
+            tag_name_prefix: None,
             filename: "sns_aggregator.wasm.gz",
             test_filename: Some("sns_aggregator_dev.wasm.gz"),
             canister_id: SNS_AGGREGATOR_CANISTER_ID,
@@ -259,6 +264,7 @@ impl Release {
 /// which contains a release asset for the given canister with the expected sha256 hash.
 /// To find the release, this function proceeds as follows:
 ///   - it crawls all git tags of the given `canister_repository`;
+///   - git tags whose name does not start with an optionally provided tag name prefix are skipped;
 ///   - for every git tag, it checks if there is an associated release and then
 ///     - looks for a release asset whose name has the form `{canister_name}.sha256`:
 ///       if that release asset starts with `expected_module_hash_str`, then the corresponding release is returned;
@@ -267,6 +273,7 @@ impl Release {
 async fn get_mainnet_canister_release(
     canister_name: String,
     canister_repository: String,
+    canister_tag_name_prefix: Option<String>,
     canister_filename: String,
     expected_module_hash_str: String,
 ) -> Result<Release> {
@@ -288,6 +295,11 @@ async fn get_mainnet_canister_release(
             .await?;
 
         for tag in &tags {
+            if let Some(ref tag_name_prefix) = canister_tag_name_prefix {
+                if !tag.name.starts_with(tag_name_prefix) {
+                    continue;
+                }
+            }
             match tag
                 .release_for_canister(
                     canister_repository.clone(),
@@ -325,6 +337,7 @@ async fn get_mainnet_canister_release(
 /// This function fetches the given canister's module hash deployed on the ICP mainnet (based on `canister_id`)
 /// and then finds a git tag in the given `canister_repository` (e.g., `dfinity/cycles-ledger`)
 /// which contains a release asset with the given canister's module hash deployed on the ICP mainnet.
+/// The git tag name starts with an optionally provided tag name prefix.
 /// This function then returns the git tag and the canister's module hash.
 /// If a test canister name is provided, then the returned module hash is that of the test canister in the release for the same git tag.
 async fn get_mainnet_canister_git_tag_and_module_hash(
@@ -332,6 +345,7 @@ async fn get_mainnet_canister_git_tag_and_module_hash(
     canister_name: String,
     canister_id: CanisterId,
     canister_repository: String,
+    canister_tag_name_prefix: Option<String>,
     canister_filename: String,
     canister_test_filename: Option<String>,
 ) -> Result<(String, String)> {
@@ -352,6 +366,7 @@ async fn get_mainnet_canister_git_tag_and_module_hash(
     let release = get_mainnet_canister_release(
         canister_name.clone(),
         canister_repository.clone(),
+        canister_tag_name_prefix.clone(),
         canister_filename.clone(),
         prod_module_hash_str.clone(),
     )
@@ -473,6 +488,9 @@ async fn main() -> Result<()> {
         .then(|(canister_name, canister_info)| async {
             let canister_name = canister_name.to_string();
             let canister_repository = canister_info.repository.to_string();
+            let canister_tag_name_prefix = canister_info
+                .tag_name_prefix
+                .map(|tag_name_prefix| tag_name_prefix.to_string());
             let canister_filename = canister_info.filename.to_string();
             let canister_test_filename = canister_info
                 .test_filename
@@ -482,6 +500,7 @@ async fn main() -> Result<()> {
                 canister_name.clone(),
                 canister_info.canister_id,
                 canister_repository.clone(),
+                canister_tag_name_prefix.clone(),
                 canister_filename.clone(),
                 canister_test_filename.clone(),
             )
