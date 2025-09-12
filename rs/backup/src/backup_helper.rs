@@ -306,10 +306,8 @@ impl BackupHelper {
         cmd.arg("--min-size=1").arg(remote_dir).arg(local_dir);
         debug!(self.log, "Will execute: {:?}", cmd);
 
-        match exec_cmd(&mut cmd) {
-            Err(e) => Err(format!("Error: {}", e)),
-            _ => Ok(()),
-        }
+        exec_cmd(&mut cmd).map_err(|e| format!("Error: {}", e))?;
+        Ok(())
     }
 
     pub(crate) fn sync_files(&self, nodes: &[IpAddr]) {

@@ -87,19 +87,15 @@ pub(crate) fn insert_cup_at_height(
     height: Height,
 ) -> Result<(), ReplayError> {
     let file = &cup_file_name(backup_dir, height);
-    match read_cup_file(file) {
-        Some(cup) => {
-            pool.apply(
-                ChangeAction::AddToValidated(ValidatedConsensusArtifact {
-                    msg: cup.into_message(),
-                    timestamp: UNIX_EPOCH,
-                })
-                .into(),
-            );
-            Ok(())
-        }
-        _ => Err(ReplayError::CUPVerificationFailed(height)),
-    }
+    let cup = read_cup_file(file).ok_or(ReplayError::CUPVerificationFailed(height))?;
+    pool.apply(
+        ChangeAction::AddToValidated(ValidatedConsensusArtifact {
+            msg: cup.into_message(),
+            timestamp: UNIX_EPOCH,
+        })
+        .into(),
+    );
+    Ok(())
 }
 
 pub(crate) fn read_cup_proto_file(file: &Path) -> Option<pb::CatchUpPackage> {

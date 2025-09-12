@@ -179,12 +179,8 @@ impl CertificationPoolImpl {
             .get_by_height(certification.height)
             .next()
         {
-            Some(existing_certification) => {
-                if certification != existing_certification {
-                    panic!(
-                        "Certifications are not expected to be added more than once per height."
-                    );
-                }
+            Some(existing_certification) if certification != existing_certification => {
+                panic!("Certifications are not expected to be added more than once per height.");
             }
             _ => self
                 .validated
