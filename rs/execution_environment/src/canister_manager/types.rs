@@ -944,7 +944,7 @@ impl From<CanisterManagerError> for UserError {
                 ErrorCode::ReservedCyclesLimitExceededInMemoryGrow,
                 format!(
                     "Canister cannot grow memory by {} bytes due to its reserved cycles limit. \
-                         The current limit ({}) would exceeded by {}.{additional_help}",
+                         The current limit ({}) would be exceeded by {}.{additional_help}",
                     bytes,
                     limit,
                     requested - limit,
