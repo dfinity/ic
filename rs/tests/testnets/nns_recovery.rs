@@ -23,6 +23,7 @@
 
 use anyhow::Result;
 use ic_nested_nns_recovery_common::{replace_nns_with_unassigned_nodes, setup, SetupConfig};
+use ic_system_test_driver::driver::nested::NestedVms;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::driver::test_setup::GroupSetup;
@@ -48,10 +49,11 @@ fn log_instructions(env: TestEnv) {
         logger,
         "To reboot host VMs run any, or some of the following commands:"
     );
-    for i in 1..=subnet_size {
+    for vm in env.get_all_nested_vms().unwrap() {
+        let vm_name = vm.vm_name();
         info!(
             logger,
-            "curl -X PUT '{farm_url}group/{group_name}/vm/host-{i}/reboot'"
+            "curl -X PUT '{farm_url}group/{group_name}/vm/{vm_name}/reboot'"
         );
     }
 }

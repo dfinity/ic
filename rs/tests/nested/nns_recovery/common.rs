@@ -24,7 +24,7 @@ use ic_system_test_driver::{
     driver::{
         constants::SSH_USERNAME,
         driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR},
-        nested::NestedVms,
+        nested::{NestedVm, NestedVms},
         test_env::TestEnv,
         test_env_api::*,
     },
@@ -352,15 +352,12 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
     block_on(async {
         let mut handles = JoinSet::new();
 
-        for vm_name in get_host_vm_names(subnet_size)
+        for vm in env
+            .get_all_nested_vms()
+            .unwrap()
             .iter()
-            .filter(|&vm_name| {
-                env.get_nested_vm(vm_name)
-                    .unwrap()
-                    .get_nested_network()
-                    .unwrap()
-                    .guest_ip
-                    != dfinity_owned_node.get_ip_addr()
+            .filter(|&vm| {
+                vm.get_nested_network().unwrap().guest_ip != dfinity_owned_node.get_ip_addr()
             })
             .cloned()
             .collect::<Vec<_>>()
@@ -368,7 +365,7 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
         {
             let logger = logger.clone();
             let env = env.clone();
-            let vm_name = vm_name.clone();
+            let vm = vm.clone();
             let recovery_img_hash = recovery_img_hash.clone();
             let artifacts_hash = artifacts_hash.clone();
 
@@ -376,7 +373,7 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
                 simulate_node_provider_action(
                     &logger,
                     &env,
-                    &vm_name,
+                    &vm,
                     RECOVERY_GUESTOS_IMG_VERSION,
                     &recovery_img_hash[..6],
                     &artifacts_hash,
@@ -464,18 +461,17 @@ where
 async fn simulate_node_provider_action(
     logger: &Logger,
     env: &TestEnv,
-    vm_name: &str,
+    host: &NestedVm,
     img_version: &str,
     img_short_hash: &str,
     artifacts_hash: &str,
 ) {
-    let host = env.get_nested_vm(vm_name).unwrap();
-    let host_boot_id_pre_reboot = get_host_boot_id_async(&host).await;
+    let host_boot_id_pre_reboot = get_host_boot_id_async(host).await;
 
     // Trigger HostOS reboot and run guestos-recovery-upgrader
     info!(
         logger,
-        "Remounting /boot as read-write, updating boot_args file and rebooting host {}", vm_name,
+        "Remounting /boot as read-write, updating boot_args file and rebooting host {}", host.vm_name(),
     );
     let boot_args_command = format!(
         "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={} hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot && sudo reboot",
@@ -495,7 +491,7 @@ async fn simulate_node_provider_action(
         Duration::from_secs(5 * 60),
         Duration::from_secs(5),
         || async {
-            let host_boot_id = get_host_boot_id_async(&host).await;
+            let host_boot_id = get_host_boot_id_async(host).await;
             if host_boot_id != host_boot_id_pre_reboot {
                 info!(
                     logger,
@@ -514,9 +510,9 @@ async fn simulate_node_provider_action(
     let server_ipv6 = impersonate_upstreams::get_upstreams_uvm_ipv6(env);
     info!(
         logger,
-        "Spoofing HostOS {} DNS to point the upstreams to the UVM at {}", vm_name, server_ipv6
+        "Spoofing HostOS {} DNS to point the upstreams to the UVM at {}", host.vm_name(), server_ipv6
     );
-    impersonate_upstreams::spoof_node_dns_async(&host, &server_ipv6)
+    impersonate_upstreams::spoof_node_dns_async(host, &server_ipv6)
         .await
         .expect("Failed to spoof HostOS DNS");
 
@@ -532,7 +528,7 @@ async fn simulate_node_provider_action(
         .expect("Failed to overwrite expected recovery hash");
     info!(
         logger,
-        "Spoofing GuestOS DNS to point the upstreams to the UVM at {}", server_ipv6
+        "Spoofing GuestOS {} DNS to point the upstreams to the UVM at {}", host.vm_name(), server_ipv6
     );
     impersonate_upstreams::spoof_node_dns_async(&guest, &server_ipv6)
         .await
