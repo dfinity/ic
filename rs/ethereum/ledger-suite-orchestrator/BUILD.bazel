@@ -1,3 +1,4 @@
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test")
@@ -100,6 +101,15 @@ rust_test(
     ],
 )
 
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    build_script_env = {
+        "IN_BAZEL": "1",
+    },
+    data = ["templates/dashboard.html"],
+)
+
 [
     rust_canister(
         name = "ledger_suite_orchestrator_canister" + name_suffix,
@@ -109,9 +119,6 @@ rust_test(
             "src/dashboard/tests.rs",
             "src/main.rs",
         ],
-        compile_data = [
-            "templates/dashboard.html",
-        ],
         crate_name = "ic_ledger_suite_orchestrator_canister" + name_suffix,
         opt = "z",
         proc_macro_deps = [
@@ -120,6 +127,7 @@ rust_test(
         service_file = "ledger_suite_orchestrator.did",
         deps = [
             # Keep sorted.
+            ":build_script",
             ":ledger_suite_orchestrator" + name_suffix,
             "//packages/ic-http-types",
             "@crate_index//:askama",

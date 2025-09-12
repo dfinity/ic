@@ -43,13 +43,8 @@ mod filters {
     }
 }
 
-#[derive(Template)]
-#[template(path = "dashboard.html")]
-pub struct DashboardTemplate {
-    managed_canisters: BTreeMap<Erc20Token, CanistersDashboardData>,
-    other_canisters: BTreeMap<String, Vec<CanisterDashboardData>>,
-    wasm_store: Vec<DashboardStoredWasm>,
-}
+// See build-canister.rs
+include!(concat!(env!("OUT_DIR"), "/dashboard_template.rs"));
 
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct CanistersDashboardData {
