@@ -277,11 +277,11 @@ impl CanisterMasterKey {
                 DerivedPublicKeyInner::Ed25519(ck.0.derive_subkey_with_chain_code(&path, &ck.1))
             }
             #[cfg(feature = "vetkeys")]
-            DerivedPublicKeyInner::VetKD(ck) => {
+            DerivedPublicKeyInner::VetKD(_ck) => {
                 // VetKD has a somewhat different design for derivation than used by
                 // the other threshold schemes - it supports only a single input rather
                 // than a path. To avoid risk of confusing behavior, just reject
-                Err(Error::AlgorithmNotSupported)
+                return Err(Error::AlgorithmNotSupported);
             }
         };
         Ok(DerivedPublicKey { inner })
