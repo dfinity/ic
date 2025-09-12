@@ -1,9 +1,9 @@
-use std::{io::Write, net::Ipv6Addr, path::Path};
+use std::{net::Ipv6Addr, path::Path};
 
 use anyhow::Result;
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
-    test_env_api::{get_dependency_path, SshSession},
+    test_env_api::{get_dependency_path, scp_send_to, SshSession},
     universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
 };
 
@@ -63,10 +63,14 @@ pub fn setup_upstreams_uvm(env: &TestEnv) {
         .unwrap();
 }
 
-pub fn uvm_serve_guestos_image(env: &TestEnv, image: Vec<u8>, image_version: &str) -> Result<()> {
+pub fn uvm_serve_guestos_image(
+    env: &TestEnv,
+    image_path: &Path,
+    image_version: &str,
+) -> Result<()> {
     uvm_serve_file(
         env,
-        image,
+        image_path,
         Path::new(&format!(
             "ic/{}/guest-os/update-img/update-img.tar.zst",
             image_version
@@ -76,35 +80,29 @@ pub fn uvm_serve_guestos_image(env: &TestEnv, image: Vec<u8>, image_version: &st
 
 pub fn uvm_serve_recovery_artifacts(
     env: &TestEnv,
-    artifacts: Vec<u8>,
+    artifacts_path: &Path,
     artifacts_hash: &str,
 ) -> Result<()> {
     uvm_serve_file(
         env,
-        artifacts,
+        artifacts_path,
         Path::new(&format!("recovery/{}/recovery.tar.zst", artifacts_hash)),
     )
 }
 
-fn uvm_serve_file(env: &TestEnv, file: Vec<u8>, uri: &Path) -> Result<()> {
+fn uvm_serve_file(env: &TestEnv, local_path: &Path, uri: &Path) -> Result<()> {
     let uvm = get_upstreams_uvm(env);
+    let session = uvm.block_on_ssh_session()?;
 
     // Create the web root directory and the uri subdirectories.
-    let file_path = Path::new(WEB_ROOT).join(uri);
-    uvm.block_on_bash_script(&format!(
-        "mkdir -p {}",
-        file_path.parent().unwrap().display(),
-    ))?;
+    let remote_path = Path::new(WEB_ROOT).join(uri);
+    uvm.block_on_bash_script_from_session(
+        &session,
+        &format!("mkdir -p {}", remote_path.parent().unwrap().display(),),
+    )?;
 
     // Send the file to the UVM.
-    let mut remote_artifacts =
-        uvm.block_on_ssh_session()?
-            .scp_send(&file_path, 0o644, file.len() as u64, None)?;
-    remote_artifacts.write_all(&file)?;
-    remote_artifacts.send_eof()?;
-    remote_artifacts.wait_eof()?;
-    remote_artifacts.close()?;
-    remote_artifacts.wait_close()?;
+    scp_send_to(env.logger(), &session, local_path, &remote_path, 0o644);
 
     // The static server is already running and will serve the file at the given URI.
 

@@ -223,8 +223,8 @@ fn random_sig_inputs<R: Rng>(rng: &mut R) -> (ExtendedDerivationPath, Vec<u8>, R
         caller: PrincipalId::new_user_test_id(1),
         derivation_path: vec![],
     };
-    let message = rng.gen::<[u8; 32]>();
-    let seed = Randomness::from(rng.gen::<[u8; 32]>());
+    let message = rng.r#gen::<[u8; 32]>();
+    let seed = Randomness::from(rng.r#gen::<[u8; 32]>());
     (derivation_path, message.to_vec(), seed)
 }
 

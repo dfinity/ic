@@ -277,7 +277,7 @@ fn load_transcript_for_receivers_expecting_status<C: CryptoComponentRng>(
 }
 
 fn random_n_bytes<R: Rng + CryptoRng>(n: u128, rng: &mut R) -> Vec<u8> {
-    (0..n).map(|_| rng.gen::<u8>()).collect()
+    (0..n).map(|_| rng.r#gen::<u8>()).collect()
 }
 
 fn random_node_in<R: Rng + CryptoRng>(nodes: &BTreeSet<NodeId>, rng: &mut R) -> NodeId {
@@ -296,7 +296,7 @@ fn n_random_nodes_in<R: Rng + CryptoRng>(
 }
 
 fn random_transports_secret_key<R: Rng + CryptoRng>(rng: &mut R) -> TransportSecretKey {
-    ic_vetkeys::TransportSecretKey::from_seed(rng.gen::<[u8; 32]>().to_vec())
+    ic_vetkeys::TransportSecretKey::from_seed(rng.r#gen::<[u8; 32]>().to_vec())
         .expect("failed to create transport secret key")
 }
 
@@ -305,7 +305,7 @@ fn random_derivation_context_with_n_bytes<R: Rng + CryptoRng>(
     rng: &mut R,
 ) -> VetKdDerivationContext {
     VetKdDerivationContext {
-        caller: canister_test_id(rng.gen::<u64>()).get(),
+        caller: canister_test_id(rng.r#gen::<u64>()).get(),
         context: random_n_bytes(n, rng),
     }
 }

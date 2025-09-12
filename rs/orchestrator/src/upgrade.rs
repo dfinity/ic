@@ -1359,10 +1359,8 @@ mod tests {
             let c1 = make_cup(Height::from(10), Some(key.clone()));
 
             let key_id2 = clone_key_id_with_name(&key_id1, "other_key");
-            let c2 = if let (
-                MasterPublicKeyId::VetKd(ref key_id),
-                KeyTranscript::NiDkg(ref transcript),
-            ) = (&key_id2, &key.1)
+            let c2 = if let (MasterPublicKeyId::VetKd(key_id), KeyTranscript::NiDkg(transcript)) =
+                (&key_id2, &key.1)
             {
                 let mut transcript2 = transcript.clone();
                 transcript2.dkg_id.dkg_tag =

@@ -360,7 +360,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
 
         // The node address that will be receiving this message.
         let receiver = Address::new(addr, ServiceFlags::NETWORK | ServiceFlags::NETWORK_LIMITED);
-        let nonce: u64 = self.rng.gen();
+        let nonce: u64 = self.rng.r#gen();
         let user_agent = String::from(USER_AGENT);
         let message = <NetworkMessageOf<Network>>::Version(VersionMessage::new(
             self.p2p_protocol_version,
@@ -389,7 +389,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
 
     /// This function is used to send a `ping` message to a specified connection.
     fn send_ping(&mut self, addr: &SocketAddr) -> ConnectionManagerResult<()> {
-        let nonce = self.rng.gen();
+        let nonce = self.rng.r#gen();
         let conn = self.get_connection(addr)?;
         conn.expect_pong(nonce);
         self.send_to(addr, NetworkMessage::Ping(nonce))

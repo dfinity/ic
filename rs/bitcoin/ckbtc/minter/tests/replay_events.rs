@@ -24,7 +24,7 @@ use std::cell::RefCell;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, LazyLock, RwLock};
 
 pub mod mock {
     use async_trait::async_trait;
@@ -80,12 +80,18 @@ pub fn mock_ecdsa_public_key() -> ECDSAPublicKey {
     }
 }
 
+static MAINNET_EVENTS: LazyLock<GetEventsResult> = LazyLock::new(|| Mainnet.deserialize());
+static MAINNET_STATE: LazyLock<CkBtcMinterState> = LazyLock::new(|| {
+    replay::<SkipCheckInvariantsImpl>(MAINNET_EVENTS.events.iter().cloned())
+        .expect("Failed to replay events")
+});
+static TESTNET_EVENTS: LazyLock<GetEventsResult> = LazyLock::new(|| Testnet.deserialize());
+
 #[tokio::test]
 async fn should_replay_events_for_mainnet() {
     Mainnet.retrieve_and_store_events_if_env().await;
 
-    let state = replay::<SkipCheckInvariantsImpl>(Mainnet.deserialize().events.into_iter())
-        .expect("Failed to replay events");
+    let state = &MAINNET_STATE;
     state
         .check_invariants()
         .expect("Failed to check invariants");
@@ -97,7 +103,7 @@ async fn should_replay_events_for_mainnet() {
 #[tokio::test]
 async fn should_have_not_many_transactions_with_many_used_utxos() {
     let mut txs_by_used_utxos: BTreeMap<_, Vec<String>> = BTreeMap::new();
-    for event in Mainnet.deserialize().events.into_iter() {
+    for event in MAINNET_EVENTS.events.iter().cloned() {
         // Note: this does not consider resubmitted transactions (event `ReplacedBtcTransaction`)
         // which use the same UTXOs set as the replaced transaction.
         if let EventType::SentBtcTransaction { utxos, txid, .. } = event.payload {
@@ -131,8 +137,7 @@ async fn should_have_not_many_transactions_with_many_used_utxos() {
 async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30() {
     Mainnet.retrieve_and_store_events_if_env().await;
 
-    let mut state = replay::<SkipCheckInvariantsImpl>(Mainnet.deserialize().events.into_iter())
-        .expect("Failed to replay events");
+    let mut state = MAINNET_STATE.clone();
 
     assert_eq!(state.btc_network, Network::Mainnet);
     assert_eq!(state.get_total_btc_managed(), 43_366_185_379);
@@ -348,7 +353,7 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
 async fn should_replay_events_for_testnet() {
     Testnet.retrieve_and_store_events_if_env().await;
 
-    let state = replay::<SkipCheckInvariantsImpl>(Testnet.deserialize().events.into_iter())
+    let state = replay::<SkipCheckInvariantsImpl>(TESTNET_EVENTS.events.iter().cloned())
         .expect("Failed to replay events");
     state
         .check_invariants()
@@ -365,14 +370,13 @@ async fn should_replay_events_for_testnet() {
 #[test]
 #[ignore]
 fn should_replay_events_and_check_invariants() {
-    fn test(file: impl GetEventsFile + std::fmt::Debug) {
-        let events = file.deserialize();
-        println!("Replaying {} {:?} events", events.total_event_count, file);
-        let _state = replay::<CheckInvariantsImpl>(events.events.into_iter())
+    fn test(events: &GetEventsResult) {
+        println!("Replaying {} events", events.total_event_count);
+        let _state = replay::<CheckInvariantsImpl>(events.events.iter().cloned())
             .expect("Failed to replay events");
     }
-    test(Mainnet);
-    test(Testnet);
+    test(&MAINNET_EVENTS);
+    test(&TESTNET_EVENTS);
 }
 
 // Due to an initial bug, there were a lot of useless events.
@@ -383,10 +387,9 @@ fn should_replay_events_and_check_invariants() {
 // any regression.
 #[tokio::test]
 async fn should_not_have_useless_events() {
-    fn assert_useless_events_is_empty(file: impl GetEventsFile) {
-        let events = file.deserialize();
+    fn assert_useless_events_is_empty(events: &GetEventsResult) {
         let mut count = 0;
-        for event in events.events {
+        for event in &events.events {
             match &event.payload {
                 EventType::ReceivedUtxos { utxos, .. } if utxos.is_empty() => {
                     count += 1;
@@ -397,8 +400,8 @@ async fn should_not_have_useless_events() {
         assert_eq!(count, 0);
     }
 
-    assert_useless_events_is_empty(Mainnet);
-    assert_useless_events_is_empty(Testnet);
+    assert_useless_events_is_empty(&MAINNET_EVENTS);
+    assert_useless_events_is_empty(&TESTNET_EVENTS);
 }
 
 #[derive(Debug)]

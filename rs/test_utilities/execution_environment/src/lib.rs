@@ -2725,7 +2725,7 @@ pub fn get_routing_table_with_specified_ids_allocation_range(
 /// we can't always compare the Cycles precisely.
 #[macro_export]
 macro_rules! assert_delta {
-    ($x:expr, $y:expr, $d:expr) => {
+    ($x:expr_2021, $y:expr_2021, $d:expr_2021) => {
         // As Cycles use saturating sub, we can't just subtract $x from $y
         if !($x >= $y && $x - $y <= $d) && !($x < $y && $y - $x <= $d) {
             assert_eq!($x, $y, "delta: `{:?}`", $d);

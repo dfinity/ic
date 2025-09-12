@@ -10712,12 +10712,20 @@ name = "ic-migration-canister"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "canister-test",
  "futures",
+ "ic-base-types",
  "ic-cdk",
  "ic-cdk-timers",
+ "ic-management-canister-types",
+ "ic-nns-test-utils",
  "ic-stable-structures 0.7.0",
+ "pocket-ic",
+ "registry-canister",
  "serde",
  "serde_cbor",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -11488,6 +11496,7 @@ dependencies = [
  "bytes",
  "candid",
  "comparable",
+ "hex",
  "ic-base-types",
  "ic-crypto-sha2",
  "ic-nervous-system-clients",
@@ -22632,7 +22641,6 @@ dependencies = [
  "ic-types",
  "lazy_static",
  "rand 0.8.5",
- "rand_pcg 0.3.1",
  "serde",
  "serde_json",
 ]

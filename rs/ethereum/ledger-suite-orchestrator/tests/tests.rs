@@ -920,7 +920,7 @@ mod upgrade {
     #[test]
     fn should_upgrade_when_some_canister_are_stopped_to_simulate_previous_upgrade_failure() {
         let rng = &mut reproducible_rng();
-        let [stop_ledger, stop_index] = rng.gen::<[bool; 2]>();
+        let [stop_ledger, stop_index] = rng.r#gen::<[bool; 2]>();
         test_when_canisters_stopped(stop_ledger, stop_index);
 
         fn test_when_canisters_stopped(stop_ledger: bool, stop_index: bool) {

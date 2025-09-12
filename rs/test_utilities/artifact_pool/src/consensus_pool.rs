@@ -248,10 +248,11 @@ impl TestConsensusPool {
     }
 
     pub fn make_next_block_with_rank(&self, rank: Rank) -> BlockProposal {
-        if let Some(parent) = self.latest_notarized_blocks().next() {
-            self.make_next_block_from_parent(&parent, rank)
-        } else {
-            panic!("Pool contains a valid notarization on a block that is not in the pool");
+        match self.latest_notarized_blocks().next() {
+            Some(parent) => self.make_next_block_from_parent(&parent, rank),
+            _ => {
+                panic!("Pool contains a valid notarization on a block that is not in the pool");
+            }
         }
     }
 
