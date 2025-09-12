@@ -1,6 +1,6 @@
 use crate::api_conversion::into_rewards_calculation_results;
 use crate::metrics::MetricsManager;
-use crate::pb::v1::{RewardableNodesKey, RewardableNodesValue};
+use crate::pb::v1::RewardableNodesKey;
 use crate::registry_querier::RegistryQuerier;
 use crate::storage::{REWARDABLE_NODES_CACHE, VM};
 use crate::KeyRange;
@@ -25,7 +25,7 @@ use ic_registry_keys::{
     DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
 };
 use ic_registry_node_provider_rewards::{calculate_rewards_v0, RewardsPerNodeProvider};
-use ic_types::RegistryVersion;
+use ic_types::{RegistryVersion, Time};
 use rewards_calculation::performance_based_algorithm::results::RewardsCalculatorResults;
 use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
 use rewards_calculation::types::{DayUtc, NodeMetricsDailyRaw, RewardableNode};
@@ -167,7 +167,7 @@ impl NodeRewardsCanister {
                             node_reward_type: NodeRewardType::try_from(
                                 rewardable_node.node_reward_type.unwrap(),
                             )
-                                .unwrap(),
+                            .unwrap(),
                             dc_id: rewardable_node.dc_id.unwrap(),
                         })
                         .collect::<Vec<_>>();
