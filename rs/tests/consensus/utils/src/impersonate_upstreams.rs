@@ -63,7 +63,7 @@ pub fn setup_upstreams_uvm(env: &TestEnv) {
         .unwrap();
 }
 
-pub fn uvm_serve_guestos_image(
+pub fn uvm_serve_recovery_image(
     env: &TestEnv,
     image_path: &Path,
     image_version: &str,
@@ -72,7 +72,7 @@ pub fn uvm_serve_guestos_image(
         env,
         image_path,
         Path::new(&format!(
-            "ic/{}/guest-os/update-img/update-img.tar.zst",
+            "ic/{}/guest-os/update-img-recovery/update-img.tar.zst",
             image_version
         )),
     )
@@ -81,12 +81,15 @@ pub fn uvm_serve_guestos_image(
 pub fn uvm_serve_recovery_artifacts(
     env: &TestEnv,
     artifacts_path: &Path,
-    artifacts_hash: &str,
+    artifacts_short_hash: &str,
 ) -> Result<()> {
     uvm_serve_file(
         env,
         artifacts_path,
-        Path::new(&format!("recovery/{}/recovery.tar.zst", artifacts_hash)),
+        Path::new(&format!(
+            "recovery/{}/recovery.tar.zst",
+            artifacts_short_hash
+        )),
     )
 }
 

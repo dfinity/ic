@@ -60,9 +60,6 @@ artifact_bundle(
     prefix = "guest-os/update-img-recovery",
     tags = [
         "manual",
-        "no-cache",
     ],
-    visibility = [
-        "//rs:ic-os-pkg",
-    ],
+    visibility = ["//visibility:public"],
 )

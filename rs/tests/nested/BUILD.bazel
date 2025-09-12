@@ -175,7 +175,10 @@ system_test_nns(
     name = "recovery_upgrader_test",
     env = MAINNET_ENV,
     flaky = True,
-    tags = ["long_test"],
+    tags = [
+        "long_test",
+        "manual",  # TODO(NODE-1707): re-enable this test after next weekly release
+    ],
     test_timeout = "eternal",
     uses_guestos_mainnet_nns_update = True,
     uses_setupos_img = True,
