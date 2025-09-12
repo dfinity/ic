@@ -23,7 +23,7 @@
 
 use anyhow::Result;
 use ic_nested_nns_recovery_common::{SetupConfig, replace_nns_with_unassigned_nodes, setup};
-use ic_system_test_driver::driver::nested::NestedVms;
+use ic_system_test_driver::driver::nested::HasNestedVms;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::driver::test_setup::GroupSetup;

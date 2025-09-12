@@ -1,6 +1,7 @@
 use crate::driver::{
     bootstrap::{init_ic, setup_and_start_vms},
     farm::{Farm, HostFeature},
+    nested::UnassignedRecordConfig,
     node_software_version::NodeSoftwareVersion,
     resource::{AllocatedVm, ResourceGroup, allocate_resources, get_resource_request},
     test_env::{TestEnv, TestEnvAttribute},
@@ -46,7 +47,7 @@ pub struct InternetComputer {
     pub jaeger_addr: Option<SocketAddr>,
     pub socks_proxy: Option<String>,
     use_specified_ids_allocation_range: bool,
-    pub skip_unassigned_record: bool,
+    pub unassigned_record_config: Option<UnassignedRecordConfig>,
     pub api_boundary_nodes: Vec<Node>,
 }
 
@@ -219,7 +220,12 @@ impl InternetComputer {
     }
 
     pub fn without_unassigned_config(mut self) -> Self {
-        self.skip_unassigned_record = true;
+        self.unassigned_record_config = Some(UnassignedRecordConfig::Skip);
+        self
+    }
+
+    pub fn with_unassigned_config(mut self) -> Self {
+        self.unassigned_record_config = Some(UnassignedRecordConfig::Ignore);
         self
     }
 
@@ -258,6 +264,10 @@ impl InternetComputer {
                 .image_url(image_url.as_ref())
                 .image_sha(image_sha.as_ref());
             tnet.write_attribute(env);
+        }
+
+        if let Some(record) = self.unassigned_record_config {
+            record.write_attribute(env);
         }
 
         let res_group = allocate_resources(&farm, &res_request, env)?;
