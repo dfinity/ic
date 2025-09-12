@@ -7,24 +7,24 @@ description.workspace = true
 documentation.workspace = true
 
 [dependencies]
-anyhow = { workspace = true }
 candid = { workspace = true }
-ic-agent = { workspace = true }
-ic-icrc-rosetta = { path = "../../../icrc1" }
 ic-icrc-rosetta-client = { path = "../../../icrc1/client" }
 ic-rosetta-api = { path = "../.." }
-ic-sender-canister = { path = "../../test_utils/sender_canister" }
-ic-test-utilities-load-wasm = { path = "../../../../test_utilities/load_wasm" }
 icp-ledger = { path = "../../../../ledger_suite/icp" }
-icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
 ledger-canister = { path = "../../../../ledger_suite/icp/ledger" }
-num-traits = { workspace = true }
-pocket-ic = { path = "../../../../../packages/pocket-ic" }
-rosetta-core = { path = "../../../common/rosetta_core" }
-serde = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
 
 [dev-dependencies]
-ic-ledger-suite-state-machine-tests-types = { path = "../../../../ledger_suite/tests/sm-tests/types" }
+anyhow = { workspace = true }
+ic-agent = { workspace = true }
+ic-icrc-rosetta = { path = "../../../icrc1" }
+ic-nns-constants = { path = "../../../../nns/constants" }
+ic-sender-canister = { path = "../../test_utils/sender_canister" }
+ic-test-utilities-load-wasm = { path = "../../../../test_utilities/load_wasm" }
+icrc-ledger-types = { path = "../../../../../packages/icrc-ledger-types" }
+num-traits = { workspace = true }
+pocket-ic = { path = "../../../../../packages/pocket-ic" }
+rosetta-core = { path = "../../../common/rosetta_core" }
+serde = { workspace = true }

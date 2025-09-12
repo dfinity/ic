@@ -15443,7 +15443,7 @@ dependencies = [
  "ic-agent",
  "ic-icrc-rosetta",
  "ic-icrc-rosetta-client",
- "ic-ledger-suite-state-machine-tests-types",
+ "ic-nns-constants",
  "ic-rosetta-api",
  "ic-sender-canister",
  "ic-test-utilities-load-wasm",
