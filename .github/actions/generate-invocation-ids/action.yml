@@ -108,15 +108,15 @@ runs:
             summary+="| $name | \`$uuid\` | [BuildBuddy link to $uuid]($link) |\n"
 
             # Cannot have dynamic variables so hack it with yq.
-            if [[ -z "$temp_yaml" ]]; then
-                temp_yaml="$output_id: \"$uuid\""
+            if [[ -z "$output_yaml" ]]; then
+                output_yaml="$output_id: \"$uuid\""
             else
-                temp_yaml="$temp_yaml"$'\n'"$output_id: \"$uuid\""
+                output_yaml="$output_yaml"$'\n'"$output_id: \"$uuid\""
             fi
         done < <(echo "$targets" | $yq_cmd -r '.[] | [.name, .output_id] | @tsv')
 
         # Convert YAML to JSON using yq and set as output
-        output_json=$(echo "$temp_yaml" | $yq_cmd -o=json '.')
+        output_json=$(echo "$output_yaml" | $yq_cmd -o=json '.')
         echo "output=$output_json" >> "$GITHUB_OUTPUT"
 
         # cleanup if we downloaded yq locally
