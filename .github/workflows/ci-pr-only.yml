@@ -28,16 +28,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Generate Bazel invocation IDs
-        id: gen-uuids
+        id: generate-ids
         uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
             - name: Test
               output_id: test_id
+      - name: Debug outputs
+        run: |
+          echo "Available outputs:"
+          echo "test_id = '${{ steps.gen-uuids.outputs.test_id }}'"
+          echo "All step outputs:"
+          echo '${{ toJSON(steps.gen-uuids.outputs) }}'
       - name: Run insta-tests
         uses: ./.github/actions/bazel
         with:
-          run: bazel test --invocation_id="${{ steps.gen-uuids.outputs.test_id }}" //:insta_tests
+          run: bazel test --invocation_id="${{ steps.generate-ids.outputs.test_id }}" //:insta_tests
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   bazel-build-fuzzers-archives:
     name: Bazel Build Fuzzers Archives

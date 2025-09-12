@@ -149,7 +149,7 @@ jobs:
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
       - name: Generate Bazel invocation IDs
-        id: gen-uuids
+        id: generate-ids
         uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
@@ -232,9 +232,9 @@ jobs:
 
               # pick invocation id from action outputs
               if [ "$bazel_cmd" = "build" ]; then
-                invocation_id="${{ steps.gen-uuids.outputs.build_id }}"
+                invocation_id="${{ steps.generate-ids.outputs.build_id }}"
               else
-                invocation_id="${{ steps.gen-uuids.outputs.test_id }}"
+                invocation_id="${{ steps.generate-ids.outputs.test_id }}"
               fi
 
               echo "Running bazel command: $bazel_cmd"
@@ -265,7 +265,7 @@ jobs:
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Generate Bazel invocation IDs
-        id: gen-uuids
+        id: generate-ids
         uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
@@ -281,7 +281,7 @@ jobs:
           run: |
             bazel build \
               --config=stamped \
-              --invocation_id="${{ steps.gen-uuids.outputs.build_id }}" \
+              --invocation_id="${{ steps.generate-ids.outputs.build_id }}" \
               --build_tag_filters=test_macos \
               //... --nobuild
       - name: Build & Test
@@ -291,7 +291,7 @@ jobs:
           run: |
             bazel test \
               --config=stamped \
-              --invocation_id="${{ steps.gen-uuids.outputs.test_id }}" \
+              --invocation_id="${{ steps.generate-ids.outputs.test_id }}" \
               --test_tag_filters=test_macos \
               //...
       - name: Upload artifacts
@@ -322,7 +322,7 @@ jobs:
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
       - name: Generate Bazel invocation IDs
-        id: gen-uuids
+        id: generate-ids
         uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
@@ -335,7 +335,7 @@ jobs:
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             test \
-              --invocation_id="${{ steps.gen-uuids.outputs.test_id }}" \
+              --invocation_id="${{ steps.generate-ids.outputs.test_id }}" \
               //packages/pocket-ic:all \
               //rs/pocket_ic_server:test \
               //rs/pocket_ic_server:gateway \
@@ -362,7 +362,7 @@ jobs:
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
       - name: Generate Bazel invocation IDs
-        id: gen-uuids
+        id: generate-ids
         uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
@@ -392,7 +392,7 @@ jobs:
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             test \
-            --invocation_id="${{ steps.gen-uuids.outputs.test_id }}" \
+            --invocation_id="${{ steps.generate-ids.outputs.test_id }}" \
             --test_tag_filters="test_macos,test_macos_slow" \
             "${bazel_targets[@]}"
 
@@ -526,7 +526,7 @@ jobs:
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
       - name: Generate Bazel invocation IDs
-        id: gen-uuids
+        id: generate-ids
         uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
@@ -544,7 +544,7 @@ jobs:
             BASE_SHA='${{ github.event.pull_request.base.sha }}'
             HEAD_SHA='${{ github.event.pull_request.head.sha }}'
 
-            export BAZEL_BUILD_INVOCATION_ID="${{ steps.gen-uuids.outputs.build_id }}"
+            export BAZEL_BUILD_INVOCATION_ID="${{ steps.generate-ids.outputs.build_id }}"
 
             cd "$CI_PROJECT_DIR"
 
@@ -669,7 +669,7 @@ jobs:
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Generate Bazel invocation IDs
-        id: gen-uuids
+        id: generate-ids
         uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
@@ -678,7 +678,7 @@ jobs:
       - name: Run Bazel Build All No Cache
         uses: ./.github/actions/bazel
         with:
-          run: bazel build --config=stamped --config=local --invocation_id="${{ steps.gen-uuids.outputs.build_id }}" //...
+          run: bazel build --config=stamped --config=local --invocation_id="${{ steps.generate-ids.outputs.build_id }}" //...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
   cargo-clippy-linux:
     name: Cargo Clippy Linux
