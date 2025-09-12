@@ -9,7 +9,7 @@ Runbook::
 . Break the subnet by replacing the replica binary on f+1 nodes.
 . Run ic-recovery to replay consensus artifacts until the highest certification share height, manually inject a message upgrading the replica to a known working version, produce a CUP and registry local store corresponding to the new state and bundle them in a tarball.
 . Upload the tarball to a local web server acting as DFINITY's upstreams, as well as a recovery GuestOS image (containing guestos-recovery-engine).
-. Reboot nodes' HostOSes into recovery mode to trigger guestos-recovery-upgrader and download the recovery GuestOS iamge.
+. Reboot 2f+1 nodes' HostOSes into recovery mode to trigger guestos-recovery-upgrader and download the recovery GuestOS iamge.
 . This recovery GuestOS image will download the recovery artifacts from the local web server and launch the orchestrator, which will detect the upgrade message and upgrade to it.
   . It will also state sync the state indicated by the CUP.
 . Observe that NNS subnet continues functioning.
@@ -18,13 +18,13 @@ Success::
 . NNS subnet is functional after the recovery.
 
 Variant::
-. This test variant performs the recovery remotely, i.e. downloads/uploads state and artifacts from a remote node instead of running the recovery tool directly on the node.
+. This test variant performs the recovery assuming the DFINITY-owned node is broken/lagging behind.
 
 end::catalog[] */
 
 use anyhow::Result;
 use ic_nested_nns_recovery_common::{
-    setup, test, SetupConfig, TestConfig, DKG_INTERVAL, SUBNET_SIZE,
+    setup, test, SetupConfig, TestConfig, LARGE_DKG_INTERVAL, SUBNET_SIZE,
 };
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use std::time::Duration;
@@ -37,13 +37,14 @@ fn main() -> Result<()> {
                 SetupConfig {
                     impersonate_upstreams: true,
                     subnet_size: SUBNET_SIZE,
-                    dkg_interval: DKG_INTERVAL,
+                    dkg_interval: LARGE_DKG_INTERVAL, // Otherwise DFINITY-owned node would fall
+                                                      // one interval behind more frequently
                 },
             )
         })
         .add_test(systest!(test; TestConfig {
             subnet_size: SUBNET_SIZE,
-            break_dfinity_owned_node: false,
+            break_dfinity_owned_node: true,
         }))
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .with_overall_timeout(Duration::from_secs(35 * 60))

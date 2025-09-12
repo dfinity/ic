@@ -364,7 +364,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     Some(DataLocation::Remote(node_ip)) => {
                         Ok(Box::new(self.recovery.get_download_state_step(
                             node_ip,
-                            self.params.pub_key.is_some(),
+                            if self.params.pub_key.is_some() {
+                                SshUser::Readonly
+                            } else {
+                                SshUser::Admin
+                            },
                             self.params.keep_downloaded_state == Some(true),
                             /*additional_excludes=*/ vec![CUPS_DIR],
                         )))
