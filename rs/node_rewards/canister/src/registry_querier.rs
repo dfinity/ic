@@ -83,7 +83,6 @@ impl RegistryQuerier {
     pub fn get_rewardable_nodes_per_provider(
         &self,
         day_utc: &DayUtc,
-        provider_filter: Option<&PrincipalId>,
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, RegistryClientError> {
         let mut rewardable_nodes_per_provider: BTreeMap<_, Vec<RewardableNode>> = BTreeMap::new();
         let registry_version = self
@@ -107,11 +106,6 @@ impl RegistryQuerier {
                 ic_cdk::println!("Node {} has no NodeOperatorData: skipping", node_id);
                 continue;
             };
-            if let Some(provider_filter) = provider_filter {
-                if &node_provider_id != provider_filter {
-                    continue;
-                }
-            }
             let Some(some_reward_type) = node_record.node_reward_type else {
                 // If the node does not have a node_reward_type, we skip it.
                 continue;

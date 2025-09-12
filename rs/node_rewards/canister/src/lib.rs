@@ -11,6 +11,7 @@ use ic_management_canister_types::NodeMetrics;
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::Storable;
 use prost::Message;
+use rewards_calculation::types::RewardableNode;
 use std::borrow::Cow;
 
 pub mod api_conversion;
@@ -48,6 +49,22 @@ impl KeyRange for pb::v1::SubnetMetricsKey {
         Self {
             timestamp_nanos: u64::MAX,
             subnet_id: Some(MAX_PRINCIPAL_ID),
+        }
+    }
+}
+
+impl KeyRange for pb::v1::RewardableNodesKey {
+    fn min_key() -> Self {
+        Self {
+            registry_version: u64::MIN,
+            provider_id: Some(MIN_PRINCIPAL_ID),
+        }
+    }
+
+    fn max_key() -> Self {
+        Self {
+            registry_version: u64::MAX,
+            provider_id: Some(MAX_PRINCIPAL_ID),
         }
     }
 }
@@ -106,6 +123,26 @@ impl Storable for pb::v1::NodeMetrics {
     const BOUND: Bound = Bound::Unbounded;
 }
 
+impl Storable for pb::v1::RewardableNodesKey {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        Cow::Owned(self.encode_to_vec())
+    }
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        Self::decode(bytes.as_ref()).unwrap()
+    }
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+impl Storable for pb::v1::RewardableNodesValue {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        Cow::Owned(self.encode_to_vec())
+    }
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        Self::decode(bytes.as_ref()).unwrap()
+    }
+    const BOUND: Bound = Bound::Unbounded;
+}
+
 impl From<SubnetId> for pb::v1::SubnetIdKey {
     fn from(subnet_id: SubnetId) -> Self {
         Self {
@@ -126,6 +163,17 @@ impl From<NodeMetrics> for pb::v1::NodeMetrics {
             node_id: Some(metrics.node_id.into()),
             num_blocks_proposed_total: metrics.num_blocks_proposed_total,
             num_blocks_failed_total: metrics.num_block_failures_total,
+        }
+    }
+}
+
+impl From<RewardableNode> for pb::v1::RewardableNode {
+    fn from(value: RewardableNode) -> Self {
+        Self {
+            node_id: Some(value.node_id.get()),
+            region: Some(value.region),
+            dc_id: Some(value.dc_id),
+            node_reward_type: Some(value.node_reward_type.into()),
         }
     }
 }

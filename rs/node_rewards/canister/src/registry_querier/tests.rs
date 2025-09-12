@@ -232,12 +232,8 @@ fn test_rewardable_nodes_deleted_nodes() {
     let day1 = DayUtc::try_from("2025-07-12").unwrap();
     let day2 = DayUtc::try_from("2025-07-13").unwrap();
 
-    let mut rewardable_nodes_day1 = client
-        .get_rewardable_nodes_per_provider(&day1, None)
-        .unwrap();
-    let mut rewardable_nodes_day2 = client
-        .get_rewardable_nodes_per_provider(&day2, None)
-        .unwrap();
+    let mut rewardable_nodes_day1 = client.get_rewardable_nodes_per_provider(&day1).unwrap();
+    let mut rewardable_nodes_day2 = client.get_rewardable_nodes_per_provider(&day2).unwrap();
 
     let np_1_id = PrincipalId::new_user_test_id(20);
     let rewardables_day1 = rewardable_nodes_day1.remove(&np_1_id).unwrap();
@@ -296,7 +292,7 @@ fn test_node_re_registered_after_deletion() {
 
     while current_day <= to {
         let rewardables = client
-            .get_rewardable_nodes_per_provider(&current_day, None)
+            .get_rewardable_nodes_per_provider(&current_day)
             .unwrap()
             .remove(&PrincipalId::new_user_test_id(20))
             .unwrap();

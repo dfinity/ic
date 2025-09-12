@@ -1,8 +1,10 @@
 use crate::api_conversion::into_rewards_calculation_results;
 use crate::metrics::MetricsManager;
+use crate::pb::v1::{RewardableNodesKey, RewardableNodesValue};
 use crate::registry_querier::RegistryQuerier;
-use crate::storage::VM;
-use ic_base_types::{PrincipalId, SubnetId};
+use crate::storage::{REWARDABLE_NODES_CACHE, VM};
+use crate::KeyRange;
+use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
@@ -15,6 +17,7 @@ use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse, NodeProvidersRewards,
 };
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use ic_registry_canister_client::{get_decoded_value, CanisterRegistryClient};
@@ -22,6 +25,7 @@ use ic_registry_keys::{
     DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
 };
 use ic_registry_node_provider_rewards::{calculate_rewards_v0, RewardsPerNodeProvider};
+use ic_types::registry::RegistryClientError;
 use ic_types::RegistryVersion;
 use rewards_calculation::performance_based_algorithm::results::RewardsCalculatorResults;
 use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
@@ -116,6 +120,79 @@ impl NodeRewardsCanister {
         });
     }
 
+    pub fn backfill_rewardable_nodes(
+        canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
+        day_utc: &DayUtc,
+    ) -> Result<(), RegistryClientError> {
+        let registry_client = canister.with_borrow(|canister| canister.get_registry_client());
+        let registry_querier = RegistryQuerier::new(registry_client.clone());
+        let registry_version = registry_querier
+            .version_for_timestamp(day_utc.unix_ts_at_day_end_nanoseconds())
+            .unwrap();
+        let cached_rewardable_nodes = canister.with_borrow(|canister| {
+            canister.get_cached_rewardable_nodes_per_provider(registry_version)
+        });
+        if cached_rewardable_nodes.is_empty() {
+            let rewardable_nodes = registry_querier.get_rewardable_nodes_per_provider(day_utc)?;
+
+            for (provider_id, rewardable_nodes_daily) in rewardable_nodes {
+                REWARDABLE_NODES_CACHE.with_borrow_mut(|rewardable_nodes_cache| {
+                    let key = RewardableNodesKey {
+                        registry_version: registry_version.get(),
+                        provider_id: Some(provider_id),
+                    };
+                    let value = RewardableNodesValue {
+                        rewardable_nodes: rewardable_nodes_daily
+                            .into_iter()
+                            .map(|node| node.into())
+                            .collect(),
+                    };
+                    rewardable_nodes_cache.insert(key, value);
+                });
+            }
+            ic_cdk::println!("Backfilled rewardable nodes for day {}", day_utc);
+        } else {
+            ic_cdk::println!("Rewardable nodes already backfilled for day {}", day_utc);
+        }
+        Ok(())
+    }
+
+    fn get_cached_rewardable_nodes_per_provider(
+        &self,
+        version: RegistryVersion,
+    ) -> BTreeMap<PrincipalId, Vec<RewardableNode>> {
+        let key_start = RewardableNodesKey {
+            registry_version: version.get(),
+            ..RewardableNodesKey::min_key()
+        };
+        let key_end = RewardableNodesKey {
+            registry_version: version.get(),
+            ..RewardableNodesKey::max_key()
+        };
+
+        REWARDABLE_NODES_CACHE.with_borrow(|rewardable_nodes_cache| {
+            rewardable_nodes_cache
+                .range(key_start..=key_end)
+                .map(|(key, rewardable_nodes)| {
+                    let nodes = rewardable_nodes
+                        .rewardable_nodes
+                        .into_iter()
+                        .map(|rewardable_node| RewardableNode {
+                            node_id: NodeId::from(rewardable_node.node_id.unwrap()),
+                            region: rewardable_node.region.unwrap(),
+                            node_reward_type: NodeRewardType::try_from(
+                                rewardable_node.node_reward_type.unwrap(),
+                            )
+                            .unwrap(),
+                            dc_id: rewardable_node.dc_id.unwrap(),
+                        })
+                        .collect::<Vec<_>>();
+                    (key.provider_id.unwrap(), nodes)
+                })
+                .collect()
+        })
+    }
+
     fn calculate_rewards(
         &self,
         request: GetNodeProvidersRewardsRequest,
@@ -154,23 +231,32 @@ impl rewards_calculation::performance_based_algorithm::DataProvider for &NodeRew
         &self,
         day: &DayUtc,
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, String> {
-        let registry_client = self.get_registry_client();
-        let registry_querier = RegistryQuerier::new(registry_client.clone());
-        registry_querier
-            .get_rewardable_nodes_per_provider(day, None)
-            .map_err(|e| format!("Could not get rewardable nodes: {e:?}"))
+        let registry_querier = RegistryQuerier::new(self.registry_client.clone());
+        let version = registry_querier
+            .version_for_timestamp(day.unix_ts_at_day_end_nanoseconds())
+            .ok_or_else(|| "Could not find registry version for timestamp".to_string())?;
+        let cached_rewardable_nodes = self.get_cached_rewardable_nodes_per_provider(version);
+
+        if cached_rewardable_nodes.is_empty() {
+            Err(format!(
+                "Rewardable nodes not found in cache for day {}, please backfill first",
+                day.to_string()
+            ))
+        } else {
+            Ok(cached_rewardable_nodes)
+        }
     }
 
     fn get_provider_rewardable_nodes(
         &self,
         day: &DayUtc,
         provider_id: &PrincipalId,
-    ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, String> {
-        let registry_client = self.get_registry_client();
-        let registry_querier = RegistryQuerier::new(registry_client.clone());
-        registry_querier
-            .get_rewardable_nodes_per_provider(day, Some(provider_id))
-            .map_err(|e| format!("Could not get rewardable nodes: {e:?}"))
+    ) -> Result<Vec<RewardableNode>, String> {
+        let mut all_rewardable_nodes = self.get_rewardable_nodes(day)?;
+        let rewardable_nodes = all_rewardable_nodes
+            .remove(provider_id)
+            .ok_or_else(|| format!("No rewardable nodes found for provider {}", provider_id))?;
+        Ok(rewardable_nodes)
     }
 }
 
@@ -245,20 +331,10 @@ impl NodeRewardsCanister {
         }
     }
 
-    pub async fn get_node_providers_rewards(
+    pub fn get_node_providers_rewards(
         canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
         request: GetNodeProvidersRewardsRequest,
     ) -> GetNodeProvidersRewardsResponse {
-        NodeRewardsCanister::schedule_registry_sync(canister)
-            .await
-            .map_err(|e| {
-                format!(
-                    "Could not sync registry store to latest version, \
-                    please try again later: {:?}",
-                    e
-                )
-            })?;
-        NodeRewardsCanister::schedule_metrics_sync(canister).await;
         let result = canister.with_borrow(|canister| canister.calculate_rewards(request, None))?;
 
         let rewards_xdr_permyriad = result
