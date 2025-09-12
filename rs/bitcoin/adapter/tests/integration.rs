@@ -13,6 +13,7 @@ use ic_btc_replica_types::{
     Network, SendTransactionRequest,
 };
 use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig;
+use ic_config::logger::{Config as LoggerConfig, Level as LoggerLevel};
 use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError};
 use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_metrics::MetricsRegistry;
@@ -91,8 +92,8 @@ fn make_send_tx_request(
 }
 
 fn start_adapter<T: RpcClientType + Into<AdapterNetwork>>(
-    logger: &ReplicaLogger,
-    metrics_registry: &MetricsRegistry,
+    logger: ReplicaLogger,
+    metrics_registry: MetricsRegistry,
     rt_handle: &tokio::runtime::Handle,
     nodes: Vec<SocketAddr>,
     uds_path: &Path,
@@ -104,10 +105,14 @@ fn start_adapter<T: RpcClientType + Into<AdapterNetwork>>(
         ipv6_only: true,
         address_limits: (1, 1),
         idle_seconds: 6, // it can take at most 5 seconds for tcp connections etc to be established.
+        logger: LoggerConfig {
+            level: LoggerLevel::Trace,
+            ..LoggerConfig::default()
+        },
         ..Config::default_with(network.into())
     };
-
-    start_server(logger, metrics_registry, rt_handle, config);
+    let _enter = rt_handle.enter();
+    rt_handle.spawn(start_server(logger, metrics_registry, config));
 }
 
 fn start_bitcoind<T: RpcClientType>(network: T) -> Daemon<T> {
@@ -168,8 +173,8 @@ fn start_adapter_and_client<T: RpcClientType + Into<AdapterNetwork>>(
     let res = Builder::new()
         .make(|uds_path| {
             start_adapter(
-                &logger,
-                &metrics_registry,
+                logger.clone(),
+                metrics_registry.clone(),
                 rt.handle(),
                 urls.clone(),
                 uds_path,
@@ -190,7 +195,14 @@ fn start_adapter_and_client<T: RpcClientType + Into<AdapterNetwork>>(
         .unwrap();
     if let AdapterState::Active = adapter_state {
         // We send this request to make sure the adapter is not idle.
-        let _ = make_get_successors_request(&res.0, anchor[..].to_vec(), vec![]);
+        for _ in 0..10 {
+            let res = make_get_successors_request(&res.0, anchor[..].to_vec(), vec![]);
+            if res.is_err() {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+            } else {
+                break;
+            }
+        }
     }
 
     res
@@ -235,6 +247,31 @@ fn wait_for_connection<T: RpcClientType>(client: &RpcClient<T>, connection_count
         }
     }
 }
+
+/*
+fn wait_for_connection_<T: RpcClientType>(
+    client: &RpcClient<T>,
+    connection_count: usize,
+    rt_handle: &tokio::runtime::Handle,
+) {
+    let mut tries = 0;
+    while client.get_connection_count().unwrap() != connection_count {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        tries += 1;
+        if tries > 5 {
+            rt_handle.block_on(async {
+                let dump = rt_handle.dump().await;
+                for (i, task) in dump.tasks().iter().enumerate() {
+                    let trace = task.trace();
+                    println!("TASK {i}:");
+                    println!("{trace}\n");
+                }
+            });
+            panic!("Timeout in wait_for_connection");
+        }
+    }
+}
+*/
 
 // This is an expensive operation. Should only be used when checking for an upper bound on the number of connections.
 fn exact_connections<T: RpcClientType>(client: &RpcClient<T>, connection_count: usize) {
@@ -343,6 +380,13 @@ fn sync_blocks<T: RpcClientType>(
             Err(err) => panic!("{err:?}"),
         }
         tries += 1;
+        eprintln!(
+            "synced blocks = {} <= {}, tries {} <= {}",
+            blocks.len(),
+            max_num_blocks,
+            tries,
+            max_tries
+        );
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
 
@@ -805,7 +849,8 @@ fn doge_test_send_tx() {
 
 /// Checks that the client (replica) receives blocks from both created forks.
 fn test_receives_blocks_from_forks<T: RpcClientType + Into<AdapterNetwork>>() {
-    let logger = no_op_logger();
+    use ic_logger::new_replica_logger_from_config;
+
     let network = T::REGTEST;
     let bitcoind1 = start_bitcoind(network);
     let client1 = &bitcoind1.rpc_client;
@@ -817,6 +862,12 @@ fn test_receives_blocks_from_forks<T: RpcClientType + Into<AdapterNetwork>>() {
     let url2 = bitcoind2.p2p_socket().unwrap();
 
     let rt = tokio::runtime::Runtime::new().unwrap();
+
+    let logger_config = LoggerConfig {
+        level: LoggerLevel::Trace,
+        ..LoggerConfig::default()
+    };
+    let (logger, _async_log_guard) = new_replica_logger_from_config(&logger_config);
     let (adapter_client, _path) = start_active_adapter_and_client(
         &rt,
         vec![SocketAddr::V4(url1), SocketAddr::V4(url2)],

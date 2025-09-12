@@ -71,6 +71,9 @@ pub enum ConnectionManagerError {
     /// This can happen from recycling the DNS seed queue addresses.
     #[error("Address {0} is already connected")]
     AlreadyConnected(SocketAddr),
+    /// async error thrown by tokio runtime
+    #[error("JoinError")]
+    JoinError(#[from] tokio::task::JoinError),
 }
 
 /// This type is a simple wrapper for results created by a connection manager.
@@ -165,14 +168,15 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
 
     /// This function contains the actions the must occur every time the connection
     /// manager must execute actions.
-    pub fn tick(
+    pub async fn tick(
         &mut self,
         current_height: BlockHeight,
         handle: fn(StreamConfigOf<Network>) -> JoinHandle<()>,
     ) {
         self.current_height = current_height;
 
-        if let Err(ConnectionManagerError::AddressBook(err)) = self.manage_connections(handle) {
+        if let Err(ConnectionManagerError::AddressBook(err)) = self.manage_connections(handle).await
+        {
             error!(self.logger, "{}", err);
         }
     }
@@ -188,7 +192,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
     }
 
     /// This function will remove disconnects and establish new connections.
-    fn manage_connections(
+    async fn manage_connections(
         &mut self,
         handle: fn(StreamConfigOf<Network>) -> JoinHandle<()>,
     ) -> ConnectionManagerResult<()> {
@@ -203,7 +207,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
             .known_peer_addresses
             .set(self.address_book.size() as i64);
         while self.connections.len() < self.get_max_number_of_connections() {
-            self.make_connection(handle)?;
+            self.make_connection(handle).await?;
         }
         Ok(())
     }
@@ -294,13 +298,13 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
     }
 
     /// This function creates a new connection with a stream to a BTC node.
-    fn make_connection(
+    async fn make_connection(
         &mut self,
         handle: fn(StreamConfigOf<Network>) -> JoinHandle<()>,
     ) -> ConnectionManagerResult<()> {
         self.metrics.connections.inc();
         let address_entry_result = if !self.address_book.has_enough_addresses() {
-            self.address_book.pop_seed()
+            self.address_book.pop_seed().await
         } else {
             self.address_book.pop()
         };
@@ -912,7 +916,7 @@ mod test {
             manager.get_max_number_of_connections(),
             MAX_CONNECTIONS_DURING_ADDRESS_DISCOVERY
         );
-        manager.tick(BLOCK_HEIGHT_FOR_TESTS, simple_handle);
+        manager.tick(BLOCK_HEIGHT_FOR_TESTS, simple_handle).await;
         for i in 0..4u8 {
             tokio::select! {
                 event = manager
@@ -932,7 +936,7 @@ mod test {
                 // has been disconnected.
                 continue;
             }
-            manager.tick(BLOCK_HEIGHT_FOR_TESTS, simple_handle);
+            manager.tick(BLOCK_HEIGHT_FOR_TESTS, simple_handle).await;
         }
         assert_eq!(manager.current_height, 1);
         assert_eq!(

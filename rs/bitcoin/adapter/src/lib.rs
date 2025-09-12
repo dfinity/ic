@@ -8,11 +8,7 @@ use bitcoin::p2p::message::NetworkMessage;
 use bitcoin::{BlockHash, block::Header as PureHeader};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use std::{
-    net::SocketAddr,
-    sync::{Arc, Mutex},
-    time::Instant,
-};
+use std::{net::SocketAddr, sync::Arc, time::Instant};
 use tokio::sync::{mpsc::channel, watch};
 /// This module contains the AddressManager struct. The struct stores addresses
 /// that will be used to create new connections. It also tracks addresses that
@@ -198,68 +194,71 @@ impl AdapterState {
     }
 }
 
-fn start_server_helper<Network>(
-    log: &ReplicaLogger,
-    metrics_registry: &MetricsRegistry,
-    rt_handle: &tokio::runtime::Handle,
+async fn start_server_helper<Network>(
+    log: ReplicaLogger,
+    metrics_registry: MetricsRegistry,
     config: config::Config<Network>,
 ) where
     Network: BlockchainNetwork + Sync + Send + 'static,
     Network::Header: Send,
-    Network::Block: Send,
+    Network::Block: Send + Sync,
 {
-    let _enter = rt_handle.enter();
     let (adapter_state, tx) = AdapterState::new(config.idle_seconds);
     let (blockchain_manager_tx, blockchain_manager_rx) = channel(100);
     let blockchain_state = if let Some(cache_dir) = &config.cache_dir {
         BlockchainState::new_with_cache_dir(
             config.network,
             cache_dir.clone(),
-            metrics_registry,
+            &metrics_registry,
             log.clone(),
         )
     } else {
-        BlockchainState::new(config.network, metrics_registry)
+        BlockchainState::new(config.network, &metrics_registry)
     };
-    let blockchain_state = Arc::new(Mutex::new(blockchain_state));
+    let blockchain_state = Arc::new(blockchain_state);
 
     let (transaction_manager_tx, transaction_manager_rx) = channel(100);
-    start_grpc_server(
-        config.network,
-        config.incoming_source.clone(),
-        log.clone(),
-        tx,
-        blockchain_state.clone(),
-        blockchain_manager_tx,
-        transaction_manager_tx,
-        metrics_registry,
-    );
-    start_main_event_loop(
-        &config,
-        log.clone(),
-        blockchain_state,
-        transaction_manager_rx,
-        adapter_state,
-        blockchain_manager_rx,
-        metrics_registry,
-    )
+    let handles = [
+        start_grpc_server(
+            config.network,
+            config.incoming_source.clone(),
+            log.clone(),
+            tx,
+            blockchain_state.clone(),
+            blockchain_manager_tx,
+            transaction_manager_tx,
+            &metrics_registry,
+        ),
+        start_main_event_loop(
+            &config,
+            log.clone(),
+            blockchain_state,
+            transaction_manager_rx,
+            adapter_state,
+            blockchain_manager_rx,
+            &metrics_registry,
+        ),
+    ];
+
+    for handle in handles {
+        let _ = handle.await; // Waits for each task to complete
+    }
 }
 
 /// Starts the gRPC server and the router for handling incoming requests.
-pub fn start_server(
-    log: &ReplicaLogger,
-    metrics_registry: &MetricsRegistry,
-    rt_handle: &tokio::runtime::Handle,
+pub async fn start_server(
+    log: ReplicaLogger,
+    metrics_registry: MetricsRegistry,
     config: config::Config<AdapterNetwork>,
 ) {
     match config.network {
         AdapterNetwork::Bitcoin(network) => {
             let btc_config = config.with_network(network);
-            start_server_helper(log, metrics_registry, rt_handle, btc_config)
+            start_server_helper(log, metrics_registry, btc_config).await
         }
         AdapterNetwork::Dogecoin(network) => {
             let doge_config = config.with_network(network);
-            start_server_helper(log, metrics_registry, rt_handle, doge_config)
+            start_server_helper(log, metrics_registry, doge_config).await
         }
     }
 }
