@@ -163,14 +163,16 @@ impl HasNestedVms for TestEnv {
         let mut vms = Vec::new();
 
         let abs_dir = self.get_path(NESTED_VMS_DIR);
-        for file in fs::read_dir(abs_dir)? {
-            let file = file?;
+        if abs_dir.exists() {
+            for file in fs::read_dir(abs_dir)? {
+                let file = file?;
 
-            if file.file_type()?.is_dir() {
-                vms.push(NestedVm {
-                    env: self.clone(),
-                    name: file.file_name().to_string_lossy().into_owned(),
-                });
+                if file.file_type()?.is_dir() {
+                    vms.push(NestedVm {
+                        env: self.clone(),
+                        name: file.file_name().to_string_lossy().into_owned(),
+                    });
+                }
             }
         }
 
