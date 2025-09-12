@@ -5392,7 +5392,6 @@ dependencies = [
  "config",
  "config_types",
  "indoc",
- "itertools 0.12.1",
  "network",
  "regex",
  "utils",
@@ -5808,7 +5807,9 @@ dependencies = [
  "config",
  "config_types",
  "deterministic_ips",
+ "itertools 0.12.1",
  "network",
+ "regex",
  "utils",
 ]
 
