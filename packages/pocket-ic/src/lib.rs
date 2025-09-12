@@ -56,9 +56,9 @@
 use crate::{
     common::rest::{
         AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet,
-        HttpsConfig, IcpFeatures, InitialTime, InstanceHttpGatewayConfig, InstanceId,
-        MockCanisterHttpResponse, NonmainnetFeatures, RawEffectivePrincipal, RawMessageId, RawTime,
-        SubnetId, SubnetKind, SubnetSpec, Topology,
+        HttpsConfig, IcpConfig, IcpFeatures, InitialTime, InstanceHttpGatewayConfig, InstanceId,
+        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, RawTime, SubnetId,
+        SubnetKind, SubnetSpec, Topology,
     },
     nonblocking::PocketIc as PocketIcAsync,
 };
@@ -160,7 +160,7 @@ pub struct PocketIcBuilder {
     max_request_time_ms: Option<u64>,
     read_only_state_dir: Option<PathBuf>,
     state_dir: Option<PocketIcState>,
-    nonmainnet_features: NonmainnetFeatures,
+    icp_config: IcpConfig,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
     icp_features: IcpFeatures,
@@ -178,7 +178,7 @@ impl PocketIcBuilder {
             max_request_time_ms: Some(DEFAULT_MAX_REQUEST_TIME_MS),
             read_only_state_dir: None,
             state_dir: None,
-            nonmainnet_features: NonmainnetFeatures::default(),
+            icp_config: IcpConfig::default(),
             log_level: None,
             bitcoind_addr: None,
             icp_features: IcpFeatures::default(),
@@ -200,7 +200,7 @@ impl PocketIcBuilder {
             self.max_request_time_ms,
             self.read_only_state_dir,
             self.state_dir,
-            self.nonmainnet_features,
+            self.icp_config,
             self.log_level,
             self.bitcoind_addr,
             self.icp_features,
@@ -217,7 +217,7 @@ impl PocketIcBuilder {
             self.max_request_time_ms,
             self.read_only_state_dir,
             self.state_dir,
-            self.nonmainnet_features,
+            self.icp_config,
             self.log_level,
             self.bitcoind_addr,
             self.icp_features,
@@ -259,8 +259,8 @@ impl PocketIcBuilder {
         self
     }
 
-    pub fn with_nonmainnet_features(mut self, nonmainnet_features: NonmainnetFeatures) -> Self {
-        self.nonmainnet_features = nonmainnet_features;
+    pub fn with_icp_config(mut self, icp_config: IcpConfig) -> Self {
+        self.icp_config = icp_config;
         self
     }
 
@@ -558,7 +558,7 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
         read_only_state_dir: Option<PathBuf>,
         state_dir: Option<PocketIcState>,
-        nonmainnet_features: NonmainnetFeatures,
+        icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
@@ -583,7 +583,7 @@ impl PocketIc {
                 max_request_time_ms,
                 read_only_state_dir,
                 state_dir,
-                nonmainnet_features,
+                icp_config,
                 log_level,
                 bitcoind_addr,
                 icp_features,
@@ -1901,36 +1901,39 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
         options.write(true).create_new(true);
         #[cfg(unix)]
         options.mode(0o777);
-        if let Ok(out) = options.open(&default_bin_path) {
-            #[cfg(target_os = "macos")]
-            let os = "darwin";
-            #[cfg(not(target_os = "macos"))]
-            let os = "linux";
-            #[cfg(target_arch = "aarch64")]
-            let arch = "arm64";
-            #[cfg(not(target_arch = "aarch64"))]
-            let arch = "x86_64";
-            let server_url = format!(
-                "https://github.com/dfinity/pocketic/releases/download/{}/pocket-ic-{}-{}.gz",
-                EXPECTED_SERVER_VERSION, arch, os
-            );
-            println!("Failed to validate PocketIC server binary: `{}`. Going to download PocketIC server {} from {} to the local path {}. To avoid downloads during test execution, please specify the path to the (ungzipped and executable) PocketIC server {} using the function `PocketIcBuilder::with_server_binary` or using the `POCKET_IC_BIN` environment variable.", e, EXPECTED_SERVER_VERSION, server_url, default_bin_path.display(), EXPECTED_SERVER_VERSION);
-            if let Err(e) = download_pocketic_server(server_url, out).await {
-                let _ = std::fs::remove_file(default_bin_path);
-                panic!("{}", e);
+        match options.open(&default_bin_path) {
+            Ok(out) => {
+                #[cfg(target_os = "macos")]
+                let os = "darwin";
+                #[cfg(not(target_os = "macos"))]
+                let os = "linux";
+                #[cfg(target_arch = "aarch64")]
+                let arch = "arm64";
+                #[cfg(not(target_arch = "aarch64"))]
+                let arch = "x86_64";
+                let server_url = format!(
+                    "https://github.com/dfinity/pocketic/releases/download/{}/pocket-ic-{}-{}.gz",
+                    EXPECTED_SERVER_VERSION, arch, os
+                );
+                println!("Failed to validate PocketIC server binary: `{}`. Going to download PocketIC server {} from {} to the local path {}. To avoid downloads during test execution, please specify the path to the (ungzipped and executable) PocketIC server {} using the function `PocketIcBuilder::with_server_binary` or using the `POCKET_IC_BIN` environment variable.", e, EXPECTED_SERVER_VERSION, server_url, default_bin_path.display(), EXPECTED_SERVER_VERSION);
+                if let Err(e) = download_pocketic_server(server_url, out).await {
+                    let _ = std::fs::remove_file(default_bin_path);
+                    panic!("{}", e);
+                }
             }
-        } else {
-            // PocketIC server has already been created: wait until it's fully downloaded.
-            let start = std::time::Instant::now();
-            loop {
-                if check_pocketic_server_version(&default_bin_path).is_ok() {
-                    break;
+            _ => {
+                // PocketIC server has already been created: wait until it's fully downloaded.
+                let start = std::time::Instant::now();
+                loop {
+                    if check_pocketic_server_version(&default_bin_path).is_ok() {
+                        break;
+                    }
+                    if start.elapsed() > std::time::Duration::from_secs(60) {
+                        let _ = std::fs::remove_file(&default_bin_path);
+                        panic!("Timed out waiting for PocketIC server being available at the local path {}.", default_bin_path.display());
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(100));
                 }
-                if start.elapsed() > std::time::Duration::from_secs(60) {
-                    let _ = std::fs::remove_file(&default_bin_path);
-                    panic!("Timed out waiting for PocketIC server being available at the local path {}.", default_bin_path.display());
-                }
-                std::thread::sleep(std::time::Duration::from_millis(100));
             }
         }
     }

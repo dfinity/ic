@@ -439,77 +439,77 @@ fn copy() {
     api::reply(&[]);
 }
 
-#[export_name = "canister_update update_copy"]
+#[unsafe(export_name = "canister_update update_copy")]
 fn update_copy() {
     copy();
 }
 
-#[export_name = "canister_update update_read"]
+#[unsafe(export_name = "canister_update update_read")]
 fn update_read() {
     read();
 }
 
-#[export_name = "canister_update update_read_write"]
+#[unsafe(export_name = "canister_update update_read_write")]
 fn update_read_write() {
     read_write();
 }
 
-#[export_name = "canister_update update_write"]
+#[unsafe(export_name = "canister_update update_write")]
 fn update_write() {
     write();
 }
 
-#[export_name = "canister_update update_stable_read"]
+#[unsafe(export_name = "canister_update update_stable_read")]
 fn update_stable_read() {
     stable_read();
 }
 
-#[export_name = "canister_update update_stable_write"]
+#[unsafe(export_name = "canister_update update_stable_write")]
 fn update_stable_write() {
     stable_write();
 }
 
-#[export_name = "canister_update update_stable_read_write"]
+#[unsafe(export_name = "canister_update update_stable_read_write")]
 fn update_stable_read_write() {
     stable_read_write();
 }
 
-#[export_name = "canister_query query_copy"]
+#[unsafe(export_name = "canister_query query_copy")]
 fn query_copy() {
     copy();
 }
 
-#[export_name = "canister_query query_read"]
+#[unsafe(export_name = "canister_query query_read")]
 fn query_read() {
     read();
 }
 
-#[export_name = "canister_query query_read_write"]
+#[unsafe(export_name = "canister_query query_read_write")]
 fn query_read_write() {
     read_write();
 }
 
-#[export_name = "canister_query query_write"]
+#[unsafe(export_name = "canister_query query_write")]
 fn query_write() {
     write();
 }
 
-#[export_name = "canister_query query_stable_read"]
+#[unsafe(export_name = "canister_query query_stable_read")]
 fn query_stable_read() {
     stable_read();
 }
 
-#[export_name = "canister_query query_stable_write"]
+#[unsafe(export_name = "canister_query query_stable_write")]
 fn query_stable_write() {
     stable_write();
 }
 
-#[export_name = "canister_query query_stable_read_write"]
+#[unsafe(export_name = "canister_query query_stable_read_write")]
 fn query_stable_read_write() {
     stable_read_write();
 }
 
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn main() {
     let mut memory = vec![0; MEMORY_LEN];
     // Ensure that all pages are different.

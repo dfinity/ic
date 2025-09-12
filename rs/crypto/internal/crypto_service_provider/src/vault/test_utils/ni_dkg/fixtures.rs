@@ -30,10 +30,10 @@ use strum::{EnumCount, IntoEnumIterator};
 // Alternatively we could implement Distribution for all of these types.
 // Deriving Rand may be enough for many.  See: https://stackoverflow.com/questions/48490049/how-do-i-choose-a-random-value-from-an-enum
 pub fn random_height(rng: &mut ChaCha20Rng) -> Height {
-    Height::from(rng.gen::<u64>())
+    Height::from(rng.r#gen::<u64>())
 }
 pub fn random_subnet_id(rng: &mut ChaCha20Rng) -> SubnetId {
-    subnet_test_id(rng.gen::<u64>())
+    subnet_test_id(rng.r#gen::<u64>())
 }
 pub fn random_ni_dkg_master_public_key_id(rng: &mut ChaCha20Rng) -> NiDkgMasterPublicKeyId {
     assert_eq!(NiDkgMasterPublicKeyId::COUNT, 1);
@@ -86,7 +86,7 @@ impl MockNode {
         rng: &mut ChaCha20Rng,
         csp_vault_factory: impl Fn() -> Arc<dyn CspVault>,
     ) -> Self {
-        let node_id = node_test_id(rng.gen::<u64>());
+        let node_id = node_test_id(rng.r#gen::<u64>());
         Self::from_node_id(node_id, csp_vault_factory)
     }
     pub fn from_node_id(
@@ -253,7 +253,7 @@ impl MockDkgConfig {
         let max_corrupt_receivers =
             rng.gen_range(0..std::cmp::min(num_receivers + 1 - threshold, threshold)); // (max_corrupt_receivers <= num_receivers - threshold) &&
                                                                                        // (max_corrupt_receivers < threshold)
-        let epoch = Epoch::from(rng.gen::<u32>());
+        let epoch = Epoch::from(rng.r#gen::<u32>());
 
         let receiver_keys: BTreeMap<NodeIndex, CspFsEncryptionPublicKey> = receivers
             .iter()

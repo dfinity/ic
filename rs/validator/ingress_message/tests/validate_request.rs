@@ -48,7 +48,7 @@ mod request_nonce {
             .with_root_of_trust(hard_coded_root_of_trust().public_key)
             .build();
         let reasonable_nonce = {
-            let random_bytes = rng.gen::<[u8; 32]>();
+            let random_bytes = rng.r#gen::<[u8; 32]>();
             let nonce_size = rng.gen_range(0..=32);
             random_bytes[..nonce_size].to_vec()
         };

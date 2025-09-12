@@ -81,6 +81,7 @@ pub struct NestedNetwork {
     pub host_ip: Ipv6Addr,
 }
 
+#[derive(Clone)]
 pub struct NestedVm {
     env: TestEnv,
     name: String,

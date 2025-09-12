@@ -66,7 +66,10 @@ pub fn logging_layer(
     config: &LoggingConfig,
     node_id: NodeId,
     subnet_id: SubnetId,
-) -> (impl Layer<Registry> + Send + Sync, Option<WorkerGuard>) {
+) -> (
+    impl Layer<Registry> + Send + Sync + use<>,
+    Option<WorkerGuard>,
+) {
     let formatter = Formatter::new(config.format, node_id, subnet_id);
 
     let log_destination = config.log_destination.clone();

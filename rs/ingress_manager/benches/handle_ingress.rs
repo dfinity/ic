@@ -261,7 +261,7 @@ fn prepare(time_source: &dyn TimeSource, duration: Duration, num: usize) -> Vec<
     (0..num)
         .map(|i| {
             let expiry = Duration::from_millis(
-                rng.gen::<u64>() % ((duration.as_millis() as u64).saturating_sub(1) + 1),
+                rng.r#gen::<u64>() % ((duration.as_millis() as u64).saturating_sub(1) + 1),
             );
             SignedIngressBuilder::new()
                 .method_payload(vec![0; PAYLOAD_SIZE])

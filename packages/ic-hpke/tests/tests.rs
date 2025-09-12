@@ -68,7 +68,7 @@ fn smoke_test_noauth() {
     for ptext_len in 0..128 {
         let mut ptext = vec![0u8; ptext_len];
         rng.fill_bytes(&mut ptext);
-        let aad = rng.gen::<[u8; 32]>();
+        let aad = rng.r#gen::<[u8; 32]>();
         let ctext = pk.encrypt_noauth(&ptext, &aad, &mut rng).unwrap();
         let rec = sk.decrypt_noauth(&ctext, &aad).unwrap();
         assert_eq!(rec, ptext);
@@ -85,7 +85,7 @@ fn smoke_test_auth() {
     let b_sk = PrivateKey::generate(&mut rng);
     let b_pk = b_sk.public_key();
 
-    let aad = rng.gen::<[u8; 32]>();
+    let aad = rng.r#gen::<[u8; 32]>();
 
     for ptext_len in 0..128 {
         let mut ptext = vec![0u8; ptext_len];
@@ -105,8 +105,8 @@ fn any_bit_flip_causes_rejection_noauth() {
     let a_sk = PrivateKey::generate(&mut rng);
     let a_pk = a_sk.public_key();
 
-    let ptext = rng.gen::<[u8; 16]>().to_vec();
-    let aad = rng.gen::<[u8; 32]>();
+    let ptext = rng.r#gen::<[u8; 16]>().to_vec();
+    let aad = rng.r#gen::<[u8; 32]>();
 
     let mut ctext = a_pk.encrypt_noauth(&ptext, &aad, &mut rng).unwrap();
 
@@ -133,8 +133,8 @@ fn any_bit_flip_causes_rejection_auth() {
     let b_sk = PrivateKey::generate(&mut rng);
     let b_pk = b_sk.public_key();
 
-    let ptext = rng.gen::<[u8; 16]>().to_vec();
-    let aad = rng.gen::<[u8; 32]>();
+    let ptext = rng.r#gen::<[u8; 16]>().to_vec();
+    let aad = rng.r#gen::<[u8; 32]>();
 
     let mut ctext = a_pk.encrypt(&ptext, &aad, &b_sk, &mut rng).unwrap();
 
@@ -158,8 +158,8 @@ fn any_truncation_causes_rejection_noauth() {
     let a_sk = PrivateKey::generate(&mut rng);
     let a_pk = a_sk.public_key();
 
-    let ptext = rng.gen::<[u8; 16]>().to_vec();
-    let aad = rng.gen::<[u8; 32]>();
+    let ptext = rng.r#gen::<[u8; 16]>().to_vec();
+    let aad = rng.r#gen::<[u8; 32]>();
 
     let mut ctext = a_pk.encrypt_noauth(&ptext, &aad, &mut rng).unwrap();
 
@@ -186,8 +186,8 @@ fn any_truncation_causes_rejection_auth() {
     let b_sk = PrivateKey::generate(&mut rng);
     let b_pk = b_sk.public_key();
 
-    let ptext = rng.gen::<[u8; 16]>().to_vec();
-    let aad = rng.gen::<[u8; 32]>();
+    let ptext = rng.r#gen::<[u8; 16]>().to_vec();
+    let aad = rng.r#gen::<[u8; 32]>();
 
     let mut ctext = a_pk.encrypt(&ptext, &aad, &b_sk, &mut rng).unwrap();
 

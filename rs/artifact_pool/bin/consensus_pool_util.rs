@@ -238,17 +238,22 @@ fn import(path: &str) {
     let stdin = std::io::stdin();
     for line in stdin.lock().lines() {
         let s = line.expect("Cannot read input");
-        if let Ok(msg) = from_str(&s) {
-            let mut ops = PoolSectionOps::new();
-            ops.insert(ValidatedConsensusArtifact {
-                msg,
-                timestamp: current_time(),
-            });
-            consensus_pool.validated.mutate(ops);
-        } else if let Ok(msg) = from_str(&s) {
-            certification_pool.validated.insert(msg)
-        } else {
-            panic!("Failed to parse JSON: {}", s);
+        match from_str(&s) {
+            Ok(msg) => {
+                let mut ops = PoolSectionOps::new();
+                ops.insert(ValidatedConsensusArtifact {
+                    msg,
+                    timestamp: current_time(),
+                });
+                consensus_pool.validated.mutate(ops);
+            }
+            _ => {
+                if let Ok(msg) = from_str(&s) {
+                    certification_pool.validated.insert(msg)
+                } else {
+                    panic!("Failed to parse JSON: {}", s);
+                }
+            }
         }
     }
 }

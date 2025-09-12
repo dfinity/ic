@@ -625,7 +625,7 @@ fn write_overlays_and_verify_with_tempdir(
                                 lsmt_config,
                             );
                         }
-                        MergeDestination::BaseFile(ref path) => {
+                        MergeDestination::BaseFile(path) => {
                             verify_merge_to_base(
                                 path,
                                 &merged_base,

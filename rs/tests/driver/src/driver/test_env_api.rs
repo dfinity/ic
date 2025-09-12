@@ -1190,7 +1190,7 @@ pub fn get_current_branch_version() -> ReplicaVersion {
 
 pub fn get_mainnet_nns_revision() -> Result<ReplicaVersion> {
     let replica_version = ReplicaVersion::try_from(
-        std::env::var("MAINNET_NNS_SUBNET_REVISION_ENV")
+        std::env::var("MAINNET_NNS_GUESTOS_REVISION_ENV")
             .expect("could not read mainnet nns version from environment"),
     )?;
 
@@ -1199,7 +1199,7 @@ pub fn get_mainnet_nns_revision() -> Result<ReplicaVersion> {
 
 pub fn get_mainnet_application_subnet_revision() -> Result<ReplicaVersion> {
     let replica_version = ReplicaVersion::try_from(
-        std::env::var("MAINNET_APPLICATION_SUBNET_REVISION_ENV")
+        std::env::var("MAINNET_APP_GUESTOS_REVISION_ENV")
             .expect("could not read mainnet application subnet version from environment"),
     )?;
 
@@ -1357,7 +1357,7 @@ pub fn read_dependency_to_string<P: AsRef<Path>>(p: P) -> Result<String> {
     }
 }
 
-pub(crate) fn read_dependency_from_env_to_string(v: &str) -> Result<String> {
+pub fn read_dependency_from_env_to_string(v: &str) -> Result<String> {
     let path_from_env =
         std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {} not set", v));
     read_dependency_to_string(path_from_env)
@@ -1857,7 +1857,8 @@ pub fn set_var_to_path<K: AsRef<OsStr>>(env_name: K, file_path: PathBuf) {
     } else {
         file_path
     };
-    std::env::set_var(env_name, path);
+    // TODO: Audit that the environment access only happens in single-threaded code.
+    unsafe { std::env::set_var(env_name, path) };
 }
 
 pub trait HasRegistryVersion {
@@ -2046,7 +2047,7 @@ impl SshSession for IcNodeSnapshot {
 /// The log messages will include the source file path and code location of the macro call site.
 #[macro_export]
 macro_rules! retry_with_msg {
-    ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
+    ($msg:expr_2021, $log:expr_2021, $timeout:expr_2021, $backoff:expr_2021, $f:expr_2021) => {
         $crate::driver::test_env_api::retry(
             format!("{} [{}:{}]", $msg, file!(), line!()),
             $log,
@@ -2116,7 +2117,7 @@ fn trunc_error(err_str: String) -> String {
 /// The log messages will include the source file path and code location of the macro call site.
 #[macro_export]
 macro_rules! retry_with_msg_async {
-    ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
+    ($msg:expr_2021, $log:expr_2021, $timeout:expr_2021, $backoff:expr_2021, $f:expr_2021) => {
         $crate::driver::test_env_api::retry_async(
             format!("{} [{}:{}]", $msg, file!(), line!()),
             $log,
@@ -2130,7 +2131,7 @@ macro_rules! retry_with_msg_async {
 /// This is a quieter version of retry_with_msg_async that only logs the initial attempt and final result, not every intermediate failure.
 #[macro_export]
 macro_rules! retry_with_msg_async_quiet {
-    ($msg:expr, $log:expr, $timeout:expr, $backoff:expr, $f:expr) => {
+    ($msg:expr_2021, $log:expr_2021, $timeout:expr_2021, $backoff:expr_2021, $f:expr_2021) => {
         $crate::driver::test_env_api::retry_async_quiet(
             format!("{} [{}:{}]", $msg, file!(), line!()),
             $log,

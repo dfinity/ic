@@ -602,6 +602,8 @@ pub mod proposal {
         RewardNodeProviders(super::RewardNodeProviders),
         /// Register Known Neuron
         RegisterKnownNeuron(super::KnownNeuron),
+        /// Deregister Known Neuron
+        DeregisterKnownNeuron(super::DeregisterKnownNeuron),
         /// Obsolete. Superseded by CreateServiceNervousSystem. Kept for Candid compatibility.
         SetSnsTokenSwapOpenTimeWindow(super::SetSnsTokenSwapOpenTimeWindow),
         /// Call the open method on an SNS swap canister.
@@ -1374,6 +1376,7 @@ pub enum ProposalActionRequest {
     RewardNodeProvider(RewardNodeProvider),
     RewardNodeProviders(RewardNodeProviders),
     RegisterKnownNeuron(KnownNeuron),
+    DeregisterKnownNeuron(DeregisterKnownNeuron),
     CreateServiceNervousSystem(CreateServiceNervousSystem),
     InstallCode(InstallCodeRequest),
     StopOrStartCanister(StopOrStartCanister),
@@ -2195,6 +2198,13 @@ pub struct KnownNeuronData {
     pub name: String,
     pub description: Option<String>,
 }
+/// Proposal action to deregister a known neuron by removing its name and description.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct DeregisterKnownNeuron {
+    pub id: Option<NeuronId>,
+}
 /// Proposal action to call the "open" method of an SNS token swap canister.
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
@@ -2461,9 +2471,7 @@ pub mod install_code {
     }
 }
 
-#[derive(
-    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
-)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Default)]
 pub struct InstallCodeRequest {
     pub canister_id: ::core::option::Option<PrincipalId>,
     pub install_mode: ::core::option::Option<i32>,
@@ -3593,7 +3601,7 @@ pub enum Topic {
     SubnetManagement = 7,
     /// All proposals to manage NNS-controlled canisters not covered by other topics (Protocol
     /// Canister Management or Service Nervous System Management).
-    NetworkCanisterManagement = 8,
+    ApplicationCanisterManagement = 8,
     /// Proposals that update KYC information for regulatory purposes,
     /// for example during the initial Genesis distribution of ICP in the
     /// form of neurons.
@@ -3635,58 +3643,7 @@ pub enum Topic {
     /// relevant canisters and managing SNS framework canister WASMs through SNS-W.
     ServiceNervousSystemManagement = 18,
 }
-impl Topic {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Topic::Unspecified => "TOPIC_UNSPECIFIED",
-            Topic::NeuronManagement => "TOPIC_NEURON_MANAGEMENT",
-            Topic::ExchangeRate => "TOPIC_EXCHANGE_RATE",
-            Topic::NetworkEconomics => "TOPIC_NETWORK_ECONOMICS",
-            Topic::Governance => "TOPIC_GOVERNANCE",
-            Topic::NodeAdmin => "TOPIC_NODE_ADMIN",
-            Topic::ParticipantManagement => "TOPIC_PARTICIPANT_MANAGEMENT",
-            Topic::SubnetManagement => "TOPIC_SUBNET_MANAGEMENT",
-            Topic::NetworkCanisterManagement => "TOPIC_NETWORK_CANISTER_MANAGEMENT",
-            Topic::Kyc => "TOPIC_KYC",
-            Topic::NodeProviderRewards => "TOPIC_NODE_PROVIDER_REWARDS",
-            Topic::IcOsVersionDeployment => "TOPIC_IC_OS_VERSION_DEPLOYMENT",
-            Topic::IcOsVersionElection => "TOPIC_IC_OS_VERSION_ELECTION",
-            Topic::SnsAndCommunityFund => "TOPIC_SNS_AND_COMMUNITY_FUND",
-            Topic::ApiBoundaryNodeManagement => "TOPIC_API_BOUNDARY_NODE_MANAGEMENT",
-            Topic::SubnetRental => "TOPIC_SUBNET_RENTAL",
-            Topic::ProtocolCanisterManagement => "TOPIC_PROTOCOL_CANISTER_MANAGEMENT",
-            Topic::ServiceNervousSystemManagement => "TOPIC_SERVICE_NERVOUS_SYSTEM_MANAGEMENT",
-        }
-    }
-    /// Creates an enum from field names used in the ProtoBuf definition.
-    pub fn from_str_name(value: &str) -> Option<Self> {
-        match value {
-            "TOPIC_UNSPECIFIED" => Some(Self::Unspecified),
-            "TOPIC_NEURON_MANAGEMENT" => Some(Self::NeuronManagement),
-            "TOPIC_EXCHANGE_RATE" => Some(Self::ExchangeRate),
-            "TOPIC_NETWORK_ECONOMICS" => Some(Self::NetworkEconomics),
-            "TOPIC_GOVERNANCE" => Some(Self::Governance),
-            "TOPIC_NODE_ADMIN" => Some(Self::NodeAdmin),
-            "TOPIC_PARTICIPANT_MANAGEMENT" => Some(Self::ParticipantManagement),
-            "TOPIC_SUBNET_MANAGEMENT" => Some(Self::SubnetManagement),
-            "TOPIC_NETWORK_CANISTER_MANAGEMENT" => Some(Self::NetworkCanisterManagement),
-            "TOPIC_KYC" => Some(Self::Kyc),
-            "TOPIC_NODE_PROVIDER_REWARDS" => Some(Self::NodeProviderRewards),
-            "TOPIC_IC_OS_VERSION_DEPLOYMENT" => Some(Self::IcOsVersionDeployment),
-            "TOPIC_IC_OS_VERSION_ELECTION" => Some(Self::IcOsVersionElection),
-            "TOPIC_SNS_AND_COMMUNITY_FUND" => Some(Self::SnsAndCommunityFund),
-            "TOPIC_API_BOUNDARY_NODE_MANAGEMENT" => Some(Self::ApiBoundaryNodeManagement),
-            "TOPIC_SUBNET_RENTAL" => Some(Self::SubnetRental),
-            "TOPIC_PROTOCOL_CANISTER_MANAGEMENT" => Some(Self::ProtocolCanisterManagement),
-            "TOPIC_SERVICE_NERVOUS_SYSTEM_MANAGEMENT" => Some(Self::ServiceNervousSystemManagement),
-            _ => None,
-        }
-    }
-}
+
 /// Every neuron is in one of three states.
 ///
 /// Note that `Disbursed` is not a state of a neuron, as the neuron is
