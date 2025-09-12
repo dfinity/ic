@@ -238,11 +238,8 @@ impl CanisterMasterKey {
 
     /// Derive a public key using a path of contextual inputs
     ///
-    /// VetKeys requires exactly one contextual input be supplied. In addition,
-    /// if that contextual input is the empty bytestring then the "derived key"
-    /// is identical to the canister master public key. This matches the
-    /// behavior of the management canister interface.
-    ///
+    /// Note that VetKD does not support derivation paths, but only a single context string,
+    /// so VetKD is not supported by this function.
     pub fn derive_key(&self, path: &[Vec<u8>]) -> Result<DerivedPublicKey, Error> {
         let inner = match &self.inner {
             #[cfg(feature = "secp256k1")]
@@ -281,11 +278,10 @@ impl CanisterMasterKey {
             }
             #[cfg(feature = "vetkeys")]
             DerivedPublicKeyInner::VetKD(ck) => {
-                if path.len() == 1 {
-                    DerivedPublicKeyInner::VetKD(ck.derive_sub_key(&path[0]))
-                } else {
-                    return Err(Error::InvalidPath);
-                }
+                // VetKD has a somewhat different design for derivation than used by
+                // the other threshold schemes - it supports only a single input rather
+                // than a path. To avoid risk of confusing behavior, just reject
+                Err(Error::AlgorithmNotSupported)
             }
         };
         Ok(DerivedPublicKey { inner })
