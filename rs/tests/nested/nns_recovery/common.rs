@@ -383,7 +383,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         .to_string()
         .chars()
         .take(6)
-        .collect();
+        .collect::<String>();
     impersonate_upstreams::uvm_serve_recovery_artifacts(
         &env,
         &artifacts_path,

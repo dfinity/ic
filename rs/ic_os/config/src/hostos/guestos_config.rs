@@ -79,12 +79,10 @@ pub fn generate_guestos_config(
     let hostos_cmdline_content = std::fs::read_to_string("/proc/cmdline")
         .context("Failed to read HostOS boot args from /proc/cmdline")?;
 
-    if let Some(recovery_short_hash) = guestos_recovery_short_hash(
+    guestos_settings.recovery_short_hash = guestos_recovery_short_hash(
         &hostos_cmdline_content,
         DEFAULT_GUESTOS_RECOVERY_FILE_PATH.as_ref(),
-    )? {
-        guestos_settings.recovery_short_hash = Some(recovery_short_hash);
-    }
+    )?;
 
     let guestos_config = GuestOSConfig {
         config_version: hostos_config.config_version.clone(),
@@ -126,7 +124,7 @@ fn guestos_recovery_short_hash(
     if let Some(recovery_short_hash_value) = hostos_cmdline.get_argument("recovery-hash") {
         if !recovery_file_path.exists() {
             mark_hostos_recovered(recovery_file_path)?;
-            Ok(Some(recovery_short_hash_value.to_string()))
+            Ok(Some(recovery_short_hash_value))
         } else {
             Ok(None)
         }

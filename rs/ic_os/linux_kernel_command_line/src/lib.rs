@@ -132,7 +132,7 @@ impl KernelCommandLine {
 
         self.tokenized_arguments.iter().find_map(|arg| {
             if *arg == argument_name {
-                Some("".to_string())
+                Some(String::new())
             } else {
                 REGEX.captures(arg).and_then(|caps| {
                     let key = caps.name("key")?;
@@ -398,7 +398,7 @@ Actual:
                 "get existing argument without value",
                 "rd.debug rd.initrd=/bin/bash",
                 "rd.debug",
-                Some("".to_string()),
+                Some(String::new()),
             ),
             (
                 "get existing argument with value",
@@ -428,7 +428,7 @@ Actual:
                 "get argument that is substring of another",
                 "rd.debug rd.debuglevel=1",
                 "rd.debug",
-                Some("".to_string()),
+                Some(String::new()),
             ),
             (
                 "get argument including ' character",
