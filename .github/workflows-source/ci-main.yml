@@ -61,6 +61,10 @@ anchors:
     uses: actions/setup-python@v5
     with:
       python-version: '3.12'
+  generate-bazel-invocation-ids: &generate-bazel-invocation-ids
+    name: Generate Bazel invocation IDs
+    id: gen-uuids
+    uses: ./.github/actions/generate-invocation-ids
 
 jobs:
   config:
@@ -176,6 +180,13 @@ jobs:
       - name: "Node Name"
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            - name: Build
+              output_id: build_id
+            - name: Test
+              output_id: test_id
 
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
@@ -250,9 +261,16 @@ jobs:
                 echo '</details>';
               } >>"$GITHUB_STEP_SUMMARY"
 
+              # pick invocation id from action outputs
+              if [ "$bazel_cmd" = "build" ]; then
+                invocation_id="${{ steps.gen-uuids.outputs.build_id }}"
+              else
+                invocation_id="${{ steps.gen-uuids.outputs.test_id }}"
+              fi
+
               echo "Running bazel command: $bazel_cmd"
 
-              bazel "$bazel_cmd" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
+              bazel "$bazel_cmd" "--invocation_id=$invocation_id" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
             done
 
       - name: Upload to S3
@@ -276,6 +294,14 @@ jobs:
     if: github.repository == 'dfinity/ic'
     steps:
       - <<: *checkout
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            - name: Build
+              output_id: build_id
+            - name: Test
+              output_id: test_id
+
         # The amd64-darwin runners are pretty slow so we don't always run the tests -- we do however
         # wanna make sure bazel evaluates successfully.
       - name: Evaluate workspace
@@ -284,6 +310,7 @@ jobs:
           run: |
             bazel build \
               --config=stamped \
+              --invocation_id="${{ steps.gen-uuids.outputs.build_id }}" \
               --build_tag_filters=test_macos \
               //... --nobuild
 
@@ -294,6 +321,7 @@ jobs:
           run: |
             bazel test \
               --config=stamped \
+              --invocation_id="${{ steps.gen-uuids.outputs.test_id }}" \
               --test_tag_filters=test_macos \
               //...
 
@@ -327,6 +355,12 @@ jobs:
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
 
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            - name: Test
+              output_id: test_id
+
       - name: Build and Test
         run: |
           # run pocket-ic tests
@@ -334,6 +368,7 @@ jobs:
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             test \
+              --invocation_id="${{ steps.gen-uuids.outputs.test_id }}" \
               //packages/pocket-ic:all \
               //rs/pocket_ic_server:test \
               //rs/pocket_ic_server:gateway \
@@ -361,6 +396,11 @@ jobs:
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            - name: Test
+              output_id: test_id
 
       # Build and test, excluding 'upload' jobs that are not required on macOS (used in reproducibility tests)
       - name: Test
@@ -386,6 +426,7 @@ jobs:
             --noworkspace_rc \
             --bazelrc=./bazel/conf/.bazelrc.build --bazelrc=/tmp/bazel-cache.bazelrc \
             test \
+            --invocation_id="${{ steps.gen-uuids.outputs.test_id }}" \
             --test_tag_filters="test_macos,test_macos_slow" \
             "${bazel_targets[@]}"
 
@@ -492,6 +533,12 @@ jobs:
       - name: "Node Name"
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            - name: Build
+              output: build_id
+
       - name: Run Build IC
         uses: ./.github/actions/bazel
         with:
@@ -557,6 +604,8 @@ jobs:
                 exit 0
             fi
 
+            export BAZEL_BUILD_INVOCATION_ID="${{ steps.gen-uuids.outputs.build_id }}"
+
             ci/container/build-ic.sh "${ARGS[@]}" --no-release
 
   build-determinism:
@@ -620,10 +669,16 @@ jobs:
     <<: *dind-large-setup
     steps:
       - <<: *checkout
+      - <<: *generate-bazel-invocation-ids
+        with:
+          targets: |
+            - name: Build
+              output_id: build_id
+
       - name: Run Bazel Build All No Cache
         uses: ./.github/actions/bazel
         with:
-          run: bazel build --config=stamped --config=local //...
+          run: bazel build --config=stamped --config=local --invocation_id="${{ steps.gen-uuids.outputs.build_id }}" //...
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   cargo-clippy-linux:

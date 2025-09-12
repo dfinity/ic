@@ -12,6 +12,9 @@ export BUILD_IC_NESTED=1
 
 export ROOT_DIR="$(git rev-parse --show-toplevel)"
 
+# Generate the uuid if it is not already generated.
+BAZEL_BUILD_INVOCATION_ID="$BAZEL_BUILD_INVOCATION_ID:$(uuidgen)"
+
 # Drop into the container if we're not already inside it. This ensures
 # we run in a predictable environment (Ubuntu with known deps).
 if ! ([ -e /home/ubuntu/.DFINITY-TAG ] && ([ -e /.dockerenv ] || [ -e /run/.containerenv ] || [ -n "${CI_JOB_NAME:-}" ])); then
@@ -143,7 +146,7 @@ if "$BUILD_IMG"; then BAZEL_TARGETS+=(
 
 echo_blue "Bazel targets: ${BAZEL_TARGETS[*]}"
 
-bazel build "${BAZEL_COMMON_ARGS[@]}" "${BAZEL_TARGETS[@]}"
+bazel build --invocation_id="$BAZEL_BUILD_INVOCATION_ID" "${BAZEL_COMMON_ARGS[@]}" "${BAZEL_TARGETS[@]}"
 
 query="$(join_by "+" "${BAZEL_TARGETS[@]}")"
 
