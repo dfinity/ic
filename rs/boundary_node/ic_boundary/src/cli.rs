@@ -7,7 +7,6 @@ use ic_bn_lib::{
         shed::cli::{ShedSharded, ShedSystem},
     },
     parse_size, parse_size_usize,
-    types::RequestType,
 };
 use ic_config::crypto::CryptoConfig;
 use ic_types::CanisterId;
@@ -15,7 +14,10 @@ use std::time::Duration;
 use std::{net::SocketAddr, path::PathBuf};
 use url::Url;
 
-use crate::core::{AUTHOR_NAME, SERVICE_NAME};
+use crate::{
+    core::{AUTHOR_NAME, SERVICE_NAME},
+    http::RequestType,
+};
 
 #[derive(Parser)]
 #[clap(name = SERVICE_NAME)]

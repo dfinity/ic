@@ -13,7 +13,6 @@ use axum::{
 };
 use candid::{CandidType, Principal};
 use ic_bn_lib::http::{proxy, Client as HttpClient};
-pub use ic_bn_lib::types::RequestType;
 use ic_types::{messages::ReplicaHealthStatus, CanisterId, SubnetId};
 use serde::Deserialize;
 use url::Url;
@@ -21,7 +20,7 @@ use url::Url;
 use crate::{
     core::ANONYMOUS_PRINCIPAL,
     errors::{ApiError, ErrorCause},
-    http::error_infer,
+    http::{error_infer, RequestType},
     persist::Routes,
     snapshot::{RegistrySnapshot, Subnet},
 };
@@ -602,7 +601,7 @@ pub(crate) mod test {
         assert_header(&headers, X_IC_SENDER, &sender.to_string());
         assert_header(&headers, X_IC_CANISTER_ID, &canister_id.to_string());
         assert_header(&headers, X_IC_METHOD_NAME, "foobar");
-        assert_header(&headers, X_IC_REQUEST_TYPE, "query");
+        assert_header(&headers, X_IC_REQUEST_TYPE, "query_v2");
         assert_header(&headers, CONTENT_TYPE, "application/cbor");
         assert_header(&headers, X_CONTENT_TYPE_OPTIONS, "nosniff");
         assert_header(&headers, X_FRAME_OPTIONS, "DENY");

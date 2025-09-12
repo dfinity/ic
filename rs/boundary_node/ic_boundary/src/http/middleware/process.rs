@@ -5,14 +5,13 @@ use bytes::Bytes;
 use candid::{Decode, Principal};
 use http::header::{HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
 use ic_bn_lib::http::{body::buffer_body, cache::CacheStatus, headers::*, Error as IcBnError};
-pub use ic_bn_lib::types::RequestType;
 use ic_types::messages::Blob;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     core::{decoder_config, MAX_REQUEST_BODY_SIZE},
     errors::{ApiError, ErrorCause},
-    http::middleware::retry::RetryResult,
+    http::{middleware::retry::RetryResult, RequestType},
     routes::{HttpRequest, RequestContext},
     snapshot::{Node, Subnet},
 };
@@ -63,7 +62,7 @@ pub async fn preprocess_request(
     // Check if the request is HTTP and try to parse the arg
     let (arg, http_request) = match (&content.method_name, content.arg) {
         (Some(method), Some(arg)) => {
-            if request_type == RequestType::Query && method == METHOD_HTTP {
+            if request_type.is_query() && method == METHOD_HTTP {
                 let mut req: HttpRequest = Decode!([decoder_config()]; &arg.0, HttpRequest)
                     .map_err(|err| {
                         ErrorCause::UnableToParseHTTPArg(format!(
