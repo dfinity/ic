@@ -162,9 +162,11 @@ rust_bench(
     data = [
         # Keep sorted.
         "@bitcoin_adapter_mainnet_headers//file",
+        "@doge_headers_800k_mainnet_auxpow//file",
     ],
     env = {
         "BITCOIN_MAINNET_HEADERS_DATA_PATH": "$(rootpath @bitcoin_adapter_mainnet_headers//file)",
+        "DOGECOIN_MAINNET_HEADERS_DATA_PATH": "$(rootpath @doge_headers_800k_mainnet_auxpow//file)",
     },
     deps = [
         # Keep sorted.

@@ -81,7 +81,7 @@ enum ProcessNetworkMessageError {
     InvalidMessage,
 }
 
-/// This enum is used to represent errors that
+/// Error returned by `Channel::send`.
 #[derive(Debug)]
 enum ChannelError {}
 
