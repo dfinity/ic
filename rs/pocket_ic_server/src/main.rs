@@ -126,6 +126,21 @@ fn main() {
         // detail that we do not advertize in the public-facing error message.
         panic!("The PocketIc server binary name must be \"pocket-ic\" or \"pocket-ic-server\" (without quotes).")
     }
+
+    // Set RUST_MIN_STACK if not yet set:
+    // the value of 8192000 is set according to `ic-os/components/ic/ic-replica.service`.
+    // TODO: Audit that the environment access only happens in single-threaded code.
+    unsafe { std::env::set_var("RUST_MIN_STACK", "8192000") };
+
+    // Set the maximum number of open files:
+    // the limit of 16777216 is set according to `ic-os/components/ic/ic-replica.service`.
+    if let Err(e) = increase_nofile_limit(16777216) {
+        error!(
+            "Failed to increase the maximum number of open files: {:?}",
+            e
+        );
+    }
+
     // Check if `pocket-ic-server` is running in the canister sandbox mode where it waits
     // for commands from the parent process. This check has to be performed
     // before the arguments are parsed because the parent process does not pass
@@ -169,20 +184,6 @@ async fn start(runtime: Arc<Runtime>) {
     };
 
     let _guard = setup_tracing(args.log_levels);
-
-    // Set RUST_MIN_STACK if not yet set:
-    // the value of 8192000 is set according to `ic-os/components/ic/ic-replica.service`.
-    // TODO: Audit that the environment access only happens in single-threaded code.
-    unsafe { std::env::set_var("RUST_MIN_STACK", "8192000") };
-
-    // Set the maximum number of open files:
-    // the limit of 16777216 is set according to `ic-os/components/ic/ic-replica.service`.
-    if let Err(e) = increase_nofile_limit(16777216) {
-        error!(
-            "Failed to increase the maximum number of open files: {:?}",
-            e
-        );
-    }
 
     let ip_addr = args.ip_addr.unwrap_or("127.0.0.1".to_string());
     let addr = format!("{}:{}", ip_addr, args.port);
