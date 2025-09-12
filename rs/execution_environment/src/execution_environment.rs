@@ -1566,7 +1566,12 @@ impl ExecutionEnvironment {
                             } else {
                                 FetchCanisterLogsRequest::decode(payload)
                                     .and_then(|args| {
-                                        fetch_canister_logs(*msg.sender(), &state, args)
+                                        fetch_canister_logs(
+                                            *msg.sender(),
+                                            &state,
+                                            args,
+                                            self.config.fetch_canister_logs_filter_by_idx,
+                                        )
                                     })
                                     .map(|resp| (Encode!(&resp).unwrap(), None))
                             };
