@@ -52,12 +52,14 @@ mod transaction_store;
 // malicious fork can be prioritized by a DFS, thus potentially ignoring honest forks).
 mod get_successors_handler;
 
+pub use blockchainmanager::MAX_HEADERS_SIZE;
+pub use blockchainstate::BlockchainState;
 pub use common::{AdapterNetwork, BlockchainBlock, BlockchainHeader, BlockchainNetwork};
 pub use config::{address_limits, Config, IncomingSource};
 
 use crate::{
-    blockchainstate::BlockchainState, get_successors_handler::GetSuccessorsHandler,
-    router::start_main_event_loop, rpc_server::start_grpc_server, stream::StreamEvent,
+    get_successors_handler::GetSuccessorsHandler, router::start_main_event_loop,
+    rpc_server::start_grpc_server, stream::StreamEvent,
 };
 
 /// This struct is used to represent commands given to the adapter in order to interact
@@ -80,7 +82,7 @@ enum ProcessNetworkMessageError {
     InvalidMessage,
 }
 
-/// This enum is used to represent errors that  
+/// This enum is used to represent errors that
 #[derive(Debug)]
 enum ChannelError {}
 

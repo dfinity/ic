@@ -125,6 +125,7 @@ pub mod tests {
             parse_hardware_gen("model name      : Intel Fake Lake i5-1040 32-Core Processor")
                 .is_err()
         );
+        assert!(parse_hardware_gen("model name	: Intel(R) Xeon(R) E-2278G CPU @ 3.40GHz").is_err());
         assert!(parse_hardware_gen("Fast times at Ridgemont High").is_err());
         assert!(parse_hardware_gen("").is_err());
     }

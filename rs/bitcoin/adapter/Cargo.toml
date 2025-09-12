@@ -40,6 +40,7 @@ tower = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
+flate2 = { workspace = true }
 ic-btc-adapter-client = { path = "../client" }
 ic-btc-adapter-test-utils = { path = "./test_utils" }
 ic-btc-replica-types = { path = "../replica_types" }

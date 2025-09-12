@@ -404,10 +404,6 @@ impl Registry {
                     encoded_mutation: bytes.clone(),
                 })
                 .collect(),
-
-            // This is part of a legacy format (from before mid 2021), and can
-            // safely be ignored from now on.
-            deltas: vec![],
         }
     }
 
