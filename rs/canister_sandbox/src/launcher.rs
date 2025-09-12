@@ -180,6 +180,7 @@ impl LauncherService for LauncherServer {
         }: LaunchSandboxRequest,
     ) -> rpc::Call<LaunchSandboxReply> {
         match spawn_socketed_process(
+            "[SANDBOX]: ",
             &sandbox_exec_path,
             &argv,
             &[("RUST_LIB_BACKTRACE", "0")],
@@ -228,7 +229,7 @@ impl LauncherService for LauncherServer {
         args.push("--embedder-config".to_string());
         args.push(self.embedder_config_arg.clone());
 
-        match spawn_socketed_process(&exec_path, &args, &[], socket) {
+        match spawn_socketed_process("[COMPILER]: ", &exec_path, &args, &[], socket) {
             Ok(child_handle) => {
                 // Ensure the launcher closes its end of the socket.
                 drop(unsafe { UnixStream::from_raw_fd(socket) });
