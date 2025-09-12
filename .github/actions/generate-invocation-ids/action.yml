@@ -99,7 +99,7 @@ runs:
         summary+="|----------|---------------|------|\n"
 
         while IFS=$'\t' read -r name output_id; do
-            uuid=$(cat /proc/sys/kernel/random/uuid)
+            uuid=$(generate_uuid)
             link="$invocations_base/$uuid"
             summary+="| $name | \`$uuid\` | [BuildBuddy link to $uuid]($link) |\n"
             echo "$output_id=$uuid" >> "$GITHUB_OUTPUT"
@@ -110,6 +110,7 @@ runs:
             rm -f "$yq_cmd"
         fi
 
+        echo -e "$GITHUB_OUTPUT"
         # write summary
         echo -e "$summary" >> "$GITHUB_STEP_SUMMARY"
         # write it to stdout so that the job also has it
