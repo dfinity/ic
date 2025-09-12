@@ -63,9 +63,7 @@ pub struct SetupConfig {
 }
 
 #[derive(Debug)]
-pub struct TestConfig {
-    pub subnet_size: usize,
-}
+pub struct TestConfig {}
 
 fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
     (1..=num_hosts).map(|i| format!("host-{}", i)).collect()
@@ -138,7 +136,7 @@ pub fn setup(env: TestEnv, cfg: SetupConfig) {
     }
 }
 
-pub fn test(env: TestEnv, cfg: TestConfig) {
+pub fn test(env: TestEnv, _cfg: TestConfig) {
     let logger = env.logger();
 
     let recovery_img_path = get_dependency_path_from_env("RECOVERY_GUESTOS_IMG_PATH");
@@ -154,6 +152,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
 
     let topology = env.topology_snapshot();
     let nns_subnet = topology.root_subnet();
+    let subnet_size = nns_subnet.nodes().count();
     let nns_node = nns_subnet.nodes().next().unwrap();
 
     // Mirror production setup by granting backup access to all NNS nodes to a specific SSH key.
@@ -212,7 +211,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
 
     // Choose f+1 faulty nodes to break
     let nns_nodes = nns_subnet.nodes().collect::<Vec<_>>();
-    let f = (cfg.subnet_size - 1) / 3;
+    let f = (subnet_size - 1) / 3;
     let faulty_nodes = &nns_nodes[..(f + 1)];
     let healthy_nodes = &nns_nodes[(f + 1)..];
     info!(
@@ -353,7 +352,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     block_on(async {
         let mut handles = JoinSet::new();
 
-        for vm_name in get_host_vm_names(cfg.subnet_size)
+        for vm_name in get_host_vm_names(subnet_size)
             .iter()
             .filter(|&vm_name| {
                 env.get_nested_vm(vm_name)
