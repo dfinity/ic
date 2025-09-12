@@ -187,76 +187,55 @@ async fn caller_not_whitelisted() {
     )
 }
 
-// #[tokio::test]
-// async fn subnet_not_whitelisted() {
-//     let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
-//
-//     let compliant_registry = CompliantRegistryMutationsBuilder::default()
-//         .with_operator("operator", "dc", "provider")
-//         .with_node("node-1", "operator", Some("subnet"))
-//         .with_node("node-2", "operator", None)
-//         .build();
-//
-//     let operator = compliant_registry.operator_id("operator");
-//     let subnet = compliant_registry.subnet_id("subnet");
-//
-//     let mut builder = compliant_registry.get_builder();
-//     builder.enable_swapping_feature_globally();
-//     builder.whitelist_swapping_feature_caller(operator);
-//
-//     install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
-//
-//     let response = swap_node_in_subnet_directly(
-//         &pocket_ic,
-//         SwapNodeInSubnetDirectlyPayload {
-//             new_node_id: Some(compliant_registry.node_id("node-2").get()),
-//             old_node_id: Some(compliant_registry.node_id("node-1").get()),
-//         },
-//         operator,
-//     )
-//     .await;
-//
-//     let expected_err = SwapError::FeatureDisabledOnSubnet { subnet_id: subnet };
-//     assert!(
-//         response
-//             .as_ref()
-//             .is_err_and(|err| err.reject_message.contains(&format!("{}", expected_err))),
-//         "Expected error {expected_err:?}, but got {response:?}"
-//     )
-// }
-//
-// #[tokio::test]
-// async fn e2e() {
-//     let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
-//
-//     let compliant_registry = CompliantRegistryMutationsBuilder::default()
-//         .with_operator("operator", "dc", "provider")
-//         .with_node("node-1", "operator", Some("subnet"))
-//         .with_node("node-2", "operator", None)
-//         .build();
-//
-//     let mut builder = compliant_registry.get_builder();
-//     builder.enable_swapping_feature_globally();
-//
-//     let caller = compliant_registry.operator_id("operator");
-//     let subnet = compliant_registry.subnet_id("subnet");
-//
-//     builder.whitelist_swapping_feature_caller(caller);
-//     builder.enable_swapping_feature_for_subnet(subnet);
-//     install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
-//
-//     let response = swap_node_in_subnet_directly(
-//         &pocket_ic,
-//         SwapNodeInSubnetDirectlyPayload {
-//             new_node_id: Some(compliant_registry.node_id("node-2").get()),
-//             old_node_id: Some(compliant_registry.node_id("node-1").get()),
-//         },
-//         caller,
-//     )
-//     .await;
-//
-//     assert!(
-//         response.is_ok(),
-//         "Expected OK response but got {response:?}"
-//     );
-// }
+#[tokio::test]
+async fn subnet_not_whitelisted() {
+    let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
+
+    let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+    let operator_id = PrincipalId::new_user_test_id(1);
+
+    let (mutations, nodes) = get_mutations_and_node_ids(&[
+        // Old node id
+        NodeInformation {
+            subnet_id: Some(subnet_id),
+            operator: operator_id,
+        },
+        // New node id
+        NodeInformation {
+            subnet_id: None,
+            operator: operator_id,
+        },
+    ]);
+
+    let old_node_id = nodes[0];
+    let new_node_id = nodes[1];
+
+    let mut builder = RegistryCanisterInitPayloadBuilder::new();
+    builder.push_init_mutate_request(RegistryAtomicMutateRequest {
+        mutations,
+        preconditions: vec![],
+    });
+
+    builder.enable_swapping_feature_globally();
+    builder.whitelist_swapping_feature_caller(operator_id);
+
+    install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
+
+    let response = swap_node_in_subnet_directly(
+        &pocket_ic,
+        SwapNodeInSubnetDirectlyPayload {
+            new_node_id: Some(new_node_id.get()),
+            old_node_id: Some(old_node_id.get()),
+        },
+        operator_id,
+    )
+    .await;
+
+    let expected_err = SwapError::FeatureDisabledOnSubnet { subnet_id };
+    assert!(
+        response
+            .as_ref()
+            .is_err_and(|err| err.reject_message.contains(&format!("{}", expected_err))),
+        "Expected error {expected_err:?}, but got {response:?}"
+    )
+}
