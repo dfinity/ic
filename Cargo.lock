@@ -10030,6 +10030,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-hash-of",
  "ic-ledger-suite-state-machine-tests",
+ "ic-ledger-suite-state-machine-tests-types",
  "ic-metrics-encoder",
  "ic-stable-structures 0.6.8",
  "ic-state-machine-tests",
