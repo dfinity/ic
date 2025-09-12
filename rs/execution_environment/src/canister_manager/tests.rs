@@ -5005,30 +5005,20 @@ where
     op(&mut test, canister_id);
 
     // Check that heap memory is cleared.
-    let res = test
-        .ingress(
-            canister_id,
-            "query",
-            wasm().get_global_data().append_and_reply().build(),
-        )
-        .unwrap();
-    match res {
-        WasmResult::Reply(data) => assert!(data.is_empty()),
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
-    };
+    let res = test.ingress(
+        canister_id,
+        "query",
+        wasm().get_global_data().append_and_reply().build(),
+    );
+    assert!(get_reply(res).is_empty());
 
     // Check that stable memory is cleared.
-    let res = test
-        .ingress(
-            canister_id,
-            "query",
-            wasm().stable64_size().reply_int64().build(),
-        )
-        .unwrap();
-    match res {
-        WasmResult::Reply(data) => assert_eq!(data, 0_u64.to_le_bytes()),
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
-    };
+    let res = test.ingress(
+        canister_id,
+        "query",
+        wasm().stable64_size().reply_int64().build(),
+    );
+    assert_eq!(get_reply(res), 0_u64.to_le_bytes());
 
     // Check that certified data are cleared.
     assert!(certified_data_are_empty(&test));
