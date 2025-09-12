@@ -1,5 +1,5 @@
 [package]
-name = "nested-nns-recovery"
+name = "ic_nested_nns_recovery_common"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -11,7 +11,6 @@ anyhow = { workspace = true }
 ic_consensus_system_test_utils = { path = "../../consensus/utils" }
 ic-recovery = { path = "../../../recovery" }
 ic-system-test-driver = { path = "../../driver" }
-ic-types = { path = "../../../types/types" }
 nested = { path = "../../nested" }
 rand = { workspace = true }
 sha2 = { workspace = true }
