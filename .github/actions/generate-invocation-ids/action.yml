@@ -116,8 +116,9 @@ runs:
         done < <(echo "$targets" | $yq_cmd -r '.[] | [.name, .output_id] | @tsv')
 
         # Convert YAML to JSON using yq and set as output
+        # but unescaped.
         output_json=$(echo "$output_yaml" | $yq_cmd -o=json -I=0 '.')
-        echo "output=$output_json" >> "$GITHUB_OUTPUT"
+        echo "raw_json=$output_json" >> "$GITHUB_OUTPUT"
 
         # cleanup if we downloaded yq locally
         if [[ "$downloaded" == true ]]; then
@@ -132,3 +133,12 @@ runs:
         echo -e "$summary" >> "$GITHUB_STEP_SUMMARY"
         # write it to stdout so that the job also has it
         echo -e "$summary"
+
+    - name: Convert the output to json
+      id: serialize
+      run: |
+        echo "output=${{ steps.gen-uuids.outputs.raw_json }}" >> "$GITHUB_OUTPUT"
+        echo "Output:"
+        echo -e "$(cat $GITHUB_OUTPUT)"
+
+
