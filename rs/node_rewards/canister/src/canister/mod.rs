@@ -193,8 +193,7 @@ impl rewards_calculation::performance_based_algorithm::DataProvider for &NodeRew
         let rewardable_nodes = all_rewardable_nodes.remove(provider_id).ok_or_else(|| {
             format!(
                 "No rewardable nodes found for provider {} for day {}",
-                provider_id,
-                day.to_string()
+                provider_id, day
             )
         })?;
         Ok(rewardable_nodes)
