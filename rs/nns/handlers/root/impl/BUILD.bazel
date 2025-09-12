@@ -200,7 +200,7 @@ rust_ic_test_suite(
         # Keep sorted.
         ":root-canister",
         ":upgrade-test-canister",
-        "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
+        "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
         "//rs/nns/cmc:cycles-minting-canister",
         "//rs/nns/governance:governance-canister-test",
         "//rs/nns/gtc:genesis-token-canister",
@@ -216,7 +216,7 @@ rust_ic_test_suite(
         "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
         "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
         "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
-        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
         "LIFELINE_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
         "NODE_REWARDS_CANISTER_WASM_PATH": "$(rootpath //rs/node_rewards/canister:node-rewards-canister)",
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",

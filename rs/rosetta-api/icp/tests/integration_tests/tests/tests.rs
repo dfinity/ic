@@ -46,11 +46,7 @@ fn icp_ledger_wasm_bytes() -> Vec<u8> {
             .unwrap()
             .join("icp_ledger")
             .join("ledger");
-    ic_test_utilities_load_wasm::load_wasm(
-        icp_ledger_project_path,
-        "ledger-canister",
-        &["notify-method"],
-    )
+    ic_test_utilities_load_wasm::load_wasm(icp_ledger_project_path, "ledger-canister", &[])
 }
 
 fn icp_ledger_init(sender_id: Principal) -> Vec<u8> {
