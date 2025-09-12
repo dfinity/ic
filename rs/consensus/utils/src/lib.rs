@@ -285,7 +285,7 @@ pub fn active_threshold_nidkg_id(
         ThresholdCommittee::High => NiDkgTag::HighThreshold,
     };
     get_active_data_at(reader, height, |block, height| {
-        get_transcript_data_at_given_summary(block, height, dkg_tag.clone(), |transcript| {
+        get_transcript_data_at_given_summary(block, height, &dkg_tag, |transcript| {
             transcript
                 .expect("No active threshold transcript available for tag {:?}")
                 .dkg_id
@@ -305,7 +305,7 @@ pub fn active_threshold_committee(
         ThresholdCommittee::High => NiDkgTag::HighThreshold,
     };
     get_active_data_at(reader, height, |block, height| {
-        get_transcript_data_at_given_summary(block, height, dkg_tag.clone(), |transcript| {
+        get_transcript_data_at_given_summary(block, height, &dkg_tag, |transcript| {
             let transcript = transcript.expect("No active threshold transcript available");
             (
                 transcript.threshold.get().get() as usize,
@@ -375,16 +375,16 @@ fn get_dkg_interval_length_at_given_summary(
 fn get_transcript_data_at_given_summary<T>(
     summary_block: &Block,
     height: Height,
-    tag: NiDkgTag,
+    tag: &NiDkgTag,
     getter: impl Fn(Option<&NiDkgTranscript>) -> T,
 ) -> Option<T> {
     let dkg_summary = &summary_block.payload.as_ref().as_summary().dkg;
     if dkg_summary.current_interval_includes(height) {
-        Some(getter(dkg_summary.current_transcript(&tag)))
+        Some(getter(dkg_summary.current_transcript(tag)))
     } else if dkg_summary.next_interval_includes(height) {
         let transcript = dkg_summary
-            .next_transcript(&tag)
-            .or(dkg_summary.current_transcript(&tag));
+            .next_transcript(tag)
+            .or(dkg_summary.current_transcript(tag));
         Some(getter(transcript))
     } else {
         None

@@ -19,8 +19,8 @@ use ic_types::{
 };
 use std::{cmp::min, sync::Arc};
 
-/// The ShareAggregator is responsible for aggregating shares of random beacons,
-/// notarizations, and finalizations into full objects
+/// The [`ShareAggregator`] is responsible for aggregating shares of random beacons,
+/// random_tapes, notarizations, finalizations, and CUPs into full objects
 pub struct ShareAggregator {
     membership: Arc<Membership>,
     crypto: Arc<dyn ConsensusCrypto>,
@@ -59,9 +59,9 @@ impl ShareAggregator {
     fn aggregate_random_beacon_shares(&self, pool: &PoolReader<'_>) -> Vec<ConsensusMessage> {
         let height = pool.get_random_beacon_height().increment();
         let shares = pool.get_random_beacon_shares(height);
-        let state_reader = pool.as_cache();
+        let pool_cache = pool.as_cache();
         let dkg_id =
-            active_threshold_nidkg_id(state_reader, height, RandomBeacon::threshold_committee());
+            active_threshold_nidkg_id(pool_cache, height, RandomBeacon::threshold_committee());
         to_messages(aggregate(
             &self.log,
             self.membership.as_ref(),
@@ -72,7 +72,7 @@ impl ShareAggregator {
     }
 
     /// Attempt to construct random tapes for rounds greater than or equal to
-    /// expected_batch_height.
+    /// [`MessageRouting::expected_batch_height()`].
     fn aggregate_random_tape_shares(&self, pool: &PoolReader<'_>) -> Vec<ConsensusMessage> {
         let expected_height = self.message_routing.expected_batch_height();
         let finalized_height = pool.get_finalized_height();
@@ -84,14 +84,14 @@ impl ShareAggregator {
         let shares = pool
             .get_random_tape_shares(expected_height, max_height)
             .filter(|share| pool.get_random_tape(share.height()).is_none());
-        let state_reader = pool.as_cache();
+        let pool_cache = pool.as_cache();
         to_messages(aggregate(
             &self.log,
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
             Box::new(|content: &RandomTapeContent| {
                 active_threshold_nidkg_id(
-                    state_reader,
+                    pool_cache,
                     content.height(),
                     RandomTape::threshold_committee(),
                 )
@@ -104,8 +104,8 @@ impl ShareAggregator {
     fn aggregate_notarization_shares(&self, pool: &PoolReader<'_>) -> Vec<ConsensusMessage> {
         let height = pool.get_notarized_height().increment();
         let shares = pool.get_notarization_shares(height);
-        let state_reader = pool.as_cache();
-        let registry_version = registry_version_at_height(state_reader, height);
+        let pool_cache = pool.as_cache();
+        let registry_version = registry_version_at_height(pool_cache, height);
         to_messages(aggregate(
             &self.log,
             self.membership.as_ref(),
@@ -121,13 +121,13 @@ impl ShareAggregator {
             pool.get_finalized_height().increment(),
             pool.get_notarized_height(),
         );
-        let state_reader = pool.as_cache();
+        let pool_cache = pool.as_cache();
         to_messages(aggregate(
             &self.log,
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
             Box::new(|content: &FinalizationContent| {
-                registry_version_at_height(state_reader, content.height())
+                registry_version_at_height(pool_cache, content.height())
             }),
             shares,
         ))
@@ -151,9 +151,9 @@ impl ShareAggregator {
                     signature: share.signature,
                 }
             });
-            let state_reader = pool.as_cache();
+            let pool_cache = pool.as_cache();
             let dkg_id = active_threshold_nidkg_id(
-                state_reader,
+                pool_cache,
                 height,
                 CatchUpContent::threshold_committee(),
             );
