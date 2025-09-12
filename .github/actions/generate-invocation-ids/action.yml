@@ -110,7 +110,10 @@ runs:
             rm -f "$yq_cmd"
         fi
 
-        echo -e "$GITHUB_OUTPUT"
+        echo "Output:"
+        echo -e "$(cat $GITHUB_OUTPUT)"
+
+        echo "Summary:"
         # write summary
         echo -e "$summary" >> "$GITHUB_STEP_SUMMARY"
         # write it to stdout so that the job also has it
