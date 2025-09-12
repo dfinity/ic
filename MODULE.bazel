@@ -541,6 +541,14 @@ http_file(
     url = "https://download.dfinity.systems/testdata/mainnet_headers_800k.json.gz",
 )
 
+# Contains the first 800_000 headers of the Dogecoin mainnet blockchain with auxiliary proof-of-work.
+http_file(
+    name = "doge_headers_800k_mainnet_auxpow",
+    downloaded_file_path = "doge_headers_800k_mainnet_auxpow.json.gz",
+    sha256 = "e138d7c59d237d0eea70943b60038b8755d9aa1f04bc94f315a74775cf8bfc2d",
+    url = "http://download.dfinity.systems/testdata/doge/doge_headers_800k_mainnet_auxpow.json.gz",
+)
+
 # Contains blocks 350_990 to 350_999 (inclusive) of the Bitcoin mainnet blockchain.
 http_file(
     name = "bitcoin_adapter_mainnet_blocks",
