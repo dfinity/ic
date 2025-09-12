@@ -1,10 +1,8 @@
-#![allow(dead_code)]
 use crate::performance_based_algorithm::results::{
     BaseRewards, BaseRewardsType3, DailyResults, NodeMetricsDaily, NodeProviderRewards,
     NodeResults, NodeStatus, Percent, RewardsCalculatorResults, XDRPermyriad,
 };
-use crate::performance_based_algorithm::test_utils::RewardableNode;
-use crate::types::{DayUtc, NodeMetricsDailyRaw, Region};
+use crate::types::{DayUtc, NodeMetricsDailyRaw, Region, RewardableNode};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
@@ -17,7 +15,7 @@ use std::cmp::max;
 use std::collections::BTreeMap;
 
 pub mod results;
-mod test_utils;
+pub mod test_utils;
 pub mod v1;
 
 // ================================================================================================
