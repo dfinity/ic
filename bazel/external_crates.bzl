@@ -715,7 +715,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^1.0.0",
             ),
             "ic-stable-structures": crate.spec(
-                version = "^0.6.8",
+                version = "^0.6.9",
             ),
             "ic-stable-structures-next": crate.spec(
                 package = "ic-stable-structures",
@@ -1375,6 +1375,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "stubborn-io": crate.spec(
                 version = "^0.3.2",
+            ),
+            "subnet_rental_canister": crate.spec(
+                git = "https://github.com/dfinity/subnet-rental-canister",
+                rev = "0.3.0",
+                features = [
+                ],
             ),
             "subtle": crate.spec(
                 version = "^2.6.1",
