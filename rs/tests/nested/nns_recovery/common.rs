@@ -29,13 +29,12 @@ use ic_system_test_driver::{
         test_env_api::*,
     },
     nns::change_subnet_membership,
-    retry_with_msg, retry_with_msg_async,
+    retry_with_msg_async,
     util::block_on,
 };
 use nested::util::{
     assert_version_compatibility, get_host_boot_id_async, setup_ic_infrastructure,
-    setup_nested_vm_group, setup_vector_targets_for_vm, start_nested_vm_group,
-    NODE_REGISTRATION_BACKOFF, NODE_REGISTRATION_TIMEOUT,
+    setup_nested_vm_group, setup_vector_targets_for_vm,
 };
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
@@ -72,11 +71,11 @@ fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
     (1..=num_hosts).map(|i| format!("host-{}", i)).collect()
 }
 
-pub fn assign_unassigned_nodes_to_nns(
-    logger: &Logger,
-    topology: &TopologySnapshot,
-) -> TopologySnapshot {
+pub fn assign_unassigned_nodes_to_nns(env: &TestEnv) {
+    let logger = env.logger();
+
     info!(logger, "Adding all unassigned nodes to the NNS subnet...");
+    let topology = env.topology_snapshot();
     let nns_subnet = topology.root_subnet();
     let original_node = nns_subnet.nodes().next().unwrap();
 
@@ -116,11 +115,9 @@ pub fn assign_unassigned_nodes_to_nns(
     await_subnet_earliest_topology_version(
         &nns_subnet,
         new_topology.get_registry_version(),
-        logger,
+        &logger,
     );
     info!(logger, "Success: New nodes have taken over the NNS subnet");
-
-    new_topology
 }
 
 pub fn setup(env: TestEnv, cfg: SetupConfig) {
@@ -152,53 +149,11 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         .map(|b| format!("{:02x}", b))
         .collect::<String>();
 
-    let initial_topology = block_on(
-        env.topology_snapshot()
-            .block_for_min_registry_version(ic_types::RegistryVersion::from(1)),
-    )
-    .unwrap();
+    nested::registration(&env);
+    assign_unassigned_nodes_to_nns(&env);
 
-    // Check that there are initially no unassigned nodes.
-    let num_unassigned_nodes = initial_topology.unassigned_nodes().count();
-    assert_eq!(num_unassigned_nodes, 0);
-
-    start_nested_vm_group(env.clone());
-
-    info!(logger, "Waiting for all nodes to join ...");
-
-    // Wait for all nodes to register by repeatedly waiting for registry updates
-    // and checking if we have the expected number of unassigned nodes
-    let new_topology = retry_with_msg!(
-        "Waiting for all nodes to register and appear as unassigned nodes",
-        logger.clone(),
-        NODE_REGISTRATION_TIMEOUT,
-        NODE_REGISTRATION_BACKOFF,
-        || {
-            // Wait for a newer registry version to be available
-            let new_topology = block_on(
-                initial_topology.block_for_newer_registry_version_within_duration(
-                    Duration::from_secs(60), // Shorter timeout for each individual check
-                    Duration::from_secs(2),
-                ),
-            )?;
-
-            let num_unassigned_nodes = new_topology.unassigned_nodes().count();
-            if num_unassigned_nodes == cfg.subnet_size {
-                info!(logger, "Success: All nodes have registered");
-                Ok(new_topology)
-            } else {
-                bail!(
-                    "Expected {} unassigned nodes, but found {}",
-                    cfg.subnet_size,
-                    num_unassigned_nodes
-                )
-            }
-        }
-    )
-    .unwrap();
-
-    let new_topology = assign_unassigned_nodes_to_nns(&logger, &new_topology);
-    let nns_subnet = new_topology.root_subnet();
+    let topology = env.topology_snapshot();
+    let nns_subnet = topology.root_subnet();
     let nns_node = nns_subnet.nodes().next().unwrap();
 
     // Mirror production setup by granting backup access to all NNS nodes to a specific SSH key.
@@ -435,11 +390,10 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     });
 
     info!(logger, "Ensure every node uses the new replica version, is healthy and the subnet is making progress");
-    let nns_subnet = block_on(
-        new_topology.block_for_newer_registry_version_within_duration(secs(600), secs(10)),
-    )
-    .expect("Could not obtain updated registry.")
-    .root_subnet();
+    let nns_subnet =
+        block_on(topology.block_for_newer_registry_version_within_duration(secs(600), secs(10)))
+            .expect("Could not obtain updated registry.")
+            .root_subnet();
     for node in nns_subnet.nodes() {
         assert_assigned_replica_version(&node, &working_version, env.logger());
         node.await_status_is_healthy().unwrap_or_else(|_| {

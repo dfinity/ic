@@ -42,7 +42,7 @@ pub fn simple_config(env: TestEnv) {
 
 /// Allow the nested GuestOS to install and launch, and check that it can
 /// successfully join the testnet.
-pub fn registration(env: TestEnv) {
+pub fn registration(env: &TestEnv) {
     let logger = env.logger();
 
     let initial_topology = block_on(

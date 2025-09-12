@@ -334,6 +334,7 @@ system_test_nns(
         # Keep sorted.
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nested",
+        "//rs/tests/nested/nns_recovery:common",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
     ],
