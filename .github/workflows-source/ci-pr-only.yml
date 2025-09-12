@@ -57,16 +57,18 @@ jobs:
               output_id: test_id
 
       - name: Debug outputs
+        env:
+          TEST_ID: ${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}"
         run: |
           echo "Available outputs:"
-          echo "test_id = '${{  fromJSON(steps.gen-uuids.outputs.output).test_id }}'"
+          echo "test_id = $TEST_ID"
           echo "All step outputs:"
-          echo '${{ fromJSON(steps.gen-uuids.outputs.output) }}'
+          echo ${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}
 
       - name: Run insta-tests
         uses: ./.github/actions/bazel
         with:
-          run: bazel test --invocation_id="${{  fromJSON(steps.gen-uuids.outputs.output).test_id }}" //:insta_tests
+          run: bazel test --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" //:insta_tests
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   bazel-build-fuzzers-archives:
