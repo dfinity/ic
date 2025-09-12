@@ -156,11 +156,13 @@ impl SwapNodeInSubnetDirectlyPayload {
 #[cfg(test)]
 mod tests {
 
+    use std::collections::BTreeMap;
+
     use ic_protobuf::registry::{node::v1::NodeRecord, subnet::v1::SubnetListRecord};
     use ic_registry_keys::{
         make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
     };
-    use ic_registry_transport::upsert;
+    use ic_registry_transport::{pb::v1::RegistryMutation, upsert};
     use ic_types::{NodeId, PrincipalId, SubnetId};
 
     use crate::{
@@ -262,49 +264,73 @@ mod tests {
         }
     }
 
+    struct NodeInformation {
+        node_id: NodeId,
+        subnet_id: Option<SubnetId>,
+        operator: PrincipalId,
+    }
+
+    fn get_mutations_from_node_information(
+        node_information: &[NodeInformation],
+    ) -> Vec<RegistryMutation> {
+        let mut mutations = vec![];
+
+        let mut subnets = BTreeMap::new();
+
+        for node in node_information {
+            if let Some(subnet) = node.subnet_id {
+                subnets.entry(subnet).or_insert(vec![]).push(node.node_id);
+            }
+
+            mutations.push(upsert(
+                make_node_record_key(node.node_id),
+                NodeRecord {
+                    node_operator_id: node.operator.to_vec(),
+                    ..Default::default()
+                }
+                .encode_to_vec(),
+            ));
+        }
+
+        for (subnet, nodes) in &subnets {
+            mutations.push(upsert(
+                make_subnet_record_key(*subnet),
+                get_invariant_compliant_subnet_record(nodes.to_vec()).encode_to_vec(),
+            ));
+        }
+
+        mutations.push(upsert(
+            make_subnet_list_record_key(),
+            SubnetListRecord {
+                subnets: subnets.keys().map(|k| k.get().to_vec()).collect(),
+            }
+            .encode_to_vec(),
+        ));
+
+        mutations
+    }
+
     #[test]
     fn feature_enabled_for_caller() {
         let _temp_enable_feat = temporarily_enable_node_swapping();
         let mut registry = Registry::new();
 
-        let mut mutations = vec![];
-
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
         let old_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
         let new_node_id = NodeId::new(PrincipalId::new_node_test_id(2));
-        let subnet_record = get_invariant_compliant_subnet_record(vec![old_node_id.clone()]);
-        let subnet_list_record = SubnetListRecord {
-            subnets: vec![subnet_id.get().to_vec()],
-        };
+        let operator_id = PrincipalId::new_user_test_id(1);
 
-        let caller = PrincipalId::new_user_test_id(1);
-
-        let old_node_record = NodeRecord {
-            node_operator_id: caller.to_vec(),
-            ..Default::default()
-        };
-        mutations.push(upsert(
-            make_node_record_key(old_node_id).as_bytes(),
-            old_node_record.encode_to_vec(),
-        ));
-        let new_node_record = NodeRecord {
-            node_operator_id: caller.to_vec(),
-            ..Default::default()
-        };
-        mutations.push(upsert(
-            make_node_record_key(new_node_id),
-            new_node_record.encode_to_vec(),
-        ));
-
-        mutations.extend_from_slice(&[
-            upsert(
-                make_subnet_record_key(subnet_id).as_bytes(),
-                subnet_record.encode_to_vec(),
-            ),
-            upsert(
-                make_subnet_list_record_key(),
-                subnet_list_record.encode_to_vec(),
-            ),
+        let mutations = get_mutations_from_node_information(&[
+            NodeInformation {
+                node_id: old_node_id,
+                subnet_id: Some(subnet_id),
+                operator: operator_id,
+            },
+            NodeInformation {
+                node_id: new_node_id,
+                subnet_id: None,
+                operator: operator_id,
+            },
         ]);
         registry.apply_mutations_for_test(mutations);
 
@@ -317,16 +343,18 @@ mod tests {
 
         // First make a call and expect to fail because
         // the feature is not enabled for this caller.
-        let response = registry.swap_nodes_inner(payload.clone(), caller);
-        let expected_err = SwapError::FeatureDisabledForCaller { caller };
+        let response = registry.swap_nodes_inner(payload.clone(), operator_id);
+        let expected_err = SwapError::FeatureDisabledForCaller {
+            caller: operator_id,
+        };
         assert!(
             response.as_ref().is_err_and(|err| err == &expected_err),
             "Expected error {expected_err:?} but got {response:?}"
         );
 
         // Enable the feature for the caller
-        enable_swapping_for_callers(vec![caller]);
-        let response = registry.swap_nodes_inner(payload, caller);
+        enable_swapping_for_callers(vec![operator_id]);
+        let response = registry.swap_nodes_inner(payload, operator_id);
         // Expect the first next error which is the missing
         // subnet in the registry.
         assert!(response.is_ok(), "Expected OK but got {response:?}");
@@ -338,55 +366,33 @@ mod tests {
 
         let mut registry = Registry::new();
 
-        let mut mutations = vec![];
-
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
         let old_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
         let new_node_id = NodeId::new(PrincipalId::new_node_test_id(2));
-        let subnet_record = get_invariant_compliant_subnet_record(vec![old_node_id.clone()]);
-        let subnet_list_record = SubnetListRecord {
-            subnets: vec![subnet_id.get().to_vec()],
-        };
+        let operator_id = PrincipalId::new_user_test_id(1);
 
-        let caller = PrincipalId::new_user_test_id(1);
-
-        let old_node_record = NodeRecord {
-            node_operator_id: caller.to_vec(),
-            ..Default::default()
-        };
-        mutations.push(upsert(
-            make_node_record_key(old_node_id).as_bytes(),
-            old_node_record.encode_to_vec(),
-        ));
-        let new_node_record = NodeRecord {
-            node_operator_id: caller.to_vec(),
-            ..Default::default()
-        };
-        mutations.push(upsert(
-            make_node_record_key(new_node_id),
-            new_node_record.encode_to_vec(),
-        ));
-
-        mutations.extend_from_slice(&[
-            upsert(
-                make_subnet_record_key(subnet_id).as_bytes(),
-                subnet_record.encode_to_vec(),
-            ),
-            upsert(
-                make_subnet_list_record_key(),
-                subnet_list_record.encode_to_vec(),
-            ),
+        let mutations = get_mutations_from_node_information(&[
+            NodeInformation {
+                node_id: old_node_id,
+                subnet_id: Some(subnet_id),
+                operator: operator_id,
+            },
+            NodeInformation {
+                node_id: new_node_id,
+                subnet_id: None,
+                operator: operator_id,
+            },
         ]);
         registry.apply_mutations_for_test(mutations);
 
-        enable_swapping_for_callers(vec![caller]);
+        enable_swapping_for_callers(vec![operator_id]);
 
         let payload = SwapNodeInSubnetDirectlyPayload {
             old_node_id: Some(old_node_id.get()),
             new_node_id: Some(new_node_id.get()),
         };
 
-        let response = registry.swap_nodes_inner(payload.clone(), caller);
+        let response = registry.swap_nodes_inner(payload.clone(), operator_id);
         let expected_err = SwapError::FeatureDisabledOnSubnet { subnet_id };
 
         // First call when the feature isn't enabled on the subnet.
@@ -397,7 +403,7 @@ mod tests {
 
         // Now enable the feature and call again.
         enable_swapping_on_subnets(vec![subnet_id]);
-        let response = registry.swap_nodes_inner(payload, caller);
+        let response = registry.swap_nodes_inner(payload, operator_id);
         assert!(
             response.is_ok(),
             "Expected the result to be OK but got {response:?}"
@@ -409,44 +415,22 @@ mod tests {
         let _temp_enable_feat = temporarily_enable_node_swapping();
         let mut registry = Registry::new();
 
-        let mut mutations = vec![];
-
         let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
         let old_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
         let new_node_id = NodeId::new(PrincipalId::new_node_test_id(2));
-        let subnet_record = get_invariant_compliant_subnet_record(vec![old_node_id.clone()]);
-        let subnet_list_record = SubnetListRecord {
-            subnets: vec![subnet_id.get().to_vec()],
-        };
+        let operator_id = PrincipalId::new_user_test_id(1);
 
-        let caller = PrincipalId::new_user_test_id(1);
-
-        let old_node_record = NodeRecord {
-            node_operator_id: caller.to_vec(),
-            ..Default::default()
-        };
-        mutations.push(upsert(
-            make_node_record_key(old_node_id).as_bytes(),
-            old_node_record.encode_to_vec(),
-        ));
-        let new_node_record = NodeRecord {
-            node_operator_id: caller.to_vec(),
-            ..Default::default()
-        };
-        mutations.push(upsert(
-            make_node_record_key(new_node_id),
-            new_node_record.encode_to_vec(),
-        ));
-
-        mutations.extend_from_slice(&[
-            upsert(
-                make_subnet_record_key(subnet_id).as_bytes(),
-                subnet_record.encode_to_vec(),
-            ),
-            upsert(
-                make_subnet_list_record_key(),
-                subnet_list_record.encode_to_vec(),
-            ),
+        let mutations = get_mutations_from_node_information(&[
+            NodeInformation {
+                node_id: old_node_id,
+                subnet_id: Some(subnet_id),
+                operator: operator_id,
+            },
+            NodeInformation {
+                node_id: new_node_id,
+                subnet_id: None,
+                operator: operator_id,
+            },
         ]);
         registry.apply_mutations_for_test(mutations);
 
@@ -455,10 +439,10 @@ mod tests {
             new_node_id: Some(new_node_id.get()),
         };
 
-        enable_swapping_for_callers(vec![caller]);
+        enable_swapping_for_callers(vec![operator_id]);
         enable_swapping_on_subnets(vec![subnet_id]);
 
-        let response = registry.swap_nodes_inner(payload, caller);
+        let response = registry.swap_nodes_inner(payload, operator_id);
         assert!(
             response.is_ok(),
             "Expected OK response but got: {response:?}"
