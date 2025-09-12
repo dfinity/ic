@@ -441,9 +441,11 @@ pub async fn install_registry_canister_with_payload_builder(
         "Registry",
         REGISTRY_CANISTER_ID,
         Encode!(&payload).unwrap(),
-        test_configuration
-            .then(build_test_registry_wasm)
-            .unwrap_or(build_registry_wasm()),
+        if test_configuration {
+            build_test_registry_wasm()
+        } else {
+            build_registry_wasm()
+        },
         Some(ROOT_CANISTER_ID.get()),
     )
     .await;
