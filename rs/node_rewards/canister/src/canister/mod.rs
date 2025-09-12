@@ -165,12 +165,12 @@ impl rewards_calculation::performance_based_algorithm::DataProvider for &NodeRew
         &self,
         day: &DayUtc,
         provider_id: &PrincipalId,
-    ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, String> {
-        let registry_client = self.get_registry_client();
-        let registry_querier = RegistryQuerier::new(registry_client.clone());
-        registry_querier
-            .get_rewardable_nodes_per_provider(day, Some(provider_id))
-            .map_err(|e| format!("Could not get rewardable nodes: {e:?}"))
+    ) -> Result<Vec<RewardableNode>, String> {
+        let mut all_rewardable_nodes = self.get_rewardable_nodes(day)?;
+        let rewardable_nodes = all_rewardable_nodes
+            .remove(provider_id)
+            .ok_or_else(|| format!("No rewardable nodes found for provider {}", provider_id))?;
+        Ok(rewardable_nodes)
     }
 }
 
