@@ -156,9 +156,15 @@ impl SwapNodeInSubnetDirectlyPayload {
 #[cfg(test)]
 mod tests {
 
-    use ic_types::PrincipalId;
+    use ic_protobuf::registry::{node::v1::NodeRecord, subnet::v1::SubnetListRecord};
+    use ic_registry_keys::{
+        make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
+    };
+    use ic_registry_transport::upsert;
+    use ic_types::{NodeId, PrincipalId, SubnetId};
 
     use crate::{
+        common::test_helpers::get_invariant_compliant_subnet_record,
         flags::{
             enable_swapping_for_callers, enable_swapping_on_subnets,
             temporarily_disable_node_swapping, temporarily_enable_node_swapping,
@@ -166,6 +172,7 @@ mod tests {
         mutations::do_swap_node_in_subnet_directly::{SwapError, SwapNodeInSubnetDirectlyPayload},
         registry::Registry,
     };
+    use prost::Message;
 
     fn invalid_payloads_with_expected_errors() -> Vec<(SwapNodeInSubnetDirectlyPayload, SwapError)>
     {
@@ -255,112 +262,208 @@ mod tests {
         }
     }
 
-    // #[test]
-    // fn feature_enabled_for_caller() {
-    //     let _temp_enable_feat = temporarily_enable_node_swapping();
-    //
-    //     let compliant_registry = CompliantRegistryMutationsBuilder::default()
-    //         .with_operator("operator", "dc", "provider")
-    //         .with_node("node-1", "operator", None)
-    //         .with_node("node-2", "operator", Some("subnet"))
-    //         .build();
-    //     let mut test_registry = TestableRegistry::from(compliant_registry);
-    //
-    //     let operator = test_registry.compliant_mutations().operator_id("operator");
-    //     let subnet = test_registry.compliant_mutations().subnet_id("subnet");
-    //     enable_swapping_on_subnets(vec![subnet]);
-    //
-    //     let payload = SwapNodeInSubnetDirectlyPayload {
-    //         new_node_id: Some(test_registry.compliant_mutations().node_id("node-1").get()),
-    //         old_node_id: Some(test_registry.compliant_mutations().node_id("node-2").get()),
-    //     };
-    //
-    //     // First make a call and expect to fail because
-    //     // the feature is not enabled for this caller.
-    //     let response = test_registry.run_mut(|reg| reg.swap_nodes_inner(payload.clone(), operator));
-    //     let expected_err = SwapError::FeatureDisabledForCaller { caller: operator };
-    //     assert!(
-    //         response.as_ref().is_err_and(|err| err == &expected_err),
-    //         "Expected error {expected_err:?} but got {response:?}"
-    //     );
-    //
-    //     // Enable the feature for the caller
-    //     enable_swapping_for_callers(vec![operator]);
-    //     let response = test_registry.run_mut(|reg| reg.swap_nodes_inner(payload.clone(), operator));
-    //
-    //     // Expect the first next error which is the missing
-    //     // subnet in the registry.
-    //     assert!(response.is_ok(), "Expected OK but got {response:?}");
-    // }
+    #[test]
+    fn feature_enabled_for_caller() {
+        let _temp_enable_feat = temporarily_enable_node_swapping();
+        let mut registry = Registry::new();
 
-    // #[test]
-    // fn feature_enabled_for_subnet() {
-    //     let _temp_enable_feat = temporarily_enable_node_swapping();
-    //     let compliant_registry = CompliantRegistryMutationsBuilder::default()
-    //         .with_operator("operator", "dc", "provider")
-    //         .with_node("node-1", "operator", Some("subnet"))
-    //         .with_node("node-2", "operator", None)
-    //         .build();
-    //
-    //     let mut test_registry = TestableRegistry::from(compliant_registry);
-    //
-    //     let subnet = test_registry.compliant_mutations().subnet_id("subnet");
-    //     let operator = test_registry.compliant_mutations().operator_id("operator");
-    //     enable_swapping_for_callers(vec![operator]);
-    //
-    //     let payload = SwapNodeInSubnetDirectlyPayload {
-    //         new_node_id: Some(test_registry.compliant_mutations().node_id("node-2").get()),
-    //         old_node_id: Some(test_registry.compliant_mutations().node_id("node-1").get()),
-    //     };
-    //
-    //     let response = test_registry.run_mut(|reg| reg.swap_nodes_inner(payload.clone(), operator));
-    //
-    //     let expected_err = SwapError::FeatureDisabledOnSubnet { subnet_id: subnet };
-    //
-    //     // First call when the feature isn't enabled on the subnet.
-    //     assert!(
-    //         response.as_ref().is_err_and(|err| err == &expected_err),
-    //         "Expected to get error {expected_err:?} but got {response:?}"
-    //     );
-    //
-    //     // Now enable the feature and call again.
-    //     enable_swapping_on_subnets(vec![subnet]);
-    //     let response = test_registry.run_mut(|reg| reg.swap_nodes_inner(payload.clone(), operator));
-    //
-    //     assert!(
-    //         response.is_ok(),
-    //         "Expected the result to be OK but got {response:?}"
-    //     );
-    // }
+        let mut mutations = vec![];
 
-    // #[test]
-    // fn e2e_valid_swap() {
-    //     let _temp_enable_feat = temporarily_enable_node_swapping();
-    //     let compliant_registry = CompliantRegistryMutationsBuilder::default()
-    //         .with_operator("operator", "dc", "provider")
-    //         .with_node("node-1", "operator", None)
-    //         .with_node("node-2", "operator", Some("subnet"))
-    //         .build();
-    //
-    //     let mut test_registry = TestableRegistry::from(compliant_registry);
-    //
-    //     let payload = SwapNodeInSubnetDirectlyPayload {
-    //         old_node_id: Some(test_registry.compliant_mutations().node_id("node-2").get()),
-    //         new_node_id: Some(test_registry.compliant_mutations().node_id("node-1").get()),
-    //     };
-    //
-    //     let operator = test_registry.compliant_mutations().operator_id("operator");
-    //     let subnet = test_registry.compliant_mutations().subnet_id("subnet");
-    //
-    //     enable_swapping_for_callers(vec![operator]);
-    //     enable_swapping_on_subnets(vec![subnet]);
-    //
-    //     let response = test_registry.run_mut(|reg| reg.swap_nodes_inner(payload.clone(), operator));
-    //     assert!(
-    //         response.is_ok(),
-    //         "Expected OK response but got: {response:?}"
-    //     );
-    //
-    //     //TODO(DRE-548): Add assertions that the swap has been made
-    // }
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let old_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
+        let new_node_id = NodeId::new(PrincipalId::new_node_test_id(2));
+        let subnet_record = get_invariant_compliant_subnet_record(vec![old_node_id.clone()]);
+        let subnet_list_record = SubnetListRecord {
+            subnets: vec![subnet_id.get().to_vec()],
+        };
+
+        let caller = PrincipalId::new_user_test_id(1);
+
+        let old_node_record = NodeRecord {
+            node_operator_id: caller.to_vec(),
+            ..Default::default()
+        };
+        mutations.push(upsert(
+            make_node_record_key(old_node_id).as_bytes(),
+            old_node_record.encode_to_vec(),
+        ));
+        let new_node_record = NodeRecord {
+            node_operator_id: caller.to_vec(),
+            ..Default::default()
+        };
+        mutations.push(upsert(
+            make_node_record_key(new_node_id),
+            new_node_record.encode_to_vec(),
+        ));
+
+        mutations.extend_from_slice(&[
+            upsert(
+                make_subnet_record_key(subnet_id).as_bytes(),
+                subnet_record.encode_to_vec(),
+            ),
+            upsert(
+                make_subnet_list_record_key(),
+                subnet_list_record.encode_to_vec(),
+            ),
+        ]);
+        registry.apply_mutations_for_test(mutations);
+
+        enable_swapping_on_subnets(vec![subnet_id]);
+
+        let payload = SwapNodeInSubnetDirectlyPayload {
+            new_node_id: Some(new_node_id.get()),
+            old_node_id: Some(old_node_id.get()),
+        };
+
+        // First make a call and expect to fail because
+        // the feature is not enabled for this caller.
+        let response = registry.swap_nodes_inner(payload.clone(), caller);
+        let expected_err = SwapError::FeatureDisabledForCaller { caller };
+        assert!(
+            response.as_ref().is_err_and(|err| err == &expected_err),
+            "Expected error {expected_err:?} but got {response:?}"
+        );
+
+        // Enable the feature for the caller
+        enable_swapping_for_callers(vec![caller]);
+        let response = registry.swap_nodes_inner(payload, caller);
+        // Expect the first next error which is the missing
+        // subnet in the registry.
+        assert!(response.is_ok(), "Expected OK but got {response:?}");
+    }
+
+    #[test]
+    fn feature_enabled_for_subnet() {
+        let _temp_enable_feat = temporarily_enable_node_swapping();
+
+        let mut registry = Registry::new();
+
+        let mut mutations = vec![];
+
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let old_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
+        let new_node_id = NodeId::new(PrincipalId::new_node_test_id(2));
+        let subnet_record = get_invariant_compliant_subnet_record(vec![old_node_id.clone()]);
+        let subnet_list_record = SubnetListRecord {
+            subnets: vec![subnet_id.get().to_vec()],
+        };
+
+        let caller = PrincipalId::new_user_test_id(1);
+
+        let old_node_record = NodeRecord {
+            node_operator_id: caller.to_vec(),
+            ..Default::default()
+        };
+        mutations.push(upsert(
+            make_node_record_key(old_node_id).as_bytes(),
+            old_node_record.encode_to_vec(),
+        ));
+        let new_node_record = NodeRecord {
+            node_operator_id: caller.to_vec(),
+            ..Default::default()
+        };
+        mutations.push(upsert(
+            make_node_record_key(new_node_id),
+            new_node_record.encode_to_vec(),
+        ));
+
+        mutations.extend_from_slice(&[
+            upsert(
+                make_subnet_record_key(subnet_id).as_bytes(),
+                subnet_record.encode_to_vec(),
+            ),
+            upsert(
+                make_subnet_list_record_key(),
+                subnet_list_record.encode_to_vec(),
+            ),
+        ]);
+        registry.apply_mutations_for_test(mutations);
+
+        enable_swapping_for_callers(vec![caller]);
+
+        let payload = SwapNodeInSubnetDirectlyPayload {
+            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(new_node_id.get()),
+        };
+
+        let response = registry.swap_nodes_inner(payload.clone(), caller);
+        let expected_err = SwapError::FeatureDisabledOnSubnet { subnet_id };
+
+        // First call when the feature isn't enabled on the subnet.
+        assert!(
+            response.as_ref().is_err_and(|err| err == &expected_err),
+            "Expected to get error {expected_err:?} but got {response:?}"
+        );
+
+        // Now enable the feature and call again.
+        enable_swapping_on_subnets(vec![subnet_id]);
+        let response = registry.swap_nodes_inner(payload, caller);
+        assert!(
+            response.is_ok(),
+            "Expected the result to be OK but got {response:?}"
+        );
+    }
+
+    #[test]
+    fn e2e_valid_swap() {
+        let _temp_enable_feat = temporarily_enable_node_swapping();
+        let mut registry = Registry::new();
+
+        let mut mutations = vec![];
+
+        let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+        let old_node_id = NodeId::new(PrincipalId::new_node_test_id(1));
+        let new_node_id = NodeId::new(PrincipalId::new_node_test_id(2));
+        let subnet_record = get_invariant_compliant_subnet_record(vec![old_node_id.clone()]);
+        let subnet_list_record = SubnetListRecord {
+            subnets: vec![subnet_id.get().to_vec()],
+        };
+
+        let caller = PrincipalId::new_user_test_id(1);
+
+        let old_node_record = NodeRecord {
+            node_operator_id: caller.to_vec(),
+            ..Default::default()
+        };
+        mutations.push(upsert(
+            make_node_record_key(old_node_id).as_bytes(),
+            old_node_record.encode_to_vec(),
+        ));
+        let new_node_record = NodeRecord {
+            node_operator_id: caller.to_vec(),
+            ..Default::default()
+        };
+        mutations.push(upsert(
+            make_node_record_key(new_node_id),
+            new_node_record.encode_to_vec(),
+        ));
+
+        mutations.extend_from_slice(&[
+            upsert(
+                make_subnet_record_key(subnet_id).as_bytes(),
+                subnet_record.encode_to_vec(),
+            ),
+            upsert(
+                make_subnet_list_record_key(),
+                subnet_list_record.encode_to_vec(),
+            ),
+        ]);
+        registry.apply_mutations_for_test(mutations);
+
+        let payload = SwapNodeInSubnetDirectlyPayload {
+            old_node_id: Some(old_node_id.get()),
+            new_node_id: Some(new_node_id.get()),
+        };
+
+        enable_swapping_for_callers(vec![caller]);
+        enable_swapping_on_subnets(vec![subnet_id]);
+
+        let response = registry.swap_nodes_inner(payload, caller);
+        assert!(
+            response.is_ok(),
+            "Expected OK response but got: {response:?}"
+        );
+
+        //TODO(DRE-548): Add assertions that the swap has been made
+    }
 }
