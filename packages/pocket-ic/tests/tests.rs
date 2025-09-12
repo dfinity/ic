@@ -40,9 +40,10 @@ use reqwest::header::CONTENT_LENGTH;
 use reqwest::{Method, StatusCode, Url};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+#[cfg(not(windows))]
+use std::net::SocketAddr;
 use std::{
     io::Read,
-    net::SocketAddr,
     sync::OnceLock,
     time::{Duration, SystemTime},
 };
