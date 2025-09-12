@@ -1,4 +1,4 @@
-use bitcoin::{block::Header as BlockHeader, BlockHash, Network};
+use bitcoin::{block::Header as BlockHeader, BlockHash};
 use criterion::measurement::Measurement;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
 use ic_btc_adapter::{
@@ -66,7 +66,7 @@ fn prepare(
 }
 
 fn e2e(criterion: &mut Criterion) {
-    let network = Network::Regtest;
+    let network = bitcoin::Network::Regtest;
     let mut config = Config::default_with(network.into());
 
     let mut processed_block_hashes = vec![];
@@ -185,19 +185,50 @@ fn add_800k_block_headers(criterion: &mut Criterion) {
         );
         retrieve_headers::<bitcoin::Network>(&headers_data_path)
     });
-    // Call BITCOIN_HEADERS once before benchmarking to avoid biasing the first sample (lazy instantiation).
+    static DOGECOIN_HEADERS: LazyLock<Vec<bitcoin::dogecoin::Header>> = LazyLock::new(|| {
+        let headers_data_path = PathBuf::from(
+            std::env::var("DOGECOIN_MAINNET_HEADERS_DATA_PATH")
+                .expect("Failed to get test data path env variable"),
+        );
+        retrieve_headers::<bitcoin::dogecoin::Network>(&headers_data_path)
+    });
+    {
+        // warm-up: Call BITCOIN_HEADERS once before benchmarking to avoid biasing the first sample (lazy instantiation).
+        // Genesis block header is automatically added when instantiating BlockchainState
+        let bitcoin_headers_to_add = &BITCOIN_HEADERS.as_slice()[1..];
+        assert_eq!(bitcoin_headers_to_add.len(), 800_000);
+        let mut group = criterion.benchmark_group("bitcoin_800k");
+        group.sample_size(10);
+
+        group.bench_function("add_headers", |bench| {
+            bench.iter(|| {
+                let mut blockchain_state =
+                    BlockchainState::new(bitcoin::Network::Bitcoin, &MetricsRegistry::default());
+                // Headers are processed in chunks of at most MAX_HEADERS_SIZE entries
+                for chunk in bitcoin_headers_to_add.chunks(MAX_HEADERS_SIZE) {
+                    let (added_headers, error) = blockchain_state.add_headers(chunk);
+                    assert_eq!(error, None);
+                    assert_eq!(added_headers.len(), chunk.len())
+                }
+            })
+        });
+    }
+
+    // warm-up: Call DOGECOIN_HEADERS once before benchmarking to avoid biasing the first sample (lazy instantiation).
     // Genesis block header is automatically added when instantiating BlockchainState
-    let bitcoin_headers_to_add = &BITCOIN_HEADERS.as_slice()[1..];
-    assert_eq!(bitcoin_headers_to_add.len(), 800_000);
-    let mut group = criterion.benchmark_group("bitcoin_800k");
+    let dogecoin_headers_to_add = &DOGECOIN_HEADERS.as_slice()[1..];
+    assert_eq!(dogecoin_headers_to_add.len(), 800_000);
+    let mut group = criterion.benchmark_group("dogecoin_800k");
     group.sample_size(10);
 
     group.bench_function("add_headers", |bench| {
         bench.iter(|| {
-            let mut blockchain_state =
-                BlockchainState::new(Network::Bitcoin, &MetricsRegistry::default());
+            let mut blockchain_state = BlockchainState::new(
+                bitcoin::dogecoin::Network::Dogecoin,
+                &MetricsRegistry::default(),
+            );
             // Headers are processed in chunks of at most MAX_HEADERS_SIZE entries
-            for chunk in bitcoin_headers_to_add.chunks(MAX_HEADERS_SIZE) {
+            for chunk in dogecoin_headers_to_add.chunks(MAX_HEADERS_SIZE) {
                 let (added_headers, error) = blockchain_state.add_headers(chunk);
                 assert_eq!(error, None);
                 assert_eq!(added_headers.len(), chunk.len())
