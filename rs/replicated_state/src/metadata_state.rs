@@ -629,7 +629,7 @@ impl SystemMetadata {
         // whenever new fields are added.
         //
         // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
-        let SystemMetadata {
+        let &mut SystemMetadata {
             ref mut ingress_history,
             streams: _,
             canister_allocation_ranges: _,
@@ -1316,10 +1316,10 @@ impl IngressHistoryState {
         //
         // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
         let Self {
-            ref mut statuses,
+            statuses,
             pruning_times: _,
             next_terminal_time: _,
-            ref mut memory_usage,
+            memory_usage,
         } = self;
 
         // Filters for messages in terminal states or addressed to local canisters.

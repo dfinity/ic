@@ -546,12 +546,8 @@ impl ProposalVotingStateMachine {
             }
         } else {
             while let Some((neuron_id, vote)) = self.recent_neuron_ballots_to_record.pop_first() {
-                match neuron_store.register_recent_neuron_ballot(
-                    neuron_id,
-                    self.topic,
-                    self.proposal_id,
-                    vote,
-                ) {
+                match neuron_store.record_neuron_vote(neuron_id, self.topic, self.proposal_id, vote)
+                {
                     Ok(_) => {}
                     Err(e) => {
                         // This is a bad inconsistency, but there is
@@ -765,7 +761,7 @@ mod test {
     #[test]
     fn test_cast_vote_and_cascade_works() {
         let now = 1000;
-        let topic = Topic::NetworkCanisterManagement;
+        let topic = Topic::ApplicationCanisterManagement;
 
         let make_neuron = |id: u64, followees: Vec<u64>| {
             make_neuron(

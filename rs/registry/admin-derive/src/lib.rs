@@ -16,7 +16,7 @@ pub fn proposal_metadata_derive(input: TokenStream) -> TokenStream {
 
 fn impl_proposal_metadata(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
-    let gen = quote! {
+    let r#gen = quote! {
         impl ProposalMetadata for #name {
             fn summary(&self) -> String {
                 summary_from_string_or_file(&self.summary, &self.summary_file)
@@ -40,7 +40,7 @@ fn impl_proposal_metadata(ast: &syn::DeriveInput) -> TokenStream {
             }
         }
     };
-    gen.into()
+    r#gen.into()
 }
 
 /// Macro to add common fields to proposals command structs.
@@ -58,7 +58,7 @@ pub fn derive_common_proposal_fields(_: TokenStream, item: TokenStream) -> Token
                     if group.delimiter() == proc_macro::Delimiter::Brace && found_struct =>
                 {
                     let mut stream = proc_macro::TokenStream::new();
-                    let gen = TokenStream::from(quote! {
+                    let r#gen = TokenStream::from(quote! {
                             #[clap(long)]
                             /// The id of the neuron on behalf of which the proposal will be submitted.
                             pub proposer: Option<NeuronId>,
@@ -95,7 +95,7 @@ pub fn derive_common_proposal_fields(_: TokenStream, item: TokenStream) -> Token
                             #[clap(long)]
                             pub json: bool,
                     });
-                    stream.extend(gen);
+                    stream.extend(r#gen);
                     stream.extend(group.stream());
                     proc_macro::TokenTree::Group(proc_macro::Group::new(
                         proc_macro::Delimiter::Brace,

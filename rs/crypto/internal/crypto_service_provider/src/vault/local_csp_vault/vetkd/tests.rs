@@ -138,7 +138,7 @@ impl CreateVetKdKeyShareTestSetup {
             context: b"context-123".to_vec(),
         };
         let input = b"some-input".to_vec();
-        let rng = ChaCha20Rng::from_seed(rng.gen());
+        let rng = ChaCha20Rng::from_seed(rng.r#gen());
 
         Self {
             master_secret_key,

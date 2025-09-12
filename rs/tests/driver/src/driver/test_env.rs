@@ -233,16 +233,17 @@ pub trait RequiredHostFeaturesFromCmdLine {
 
 impl RequiredHostFeaturesFromCmdLine for TestEnv {
     fn read_host_features(&self, context: &str) -> Option<Vec<HostFeature>> {
-        if let Ok(host_features_from_command_line) = Vec::<HostFeature>::try_read_attribute(self) {
-            warn!(
+        match Vec::<HostFeature>::try_read_attribute(self) {
+            Ok(host_features_from_command_line) => {
+                warn!(
                 self.logger(),
                 "Using host features supplied on the command line ({:?}) for {}, overriding others.",
                 &host_features_from_command_line,
                 context
             );
-            Some(host_features_from_command_line)
-        } else {
-            None
+                Some(host_features_from_command_line)
+            }
+            _ => None,
         }
     }
 }

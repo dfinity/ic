@@ -7,8 +7,13 @@ use ic_cdk::{api::msg_caller, init, post_upgrade, println, update};
 use serde::Deserialize;
 
 use crate::{
-    canister_state::{migrations_disabled, requests::insert_request},
-    rate_limited, start_timers, validate_request, RequestState, ValidationError,
+    canister_state::{
+        migrations_disabled,
+        requests::{insert_request, list_by},
+    },
+    rate_limited, start_timers,
+    validation::validate_request,
+    RequestState, ValidationError,
 };
 
 #[init]
@@ -57,12 +62,13 @@ enum MigrationStatus {
     Succeeded,
 }
 
-// TODO: if a request is repeated, we don't know which one is meant... because the MigrateCanisterArgs
-// will be identical even though the actual `Request` will be different. So should we use IDs after all?
 #[update]
-fn migration_status(_args: MigrateCanisterArgs) -> MigrationStatus {
+/// we return a vector.
+/// The same (source, target) pair might be present in the `HISTORY`, and valid to process again, so
+fn migration_status(_args: MigrateCanisterArgs) -> Vec<MigrationStatus> {
     // TODO
-    MigrationStatus::Unknown
+    println!("{:?}", list_by(|_| true));
+    vec![MigrationStatus::Unknown]
 }
 
 // TODO: history endpoint

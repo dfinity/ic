@@ -34,10 +34,12 @@ ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-cdk = { workspace = true }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 ic-management-canister-types = { workspace = true }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nervous-system-agent = { path = "../../nervous_system/agent" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
+ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nervous-system-integration-tests = { path = "../../nervous_system/integration_tests" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
@@ -45,7 +47,6 @@ ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
-ic-registry-transport = { path = "../../registry/transport" }
 ic-sns-cli = { path = "../cli" }
 ic-sns-governance-api = { path = "../../sns/governance/api" }
 ic-sns-swap = { path = "../swap" }

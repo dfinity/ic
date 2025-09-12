@@ -423,7 +423,7 @@ pub fn set_update_exchange_rate_state(
     maybe_reason: &Option<UpdateIcpXdrConversionRatePayloadReason>,
     rate_timestamp_seconds: u64,
 ) {
-    if let Some(ref reason) = maybe_reason {
+    if let Some(reason) = maybe_reason {
         mutate_state(safe_state, |state| {
             let current_update_exchange_rate_state = state
                 .update_exchange_rate_canister_state

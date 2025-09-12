@@ -44,7 +44,16 @@ use std::{
 };
 
 thread_local! {
-    static ALLOWED_EXTENSIONS: RefCell<BTreeMap<[u8; 32], ExtensionSpec>> = const { RefCell::new(btreemap! {}) };
+    static ALLOWED_EXTENSIONS: RefCell<BTreeMap<[u8; 32], ExtensionSpec>> = RefCell::new(btreemap! {
+    hex::decode("1c07ceba560e7bcffa43d1b5ae97db81151854f068b707c1728e213948212a6c")
+    .unwrap()
+    .try_into()
+    .unwrap() => ExtensionSpec {
+            name: "sns-kongswap-adaptor".to_string(),
+            version: ExtensionVersion(1),
+            topic: Topic::TreasuryAssetManagement,
+            extension_type: ExtensionType::TreasuryManager,
+    }});
 }
 
 #[cfg(feature = "test")]
@@ -652,7 +661,7 @@ impl Governance {
         self.ledger
             .icrc2_approve(
                 to,
-                sns_amount_e8s.saturating_sub(self.transaction_fee_e8s_or_panic()),
+                sns_amount_e8s,
                 Some(expiry_time_nsec),
                 self.transaction_fee_e8s_or_panic(),
                 self.sns_treasury_subaccount(),
@@ -670,7 +679,7 @@ impl Governance {
         self.nns_ledger
             .icrc2_approve(
                 to,
-                icp_amount_e8s.saturating_sub(icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s()),
+                icp_amount_e8s,
                 Some(expiry_time_nsec),
                 icp_ledger::DEFAULT_TRANSFER_FEE.get_e8s(),
                 self.icp_treasury_subaccount(),

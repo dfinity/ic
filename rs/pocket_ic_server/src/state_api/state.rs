@@ -62,7 +62,7 @@ use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, error, trace};
 
 // The maximum wait time for a computation to finish synchronously.
-const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
+pub(crate) const DEFAULT_SYNC_WAIT_DURATION: Duration = Duration::from_secs(10);
 
 // The timeout for executing an operation in auto progress mode.
 const AUTO_PROGRESS_OPERATION_TIMEOUT: Duration = Duration::from_secs(10);
@@ -156,7 +156,6 @@ pub struct ApiState {
     instances: Arc<RwLock<Vec<Mutex<Instance>>>>,
     graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
     seed: AtomicU64,
-    sync_wait_time: Duration,
     // PocketIC server port
     port: Option<u16>,
     // HTTP gateway infos (`None` = stopped)
@@ -166,22 +165,12 @@ pub struct ApiState {
 #[derive(Default)]
 pub struct PocketIcApiStateBuilder {
     initial_instances: Vec<PocketIc>,
-    sync_wait_time: Option<Duration>,
     port: Option<u16>,
 }
 
 impl PocketIcApiStateBuilder {
     pub fn new() -> Self {
         Default::default()
-    }
-
-    /// Computations are dispatched into background tasks. If a computation takes longer than
-    /// [sync_wait_time], the update-operation returns, indicating that the given instance is busy.
-    pub fn with_sync_wait_time(self, sync_wait_time: Duration) -> Self {
-        Self {
-            sync_wait_time: Some(sync_wait_time),
-            ..self
-        }
     }
 
     pub fn with_port(self, port: u16) -> Self {
@@ -217,13 +206,10 @@ impl PocketIcApiStateBuilder {
             .collect();
         let instances = Arc::new(RwLock::new(instances));
 
-        let sync_wait_time = self.sync_wait_time.unwrap_or(DEFAULT_SYNC_WAIT_DURATION);
-
         Arc::new(ApiState {
             instances,
             graph,
             seed: AtomicU64::new(0),
-            sync_wait_time,
             port: self.port,
             http_gateways: Arc::new(RwLock::new(Vec::new())),
         })
@@ -254,7 +240,8 @@ pub enum PocketIcError {
     CanisterIsEmpty(CanisterId),
     BadIngressMessage(String),
     SubnetNotFound(candid::Principal),
-    RequestRoutingError(String),
+    CanisterRequestRoutingError(String),
+    SubnetRequestRoutingError(String),
     InvalidCanisterHttpRequestId((SubnetId, CanisterHttpRequestId)),
     InvalidMockCanisterHttpResponses((usize, usize)),
     InvalidRejectCode(u64),
@@ -297,8 +284,11 @@ impl std::fmt::Debug for OpOut {
             OpOut::Error(PocketIcError::BlockmakerContainedInFailed(nid)) => {
                 write!(f, "BlockmakerContainedInFailed({})", nid)
             }
-            OpOut::Error(PocketIcError::RequestRoutingError(msg)) => {
-                write!(f, "RequestRoutingError({:?})", msg)
+            OpOut::Error(PocketIcError::CanisterRequestRoutingError(msg)) => {
+                write!(f, "CanisterRequestRoutingError({:?})", msg)
+            }
+            OpOut::Error(PocketIcError::SubnetRequestRoutingError(msg)) => {
+                write!(f, "SubnetRequestRoutingError({:?})", msg)
             }
             OpOut::Error(PocketIcError::InvalidCanisterHttpRequestId((
                 subnet_id,
@@ -505,7 +495,7 @@ impl ApiState {
                 graph.clone(),
                 op.clone(),
                 instance_id,
-                AUTO_PROGRESS_OPERATION_TIMEOUT,
+                Some(AUTO_PROGRESS_OPERATION_TIMEOUT),
             )
             .await
             .unwrap()
@@ -558,16 +548,28 @@ impl ApiState {
 
     pub async fn add_instance<F>(
         &self,
-        create_instance_from_seed: F,
+        create_instance: F,
         auto_progress: Option<AutoProgressConfig>,
         instance_http_gateway_config: Option<InstanceHttpGatewayConfig>,
     ) -> Result<(InstanceId, Topology, Option<HttpGatewayInfo>), String>
     where
-        F: FnOnce(u64) -> Result<PocketIc, String> + std::marker::Send + 'static,
+        F: FnOnce(u64, Option<u16>) -> Result<PocketIc, String> + std::marker::Send + 'static,
     {
         let seed = self.seed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let listener = if let Some(ref instance_http_gateway_config) = instance_http_gateway_config
+        {
+            Some(self.create_http_gateway_listener(
+                instance_http_gateway_config.ip_addr.clone(),
+                instance_http_gateway_config.port,
+            )?)
+        } else {
+            None
+        };
+        let gateway_port = listener
+            .as_ref()
+            .map(|listener| listener.local_addr().unwrap().port());
         // create the instance using `spawn_blocking` before acquiring a lock
-        let instance = tokio::task::spawn_blocking(move || create_instance_from_seed(seed))
+        let instance = tokio::task::spawn_blocking(move || create_instance(seed, gateway_port))
             .await
             .expect("Failed to create PocketIC instance")?;
         let topology = instance.topology();
@@ -594,7 +596,9 @@ impl ApiState {
                     domains: instance_http_gateway_config.domains,
                     https_config: instance_http_gateway_config.https_config,
                 };
-                let res = self.create_http_gateway(http_gateway_config).await;
+                let res = self
+                    .create_http_gateway(http_gateway_config, listener.unwrap())
+                    .await;
                 match res {
                     Ok(http_gateway_info) => Some(http_gateway_info),
                     Err(e) => {
@@ -641,9 +645,22 @@ impl ApiState {
         tasks.join_all().await;
     }
 
-    pub async fn create_http_gateway(
+    pub(crate) fn create_http_gateway_listener(
+        &self,
+        ip_addr: Option<String>,
+        port: Option<u16>,
+    ) -> Result<std::net::TcpListener, String> {
+        let ip_addr = ip_addr.clone().unwrap_or("127.0.0.1".to_string());
+        let port = port.unwrap_or_default();
+        let addr = format!("{}:{}", ip_addr, port);
+        std::net::TcpListener::bind(&addr)
+            .map_err(|e| format!("Failed to bind to address {}: {}", addr, e))
+    }
+
+    pub(crate) async fn create_http_gateway(
         &self,
         http_gateway_config: HttpGatewayConfig,
+        listener: std::net::TcpListener,
     ) -> Result<HttpGatewayInfo, String> {
         async fn proxy_handler(
             State((replica_url, client)): State<(String, Arc<dyn Client>)>,
@@ -675,15 +692,6 @@ impl ApiState {
         } else {
             None
         };
-
-        let ip_addr = http_gateway_config
-            .ip_addr
-            .clone()
-            .unwrap_or("127.0.0.1".to_string());
-        let port = http_gateway_config.port.unwrap_or_default();
-        let addr = format!("{}:{}", ip_addr, port);
-        let listener = std::net::TcpListener::bind(&addr)
-            .map_err(|e| format!("Failed to bind to address {}: {}", addr, e))?;
 
         let pocket_ic_server_port = self.port.unwrap();
         let replica_url = match http_gateway_config.forward_to {
@@ -963,24 +971,15 @@ impl ApiState {
     ///   indicate that the instance is busy with a previous operation.
     ///
     /// * If the instance is available and the computation exceeds a (short) timeout,
-    ///   [UpdateReply::Busy] is returned.
+    ///   [UpdateReply::Started] is returned.
     ///
-    /// * If the computation finished within the timeout, [UpdateReply::Output] is returned
-    ///   containing the result.
+    /// * If the computation finished within the timeout or no timeout is provided,
+    ///   [UpdateReply::Output] is returned containing the result.
     ///
     /// Operations are _not_ queued by default. Thus, if the instance is busy with an existing operation,
     /// the client has to retry until the operation is done. Some operations for which the client
     /// might be unable to retry are exceptions to this rule and they are queued up implicitly
     /// by a retry mechanism inside PocketIc.
-    pub async fn update<O>(&self, op: Arc<O>, instance_id: InstanceId) -> UpdateResult
-    where
-        O: Operation + Send + Sync + 'static,
-    {
-        self.update_with_timeout(op, instance_id, None).await
-    }
-
-    /// Same as [Self::update] except that the timeout can be specified manually. This is useful in
-    /// cases when clients want to enforce a long-running blocking call.
     pub async fn update_with_timeout<O>(
         &self,
         op: Arc<O>,
@@ -990,7 +989,6 @@ impl ApiState {
     where
         O: Operation + Send + Sync + 'static,
     {
-        let sync_wait_time = sync_wait_time.unwrap_or(self.sync_wait_time);
         Self::update_instances_with_timeout(
             self.instances.clone(),
             self.graph.clone(),
@@ -1008,7 +1006,7 @@ impl ApiState {
         graph: Arc<RwLock<HashMap<StateLabel, Computations>>>,
         op: Arc<O>,
         instance_id: InstanceId,
-        sync_wait_time: Duration,
+        sync_wait_time: Option<Duration>,
     ) -> UpdateResult
     where
         O: Operation + Send + Sync + 'static,
@@ -1021,7 +1019,7 @@ impl ApiState {
         );
         let instances_cloned = instances.clone();
         let instances_locked = instances_cloned.read().await;
-        let (bg_task, busy_outcome) = if let Some(instance_mutex) =
+        let (bg_task, started_outcome) = if let Some(instance_mutex) =
             instances_locked.get(instance_id)
         {
             let mut instance = instance_mutex.lock().await;
@@ -1088,7 +1086,6 @@ impl ApiState {
                         }
                     };
 
-                    // cache miss: replace pocket_ic instance in the vector with Busy
                     (bg_task, UpdateReply::Started { state_label, op_id })
                 }
             }
@@ -1111,19 +1108,29 @@ impl ApiState {
         // See: https://docs.rs/tokio/latest/tokio/task/fn.spawn_blocking.html
         let bg_handle = spawn_blocking(bg_task);
 
-        // if the operation returns "in time", we return the result, otherwise we indicate to the
-        // client that the instance is busy.
+        // if the operation returns "in time" or there's no timeout, we return the result,
+        // otherwise we indicate to the client that the operation has started.
         //
         // note: this assumes that cancelling the JoinHandle does not stop the execution of the
         // background task. This only works because the background thread, in this case, is a
         // kernel thread.
-        if let Ok(Ok(op_out)) = time::timeout(sync_wait_time, bg_handle).await {
+        if let Some(sync_wait_time) = sync_wait_time {
+            if let Ok(res) = time::timeout(sync_wait_time, bg_handle).await {
+                trace!(
+                    "update_with_timeout::synchronous instance_id={} op_id={}",
+                    instance_id,
+                    op_id,
+                );
+                return Ok(UpdateReply::Output(res.unwrap()));
+            }
+        } else {
+            let res = bg_handle.await;
             trace!(
                 "update_with_timeout::synchronous instance_id={} op_id={}",
                 instance_id,
                 op_id,
             );
-            return Ok(UpdateReply::Output(op_out));
+            return Ok(UpdateReply::Output(res.unwrap()));
         }
 
         trace!(
@@ -1131,6 +1138,6 @@ impl ApiState {
             instance_id,
             op_id,
         );
-        Ok(busy_outcome)
+        Ok(started_outcome)
     }
 }

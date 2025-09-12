@@ -1,4 +1,5 @@
 use crate::displayer::{DisplayProxy, DisplayerOf};
+use ic_heap_bytes::DeterministicHeapBytes;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
 use std::fmt;
@@ -301,5 +302,11 @@ impl<Entity, Repr: slog::Value> slog::Value for Id<Entity, Repr> {
         serializer: &mut dyn slog::Serializer,
     ) -> slog::Result {
         self.0.serialize(record, key, serializer)
+    }
+}
+
+impl<Entity, Repr: DeterministicHeapBytes> DeterministicHeapBytes for Id<Entity, Repr> {
+    fn deterministic_heap_bytes(&self) -> usize {
+        self.0.deterministic_heap_bytes()
     }
 }

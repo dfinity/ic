@@ -82,7 +82,7 @@ pub const IC_ROOT_PUB_KEY_PATH: &str = "nns_public_key.pem";
 /// For testing purposes, the bootstrapped nodes can be configured to have a
 /// node operator. The corresponding allowance is the number of configured
 /// initial nodes multiplied by this value.
-pub const INITIAL_NODE_ALLOWANCE_MULTIPLIER: usize = 4;
+pub const INITIAL_NODE_ALLOWANCE_MULTIPLIER: usize = 40;
 
 pub const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
 
@@ -299,6 +299,9 @@ pub struct IcConfig {
     /// give "readonly" access to all unassigned nodes.
     ssh_readonly_access_to_unassigned_nodes: Vec<String>,
 
+    /// Do not create an unassigned node record.
+    skip_unassigned_record: bool,
+
     /// Whether or not to assign canister ID allocation range for specified IDs to subnet.
     /// By default, it has the value 'false'.
     use_specified_ids_allocation_range: bool,
@@ -378,6 +381,10 @@ impl IcConfig {
         self.whitelisted_ports = whitelisted_ports;
     }
 
+    pub fn skip_unassigned_record(&mut self) {
+        self.skip_unassigned_record = true;
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new<P: AsRef<Path>>(
         target_dir: P,
@@ -396,6 +403,7 @@ impl IcConfig {
         Self {
             target_dir: PathBuf::from(target_dir.as_ref()),
             topology_config,
+            skip_unassigned_record: false,
             initial_replica_version_id: replica_version_id,
             generate_subnet_records,
             nns_subnet_index,
@@ -679,13 +687,15 @@ impl IcConfig {
             ssh_readonly_access: self.ssh_readonly_access_to_unassigned_nodes,
         };
 
-        write_registry_entry(
-            &data_provider,
-            self.target_dir.as_path(),
-            &make_unassigned_nodes_config_record_key(),
-            version,
-            unassigned_nodes_config,
-        );
+        if !self.skip_unassigned_record {
+            write_registry_entry(
+                &data_provider,
+                self.target_dir.as_path(),
+                &make_unassigned_nodes_config_record_key(),
+                version,
+                unassigned_nodes_config,
+            );
+        }
 
         data_provider.write_to_file(InitializedIc::registry_path_(self.target_dir.as_path()));
 

@@ -1,12 +1,12 @@
 use crate::common::rest::{
     ApiResponse, AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest,
     CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
-    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpFeatures, InitialTime, InstanceConfig,
-    InstanceHttpGatewayConfig, InstanceId, MockCanisterHttpResponse, NonmainnetFeatures,
-    RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult,
-    RawCycles, RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId,
-    RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
-    RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
+    HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpConfig, IcpFeatures, InitialTime,
+    InstanceConfig, InstanceHttpGatewayConfig, InstanceId, MockCanisterHttpResponse, RawAddCycles,
+    RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles,
+    RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
+    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime,
+    RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
 };
 #[cfg(windows)]
 use crate::wsl_path;
@@ -136,7 +136,7 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
         read_only_state_dir: Option<PathBuf>,
         mut state_dir: Option<PocketIcState>,
-        nonmainnet_features: NonmainnetFeatures,
+        icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
@@ -204,11 +204,11 @@ impl PocketIc {
             state_dir: state_dir
                 .as_ref()
                 .map(|state_dir| wsl_path(&state_dir.state_dir(), "state directory").into()),
-            nonmainnet_features: Some(nonmainnet_features),
+            icp_config: Some(icp_config),
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
             icp_features: Some(icp_features),
-            allow_incomplete_state: Some(false),
+            incomplete_state: None,
             initial_time,
         };
 
@@ -468,7 +468,9 @@ impl PocketIc {
         if let Some(url) = self.url() {
             return url;
         }
-        self.auto_progress().await;
+        if !self.auto_progress_enabled().await {
+            self.auto_progress().await;
+        }
         self.start_http_gateway(
             ip_addr.map(|ip_addr| ip_addr.to_string()),
             listen_at,
@@ -553,12 +555,6 @@ impl PocketIc {
     pub async fn stop_live(&mut self) {
         self.stop_http_gateway().await;
         self.stop_progress().await;
-    }
-
-    #[deprecated(note = "Use `stop_live` instead.")]
-    /// Use `stop_live` instead.
-    pub async fn make_deterministic(&mut self) {
-        self.stop_live().await;
     }
 
     /// Get the root key of this IC instance. Returns `None` if the IC has no NNS subnet.

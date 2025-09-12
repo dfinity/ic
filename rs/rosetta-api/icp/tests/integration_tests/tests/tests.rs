@@ -352,11 +352,14 @@ impl TestEnv {
         persistent_storage: bool,
     ) -> anyhow::Result<()> {
         let rosetta_state_directory;
-        if let Some(rosetta_context) = std::mem::take(&mut self.rosetta_context) {
-            rosetta_state_directory = rosetta_context.state_directory.clone();
-            rosetta_context.kill();
-        } else {
-            panic!("The Rosetta State directory should be set")
+        match std::mem::take(&mut self.rosetta_context) {
+            Some(rosetta_context) => {
+                rosetta_state_directory = rosetta_context.state_directory.clone();
+                rosetta_context.kill();
+            }
+            _ => {
+                panic!("The Rosetta State directory should be set")
+            }
         }
         assert!(rosetta_state_directory.exists());
         println!("Restarting rosetta with enable_rosetta_blocks={enable_rosetta_blocks}. State directory: {rosetta_state_directory:?}");

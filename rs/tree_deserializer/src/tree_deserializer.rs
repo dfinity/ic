@@ -11,7 +11,7 @@ use std::fmt;
 use std::marker::PhantomData;
 
 macro_rules! unsupported_type {
-    ($func:ident, $msg:expr) => {
+    ($func:ident, $msg:expr_2021) => {
         fn $func<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
         where
             V: Visitor<'de>,

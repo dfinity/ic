@@ -42,9 +42,11 @@ pub struct InternetComputer {
     pub ssh_readonly_access_to_unassigned_nodes: Vec<String>,
     name: String,
     pub bitcoind_addr: Option<SocketAddr>,
+    pub dogecoind_addr: Option<SocketAddr>,
     pub jaeger_addr: Option<SocketAddr>,
     pub socks_proxy: Option<String>,
     use_specified_ids_allocation_range: bool,
+    pub skip_unassigned_record: bool,
     pub api_boundary_nodes: Vec<Node>,
 }
 
@@ -196,6 +198,11 @@ impl InternetComputer {
         self
     }
 
+    pub fn with_dogecoind_addr(mut self, dogecoind_addr: SocketAddr) -> Self {
+        self.dogecoind_addr = Some(dogecoind_addr);
+        self
+    }
+
     pub fn with_jaeger_addr(mut self, jaeger_addr: SocketAddr) -> Self {
         self.jaeger_addr = Some(jaeger_addr);
         self
@@ -208,6 +215,11 @@ impl InternetComputer {
 
     pub fn with_socks_proxy(mut self, socks_proxy: String) -> Self {
         self.socks_proxy = Some(socks_proxy);
+        self
+    }
+
+    pub fn without_unassigned_config(mut self) -> Self {
+        self.skip_unassigned_record = true;
         self
     }
 
@@ -662,7 +674,7 @@ impl Subnet {
 
     pub fn with_random_height(mut self) -> Self {
         use rand::Rng;
-        self.initial_height = rand::thread_rng().gen();
+        self.initial_height = rand::thread_rng().r#gen();
         self
     }
 

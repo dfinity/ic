@@ -544,6 +544,15 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         swap().current_neurons_fund_participation_e8s() as f64,
         "The total amount of ICP contributed by the Community Fund",
     )?;
+    w.encode_gauge(
+        "swap_auto_finalization_failed",
+        if swap().has_auto_finalization_failed() {
+            1.0
+        } else {
+            0.0
+        },
+        "Whether the auto-finalization has failed (1.0 if failed, 0.0 if succeeded or not attempted)",
+    )?;
 
     Ok(())
 }

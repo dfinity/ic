@@ -31,7 +31,7 @@ use std::str::FromStr;
 use strum::EnumString;
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.5.0";
+pub const CONFIG_VERSION: &str = "1.6.0";
 
 /// List of field names that have been removed and should not be reused.
 pub static RESERVED_FIELD_NAMES: &[&str] = &[];
@@ -206,6 +206,7 @@ pub struct GuestOSDevSettings {
     pub malicious_behavior: Option<MaliciousBehavior>,
     pub query_stats_epoch_length: Option<u64>,
     pub bitcoind_addr: Option<String>,
+    pub dogecoind_addr: Option<String>,
     pub jaeger_addr: Option<String>,
     pub socks_proxy: Option<String>,
     // An optional hostname to override the deterministically generated hostname

@@ -340,7 +340,7 @@ fn bench_verify_threshold_sig_combined<M: Measurement, R: Rng + CryptoRng>(
 }
 
 fn random_bytes<R: Rng + CryptoRng>(n: u128, rng: &mut R) -> Vec<u8> {
-    (0..n).map(|_| rng.gen::<u8>()).collect()
+    (0..n).map(|_| rng.r#gen::<u8>()).collect()
 }
 
 fn random_node<R: Rng + CryptoRng>(nodes: &[NodeId], rng: &mut R) -> NodeId {

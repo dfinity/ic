@@ -83,6 +83,12 @@ impl PeerManager {
 
             let mut topology = self.get_latest_subnet_topology();
             let _timer = self.metrics.topology_watcher_update_duration.start_timer();
+            self.metrics
+                .earliest_registry_version
+                .set(topology.earliest_registry_version().get() as i64);
+            self.metrics
+                .latest_registry_version
+                .set(topology.latest_registry_version().get() as i64);
             // Notify watchers of latest shared state iff the latest topology is different to the old one.
             self.topology_sender
                 .send_if_modified(move |old_topology: &mut SubnetTopology| {
