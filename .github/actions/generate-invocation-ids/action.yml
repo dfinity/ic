@@ -27,6 +27,36 @@ runs:
       run: |
         set -euo pipefail
 
+        generate_uuid() {
+          case "$(uname -s)" in
+              Linux)
+                  if [[ -f /proc/sys/kernel/random/uuid ]]; then
+                      cat /proc/sys/kernel/random/uuid
+                  else
+                      # fallback if /proc/sys/kernel/random/uuid is missing
+                      uuidgen
+                  fi
+                  ;;
+              Darwin)
+                  uuidgen
+                  ;;
+              MINGW*|MSYS*|CYGWIN*)
+                  # Windows Git Bash / MSYS
+                  if command -v uuidgen &> /dev/null; then
+                      uuidgen
+                  else
+                      # TODO: how to do it properly on a windows???
+                      # fallback: use PowerShell to generate a GUID
+                      powershell.exe -Command "[guid]::NewGuid().ToString()"
+                  fi
+                  ;;
+              *)
+                  echo "Unsupported OS: $(uname -s)" >&2
+                  exit 1
+                  ;;
+          esac
+        }
+
         targets="${{ inputs.targets }}"
 
         # panic if empty

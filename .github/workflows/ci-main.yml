@@ -545,6 +545,7 @@ jobs:
             HEAD_SHA='${{ github.event.pull_request.head.sha }}'
 
             cd "$CI_PROJECT_DIR"
+            export BAZEL_BUILD_INVOCATION_ID="${{ steps.gen-uuids.outputs.build_id }}"
 
             # run full release build on "protected" branches
             if [[ "$RELEASE_BUILD" == 'true' ]]; then
@@ -596,8 +597,6 @@ jobs:
                 echo "No changes that require building IC-OS, binaries or canisters."
                 exit 0
             fi
-
-            export BAZEL_BUILD_INVOCATION_ID="${{ steps.gen-uuids.outputs.build_id }}"
 
             ci/container/build-ic.sh "${ARGS[@]}" --no-release
   build-determinism:
