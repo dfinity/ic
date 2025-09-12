@@ -38,7 +38,7 @@ fn point_multiexp_vartime_total(c: &mut Criterion) {
     let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
-        let mut group = c.benchmark_group(format!("crypto_point_multiexp_total_{}", curve_type));
+        let mut group = c.benchmark_group(format!("crypto_point_multiexp_total_{curve_type}"));
 
         {
             // fixed 2 arguments for special-purpose functions with a fixed number of arguments
@@ -111,7 +111,7 @@ fn point_multiexp_vartime_online(c: &mut Criterion) {
     let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
-        let mut group = c.benchmark_group(format!("crypto_point_multiexp_online_{}", curve_type));
+        let mut group = c.benchmark_group(format!("crypto_point_multiexp_online_{curve_type}"));
 
         {
             // fixed 2 arguments for special-purpose functions with a fixed number of arguments
@@ -186,10 +186,8 @@ fn point_multiexp_constant_time(c: &mut Criterion) {
     let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
-        let mut group = c.benchmark_group(format!(
-            "crypto_point_multiexp_constant_time_{}",
-            curve_type
-        ));
+        let mut group =
+            c.benchmark_group(format!("crypto_point_multiexp_constant_time_{curve_type}"));
 
         {
             // fixed 2 arguments for special-purpose functions with a fixed number of arguments
@@ -275,8 +273,7 @@ fn point_double_vs_addition(c: &mut Criterion) {
     let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
-        let mut group =
-            c.benchmark_group(format!("crypto_point_double_vs_addition_{}", curve_type));
+        let mut group = c.benchmark_group(format!("crypto_point_double_vs_addition_{curve_type}"));
 
         group.bench_function(BenchmarkId::new("double", 0), |b| {
             b.iter_with_setup(|| random_point(curve_type, rng), |p| p.double())
@@ -297,7 +294,7 @@ fn point_mul(c: &mut Criterion) {
     let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
-        let mut group = c.benchmark_group(format!("crypto_point_multiplication_{}", curve_type));
+        let mut group = c.benchmark_group(format!("crypto_point_multiplication_{curve_type}"));
 
         group.bench_function("multiply_arbitrary_point", |b| {
             b.iter_batched_ref(
@@ -413,7 +410,7 @@ fn point_serialize(c: &mut Criterion) {
     let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
-        let mut group = c.benchmark_group(format!("crypto_point_serialization_{}", curve_type));
+        let mut group = c.benchmark_group(format!("crypto_point_serialization_{curve_type}"));
 
         group.bench_function(BenchmarkId::new("serialize_compressed", 0), |b| {
             b.iter_with_setup(|| random_point(curve_type, rng), |p| p.serialize())

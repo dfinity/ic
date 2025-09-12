@@ -50,7 +50,7 @@ fn explode() {
 /// Implementation of explode.
 #[candid_method(query, rename = "explode")]
 fn explode_(message: String) {
-    panic!("Oh noez! {}", message);
+    panic!("Oh noez! {message}");
 }
 
 // Prints Candid interface definition, which should only contain get_build_metadata method.
@@ -96,9 +96,7 @@ mod test {
         ] {
             assert!(
                 result.contains(required_chunk),
-                "result: {} vs. required_chunk: {}",
-                result,
-                required_chunk
+                "result: {result} vs. required_chunk: {required_chunk}"
             );
         }
     }

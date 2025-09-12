@@ -1,6 +1,6 @@
 use candid::Nat;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{ExplosiveTokens, E8, ONE_DAY_SECONDS, ONE_TRILLION};
+use ic_nervous_system_common::{E8, ExplosiveTokens, ONE_DAY_SECONDS, ONE_TRILLION};
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
 use ic_nervous_system_proto::pb::v1::{
     Canister, Duration, GlobalTimeOfDay, Image, Percentage, Tokens,
@@ -8,16 +8,17 @@ use ic_nervous_system_proto::pb::v1::{
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance_api::{
+    CreateServiceNervousSystem, MakeProposalRequest, ProposalActionRequest,
     create_service_nervous_system::{
+        GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
         governance_parameters::VotingRewardParameters,
         initial_token_distribution::{
-            developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
-            TreasuryDistribution,
+            DeveloperDistribution, SwapDistribution, TreasuryDistribution,
+            developer_distribution::NeuronDistribution,
         },
         swap_parameters::NeuronBasketConstructionParameters,
-        GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
     },
-    manage_neuron_response, CreateServiceNervousSystem, MakeProposalRequest, ProposalActionRequest,
+    manage_neuron_response,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -32,8 +33,8 @@ use ic_nns_test_utils::{
     },
 };
 use ic_sns_governance::pb::v1::{
-    governance::Mode::{Normal, PreInitializationSwap},
     ListNeurons,
+    governance::Mode::{Normal, PreInitializationSwap},
 };
 use ic_sns_swap::pb::v1::Lifecycle;
 use ic_sns_test_utils::state_test_helpers::{
@@ -252,7 +253,7 @@ impl SnsInitializationFlowTestSetup {
                     None => panic!("Unable to find proposal ID!"),
                 }
             }
-            _ => panic!("Unable to submit the proposal: {:?}", response),
+            _ => panic!("Unable to submit the proposal: {response:?}"),
         }
     }
 
@@ -297,8 +298,7 @@ impl SnsInitializationFlowTestSetup {
             }
         }
         panic!(
-            "SNS Swap({}) never had its finalization status set during automatic swap finalization",
-            swap_canister_id
+            "SNS Swap({swap_canister_id}) never had its finalization status set during automatic swap finalization"
         );
     }
 }
@@ -440,8 +440,7 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
     // With Matched Funding, this field remains unset set until the swap finalization phase.
     assert!(
         cf_participants.is_empty(),
-        "Unexpected Neurons' Fund participants: {:#?}",
-        cf_participants
+        "Unexpected Neurons' Fund participants: {cf_participants:#?}"
     );
 
     // Step 3: Advance time to open the swap for participation, and then finish it
@@ -493,9 +492,11 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
         &canister_id_or_panic(test_sns.swap_canister_id),
     );
     assert_eq!(get_lifecycle_response.lifecycle(), Lifecycle::Committed);
-    assert!(get_lifecycle_response
-        .decentralization_swap_termination_timestamp_seconds
-        .is_some());
+    assert!(
+        get_lifecycle_response
+            .decentralization_swap_termination_timestamp_seconds
+            .is_some()
+    );
 
     // Step 4: Verify the Swap auto-finalizes and the SNS is in the correct state
     sns_initialization_flow_test
@@ -801,9 +802,11 @@ fn test_one_proposal_sns_initialization_success_without_neurons_fund_participati
         &canister_id_or_panic(test_sns.swap_canister_id),
     );
     assert_eq!(get_lifecycle_response.lifecycle(), Lifecycle::Committed);
-    assert!(get_lifecycle_response
-        .decentralization_swap_termination_timestamp_seconds
-        .is_some());
+    assert!(
+        get_lifecycle_response
+            .decentralization_swap_termination_timestamp_seconds
+            .is_some()
+    );
 
     // Step 4: Verify the Swap auto-finalizes and the SNS is in the correct state
     sns_initialization_flow_test

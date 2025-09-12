@@ -124,7 +124,7 @@ fn parse_key_config_requests_option(
     };
 
     let raw: Vec<BTreeMap<String, String>> = serde_json::from_str(value)
-        .unwrap_or_else(|err| panic!("Cannot parse `{}` as JSON: {}", value, err));
+        .unwrap_or_else(|err| panic!("Cannot parse `{value}` as JSON: {err}"));
 
     raw.iter()
         .map(|btree| {
@@ -132,7 +132,7 @@ fn parse_key_config_requests_option(
                 .get("subnet_id")
                 .map(|key| {
                     key.parse::<PrincipalId>()
-                        .unwrap_or_else(|_| panic!("Could not parse subnet_id: '{}'", key))
+                        .unwrap_or_else(|_| panic!("Could not parse subnet_id: '{key}'"))
                 })
                 .expect("Each element of the JSON object must specify a 'subnet_id'."));
 
@@ -140,7 +140,7 @@ fn parse_key_config_requests_option(
                 .get("key_id")
                 .map(|key| {
                     key.parse::<MasterPublicKeyId>()
-                        .unwrap_or_else(|_| panic!("Could not parse key_id: '{}'", key))
+                        .unwrap_or_else(|_| panic!("Could not parse key_id: '{key}'"))
                 })
                 .expect("Each element of the JSON object must specify a 'key_id'."));
 
@@ -171,7 +171,7 @@ impl ProposeToUpdateRecoveryCupCmd {
         subnet_id: SubnetId,
     ) -> do_recover_subnet::RecoverSubnetPayload {
         let state_hash = hex::decode(self.state_hash.clone())
-            .unwrap_or_else(|err| panic!("The provided state hash was invalid: {}", err));
+            .unwrap_or_else(|err| panic!("The provided state hash was invalid: {err}"));
 
         let replacement_nodes = self
             .replacement_nodes
@@ -249,7 +249,7 @@ mod tests {
             height,
             time_ns,
             state_hash: hex::decode(state_hash)
-                .unwrap_or_else(|err| panic!("Invalid state hash: {}", err)),
+                .unwrap_or_else(|err| panic!("Invalid state hash: {err}")),
             replacement_nodes: None,
             registry_store_uri: None,
             chain_key_config: None,

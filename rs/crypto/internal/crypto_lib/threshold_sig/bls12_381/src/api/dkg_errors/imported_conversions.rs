@@ -8,8 +8,8 @@ mod create_dealing_error_conversions_v2 {
     // TODO (CRP-818): Remove the v2 and merge.
     use crate::api::ni_dkg_errors::{CspDkgCreateDealingError, CspDkgCreateReshareDealingError};
     use ic_types::crypto::error::{InternalError, InvalidArgumentError};
-    use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::MalformedFsEncryptionPublicKeyError;
+    use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
 
     impl From<CspDkgCreateDealingError> for DkgCreateDealingError {
         fn from(csp_create_dealing_error: CspDkgCreateDealingError) -> Self {
@@ -33,8 +33,7 @@ mod create_dealing_error_conversions_v2 {
                         MalformedFsEncryptionPublicKeyError {
                             // TODO (CRP-576): implement `Display`?
                             internal_error: format!(
-                                "error for receiver index {}: {:?}",
-                                receiver_index, error
+                                "error for receiver index {receiver_index}: {error:?}"
                             ),
                         },
                     )
@@ -46,15 +45,14 @@ mod create_dealing_error_conversions_v2 {
                 CspDkgCreateReshareDealingError::UnsupportedAlgorithmId(algorithm_id) => {
                     // This would be an IDKM implementation error, so we panic:
                     panic!(
-                        "{}UnsupportedAlgorithmId: The algorithm id {:?} is unsupported.",
-                        panic_prefix, algorithm_id
+                        "{panic_prefix}UnsupportedAlgorithmId: The algorithm id {algorithm_id:?} is unsupported."
                     );
                 }
                 CspDkgCreateReshareDealingError::InvalidThresholdError(error) => {
                     // This would be an IDKM implementation error, since the threshold invariants
                     // are checked upon config creation.
                     // TODO (CRP-576): implement `Display`?
-                    panic!("{}InvalidThresholdError: {:?}", panic_prefix, error);
+                    panic!("{panic_prefix}InvalidThresholdError: {error:?}");
                 }
                 CspDkgCreateReshareDealingError::MisnumberedReceiverError {
                     receiver_index,
@@ -63,23 +61,19 @@ mod create_dealing_error_conversions_v2 {
                     // This would be an IDKM implementation error, since the IDKM code should number
                     // the receivers correctly.
                     panic!(
-                        "{}MisnumberedReceiverError: receiver index {}, number of receivers: {}",
-                        panic_prefix, receiver_index, number_of_receivers
+                        "{panic_prefix}MisnumberedReceiverError: receiver index {receiver_index}, number of receivers: {number_of_receivers}"
                     );
                 }
                 CspDkgCreateReshareDealingError::SizeError(error) => {
                     // Will not happen in practice, so we panic:
                     // TODO (CRP-576): implement `Display`?
-                    panic!("{}SizeError: {:?}", panic_prefix, error);
+                    panic!("{panic_prefix}SizeError: {error:?}");
                 }
                 CspDkgCreateReshareDealingError::MalformedReshareSecretKeyError(error) => {
                     // This would be an implementation error, since we inserted a key that is
                     // malformed:
                     // TODO (CRP-576): implement `Display`?
-                    panic!(
-                        "{}MalformedReshareSecretKeyError: {:?}",
-                        panic_prefix, error
-                    );
+                    panic!("{panic_prefix}MalformedReshareSecretKeyError: {error:?}");
                 }
                 CspDkgCreateReshareDealingError::TransientInternalError(error) => {
                     DkgCreateDealingError::TransientInternalError(InternalError {
@@ -100,8 +94,8 @@ mod create_dealing_error_conversions_v2 {
 mod verify_dealing_error_conversions {
 
     use crate::api::ni_dkg_errors::{CspDkgVerifyDealingError, CspDkgVerifyReshareDealingError};
-    use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::MalformedFsEncryptionPublicKeyError;
+    use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
 
     impl From<CspDkgVerifyDealingError> for DkgVerifyDealingError {
         fn from(csp_verify_dealing_error: CspDkgVerifyDealingError) -> Self {
@@ -125,8 +119,7 @@ mod verify_dealing_error_conversions {
                         MalformedFsEncryptionPublicKeyError {
                             // TODO (CRP-576): implement `Display`?
                             internal_error: format!(
-                                "error for receiver index {}: {:?}",
-                                receiver_index, error
+                                "error for receiver index {receiver_index}: {error:?}"
                             ),
                         },
                     )
@@ -147,15 +140,14 @@ mod verify_dealing_error_conversions {
                 CspDkgVerifyReshareDealingError::UnsupportedAlgorithmId(algorithm_id) => {
                     // This would be an IDKM implementation error, so we panic:
                     panic!(
-                        "{}UnsupportedAlgorithmId: The algorithm id {:?} is unsupported.",
-                        panic_prefix, algorithm_id
+                        "{panic_prefix}UnsupportedAlgorithmId: The algorithm id {algorithm_id:?} is unsupported."
                     );
                 }
                 CspDkgVerifyReshareDealingError::InvalidThresholdError(error) => {
                     // This would be an IDKM implementation error, since the threshold invariants
                     // are checked upon config creation.
                     // TODO (CRP-576): implement `Display`?
-                    panic!("{}InvalidThresholdError: {:?}", panic_prefix, error);
+                    panic!("{panic_prefix}InvalidThresholdError: {error:?}");
                 }
                 CspDkgVerifyReshareDealingError::MisnumberedReceiverError {
                     receiver_index,
@@ -164,14 +156,13 @@ mod verify_dealing_error_conversions {
                     // This would be an IDKM implementation error, since the IDKM code should number
                     // the receivers correctly.
                     panic!(
-                        "{}MisnumberedReceiverError: receiver index {}, number of receivers: {}",
-                        panic_prefix, receiver_index, number_of_receivers
+                        "{panic_prefix}MisnumberedReceiverError: receiver index {receiver_index}, number of receivers: {number_of_receivers}"
                     );
                 }
                 CspDkgVerifyReshareDealingError::SizeError(error) => {
                     // Will not happen in practice, so we panic:
                     // TODO (CRP-576): implement `Display`?
-                    panic!("{}SizeError: {:?}", panic_prefix, error);
+                    panic!("{panic_prefix}SizeError: {error:?}");
                 }
             }
         }
@@ -189,7 +180,7 @@ mod retain_active_keys_error_conversions {
                 // This would be an implementation error in IDKM since the algorithm ID is hard
                 // coded:
                 CspDkgUpdateFsEpochError::UnsupportedAlgorithmId(id) => {
-                    panic!("Implementation error - unknown algorithm ID: {:?}", id)
+                    panic!("Implementation error - unknown algorithm ID: {id:?}")
                 }
                 CspDkgUpdateFsEpochError::FsKeyNotInSecretKeyStoreError(e) => {
                     DkgKeyRemovalError::FsKeyNotInSecretKeyStoreError(e)

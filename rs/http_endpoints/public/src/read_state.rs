@@ -12,7 +12,7 @@ fn parse_principal_id(principal_id: &[u8]) -> Result<PrincipalId, HttpError> {
         Ok(principal_id) => Ok(principal_id),
         Err(err) => Err(HttpError {
             status: StatusCode::BAD_REQUEST,
-            message: format!("Could not parse principal ID: {}.", err),
+            message: format!("Could not parse principal ID: {err}."),
         }),
     }
 }
@@ -25,8 +25,7 @@ fn verify_principal_ids(
         return Err(HttpError {
             status: StatusCode::BAD_REQUEST,
             message: format!(
-                "Effective principal id in URL {} does not match requested principal id: {}.",
-                effective_principal_id, principal_id
+                "Effective principal id in URL {effective_principal_id} does not match requested principal id: {principal_id}."
             ),
         });
     }

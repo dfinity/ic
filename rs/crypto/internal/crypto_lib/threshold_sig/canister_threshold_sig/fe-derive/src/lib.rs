@@ -1,7 +1,7 @@
 use num_bigint_dig::{BigUint, ModInverse};
 use num_traits::{
-    identities::{One, Zero},
     ToPrimitive,
+    identities::{One, Zero},
 };
 use quote::quote;
 use std::collections::BTreeMap;
@@ -187,7 +187,7 @@ pub fn derive_field_element(input: proc_macro::TokenStream) -> proc_macro::Token
 
 fn define_fe_struct(config: &FieldElementConfig) -> proc_macro2::TokenStream {
     let ident = config.ident.clone();
-    let ident_str = format!("{}", ident);
+    let ident_str = format!("{ident}");
     let limbs = config.limbs;
 
     let modulus_limbs = biguint_as_u64s(&config.modulus, limbs);

@@ -1,11 +1,11 @@
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_test_utils_tls::CipherSuite;
+use ic_crypto_test_utils_tls::TlsVersion;
 use ic_crypto_test_utils_tls::registry::TlsRegistry;
 use ic_crypto_test_utils_tls::temp_crypto_component_with_tls_keys;
 use ic_crypto_test_utils_tls::test_client::{Client, ClientBuilder, TlsTestClientRunError};
 use ic_crypto_test_utils_tls::test_server::{Server, ServerBuilder, TlsTestServerRunError};
-use ic_crypto_test_utils_tls::CipherSuite;
-use ic_crypto_test_utils_tls::TlsVersion;
 use ic_crypto_tls_interfaces::AuthenticatedPeer;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
@@ -23,7 +23,7 @@ const CLIENT_ID_3: NodeId = NODE_5;
 
 mod handshakes {
     use super::*;
-    use ic_crypto_test_utils_tls::x509_certificates::{x509_public_key_cert, CertWithPrivateKey};
+    use ic_crypto_test_utils_tls::x509_certificates::{CertWithPrivateKey, x509_public_key_cert};
 
     #[test]
     fn should_perform_tls_handshake() {
@@ -169,7 +169,7 @@ mod server {
     use super::*;
     use ic_crypto_test_utils_tls::custom_client::CustomClient;
     use ic_crypto_test_utils_tls::x509_certificates::{
-        ed25519_key_pair, x509_public_key_cert, CertWithPrivateKey,
+        CertWithPrivateKey, ed25519_key_pair, x509_public_key_cert,
     };
 
     #[test]
@@ -731,7 +731,7 @@ mod client {
     use super::*;
     use ic_crypto_test_utils_tls::custom_server::CustomServer;
     use ic_crypto_test_utils_tls::x509_certificates::{
-        ed25519_key_pair, x509_public_key_cert, CertWithPrivateKey,
+        CertWithPrivateKey, ed25519_key_pair, x509_public_key_cert,
     };
 
     #[test]

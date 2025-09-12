@@ -1,6 +1,7 @@
 use prometheus::{
+    Gauge,
     core::{Collector, Desc, Opts},
-    proto, Gauge,
+    proto,
 };
 
 /// The process IDs type.

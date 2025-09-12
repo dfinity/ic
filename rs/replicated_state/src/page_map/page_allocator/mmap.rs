@@ -4,14 +4,14 @@ use crate::page_map::{
 
 use super::page_allocator_registry::PageAllocatorRegistry;
 use super::{
-    MmapPageSerialization, Page, PageAllocatorSerialization, PageDeltaSerialization,
-    PageValidation, ALLOCATED_PAGES,
+    ALLOCATED_PAGES, MmapPageSerialization, Page, PageAllocatorSerialization,
+    PageDeltaSerialization, PageValidation,
 };
 use cvt::{cvt, cvt_r};
-use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
+use ic_sys::{PAGE_SIZE, PageBytes, PageIndex, page_bytes_from_ptr};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use libc::{c_void, close};
-use nix::sys::mman::{madvise, mmap, munmap, MapFlags, MmapAdvise, ProtFlags};
+use nix::sys::mman::{MapFlags, MmapAdvise, ProtFlags, madvise, mmap, munmap};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::os::raw::c_int;
@@ -779,9 +779,8 @@ unsafe fn madvise_remove(start_ptr: *mut u8, end_ptr: *mut u8) {
         // SAFETY: the range is mapped as shared and writable by precondition.
         madvise(ptr, size as usize, advise).unwrap_or_else(|err| {
             panic!(
-                "Failed to madvise a page range {:?}..{:?}:
-        {}",
-                start_ptr, end_ptr, err
+                "Failed to madvise a page range {start_ptr:?}..{end_ptr:?}:
+        {err}"
             )
         });
     }
@@ -843,10 +842,7 @@ unsafe fn get_file_length(fd: RawFd) -> FileOffset {
     unsafe {
         let mut stat = std::mem::MaybeUninit::<libc::stat64>::uninit();
         cvt(libc::fstat64(fd, stat.as_mut_ptr())).unwrap_or_else(|err| {
-            panic!(
-                "MmapPageAllocator failed to get the length of the file #{}: {}",
-                fd, err
-            )
+            panic!("MmapPageAllocator failed to get the length of the file #{fd}: {err}")
         });
         stat.assume_init().st_size
     }

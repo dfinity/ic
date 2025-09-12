@@ -1,14 +1,14 @@
 use bit_vec::BitVec;
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug};
 use ic_replicated_state::{
-    page_map::{FileDescriptor, MemoryInstructions},
     PageIndex, PageMap,
+    page_map::{FileDescriptor, MemoryInstructions},
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{NumBytes, NumOsPages};
 use nix::{
     errno::Errno,
-    sys::mman::{mmap, mprotect, MapFlags, ProtFlags},
+    sys::mman::{MapFlags, ProtFlags, mmap, mprotect},
 };
 use std::{
     cell::{Cell, RefCell},
@@ -748,9 +748,7 @@ fn map_unaccessed_pages(
     debug_assert!(
         min_prefetch_range.start >= max_prefetch_range.start
             && min_prefetch_range.end <= max_prefetch_range.end,
-        "Error checking min_prefetch_range:{:?} ⊆ max_prefetch_range:{:?}",
-        min_prefetch_range,
-        max_prefetch_range
+        "Error checking min_prefetch_range:{min_prefetch_range:?} ⊆ max_prefetch_range:{max_prefetch_range:?}"
     );
 
     let instructions = tracker

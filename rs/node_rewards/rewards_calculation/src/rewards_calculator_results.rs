@@ -132,20 +132,16 @@ impl fmt::Display for RewardCalculatorError {
                 )
             }
             RewardCalculatorError::RewardPeriodError(err) => {
-                write!(f, "Reward period error: {}", err)
+                write!(f, "Reward period error: {err}")
             }
             RewardCalculatorError::ProviderNotFound(provider_id) => {
-                write!(f, "Node Provider: {} not found", provider_id)
+                write!(f, "Node Provider: {provider_id} not found")
             }
             RewardCalculatorError::NodeNotInRewardables(node_id) => {
-                write!(f, "Node: {} has metrics but is not rewardable", node_id)
+                write!(f, "Node: {node_id} has metrics but is not rewardable")
             }
             RewardCalculatorError::RewardableNodeOutOfRange(node_id) => {
-                write!(
-                    f,
-                    "Node: {} is not rewardable in the reward period",
-                    node_id
-                )
+                write!(f, "Node: {node_id} is not rewardable in the reward period")
             }
         }
     }

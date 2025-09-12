@@ -1,9 +1,9 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use clap::{Parser, Subcommand};
-use config::{deserialize_config, DEFAULT_HOSTOS_CONFIG_OBJECT_PATH};
+use config::{DEFAULT_HOSTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
+use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
 use network::generate_network_config;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use std::path::Path;
@@ -101,7 +101,7 @@ pub fn main() -> Result<()> {
                 node_type,
             );
 
-            eprintln!("Using generated mac address {}", generated_mac);
+            eprintln!("Using generated mac address {generated_mac}");
 
             let Ipv6Config::Deterministic(ipv6_config) =
                 &hostos_config.network_settings.ipv6_config
@@ -130,7 +130,7 @@ pub fn main() -> Result<()> {
                 IpVariant::V6,
                 node_type,
             );
-            println!("{}", generated_mac);
+            println!("{generated_mac}");
             Ok(())
         }
         None => Err(anyhow!(
