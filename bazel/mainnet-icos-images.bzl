@@ -34,17 +34,19 @@ def get_mainnet_setupos_images(versions):
         )
 
 def get_mainnet_guestos_images(versions, extract_guestos):
-    for (name, version) in versions:
+    for (name, version, measurements) in versions:
         _get_mainnet_guestos_image(
             name = name,
             setupos_url = icos_image_download_url(version, "setup-os", False, False),
             extract_guestos = extract_guestos,
+            measurements = json.encode(measurements),
         )
 
         _get_mainnet_guestos_image(
             name = name + "_dev",
             setupos_url = icos_dev_image_download_url(version, "setup-os", False),
             extract_guestos = extract_guestos,
+            measurements = json.encode(measurements),
         )
 
 _DEFS_CONTENTS = '''\
@@ -65,16 +67,24 @@ def extract_image(name, extract_guestos, **kwargs):
 
 _BUILD_CONTENTS = """\
 load(":defs.bzl", "extract_image")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
 
 package(default_visibility = ["//visibility:public"])
 
 extract_image("{name}", "{extract_guestos}")
+
+write_file(
+    name = "launch_measurements",
+    out = "launch-measurements.json",
+    content = ['''{measurements}'''],
+)
 """
 
 _attrs = {
     "extract_guestos": attr.label(mandatory = True, doc = "Tool used to extract a GuestOS image from a SetupOS image."),
     "setupos_url": attr.string(mandatory = True, doc = "URL to the SetupOS image to extract from"),
     "setupos_integrity": attr.string(doc = "Optional integrity for the image. If unset, it will be set after the image is downloaded."),
+    "measurements": attr.string(mandatory = True, doc = "Launch measurements for the GuestOS version extracted."),
 }
 
 def _copy_attrs(repository_ctx, attrs):
@@ -97,7 +107,7 @@ def _get_mainnet_guestos_image_impl(repository_ctx):
     )
 
     repository_ctx.file("defs.bzl", content = _DEFS_CONTENTS)
-    repository_ctx.file("BUILD.bazel", content = _BUILD_CONTENTS.format(name = repository_ctx.name, extract_guestos = repository_ctx.attr.extract_guestos))
+    repository_ctx.file("BUILD.bazel", content = _BUILD_CONTENTS.format(name = repository_ctx.name, measurements = repository_ctx.attr.measurements, extract_guestos = repository_ctx.attr.extract_guestos))
 
     new_attrs = _copy_attrs(repository_ctx, _attrs)
     new_attrs.update({"setupos_integrity": download_info.integrity})
