@@ -14,11 +14,63 @@ use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::cmp::max;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 pub mod results;
 mod test_utils;
 pub mod v1;
+
+// ================================================================================================
+// VERSIONING SAFETY WARNING
+// ================================================================================================
+//
+// This PerformanceBasedAlgorithm trait defines the core reward calculation interface.
+//
+// The trait methods in this module should NOT be modified directly as they serve as the
+// stable API contract for all reward calculation versions. Instead, new algorithm versions
+// should be created by implementing this trait with different behavior, as demonstrated
+// by RewardsCalculationV1.
+//
+// This approach ensures:
+//
+// 1. **API Stability**: The trait interface remains consistent across versions
+// 2. **Backward Compatibility**: Existing implementations continue to work
+// 3. **Version Isolation**: Each version can have its own calculation logic
+// 4. **Historical Reproducibility**: Past calculations remain verifiable
+//
+//
+// To create a new algorithm version:
+// 1. Create a new module (e.g., v2.rs)
+// 2. Implement the PerformanceBasedAlgorithm trait
+// 3. Override only the methods that need different behavior
+// 4. Keep the same trait interface for compatibility
+// ================================================================================================
+
+#[derive(Default)]
+struct FailureRateResults {
+    subnets_fr: BTreeMap<SubnetId, Percent>,
+    nodes_metrics_daily: BTreeMap<NodeId, NodeMetricsDaily>,
+}
+
+#[derive(Default)]
+struct PerformanceMultiplierResults {
+    reward_reduction: BTreeMap<NodeId, Percent>,
+    performance_multiplier: BTreeMap<NodeId, Percent>,
+}
+
+#[derive(Default)]
+struct BaseRewardsResults {
+    base_rewards: Vec<BaseRewards>,
+    base_rewards_type3: Vec<BaseRewardsType3>,
+    base_rewards_per_node: BTreeMap<NodeId, XDRPermyriad>,
+}
+
+type RewardsCoefficientPercent = Decimal;
+
+#[derive(Default)]
+struct AdjustedRewardsResults {
+    adjusted_rewards: BTreeMap<NodeId, XDRPermyriad>,
+}
 
 #[cfg(target_arch = "wasm32")]
 fn current_time() -> Time {
@@ -93,24 +145,17 @@ trait PerformanceBasedAlgorithm {
         data_provider: impl DataProvider,
     ) -> Result<RewardsCalculatorResults, String> {
         Self::validate_reward_period(from_day, to_day)?;
+
+        let reward_period = from_day.days_until(to_day)?;
         let mut total_rewards_per_provider = BTreeMap::new();
         let mut daily_results = BTreeMap::new();
-        let reward_period = from_day.days_until(to_day)?;
 
+        // Process each day in the reward period
         for day in reward_period {
-            let rewards_table = data_provider.get_rewards_table(&day)?;
-            let metrics_by_subnet = data_provider.get_daily_metrics_by_subnet(&day)?;
-            let providers_rewardable_nodes = if let Some(provider_id) = node_provider_filter {
-                data_provider.get_provider_rewardable_nodes(&day, &provider_id)?
-            } else {
-                data_provider.get_rewardable_nodes(&day)?
-            };
-            let result_for_day = Self::calculate_daily_rewards(
-                rewards_table,
-                metrics_by_subnet,
-                providers_rewardable_nodes,
-            );
+            let result_for_day =
+                Self::calculate_daily_rewards(&data_provider, &day, &node_provider_filter)?;
 
+            // Accumulate total rewards per provider across all days
             for (provider_id, provider_rewards) in &result_for_day.provider_results {
                 total_rewards_per_provider
                     .entry(*provider_id)
@@ -130,88 +175,115 @@ trait PerformanceBasedAlgorithm {
             daily_results,
         })
     }
+
     fn calculate_daily_rewards(
-        rewards_table: NodeRewardsTable,
-        metrics_by_subnet: BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>>,
-        providers_rewardable_nodes: BTreeMap<PrincipalId, Vec<RewardableNode>>,
-    ) -> DailyResults {
+        data_provider: &impl DataProvider,
+        day: &DayUtc,
+        node_provider_filter: &Option<PrincipalId>,
+    ) -> Result<DailyResults, String> {
+        let rewards_table = data_provider.get_rewards_table(day)?;
+        let metrics_by_subnet = data_provider.get_daily_metrics_by_subnet(day)?;
+        let providers_rewardable_nodes = if let Some(provider_id) = node_provider_filter {
+            data_provider.get_provider_rewardable_nodes(day, provider_id)?
+        } else {
+            data_provider.get_rewardable_nodes(day)?
+        };
         let mut results_per_provider = BTreeMap::new();
 
-        // Step 0: Pre-compute subnets and nodes failure rates
-        let Step0Results {
+        // Calculate failure rates for subnets and individual nodes
+        let FailureRateResults {
             subnets_fr,
             mut nodes_metrics_daily,
-        } = Self::step_0_subnets_nodes_fr(metrics_by_subnet);
+        } = Self::calculate_failure_rates(metrics_by_subnet);
 
+        // Process each provider's nodes
         for (provider_id, rewardable_nodes) in providers_rewardable_nodes {
-            // Step 1: Extract Provider Nodes metrics daily
-            let mut provider_nodes_metrics_daily = BTreeMap::new();
-            for node in &rewardable_nodes {
-                if let Some(metrics) = nodes_metrics_daily.remove(&node.node_id) {
-                    provider_nodes_metrics_daily.insert(node.node_id, metrics.clone());
-                }
-            }
-
-            // Step 2: Extrapolated failure rate for each provider
-            let relative_nodes_fr = provider_nodes_metrics_daily
-                .iter()
-                .map(|(node, metrics)| (*node, metrics.relative_fr))
-                .collect::<BTreeMap<_, _>>();
-            let all_relative_frs = relative_nodes_fr.values().cloned().collect::<Vec<_>>();
-            let extrapolated_fr = avg(&all_relative_frs).unwrap_or_default();
-
-            // Step 3: Compute performance multiplier for each node for each provider
-            let Step3Results {
-                reward_reduction,
-                performance_multiplier,
-            } = Self::step_3_performance_multiplier(
-                &rewardable_nodes,
-                &relative_nodes_fr,
-                &extrapolated_fr,
-            );
-
-            // Step 4: Compute base rewards for each node based on its region and node type
-            let Step4Results {
-                base_rewards_per_node,
-                base_rewards,
-                base_rewards_type3,
-            } = Self::step_4_compute_base_rewards_type_region(&rewards_table, &rewardable_nodes);
-
-            // Step 5: Adjusted rewards for all the nodes based on their performance
-            let Step5Results { adjusted_rewards } = Self::step_5_adjust_node_rewards(
-                &rewardable_nodes,
-                &base_rewards_per_node,
-                &performance_multiplier,
-            );
-
-            // Step 6: Construct provider results
-            let provider_results = Self::step_6_construct_provider_results(
+            let provider_results = Self::calculate_provider_rewards(
+                &rewards_table,
+                &mut nodes_metrics_daily,
                 rewardable_nodes,
-                provider_nodes_metrics_daily,
-                extrapolated_fr,
-                reward_reduction,
-                performance_multiplier,
-                base_rewards_per_node,
-                adjusted_rewards,
-                base_rewards,
-                base_rewards_type3,
             );
-
             results_per_provider.insert(provider_id, provider_results);
         }
 
-        DailyResults {
+        Ok(DailyResults {
             subnets_fr,
             provider_results: results_per_provider,
+        })
+    }
+
+    fn calculate_provider_rewards(
+        rewards_table: &NodeRewardsTable,
+        nodes_metrics_daily: &mut BTreeMap<NodeId, NodeMetricsDaily>,
+        rewardable_nodes: Vec<RewardableNode>,
+    ) -> NodeProviderRewards {
+        let mut provider_nodes_metrics_daily = BTreeMap::new();
+        for node in &rewardable_nodes {
+            if let Some(metrics) = nodes_metrics_daily.remove(&node.node_id) {
+                provider_nodes_metrics_daily.insert(node.node_id, metrics);
+            }
         }
+
+        let relative_nodes_fr: BTreeMap<NodeId, Decimal> = provider_nodes_metrics_daily
+            .iter()
+            .map(|(node_id, metrics)| (*node_id, metrics.relative_fr))
+            .collect();
+
+        // Calculate extrapolated failure rate for unassigned nodes
+        // This is the average of relative failure rates for assigned nodes
+        let extrapolated_fr = if !relative_nodes_fr.is_empty() {
+            let values: Vec<Decimal> = relative_nodes_fr.values().cloned().collect();
+            avg(&values).unwrap_or_default()
+        } else {
+            Decimal::ZERO
+        };
+
+        // Calculate performance multipliers based on failure rates
+        // Assigned nodes use actual failure rate, unassigned nodes use extrapolated rate
+        let PerformanceMultiplierResults {
+            reward_reduction,
+            performance_multiplier,
+        } = Self::calculate_performance_multipliers(
+            &rewardable_nodes,
+            &relative_nodes_fr,
+            &extrapolated_fr,
+        );
+
+        // Calculate base rewards for each node based on region and node type
+        // Handles special logic for Type3 nodes (grouped by country, with reduction coefficients)
+        let BaseRewardsResults {
+            base_rewards_per_node,
+            base_rewards,
+            base_rewards_type3,
+        } = Self::calculate_base_rewards_by_region_and_type(rewards_table, &rewardable_nodes);
+
+        // Apply performance multipliers to base rewards to get final daily rewards
+        let AdjustedRewardsResults { adjusted_rewards } = Self::apply_performance_adjustments(
+            &rewardable_nodes,
+            &base_rewards_per_node,
+            &performance_multiplier,
+        );
+
+        // Combine all calculated values into the final NodeProviderRewards structure
+        Self::build_provider_rewards_summary(
+            rewardable_nodes,
+            provider_nodes_metrics_daily,
+            extrapolated_fr,
+            reward_reduction,
+            performance_multiplier,
+            base_rewards_per_node,
+            adjusted_rewards,
+            base_rewards,
+            base_rewards_type3,
+        )
     }
 
     // ------------------------------------------------------------------------------------------------
-    // Step 0: Pre-compute subnets and nodes failure rates
+    // Calculate failure rates for subnets and individual nodes
     // ------------------------------------------------------------------------------------------------
-    fn step_0_subnets_nodes_fr(
+    fn calculate_failure_rates(
         daily_metrics_by_subnet: BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>>,
-    ) -> Step0Results {
+    ) -> FailureRateResults {
         fn calculate_daily_node_fr(num_blocks_proposed: u64, num_blocks_failed: u64) -> Decimal {
             let total_blocks = Decimal::from(num_blocks_proposed + num_blocks_failed);
             if total_blocks == Decimal::ZERO {
@@ -222,7 +294,7 @@ trait PerformanceBasedAlgorithm {
             }
         }
 
-        let mut result = Step0Results::default();
+        let mut result = FailureRateResults::default();
 
         for (subnet_id, subnet_nodes_metrics) in daily_metrics_by_subnet {
             let nodes_original_fr = subnet_nodes_metrics
@@ -268,15 +340,14 @@ trait PerformanceBasedAlgorithm {
         result
     }
 
-    // ------------------------------------------------------------------------------------------------
-    // Step 3: Compute performance multiplier for each node for each provider
-    // ------------------------------------------------------------------------------------------------
-    fn step_3_performance_multiplier(
+    fn calculate_performance_multipliers(
         rewardable_nodes: &[RewardableNode],
         relative_nodes_fr: &BTreeMap<NodeId, Decimal>,
         extrapolated_fr: &Decimal,
-    ) -> Step3Results {
-        let mut results = Step3Results::default();
+    ) -> PerformanceMultiplierResults {
+        let mut reward_reduction = BTreeMap::new();
+        let mut performance_multiplier = BTreeMap::new();
+
         let calculate_rewards_reduction = |fr: Decimal| -> Decimal {
             if fr < Self::MIN_FAILURE_RATE {
                 Self::MIN_REWARDS_REDUCTION
@@ -290,35 +361,31 @@ trait PerformanceBasedAlgorithm {
         };
 
         for node in rewardable_nodes {
-            let daily_fr_used;
+            let daily_fr_used = relative_nodes_fr
+                .get(&node.node_id)
+                .copied()
+                .unwrap_or(*extrapolated_fr);
 
-            if let Some(relative_fr) = relative_nodes_fr.get(&node.node_id) {
-                // If the node is assigned on this day, use the relative failure rate for that day.
-                daily_fr_used = *relative_fr;
-            } else {
-                // If the node is not assigned on this day, use the extrapolated failure rate for that day.
-                daily_fr_used = *extrapolated_fr;
-            }
             let rewards_reduction = calculate_rewards_reduction(daily_fr_used);
-            let performance_multiplier = dec!(1) - rewards_reduction;
+            let performance_mult = dec!(1) - rewards_reduction;
 
-            results
-                .reward_reduction
-                .insert(node.node_id, rewards_reduction);
-            results
-                .performance_multiplier
-                .insert(node.node_id, performance_multiplier);
+            reward_reduction.insert(node.node_id, rewards_reduction);
+            performance_multiplier.insert(node.node_id, performance_mult);
         }
-        results
+
+        PerformanceMultiplierResults {
+            reward_reduction,
+            performance_multiplier,
+        }
     }
 
     // ------------------------------------------------------------------------------------------------
-    // Step 4: Compute base rewards for each node based on its region and node type
+    // Calculate base rewards for each node based on region and node type
     // ------------------------------------------------------------------------------------------------
-    fn step_4_compute_base_rewards_type_region(
+    fn calculate_base_rewards_by_region_and_type(
         node_rewards_table: &NodeRewardsTable,
         rewardable_nodes: &[RewardableNode],
-    ) -> Step4Results {
+    ) -> BaseRewardsResults {
         fn get_monthly_rate(
             rewards_table: &NodeRewardsTable,
             region: &Region,
@@ -454,49 +521,43 @@ trait PerformanceBasedAlgorithm {
             )
             .collect();
 
-        Step4Results {
+        BaseRewardsResults {
             base_rewards_per_node,
             base_rewards_type3,
             base_rewards,
         }
     }
 
-    // ------------------------------------------------------------------------------------------------
-    // Step 5: Adjusted rewards for all the nodes based on their performance
-    // ------------------------------------------------------------------------------------------------
-    fn step_5_adjust_node_rewards(
+    fn apply_performance_adjustments(
         rewardable_nodes: &[RewardableNode],
         base_rewards: &BTreeMap<NodeId, Decimal>,
-        performance_multiplier: &HashMap<NodeId, Decimal>,
-    ) -> Step5Results {
-        let mut result = Step5Results::default();
+        performance_multiplier: &BTreeMap<NodeId, Decimal>,
+    ) -> AdjustedRewardsResults {
+        let mut adjusted_rewards = BTreeMap::new();
+
         for node in rewardable_nodes {
             let base_rewards_for_day = base_rewards
                 .get(&node.node_id)
                 .expect("Base rewards expected for each node");
 
-            let performance_multiplier = performance_multiplier
+            let performance_mult = performance_multiplier
                 .get(&node.node_id)
                 .expect("Performance multiplier expected for every node");
 
-            let adjusted_rewards_for_day = base_rewards_for_day * performance_multiplier;
-            result
-                .adjusted_rewards
-                .insert(node.node_id, adjusted_rewards_for_day);
+            let adjusted_rewards_for_day = base_rewards_for_day * performance_mult;
+            adjusted_rewards.insert(node.node_id, adjusted_rewards_for_day);
         }
 
-        result
+        AdjustedRewardsResults { adjusted_rewards }
     }
 
-    // ------------------------------------------------------------------------------------------------
-    // Step 6: Construct provider results
-    // ------------------------------------------------------------------------------------------------
-    fn step_6_construct_provider_results(
+    /// Build provider rewards summary using BTreeMap for consistency and better performance
+    fn build_provider_rewards_summary(
         rewardable_nodes: Vec<RewardableNode>,
         mut provider_nodes_metrics_daily: BTreeMap<NodeId, NodeMetricsDaily>,
         extrapolated_fr: Percent,
-        mut reward_reduction: HashMap<NodeId, Percent>,
-        mut performance_multiplier: HashMap<NodeId, Percent>,
+        mut reward_reduction: BTreeMap<NodeId, Percent>,
+        mut performance_multiplier: BTreeMap<NodeId, Percent>,
         mut base_rewards_per_node: BTreeMap<NodeId, XDRPermyriad>,
         mut adjusted_rewards: BTreeMap<NodeId, XDRPermyriad>,
         base_rewards: Vec<BaseRewards>,
@@ -506,10 +567,6 @@ trait PerformanceBasedAlgorithm {
         let mut rewards_total = Decimal::ZERO;
 
         for node in rewardable_nodes {
-            let node_reward_type = node.node_reward_type;
-            let region = node.region;
-            let dc_id = node.dc_id;
-
             let node_status =
                 if let Some(node_metrics) = provider_nodes_metrics_daily.remove(&node.node_id) {
                     NodeStatus::Assigned { node_metrics }
@@ -537,9 +594,9 @@ trait PerformanceBasedAlgorithm {
 
             results_by_node.push(NodeResults {
                 node_id: node.node_id,
-                node_reward_type,
-                region,
-                dc_id,
+                node_reward_type: node.node_reward_type,
+                region: node.region,
+                dc_id: node.dc_id,
                 node_status,
                 performance_multiplier: performance_multiplier_percent,
                 rewards_reduction: rewards_reduction_percent,
@@ -555,32 +612,6 @@ trait PerformanceBasedAlgorithm {
             nodes_results: results_by_node,
         }
     }
-}
-
-#[derive(Default)]
-struct Step0Results {
-    subnets_fr: BTreeMap<SubnetId, Percent>,
-    nodes_metrics_daily: BTreeMap<NodeId, NodeMetricsDaily>,
-}
-
-#[derive(Default)]
-struct Step3Results {
-    reward_reduction: HashMap<NodeId, Percent>,
-    performance_multiplier: HashMap<NodeId, Percent>,
-}
-
-#[derive(Default)]
-struct Step4Results {
-    base_rewards: Vec<BaseRewards>,
-    base_rewards_type3: Vec<BaseRewardsType3>,
-    base_rewards_per_node: BTreeMap<NodeId, XDRPermyriad>,
-}
-
-type RewardsCoefficientPercent = Decimal;
-
-#[derive(Default)]
-struct Step5Results {
-    adjusted_rewards: BTreeMap<NodeId, XDRPermyriad>,
 }
 
 // ------------------------------------------------------------------------------------------------

@@ -7,6 +7,25 @@ use ic_base_types::PrincipalId;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 
+// ================================================================================================
+// VERSIONING SAFETY WARNING
+// ================================================================================================
+//
+// CRITICAL: This RewardsCalculationV1 implementation must maintain historical reproducibility.
+//
+// Any changes to the calculation logic, constants, or data structures in this version MUST NOT
+// affect the results of previously calculated rewards. This is essential for:
+//
+// 1. **Audit Trail Integrity**: Historical reward calculations must remain verifiable
+// 3. **Financial Accuracy**: Incorrect historical calculations could have legal implications
+// 4. **System Reliability**: Users depend on consistent reward calculations over time
+//
+// If you need to change the calculation logic, create a new version (V2, V3, etc.) instead
+// of modifying this V1 implementation. This ensures backward compatibility and historical
+// reproducibility while allowing for future algorithm improvements.
+//
+// ================================================================================================
+
 pub struct RewardsCalculationV1;
 
 impl PerformanceBasedAlgorithm for RewardsCalculationV1 {
@@ -41,11 +60,11 @@ mod tests {
     };
     use crate::performance_based_algorithm::v1::RewardsCalculationV1;
     use crate::performance_based_algorithm::PerformanceBasedAlgorithm;
-    use crate::performance_based_algorithm::{Step4Results, Step5Results};
+    use crate::performance_based_algorithm::{AdjustedRewardsResults, BaseRewardsResults};
     use ic_protobuf::registry::node::v1::NodeRewardType;
     use maplit::btreemap;
     use rust_decimal_macros::dec;
-    use std::collections::{BTreeMap, HashMap};
+    use std::collections::BTreeMap;
 
     // ------------------------------------------------------------------------------------------------
     // Step 0: Pre-compute subnets and nodes failure rates
@@ -86,7 +105,7 @@ mod tests {
         ]);
 
         // --- Execution ---
-        let result = RewardsCalculationV1::step_0_subnets_nodes_fr(daily_metrics_by_subnet);
+        let result = RewardsCalculationV1::calculate_failure_rates(daily_metrics_by_subnet);
         let subnets_fr = result.subnets_fr;
         let original_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
@@ -127,7 +146,7 @@ mod tests {
                 (s1_node2, 0, 0),  // FR = 0.0, but not in rewardable_nodes for day2 so ignored
             ],
         )]);
-        let result = RewardsCalculationV1::step_0_subnets_nodes_fr(daily_metrics_by_subnet);
+        let result = RewardsCalculationV1::calculate_failure_rates(daily_metrics_by_subnet);
         let subnets_fr = result.subnets_fr;
         let original_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
@@ -174,7 +193,7 @@ mod tests {
         let extrapolated_fr = dec!(0.35);
 
         // --- Execution ---
-        let result = RewardsCalculationV1::step_3_performance_multiplier(
+        let result = RewardsCalculationV1::calculate_performance_multipliers(
             &rewardable_nodes,
             &relative_nodes_fr,
             &extrapolated_fr,
@@ -241,10 +260,10 @@ mod tests {
         let rewards_table = create_rewards_table_for_region_test();
 
         // --- Execution ---
-        let Step4Results {
+        let BaseRewardsResults {
             base_rewards_per_node,
             ..
-        } = RewardsCalculationV1::step_4_compute_base_rewards_type_region(
+        } = RewardsCalculationV1::calculate_base_rewards_by_region_and_type(
             &rewards_table,
             &rewardable_nodes,
         );
@@ -276,7 +295,7 @@ mod tests {
         let rewardable_nodes = generate_rewardable_nodes(vec![node1, node2, node3, node4, node5]);
 
         let mut base_rewards = BTreeMap::new();
-        let mut performance_multiplier = HashMap::new();
+        let mut performance_multiplier = BTreeMap::new();
         for node in &rewardable_nodes {
             base_rewards.insert(node.node_id, dec!(1000));
             // Assigned nodes
@@ -284,11 +303,12 @@ mod tests {
         }
 
         // --- Execution ---
-        let Step5Results { adjusted_rewards } = RewardsCalculationV1::step_5_adjust_node_rewards(
-            &rewardable_nodes,
-            &base_rewards,
-            &performance_multiplier,
-        );
+        let AdjustedRewardsResults { adjusted_rewards } =
+            RewardsCalculationV1::apply_performance_adjustments(
+                &rewardable_nodes,
+                &base_rewards,
+                &performance_multiplier,
+            );
 
         // --- Assertions ---
         let expected = dec!(1000) * dec!(0.5);
