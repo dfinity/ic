@@ -114,27 +114,35 @@ impl LagrangeCoefficients {
             numerator[i] *= &tmp;
         }
 
-        for (lagrange_i, x_i) in numerator.iter_mut().zip(&samples) {
+        let mut denominator = Vec::with_capacity(samples.len());
+
+        for i in 0..samples.len() {
             // Compute the value at 0 of the i-th Lagrange polynomial that is `0` at the
             // other data points but `1` at `x_i`.
             let mut denom = Scalar::one();
-            for x_j in samples.iter().filter(|x_j| *x_j != x_i) {
-                denom *= x_j - x_i;
+            let x_i = samples[i].clone();
+            for x_j in samples.iter().filter(|x_j| **x_j != x_i) {
+                denom *= x_j - &x_i;
             }
 
-            /*
-             * This expect can never fire because:
-             *
-             * 1) The denom is in the prime order scalar group. Thus the only value which
-             *    does not have a valid inverse is zero.
-             * 2) We initialize denom with 1.
-             * 3) We multiply into denom various values, all of which are non-zero
-             *     (because in the loop x_j - x_i must be non-zero)
-             * 4) Since denom is not equal to zero, the inverse must exist.
-             */
-            let inv = denom.inverse().expect("Inversion unexpectedly failed");
+            denominator.push(denom);
+        }
 
-            *lagrange_i *= inv;
+        /*
+         * This expect can never fire because:
+         *
+         * 1) The denom is in the prime order scalar group. Thus the only value which
+         *    does not have a valid inverse is zero.
+         * 2) We initialize each value denom with 1.
+         * 3) We multiply into denom various values, all of which are non-zero
+         *     (because in the loop x_j - x_i must be non-zero)
+         * 4) Since denom is not equal to zero, the inverse must exist.
+         */
+        let inv_denominator =
+            Scalar::batch_inverse_vartime(&denominator).expect("Inversion unexpectedly failed");
+
+        for i in 0..samples.len() {
+            numerator[i] *= &inv_denominator[i];
         }
         Self::new(numerator)
     }
