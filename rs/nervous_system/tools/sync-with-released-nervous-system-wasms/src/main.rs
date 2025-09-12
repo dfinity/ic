@@ -74,7 +74,7 @@ const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 4] = [
         "sns_aggregator_test",
         ExternalCanisterInfo {
             repository: "dfinity/nns-dapp",
-            tag_name_prefix: None,
+            tag_name_prefix: Some("proposal-"),
             filename: "sns_aggregator.wasm.gz",
             test_filename: Some("sns_aggregator_dev.wasm.gz"),
             canister_id: SNS_AGGREGATOR_CANISTER_ID,
