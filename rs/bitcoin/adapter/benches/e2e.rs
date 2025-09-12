@@ -224,7 +224,7 @@ fn bench_add_headers<M: Measurement, Network: BlockchainNetwork>(
             // Headers are processed in chunks of at most MAX_HEADERS_SIZE entries
             for chunk in headers.chunks(MAX_HEADERS_SIZE) {
                 let (added_headers, error) = blockchain_state.add_headers(chunk);
-                assert_eq!(error, None);
+                assert!(error.is_none());
                 assert_eq!(added_headers.len(), chunk.len())
             }
         })
