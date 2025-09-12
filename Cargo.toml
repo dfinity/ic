@@ -171,7 +171,6 @@ members = [
     "rs/ic_os/config_types/compatibility_tests",
     "rs/ic_os/deterministic_ips",
     "rs/ic_os/device",
-    "rs/ic_os/dev_test_tools/launch-single-vm",
     "rs/ic_os/dev_test_tools/setupos-disable-checks",
     "rs/ic_os/dev_test_tools/setupos-image-config",
     "rs/ic_os/fstrim_tool",
