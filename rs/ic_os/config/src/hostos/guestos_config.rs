@@ -79,11 +79,11 @@ pub fn generate_guestos_config(
     let hostos_cmdline_content = std::fs::read_to_string("/proc/cmdline")
         .context("Failed to read HostOS boot args from /proc/cmdline")?;
 
-    if let Some(recovery_hash) = guestos_recovery_hash(
+    if let Some(recovery_short_hash) = guestos_recovery_short_hash(
         &hostos_cmdline_content,
         DEFAULT_GUESTOS_RECOVERY_FILE_PATH.as_ref(),
     )? {
-        guestos_settings.recovery_hash = Some(recovery_hash);
+        guestos_settings.recovery_short_hash = Some(recovery_short_hash);
     }
 
     let guestos_config = GuestOSConfig {
@@ -117,16 +117,16 @@ fn node_ipv6_address(
 /// Retrieves the recovery-hash from the HostOS boot args, if present.
 /// If a recovery hash is found and GuestOS hasn't been marked as recovered yet,
 /// it marks HostOS as recovered and returns the hash.
-fn guestos_recovery_hash(
+fn guestos_recovery_short_hash(
     hostos_cmdline_content: &str,
     recovery_file_path: &Path,
 ) -> Result<Option<String>> {
     let hostos_cmdline = hostos_cmdline_content.parse::<KernelCommandLine>()?;
 
-    if let Some(recovery_hash_value) = hostos_cmdline.get_argument("recovery-hash") {
+    if let Some(recovery_short_hash_value) = hostos_cmdline.get_argument("recovery-hash") {
         if !recovery_file_path.exists() {
             mark_hostos_recovered(recovery_file_path)?;
-            Ok(Some(recovery_hash_value.to_string()))
+            Ok(Some(recovery_short_hash_value.to_string()))
         } else {
             Ok(None)
         }
@@ -137,7 +137,7 @@ fn guestos_recovery_hash(
 
 /// Marks that HostOS has booted GuestOS in recovery mode by creating a tracking file.
 /// This ensures that subsequent GuestOS launches in the same HostOS boot
-/// will not use the recovery_hash again.
+/// will not use the recovery_short_hash again.
 fn mark_hostos_recovered(recovery_file_path: &Path) -> Result<()> {
     if let Some(parent) = recovery_file_path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -283,30 +283,33 @@ mod tests {
     }
 
     #[test]
-    fn test_recovery_hash() {
+    fn test_recovery_short_hash() {
         let temp_dir = tempdir().unwrap();
         let recovery_file_path = temp_dir.path().join("guestos_recovered");
         let mock_cmdline = "root=/dev/sda1 recovery-hash=test123 dummy";
 
         // Test case 1: No recovery file exists initially
         // The function should return the recovery hash and create the recovery file
-        let recovery_hash = guestos_recovery_hash(mock_cmdline, &recovery_file_path).unwrap();
-        assert_eq!(recovery_hash, Some("test123".to_string()));
+        let recovery_short_hash =
+            guestos_recovery_short_hash(mock_cmdline, &recovery_file_path).unwrap();
+        assert_eq!(recovery_short_hash, Some("test123".to_string()));
         assert!(recovery_file_path.exists());
 
         // Test case 2: Recovery file now exists
         // The function should return None since GuestOS has already been recovered
-        let recovery_hash = guestos_recovery_hash(mock_cmdline, &recovery_file_path).unwrap();
-        assert_eq!(recovery_hash, None);
+        let recovery_short_hash =
+            guestos_recovery_short_hash(mock_cmdline, &recovery_file_path).unwrap();
+        assert_eq!(recovery_short_hash, None);
     }
 
     #[test]
-    fn test_recovery_hash_absent() {
+    fn test_recovery_short_hash_absent() {
         let temp_dir = tempdir().unwrap();
         let recovery_file_path = temp_dir.path().join("guestos_recovered");
 
         let mock_cmdline = "root=/dev/sda1 dummy";
-        let recovery_hash = guestos_recovery_hash(mock_cmdline, &recovery_file_path).unwrap();
-        assert_eq!(recovery_hash, None);
+        let recovery_short_hash =
+            guestos_recovery_short_hash(mock_cmdline, &recovery_file_path).unwrap();
+        assert_eq!(recovery_short_hash, None);
     }
 }

@@ -130,20 +130,24 @@ fn verify_permissions_recursively(
 
 pub fn setup(env: TestEnv) {
     setup_upstreams_uvm(&env);
+    let recovery_short_hash = read_dependency_from_env_to_string("RECOVERY_HASH_PATH")
+        .unwrap()
+        .trim()
+        .chars()
+        .take(6)
+        .collect::<String>();
+
     uvm_serve_recovery_artifacts(
         &env,
         &get_dependency_path_from_env("RECOVERY_ARTIFACTS_PATH"),
-        read_dependency_from_env_to_string("RECOVERY_HASH_PATH")
-            .unwrap()
-            .trim(),
+        &recovery_short_hash,
     )
     .unwrap();
 
-    let recovery_hash = read_dependency_from_env_to_string("RECOVERY_HASH_PATH").unwrap();
-
     InternetComputer::new()
         .add_subnet(
-            Subnet::new(SubnetType::System).add_node(Node::new().with_recovery_hash(recovery_hash)),
+            Subnet::new(SubnetType::System)
+                .add_node(Node::new().with_recovery_short_hash(recovery_short_hash)),
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
@@ -158,7 +162,12 @@ pub fn test(env: TestEnv) {
         read_dependency_from_env_to_string("RECOVERY_STORE_1_B64_PATH").unwrap();
     let expected_local_store_2_b64 =
         read_dependency_from_env_to_string("RECOVERY_STORE_2_B64_PATH").unwrap();
-    let recovery_hash = read_dependency_from_env_to_string("RECOVERY_HASH_PATH").unwrap();
+    let recovery_short_hash = &read_dependency_from_env_to_string("RECOVERY_HASH_PATH")
+        .unwrap()
+        .trim()
+        .chars()
+        .take(6)
+        .collect::<String>();
 
     let node = env
         .topology_snapshot()
@@ -183,7 +192,7 @@ pub fn test(env: TestEnv) {
     );
     let boot_args_command = format!(
         "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)\"/\\1 recovery-hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot",
-        recovery_hash
+        recovery_short_hash
     );
     execute_bash_command(&ssh_session, boot_args_command)
         .map_err(|e| anyhow!(e))

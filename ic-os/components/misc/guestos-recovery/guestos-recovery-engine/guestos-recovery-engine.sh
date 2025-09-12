@@ -8,7 +8,7 @@ readonly MAX_ATTEMPTS=10
 readonly RETRY_DELAY=5
 
 function read_config_variables() {
-    expected_recovery_hash=$(get_config_value '.guestos_settings.recovery_hash')
+    expected_recovery_short_hash=$(get_config_value '.guestos_settings.recovery_short_hash')
 }
 
 # Completes the recovery process by downloading and applying the recovery artifacts
@@ -22,27 +22,28 @@ pushd /tmp/subnet_recovery >/dev/null
 perform_recovery() {
     verify_file_hash() {
         local file="$1"
-        local expected_hash="$2"
+        local expected_short_hash="$2"
         local actual_hash
 
         echo "Verifying hash for $file..."
         actual_hash=$(sha256sum "$file" | cut -d' ' -f1)
+        actual_short_hash=${actual_hash:0:6}
 
-        if [ "$actual_hash" = "$expected_hash" ]; then
+        if [ "$actual_short_hash" = "$expected_short_hash" ]; then
             echo "✓ Hash verification successful for $file"
             return 0
         else
             echo "✗ Hash verification failed for $file"
-            echo "  Expected: $expected_hash"
-            echo "  Actual:   $actual_hash"
+            echo "  Expected short hash: $expected_short_hash"
+            echo "  Actual hash:   $actual_hash"
             return 1
         fi
     }
 
     download_recovery_artifact() {
         local base_url="$1"
-        local expected_recovery_hash="$2"
-        local recovery_url="${base_url}/recovery/${expected_recovery_hash}/recovery.tar.zst"
+        local expected_recovery_short_hash="$2"
+        local recovery_url="${base_url}/recovery/${expected_recovery_short_hash}/recovery.tar.zst"
 
         echo "Attempting to download recovery artifact from $recovery_url"
 
@@ -58,12 +59,12 @@ perform_recovery() {
 
     read_config_variables
 
-    if [ -z "$expected_recovery_hash" ]; then
+    if [ -z "$expected_recovery_short_hash" ]; then
         echo "ERROR: recovery-hash boot parameter is required"
         return 1
     fi
 
-    echo "Using expected recovery hash: $expected_recovery_hash"
+    echo "Using expected recovery hash: $expected_recovery_short_hash"
 
     echo "Downloading recovery artifact..."
     base_urls=(
@@ -73,7 +74,7 @@ perform_recovery() {
 
     download_successful=false
     for base_url in "${base_urls[@]}"; do
-        if download_recovery_artifact "$base_url" "$expected_recovery_hash"; then
+        if download_recovery_artifact "$base_url" "$expected_recovery_short_hash"; then
             download_successful=true
             break
         fi
@@ -85,7 +86,7 @@ perform_recovery() {
     fi
 
     echo "Verifying recovery artifact..."
-    if ! verify_file_hash "recovery.tar.zst" "$expected_recovery_hash"; then
+    if ! verify_file_hash "recovery.tar.zst" "$expected_recovery_short_hash"; then
         echo "ERROR: Recovery artifact hash verification failed"
         return 1
     fi

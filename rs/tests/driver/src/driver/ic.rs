@@ -435,28 +435,28 @@ impl InternetComputer {
         }
     }
 
-    pub fn get_recovery_hash_of_node(&self, node_id: NodeId) -> Option<String> {
+    pub fn get_recovery_short_hash_of_node(&self, node_id: NodeId) -> Option<String> {
         let node_filter_map = |n: &Node| {
             if n.secret_key_store.as_ref().unwrap().node_id == node_id {
-                Some(n.recovery_hash.clone())
+                Some(n.recovery_short_hash.clone())
             } else {
                 None
             }
         };
         // extract recovery hash from all subnet nodes
-        let mut recovery_hashes: Vec<Option<String>> = self
+        let mut recovery_short_hashes: Vec<Option<String>> = self
             .subnets
             .iter()
             .flat_map(|s| s.nodes.iter().filter_map(node_filter_map))
             .collect();
         // extract recovery hash from all unassigned nodes
-        recovery_hashes.extend(self.unassigned_nodes.iter().filter_map(node_filter_map));
+        recovery_short_hashes.extend(self.unassigned_nodes.iter().filter_map(node_filter_map));
         // extract recovery hash from all API boundary nodes
-        recovery_hashes.extend(self.api_boundary_nodes.iter().filter_map(node_filter_map));
+        recovery_short_hashes.extend(self.api_boundary_nodes.iter().filter_map(node_filter_map));
 
-        match recovery_hashes.len() {
+        match recovery_short_hashes.len() {
             0 => None,
-            1 => recovery_hashes.first().unwrap().clone(),
+            1 => recovery_short_hashes.first().unwrap().clone(),
             _ => panic!("more than one node has id={node_id}"),
         }
     }
@@ -815,7 +815,7 @@ pub struct Node {
     pub malicious_behavior: Option<MaliciousBehavior>,
     pub ipv4: Option<IPv4Config>,
     pub domain: Option<String>,
-    pub recovery_hash: Option<String>,
+    pub recovery_short_hash: Option<String>,
 }
 
 impl Node {
@@ -857,8 +857,8 @@ impl Node {
         self
     }
 
-    pub fn with_recovery_hash(mut self, recovery_hash: String) -> Self {
-        self.recovery_hash = Some(recovery_hash);
+    pub fn with_recovery_short_hash(mut self, recovery_short_hash: String) -> Self {
+        self.recovery_short_hash = Some(recovery_short_hash);
         self
     }
 }

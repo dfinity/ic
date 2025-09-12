@@ -108,7 +108,7 @@ pub struct GenerateTestnetConfigClapArgs {
     #[arg(long)]
     pub inject_ic_registry_local_store: Option<bool>,
     #[arg(long)]
-    pub recovery_hash: Option<String>,
+    pub recovery_short_hash: Option<String>,
     // GuestOSDevSettings arguments
     #[arg(long)]
     pub backup_retention_time_seconds: Option<u64>,
@@ -318,7 +318,7 @@ pub fn main() -> Result<()> {
                 inject_ic_crypto: clap_args.inject_ic_crypto,
                 inject_ic_state: clap_args.inject_ic_state,
                 inject_ic_registry_local_store: clap_args.inject_ic_registry_local_store,
-                recovery_hash: clap_args.recovery_hash,
+                recovery_short_hash: clap_args.recovery_short_hash,
                 backup_retention_time_seconds: clap_args.backup_retention_time_seconds,
                 backup_purging_interval_seconds: clap_args.backup_purging_interval_seconds,
                 malicious_behavior: clap_args.malicious_behavior,

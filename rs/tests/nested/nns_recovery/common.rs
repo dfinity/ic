@@ -377,12 +377,19 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
 
     info!(logger, "Setup UVM to serve recovery artifacts");
     let artifacts_path = output_dir.join("recovery.tar.zst");
-    let artifacts_hash = std::fs::read_to_string(output_dir.join("recovery.tar.zst.sha256"))
+    let artifacts_short_hash = std::fs::read_to_string(output_dir.join("recovery.tar.zst.sha256"))
         .unwrap()
         .trim()
-        .to_string();
-    impersonate_upstreams::uvm_serve_recovery_artifacts(&env, &artifacts_path, &artifacts_hash)
-        .expect("Failed to serve recovery artifacts from UVM");
+        .to_string()
+        .chars()
+        .take(6)
+        .collect();
+    impersonate_upstreams::uvm_serve_recovery_artifacts(
+        &env,
+        &artifacts_path,
+        &artifacts_short_hash,
+    )
+    .expect("Failed to serve recovery artifacts from UVM");
 
     info!(logger, "Setup UVM to serve recovery-dev GuestOS image");
     impersonate_upstreams::uvm_serve_guestos_image(
@@ -416,7 +423,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             let env = env.clone();
             let vm_name = vm_name.clone();
             let recovery_img_hash = recovery_img_hash.clone();
-            let artifacts_hash = artifacts_hash.clone();
+            let artifacts_short_hash = artifacts_short_hash.clone();
 
             handles.spawn(async move {
                 simulate_node_provider_action(
@@ -425,7 +432,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                     &vm_name,
                     RECOVERY_GUESTOS_IMG_VERSION,
                     &recovery_img_hash[..6],
-                    &artifacts_hash,
+                    &artifacts_short_hash,
                 )
                 .await
             });
@@ -493,7 +500,7 @@ async fn simulate_node_provider_action(
     vm_name: &str,
     img_version: &str,
     img_short_hash: &str,
-    artifacts_hash: &str,
+    artifacts_short_hash: &str,
 ) {
     let host = env.get_nested_vm(vm_name).unwrap();
     let host_boot_id_pre_reboot = get_host_boot_id_async(&host).await;
@@ -505,7 +512,7 @@ async fn simulate_node_provider_action(
     );
     let boot_args_command = format!(
         "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={} version-hash={} recovery-hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot && sudo reboot",
-        &img_version, &img_short_hash, &artifacts_hash
+        &img_version, &img_short_hash, &artifacts_short_hash
     );
     host.block_on_bash_script_async(&boot_args_command)
         .await

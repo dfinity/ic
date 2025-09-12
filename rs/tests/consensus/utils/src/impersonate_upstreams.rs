@@ -81,12 +81,15 @@ pub fn uvm_serve_guestos_image(
 pub fn uvm_serve_recovery_artifacts(
     env: &TestEnv,
     artifacts_path: &Path,
-    artifacts_hash: &str,
+    artifacts_short_hash: &str,
 ) -> Result<()> {
     uvm_serve_file(
         env,
         artifacts_path,
-        Path::new(&format!("recovery/{}/recovery.tar.zst", artifacts_hash)),
+        Path::new(&format!(
+            "recovery/{}/recovery.tar.zst",
+            artifacts_short_hash
+        )),
     )
 }
 

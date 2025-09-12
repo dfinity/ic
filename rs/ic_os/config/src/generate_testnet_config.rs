@@ -33,7 +33,7 @@ pub struct GenerateTestnetConfigArgs {
     pub inject_ic_crypto: Option<bool>,
     pub inject_ic_state: Option<bool>,
     pub inject_ic_registry_local_store: Option<bool>,
-    pub recovery_hash: Option<String>,
+    pub recovery_short_hash: Option<String>,
 
     // GuestOSDevSettings arguments
     pub backup_retention_time_seconds: Option<u64>,
@@ -80,7 +80,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         inject_ic_crypto,
         inject_ic_state,
         inject_ic_registry_local_store,
-        recovery_hash,
+        recovery_short_hash,
         backup_retention_time_seconds,
         backup_purging_interval_seconds,
         malicious_behavior,
@@ -233,7 +233,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         inject_ic_crypto: inject_ic_crypto.unwrap_or(false),
         inject_ic_state: inject_ic_state.unwrap_or(false),
         inject_ic_registry_local_store: inject_ic_registry_local_store.unwrap_or(false),
-        recovery_hash,
+        recovery_short_hash,
         guestos_dev_settings,
     };
 
