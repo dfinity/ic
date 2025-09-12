@@ -35,6 +35,28 @@ runs:
           exit 1
         fi
 
+        # Detect architecture and download yq if missing
+        # TODO: find a better alternative longterm
+        downloaded=false
+        yq_cmd=yq
+        if ! command -v yq &> /dev/null; then
+            echo "yq not found, downloading..."
+            ARCH=$(uname -m)
+            YQ_URL=""
+            case "$ARCH" in
+                x86_64) YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_amd64" ;;
+                i386|i686) YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_386" ;;
+                armv7l) YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_arm" ;;
+                aarch64) YQ_URL="https://github.com/mikefarah/yq/releases/download/v4.45.1/yq_linux_arm64" ;;
+                *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;;
+            esac
+
+            curl -L "$YQ_URL" -o ./yq
+            chmod +x ./yq
+            downloaded=true
+            yq_cmd=./yq
+        fi
+
         # TODO: find a way to programatically get bes upload url
         build_buddy="https://dash.idx.dfinity.network"
         invocations_base="$build_buddy/invocation"
@@ -46,13 +68,18 @@ runs:
         summary+="| Job type | Invocation ID | Link |\n"
         summary+="|----------|---------------|------|\n"
 
-        # parse YAML and generate UUIDs
-        echo "$targets" | yq -r '.[] | [.name, .output_id] | @tsv' | while IFS=$'\t' read -r name output_id; do
-          uuid=$(cat /proc/sys/kernel/random/uuid)
-          echo "$output_id=$uuid" >> "$GITHUB_OUTPUT"
-          link="$invocations_base/$uuid"
-          summary+="| $name | \`$uuid\` | [BuildBuddy link to $uuid]($link) |\n"
-        done
+        while IFS=$'\t' read -r name output_id; do
+            uuid=$(cat /proc/sys/kernel/random/uuid)
+            link="$invocations_base/$uuid"
+            summary+="| $name | \`$uuid\` | [BuildBuddy link to $uuid]($link) |\n"
+        done < <(echo "$targets" | $yq_cmd -r '.[] | [.name, .output_id] | @tsv')
+
+        # cleanup if we downloaded yq locally
+        if [[ "$downloaded" == true ]]; then
+            rm -f "$yq_cmd"
+        fi
 
         # write summary
         echo -e "$summary" >> "$GITHUB_STEP_SUMMARY"
+        # write it to stdout so that the job also has it
+        echo -e "$summary"

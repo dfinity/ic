@@ -13,7 +13,7 @@ export BUILD_IC_NESTED=1
 export ROOT_DIR="$(git rev-parse --show-toplevel)"
 
 # Generate the uuid if it is not already generated.
-BAZEL_BUILD_INVOCATION_ID="$BAZEL_BUILD_INVOCATION_ID:$(uuidgen)"
+BAZEL_BUILD_INVOCATION_ID="$BAZEL_BUILD_INVOCATION_ID:$(cat /proc/sys/kernel/random/uuid)"
 
 # Drop into the container if we're not already inside it. This ensures
 # we run in a predictable environment (Ubuntu with known deps).
