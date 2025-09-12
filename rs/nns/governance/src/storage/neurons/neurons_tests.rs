@@ -48,6 +48,7 @@ fn create_model_neuron(id: u64) -> Neuron {
     .with_known_neuron_data(Some(KnownNeuronData {
         name: "Fabulous".to_string(),
         description: Some("Follow MeEe for max rewards!".to_string()),
+        links: vec![],
     }))
     .with_recent_ballots(vec![
         BallotInfo {

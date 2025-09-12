@@ -1,4 +1,6 @@
-use crate::{governance::KNOWN_NEURON_NAME_MAX_LEN, storage::validate_stable_btree_map};
+use crate::{
+    proposals::register_known_neuron::KNOWN_NEURON_NAME_MAX_LEN, storage::validate_stable_btree_map,
+};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_stable_structures::storable::Bound;
 use ic_stable_structures::{Memory, StableBTreeMap, Storable};

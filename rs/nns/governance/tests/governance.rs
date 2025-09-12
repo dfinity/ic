@@ -9570,7 +9570,11 @@ fn test_include_public_neurons_in_full_neurons() {
     let known_neuron = new_neuron(
         2,
         Visibility::Unspecified,
-        Some(api::KnownNeuronData::default()),
+        Some(api::KnownNeuronData {
+            name: "".to_string(),
+            description: None,
+            links: Some(vec![]),
+        }),
     );
     let explicitly_private_neuron = new_neuron(3, Visibility::Private, None);
     let explicitly_public_neuron = new_neuron(4, Visibility::Public, None);
@@ -10766,6 +10770,7 @@ async fn test_known_neurons() {
                 known_neuron_data: Some(KnownNeuronData {
                     name: "One".to_string(),
                     description: None,
+                    links: vec![],
                 }),
             })),
             ..Default::default()
@@ -10785,6 +10790,7 @@ async fn test_known_neurons() {
                 known_neuron_data: Some(KnownNeuronData {
                     name: "Two".to_string(),
                     description: None,
+                    links: vec![],
                 }),
             })),
             ..Default::default()
@@ -10806,6 +10812,7 @@ async fn test_known_neurons() {
             known_neuron_data: Some(KnownNeuronData {
                 name: "One".to_string(),
                 description: None,
+                links: vec![],
             }),
         },
         KnownNeuron {
@@ -10813,6 +10820,7 @@ async fn test_known_neurons() {
             known_neuron_data: Some(KnownNeuronData {
                 name: "Two".to_string(),
                 description: None,
+                links: vec![],
             }),
         },
     ];
@@ -10821,33 +10829,26 @@ async fn test_known_neurons() {
         .sort_by(|a, b| a.id.as_ref().unwrap().id.cmp(&b.id.as_ref().unwrap().id));
     assert_eq!(sorted_response_known_neurons, expected_known_neurons);
 
-    // This proposal tries to name neuron 1 with the already existing name "Two", the change should not be executed.
-    let failed_proposal_id = gov
-        .make_proposal(
-            &NeuronId { id: 3 },
-            &principal(3),
-            &Proposal {
-                title: Some("A Reasonable Title".to_string()),
-                summary: "proposal 3 summary".to_string(),
-                action: Some(proposal::Action::RegisterKnownNeuron(KnownNeuron {
-                    id: Some(NeuronId { id: 1 }),
-                    known_neuron_data: Some(KnownNeuronData {
-                        name: "Two".to_string(),
-                        description: None,
-                    }),
-                })),
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(
-        gov.get_proposal_info(&principal(3), failed_proposal_id)
-            .unwrap()
-            .status,
-        ProposalStatus::Failed as i32
-    );
+    // This proposal tries to name neuron 1 with the already existing name "Two", this should fail.
+    gov.make_proposal(
+        &NeuronId { id: 3 },
+        &principal(3),
+        &Proposal {
+            title: Some("A Reasonable Title".to_string()),
+            summary: "proposal 3 summary".to_string(),
+            action: Some(proposal::Action::RegisterKnownNeuron(KnownNeuron {
+                id: Some(NeuronId { id: 1 }),
+                known_neuron_data: Some(KnownNeuronData {
+                    name: "Two".to_string(),
+                    description: None,
+                    links: vec![],
+                }),
+            })),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap_err();
 
     // Check that the state is the same as before the last proposal.
     let mut sorted_response_known_neurons = gov.list_known_neurons().known_neurons;
@@ -10867,6 +10868,7 @@ async fn test_known_neurons() {
                 known_neuron_data: Some(KnownNeuronData {
                     name: "Zwei".to_string(),
                     description: None,
+                    links: vec![],
                 }),
             })),
             ..Default::default()
@@ -13606,6 +13608,7 @@ fn test_neuron_info_private_enforcement() {
         known_neuron_data: Some(api::KnownNeuronData {
             name: "Hello, world!".to_string(),
             description: Some("All the best votes.".to_string()),
+            links: Some(vec![]),
         }),
         ..new_neuron()
     };

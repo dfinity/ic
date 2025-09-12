@@ -591,6 +591,7 @@ fn test_visibility_when_converting_neuron_to_neuron_info_and_neuron_proto() {
         .with_known_neuron_data(Some(KnownNeuronData {
             name: "neuron name".to_string(),
             description: Some("neuron description".to_string()),
+            links: vec![],
         }))
         .build();
 

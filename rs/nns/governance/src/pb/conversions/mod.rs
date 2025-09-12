@@ -2073,6 +2073,7 @@ impl From<pb::KnownNeuronData> for pb_api::KnownNeuronData {
         Self {
             name: item.name,
             description: item.description,
+            links: Some(item.links),
         }
     }
 }
@@ -2081,6 +2082,7 @@ impl From<pb_api::KnownNeuronData> for pb::KnownNeuronData {
         Self {
             name: item.name,
             description: item.description,
+            links: item.links.unwrap_or_default(),
         }
     }
 }

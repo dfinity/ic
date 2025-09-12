@@ -2197,6 +2197,7 @@ pub struct KnownNeuron {
 pub struct KnownNeuronData {
     pub name: String,
     pub description: Option<String>,
+    pub links: Option<Vec<String>>,
 }
 /// Proposal action to deregister a known neuron by removing its name and description.
 #[derive(

@@ -708,6 +708,7 @@ fn test_list_known_neurons() {
         neuron.known_neuron_data = Some(KnownNeuronData {
             name: "KnownNeuron 0".to_owned(),
             description: Some("This is a known neuron".to_owned()),
+            links: Some(vec![]),
         });
         update_neuron(&agent, neuron).await;
 
@@ -732,7 +733,8 @@ fn test_list_known_neurons() {
                 .unwrap(),
             KnownNeuronData {
                 name: "KnownNeuron 0".to_owned(),
-                description: Some("This is a known neuron".to_owned())
+                description: Some("This is a known neuron".to_owned()),
+                links: Some(vec![]),
             }
         );
     });

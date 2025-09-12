@@ -448,6 +448,7 @@ type DeregisterKnownNeuron = record {
 type KnownNeuronData = record {
   name : text;
   description : opt text;
+  links : opt vec text;
 };
 
 type LedgerParameters = record {

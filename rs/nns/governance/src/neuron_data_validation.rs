@@ -743,6 +743,7 @@ mod tests {
         .with_known_neuron_data(Some(KnownNeuronData {
             name: known_neuron_name,
             description: None,
+            links: vec![],
         }))
     }
 

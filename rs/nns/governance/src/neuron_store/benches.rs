@@ -2,15 +2,17 @@ use super::*;
 use crate::{
     benches_util::check_projected_instructions,
     governance::{
-        KNOWN_NEURON_DESCRIPTION_MAX_LEN, KNOWN_NEURON_NAME_MAX_LEN, MAX_FOLLOWEES_PER_TOPIC,
-        MAX_NEURONS_FUND_PARTICIPANTS, MAX_NEURON_RECENT_BALLOTS, MAX_NUMBER_OF_NEURONS,
-        MAX_NUM_HOT_KEYS_PER_NEURON,
+        MAX_FOLLOWEES_PER_TOPIC, MAX_NEURONS_FUND_PARTICIPANTS, MAX_NEURON_RECENT_BALLOTS,
+        MAX_NUMBER_OF_NEURONS, MAX_NUM_HOT_KEYS_PER_NEURON,
     },
     neuron::{DissolveStateAndAge, NeuronBuilder},
     neuron_data_validation::NeuronDataValidator,
     neurons_fund::{NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot},
     now_seconds,
     pb::v1::{BallotInfo, Followees, KnownNeuronData, Vote},
+    proposals::register_known_neuron::{
+        KNOWN_NEURON_DESCRIPTION_MAX_LEN, KNOWN_NEURON_NAME_MAX_LEN,
+    },
     temporarily_disable_known_neuron_voting_history,
     temporarily_enable_known_neuron_voting_history,
 };
@@ -228,6 +230,7 @@ fn modify_neuron_all_sections(neuron: &mut Neuron) {
     neuron.set_known_neuron_data(KnownNeuronData {
         name: "name".to_string(),
         description: Some("description".to_string()),
+        links: vec!["http://example.com".to_string()],
     });
 }
 
@@ -300,6 +303,7 @@ fn record_known_neuron_vote() -> BenchResult {
         .with_known_neuron_data(Some(KnownNeuronData {
             name: "a".repeat(KNOWN_NEURON_NAME_MAX_LEN),
             description: Some("b".repeat(KNOWN_NEURON_DESCRIPTION_MAX_LEN)),
+            links: vec!["http://example.com".to_string()],
         }))
         .build();
 
