@@ -129,7 +129,6 @@ fn main() {
 
     // Set RUST_MIN_STACK if not yet set:
     // the value of 8192000 is set according to `ic-os/components/ic/ic-replica.service`.
-    // TODO: Audit that the environment access only happens in single-threaded code.
     unsafe { std::env::set_var("RUST_MIN_STACK", "8192000") };
 
     // Set the maximum number of open files:
