@@ -118,7 +118,7 @@ runs:
 
         # Convert YAML to JSON using yq and set as output
         # but unescaped.
-        output_json=$(echo "$output_yaml" | $yq_cmd -o=json -I=0 '.' | jq -Rs '.')
+        output_json=$(echo "$output_yaml" | $yq_cmd -o=json -I=0 '.')
         echo "output=$output_json" >> "$GITHUB_OUTPUT"
 
         # cleanup if we downloaded yq locally
