@@ -471,7 +471,8 @@ async fn simulate_node_provider_action(
     // Trigger HostOS reboot and run guestos-recovery-upgrader
     info!(
         logger,
-        "Remounting /boot as read-write, updating boot_args file and rebooting host {}", host.vm_name(),
+        "Remounting /boot as read-write, updating boot_args file and rebooting host {}",
+        host.vm_name(),
     );
     let boot_args_command = format!(
         "sudo mount -o remount,rw /boot && sudo sed -i 's/\\(BOOT_ARGS_A=\".*\\)enforcing=0\"/\\1enforcing=0 recovery=1 version={} hash={}\"/' /boot/boot_args && sudo mount -o remount,ro /boot && sudo reboot",
@@ -510,7 +511,9 @@ async fn simulate_node_provider_action(
     let server_ipv6 = impersonate_upstreams::get_upstreams_uvm_ipv6(env);
     info!(
         logger,
-        "Spoofing HostOS {} DNS to point the upstreams to the UVM at {}", host.vm_name(), server_ipv6
+        "Spoofing HostOS {} DNS to point the upstreams to the UVM at {}",
+        host.vm_name(),
+        server_ipv6
     );
     impersonate_upstreams::spoof_node_dns_async(host, &server_ipv6)
         .await
@@ -528,7 +531,9 @@ async fn simulate_node_provider_action(
         .expect("Failed to overwrite expected recovery hash");
     info!(
         logger,
-        "Spoofing GuestOS {} DNS to point the upstreams to the UVM at {}", host.vm_name(), server_ipv6
+        "Spoofing GuestOS {} DNS to point the upstreams to the UVM at {}",
+        host.vm_name(),
+        server_ipv6
     );
     impersonate_upstreams::spoof_node_dns_async(&guest, &server_ipv6)
         .await
