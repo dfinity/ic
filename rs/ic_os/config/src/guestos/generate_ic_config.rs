@@ -338,8 +338,8 @@ fn generate_tls_certificate(domain_name: &str) -> Result<()> {
 mod tests {
     use super::*;
     use config_types::{
-        FixedIpv6Config, GuestOSConfig, GuestOSDevSettings, GuestOSSettings, GuestOSUpgradeConfig,
-        GuestVMType, ICOSSettings, Ipv6Config, NetworkSettings, CONFIG_VERSION,
+        FixedIpv6Config, GuestOSConfig, GuestOSSettings, GuestOSUpgradeConfig, GuestVMType,
+        ICOSSettings, Ipv6Config, NetworkSettings, CONFIG_VERSION,
     };
     use ic_config::{config_parser::ConfigSource, ConfigOptional};
 
@@ -443,7 +443,7 @@ mod tests {
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: config_types::ICOSDevSettings::default(),
             },
-            guestos_settings: GuestOSSettings::Default,
+            guestos_settings: GuestOSSettings::default(),
             guest_vm_type: GuestVMType::Default,
             upgrade_config: GuestOSUpgradeConfig::default(),
             trusted_execution_environment_config: None,

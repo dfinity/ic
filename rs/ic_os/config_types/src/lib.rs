@@ -356,7 +356,7 @@ mod tests {
                 "inject_ic_crypto": false,
                 "inject_ic_state": false,
                 "inject_ic_registry_local_store": false,
-                "recovery_hash": None,
+                "recovery_hash": None::<String>,
                 "guestos_dev_settings": {}
             },
             "guest_vm_type": "unknown_future_variant"
