@@ -314,16 +314,23 @@ fn verify_paths(
             {
                 let message_id = MessageId::try_from(*request_id).map_err(|_| HttpError {
                     status: StatusCode::BAD_REQUEST,
-                    message: format!("Invalid request id in paths. Maybe the request ID is not of {} bytes in length?!", EXPECTED_MESSAGE_ID_LENGTH)
+                    message: format!(
+                        "Invalid request id in paths. Maybe the request ID \
+                        is not of {} bytes in length?!",
+                        EXPECTED_MESSAGE_ID_LENGTH
+                    ),
                 })?;
 
                 if let Some(x) = last_request_status_id {
                     if x != message_id {
                         return Err(HttpError {
-                                status: StatusCode::BAD_REQUEST,
-                                message: format!("More than one non-unique request ID exists in request_status paths: {} and {}.",
-                                   x, message_id),
-                            });
+                            status: StatusCode::BAD_REQUEST,
+                            message: format!(
+                                "More than one non-unique request ID exists \
+                                 in request_status paths: {} and {}.",
+                                x, message_id
+                            ),
+                        });
                     }
                 }
                 last_request_status_id = Some(message_id.clone());
