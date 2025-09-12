@@ -392,7 +392,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     .expect("Failed to serve recovery artifacts from UVM");
 
     info!(logger, "Setup UVM to serve recovery-dev GuestOS image");
-    impersonate_upstreams::uvm_serve_guestos_image(
+    impersonate_upstreams::uvm_serve_recovery_image(
         &env,
         &recovery_img_path,
         RECOVERY_GUESTOS_IMG_VERSION,
