@@ -8,7 +8,10 @@ use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
 use linux_kernel_command_line::KernelCommandLine;
 use std::net::Ipv6Addr;
+use std::path::Path;
 use utils::to_cidr;
+
+const DEFAULT_GUESTOS_RECOVERY_FILE_PATH: &str = "/run/config/guestos_recovered";
 
 /// Generate the GuestOS configuration based on the provided HostOS configuration.
 /// If hostos_config.icos_settings.enable_trusted_execution_environment is true,
@@ -75,7 +78,13 @@ pub fn generate_guestos_config(
     let mut guestos_settings = hostos_config.guestos_settings.clone();
     let hostos_cmdline_content = std::fs::read_to_string("/proc/cmdline")
         .context("Failed to read HostOS boot args from /proc/cmdline")?;
-    guestos_settings.recovery_hash = guestos_recovery_hash(&hostos_cmdline_content)?;
+
+    if let Some(recovery_hash) = guestos_recovery_hash(
+        &hostos_cmdline_content,
+        DEFAULT_GUESTOS_RECOVERY_FILE_PATH.as_ref(),
+    )? {
+        guestos_settings.recovery_hash = Some(recovery_hash);
+    }
 
     let guestos_config = GuestOSConfig {
         config_version: hostos_config.config_version.clone(),
@@ -106,14 +115,37 @@ fn node_ipv6_address(
 }
 
 /// Retrieves the recovery-hash from the HostOS boot args, if present.
-fn guestos_recovery_hash(hostos_cmdline_content: &str) -> Result<Option<String>> {
+/// If a recovery hash is found and GuestOS hasn't been marked as recovered yet,
+/// it marks HostOS as recovered and returns the hash.
+fn guestos_recovery_hash(
+    hostos_cmdline_content: &str,
+    recovery_file_path: &Path,
+) -> Result<Option<String>> {
     let hostos_cmdline = hostos_cmdline_content.parse::<KernelCommandLine>()?;
 
     if let Some(recovery_hash_value) = hostos_cmdline.get_argument("recovery-hash") {
-        Ok(Some(recovery_hash_value.to_string()))
+        if !recovery_file_path.exists() {
+            mark_hostos_recovered(recovery_file_path)?;
+            Ok(Some(recovery_hash_value.to_string()))
+        } else {
+            Ok(None)
+        }
     } else {
         Ok(None)
     }
+}
+
+/// Marks that HostOS has booted GuestOS in recovery mode by creating a tracking file.
+/// This ensures that subsequent GuestOS launches in the same HostOS boot
+/// will not use the recovery_hash again.
+fn mark_hostos_recovered(recovery_file_path: &Path) -> Result<()> {
+    if let Some(parent) = recovery_file_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    std::fs::File::create(recovery_file_path)?;
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -124,6 +156,7 @@ mod tests {
         NetworkSettings,
     };
     use std::net::Ipv6Addr;
+    use tempfile::tempdir;
 
     fn hostos_config_for_test() -> HostOSConfig {
         HostOSConfig {
@@ -248,14 +281,32 @@ mod tests {
             "abc"
         );
     }
-    #[test]
-    fn test_get_recovery_hash() {
-        let mock_cmdline = "root=/dev/sda1 recovery-hash=abc123 dummy";
-        let recovery_hash = guestos_recovery_hash(mock_cmdline).unwrap();
-        assert_eq!(recovery_hash, Some("abc123".to_string()));
 
-        let mock_cmdline = "root=/dev/sda1 quiet";
-        let recovery_hash = guestos_recovery_hash(mock_cmdline).unwrap();
+    #[test]
+    fn test_recovery_hash() {
+        let temp_dir = tempdir().unwrap();
+        let recovery_file_path = temp_dir.path().join("guestos_recovered");
+        let mock_cmdline = "root=/dev/sda1 recovery-hash=test123 dummy";
+
+        // Test case 1: No recovery file exists initially
+        // The function should return the recovery hash and create the recovery file
+        let recovery_hash = guestos_recovery_hash(mock_cmdline, &recovery_file_path).unwrap();
+        assert_eq!(recovery_hash, Some("test123".to_string()));
+        assert!(recovery_file_path.exists());
+
+        // Test case 2: Recovery file now exists
+        // The function should return None since GuestOS has already been recovered
+        let recovery_hash = guestos_recovery_hash(mock_cmdline, &recovery_file_path).unwrap();
+        assert_eq!(recovery_hash, None);
+    }
+
+    #[test]
+    fn test_recovery_hash_absent() {
+        let temp_dir = tempdir().unwrap();
+        let recovery_file_path = temp_dir.path().join("guestos_recovered");
+
+        let mock_cmdline = "root=/dev/sda1 dummy";
+        let recovery_hash = guestos_recovery_hash(mock_cmdline, &recovery_file_path).unwrap();
         assert_eq!(recovery_hash, None);
     }
 }
