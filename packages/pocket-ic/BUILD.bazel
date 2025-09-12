@@ -55,7 +55,10 @@ rust_test_suite(
     # the test sometimes times out on CI with default timeout
     # of "moderate" (5 minutes) - 2025-07-03
     timeout = "long",
-    srcs = ["tests/tests.rs"],
+    srcs = [
+        "tests/common.rs",
+        "tests/tests.rs",
+    ],
     data = [
         "//packages/pocket-ic/test_canister:test_canister.wasm.gz",
         "//rs/pocket_ic_server:pocket-ic-server",
@@ -103,12 +106,15 @@ rust_test_suite(
 )
 
 [
-    rust_test_suite(
+    rust_test(
         name = "icp_features" + name_suffix,
         # the test sometimes times out on CI with default timeout
         # of "moderate" (5 minutes) - 2025-07-03
         timeout = "long",
-        srcs = ["tests/icp_features.rs"],
+        srcs = [
+            "tests/common.rs",
+            "tests/icp_features.rs",
+        ],
         data = [
             "//packages/pocket-ic/test_canister:test_canister.wasm.gz",
             "//rs/pocket_ic_server:pocket-ic-server" + name_suffix,
