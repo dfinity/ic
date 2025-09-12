@@ -18,6 +18,11 @@ use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::TokensType;
 use ic_ledger_core::Tokens;
 use ic_ledger_hash_of::HashOf;
+use ic_ledger_suite_state_machine_tests_types::{
+    ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
+    INT_META_VALUE, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
+    TEXT_META_VALUE, TEXT_META_VALUE_2, TOKEN_NAME, TOKEN_SYMBOL,
+};
 use ic_management_canister_types_private::CanisterSettingsArgsBuilder;
 use ic_management_canister_types_private::{
     self as ic00, CanisterInfoRequest, CanisterInfoResponse, Method, Payload,
@@ -74,29 +79,12 @@ pub mod icrc_106;
 pub mod in_memory_ledger;
 pub mod metrics;
 
-pub const FEE: u64 = 10_000;
-pub const DECIMAL_PLACES: u8 = 8;
-pub const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
-pub const NUM_BLOCKS_TO_ARCHIVE: u64 = 5;
 pub const TX_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 
 pub const MINTER: Account = Account {
     owner: PrincipalId::new(0, [0u8; 29]).0,
     subaccount: None,
 };
-
-// Metadata-related constants
-pub const TOKEN_NAME: &str = "Test Token";
-pub const TOKEN_SYMBOL: &str = "XTST";
-pub const TEXT_META_KEY: &str = "test:image";
-pub const TEXT_META_VALUE: &str = "grumpy_cat.png";
-pub const TEXT_META_VALUE_2: &str = "dog.png";
-pub const BLOB_META_KEY: &str = "test:blob";
-pub const BLOB_META_VALUE: &[u8] = b"\xca\xfe\xba\xbe";
-pub const NAT_META_KEY: &str = "test:nat";
-pub const NAT_META_VALUE: u128 = u128::MAX;
-pub const INT_META_KEY: &str = "test:int";
-pub const INT_META_VALUE: i128 = i128::MIN;
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType)]
 pub struct InitArgs {

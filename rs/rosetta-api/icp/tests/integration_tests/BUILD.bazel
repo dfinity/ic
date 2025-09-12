@@ -65,6 +65,7 @@ rust_test_suite(
     tags = ["cpu:4"],
     deps = DEPENDENCIES + [
         ":rosetta-integration-tests-lib",
+        "//rs/ledger_suite/tests/sm-tests/types:ic-ledger-suite-state-machine-tests-types",
         "//rs/rosetta-api/icp/test_utils/sender_canister:ic_sender_canister_lib",
     ],
 )
