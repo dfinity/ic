@@ -48,7 +48,7 @@ runs:
 
         # parse YAML and generate UUIDs
         echo "$targets" | yq -r '.[] | [.name, .output_id] | @tsv' | while IFS=$'\t' read -r name output_id; do
-          uuid=$(uuidgen)
+          uuid=$(cat /proc/sys/kernel/random/uuid)
           echo "$output_id=$uuid" >> "$GITHUB_OUTPUT"
           link="$invocations_base/$uuid"
           summary+="| $name | \`$uuid\` | [BuildBuddy link to $uuid]($link) |\n"
