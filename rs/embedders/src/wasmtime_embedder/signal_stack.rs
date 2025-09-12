@@ -23,9 +23,11 @@ use std::mem::MaybeUninit;
 use std::ptr;
 
 unsafe fn get_act_sigstack() -> libc::stack_t {
-    let mut prev_stack = std::mem::MaybeUninit::<libc::stack_t>::uninit();
-    sigaltstack(std::ptr::null(), prev_stack.as_mut_ptr());
-    prev_stack.assume_init()
+    unsafe {
+        let mut prev_stack = std::mem::MaybeUninit::<libc::stack_t>::uninit();
+        sigaltstack(std::ptr::null(), prev_stack.as_mut_ptr());
+        prev_stack.assume_init()
+    }
 }
 
 pub struct ScopedSignalStack {
@@ -35,17 +37,19 @@ pub struct ScopedSignalStack {
 
 impl ScopedSignalStack {
     unsafe fn new(stack: libc::stack_t) -> Self {
-        let mut prev_stack = MaybeUninit::<libc::stack_t>::uninit();
-        let res = sigaltstack(&stack, prev_stack.as_mut_ptr());
-        if res != 0 {
-            panic!(
-                "Setting sigaltstack failed. errno: {}",
-                Error::last_os_error()
-            );
-        }
-        Self {
-            stack,
-            prev_stack: prev_stack.assume_init(),
+        unsafe {
+            let mut prev_stack = MaybeUninit::<libc::stack_t>::uninit();
+            let res = sigaltstack(&stack, prev_stack.as_mut_ptr());
+            if res != 0 {
+                panic!(
+                    "Setting sigaltstack failed. errno: {}",
+                    Error::last_os_error()
+                );
+            }
+            Self {
+                stack,
+                prev_stack: prev_stack.assume_init(),
+            }
         }
     }
 }
@@ -131,7 +135,7 @@ impl WasmtimeSignalStack {
     }
 
     pub unsafe fn register(&mut self) -> ScopedSignalStack {
-        ScopedSignalStack::new(self.stack)
+        unsafe { ScopedSignalStack::new(self.stack) }
     }
 }
 

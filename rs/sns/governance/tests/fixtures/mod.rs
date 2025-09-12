@@ -1128,7 +1128,7 @@ impl GovernanceCanisterFixtureBuilder {
 
 #[macro_export]
 macro_rules! assert_changes {
-    ($sns:expr, $expected:expr) => {{
+    ($sns:expr_2021, $expected:expr_2021) => {{
         let new_state = $sns.get_state();
         comparable::pretty_assert_changes!(
             $sns.initial_state
@@ -1143,7 +1143,7 @@ macro_rules! assert_changes {
 
 #[macro_export]
 macro_rules! prop_assert_changes {
-    ($sns:expr, $expected:expr) => {{
+    ($sns:expr_2021, $expected:expr_2021) => {{
         let new_state = $sns.get_state();
         comparable::prop_pretty_assert_changes!(
             $sns.initial_state

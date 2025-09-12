@@ -748,12 +748,10 @@ mod tests {
                 let mut time = time.write().unwrap();
                 *time += 1;
 
-                let certificate =
-                    if let Some(delegation) = override_nns_delegation.read().unwrap().deref() {
-                        delegation.certificate.clone()
-                    } else {
-                        Blob(create_certificate(*time))
-                    };
+                let certificate = match override_nns_delegation.read().unwrap().deref() {
+                    Some(delegation) => delegation.certificate.clone(),
+                    _ => Blob(create_certificate(*time)),
+                };
 
                 let body = serde_cbor::ser::to_vec(&HttpReadStateResponse { certificate }).unwrap();
                 (

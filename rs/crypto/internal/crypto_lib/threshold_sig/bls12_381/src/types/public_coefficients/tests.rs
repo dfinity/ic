@@ -193,12 +193,12 @@ mod public_coefficients {
         for num_coefficients in 1..50 {
             let mut inputs = vec![];
 
-            let dup_r = rng.gen::<NodeIndex>();
+            let dup_r = rng.r#gen::<NodeIndex>();
 
             inputs.push(dup_r);
 
             for _i in 0..=num_coefficients {
-                let r = rng.gen::<NodeIndex>();
+                let r = rng.r#gen::<NodeIndex>();
                 inputs.push(r);
             }
             inputs.push(dup_r);

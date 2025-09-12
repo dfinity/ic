@@ -110,7 +110,7 @@ fn check_anonymous_caller() {
     }
 }
 
-#[export_name = "canister_global_timer"]
+#[unsafe(export_name = "canister_global_timer")]
 fn timer() {
     // ic_ckbtc_minter::timer invokes ic_cdk::spawn
     // which must be wrapped in in_executor_context

@@ -47,7 +47,7 @@ pub type PageBytes = [u8; PAGE_SIZE];
 /// should be a reference to a container owning or borrowing the page: an array,
 /// a vector, a slice, a memory mapping, etc.
 pub unsafe fn page_bytes_from_ptr<T>(_owner: &T, ptr: *const u8) -> &PageBytes {
-    &*(ptr as *const PageBytes)
+    unsafe { &*(ptr as *const PageBytes) }
 }
 
 /// Size of an OS memory page in bytes.

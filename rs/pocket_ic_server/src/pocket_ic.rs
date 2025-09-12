@@ -2,12 +2,13 @@ use crate::external_canister_types::{
     CaptchaConfig, CaptchaTrigger, GoogleOpenIdConfig, InternetIdentityInit, RateLimitConfig,
     StaticCaptchaTrigger,
 };
+use crate::state_api::routes::into_api_response;
 use crate::state_api::state::{HasStateLabel, OpOut, PocketIcError, StateLabel};
 use crate::{BlobStore, OpId, Operation, SubnetBlockmaker};
 use askama::Template;
 use axum::{
     extract::State,
-    response::{Html, IntoResponse, Response as AxumResponse},
+    response::{Html, IntoResponse},
 };
 use bitcoin::Network;
 use candid::{CandidType, Decode, Encode, Principal};
@@ -111,10 +112,10 @@ use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayloadBuilder, Subaccount
 use itertools::Itertools;
 use pocket_ic::common::rest::{
     self, BinaryBlob, BlobCompression, CanisterHttpHeader, CanisterHttpMethod, CanisterHttpRequest,
-    CanisterHttpResponse, EmptyConfig, ExtendedSubnetConfigSet, IcpFeatures,
-    MockCanisterHttpResponse, NonmainnetFeatures, RawAddCycles, RawCanisterCall, RawCanisterId,
-    RawEffectivePrincipal, RawMessageId, RawSetStableMemory, SubnetInstructionConfig, SubnetKind,
-    TickConfigs, Topology,
+    CanisterHttpResponse, ExtendedSubnetConfigSet, IcpConfig, IcpConfigFlag, IcpFeatures,
+    IcpFeaturesConfig, IncompleteStateFlag, MockCanisterHttpResponse, RawAddCycles,
+    RawCanisterCall, RawCanisterId, RawEffectivePrincipal, RawMessageId, RawSetStableMemory,
+    SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
 };
 use pocket_ic::{copy_dir, ErrorCode, RejectCode, RejectResponse};
 use registry_canister::init::RegistryCanisterInitPayload;
@@ -197,10 +198,7 @@ fn default_timestamp(icp_features: &Option<IcpFeatures>) -> SystemTime {
     // To set the ICP/XDR conversion rate, the PocketIC time (in seconds) must be strictly larger than the default timestamp in CMC state.
     let cycles_minting_feature = icp_features
         .as_ref()
-        .map(|icp_features|
-            // using `EmptyConfig { }` explicitly
-            // to force an update after adding a new field to `EmptyConfig`
-            matches!(icp_features.cycles_minting, Some(EmptyConfig {})))
+        .map(|icp_features| icp_features.cycles_minting.is_some())
         .unwrap_or_default();
     if cycles_minting_feature {
         UNIX_EPOCH + Duration::from_secs(DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS + 1)
@@ -209,8 +207,8 @@ fn default_timestamp(icp_features: &Option<IcpFeatures>) -> SystemTime {
     }
 }
 
-/// The response type for `/api/v2` and `/api/v3` IC endpoint operations.
-pub(crate) type ApiResponse = BoxFuture<'static, (u16, BTreeMap<String, Vec<u8>>, Vec<u8>)>;
+/// The response type for `/api` IC endpoint operations.
+pub(crate) type ApiResponse = BoxFuture<'static, (StatusCode, BTreeMap<String, Vec<u8>>, Vec<u8>)>;
 
 /// We assume that the maximum number of subnets on the mainnet is 1024.
 /// Used for generating canister ID ranges that do not appear on mainnet.
@@ -241,20 +239,6 @@ fn user_error_to_reject_response(
         error_code: ErrorCode::try_from(err.code() as u64).unwrap(),
         certified,
     }
-}
-
-async fn into_api_response(resp: AxumResponse) -> (u16, BTreeMap<String, Vec<u8>>, Vec<u8>) {
-    (
-        resp.status().into(),
-        resp.headers()
-            .iter()
-            .map(|(name, value)| (name.as_str().to_string(), value.as_bytes().to_vec()))
-            .collect(),
-        axum::body::to_bytes(resp.into_body(), usize::MAX)
-            .await
-            .unwrap()
-            .to_vec(),
-    )
 }
 
 fn compute_subnet_seed(
@@ -544,7 +528,7 @@ struct PocketIcSubnets {
     state_dir: Option<PathBuf>,
     routing_table: RoutingTable,
     chain_keys: BTreeMap<MasterPublicKeyId, Vec<SubnetId>>,
-    nonmainnet_features: NonmainnetFeatures,
+    icp_config: IcpConfig,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
     icp_features: Option<IcpFeatures>,
@@ -564,54 +548,64 @@ impl PocketIcSubnets {
         instruction_config: SubnetInstructionConfig,
         registry_data_provider: Arc<ProtoRegistryDataProvider>,
         create_at_registry_version: RegistryVersion,
-        nonmainnet_features: &NonmainnetFeatures,
+        icp_config: &IcpConfig,
         log_level: Option<Level>,
         bitcoin_adapter_uds_path: Option<PathBuf>,
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
         let mut subnet_config = SubnetConfig::new(subnet_type);
-        // using `let NonmainnetFeatures { }` with explicit field names
-        // to force an update after adding a new field to `NonmainnetFeatures`
-        let NonmainnetFeatures {
-            enable_beta_features,
-            disable_canister_backtrace,
-            disable_function_name_length_limits,
-            disable_canister_execution_rate_limiting,
-        } = nonmainnet_features;
-        // using `EmptyConfig { }` explicitly
-        // to force an update after adding a new field to `EmptyConfig`
-        let mut hypervisor_config = if let Some(EmptyConfig {}) = enable_beta_features {
-            crate::beta_features::hypervisor_config()
-        } else {
-            execution_environment::Config::default()
+        // using `let IcpConfig { }` with explicit field names
+        // to force an update after adding a new field to `IcpConfig`
+        let IcpConfig {
+            beta_features,
+            canister_backtrace,
+            function_name_length_limits,
+            canister_execution_rate_limiting,
+        } = icp_config;
+        let mut hypervisor_config = match beta_features.clone().unwrap_or(IcpConfigFlag::Disabled) {
+            IcpConfigFlag::Disabled => execution_environment::Config::default(),
+            IcpConfigFlag::Enabled => crate::beta_features::hypervisor_config(),
         };
-        // using `EmptyConfig { }` explicitly
-        // to force an update after adding a new field to `EmptyConfig`
-        if let Some(EmptyConfig {}) = disable_canister_backtrace {
-            hypervisor_config
-                .embedders_config
-                .feature_flags
-                .canister_backtrace = FlagStatus::Disabled;
-        }
-        // using `EmptyConfig { }` explicitly
-        // to force an update after adding a new field to `EmptyConfig`
-        if let Some(EmptyConfig {}) = disable_function_name_length_limits {
-            // the maximum size of a canister WASM is much less than 1GB
-            // and thus the following limits effectively disable all limits
-            hypervisor_config
-                .embedders_config
-                .max_number_exported_functions = 1_000_000_000;
-            hypervisor_config
-                .embedders_config
-                .max_sum_exported_function_name_lengths = 1_000_000_000;
-        }
-        // using `EmptyConfig { }` explicitly
-        // to force an update after adding a new field to `EmptyConfig`
-        if let Some(EmptyConfig {}) = disable_canister_execution_rate_limiting {
-            hypervisor_config.rate_limiting_of_heap_delta = FlagStatus::Disabled;
-            hypervisor_config.rate_limiting_of_instructions = FlagStatus::Disabled;
-        }
+        match canister_backtrace {
+            None => (),
+            Some(IcpConfigFlag::Enabled) => {
+                hypervisor_config
+                    .embedders_config
+                    .feature_flags
+                    .canister_backtrace = FlagStatus::Enabled;
+            }
+            Some(IcpConfigFlag::Disabled) => {
+                hypervisor_config
+                    .embedders_config
+                    .feature_flags
+                    .canister_backtrace = FlagStatus::Disabled;
+            }
+        };
+        match function_name_length_limits {
+            None | Some(IcpConfigFlag::Enabled) => (),
+            Some(IcpConfigFlag::Disabled) => {
+                // the maximum size of a canister WASM is much less than 1GB
+                // and thus the following limits effectively disable all limits
+                hypervisor_config
+                    .embedders_config
+                    .max_number_exported_functions = 1_000_000_000;
+                hypervisor_config
+                    .embedders_config
+                    .max_sum_exported_function_name_lengths = 1_000_000_000;
+            }
+        };
+        match canister_execution_rate_limiting {
+            None => (),
+            Some(IcpConfigFlag::Enabled) => {
+                hypervisor_config.rate_limiting_of_heap_delta = FlagStatus::Enabled;
+                hypervisor_config.rate_limiting_of_instructions = FlagStatus::Enabled;
+            }
+            Some(IcpConfigFlag::Disabled) => {
+                hypervisor_config.rate_limiting_of_heap_delta = FlagStatus::Disabled;
+                hypervisor_config.rate_limiting_of_instructions = FlagStatus::Disabled;
+            }
+        };
         if let SubnetInstructionConfig::Benchmarking = instruction_config {
             let instruction_limit = NumInstructions::new(99_999_999_999_999);
             if instruction_limit > subnet_config.scheduler_config.max_instructions_per_round {
@@ -653,7 +647,7 @@ impl PocketIcSubnets {
     fn new(
         runtime: Arc<Runtime>,
         state_dir: Option<PathBuf>,
-        nonmainnet_features: NonmainnetFeatures,
+        icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
@@ -681,7 +675,7 @@ impl PocketIcSubnets {
             registry_data_provider,
             routing_table,
             chain_keys,
-            nonmainnet_features,
+            icp_config,
             log_level,
             bitcoind_addr,
             icp_features,
@@ -784,7 +778,7 @@ impl PocketIcSubnets {
             instruction_config.clone(),
             self.registry_data_provider.clone(),
             create_at_registry_version,
-            &self.nonmainnet_features,
+            &self.icp_config,
             self.log_level,
             bitcoin_adapter_uds_path.clone(),
         );
@@ -964,45 +958,29 @@ impl PocketIcSubnets {
                     ii,
                     nns_ui,
                 } = icp_features;
-                // using `EmptyConfig { }` explicitly
-                // to force an update after adding a new field to `EmptyConfig`
-                if let Some(EmptyConfig {}) = registry {
-                    self.update_registry();
+                if let Some(ref config) = registry {
+                    self.update_registry(config);
                 }
-                // using `EmptyConfig { }` explicitly
-                // to force an update after adding a new field to `EmptyConfig`
-                if let Some(EmptyConfig {}) = cycles_minting {
-                    self.update_cmc(&subnet_kind);
+                if let Some(ref config) = cycles_minting {
+                    self.update_cmc(config, &subnet_kind);
                 }
-                // using `EmptyConfig { }` explicitly
-                // to force an update after adding a new field to `EmptyConfig`
-                if let Some(EmptyConfig {}) = icp_token {
-                    self.deploy_icp_token();
+                if let Some(ref config) = icp_token {
+                    self.deploy_icp_token(config);
                 }
-                // using `EmptyConfig { }` explicitly
-                // to force an update after adding a new field to `EmptyConfig`
-                if let Some(EmptyConfig {}) = cycles_token {
-                    self.deploy_cycles_token();
+                if let Some(ref config) = cycles_token {
+                    self.deploy_cycles_token(config);
                 }
-                // using `EmptyConfig { }` explicitly
-                // to force an update after adding a new field to `EmptyConfig`
-                if let Some(EmptyConfig {}) = nns_governance {
-                    self.deploy_nns_governance();
+                if let Some(ref config) = nns_governance {
+                    self.deploy_nns_governance(config);
                 }
-                // using `EmptyConfig { }` explicitly
-                // to force an update after adding a new field to `EmptyConfig`
-                if let Some(EmptyConfig {}) = sns {
-                    self.deploy_sns();
+                if let Some(ref config) = sns {
+                    self.deploy_sns(config);
                 }
-                // using `EmptyConfig { }` explicitly
-                // to force an update after adding a new field to `EmptyConfig`
-                if let Some(EmptyConfig {}) = ii {
-                    self.deploy_ii();
+                if let Some(ref config) = ii {
+                    self.deploy_ii(config);
                 }
-                // using `EmptyConfig { }` explicitly
-                // to force an update after adding a new field to `EmptyConfig`
-                if let Some(EmptyConfig {}) = nns_ui {
-                    self.deploy_nns_ui();
+                if let Some(ref config) = nns_ui {
+                    self.deploy_nns_ui(config);
                 }
             }
         }
@@ -1016,7 +994,13 @@ impl PocketIcSubnets {
             .map(|subnet| subnet.state_machine.clone())
     }
 
-    fn update_registry(&mut self) {
+    fn update_registry(&mut self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
         let nns_subnet = self.nns_subnet.clone().expect(
             "The NNS subnet is supposed to already exist if the `registry` ICP feature is specified.",
         );
@@ -1090,7 +1074,13 @@ impl PocketIcSubnets {
         self.synced_registry_version = self.registry_data_provider.latest_version();
     }
 
-    fn update_cmc(&mut self, subnet_kind: &SubnetKind) {
+    fn update_cmc(&mut self, config: &IcpFeaturesConfig, subnet_kind: &SubnetKind) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
         let nns_subnet = self
             .nns_subnet
             .clone()
@@ -1135,10 +1125,7 @@ impl PocketIcSubnets {
             let cycles_ledger_canister_id = if self
                 .icp_features
                 .as_ref()
-                .map(|icp_features|
-                  // using `EmptyConfig { }` explicitly
-                  // to force an update after adding a new field to `EmptyConfig`
-                  matches!(icp_features.cycles_token, Some(EmptyConfig {})))
+                .map(|icp_features| icp_features.cycles_token.is_some())
                 .unwrap_or_default()
             {
                 Some(CYCLES_LEDGER_CANISTER_ID)
@@ -1258,7 +1245,13 @@ impl PocketIcSubnets {
         }
     }
 
-    fn deploy_icp_token(&self) {
+    fn deploy_icp_token(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
         let nns_subnet = self
             .nns_subnet
             .clone()
@@ -1391,7 +1384,13 @@ impl PocketIcSubnets {
         }
     }
 
-    fn deploy_cycles_token(&self) {
+    fn deploy_cycles_token(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
         // Nothing to do if the II subnet does not exist (yet).
         let Some(ref ii_subnet) = self.ii_subnet else {
             return;
@@ -1518,7 +1517,13 @@ impl PocketIcSubnets {
         }
     }
 
-    fn deploy_nns_governance(&self) {
+    fn deploy_nns_governance(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
         let nns_subnet = self
             .nns_subnet
             .clone()
@@ -1649,7 +1654,13 @@ impl PocketIcSubnets {
         }
     }
 
-    fn deploy_sns(&self) {
+    fn deploy_sns(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
         // Nothing to do if the SNS subnet does not exist (yet).
         let Some(ref sns_subnet) = self.sns_subnet else {
             return;
@@ -1818,7 +1829,13 @@ impl PocketIcSubnets {
         }
     }
 
-    fn deploy_ii(&self) {
+    fn deploy_ii(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
         // Nothing to do if the II subnet does not exist (yet).
         let Some(ref ii_subnet) = self.ii_subnet else {
             return;
@@ -1960,7 +1977,13 @@ impl PocketIcSubnets {
         }
     }
 
-    fn deploy_nns_ui(&self) {
+    fn deploy_nns_ui(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
         let nns_subnet = self.nns_subnet.clone().expect(
             "The NNS subnet is supposed to already exist if the `nns_ui` ICP feature is specified.",
         );
@@ -2172,11 +2195,11 @@ impl PocketIc {
         seed: u64,
         mut subnet_configs: ExtendedSubnetConfigSet,
         state_dir: Option<PathBuf>,
-        nonmainnet_features: NonmainnetFeatures,
+        icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
-        allow_incomplete_state: Option<EmptyConfig>,
+        incomplete_state: Option<IncompleteStateFlag>,
         initial_time: Option<Time>,
         auto_progress_enabled: bool,
         gateway_port: Option<u16>,
@@ -2239,12 +2262,9 @@ impl PocketIc {
                     if let Some(allocation_range) = config.alloc_range {
                         range_gen.add_assigned(vec![allocation_range]).unwrap();
                     }
-                    // using `EmptyConfig { }` explicitly
-                    // to force an update after adding a new field to `EmptyConfig`
-                    let expected_state_time = if let Some(EmptyConfig {}) = allow_incomplete_state {
-                        None
-                    } else {
-                        Some(topology.time)
+                    let expected_state_time = match incomplete_state {
+                        None | Some(IncompleteStateFlag::Disabled) => Some(topology.time),
+                        Some(IncompleteStateFlag::Enabled) => None,
                     };
                     SubnetConfigInfo {
                         ranges: config.ranges,
@@ -2423,7 +2443,7 @@ impl PocketIc {
         let mut subnets = PocketIcSubnets::new(
             runtime.clone(),
             state_dir,
-            nonmainnet_features,
+            icp_config,
             log_level,
             bitcoind_addr,
             icp_features,
@@ -3540,7 +3560,7 @@ impl Operation for CallRequest {
             is_provisional_create_canister,
         );
         match subnet {
-            Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
+            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
             Ok(subnet) => {
                 let node = &subnet.nodes[0];
                 let (s, mut r) = mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
@@ -3683,7 +3703,7 @@ impl Operation for QueryRequest {
             false,
         );
         match subnet {
-            Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
+            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
             Ok(subnet) => {
                 let subnet_id = subnet.get_subnet_id();
                 let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
@@ -3760,7 +3780,7 @@ impl Operation for CanisterReadStateRequest {
             EffectivePrincipal::CanisterId(self.effective_canister_id),
             false,
         ) {
-            Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
+            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
             Ok(subnet) => {
                 let subnet_id = subnet.get_subnet_id();
                 let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
@@ -3832,7 +3852,7 @@ pub struct SubnetReadStateRequest {
 impl Operation for SubnetReadStateRequest {
     fn compute(&self, pic: &mut PocketIc) -> OpOut {
         match route(pic, EffectivePrincipal::SubnetId(self.subnet_id), false) {
-            Err(e) => OpOut::Error(PocketIcError::RequestRoutingError(e)),
+            Err(e) => OpOut::Error(PocketIcError::SubnetRequestRoutingError(e)),
             Ok(subnet) => {
                 let subnet_id = subnet.get_subnet_id();
                 let delegation = pic.get_nns_delegation_for_subnet(subnet_id);
@@ -4418,7 +4438,7 @@ mod tests {
                     ..Default::default()
                 },
                 None,
-                NonmainnetFeatures::default(),
+                IcpConfig::default(),
                 None,
                 None,
                 None,
@@ -4436,7 +4456,7 @@ mod tests {
                     ..Default::default()
                 },
                 None,
-                NonmainnetFeatures::default(),
+                IcpConfig::default(),
                 None,
                 None,
                 None,

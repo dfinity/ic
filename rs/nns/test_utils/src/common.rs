@@ -1,5 +1,6 @@
 use crate::{
     gtc_helpers::GenesisTokenCanisterInitPayloadBuilder, registry::invariant_compliant_mutation,
+    subnet_rental::SubnetRentalCanisterInitPayloadBuilder,
 };
 use canister_test::{Project, Wasm};
 use core::option::Option::{None, Some};
@@ -38,6 +39,11 @@ pub struct NnsInitPayloads {
     pub genesis_token: Gtc,
     pub sns_wasms: SnsWasmCanisterInitPayload,
     pub index: ic_icp_index::InitArg,
+
+    // Optional canister(s). Unlike others above, these are of type
+    // Option<${CANISTER}InitPayload>. When an optional canister is enabled,
+    // these fields contain Some (otherwise, they contain None).
+    pub subnet_rental: Option<()>,
 }
 
 /// Builder to help create the initial payloads for the NNS canisters.
@@ -51,6 +57,7 @@ pub struct NnsInitPayloadsBuilder {
     pub genesis_token: GenesisTokenCanisterInitPayloadBuilder,
     pub sns_wasms: SnsWasmCanisterInitPayloadBuilder,
     pub index: ic_icp_index::InitArg,
+    pub subnet_rental: SubnetRentalCanisterInitPayloadBuilder,
 }
 
 #[allow(clippy::new_without_default)]
@@ -78,6 +85,7 @@ impl NnsInitPayloadsBuilder {
             index: ic_icp_index::InitArg {
                 ledger_id: LEDGER_CANISTER_ID.get().into(),
             },
+            subnet_rental: SubnetRentalCanisterInitPayloadBuilder::new(),
         }
     }
 
@@ -222,6 +230,11 @@ impl NnsInitPayloadsBuilder {
         self
     }
 
+    pub fn with_subnet_rental_canister(&mut self) -> &mut Self {
+        self.subnet_rental.enable();
+        self
+    }
+
     pub fn build(&mut self) -> NnsInitPayloads {
         assert!(!self
             .ledger
@@ -260,6 +273,7 @@ impl NnsInitPayloadsBuilder {
             genesis_token: self.genesis_token.build(),
             sns_wasms: self.sns_wasms.build(),
             index: self.index.clone(),
+            subnet_rental: self.subnet_rental.build(),
         }
     }
 }

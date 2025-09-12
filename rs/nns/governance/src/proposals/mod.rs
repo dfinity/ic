@@ -10,6 +10,7 @@ use std::collections::HashMap;
 
 pub mod call_canister;
 pub mod create_service_nervous_system;
+pub mod deregister_known_neuron;
 pub mod fulfill_subnet_rental_request;
 pub mod install_code;
 pub mod stop_or_start_canister;
@@ -24,7 +25,7 @@ pub(crate) fn topic_to_manage_canister(canister_id: &CanisterId) -> Topic {
     } else if SNS_RELATED_CANISTER_IDS.contains(&canister_id) {
         Topic::ServiceNervousSystemManagement
     } else {
-        Topic::NetworkCanisterManagement
+        Topic::ApplicationCanisterManagement
     }
 }
 

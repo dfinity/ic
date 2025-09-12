@@ -197,18 +197,19 @@ const DEFAULT_SKIPPING_QUOTA: usize = 10_000;
 /// field is always populated in new neurons.
 pub const DEFAULT_VOTING_POWER_REFRESHED_TIMESTAMP_SECONDS: u64 = 1725148800;
 
-// TODO(NNS1-3248): Delete this once the feature has made it through the
-// probation period. At that point, we will not need this "kill switch". We can
-// leave this here indefinitely, but it will just be clutter after a modest
-// amount of time.
 thread_local! {
     static DISABLE_NF_FUND_PROPOSALS: Cell<bool>
         = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
 
+    // TODO(NNS1-4115): Delete after the Swiss subnet has been created, which is
+    // expected to occur in mid September 2025 or so.
     static ENABLE_FULFILL_SUBNET_RENTAL_REQUEST_PROPOSALS: Cell<bool>
-        = const { Cell::new(cfg!(feature = "test")) };
+        = const { Cell::new(true) };
 
     static ENABLE_KNOWN_NEURON_VOTING_HISTORY: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
+
+    static ENABLE_DEREGISTER_KNOWN_NEURON: Cell<bool>
         = const { Cell::new(cfg!(feature = "test")) };
 }
 
@@ -261,6 +262,20 @@ pub fn temporarily_enable_known_neuron_voting_history() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_known_neuron_voting_history() -> Temporary {
     Temporary::new(&ENABLE_KNOWN_NEURON_VOTING_HISTORY, false)
+}
+
+pub fn is_deregister_known_neuron_enabled() -> bool {
+    ENABLE_DEREGISTER_KNOWN_NEURON.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_deregister_known_neuron() -> Temporary {
+    Temporary::new(&ENABLE_DEREGISTER_KNOWN_NEURON, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_deregister_known_neuron() -> Temporary {
+    Temporary::new(&ENABLE_DEREGISTER_KNOWN_NEURON, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {
