@@ -46,6 +46,7 @@ component_files = {
     Label("guestos/generate-ic-config/generate-ic-config.service"): "/etc/systemd/system/generate-ic-config.service",
     Label("guestos/generate-ic-config/ic.json5.template"): "/opt/ic/share/ic.json5.template",
     Label("guestos/share/ic-boundary.env"): "/opt/ic/share/ic-boundary.env",
+    Label("guestos/share/nns_public_key.pem"): "/opt/ic/share/nns_public_key.pem",
 
     # init
     Label("guestos/init/bootstrap-ic-node/bootstrap-ic-node.service"): "/etc/systemd/system/bootstrap-ic-node.service",

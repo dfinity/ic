@@ -379,7 +379,6 @@ fn create_config_disk_image(
         node_reward_type: None,
         mgmt_mac: None,
         deployment_environment: Some(DeploymentEnvironment::Testnet),
-        use_nns_public_key: Some(true),
         nns_urls: None,
         enable_trusted_execution_environment: None,
         use_node_operator_private_key: Some(true),
@@ -553,7 +552,7 @@ pub fn setup_nested_vms(
     farm: &Farm,
     group_name: &str,
     nns_url: &Url,
-    nns_public_key: &str,
+    nns_public_key_override: &str,
 ) -> anyhow::Result<()> {
     let mut result = Ok(());
 
@@ -573,7 +572,7 @@ pub fn setup_nested_vms(
                 let setupos_image_spec = AttachImageSpec::via_url(url, hash);
 
                 let config_image =
-                    create_setupos_config_image(env, vm_name, nns_url, nns_public_key)?;
+                    create_setupos_config_image(env, vm_name, nns_url, nns_public_key_override)?;
                 let config_image_spec = AttachImageSpec::new(farm.upload_file(
                     group_name,
                     config_image,
@@ -619,7 +618,7 @@ fn create_setupos_config_image(
     env: &TestEnv,
     name: &str,
     nns_url: &Url,
-    nns_public_key: &str,
+    nns_public_key_override: &str,
 ) -> anyhow::Result<PathBuf> {
     info!(
         env.logger(),
@@ -684,8 +683,8 @@ fn create_setupos_config_image(
         .arg((HOSTOS_VCPUS_PER_VM / 2).to_string())
         .arg("--nns-urls")
         .arg(nns_url.to_string())
-        .arg("--nns-public-key")
-        .arg(nns_public_key)
+        .arg("--nns-public-key-override")
+        .arg(nns_public_key_override)
         .arg("--node-reward-type")
         .arg("type3.1")
         .arg("--admin-keys")

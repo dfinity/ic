@@ -207,7 +207,6 @@ fn main() {
             domain_name: None,
             mgmt_mac: None,
             deployment_environment: Some(DeploymentEnvironment::Testnet),
-            use_nns_public_key: Some(true),
             nns_urls: Some(vec![format!("http://[{}]", ipv6_addr)]),
             enable_trusted_execution_environment: None,
             use_node_operator_private_key: Some(true),
