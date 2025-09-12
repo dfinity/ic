@@ -102,6 +102,7 @@ runs:
             uuid=$(cat /proc/sys/kernel/random/uuid)
             link="$invocations_base/$uuid"
             summary+="| $name | \`$uuid\` | [BuildBuddy link to $uuid]($link) |\n"
+            echo "$output_id=$uuid" >> "$GITHUB_OUTPUT"
         done < <(echo "$targets" | $yq_cmd -r '.[] | [.name, .output_id] | @tsv')
 
         # cleanup if we downloaded yq locally
