@@ -1,13 +1,11 @@
-use crate::{
-    active_high_threshold_committee, active_low_threshold_committee, registry_version_at_height,
-};
+use crate::{active_threshold_committee, registry_version_at_height};
 use ic_crypto_prng::{Csprng, RandomnessPurpose};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces_registry::RegistryClient;
 use ic_types::{
     consensus::{
         get_committee_size, get_faults_tolerated, Committee, HasHeight, RandomBeacon, Rank,
-        Threshold,
+        Threshold, ThresholdCommittee,
     },
     registry::RegistryClientError,
     Height, NodeId, SubnetId,
@@ -120,30 +118,6 @@ impl Membership {
         }
     }
 
-    /// Return whether the given node is part of the given consensus committee
-    /// at the specified height
-    pub fn node_belongs_to_threshold_committee(
-        &self,
-        node_id: NodeId,
-        height: Height,
-        committee: Committee,
-    ) -> Result<bool, MembershipError> {
-        match committee {
-            Committee::HighThreshold => {
-                self.node_belongs_to_high_threshold_committee(node_id, height)
-            }
-            Committee::LowThreshold => {
-                self.node_belongs_to_low_threshold_committee(node_id, height)
-            }
-            Committee::Notarization => {
-                unreachable!("Notarization/Finalization does not use threshold committee")
-            }
-            Committee::CanisterHttp => {
-                unreachable!("CanisterHttp does not use threshold committee")
-            }
-        }
-    }
-
     /// Return the threshold of the given consensus committee at the specified
     /// height
     pub fn get_committee_threshold(
@@ -152,8 +126,9 @@ impl Membership {
         committee: Committee,
     ) -> Result<usize, MembershipError> {
         match committee {
-            Committee::HighThreshold => self.get_high_threshold_committee_threshold(height),
-            Committee::LowThreshold => self.get_low_threshold_committee_threshold(height),
+            Committee::Threshold(threshold_committee) => {
+                self.get_threshold_committee_threshold(height, threshold_committee)
+            }
             Committee::Notarization => self.get_notarization_committee_threshold(height),
             Committee::CanisterHttp => self.get_canister_http_committee_threshold(height),
         }
@@ -201,27 +176,15 @@ impl Membership {
         Ok(self.get_canister_http_committee(height)?.contains(&node_id))
     }
 
-    /// Return true if the given node ID is in the low threshold committee at
+    /// Return true if the given node ID is in the threshold committee at
     /// the given height
-    fn node_belongs_to_low_threshold_committee(
+    pub fn node_belongs_to_threshold_committee(
         &self,
         node_id: NodeId,
         height: Height,
+        committee: ThresholdCommittee,
     ) -> Result<bool, MembershipError> {
-        match active_low_threshold_committee(self.consensus_cache.as_ref(), height) {
-            Some((_, committee)) => Ok(committee.position(node_id).is_some()),
-            None => Err(MembershipError::UnableToRetrieveDkgSummary(height)),
-        }
-    }
-
-    /// Return true if the given node ID is in the high threshold committee at
-    /// the given height
-    fn node_belongs_to_high_threshold_committee(
-        &self,
-        node_id: NodeId,
-        height: Height,
-    ) -> Result<bool, MembershipError> {
-        match active_high_threshold_committee(self.consensus_cache.as_ref(), height) {
+        match active_threshold_committee(self.consensus_cache.as_ref(), height, committee) {
             Some((_, committee)) => Ok(committee.position(node_id).is_some()),
             None => Err(MembershipError::UnableToRetrieveDkgSummary(height)),
         }
@@ -238,23 +201,13 @@ impl Membership {
         ))
     }
 
-    /// Return the low-threshold committee threshold.
-    fn get_low_threshold_committee_threshold(
+    /// Return the threshold committee threshold.
+    fn get_threshold_committee_threshold(
         &self,
         height: Height,
+        committee: ThresholdCommittee,
     ) -> Result<Threshold, MembershipError> {
-        match active_low_threshold_committee(self.consensus_cache.as_ref(), height) {
-            Some((threshold, _)) => Ok(threshold),
-            None => Err(MembershipError::UnableToRetrieveDkgSummary(height)),
-        }
-    }
-
-    /// Return the high-threshold committee threshold.
-    fn get_high_threshold_committee_threshold(
-        &self,
-        height: Height,
-    ) -> Result<Threshold, MembershipError> {
-        match active_high_threshold_committee(self.consensus_cache.as_ref(), height) {
+        match active_threshold_committee(self.consensus_cache.as_ref(), height, committee) {
             Some((threshold, _)) => Ok(threshold),
             None => Err(MembershipError::UnableToRetrieveDkgSummary(height)),
         }

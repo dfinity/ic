@@ -54,8 +54,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::ConsensusMessageId, consensus::ConsensusMessageHashable,
-    malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
-    replica_version::ReplicaVersion, Time,
+    malicious_flags::MaliciousFlags, replica_config::ReplicaConfig, Time,
 };
 pub use metrics::ValidatorMetrics;
 use std::{
@@ -92,23 +91,6 @@ enum ConsensusSubcomponent {
     Validator,
     Aggregator,
     Purger,
-}
-
-/// Describe expected version and artifact version when there is a mismatch.
-#[derive(Debug)]
-pub(crate) struct ReplicaVersionMismatch {}
-
-/// The function checks if the version of the given artifact matches the default
-/// protocol version and returns an error if it does not.
-pub(crate) fn check_protocol_version(
-    version: &ReplicaVersion,
-) -> Result<(), ReplicaVersionMismatch> {
-    let expected_version = ReplicaVersion::default();
-    if version != &expected_version {
-        Err(ReplicaVersionMismatch {})
-    } else {
-        Ok(())
-    }
 }
 
 /// [ConsensusImpl] holds all consensus subcomponents, and implements the

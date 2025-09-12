@@ -11,7 +11,9 @@ use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::subnet::{NotarizationDelaySettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    consensus::{Block, BlockProposal, HasCommittee, HasHeight, HasRank, Threshold},
+    consensus::{
+        Block, BlockProposal, HasCommittee, HasHeight, HasRank, Threshold, ThresholdCommittee,
+    },
     crypto::{
         threshold_sig::ni_dkg::{NiDkgId, NiDkgReceivers, NiDkgTag, NiDkgTranscript},
         CryptoHash, CryptoHashable, Signed,
@@ -272,60 +274,39 @@ pub fn get_registry_version_and_interval_length_at_height(
     })
 }
 
-/// Return the current low transcript for the given height if it was found.
-pub fn active_low_threshold_nidkg_id(
+/// Return the current transcript for the given height if it was found.
+pub fn active_threshold_nidkg_id(
     reader: &dyn ConsensusPoolCache,
     height: Height,
+    committee: ThresholdCommittee,
 ) -> Option<NiDkgId> {
+    let dkg_tag = match committee {
+        ThresholdCommittee::Low => NiDkgTag::LowThreshold,
+        ThresholdCommittee::High => NiDkgTag::HighThreshold,
+    };
     get_active_data_at(reader, height, |block, height| {
-        get_transcript_data_at_given_summary(block, height, NiDkgTag::LowThreshold, |transcript| {
+        get_transcript_data_at_given_summary(block, height, dkg_tag.clone(), |transcript| {
             transcript
-                .expect("No active low threshold transcript available for tag {:?}")
+                .expect("No active threshold transcript available for tag {:?}")
                 .dkg_id
                 .clone()
         })
     })
 }
 
-/// Return the current high transcript for the given height if it was found.
-pub fn active_high_threshold_nidkg_id(
+/// Return the current transcript for the given height if it was found.
+pub fn active_threshold_committee(
     reader: &dyn ConsensusPoolCache,
     height: Height,
-) -> Option<NiDkgId> {
-    get_active_data_at(reader, height, |block, height| {
-        get_transcript_data_at_given_summary(block, height, NiDkgTag::HighThreshold, |transcript| {
-            transcript
-                .expect("No active high threshold transcript available for tag {:?}")
-                .dkg_id
-                .clone()
-        })
-    })
-}
-
-/// Return the current low transcript for the given height if it was found.
-pub fn active_low_threshold_committee(
-    reader: &dyn ConsensusPoolCache,
-    height: Height,
+    committee: ThresholdCommittee,
 ) -> Option<(Threshold, NiDkgReceivers)> {
+    let dkg_tag = match committee {
+        ThresholdCommittee::Low => NiDkgTag::LowThreshold,
+        ThresholdCommittee::High => NiDkgTag::HighThreshold,
+    };
     get_active_data_at(reader, height, |block, height| {
-        get_transcript_data_at_given_summary(block, height, NiDkgTag::LowThreshold, |transcript| {
-            let transcript = transcript.expect("No active low threshold transcript available");
-            (
-                transcript.threshold.get().get() as usize,
-                transcript.committee.clone(),
-            )
-        })
-    })
-}
-
-/// Return the current high transcript for the given height if it was found.
-pub fn active_high_threshold_committee(
-    reader: &dyn ConsensusPoolCache,
-    height: Height,
-) -> Option<(Threshold, NiDkgReceivers)> {
-    get_active_data_at(reader, height, |block, height| {
-        get_transcript_data_at_given_summary(block, height, NiDkgTag::HighThreshold, |transcript| {
-            let transcript = transcript.expect("No active high threshold transcript available");
+        get_transcript_data_at_given_summary(block, height, dkg_tag.clone(), |transcript| {
+            let transcript = transcript.expect("No active threshold transcript available");
             (
                 transcript.threshold.get().get() as usize,
                 transcript.committee.clone(),

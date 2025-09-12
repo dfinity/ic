@@ -2,7 +2,6 @@
 //! artifacts.
 #![allow(clippy::result_large_err)]
 use crate::consensus::{
-    check_protocol_version,
     metrics::ValidatorMetrics,
     status::{self, Status},
     ConsensusMessageId,
@@ -10,8 +9,8 @@ use crate::consensus::{
 use ic_consensus_dkg as dkg;
 use ic_consensus_idkg as idkg;
 use ic_consensus_utils::{
-    active_high_threshold_nidkg_id, active_low_threshold_nidkg_id,
-    crypto::ConsensusCrypto,
+    active_threshold_nidkg_id,
+    crypto::{Aggregate, ConsensusCrypto, SignVerify},
     get_oldest_idkg_state_registry_version,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
@@ -35,17 +34,20 @@ use ic_types::{
     consensus::{
         dkg::{DkgPayloadValidationFailure, InvalidDkgPayloadReason},
         Block, BlockMetadata, BlockPayload, BlockProposal, CatchUpContent, CatchUpPackage,
-        CatchUpShareContent, Committee, ConsensusMessage, ConsensusMessageHashable,
-        EquivocationProof, FinalizationContent, HasCommittee, HasHash, HasHeight, HasRank,
+        CatchUpShareContent, ConsensusMessage, ConsensusMessageHashable, EquivocationProof,
+        FinalizationContent, HasCommittee, HasHash, HasHeight, HasRank, HasThresholdCommittee,
         HasVersion, Notarization, NotarizationContent, RandomBeacon, RandomBeaconShare, RandomTape,
         RandomTapeShare, Rank,
     },
     crypto::{threshold_sig::ni_dkg::NiDkgId, CryptoError, CryptoHashOf, Signed},
     registry::RegistryClientError,
     replica_config::ReplicaConfig,
-    signature::{BasicSigned, MultiSignature, MultiSignatureShare, ThresholdSignatureShare},
+    signature::{
+        BasicSigned, MultiSignature, MultiSignatureShare, ThresholdSignature,
+        ThresholdSignatureShare,
+    },
     state_manager::StateManagerError,
-    Height, NodeId, RegistryVersion, SubnetId,
+    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use idkg::{IDkgPayloadValidationFailure, InvalidIDkgPayloadReason};
 use std::{
@@ -156,6 +158,17 @@ fn membership_error_to_validation_error(err: MembershipError) -> ValidatorError 
     }
 }
 
+/// The function checks if the version of the given artifact matches the default
+/// protocol version and returns an error if it does not.
+fn check_protocol_version(version: &ReplicaVersion) -> Result<(), InvalidArtifactReason> {
+    let expected_version = ReplicaVersion::default();
+    if version != &expected_version {
+        Err(InvalidArtifactReason::ReplicaVersionMismatch)
+    } else {
+        Ok(())
+    }
+}
+
 /// `SignatureVerify` provides a uniform interface to the verification of things
 /// directly related to the signature on a Consensus artifact.
 trait SignatureVerify: HasHeight {
@@ -193,6 +206,65 @@ impl SignatureVerify for BlockProposal {
     }
 }
 
+fn verify_threshold_signature<Artifact: HasHeight + HasThresholdCommittee>(
+    artifact: &Signed<Artifact, ThresholdSignature<Artifact>>,
+    pool: &PoolReader<'_>,
+    crypto: &dyn Aggregate<
+        Artifact,
+        ThresholdSignatureShare<Artifact>,
+        NiDkgId,
+        ThresholdSignature<Artifact>,
+    >,
+) -> ValidationResult<ValidatorError> {
+    let dkg_id = active_threshold_nidkg_id(
+        pool.as_cache(),
+        artifact.height(),
+        Artifact::threshold_committee(),
+    )
+    .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(artifact.height()))?;
+
+    if artifact.signature.signer != dkg_id {
+        return Err(ValidationError::InvalidArtifact(
+            InvalidArtifactReason::InappropriateDkgId(artifact.signature.signer.clone()),
+        ));
+    }
+
+    crypto
+        .verify_aggregate(artifact, dkg_id)
+        .map_err(ValidationError::from)
+}
+
+fn verify_threshold_signature_share<Artifact: HasHeight + HasThresholdCommittee>(
+    artifact: &Signed<Artifact, ThresholdSignatureShare<Artifact>>,
+    pool: &PoolReader<'_>,
+    membership: &Membership,
+    crypto: &dyn SignVerify<Artifact, ThresholdSignatureShare<Artifact>, NiDkgId>,
+) -> ValidationResult<ValidatorError> {
+    let dkg_id = active_threshold_nidkg_id(
+        pool.as_cache(),
+        artifact.height(),
+        Artifact::threshold_committee(),
+    )
+    .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(artifact.height()))?;
+
+    if !membership
+        .node_belongs_to_threshold_committee(
+            artifact.signature.signer,
+            artifact.height(),
+            Artifact::threshold_committee(),
+        )
+        .map_err(membership_error_to_validation_error)?
+    {
+        return Err(ValidationError::InvalidArtifact(
+            InvalidArtifactReason::SignerNotInThresholdCommittee(artifact.signature.signer),
+        ));
+    }
+
+    crypto
+        .verify(artifact, dkg_id)
+        .map_err(ValidationError::from)
+}
+
 impl SignatureVerify for RandomTape {
     fn verify_signature(
         &self,
@@ -201,14 +273,7 @@ impl SignatureVerify for RandomTape {
         pool: &PoolReader<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
-        let dkg_id = active_low_threshold_nidkg_id(pool.as_cache(), self.height())
-            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
-        if self.signature.signer == dkg_id {
-            crypto.verify_aggregate(self, self.signature.signer.clone())?;
-            Ok(())
-        } else {
-            Err(InvalidArtifactReason::InappropriateDkgId(self.signature.signer.clone()).into())
-        }
+        verify_threshold_signature(self, pool, crypto)
     }
 }
 
@@ -220,17 +285,7 @@ impl SignatureVerify for RandomTapeShare {
         pool: &PoolReader<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
-        let height = self.height();
-        let dkg_id = active_low_threshold_nidkg_id(pool.as_cache(), height)
-            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
-        verify_threshold_committee(
-            membership,
-            self.signature.signer,
-            height,
-            RandomTape::committee(),
-        )?;
-        crypto.verify(self, dkg_id)?;
-        Ok(())
+        verify_threshold_signature_share(self, pool, membership, crypto)
     }
 }
 
@@ -242,14 +297,7 @@ impl SignatureVerify for RandomBeacon {
         pool: &PoolReader<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
-        let dkg_id = active_low_threshold_nidkg_id(pool.as_cache(), self.height())
-            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
-        if self.signature.signer == dkg_id {
-            crypto.verify_aggregate(self, self.signature.signer.clone())?;
-            Ok(())
-        } else {
-            Err(InvalidArtifactReason::InappropriateDkgId(self.signature.signer.clone()).into())
-        }
+        verify_threshold_signature(self, pool, crypto)
     }
 }
 
@@ -261,18 +309,7 @@ impl SignatureVerify for RandomBeaconShare {
         pool: &PoolReader<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
-        let height = self.height();
-        let dkg_id = active_low_threshold_nidkg_id(pool.as_cache(), height)
-            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
-        verify_threshold_committee(
-            membership,
-            self.signature.signer,
-            height,
-            RandomBeacon::committee(),
-        )?;
-
-        crypto.verify(self, dkg_id)?;
-        Ok(())
+        verify_threshold_signature_share(self, pool, membership, crypto)
     }
 }
 
@@ -284,17 +321,7 @@ impl SignatureVerify for Signed<CatchUpContent, ThresholdSignatureShare<CatchUpC
         pool: &PoolReader<'_>,
         _cfg: &ReplicaConfig,
     ) -> ValidationResult<ValidatorError> {
-        let height = self.height();
-        let dkg_id = active_high_threshold_nidkg_id(pool.as_cache(), height)
-            .ok_or_else(|| ValidationFailure::DkgSummaryNotFound(self.height()))?;
-        verify_threshold_committee(
-            membership,
-            self.signature.signer,
-            height,
-            CatchUpPackage::committee(),
-        )?;
-        crypto.verify(self, dkg_id)?;
-        Ok(())
+        verify_threshold_signature_share(self, pool, membership, crypto)
     }
 }
 
@@ -569,22 +596,6 @@ fn verify_notary(
     }
 }
 
-fn verify_threshold_committee(
-    membership: &Membership,
-    node_id: NodeId,
-    height: Height,
-    committee: Committee,
-) -> ValidationResult<ValidatorError> {
-    if !membership
-        .node_belongs_to_threshold_committee(node_id, height, committee)
-        .map_err(membership_error_to_validation_error)?
-    {
-        Err(InvalidArtifactReason::SignerNotInThresholdCommittee(node_id).into())
-    } else {
-        Ok(())
-    }
-}
-
 fn get_notarized_parent(
     pool: &PoolReader<'_>,
     proposal: &BlockProposal,
@@ -777,8 +788,8 @@ impl Validator {
         pool_reader: &PoolReader<'_>,
         artifact: &S,
     ) -> ValidationResult<ValidatorError> {
-        check_protocol_version(artifact.version())
-            .map_err(|_| InvalidArtifactReason::ReplicaVersionMismatch)?;
+        check_protocol_version(artifact.version())?;
+
         artifact.verify_signature(
             self.membership.as_ref(),
             self.crypto.as_ref(),

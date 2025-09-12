@@ -18,6 +18,8 @@ use ic_protobuf::{
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
+use super::{HasThresholdCommittee, ThresholdCommittee};
+
 /// CertificationMessage captures the different types of messages sent around
 /// for the purpose of state certification.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -187,7 +189,13 @@ impl SignedBytesWithoutDomainSeparator for CertificationContent {
 // select correct threshold value.
 impl HasCommittee for Certification {
     fn committee() -> Committee {
-        Committee::HighThreshold
+        Committee::Threshold(Self::threshold_committee())
+    }
+}
+
+impl HasThresholdCommittee for Certification {
+    fn threshold_committee() -> ThresholdCommittee {
+        ThresholdCommittee::High
     }
 }
 
