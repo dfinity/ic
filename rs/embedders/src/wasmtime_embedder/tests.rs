@@ -9,7 +9,13 @@ use super::{
     },
     StoreData, INSTRUCTIONS_COUNTER_GLOBAL_NAME,
 };
-use crate::{wasm_utils::validate_and_instrument_for_testing, WasmtimeEmbedder};
+use crate::{
+    wasm_utils::validate_and_instrument_for_testing,
+    wasmtime_embedder::{
+        accessed_os_and_wasm_pages, dirty_os_and_wasm_pages, OS_PAGES_PER_WASM_PAGE,
+    },
+    WasmtimeEmbedder,
+};
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
 use ic_config::{
@@ -22,6 +28,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, SystemState};
+use ic_sys::PageIndex;
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
@@ -236,4 +243,57 @@ fn test_initial_wasmtime_config() {
             "Error expecting `{expected_err_msg}`, but got `{err_msg}`"
         );
     }
+}
+
+#[test]
+fn test_accessed_os_and_wasm_pages() {
+    let accessed: Vec<PageIndex> = vec![];
+    let (os_pages, wasm_pages) = accessed_os_and_wasm_pages(&accessed);
+    assert_eq!(os_pages, 0);
+    assert_eq!(wasm_pages, 0);
+
+    let accessed = vec![PageIndex::new(0)];
+    let (os_pages, wasm_pages) = accessed_os_and_wasm_pages(&accessed);
+    assert_eq!(os_pages, 1);
+    assert_eq!(wasm_pages, 1);
+
+    let accessed = vec![PageIndex::new(0), PageIndex::new(1)];
+    let (os_pages, wasm_pages) = accessed_os_and_wasm_pages(&accessed);
+    assert_eq!(os_pages, 2);
+    assert_eq!(wasm_pages, 1);
+
+    let accessed = vec![
+        PageIndex::new(OS_PAGES_PER_WASM_PAGE as u64),
+        PageIndex::new(0),
+    ];
+    let (os_pages, wasm_pages) = accessed_os_and_wasm_pages(&accessed);
+    assert_eq!(os_pages, 2);
+    assert_eq!(wasm_pages, 2);
+}
+
+#[test]
+fn test_dirty_os_and_wasm_pages() {
+    let speculatively_dirty: Vec<PageIndex> = vec![];
+    let dirty: Vec<PageIndex> = vec![];
+    let (os_pages, wasm_pages) = dirty_os_and_wasm_pages(&speculatively_dirty, &dirty);
+    assert_eq!(os_pages, 0);
+    assert_eq!(wasm_pages, 0);
+
+    let speculatively_dirty: Vec<PageIndex> = vec![];
+    let dirty: Vec<PageIndex> = vec![PageIndex::new(0)];
+    let (os_pages, wasm_pages) = dirty_os_and_wasm_pages(&speculatively_dirty, &dirty);
+    assert_eq!(os_pages, 1);
+    assert_eq!(wasm_pages, 1);
+
+    let speculatively_dirty: Vec<PageIndex> = vec![PageIndex::new(0)];
+    let dirty: Vec<PageIndex> = vec![PageIndex::new(1)];
+    let (os_pages, wasm_pages) = dirty_os_and_wasm_pages(&speculatively_dirty, &dirty);
+    assert_eq!(os_pages, 2);
+    assert_eq!(wasm_pages, 1);
+
+    let speculatively_dirty: Vec<PageIndex> = vec![PageIndex::new(OS_PAGES_PER_WASM_PAGE as u64)];
+    let dirty: Vec<PageIndex> = vec![PageIndex::new(0)];
+    let (os_pages, wasm_pages) = dirty_os_and_wasm_pages(&speculatively_dirty, &dirty);
+    assert_eq!(os_pages, 2);
+    assert_eq!(wasm_pages, 2);
 }
