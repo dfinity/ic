@@ -16,7 +16,9 @@ inputs:
           output_id: test_id
     required: true
 
-outputs: {}
+outputs:
+  output:
+    description: "JSON object containing all generated UUIDs"
 
 runs:
   using: "composite"
@@ -98,12 +100,24 @@ runs:
         summary+="| Job type | Invocation ID | Link |\n"
         summary+="|----------|---------------|------|\n"
 
+        output_yaml=""
+
         while IFS=$'\t' read -r name output_id; do
             uuid=$(generate_uuid)
             link="$invocations_base/$uuid"
             summary+="| $name | \`$uuid\` | [BuildBuddy link to $uuid]($link) |\n"
-            echo "$output_id=$uuid" >> "$GITHUB_OUTPUT"
+
+            # Cannot have dynamic variables so hack it with yq.
+            if [[ -z "$temp_yaml" ]]; then
+                temp_yaml="$output_id: \"$uuid\""
+            else
+                temp_yaml="$temp_yaml"$'\n'"$output_id: \"$uuid\""
+            fi
         done < <(echo "$targets" | $yq_cmd -r '.[] | [.name, .output_id] | @tsv')
+
+        # Convert YAML to JSON using yq and set as output
+        output_json=$(echo "$temp_yaml" | $yq_cmd -o=json '.')
+        echo "output=$output_json" >> "$GITHUB_OUTPUT"
 
         # cleanup if we downloaded yq locally
         if [[ "$downloaded" == true ]]; then

@@ -26,7 +26,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Generate Bazel invocation IDs
-        id: generate-ids
+        id: gen-uuids
         uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
@@ -59,13 +59,13 @@ jobs:
           }
 
           # Run bare metal installation test
-          launch_bare_metal "${{ steps.generate-ids.outputs.hsm_test_id }}" --hsm
+          launch_bare_metal "${{ steps.gen-uuids.outputs.hsm_test_id }}" --hsm
 
           # Run bare metal node performance benchmarks
-          launch_bare_metal "${{ steps.generate-ids.outputs.benchmark_id }}" --benchmark
+          launch_bare_metal "${{ steps.gen-uuids.outputs.benchmark_id }}" --benchmark
 
           # Run bare metal node hostOS metrics check
-          launch_bare_metal "${{ steps.generate-ids.outputs.hostos_metrics_id }}" --check_hostos_metrics
+          launch_bare_metal "${{ steps.gen-uuids.outputs.hostos_metrics_id }}" --check_hostos_metrics
 
           bazel clean
         env:
@@ -100,7 +100,7 @@ jobs:
           chmod 0700 ~/.ssh
           echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
       - name: Generate Bazel invocation IDs
-        id: generate-ids
+        id: gen-uuids
         uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
@@ -112,7 +112,7 @@ jobs:
           run: |
             bazel test \
               --config=stamped \
-              --invocation_id="${{ steps.generate-ids.outputs.test_id }}" \
+              --invocation_id="${{  fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               --test_tag_filters=fi_tests_nightly \
               //rs/ledger_suite/... \
               --test_env=SSH_AUTH_SOCK \
@@ -147,7 +147,7 @@ jobs:
           chmod 0700 ~/.ssh
           echo -e "Host *\nUser github-runner\n" > ~/.ssh/config
       - name: Generate Bazel invocation IDs
-        id: generate-ids
+        id: gen-uuids
         uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
@@ -160,7 +160,7 @@ jobs:
             bazel test \
               --config=stamped \
               --test_tag_filters=nns_tests_nightly \
-              --invocation_id="${{ steps.generate-ids.outputs.test_id }}" \
+              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               //... \
               --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
               --keep_going
@@ -186,7 +186,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Generate Bazel invocation IDs
-        id: generate-ids
+        id: gen-uuids
         uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
@@ -199,7 +199,7 @@ jobs:
             bazel test \
               --config=stamped \
               --test_tag_filters=pocketic_tests_nightly \
-              --invocation_id="${{ steps.generate-ids.outputs.test_id }}" \
+              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               //rs/pocket_ic_server/... \
               --test_env=SSH_AUTH_SOCK \
               --keep_going
@@ -225,7 +225,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Generate Bazel invocation IDs
-        id: generate-ids
+        id: gen-uuids
         uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
@@ -251,7 +251,7 @@ jobs:
             bazel test \
               --config=stamped \
               --test_tag_filters=system_test_benchmark \
-              --invocation_id="${{ steps.generate-ids.outputs.test_id }}" \
+              --invocation_id="${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}" \
               --//bazel:enable_upload_perf_systest_results=True \
               --target_pattern_file="$target_pattern_file" \
               --test_env=SSH_AUTH_SOCK --test_env=NNS_CANISTER_UPGRADE_SEQUENCE=all \
