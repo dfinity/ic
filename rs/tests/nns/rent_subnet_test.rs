@@ -46,7 +46,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
-        ic::{InternetComputer, Subnet},
+        ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
         test_env::TestEnv,
         test_env_api::{
             find_subnet_that_hosts_canister_id, new_subnet_runtime, HasPublicApiUrl,
@@ -138,7 +138,15 @@ pub fn setup(env: TestEnv) {
     // a system subnet that is assigned a canister ID range containing the usual
     // Exchange Rate canister ID (uf6dk-hyaaa-aaaaq-qaaaq-cai).
     for _ in 0..32 {
-        ic = ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(1));
+        ic = ic.add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_default_vm_resources(VmResources {
+                    vcpus: Some(NrOfVCPUs::new(1)),
+                    memory_kibibytes: Some(AmountOfMemoryKiB::new(8_389_000)),
+                    boot_image_minimal_size_gibibytes: None,
+                })
+                .add_nodes(1),
+        );
     }
     ic = ic.add_subnet(
         Subnet::new(SubnetType::System)
@@ -157,12 +165,19 @@ pub fn setup(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    env.topology_snapshot().subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
-    env.topology_snapshot()
+    let topology_snapshot = env.topology_snapshot();
+
+    let system_subnets = topology_snapshot
+        .subnets()
+        .filter(|s| s.subnet_type() == SubnetType::System)
+        .collect::<Vec<_>>();
+
+    system_subnets
+        .iter()
+        .flat_map(|subnet| subnet.nodes())
+        .for_each(|node| node.await_status_is_healthy().unwrap());
+
+    topology_snapshot
         .unassigned_nodes()
         .for_each(|node| node.await_can_login_as_admin_via_ssh().unwrap());
 

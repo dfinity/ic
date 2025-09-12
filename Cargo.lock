@@ -6731,6 +6731,7 @@ dependencies = [
  "bitcoin 0.32.5-doge.0",
  "clap 4.5.27",
  "criterion",
+ "flate2",
  "futures",
  "hashlink",
  "hex",
@@ -15318,6 +15319,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic_nested_nns_recovery_common"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "ic-recovery",
+ "ic-system-test-driver",
+ "ic_consensus_system_test_utils",
+ "nested",
+ "rand 0.8.5",
+ "sha2 0.10.9",
+ "slog",
+ "tokio",
+]
+
+[[package]]
 name = "ic_principal"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17527,22 +17543,6 @@ dependencies = [
  "reqwest 0.12.15",
  "slog",
  "url",
-]
-
-[[package]]
-name = "nested-nns-recovery"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "ic-recovery",
- "ic-system-test-driver",
- "ic-types",
- "ic_consensus_system_test_utils",
- "nested",
- "rand 0.8.5",
- "sha2 0.10.9",
- "slog",
- "tokio",
 ]
 
 [[package]]
@@ -23237,6 +23237,8 @@ dependencies = [
  "ic-system-test-driver",
  "ic-xrc-types",
  "ic_consensus_system_test_utils",
+ "ic_nested_nns_recovery_common",
+ "nested",
  "nns_dapp",
  "os_qualification_utils",
  "reqwest 0.12.15",
