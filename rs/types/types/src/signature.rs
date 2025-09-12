@@ -1,9 +1,9 @@
 use crate::{
-    crypto::threshold_sig::ni_dkg::NiDkgId, crypto::*, node_id_into_protobuf,
-    node_id_try_from_option, CountBytes, NodeId,
+    CountBytes, NodeId, crypto::threshold_sig::ni_dkg::NiDkgId, crypto::*, node_id_into_protobuf,
+    node_id_try_from_option,
 };
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     types::v1 as pb,
 };
 use serde::{Deserialize, Serialize};

@@ -1,10 +1,10 @@
 use crate::{
     logs::{ERROR, INFO},
     pb::v1::{
-        set_dapp_controllers_response, CanisterCallError, Extensions, ListSnsCanistersResponse,
-        ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
-        RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
-        SetDappControllersResponse, SnsRootCanister,
+        CanisterCallError, Extensions, ListSnsCanistersResponse, ManageDappCanisterSettingsRequest,
+        ManageDappCanisterSettingsResponse, RegisterDappCanistersRequest,
+        RegisterDappCanistersResponse, SetDappControllersRequest, SetDappControllersResponse,
+        SnsRootCanister, set_dapp_controllers_response,
     },
     types::{Environment, RejectCode},
 };
@@ -498,9 +498,8 @@ impl SnsRootCanister {
 
         if canisters_registered_count >= DAPP_AND_EXTENSION_CANISTER_REGISTRATION_LIMIT {
             return reject(&format!(
-                "Canister registration limit of {} was reached. No more canisters can be \
-                 registered until a current dapp canister or extension is deregistered.",
-                DAPP_AND_EXTENSION_CANISTER_REGISTRATION_LIMIT
+                "Canister registration limit of {DAPP_AND_EXTENSION_CANISTER_REGISTRATION_LIMIT} was reached. No more canisters can be \
+                 registered until a current dapp canister or extension is deregistered."
             ));
         }
 
@@ -521,8 +520,7 @@ impl SnsRootCanister {
 
         if dapps.contains(&canister_id) {
             return reject(&format!(
-                "{} is a registered dapp canister and cannot be registered as an extension.",
-                canister_id
+                "{canister_id} is a registered dapp canister and cannot be registered as an extension."
             ));
         }
 
@@ -547,7 +545,7 @@ impl SnsRootCanister {
             })
             .await
             .map_err(|(code, message)| {
-                let description = format!("Controller change failed: {}", message);
+                let description = format!("Controller change failed: {message}");
                 CanisterCallError {
                     code: Some(code),
                     description,
@@ -562,7 +560,7 @@ impl SnsRootCanister {
                 .canister_status(canister_id.into())
                 .await
                 .map_err(|(code, message)| {
-                    let description = format!("Canister status unavailable: {}", message);
+                    let description = format!("Canister status unavailable: {message}");
                     CanisterCallError {
                         code: Some(code),
                         description,
@@ -583,10 +581,9 @@ impl SnsRootCanister {
                     .join(", ");
 
                 return reject(&format!(
-                    "Extension canister must be controlled by Root ({}) and Governance ({}) \
+                    "Extension canister must be controlled by Root ({root_canister_id}) and Governance ({governance_canister_id}) \
                      of this SNS. However, despite the update_settings call seemingly \
-                     succeeding, extension canister ({}) is still controlled by {}.",
-                    root_canister_id, governance_canister_id, canister_id, controllers,
+                     succeeding, extension canister ({canister_id}) is still controlled by {controllers}.",
                 ));
             }
         }
@@ -620,9 +617,8 @@ impl SnsRootCanister {
 
         if canisters_registered_count >= DAPP_AND_EXTENSION_CANISTER_REGISTRATION_LIMIT {
             Err(format!(
-                "Canister registration limit of {} was reached. No more canisters can be \
-                 registered until a current dapp canister or extension is deregistered.",
-                DAPP_AND_EXTENSION_CANISTER_REGISTRATION_LIMIT
+                "Canister registration limit of {DAPP_AND_EXTENSION_CANISTER_REGISTRATION_LIMIT} was reached. No more canisters can be \
+                 registered until a current dapp canister or extension is deregistered."
             ))?;
         }
 
@@ -640,9 +636,9 @@ impl SnsRootCanister {
         // Do nothing if canister_to_register is already registered.
         if dapps.contains(&canister_to_register) {
             log!(
-                    INFO,
-                    "Attempting to register {canister_to_register} as a dapp canister, but it is already registered."
-                );
+                INFO,
+                "Attempting to register {canister_to_register} as a dapp canister, but it is already registered."
+            );
             return Ok(());
         }
         let canister_to_register = CanisterId::unchecked_from_principal(canister_to_register);
@@ -755,8 +751,7 @@ impl SnsRootCanister {
                 Err(_) => {
                     // TODO(NNS1-1993): Remove this panic and return an error type instead.
                     panic!(
-                        "Could not get the status of canister: {}.  Root may not be a controller.",
-                        dapp_canister_id
+                        "Could not get the status of canister: {dapp_canister_id}.  Root may not be a controller."
                     )
                 }
                 Ok(status) => status,
@@ -848,7 +843,7 @@ impl SnsRootCanister {
             Err(failure_reason) => {
                 return ManageDappCanisterSettingsResponse {
                     failure_reason: Some(failure_reason),
-                }
+                };
             }
         };
 
@@ -922,7 +917,7 @@ impl SnsRootCanister {
             new_archive_canisters.iter().cloned().collect();
         old_archive_canisters.iter().for_each(|principal_id| {
             if !new_archive_set.contains(principal_id) {
-                defects.push(format!("Previous archive_canister_ids PrincipalId {} is missing from response of new poll", principal_id))
+                defects.push(format!("Previous archive_canister_ids PrincipalId {principal_id} is missing from response of new poll"))
             }
         });
 
@@ -939,10 +934,10 @@ async fn get_swap_status(env: &impl Environment, swap_id: PrincipalId) -> Canist
             Encode!(&GetCanisterStatusRequest {}).unwrap(),
         )
         .await
-        .map_err(|(code, msg)| format!("Could not get swap status from swap: {}: {}", code, msg))
+        .map_err(|(code, msg)| format!("Could not get swap status from swap: {code}: {msg}"))
         .and_then(|bytes| {
             Decode!(&bytes, CanisterStatusResultV2)
-                .map_err(|e| format!("Could not decode response: {:?}", e))
+                .map_err(|e| format!("Could not decode response: {e:?}"))
         }) {
         Ok(summary) => Some(summary),
         Err(err) => {
@@ -1008,7 +1003,7 @@ async fn get_owned_canister_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pb::v1::{set_dapp_controllers_request::CanisterIds, ListSnsCanistersResponse};
+    use crate::pb::v1::{ListSnsCanistersResponse, set_dapp_controllers_request::CanisterIds};
     use ic_nervous_system_clients::{
         canister_status::CanisterStatusResultFromManagementCanister,
         management_canister_client::{
@@ -1104,8 +1099,7 @@ mod tests {
                         assert_eq!(
                             bytes, arg,
                             "Expected bytes were not the same when calling \
-                        {} {}",
-                            expected_canister, expected_method
+                        {expected_canister} {expected_method}"
                         );
                     }
 

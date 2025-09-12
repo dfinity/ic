@@ -230,7 +230,7 @@ fn generator_h_has_expected_value() -> CanisterThresholdResult<()> {
             "idkg"
         };
 
-        let dst = format!("ic-crypto-{}-{}-generator-h", proto_name, curve_type);
+        let dst = format!("ic-crypto-{proto_name}-{curve_type}-generator-h");
 
         let h2p = EccPoint::hash_to_point(curve_type, input.as_bytes(), dst.as_bytes())?;
 

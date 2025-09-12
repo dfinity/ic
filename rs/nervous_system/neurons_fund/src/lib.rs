@@ -9,10 +9,10 @@
 use std::num::NonZeroU64;
 
 use ic_cdk::println;
-use ic_nervous_system_common::{binary_search, E8};
+use ic_nervous_system_common::{E8, binary_search};
 use rust_decimal::{
-    prelude::{FromPrimitive, ToPrimitive},
     Decimal, RoundingStrategy,
+    prelude::{FromPrimitive, ToPrimitive},
 };
 use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
@@ -39,12 +39,12 @@ pub const MAX_LINEAR_SCALING_COEFFICIENT_VEC_LEN: usize = 100_000;
 /// The implementation of `Decimal::from_u64` cannot fail, but we propagate the result to the caller
 /// to protect against library implementation changes.
 pub fn u64_to_dec(x: u64) -> Result<Decimal, String> {
-    Decimal::from_u64(x).ok_or_else(|| format!("Cannot convert {:?} to Decimal.", x))
+    Decimal::from_u64(x).ok_or_else(|| format!("Cannot convert {x:?} to Decimal."))
 }
 
 pub fn dec_to_u64(x: Decimal) -> Result<u64, String> {
     if x.is_sign_negative() {
-        return Err(format!("Cannot convert negative value {:?} to u64.", x));
+        return Err(format!("Cannot convert negative value {x:?} to u64."));
     }
     if x > u64_to_dec(u64::MAX)? {
         return Err(format!(
@@ -56,7 +56,7 @@ pub fn dec_to_u64(x: Decimal) -> Result<u64, String> {
     let x = x.round_dp_with_strategy(0, RoundingStrategy::MidpointNearestEven);
     // We already checked that 0 <= x; the only reason `to_u64` can fail at this point is overflow.
     Decimal::to_u64(&x)
-        .ok_or_else(|| format!("Overflow while trying to convert value {:?} to u64.", x))
+        .ok_or_else(|| format!("Overflow while trying to convert value {x:?} to u64."))
 }
 
 pub fn rescale_to_icp(x_icp_e8s: u64) -> Result<Decimal, String> {
@@ -67,12 +67,7 @@ pub fn rescale_to_icp(x_icp_e8s: u64) -> Result<Decimal, String> {
 pub fn rescale_to_icp_e8s(x_icp: Decimal) -> Result<u64, String> {
     x_icp
         .checked_mul(u64_to_dec(E8)?)
-        .ok_or_else(|| {
-            format!(
-                "Overflow while rescaling {} ICP to e8s within Decimal.",
-                x_icp
-            )
-        })
+        .ok_or_else(|| format!("Overflow while rescaling {x_icp} ICP to e8s within Decimal."))
         .and_then(dec_to_u64)
 }
 
@@ -128,13 +123,13 @@ impl std::fmt::Display for InvertError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let invert_error_cause = match self {
             Self::ValueIsNegative(value) => {
-                format!("negative value {}.", value)
+                format!("negative value {value}.")
             }
             Self::MaxArgumentValueError(error) => {
-                format!("due to maximum argument error: {}", error)
+                format!("due to maximum argument error: {error}")
             }
             Self::FunctionApplicationError(error) => {
-                format!("due to function application error: {}", error)
+                format!("due to function application error: {error}")
             }
             Self::MonotonicityAssumptionViolation {
                 left,
@@ -142,25 +137,22 @@ impl std::fmt::Display for InvertError {
                 right,
             } => {
                 format!(
-                    "at target_y={}, as function is decreasing between {} and {}.",
-                    target_y, left, right,
+                    "at target_y={target_y}, as function is decreasing between {left} and {right}.",
                 )
             }
             Self::InvertValueAboveU64Range { lower, target_y } => {
                 format!(
-                    "at target_y={}, as function's inverse appears to be above {}.",
-                    target_y, lower,
+                    "at target_y={target_y}, as function's inverse appears to be above {lower}.",
                 )
             }
             Self::InvertValueBelowU64Range { target_y, upper } => {
                 format!(
-                    "at target_y={}, as function's inverse appears to be below {}.",
-                    target_y, upper,
+                    "at target_y={target_y}, as function's inverse appears to be below {upper}.",
                 )
             }
         };
 
-        write!(f, "Cannot invert {}", invert_error_cause)
+        write!(f, "Cannot invert {invert_error_cause}")
     }
 }
 
@@ -270,7 +262,7 @@ pub trait InvertibleFunction: MatchingFunction {
             "{}: {}",
             std::any::type_name::<Self>(),
             self.plot(NonZeroU64::try_from(30).unwrap())
-                .map(|plot| format!("{:?}", plot))
+                .map(|plot| format!("{plot:?}"))
                 .unwrap_or_else(|e| e),
         )
     }
@@ -337,7 +329,7 @@ fn checked_pow(x: Decimal, exp: u8) -> Result<Decimal, String> {
     for _ in 0..exp {
         res = res
             .checked_mul(x)
-            .ok_or_else(|| format!("Decimal overflow while computing {}^{}.", x, exp))?;
+            .ok_or_else(|| format!("Decimal overflow while computing {x}^{exp}."))?;
     }
     Ok(res)
 }
@@ -370,9 +362,9 @@ impl BinomialFormulaMember {
         let right = self.right.eval()?;
         self.coefficient
             .checked_mul(left)
-            .ok_or_else(|| format!("Decimal overflow while computing {:?}.", self))?
+            .ok_or_else(|| format!("Decimal overflow while computing {self:?}."))?
             .checked_mul(right)
-            .ok_or_else(|| format!("Decimal overflow while computing {:?}.", self))
+            .ok_or_else(|| format!("Decimal overflow while computing {self:?}."))
     }
 
     pub fn new(degree: u8, coefficient: Decimal, left: Atom, right: Atom) -> Result<Self, String> {
@@ -387,12 +379,10 @@ impl BinomialFormulaMember {
         // consistent, as the degree of its first member (2+2 = 4) differs from the degree of its
         // second member (1+4 = 5).
         if expected_degree != degree {
-            return Err(
-                format!(
-                    "Expected binomial member degree {}, but left/right atoms have degrees {} and {}, resp.",
-                    degree, left.degree, right.degree
-                )
-            );
+            return Err(format!(
+                "Expected binomial member degree {}, but left/right atoms have degrees {} and {}, resp.",
+                degree, left.degree, right.degree
+            ));
         }
         Ok(Self {
             coefficient,
@@ -430,8 +420,7 @@ impl BinomialFormula {
             .ok_or_else(|| "degree overflow in BinomialFormula::new.".to_string())?;
         if coefficients.len() != (expected_num_coefficients as usize) {
             return Err(format!(
-                "Cannot create binomial `{}` of degree {} with coefficients: {:?}.",
-                name, degree, coefficients,
+                "Cannot create binomial `{name}` of degree {degree} with coefficients: {coefficients:?}.",
             ));
         }
         let members = coefficients
@@ -461,12 +450,9 @@ impl BinomialFormula {
             .enumerate()
             // Avoid using `try_fold` here as we should not short-circuit errors.
             .fold(Ok(Decimal::ZERO), |overall_result, (i, member)| {
-                let sub_result = member.eval().map_err(|e| {
-                    format!(
-                        "Cannot evaluate binomial member #{} of {:?}: {}",
-                        i, self, e
-                    )
-                });
+                let sub_result = member
+                    .eval()
+                    .map_err(|e| format!("Cannot evaluate binomial member #{i} of {self:?}: {e}"));
                 match (overall_result, sub_result) {
                     (Ok(total), Ok(sub_total)) => total.checked_add(sub_total).ok_or_else(|| {
                         vec![format!("Decimal overflow while computing {:?}.", self)]
@@ -747,12 +733,12 @@ impl PolynomialMatchingFunctionCache {
         data: &PolynomialMatchingFunctionPersistentData,
     ) -> Result<Self, String> {
         let f_1 = F1Cache::new(data.t_1, data.t_2, data.cap)
-            .map_err(|e| format!("Error while computing cached data for f_1: {}", e))?;
+            .map_err(|e| format!("Error while computing cached data for f_1: {e}"))?;
         let f_2 = F2Cache::new(data.t_2, data.t_3, data.cap)
-            .map_err(|e| format!("Error while computing cached data for f_2: {}", e))?;
+            .map_err(|e| format!("Error while computing cached data for f_2: {e}"))?;
         let f_3 = if data.t_4 > Decimal::ZERO {
             F3Cache::new(data.t_3, data.t_4, data.cap)
-                .map_err(|e| format!("Error while computing cached data for f_3: {}", e))?
+                .map_err(|e| format!("Error while computing cached data for f_3: {e}"))?
         } else {
             // Setting all polynomial coefficients to `1.0` to avoid dealing with `0^0`; at the same
             // time, `cap == 0.0` makes `F3Cache::apply` always return `0.0`, respecting
@@ -804,7 +790,7 @@ impl SerializableFunction for PolynomialMatchingFunction {
             Ok(serialization) => serialization,
             Err(err) => {
                 // Fallback in the unlikely event that `serde_json::to_string` fails.
-                let fallback_serialization = format!("{:?}", self);
+                let fallback_serialization = format!("{self:?}");
                 println!(
                     "{}ERROR: cannot serialize a PolynomialMatchingFunction instance {} into JSON: \
                     {}. Falling back to debug serialization.",
@@ -857,24 +843,21 @@ impl PolynomialMatchingFunction {
 
         let one_tenth_maturity_equivalent_icp = dec!(0.1) * total_maturity_equivalent_icp;
 
-        let (cap, human_readable_cap_formula) =
-            if global_cap_icp <= one_tenth_maturity_equivalent_icp {
-                (
-                    global_cap_icp,
-                    format!(
-                        "max_theoretical_neurons_fund_participation_amount_icp ({})",
-                        global_cap_icp,
-                    ),
-                )
-            } else {
-                (
-                    one_tenth_maturity_equivalent_icp,
-                    format!(
-                        "(0.1 * total_maturity_equivalent_icp ({})) ({})",
-                        total_maturity_equivalent_icp, one_tenth_maturity_equivalent_icp,
-                    ),
-                )
-            };
+        let (cap, human_readable_cap_formula) = if global_cap_icp
+            <= one_tenth_maturity_equivalent_icp
+        {
+            (
+                global_cap_icp,
+                format!("max_theoretical_neurons_fund_participation_amount_icp ({global_cap_icp})",),
+            )
+        } else {
+            (
+                one_tenth_maturity_equivalent_icp,
+                format!(
+                    "(0.1 * total_maturity_equivalent_icp ({total_maturity_equivalent_icp})) ({one_tenth_maturity_equivalent_icp})",
+                ),
+            )
+        };
 
         let persistent_data = PolynomialMatchingFunctionPersistentData {
             t_1: neurons_fund_participation_limits.contribution_threshold_icp,
@@ -1062,8 +1045,7 @@ where
         }
 
         Err(format!(
-            "Found a bug in MatchedParticipationFunction.apply({})",
-            direct_participation_icp_e8s
+            "Found a bug in MatchedParticipationFunction.apply({direct_participation_icp_e8s})"
         ))
     }
 }

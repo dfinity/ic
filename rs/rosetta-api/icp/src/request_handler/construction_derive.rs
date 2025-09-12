@@ -3,7 +3,7 @@ use crate::errors::ApiError;
 use crate::models::{
     self, AccountType, ConstructionDeriveRequestMetadata, ConstructionDeriveResponse,
 };
-use crate::request_handler::{verify_network_id, RosettaRequestHandler};
+use crate::request_handler::{RosettaRequestHandler, verify_network_id};
 
 impl RosettaRequestHandler {
     /// Derive an AccountIdentifier from a PublicKey.

@@ -55,7 +55,7 @@ fn should_redact_csp_secret_key_ed25519_debug() {
     ));
     assert_eq!(
         "CspSecretKey::Ed25519 - REDACTED",
-        format!("{:?}", cspsk_ed25519)
+        format!("{cspsk_ed25519:?}")
     );
 }
 
@@ -66,7 +66,7 @@ fn should_redact_csp_secret_key_multi_debug() {
     ));
     assert_eq!(
         "CspSecretKey::MultiBls12_381 - REDACTED",
-        format!("{:?}", cspsk_multi)
+        format!("{cspsk_multi:?}")
     );
 }
 
@@ -77,7 +77,7 @@ fn should_redact_csp_secret_key_thres_debug() {
     ));
     assert_eq!(
         "CspSecretKey::ThresBls12_381 - REDACTED",
-        format!("{:?}", cspsk_thresh)
+        format!("{cspsk_thresh:?}")
     );
 }
 
@@ -86,7 +86,7 @@ fn should_redact_csp_secret_key_tls_ed25519_debug() {
     let cspsk_tls = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes::new(vec![1u8; 3]));
     assert_eq!(
         "CspSecretKey::TlsEd25519 - REDACTED",
-        format!("{:?}", cspsk_tls)
+        format!("{cspsk_tls:?}")
     );
 }
 
@@ -117,7 +117,7 @@ fn should_redact_csp_secret_key_fs_encryption_debug() {
     ));
     assert_eq!(
         "CspSecretKey::FsEncryption - REDACTED",
-        format!("{:?}", cspsk_fs)
+        format!("{cspsk_fs:?}")
     );
 }
 
@@ -284,16 +284,62 @@ fn should_correctly_compare_csp_signatures() {
 #[test]
 fn csp_signatures_should_have_a_nice_debug_representation() {
     let test_vectors = vec![
-        (CspSignature::EcdsaP256(ecdsa_secp256r1_types::SignatureBytes([0u8; ecdsa_secp256r1_types::SignatureBytes::SIZE])), "CspSignature::EcdsaP256(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\")"),
-        (CspSignature::EcdsaSecp256k1(ecdsa_secp256k1_types::SignatureBytes([0u8; ecdsa_secp256k1_types::SignatureBytes::SIZE])), "CspSignature::EcdsaSecp256k1(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\")"),
-        (CspSignature::Ed25519(ed25519_types::SignatureBytes([0u8;ed25519_types::SignatureBytes::SIZE])), "CspSignature::Ed25519(SignatureBytes(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\"))"),
-        (CspSignature::MultiBls12_381(MultiBls12_381_Signature::Individual(multi_types::IndividualSignatureBytes([0u8;multi_types::IndividualSignatureBytes::SIZE]))), "CspSignature::MultiBls12_381(Individual(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"))"),
-        (CspSignature::MultiBls12_381(MultiBls12_381_Signature::Combined(multi_types::CombinedSignatureBytes([0u8;multi_types::CombinedSignatureBytes::SIZE]))), "CspSignature::MultiBls12_381(Combined(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"))"),
-        (CspSignature::ThresBls12_381(ThresBls12_381_Signature::Individual(threshold_types::IndividualSignatureBytes([0u8;multi_types::IndividualSignatureBytes::SIZE]))), "CspSignature::ThresBls12_381(Individual(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"))"),
-        (CspSignature::ThresBls12_381(ThresBls12_381_Signature::Combined(threshold_types::CombinedSignatureBytes([0u8;multi_types::CombinedSignatureBytes::SIZE]))), "CspSignature::ThresBls12_381(Combined(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"))"),
-        (CspSignature::RsaSha256(vec![1,2,3,4]), "CspSignature::RsaSha256(\"AQIDBA==\")")
+        (
+            CspSignature::EcdsaP256(ecdsa_secp256r1_types::SignatureBytes(
+                [0u8; ecdsa_secp256r1_types::SignatureBytes::SIZE],
+            )),
+            "CspSignature::EcdsaP256(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\")",
+        ),
+        (
+            CspSignature::EcdsaSecp256k1(ecdsa_secp256k1_types::SignatureBytes(
+                [0u8; ecdsa_secp256k1_types::SignatureBytes::SIZE],
+            )),
+            "CspSignature::EcdsaSecp256k1(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\")",
+        ),
+        (
+            CspSignature::Ed25519(ed25519_types::SignatureBytes(
+                [0u8; ed25519_types::SignatureBytes::SIZE],
+            )),
+            "CspSignature::Ed25519(SignatureBytes(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==\"))",
+        ),
+        (
+            CspSignature::MultiBls12_381(MultiBls12_381_Signature::Individual(
+                multi_types::IndividualSignatureBytes(
+                    [0u8; multi_types::IndividualSignatureBytes::SIZE],
+                ),
+            )),
+            "CspSignature::MultiBls12_381(Individual(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"))",
+        ),
+        (
+            CspSignature::MultiBls12_381(MultiBls12_381_Signature::Combined(
+                multi_types::CombinedSignatureBytes(
+                    [0u8; multi_types::CombinedSignatureBytes::SIZE],
+                ),
+            )),
+            "CspSignature::MultiBls12_381(Combined(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"))",
+        ),
+        (
+            CspSignature::ThresBls12_381(ThresBls12_381_Signature::Individual(
+                threshold_types::IndividualSignatureBytes(
+                    [0u8; multi_types::IndividualSignatureBytes::SIZE],
+                ),
+            )),
+            "CspSignature::ThresBls12_381(Individual(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"))",
+        ),
+        (
+            CspSignature::ThresBls12_381(ThresBls12_381_Signature::Combined(
+                threshold_types::CombinedSignatureBytes(
+                    [0u8; multi_types::CombinedSignatureBytes::SIZE],
+                ),
+            )),
+            "CspSignature::ThresBls12_381(Combined(\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"))",
+        ),
+        (
+            CspSignature::RsaSha256(vec![1, 2, 3, 4]),
+            "CspSignature::RsaSha256(\"AQIDBA==\")",
+        ),
     ];
     for (value, formatted) in test_vectors {
-        assert_eq!(format!("{:?}", value), *formatted);
+        assert_eq!(format!("{value:?}"), *formatted);
     }
 }

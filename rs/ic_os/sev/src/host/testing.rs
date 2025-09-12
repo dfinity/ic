@@ -1,5 +1,5 @@
-use crate::host::firmware::MockSevHostFirmware;
 use crate::host::HostSevCertificateProvider;
+use crate::host::firmware::MockSevHostFirmware;
 use anyhow::Result;
 use sev::firmware::host::{Identifier, SnpPlatformStatus, TcbVersion};
 use tempfile::TempDir;

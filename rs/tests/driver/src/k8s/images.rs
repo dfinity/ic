@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use reqwest::Body;
 use std::path::Path;
 use tokio_util::codec::{BytesCodec, FramedRead};

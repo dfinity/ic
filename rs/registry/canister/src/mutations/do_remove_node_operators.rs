@@ -7,8 +7,8 @@ use dfn_core::println;
 
 use candid::CandidType;
 use ic_base_types::PrincipalId;
-use ic_registry_keys::{make_node_operator_record_key, NODE_RECORD_KEY_PREFIX};
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+use ic_registry_keys::{NODE_RECORD_KEY_PREFIX, make_node_operator_record_key};
+use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
 use serde::{Deserialize, Serialize};
 
 use ic_protobuf::registry::node::v1::NodeRecord;
@@ -16,7 +16,7 @@ use ic_protobuf::registry::node::v1::NodeRecord;
 impl Registry {
     /// Remove node operators
     pub fn do_remove_node_operators(&mut self, payload: RemoveNodeOperatorsPayload) {
-        println!("{}do_remove_node_operators: {:?}", LOG_PREFIX, payload);
+        println!("{LOG_PREFIX}do_remove_node_operators: {payload:?}");
 
         let mut mutations = vec![];
 
@@ -103,7 +103,9 @@ impl RemoveNodeOperatorsPayload {
                 principals.principals.clone()
             }
             Some(_) => {
-                panic!("Cannot specify both node_operators_to_remove and node_operator_principals_to_remove");
+                panic!(
+                    "Cannot specify both node_operators_to_remove and node_operator_principals_to_remove"
+                );
             }
             None => self
                 .node_operators_to_remove
