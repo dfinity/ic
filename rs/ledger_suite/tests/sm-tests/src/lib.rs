@@ -23,7 +23,6 @@ use ic_management_canister_types_private::{
     self as ic00, CanisterInfoRequest, CanisterInfoResponse, Method, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_rosetta_test_utils::test_http_request_decoding_quota;
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig, WasmResult};
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -6878,4 +6877,39 @@ pub fn test_icrc3_blocks_compatibility_with_production_ledger<T>(
             },
         )
         .unwrap();
+}
+
+/// Tests that `http_request` endpoint of a given canister rejects overly large HTTP requests
+/// (exceeding the candid decoding quota of 10,000, corresponding to roughly 10 KB of decoded data).
+pub fn test_http_request_decoding_quota(env: &StateMachine, canister_id: CanisterId) {
+    // The anonymous end-user sends a small HTTP request. This should succeed.
+    let http_request = HttpRequest {
+        method: "GET".to_string(),
+        url: "/metrics".to_string(),
+        headers: vec![],
+        body: ByteBuf::from(vec![42; 1_000]),
+    };
+    let http_request_bytes = Encode!(&http_request).unwrap();
+    let response = match env
+        .execute_ingress(canister_id, "http_request", http_request_bytes)
+        .unwrap()
+    {
+        WasmResult::Reply(bytes) => Decode!(&bytes, HttpResponse).unwrap(),
+        WasmResult::Reject(reason) => panic!("Unexpected reject: {}", reason),
+    };
+    assert_eq!(response.status_code, 200);
+
+    // The anonymous end-user sends a large HTTP request. This should be rejected.
+    let mut large_http_request = http_request;
+    large_http_request.body = ByteBuf::from(vec![42; 1_000_000]);
+    let large_http_request_bytes = Encode!(&large_http_request).unwrap();
+    let err = env
+        .execute_ingress(canister_id, "http_request", large_http_request_bytes)
+        .unwrap_err();
+    assert!(
+        err.description().contains("Deserialization Failed")
+            || err
+                .description()
+                .contains("Decoding cost exceeds the limit")
+    );
 }
