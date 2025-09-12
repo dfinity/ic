@@ -22,7 +22,7 @@ use ic_registry_keys::{
     DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
 };
 use ic_registry_node_provider_rewards::{calculate_rewards_v0, RewardsPerNodeProvider};
-use ic_types::RegistryVersion;
+use ic_types::{RegistryVersion, Time};
 use rewards_calculation::performance_based_algorithm::results::RewardsCalculatorResults;
 use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
 use rewards_calculation::types::{DayUtc, NodeMetricsDailyRaw, RewardableNode};
@@ -34,6 +34,17 @@ use std::thread::LocalKey;
 
 #[cfg(test)]
 mod test;
+
+#[cfg(target_arch = "wasm32")]
+fn current_time() -> Time {
+    let current_time = ic_cdk::api::time();
+    Time::from_nanos_since_unix_epoch(current_time)
+}
+
+#[cfg(not(any(target_arch = "wasm32")))]
+fn current_time() -> Time {
+    ic_types::time::current_time()
+}
 
 /// This struct represents the API for the canister.  API methods should be implemented in
 /// main.rs and defer the important work to the methods in this struct, essentially passing
@@ -116,6 +127,17 @@ impl NodeRewardsCanister {
         });
     }
 
+    fn validate_reward_period(from_day: &DayUtc, to_day: &DayUtc) -> Result<(), String> {
+        let today: DayUtc = current_time().as_nanos_since_unix_epoch().into();
+        if from_day > to_day {
+            return Err("from_day must be before to_day".to_string());
+        }
+        if to_day >= &today {
+            return Err("to_day_timestamp_nanos must be earlier than today".to_string());
+        }
+        Ok(())
+    }
+
     fn calculate_rewards(
         &self,
         request: GetNodeProvidersRewardsRequest,
@@ -123,6 +145,7 @@ impl NodeRewardsCanister {
     ) -> Result<RewardsCalculatorResults, String> {
         let start_day = DayUtc::from(request.from_day_timestamp_nanos);
         let end_day = DayUtc::from(request.to_day_timestamp_nanos);
+        Self::validate_reward_period(&start_day, &end_day)?;
 
         RewardsCalculationV1::calculate_rewards(&start_day, &end_day, provider_filter, self)
             .map_err(|e| format!("Could not calculate rewards: {e:?}"))
@@ -167,9 +190,13 @@ impl rewards_calculation::performance_based_algorithm::DataProvider for &NodeRew
         provider_id: &PrincipalId,
     ) -> Result<Vec<RewardableNode>, String> {
         let mut all_rewardable_nodes = self.get_rewardable_nodes(day)?;
-        let rewardable_nodes = all_rewardable_nodes
-            .remove(provider_id)
-            .ok_or_else(|| format!("No rewardable nodes found for provider {}", provider_id))?;
+        let rewardable_nodes = all_rewardable_nodes.remove(provider_id).ok_or_else(|| {
+            format!(
+                "No rewardable nodes found for provider {} for day {}",
+                provider_id,
+                day.to_string()
+            )
+        })?;
         Ok(rewardable_nodes)
     }
 }

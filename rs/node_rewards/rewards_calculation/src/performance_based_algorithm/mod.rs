@@ -6,7 +6,6 @@ use crate::types::{DayUtc, NodeMetricsDailyRaw, Region, RewardableNode};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
-use ic_types::Time;
 use itertools::Itertools;
 use maplit::btreemap;
 use rust_decimal::prelude::ToPrimitive;
@@ -71,17 +70,6 @@ struct AdjustedRewardsResults {
     adjusted_rewards: BTreeMap<NodeId, XDRPermyriad>,
 }
 
-#[cfg(target_arch = "wasm32")]
-fn current_time() -> Time {
-    let current_time = ic_cdk::api::time();
-    Time::from_nanos_since_unix_epoch(current_time)
-}
-
-#[cfg(not(any(target_arch = "wasm32")))]
-fn current_time() -> Time {
-    ic_types::time::current_time()
-}
-
 pub trait DataProvider {
     fn get_rewards_table(&self, day: &DayUtc) -> Result<NodeRewardsTable, String>;
 
@@ -126,24 +114,15 @@ trait PerformanceBasedAlgorithm {
     /// 2629800 / 86400 = 30.4375 days of rewards
     const REWARDS_TABLE_DAYS: Decimal = dec!(30.4375);
 
-    fn validate_reward_period(from_day: &DayUtc, to_day: &DayUtc) -> Result<(), String> {
-        let today: DayUtc = current_time().as_nanos_since_unix_epoch().into();
-        if from_day > to_day {
-            return Err("from_day must be before to_day".to_string());
-        }
-        if to_day >= &today {
-            return Err("to_day_timestamp_nanos must be earlier than today".to_string());
-        }
-        Ok(())
-    }
-
     fn calculate_rewards(
         from_day: &DayUtc,
         to_day: &DayUtc,
         node_provider_filter: Option<PrincipalId>,
         data_provider: impl DataProvider,
     ) -> Result<RewardsCalculatorResults, String> {
-        Self::validate_reward_period(from_day, to_day)?;
+        if from_day > to_day {
+            return Err("from_day must be before to_day".to_string());
+        }
 
         let reward_period = from_day.days_until(to_day)?;
         let mut total_rewards_per_provider = BTreeMap::new();

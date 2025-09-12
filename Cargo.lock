@@ -20712,7 +20712,6 @@ dependencies = [
  "chrono",
  "ic-base-types",
  "ic-protobuf",
- "ic-types",
  "itertools 0.12.1",
  "maplit",
  "rust_decimal",
