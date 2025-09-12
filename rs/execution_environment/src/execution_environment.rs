@@ -1,4 +1,5 @@
 use crate::{
+    canister_logs::fetch_canister_logs,
     canister_manager::{
         types::{
             CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult, InstallCodeContext,
@@ -38,9 +39,9 @@ use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
     CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, CreateCanisterArgs,
     DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EmptyBlob,
-    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    FetchCanisterLogsRequest, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
+    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
     ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
     SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
@@ -1536,16 +1537,51 @@ impl ExecutionEnvironment {
                 }
             },
 
-            Ok(Ic00Method::FetchCanisterLogs) => ExecuteSubnetMessageResult::Finished {
-                response: Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    format!(
-                        "{} API is only accessible in non-replicated mode",
-                        Ic00Method::FetchCanisterLogs
-                    ),
-                )),
-                refund: msg.take_cycles(),
-            },
+            Ok(Ic00Method::FetchCanisterLogs) => {
+                match self.config.replicated_inter_canister_log_fetch {
+                    FlagStatus::Disabled => ExecuteSubnetMessageResult::Finished {
+                        response: Err(UserError::new(
+                            ErrorCode::CanisterRejectedMessage,
+                            format!(
+                                "{} API is only accessible to end users in non-replicated mode",
+                                Ic00Method::FetchCanisterLogs
+                            ),
+                        )),
+                        refund: msg.take_cycles(),
+                    },
+                    FlagStatus::Enabled => match &msg {
+                        CanisterCall::Request(request) => {
+                            let fetch_canister_logs_fee = Cycles::new(1_000_000); // TODO(EXC-2112): fix placeholder fees.
+
+                            let response = if request.payment < fetch_canister_logs_fee {
+                                Err(UserError::new(
+                                    ErrorCode::CanisterRejectedMessage,
+                                    format!(
+                                        "{} request sent with {} cycles, but {} cycles are required.",
+                                        Ic00Method::FetchCanisterLogs,
+                                        request.payment,
+                                        fetch_canister_logs_fee
+                                    ),
+                                ))
+                            } else {
+                                FetchCanisterLogsRequest::decode(payload)
+                                    .and_then(|args| {
+                                        fetch_canister_logs(*msg.sender(), &state, args)
+                                    })
+                                    .map(|resp| (Encode!(&resp).unwrap(), None))
+                            };
+
+                            ExecuteSubnetMessageResult::Finished {
+                                response,
+                                refund: msg.take_cycles(),
+                            }
+                        }
+                        CanisterCall::Ingress(_) => {
+                            self.reject_unexpected_ingress(Ic00Method::FetchCanisterLogs)
+                        }
+                    },
+                }
+            }
 
             Ok(Ic00Method::TakeCanisterSnapshot) => match TakeCanisterSnapshotArgs::decode(payload)
             {
@@ -1816,8 +1852,10 @@ impl ExecutionEnvironment {
             Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "http_request request sent with {} cycles, but {} cycles are required.",
-                    request.payment, http_request_fee
+                    "{} request sent with {} cycles, but {} cycles are required.",
+                    Ic00Method::HttpRequest,
+                    request.payment,
+                    http_request_fee
                 ),
             ))
         } else {

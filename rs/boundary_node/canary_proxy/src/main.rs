@@ -262,7 +262,7 @@ impl<B: Body + 'static> SendRequest<B> {
     pub fn send_request(
         &mut self,
         req: Request<B>,
-    ) -> impl Future<Output = hyper::Result<Response<Incoming>>> {
+    ) -> impl Future<Output = hyper::Result<Response<Incoming>>> + use<B> {
         match self {
             Self::Http1(http1) => Either::Left(http1.send_request(req)),
             Self::Http2(http2) => Either::Right(http2.send_request(req)),

@@ -115,7 +115,7 @@ fn random_bytes_chunked<R: Rng>(n: u128, chunk_size: u128, rng: &mut R) -> Vec<V
 }
 
 fn random_bytes<R: Rng>(n: u128, rng: &mut R) -> Vec<u8> {
-    (0..n).map(|_| rng.gen::<u8>()).collect()
+    (0..n).map(|_| rng.r#gen::<u8>()).collect()
 }
 
 fn as_u64(u128: u128) -> u64 {

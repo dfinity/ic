@@ -351,7 +351,7 @@ struct Meta {
 
 /// Macro that logs the error when result is not Ok.
 macro_rules! log_err {
-    ($r:expr, $log:expr, $reason:expr) => {
+    ($r:expr_2021, $log:expr_2021, $reason:expr_2021) => {
         $r.map_err(|err| error!($log, "Error in DB operation {}: {:?}", $reason, err))
             .ok()
     };
@@ -367,7 +367,7 @@ struct ArtifactKey {
 
 /// Like log_err, but won't log the error if it matches the given error code.
 macro_rules! log_err_except {
-    ($r:expr, $log:expr, $code:pat, $reason:expr) => {
+    ($r:expr_2021, $log:expr_2021, $code:pat, $reason:expr_2021) => {
         $r.map_err(|err| match err {
             $code => {}
             _ => error!($log, "Error in DB operation {:?}: {:?}", $reason, err),

@@ -709,7 +709,7 @@ pub mod node {
                 generate_tls_keys_and_certificate: false,
             })
             .with_logger(logger)
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
             .build()
     }
 
@@ -732,7 +732,7 @@ pub mod node {
                 generate_tls_keys_and_certificate: false,
             })
             .with_logger(logger)
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
             .with_remote_vault()
             .build()
     }
@@ -1380,7 +1380,7 @@ pub fn random_node_ids_excluding<R: RngCore + CryptoRng>(
 ) -> BTreeSet<NodeId> {
     let mut node_ids = BTreeSet::new();
     while node_ids.len() < n {
-        let candidate = node_id(rng.gen());
+        let candidate = node_id(rng.r#gen());
         if !exclusions.contains(&candidate) {
             node_ids.insert(candidate);
         }
@@ -1410,9 +1410,9 @@ fn random_registry_version<R: RngCore + CryptoRng>(rng: &mut R) -> RegistryVersi
 }
 
 pub fn random_transcript_id<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
-    let id = rng.gen::<u64>();
-    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
-    let height = Height::from(rng.gen::<u64>());
+    let id = rng.r#gen::<u64>();
+    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.r#gen::<u64>()));
+    let height = Height::from(rng.r#gen::<u64>());
 
     IDkgTranscriptId::new(subnet, id, height)
 }
@@ -1426,7 +1426,7 @@ pub fn n_random_node_ids<R: RngCore + CryptoRng>(n: usize, rng: &mut R) -> BTree
 }
 
 fn random_node_id<R: RngCore + CryptoRng>(rng: &mut R) -> NodeId {
-    node_id(rng.gen())
+    node_id(rng.r#gen())
 }
 
 pub fn random_receiver_id_excluding<R: RngCore + CryptoRng>(
@@ -1509,7 +1509,7 @@ pub fn random_crypto_component_not_in_receivers<R: RngCore + CryptoRng>(
     TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(node_id)
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
         .build()
 }
 
@@ -1940,7 +1940,7 @@ pub fn run_tecdsa_protocol<R: RngCore + CryptoRng + Sync + Send>(
     let verifier_crypto_component = TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(verifier_id)
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
         .build();
     for (signer_id, sig_share) in sig_shares.iter() {
         ThresholdEcdsaSigVerifier::verify_sig_share(
@@ -1955,7 +1955,7 @@ pub fn run_tecdsa_protocol<R: RngCore + CryptoRng + Sync + Send>(
     let combiner_crypto_component = TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(verifier_id)
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
         .build();
     ThresholdEcdsaSigVerifier::combine_sig_shares(
         &combiner_crypto_component,
@@ -2008,7 +2008,7 @@ pub fn run_tschnorr_protocol<R: RngCore + CryptoRng + Sync + Send>(
     let verifier_crypto_component = TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(verifier_id)
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
         .build();
     for (signer_id, sig_share) in sig_shares.iter() {
         ThresholdSchnorrSigVerifier::verify_sig_share(
@@ -2023,7 +2023,7 @@ pub fn run_tschnorr_protocol<R: RngCore + CryptoRng + Sync + Send>(
     let combiner_crypto_component = TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(verifier_id)
-        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+        .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
         .build();
     ThresholdSchnorrSigVerifier::combine_sig_shares(
         &combiner_crypto_component,
@@ -2631,7 +2631,7 @@ impl IDkgTranscriptBuilder {
 
     pub fn corrupt_internal_transcript_raw<R: CryptoRng + RngCore>(mut self, rng: &mut R) -> Self {
         let raw_len = self.internal_transcript_raw.len();
-        let corrupted_idx = rng.gen::<usize>() % raw_len;
+        let corrupted_idx = rng.r#gen::<usize>() % raw_len;
         self.internal_transcript_raw[corrupted_idx] ^= 1;
         self
     }
@@ -2940,8 +2940,8 @@ pub mod ecdsa {
             caller: PrincipalId::new_user_test_id(1),
             derivation_path: vec![],
         };
-        let seed = Randomness::from(rng.gen::<[u8; 32]>());
-        let message = rng.gen::<[u8; 32]>();
+        let seed = Randomness::from(rng.r#gen::<[u8; 32]>());
+        let message = rng.r#gen::<[u8; 32]>();
 
         let key_transcript = generate_key_transcript(&env, &dealers, &receivers, alg, rng);
         let inputs = generate_tecdsa_protocol_inputs(
@@ -2998,17 +2998,17 @@ pub mod schnorr {
         let message_length = rng.gen_range(0..2_000_000);
         let mut message = vec![0; message_length];
         rng.fill_bytes(&mut message);
-        let seed = Randomness::from(rng.gen::<[u8; 32]>());
+        let seed = Randomness::from(rng.r#gen::<[u8; 32]>());
 
         let taproot_tree_root = {
             if alg == AlgorithmId::ThresholdSchnorrBip340 {
-                let choose = rng.gen::<u8>();
+                let choose = rng.r#gen::<u8>();
                 if choose <= 128 {
                     None
                 } else if choose <= 192 {
                     Some(vec![])
                 } else {
-                    Some(rng.gen::<[u8; 32]>().to_vec())
+                    Some(rng.r#gen::<[u8; 32]>().to_vec())
                 }
             } else {
                 None

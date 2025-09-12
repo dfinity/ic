@@ -2301,18 +2301,18 @@ impl StateManagerImpl {
                     Some((base_manifest, *base_height))
                 })
                 .and_then(|(base_manifest, base_height)| {
-                    if let Ok(checkpoint_layout) = self.state_layout.checkpoint_verified(base_height) {
+                    match self.state_layout.checkpoint_verified(base_height) { Ok(checkpoint_layout) => {
                         Some(PreviousCheckpointInfo {
                             base_manifest,
                             base_height,
                             checkpoint_layout,
                         })
-                    } else {
+                    } _ => {
                         warn!(self.log,
                             "Failed to get base checkpoint layout for height {}. Fallback to full manifest computation",
                             base_height);
                         None
-                    }
+                    }}
                 })
         };
 

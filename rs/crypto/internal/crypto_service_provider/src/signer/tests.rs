@@ -801,7 +801,7 @@ fn vault_builder_with_different_seeds<const N: usize>() -> [LocalCspVaultBuilder
     let mut vault_builders = Vec::with_capacity(N);
     let mut seeds = HashSet::with_capacity(N);
     for _ in 0..N {
-        let seed: [u8; 32] = rng.gen();
+        let seed: [u8; 32] = rng.r#gen();
         vault_builders
             .push(LocalCspVault::builder_for_test().with_rng(Seed::from_bytes(&seed).into_rng()));
         assert!(seeds.insert(seed));

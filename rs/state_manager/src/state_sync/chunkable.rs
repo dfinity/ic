@@ -1244,7 +1244,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                     Err(AddChunkError::Invalid)
                 }
             }
-            DownloadState::Prep {
+            &mut DownloadState::Prep {
                 ref meta_manifest,
                 ref mut manifest_in_construction,
                 ref mut manifest_chunks,
@@ -1414,7 +1414,7 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                     Ok(())
                 }
             }
-            DownloadState::Loading {
+            &mut DownloadState::Loading {
                 ref meta_manifest,
                 ref manifest,
                 ref mut fetch_chunks,

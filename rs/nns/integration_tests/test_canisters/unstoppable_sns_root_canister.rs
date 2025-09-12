@@ -37,7 +37,7 @@ thread_local! {
     static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
 }
 
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn canister_init() {
     println!("Unstoppable Canister Init!");
 
@@ -60,7 +60,7 @@ fn canister_init() {
     });
 }
 
-#[export_name = "canister_update get_sns_canisters_summary"]
+#[unsafe(export_name = "canister_update get_sns_canisters_summary")]
 fn get_sns_canisters_summary() {
     over_async(
         candid_one,

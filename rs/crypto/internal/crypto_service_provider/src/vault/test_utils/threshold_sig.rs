@@ -71,7 +71,7 @@ pub fn test_threshold_signatures(
         //
         // * Signatures cannot be generated with an incorrect key_id:
         if let Some((csp_vault, _key_id)) = signers.first() {
-            let wrong_key_id = KeyId::from(rng.gen::<[u8; 32]>());
+            let wrong_key_id = KeyId::from(rng.r#gen::<[u8; 32]>());
             let mut key_ids = signers.iter().map(|(_, key_id)| *key_id);
 
             assert!(

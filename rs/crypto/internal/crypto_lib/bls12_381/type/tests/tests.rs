@@ -248,8 +248,8 @@ fn test_scalar_comparison() {
     }
 
     for _ in 0..300 {
-        let a = Scalar::from_u32(rng.gen::<u32>());
-        let b = Scalar::from_u32(rng.gen::<u32>());
+        let a = Scalar::from_u32(rng.r#gen::<u32>());
+        let b = Scalar::from_u32(rng.r#gen::<u32>());
 
         assert_eq!(a.serialize().cmp(&b.serialize()), a.cmp(&b));
         assert_eq!(b.serialize().cmp(&a.serialize()), b.cmp(&a));
@@ -278,7 +278,7 @@ fn test_scalar_from_integer_type() {
     );
 
     for _ in 0..30 {
-        let r = rng.gen::<u32>();
+        let r = rng.r#gen::<u32>();
         assert_eq!(Scalar::from_u32(r), Scalar::from_u64(r as u64));
 
         let bytes = Scalar::from_u32(r).serialize();
@@ -288,7 +288,7 @@ fn test_scalar_from_integer_type() {
     }
 
     for _ in 0..30 {
-        let r = rng.gen::<i32>();
+        let r = rng.r#gen::<i32>();
 
         let s = Scalar::from_i32(r);
 
@@ -439,7 +439,7 @@ fn test_gt_mul_u16_is_correct() {
     // just perform some random trials.
 
     for _ in 0..500 {
-        let i = rng.gen::<u16>();
+        let i = rng.r#gen::<u16>();
         let fast = Gt::g_mul_u16(i);
         let refv = Gt::generator() * Scalar::from_usize(i as usize);
         assert_eq!(fast, refv);
@@ -929,7 +929,7 @@ fn test_verify_bls_signature() {
 
     let sk = Scalar::random(rng);
     let pk = G2Affine::from(G2Affine::generator() * &sk);
-    let message = G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>());
+    let message = G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>());
     let signature = G1Affine::from(&message * &sk);
 
     assert!(verify_bls_signature(&signature, &pk, &message));
@@ -972,7 +972,7 @@ fn with_random_new_msgs_signed_by_existing_keys(
         let in_index = rng.gen_range(0..sigs.len());
         let out_index = rng.gen_range(0..result_sigs.len() + 1);
 
-        let rand_new_msg = G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>());
+        let rand_new_msg = G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>());
 
         let rand_selected_pk = pks[in_index].clone();
         let rand_selected_sk = sks[in_index].clone();
@@ -1031,7 +1031,7 @@ macro_rules! generic_test_verify_bls_signature_batch {
                 .map(|sk| G2Affine::from(G2Affine::generator() * sk))
                 .collect();
             let msgs: Vec<_> = (0..num_inputs)
-                .map(|_| G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>()))
+                .map(|_| G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>()))
                 .collect();
             let sigs: Vec<_> = sks
                 .iter()
@@ -1122,7 +1122,7 @@ macro_rules! generic_test_verify_bls_signature_batch {
                         .map(|(j, sig)| {
                             if j == i {
                                 // corrupt signature i
-                                G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>())
+                                G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>())
                             } else {
                                 sig.clone()
                             }
@@ -1183,7 +1183,7 @@ fn test_verify_bls_signature_batch_with_same_msg() {
             .iter()
             .map(|sk| G2Affine::from(G2Affine::generator() * sk))
             .collect();
-        let msg = G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>());
+        let msg = G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>());
         let sigs: Vec<_> = sks.iter().map(|sk| G1Affine::from(&msg * sk)).collect();
 
         for i in 0..num_inputs {
@@ -1209,7 +1209,7 @@ fn test_verify_bls_signature_batch_with_same_msg() {
 
         assert!(!verify_bls_signature_batch_same_msg(
             &sigs.iter().zip(pks.iter()).collect::<Vec<_>>()[..],
-            &G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>()),
+            &G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>()),
             rng
         ));
 
@@ -1261,7 +1261,7 @@ fn test_verify_bls_signature_batch_with_same_pk() {
         let sk = Scalar::random(rng);
         let pk = G2Affine::from(G2Affine::generator() * &sk);
         let msgs: Vec<_> = (0..num_inputs)
-            .map(|_| G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>()))
+            .map(|_| G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>()))
             .collect();
         let sigs: Vec<_> = msgs.iter().map(|msg| G1Affine::from(msg * &sk)).collect();
 
@@ -1457,7 +1457,7 @@ fn random_node_indexes<R: rand::Rng>(
     let mut set = std::collections::BTreeSet::new();
 
     while set.len() != count {
-        let r = rng.gen::<NodeIndex>();
+        let r = rng.r#gen::<NodeIndex>();
         set.insert(r);
     }
 
@@ -1559,7 +1559,7 @@ trait BiasedValue {
 impl BiasedValue for Scalar {
     type Output = Scalar;
     fn biased<R: RngCore + CryptoRng>(rng: &mut R) -> Self::Output {
-        let coin = rng.gen::<u8>();
+        let coin = rng.r#gen::<u8>();
 
         // With ~4% probability each use -1, 0, or 1. Otherwise random
         if coin < 10 {
@@ -1577,7 +1577,7 @@ impl BiasedValue for Scalar {
 impl BiasedValue for G1Projective {
     type Output = G1Projective;
     fn biased<R: RngCore + CryptoRng>(rng: &mut R) -> Self::Output {
-        let coin = rng.gen::<u8>();
+        let coin = rng.r#gen::<u8>();
 
         // With ~4% probability each use identity, g, or -g. Otherwise random
         if coin < 10 {
@@ -1587,7 +1587,7 @@ impl BiasedValue for G1Projective {
         } else if coin < 30 {
             Self::generator().neg()
         } else {
-            Self::hash(b"random-g1-val-for-testing", &rng.gen::<[u8; 32]>())
+            Self::hash(b"random-g1-val-for-testing", &rng.r#gen::<[u8; 32]>())
         }
     }
 }
@@ -1595,7 +1595,7 @@ impl BiasedValue for G1Projective {
 impl BiasedValue for G2Projective {
     type Output = G2Projective;
     fn biased<R: RngCore + CryptoRng>(rng: &mut R) -> Self::Output {
-        let coin = rng.gen::<u8>();
+        let coin = rng.r#gen::<u8>();
 
         // With ~4% probability each use identity, g, or -g. Otherwise random
         if coin < 10 {
@@ -1605,7 +1605,7 @@ impl BiasedValue for G2Projective {
         } else if coin < 30 {
             Self::generator().neg()
         } else {
-            Self::hash(b"random-g2-val-for-testing", &rng.gen::<[u8; 32]>())
+            Self::hash(b"random-g2-val-for-testing", &rng.r#gen::<[u8; 32]>())
         }
     }
 }
@@ -1653,7 +1653,7 @@ test_point_operation!(serialization_round_trip, [g1, g2], {
     let rng = &mut reproducible_rng();
 
     for _ in 1..30 {
-        let orig = Projective::hash(b"serialization-round-trip-test", &rng.gen::<[u8; 32]>());
+        let orig = Projective::hash(b"serialization-round-trip-test", &rng.r#gen::<[u8; 32]>());
         let bits = orig.serialize();
 
         let d = Projective::deserialize(&bits).expect("Invalid serialization");
@@ -1743,7 +1743,7 @@ test_point_operation!(sum, [g1, g2], {
         let mut inputs = Vec::with_capacity(t);
         let mut elements = Vec::with_capacity(t);
         for _ in 0..t {
-            let r = rng.gen::<u32>() as u64;
+            let r = rng.r#gen::<u32>() as u64;
             inputs.push(r);
             elements.push(pt * Scalar::from_u64(r));
         }
@@ -1761,8 +1761,8 @@ test_point_operation!(multiply, [g1, g2, gt], {
     let pt = Affine::generator();
 
     for _ in 1..300 {
-        let lhs = rng.gen::<u32>() as u64;
-        let rhs = rng.gen::<u32>() as u64;
+        let lhs = rng.r#gen::<u32>() as u64;
+        let rhs = rng.r#gen::<u32>() as u64;
         let integer_prod = lhs * rhs;
         let product = (pt * Scalar::from_u64(lhs)) * Scalar::from_u64(rhs);
 
@@ -1773,7 +1773,7 @@ test_point_operation!(multiply, [g1, g2, gt], {
 test_point_operation!(mul_with_precompute, [g1, g2], {
     let rng = &mut reproducible_rng();
 
-    let g = Affine::hash(b"random-point-for-mul-precompute", &rng.gen::<[u8; 32]>());
+    let g = Affine::hash(b"random-point-for-mul-precompute", &rng.r#gen::<[u8; 32]>());
 
     let mut g_with_precompute = g.clone();
     g_with_precompute.precompute();
@@ -1795,7 +1795,7 @@ test_point_operation!(mul_with_precompute, [g1, g2], {
 test_point_operation!(batch_mul, [g1, g2], {
     let rng = &mut reproducible_rng();
 
-    let pt = Affine::hash(b"ic-crypto-batch-mul-test", &rng.gen::<[u8; 32]>());
+    let pt = Affine::hash(b"ic-crypto-batch-mul-test", &rng.r#gen::<[u8; 32]>());
 
     for i in 0..20 {
         let scalars = Scalar::batch_random(rng, i);
