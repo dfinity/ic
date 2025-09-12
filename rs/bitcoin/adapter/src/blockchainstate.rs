@@ -67,7 +67,7 @@ enum AddHeaderResult {
     HeaderAlreadyExists,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, PartialEq, Error)]
 pub enum AddHeaderError {
     /// This variant is used when the input header is invalid
     /// (eg: not of the right format)

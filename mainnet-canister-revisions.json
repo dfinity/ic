@@ -101,7 +101,7 @@
   },
   "nns_dapp_test": {
     "sha256": "cf7dbea63bf403b48503ee915621c25dfdd81fc758fb1e062cb33ceffa551053",
-    "tag": "release-candidate"
+    "tag": "proposal-138366"
   },
   "node-rewards": {
     "rev": "ca959ab71539b277af5f9880e6a4c5779e135cad",
