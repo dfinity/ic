@@ -31,7 +31,7 @@ use slog::info;
 use std::time::Duration;
 
 fn log_instructions(env: TestEnv) {
-    nested::registration(&env);
+    nested::registration(env.clone());
 
     let logger = env.logger();
 

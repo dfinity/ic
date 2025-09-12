@@ -147,7 +147,7 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
         .map(|b| format!("{:02x}", b))
         .collect::<String>();
 
-    nested::registration(&env);
+    nested::registration(env.clone());
     assign_unassigned_nodes_to_nns(&env);
 
     let topology = env.topology_snapshot();
