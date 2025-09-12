@@ -8,6 +8,7 @@ use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_error_types::UserError;
+use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{endpoints::StandardRecord, hash::Hash, Block, Operation, Transaction};
 use ic_icrc1_ledger::FeatureFlags;
@@ -60,6 +61,7 @@ use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
 use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
+use serde_bytes::ByteBuf;
 use std::sync::Arc;
 use std::time::{Instant, UNIX_EPOCH};
 use std::{
