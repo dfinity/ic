@@ -544,11 +544,6 @@ mod test {
                 for header in
                     generate_headers(genesis_block_hash, genesis_block_header.time, i, &[])
                 {
-                    eprintln!(
-                        "add_header {} prev = {}",
-                        header.block_hash(),
-                        header.prev_block_hash()
-                    );
                     cache.add_header(header.block_hash(), header).unwrap();
                     let next_node = cache.get_header(header.block_hash()).unwrap();
                     assert_eq!(next_node.data.header, header);
@@ -607,11 +602,6 @@ mod test {
                 for header in
                     generate_headers(genesis_block_hash, genesis_block_header.time, i, &[])
                 {
-                    eprintln!(
-                        "add_header {} prev = {}",
-                        header.block_hash(),
-                        header.prev_block_hash()
-                    );
                     cache.add_header(header.block_hash(), header).unwrap();
                     let next_node = cache.get_header(header.block_hash()).unwrap();
                     assert_eq!(next_node.data.header, header);
