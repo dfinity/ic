@@ -42,9 +42,6 @@ fn log_instructions(env: TestEnv) {
 
     replace_nns_with_unassigned_nodes(&env);
 
-    let topology = env.topology_snapshot();
-    let subnet_size = topology.root_subnet().nodes().count();
-
     info!(
         logger,
         "To reboot host VMs run any, or some of the following commands:"
