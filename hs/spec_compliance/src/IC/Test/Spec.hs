@@ -1216,7 +1216,7 @@ icTests my_sub other_sub conf =
                                                                                   -- out other causes of failure than missing fields
                                                                                   omitFields queryToNonExistent $ \req -> do
                                                                                     cid <- create ecid
-                                                                                    addExpiry req >>= envelope defaultSK >>= postQueryCBOR cid >>= code4xx,
+                                                                                    addExpiry req >>= envelope defaultSK >>= postQueryCBOR cid >>= code4xx
                                                                               ],
                                                                             testGroup "read state" $
                                                                               let ensure_request_exists cid user = do
@@ -1238,7 +1238,7 @@ icTests my_sub other_sub conf =
                                                                                in [ testGroup "required fields" $
                                                                                       omitFields readStateEmpty $ \req -> do
                                                                                         cid <- create ecid
-                                                                                        addExpiry req >>= envelope defaultSK >>= postReadStateCBOR cid >>= code4xx,
+                                                                                        addExpiry req >>= envelope defaultSK >>= postReadStateCBOR cid >>= code4xx
                                                                                   ],
                                                                             testGroup "Delegation targets" $
                                                                               let callReq cid =
