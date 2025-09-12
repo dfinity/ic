@@ -22,7 +22,7 @@
 // ```
 
 use anyhow::Result;
-use ic_nested_nns_recovery_common::{assign_unassigned_nodes_to_nns, setup, SetupConfig};
+use ic_nested_nns_recovery_common::{replace_nns_with_unassigned_nodes, setup, SetupConfig};
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::driver::test_setup::GroupSetup;
@@ -39,7 +39,7 @@ fn log_instructions(env: TestEnv) {
     let group_setup = GroupSetup::read_attribute(&env);
     let group_name: String = group_setup.infra_group_name;
 
-    assign_unassigned_nodes_to_nns(&env);
+    replace_nns_with_unassigned_nodes(&env);
 
     let topology = env.topology_snapshot();
     let subnet_size = topology.root_subnet().nodes().count();

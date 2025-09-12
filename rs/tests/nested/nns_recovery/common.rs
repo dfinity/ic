@@ -69,7 +69,7 @@ fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
     (1..=num_hosts).map(|i| format!("host-{}", i)).collect()
 }
 
-pub fn assign_unassigned_nodes_to_nns(env: &TestEnv) {
+pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
     let logger = env.logger();
 
     info!(logger, "Adding all unassigned nodes to the NNS subnet...");
@@ -148,7 +148,7 @@ pub fn test(env: TestEnv, _cfg: TestConfig) {
         .collect::<String>();
 
     nested::registration(env.clone());
-    assign_unassigned_nodes_to_nns(&env);
+    replace_nns_with_unassigned_nodes(&env);
 
     let topology = env.topology_snapshot();
     let nns_subnet = topology.root_subnet();
