@@ -113,10 +113,7 @@ async fn get_node_providers_rewards(
     request: GetNodeProvidersRewardsRequest,
 ) -> GetNodeProvidersRewardsResponse {
     panic_if_caller_not_governance();
-    NodeRewardsCanister::get_node_providers_rewards::<RegistryStoreStableMemoryBorrower>(
-        &CANISTER, request,
-    )
-    .await
+    NodeRewardsCanister::get_node_providers_rewards(&CANISTER, request).await
 }
 
 #[query]
@@ -130,9 +127,7 @@ fn get_node_provider_rewards_calculation(
         );
     }
 
-    NodeRewardsCanister::get_node_provider_rewards_calculation::<RegistryStoreStableMemoryBorrower>(
-        &CANISTER, request,
-    )
+    NodeRewardsCanister::get_node_provider_rewards_calculation(&CANISTER, request)
 }
 
 #[cfg(test)]
