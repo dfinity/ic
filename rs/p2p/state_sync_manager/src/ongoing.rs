@@ -17,13 +17,13 @@ use std::{
     time::Duration,
 };
 
-use crate::metrics::OngoingStateSyncMetrics;
 use crate::routes::{build_chunk_handler_request, parse_chunk_handler_response};
+use crate::{metrics::OngoingStateSyncMetrics, utils::XorDistance};
 
 use ic_base_types::NodeId;
 use ic_http_endpoints_async_utils::JoinMap;
 use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId};
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_quic_transport::{Shutdown, Transport};
 use rand::{
     distributions::{Distribution, WeightedIndex},
@@ -50,7 +50,7 @@ struct OngoingStateSync {
     metrics: OngoingStateSyncMetrics,
     transport: Arc<dyn Transport>,
     // Peer management
-    new_peers_rx: Receiver<NodeId>,
+    new_peers_rx: Receiver<(NodeId, Option<XorDistance>)>,
     // Peers that advertised state and the number of outstanding chunk downloads to that peer.
     active_downloads: HashMap<NodeId, u64>,
     // Download management
@@ -61,7 +61,7 @@ struct OngoingStateSync {
 }
 
 pub(crate) struct OngoingStateSyncHandle {
-    pub sender: Sender<NodeId>,
+    pub sender: Sender<(NodeId, Option<XorDistance>)>,
     pub artifact_id: StateSyncArtifactId,
     pub shutdown: Shutdown,
 }
@@ -116,7 +116,13 @@ impl OngoingStateSync {
                 () = cancellation.cancelled() => {
                     break
                 },
-                Some(new_peer) = self.new_peers_rx.recv() => {
+                Some((new_peer, partial_state)) = self.new_peers_rx.recv() => {
+                    // For now, adverts with a partial state are ignored
+                    if partial_state.is_some() {
+                        warn!(self.log, "Received a partial state advert");
+                        continue;
+                    }
+
                     if let Entry::Vacant(e) = self.active_downloads.entry(new_peer) {
                         info!(self.log, "Adding peer {} to ongoing state sync of height {}.", new_peer, self.artifact_id.height);
                         e.insert(0);
@@ -410,7 +416,7 @@ mod tests {
             );
 
             rt.block_on(async move {
-                ongoing.sender.send(NODE_1).await.unwrap();
+                ongoing.sender.send((NODE_1, None)).await.unwrap();
                 ongoing.shutdown.shutdown().await.unwrap();
             });
         });
@@ -447,7 +453,7 @@ mod tests {
             );
 
             rt.block_on(async move {
-                ongoing.sender.send(NODE_1).await.unwrap();
+                ongoing.sender.send((NODE_1, None)).await.unwrap();
                 // State sync should exit because NODE_1 got removed.
                 ongoing.shutdown.shutdown().await.unwrap();
             });
@@ -486,9 +492,9 @@ mod tests {
             );
 
             rt.block_on(async move {
-                ongoing.sender.send(NODE_1).await.unwrap();
-                ongoing.sender.send(NODE_1).await.unwrap();
-                ongoing.sender.send(NODE_1).await.unwrap();
+                ongoing.sender.send((NODE_1, None)).await.unwrap();
+                ongoing.sender.send((NODE_1, None)).await.unwrap();
+                ongoing.sender.send((NODE_1, None)).await.unwrap();
                 // State sync should exit because NODE_1 got removed.
                 ongoing.shutdown.shutdown().await.unwrap();
             });
