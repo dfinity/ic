@@ -28,7 +28,7 @@ const HOST_VM_NAME: &str = "host-1";
 pub fn setup(env: TestEnv) {
     assert_version_compatibility();
 
-    setup_ic_infrastructure(&env, None);
+    setup_ic_infrastructure(&env, /*dkg_interval=*/ None, /*is_fast=*/ true);
 
     setup_nested_vm_group(env.clone(), &[HOST_VM_NAME]);
     setup_vector_targets_for_vm(&env, HOST_VM_NAME);
