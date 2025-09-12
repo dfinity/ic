@@ -12983,7 +12983,6 @@ dependencies = [
  "ic-nns-governance-api",
  "ic-nns-governance-init",
  "ic-nns-handler-root",
- "ic-nns-test-utils",
  "ic-rosetta-test-utils",
  "ic-sys",
  "ic-types",
