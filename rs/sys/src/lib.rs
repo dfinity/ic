@@ -52,7 +52,7 @@ pub unsafe fn page_bytes_from_ptr<T>(_owner: &T, ptr: *const u8) -> &PageBytes {
 
 /// Size of an OS memory page in bytes.
 pub fn sysconf_page_size() -> usize {
-    use nix::unistd::{sysconf, SysconfVar};
+    use nix::unistd::{SysconfVar, sysconf};
     sysconf(SysconfVar::PAGE_SIZE)
         .expect("sysconf PAGE_SIZE succeeds")
         .expect("PAGE_SIZE is not none") as usize

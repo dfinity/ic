@@ -5,8 +5,8 @@ use std::{
 };
 
 use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, dkg_pool::DkgPoolImpl};
-use ic_config::{artifact_pool::ArtifactPoolConfig, Config};
-use ic_consensus::consensus::{validator::Validator, ValidatorMetrics};
+use ic_config::{Config, artifact_pool::ArtifactPoolConfig};
+use ic_consensus::consensus::{ValidatorMetrics, validator::Validator};
 use ic_consensus_certification::CertificationCrypto;
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
@@ -27,15 +27,15 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    Height, NodeId, PrincipalId, SubnetId,
     artifact::ConsensusMessageId,
     consensus::{
-        certification::{Certification, CertificationShare},
         Block, ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable, HasBlockHash,
         HasCommittee,
+        certification::{Certification, CertificationShare},
     },
     crypto::CryptoHashOf,
     replica_config::ReplicaConfig,
-    Height, NodeId, PrincipalId, SubnetId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -75,7 +75,7 @@ impl InvalidArtifact {
 
     fn bytes_to_hex_string(&self, v: &[u8]) -> String {
         v.iter().fold(String::new(), |mut hash, byte| {
-            hash.push_str(&format!("{:X}", byte));
+            hash.push_str(&format!("{byte:X}"));
             hash
         })
     }
@@ -246,7 +246,7 @@ impl ReplayValidator {
 
         self.verifier
             .validate(self.replica_cfg.subnet_id, certification, registry_version)
-            .map_err(|e| format!("{:?}", e))
+            .map_err(|e| format!("{e:?}"))
     }
 
     /// Verify the given certification share against the membership defined by the local consensus pool cache
@@ -260,7 +260,7 @@ impl ReplayValidator {
             Certification::committee(),
         ) {
             // In case of an error, we simply skip this artifact.
-            Err(e) => Err(format!("Failed to determine membership: {:?}", e)),
+            Err(e) => Err(format!("Failed to determine membership: {e:?}")),
             // If the signer does not belong to the signers committee at the
             // given height, reject this artifact.
             Ok(false) => Err("Signer does not belong to committee.".into()),
@@ -319,7 +319,7 @@ impl ReplayValidator {
                     expected.remove(&hash);
                 }
                 other => {
-                    println!("Unexpected change action: {:?}", other);
+                    println!("Unexpected change action: {other:?}");
                 }
             });
 
@@ -331,10 +331,7 @@ impl ReplayValidator {
         }
 
         let new_height = PoolReader::new(pool).get_finalized_height();
-        println!(
-            "Validated artifacts up to new finalized height: {}",
-            new_height
-        );
+        println!("Validated artifacts up to new finalized height: {new_height}");
 
         if new_height < target_height {
             Err(ReplayError::ValidationIncomplete(

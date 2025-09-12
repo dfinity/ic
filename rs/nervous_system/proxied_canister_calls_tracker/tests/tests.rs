@@ -194,7 +194,7 @@ async fn test_proxied_canister_calls_tracker_many_blocks() {
             // We make this vary with i, but it could be invariant wrt i without
             // having much effect on this test.
             let callee = CanisterId::from(i + 42);
-            let method_name = format!("method_{}", i);
+            let method_name = format!("method_{i}");
             let args = vec![];
 
             allow_overlap().await;
@@ -234,7 +234,7 @@ async fn test_proxied_canister_calls_tracker_many_blocks() {
     // Set everything in motion.
     let mut done_count = 0;
     while let Some(result) = join_set.join_next().await {
-        assert!(result.is_ok(), "{:#?}", result);
+        assert!(result.is_ok(), "{result:#?}");
         done_count += 1;
     }
     assert_eq!(done_count, 25);
@@ -269,8 +269,8 @@ fn test_proxied_canister_calls_tracker_concurrent() {
         })
     };
 
-    assert_eq!(len(), 0, "{:#?}", TRACKER);
-    assert_eq!(max_age(), BTreeMap::new(), "{:#?}", TRACKER);
+    assert_eq!(len(), 0, "{TRACKER:#?}");
+    assert_eq!(max_age(), BTreeMap::new(), "{TRACKER:#?}");
 
     // Three calls are made.
     let args = vec![];
@@ -300,7 +300,7 @@ fn test_proxied_canister_calls_tracker_concurrent() {
     );
     advance_time_seconds(20.0); // t = 21.0
 
-    assert_eq!(len(), 1, "{:#?}", TRACKER);
+    assert_eq!(len(), 1, "{TRACKER:#?}");
     assert_eq!(
         max_age(),
         btreemap! {
@@ -318,7 +318,7 @@ fn test_proxied_canister_calls_tracker_concurrent() {
     );
     advance_time_seconds(4_000.0); // t = 4_321.0
 
-    assert_eq!(len(), 2, "{:#?}", TRACKER);
+    assert_eq!(len(), 2, "{TRACKER:#?}");
     assert_eq!(
         max_age(),
         btreemap! {
@@ -336,7 +336,7 @@ fn test_proxied_canister_calls_tracker_concurrent() {
     );
     advance_time_seconds(600_000.0); // t = 654_321
 
-    assert_eq!(len(), 3, "{:#?}", TRACKER);
+    assert_eq!(len(), 3, "{TRACKER:#?}");
     assert_eq!(
         max_age(),
         btreemap! {
@@ -349,7 +349,7 @@ fn test_proxied_canister_calls_tracker_concurrent() {
     drop(tracker_1); // Unshadow the call that came in second.
     advance_time_seconds(80_000_000.0); // t = 87_654_321
 
-    assert_eq!(len(), 2, "{:#?}", TRACKER);
+    assert_eq!(len(), 2, "{TRACKER:#?}");
     assert_eq!(
         max_age(),
         btreemap! {
@@ -362,7 +362,7 @@ fn test_proxied_canister_calls_tracker_concurrent() {
     drop(tracker_3); // Out of order!
     advance_time_seconds(8_000_000_000.0); // t = 8_987_654_321
 
-    assert_eq!(len(), 1, "{:#?}", TRACKER);
+    assert_eq!(len(), 1, "{TRACKER:#?}");
     assert_eq!(
         max_age(),
         btreemap! {
@@ -374,8 +374,8 @@ fn test_proxied_canister_calls_tracker_concurrent() {
     drop(tracker_2); // Out of order!
     advance_time_seconds(600_000_000_000.0); // t = 678_987_654_321
 
-    assert_eq!(len(), 0, "{:#?}", TRACKER);
-    assert_eq!(max_age(), BTreeMap::new(), "{:#?}", TRACKER);
+    assert_eq!(len(), 0, "{TRACKER:#?}");
+    assert_eq!(max_age(), BTreeMap::new(), "{TRACKER:#?}");
 
     // This is to avoid clippy telling us to get rid of earlier clone
     // calls. Removing such calls causes code misalignment.

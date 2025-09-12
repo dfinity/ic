@@ -1,6 +1,6 @@
 use ic_base_types::NodeId;
 use ic_metrics::{
-    buckets::decimal_buckets, tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry,
+    MetricsRegistry, buckets::decimal_buckets, tokio_metrics_collector::TokioTaskMetricsCollector,
 };
 use prometheus::{GaugeVec, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use quinn::{Connection, ConnectionError, ReadError, ReadToEndError, StoppedError, WriteError};

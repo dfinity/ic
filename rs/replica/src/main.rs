@@ -12,13 +12,13 @@ use ic_tracing::ReloadHandles;
 use ic_tracing_jaeger_exporter::jaeger_exporter;
 use ic_tracing_logging_layer::logging_layer;
 use ic_types::{
-    consensus::CatchUpPackage, replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion,
-    SubnetId,
+    PrincipalId, ReplicaVersion, SubnetId, consensus::CatchUpPackage,
+    replica_version::REPLICA_BINARY_HASH,
 };
-use nix::unistd::{setpgid, Pid};
+use nix::unistd::{Pid, setpgid};
 use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
-use tokio::signal::unix::{signal, SignalKind};
-use tracing_subscriber::{filter::filter_fn, layer::SubscriberExt, Layer};
+use tokio::signal::unix::{SignalKind, signal};
+use tracing_subscriber::{Layer, filter::filter_fn, layer::SubscriberExt};
 
 #[cfg(target_os = "linux")]
 mod jemalloc_metrics;
@@ -31,7 +31,7 @@ use tikv_jemallocator::Jemalloc;
 static ALLOC: Jemalloc = Jemalloc;
 
 #[cfg(feature = "profiler")]
-use pprof::{protos::Message, ProfilerGuard};
+use pprof::{ProfilerGuard, protos::Message};
 #[cfg(feature = "profiler")]
 use regex::Regex;
 #[cfg(feature = "profiler")]
@@ -45,13 +45,13 @@ use std::io::Write;
 fn get_replica_binary_hash() -> Result<(PathBuf, String), String> {
     let mut hasher = Sha256::new();
     let replica_binary_path = env::current_exe()
-        .map_err(|e| format!("Failed to determine replica binary path: {:?}", e))?;
+        .map_err(|e| format!("Failed to determine replica binary path: {e:?}"))?;
 
     let mut binary_file = fs::File::open(&replica_binary_path)
-        .map_err(|e| format!("Failed to open replica binary to calculate hash: {:?}", e))?;
+        .map_err(|e| format!("Failed to open replica binary to calculate hash: {e:?}"))?;
 
     io::copy(&mut binary_file, &mut hasher)
-        .map_err(|e| format!("Failed to calculate hash for replica binary: {:?}", e))?;
+        .map_err(|e| format!("Failed to calculate hash for replica binary: {e:?}"))?;
 
     Ok((replica_binary_path, hex::encode(hasher.finish())))
 }

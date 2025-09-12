@@ -24,7 +24,7 @@ use ic_system_test_driver::{
     },
     systest,
     types::CreateCanisterResult,
-    util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
+    util::{UniversalCanister, assert_create_agent, block_on, runtime_from_url},
 };
 use slog::info;
 

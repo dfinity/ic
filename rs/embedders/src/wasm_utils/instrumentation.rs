@@ -116,9 +116,9 @@ use super::{InstrumentationOutput, Segments, SystemApiFunc};
 use ic_config::embedders::MeteringType;
 use ic_replicated_state::NumWasmPages;
 use ic_sys::PAGE_SIZE;
-use ic_types::methods::WasmMethod;
 use ic_types::NumBytes;
 use ic_types::NumInstructions;
+use ic_types::methods::WasmMethod;
 use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
 
 use crate::wasmtime_embedder::{
@@ -1039,7 +1039,7 @@ fn export_mutable_globals<'a>(
 
     for (ix, (mutable, exported)) in mutable_exported.iter().enumerate() {
         if *mutable && !exported {
-            extra_data.push(format!("__persistent_mutable_global_{}", ix));
+            extra_data.push(format!("__persistent_mutable_global_{ix}"));
         }
     }
     let mut iy = 0;

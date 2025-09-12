@@ -9,8 +9,8 @@ use crate::canister_manager::types::{
 };
 use crate::execution::common::{ingress_status_with_processing_state, update_round_limits};
 use crate::execution::install_code::{
-    canister_layout, finish_err, CanisterMemoryHandling, InstallCodeHelper, OriginalContext,
-    PausedInstallCodeHelper,
+    CanisterMemoryHandling, InstallCodeHelper, OriginalContext, PausedInstallCodeHelper,
+    canister_layout, finish_err,
 };
 use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::PrincipalId;
@@ -21,12 +21,12 @@ use ic_embedders::{
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_management_canister_types_private::{
     CanisterInstallModeV2, CanisterUpgradeOptions, WasmMemoryPersistence,
 };
 use ic_replicated_state::{
-    metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState, ExecutionState,
+    CanisterState, ExecutionState, metadata_state::subnet_call_context_manager::InstallCodeCallId,
 };
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 use ic_types::{

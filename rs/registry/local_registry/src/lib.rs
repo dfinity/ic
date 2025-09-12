@@ -14,8 +14,8 @@ use ic_registry_local_store::{
 };
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, registry::RegistryClientError, RegistryVersion,
-    SubnetId,
+    RegistryVersion, SubnetId, crypto::threshold_sig::ThresholdSigPublicKey,
+    registry::RegistryClientError,
 };
 use thiserror::Error;
 use tokio::sync::RwLock;
@@ -204,7 +204,7 @@ impl LocalRegistry {
 
     fn http_endpoint_to_url(http: &PbConnectionEndpoint) -> Option<Url> {
         let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
-            Ok(v) if v.is_ipv6() => format!("[{}]", v),
+            Ok(v) if v.is_ipv6() => format!("[{v}]"),
             Ok(v) => v.to_string(),
             Err(_) => http.ip_addr.clone(),
         };

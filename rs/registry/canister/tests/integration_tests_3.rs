@@ -9,8 +9,9 @@ use ic_nns_test_utils::{
 use ic_registry_transport::{
     insert,
     pb::v1::{
-        high_capacity_registry_get_value_response, HighCapacityRegistryGetValueResponse,
-        RegistryAtomicMutateRequest, RegistryAtomicMutateResponse, RegistryGetValueRequest,
+        HighCapacityRegistryGetValueResponse, RegistryAtomicMutateRequest,
+        RegistryAtomicMutateResponse, RegistryGetValueRequest,
+        high_capacity_registry_get_value_response,
     },
     precondition, upsert,
 };

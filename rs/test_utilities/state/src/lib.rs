@@ -8,21 +8,21 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    CallContext, CallOrigin, CanisterState, ExecutionState, ExportedFunctions, InputQueueType,
+    Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
     canister_state::{
         execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
         system_state::{CyclesUseCase, TaskQueue},
         testing::new_canister_output_queues_for_test,
     },
     metadata_state::{
+        Stream, SubnetMetrics,
         subnet_call_context_manager::{
             BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
         },
-        Stream, SubnetMetrics,
     },
     page_map::PageMap,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
-    CallContext, CallOrigin, CanisterState, ExecutionState, ExportedFunctions, InputQueueType,
-    Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
 };
 use ic_test_utilities_types::{
     arbitrary,
@@ -31,18 +31,18 @@ use ic_test_utilities_types::{
 };
 use ic_types::time::{CoarseTime, UNIX_EPOCH};
 use ic_types::{
-    batch::CanisterCyclesCostSchedule,
-    methods::{Callback, WasmClosure},
-};
-use ic_types::{
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NodeId, NumBytes, PrincipalId,
+    SubnetId, Time,
     batch::RawQueryStats,
     messages::{CallbackId, Ingress, Request, RequestOrResponse},
     nominal_cycles::NominalCycles,
     xnet::{
         RejectReason, RejectSignal, StreamFlags, StreamHeader, StreamIndex, StreamIndexedQueue,
     },
-    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NodeId, NumBytes, PrincipalId,
-    SubnetId, Time,
+};
+use ic_types::{
+    batch::CanisterCyclesCostSchedule,
+    methods::{Callback, WasmClosure},
 };
 use ic_wasm_types::CanisterModule;
 use proptest::prelude::*;

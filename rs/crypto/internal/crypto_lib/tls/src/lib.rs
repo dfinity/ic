@@ -108,8 +108,7 @@ fn x509_v3_certificate(
     })?;
     let not_before = OffsetDateTime::from_unix_timestamp(not_before_i64).map_err(|e| {
         TlsKeyPairAndCertGenerationError::InvalidArguments(format!(
-            "invalid notBefore date: failed to convert to OffsetDateTime: {}",
-            e
+            "invalid notBefore date: failed to convert to OffsetDateTime: {e}"
         ))
     })?;
     let not_after_i64 = i64::try_from(not_after_secs_since_unix_epoch).map_err(|_e| {
@@ -119,14 +118,12 @@ fn x509_v3_certificate(
     })?;
     let not_after = OffsetDateTime::from_unix_timestamp(not_after_i64).map_err(|e| {
         TlsKeyPairAndCertGenerationError::InvalidArguments(format!(
-            "invalid notAfter date: failed to convert to OffsetDateTime: {}",
-            e
+            "invalid notAfter date: failed to convert to OffsetDateTime: {e}"
         ))
     })?;
     if not_before >= not_after {
         return Err(TlsKeyPairAndCertGenerationError::InvalidArguments(format!(
-            "notBefore date ({}) must be before notAfter date ({})",
-            not_before, not_after,
+            "notBefore date ({not_before}) must be before notAfter date ({not_after})",
         )));
     }
     let mut distinguished_name = DistinguishedName::new();
@@ -144,8 +141,7 @@ fn x509_v3_certificate(
 
     let cert_result = cert_params.self_signed(&key_pair).map_err(|e| {
         TlsKeyPairAndCertGenerationError::InternalError(format!(
-            "failed to create X509 certificate: {}",
-            e
+            "failed to create X509 certificate: {e}"
         ))
     });
     key_pair.zeroize();
@@ -159,8 +155,7 @@ fn rcgen_keypair_from_ed25519_keypair(
     let keypair_der = secret_key_to_pkcs8_v2_der(secret_key, public_key);
     KeyPair::try_from(keypair_der.expose_secret()).map_err(|e| {
         TlsKeyPairAndCertGenerationError::InternalError(format!(
-            "failed to create Ed25519 key pair from raw private key: {}",
-            e
+            "failed to create Ed25519 key pair from raw private key: {e}"
         ))
     })
 }

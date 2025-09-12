@@ -1,5 +1,5 @@
 use anyhow::Result;
-use bitcoin::{dogecoin::Network as DogeNetwork, Amount, Network as BtcNetwork};
+use bitcoin::{Amount, Network as BtcNetwork, dogecoin::Network as DogeNetwork};
 use ic_btc_adapter_test_utils::rpc_client::CreateRawTransactionInput;
 use ic_system_test_driver::{
     driver::{
@@ -11,10 +11,10 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on},
 };
 use ic_tests_ckbtc::{
-    adapter::{fund_with_btc, AdapterProxy},
+    IcRpcClientType,
+    adapter::{AdapterProxy, fund_with_btc},
     adapter_test_setup, subnet_sys,
     utils::get_rpc_client,
-    IcRpcClientType,
 };
 use slog::info;
 use std::collections::HashMap;
@@ -194,7 +194,7 @@ fn main() -> Result<()> {
     } else if test_name == "DOGE" {
         test::<DogeNetwork>()?;
     } else {
-        panic!("Unsupported ADAPTER_TO_TEST {}", test_name);
+        panic!("Unsupported ADAPTER_TO_TEST {test_name}");
     }
     Ok(())
 }

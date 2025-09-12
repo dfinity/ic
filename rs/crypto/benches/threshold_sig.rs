@@ -1,18 +1,18 @@
-use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion};
+use criterion::measurement::Measurement;
+use criterion::{BenchmarkGroup, BenchmarkId, Criterion, criterion_group, criterion_main};
 use ic_crypto::THRESHOLD_SIG_DATA_STORE_CAPACITY_PER_TAG;
 use ic_crypto_temp_crypto::TempCryptoComponentGeneric;
 use ic_crypto_test_utils::crypto_for;
 use ic_crypto_test_utils_ni_dkg::{
-    load_transcript, run_ni_dkg_and_create_single_transcript, sign_threshold_for_each,
-    NiDkgTestEnvironment, RandomNiDkgConfig,
+    NiDkgTestEnvironment, RandomNiDkgConfig, load_transcript,
+    run_ni_dkg_and_create_single_transcript, sign_threshold_for_each,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces::crypto::{NiDkgAlgorithm, ThresholdSigVerifier, ThresholdSigner};
 use ic_types::consensus::Threshold;
-use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript};
 use ic_types::crypto::SignableMock;
+use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript};
 use ic_types::{Height, NodeId};
 use rand::prelude::*;
 use rand::seq::SliceRandom;
@@ -220,9 +220,16 @@ fn bench_verify_threshold_sig_share_incl_loading_pubkey<M: Measurement, R: Rng +
                     (sig_share, message, verifier, signer_node_id)
                 },
                 |(sig_share, message, verifier, signer_node_id)| {
-                    assert!(verifier
-                        .verify_threshold_sig_share(&sig_share, &message, dkg_id, signer_node_id)
-                        .is_ok());
+                    assert!(
+                        verifier
+                            .verify_threshold_sig_share(
+                                &sig_share,
+                                &message,
+                                dkg_id,
+                                signer_node_id
+                            )
+                            .is_ok()
+                    );
                 },
                 SmallInput,
             )
@@ -259,16 +266,30 @@ fn bench_verify_threshold_sig_share_excl_loading_pubkey<M: Measurement, R: Rng +
                     // signature data store, verify the signature share once before
                     // the benchmark is performed to ensure the public key is available
                     // in the data store during the benchmark.
-                    assert!(verifier
-                        .verify_threshold_sig_share(&sig_share, &message, dkg_id, signer_node_id)
-                        .is_ok());
+                    assert!(
+                        verifier
+                            .verify_threshold_sig_share(
+                                &sig_share,
+                                &message,
+                                dkg_id,
+                                signer_node_id
+                            )
+                            .is_ok()
+                    );
 
                     (sig_share, message, verifier, signer_node_id)
                 },
                 |(sig_share, message, verifier, signer_node_id)| {
-                    assert!(verifier
-                        .verify_threshold_sig_share(&sig_share, &message, dkg_id, signer_node_id)
-                        .is_ok());
+                    assert!(
+                        verifier
+                            .verify_threshold_sig_share(
+                                &sig_share,
+                                &message,
+                                dkg_id,
+                                signer_node_id
+                            )
+                            .is_ok()
+                    );
                 },
                 SmallInput,
             )
@@ -296,9 +317,11 @@ fn bench_combine_threshold_sig_shares<M: Measurement, R: Rng + CryptoRng>(
                     (sig_shares, combiner)
                 },
                 |(sig_shares, combiner)| {
-                    assert!(combiner
-                        .combine_threshold_sig_shares(sig_shares, dkg_id)
-                        .is_ok());
+                    assert!(
+                        combiner
+                            .combine_threshold_sig_shares(sig_shares, dkg_id)
+                            .is_ok()
+                    );
                 },
                 SmallInput,
             )
@@ -329,9 +352,11 @@ fn bench_verify_threshold_sig_combined<M: Measurement, R: Rng + CryptoRng>(
                     (threshold_sig, message, verifier)
                 },
                 |(threshold_sig, message, verifier)| {
-                    assert!(verifier
-                        .verify_threshold_sig_combined(&threshold_sig, &message, dkg_id)
-                        .is_ok());
+                    assert!(
+                        verifier
+                            .verify_threshold_sig_combined(&threshold_sig, &message, dkg_id)
+                            .is_ok()
+                    );
                 },
                 SmallInput,
             )

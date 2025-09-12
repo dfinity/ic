@@ -1,7 +1,8 @@
 //! Tests of Basic Signature operations in the CSP vault.
+use crate::KeyId;
 use crate::imported_test_utils::ed25519::csp_testvec;
-use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::public_key_store::PublicKeySetOnceError;
+use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreInsertionError};
@@ -10,16 +11,15 @@ use crate::vault::api::PublicKeyStoreCspVault;
 use crate::vault::api::SecretKeyStoreCspVault;
 use crate::vault::api::{BasicSignatureCspVault, CspBasicSignatureKeygenError};
 use crate::vault::api::{CspBasicSignatureError, CspVault};
-use crate::vault::local_csp_vault::basic_sig::node_signing_pk_to_proto;
 use crate::vault::local_csp_vault::LocalCspVault;
-use crate::KeyId;
+use crate::vault::local_csp_vault::basic_sig::node_signing_pk_to_proto;
 use assert_matches::assert_matches;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes;
 use ic_crypto_internal_test_vectors::ed25519::Ed25519TestVector::RFC8032_ED25519_SHA_ABC;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_types::crypto::AlgorithmId;
 use ic_types::NumberOfNodes;
+use ic_types::crypto::AlgorithmId;
 use mockall::Sequence;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -120,8 +120,8 @@ fn should_fail_with_transient_internal_error_if_node_signing_public_key_persiste
 }
 
 #[test]
-fn should_fail_with_transient_internal_error_if_node_signing_secret_key_persistence_fails_due_to_io_error(
-) {
+fn should_fail_with_transient_internal_error_if_node_signing_secret_key_persistence_fails_due_to_io_error()
+ {
     let mut sks_returning_io_error = MockSecretKeyStore::new();
     let expected_io_error = "cannot write to file".to_string();
     sks_returning_io_error
@@ -144,8 +144,8 @@ fn should_fail_with_transient_internal_error_if_node_signing_secret_key_persiste
 }
 
 #[test]
-fn should_fail_with_internal_error_if_node_signing_secret_key_persistence_fails_due_to_serialization_error(
-) {
+fn should_fail_with_internal_error_if_node_signing_secret_key_persistence_fails_due_to_serialization_error()
+ {
     let mut sks_returning_serialization_error = MockSecretKeyStore::new();
     let expected_serialization_error = "cannot serialize keys".to_string();
     sks_returning_serialization_error
@@ -229,7 +229,7 @@ fn should_fail_to_sign_with_unsupported_algorithm_id() {
             let err = sign_result.expect_err("Expected an error.");
             match err {
                 CspBasicSignatureError::UnsupportedAlgorithm { .. } => {}
-                _ => panic!("Expected UnsupportedAlgorithm, got {:?}", err),
+                _ => panic!("Expected UnsupportedAlgorithm, got {err:?}"),
             }
         }
     }
@@ -285,7 +285,7 @@ pub fn generate_key_pair_and_sign_and_verify_message(csp_vault: Arc<dyn CspVault
     let signature = sign_result.expect("Failed to extract the signature");
     let signature_bytes = match signature {
         CspSignature::Ed25519(signature_bytes) => signature_bytes,
-        _ => panic!("Wrong CspSignature: {:?}", signature),
+        _ => panic!("Wrong CspSignature: {signature:?}"),
     };
     assert!(ed25519::verify(&signature_bytes, message, &pk_bytes).is_ok());
 }
@@ -299,7 +299,7 @@ pub fn generate_key_pair_and_sign_message(
         .expect("failed to generate keys");
     let pk_bytes = match csp_pk {
         CspPublicKey::Ed25519(pk_bytes) => pk_bytes,
-        _ => panic!("Wrong CspPublicKey: {:?}", csp_pk),
+        _ => panic!("Wrong CspPublicKey: {csp_pk:?}"),
     };
     let sign_result = csp_vault.sign(AlgorithmId::Ed25519, message, KeyId::from(&csp_pk));
     (pk_bytes, sign_result)
