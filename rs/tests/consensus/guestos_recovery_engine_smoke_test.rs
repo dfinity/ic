@@ -32,7 +32,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     driver::{
         group::SystemTestGroup,
-        ic::{InternetComputer, Subnet},
+        ic::{InternetComputer, Node, Subnet},
         test_env::TestEnv,
         test_env_api::{
             get_dependency_path_from_env, read_dependency_from_env_to_string, secs,
@@ -139,8 +139,12 @@ pub fn setup(env: TestEnv) {
     )
     .unwrap();
 
+    let recovery_hash = read_dependency_from_env_to_string("RECOVERY_HASH_PATH").unwrap();
+
     InternetComputer::new()
-        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
+        .add_subnet(
+            Subnet::new(SubnetType::System).add_node(Node::new().with_recovery_hash(recovery_hash)),
+        )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 }

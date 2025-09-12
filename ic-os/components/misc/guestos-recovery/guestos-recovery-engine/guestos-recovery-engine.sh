@@ -2,16 +2,16 @@
 
 set -e
 
+source /opt/ic/bin/config.sh
+
 readonly MAX_ATTEMPTS=10
 readonly RETRY_DELAY=5
 
-# Completes the recovery process by downloading and applying the recovery artifacts
-
-# Helper function to extract a value from /proc/cmdline
-get_cmdline_var() {
-    local var="$1"
-    grep -oP "${var}=[^ ]*" /proc/cmdline | head -n1 | cut -d= -f2-
+function read_config_variables() {
+    expected_recovery_hash=$(get_config_value '.guestos_settings.recovery_hash')
 }
+
+# Completes the recovery process by downloading and applying the recovery artifacts
 
 echo "Starting GuestOS recovery engine with retry logic (max attempts: $MAX_ATTEMPTS, delay: ${RETRY_DELAY}s)..."
 
@@ -56,7 +56,7 @@ perform_recovery() {
         fi
     }
 
-    expected_recovery_hash="$(get_cmdline_var recovery-hash)"
+    read_config_variables
 
     if [ -z "$expected_recovery_hash" ]; then
         echo "ERROR: recovery-hash boot parameter is required"

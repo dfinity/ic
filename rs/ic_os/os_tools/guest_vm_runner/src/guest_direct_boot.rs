@@ -5,7 +5,6 @@ use anyhow::Context;
 use anyhow::Result;
 use grub::{BootAlternative, BootCycle, GrubEnv, WithDefault};
 use ic_device::mount::{FileSystem, MountOptions, PartitionProvider};
-use linux_kernel_command_line::KernelCommandLine;
 use std::fs::File;
 use tempfile::NamedTempFile;
 use uuid::Uuid;
@@ -26,26 +25,6 @@ const B_BOOT_PARTITION_UUID: Uuid =
 
 const GRUB_PARTITION_FS: FileSystem = FileSystem::Vfat;
 const BOOT_PARTITION_FS: FileSystem = FileSystem::Ext4;
-
-/// Updates boot_args to include recovery-hash if it's present in the HostOS boot args
-fn update_boot_args_with_recovery_hash(
-    guest_boot_args: &str,
-    hostos_cmdline_content: &str,
-) -> Result<String> {
-    let hostos_cmdline = hostos_cmdline_content.parse::<KernelCommandLine>()?;
-
-    if let Some(recovery_hash_value) = hostos_cmdline.get_argument("recovery-hash") {
-        let mut guest_cmdline = guest_boot_args.parse::<KernelCommandLine>()?;
-        guest_cmdline
-            .ensure_single_argument("recovery-hash", Some(&recovery_hash_value))
-            .context("Failed to add recovery-hash to boot args")?;
-
-        return Ok(guest_cmdline.into());
-    }
-
-    // If recovery-hash is not present in HostOS boot args, return original boot_args
-    Ok(guest_boot_args.to_string())
-}
 
 /// Direct boot configuration extracted from the GuestOS
 #[derive(Debug)]
@@ -162,11 +141,6 @@ pub async fn prepare_direct_boot(
 
     let boot_args =
         read_boot_args(&boot_args_path, boot_args_var_name).context("Failed to read boot args")?;
-
-    let hostos_cmdline_content = std::fs::read_to_string("/proc/cmdline")
-        .context("Failed to read HostOS boot args from /proc/cmdline")?;
-    let boot_args = update_boot_args_with_recovery_hash(&boot_args, &hostos_cmdline_content)
-        .context("Failed to update boot args with recovery hash")?;
 
     let kernel = NamedTempFile::new()?;
     let initrd = NamedTempFile::new()?;
@@ -632,32 +606,5 @@ mod tests {
             .expect("prepare_direct_boot returned None")
             .kernel_cmdline
             .contains("args_b"));
-    }
-
-    #[test]
-    fn test_update_boot_args_with_recovery_hash_present() {
-        // Mock /proc/cmdline content with recovery-hash
-        let mock_cmdline = "root=/dev/sda1 recovery-hash=abc123 dummy";
-
-        let original_boot_args = "root=/dev/vda1 security=selinux";
-        let updated_boot_args =
-            update_boot_args_with_recovery_hash(original_boot_args, mock_cmdline)
-                .expect("Function should succeed");
-
-        assert!(updated_boot_args.contains("recovery-hash=abc123"));
-        assert!(updated_boot_args.contains("root=/dev/vda1"));
-        assert!(updated_boot_args.contains("security=selinux"));
-    }
-
-    #[test]
-    fn test_update_boot_args_with_recovery_hash_absent() {
-        let mock_cmdline = "root=/dev/sda1 quiet";
-
-        let original_boot_args = "root=/dev/vda1 security=selinux";
-        let updated_boot_args =
-            update_boot_args_with_recovery_hash(original_boot_args, mock_cmdline)
-                .expect("Function should succeed");
-
-        assert_eq!(updated_boot_args, original_boot_args);
     }
 }

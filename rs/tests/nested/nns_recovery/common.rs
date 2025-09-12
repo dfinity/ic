@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use anyhow::{bail, Result};
+use anyhow::bail;
 use futures::future::join_all;
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,

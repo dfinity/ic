@@ -1,3 +1,4 @@
+use anyhow::Context;
 use anyhow::{bail, ensure, Result};
 use config_types::{
     DeterministicIpv6Config, FixedIpv6Config, GuestOSConfig, GuestOSUpgradeConfig, GuestVMType,
@@ -5,6 +6,7 @@ use config_types::{
 };
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
+use linux_kernel_command_line::KernelCommandLine;
 use std::net::Ipv6Addr;
 use utils::to_cidr;
 
@@ -70,11 +72,16 @@ pub fn generate_guestos_config(
             sev_cert_chain_pem: certificate_chain,
         });
 
+    let mut guestos_settings = hostos_config.guestos_settings.clone();
+    let hostos_cmdline_content = std::fs::read_to_string("/proc/cmdline")
+        .context("Failed to read HostOS boot args from /proc/cmdline")?;
+    guestos_settings.recovery_hash = guestos_recovery_hash(&hostos_cmdline_content)?;
+
     let guestos_config = GuestOSConfig {
         config_version: hostos_config.config_version.clone(),
         network_settings: guestos_network_settings,
         icos_settings: hostos_config.icos_settings.clone(),
-        guestos_settings: hostos_config.guestos_settings.clone(),
+        guestos_settings,
         guest_vm_type,
         upgrade_config,
         trusted_execution_environment_config,
@@ -96,6 +103,17 @@ fn node_ipv6_address(
     );
 
     mac.calculate_slaac(&deterministic_config.prefix)
+}
+
+/// Retrieves the recovery-hash from the HostOS boot args, if present.
+fn guestos_recovery_hash(hostos_cmdline_content: &str) -> Result<Option<String>> {
+    let hostos_cmdline = hostos_cmdline_content.parse::<KernelCommandLine>()?;
+
+    if let Some(recovery_hash_value) = hostos_cmdline.get_argument("recovery-hash") {
+        Ok(Some(recovery_hash_value.to_string()))
+    } else {
+        Ok(None)
+    }
 }
 
 #[cfg(test)]
@@ -229,5 +247,15 @@ mod tests {
                 .sev_cert_chain_pem,
             "abc"
         );
+    }
+    #[test]
+    fn test_get_recovery_hash() {
+        let mock_cmdline = "root=/dev/sda1 recovery-hash=abc123 dummy";
+        let recovery_hash = guestos_recovery_hash(mock_cmdline).unwrap();
+        assert_eq!(recovery_hash, Some("abc123".to_string()));
+
+        let mock_cmdline = "root=/dev/sda1 quiet";
+        let recovery_hash = guestos_recovery_hash(mock_cmdline).unwrap();
+        assert_eq!(recovery_hash, None);
     }
 }

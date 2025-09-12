@@ -31,7 +31,7 @@ use std::str::FromStr;
 use strum::EnumString;
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.6.0";
+pub const CONFIG_VERSION: &str = "1.7.0";
 
 /// List of field names that have been removed and should not be reused.
 pub static RESERVED_FIELD_NAMES: &[&str] = &[];
@@ -196,6 +196,8 @@ pub struct GuestOSSettings {
     /// When given, this provides the initial state of the registry.
     /// If not given, the node will fetch (initial) registry state from the NNS.
     pub inject_ic_registry_local_store: bool,
+    /// The hash of the recovery artifacts to be used in the event of a manual recovery.
+    pub recovery_hash: Option<String>,
     pub guestos_dev_settings: GuestOSDevSettings,
 }
 
@@ -354,6 +356,7 @@ mod tests {
                 "inject_ic_crypto": false,
                 "inject_ic_state": false,
                 "inject_ic_registry_local_store": false,
+                "recovery_hash": None,
                 "guestos_dev_settings": {}
             },
             "guest_vm_type": "unknown_future_variant"
