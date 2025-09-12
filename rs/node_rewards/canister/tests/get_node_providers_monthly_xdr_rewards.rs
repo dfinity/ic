@@ -93,7 +93,10 @@ async fn get_node_provider_rewards_calculation_is_only_callable_in_nonreplicated
     .unwrap()
     .0
     .unwrap_err();
-    assert_eq!(err, "No rewards found for node provider 2vxsx-fae");
+    assert_eq!(
+        err,
+        "Could not calculate rewards: \"No metrics found for day 1620345599999999999\""
+    );
 
     // Replicated update call is not allowed.
     let err = update_candid::<_, (GetNodeProviderRewardsCalculationResponse,)>(
