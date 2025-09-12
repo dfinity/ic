@@ -9,6 +9,12 @@ use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use std::path::Path;
 use utils::to_cidr;
 
+mod node_gen;
+use node_gen::get_node_gen_metric;
+
+mod prometheus_metric;
+use prometheus_metric::write_single_metric;
+
 #[derive(Subcommand)]
 pub enum Commands {
     /// Generate systemd network configuration files. Bridges available NIC's for IC IPv6 connectivity.
@@ -24,6 +30,16 @@ pub enum Commands {
     GenerateMacAddress {
         #[arg(short, long, default_value_t = NodeType::HostOS)]
         node_type: NodeType,
+    },
+    SetHardwareGenMetric {
+        #[arg(
+            short = 'o',
+            long = "output",
+            default_value = "/run/node_exporter/collector_textfile/node_gen.prom"
+        )]
+        /// Filename to write the prometheus metric for node generation.
+        /// Fails if directory doesn't exist.
+        output_path: String,
     },
 }
 
@@ -46,6 +62,9 @@ pub fn main() -> Result<()> {
     let opts = HostOSArgs::parse();
 
     match opts.command {
+        Some(Commands::SetHardwareGenMetric { output_path }) => {
+            write_single_metric(&get_node_gen_metric(), Path::new(&output_path))
+        }
         Some(Commands::GenerateNetworkConfig { output_directory }) => {
             let hostos_config: HostOSConfig = deserialize_config(&opts.hostos_config_object_path)?;
 

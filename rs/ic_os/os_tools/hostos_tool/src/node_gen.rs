@@ -75,18 +75,18 @@ fn get_node_gen() -> Result<HardwareGen> {
 /// node_hardware_generation{gen="Gen1"} 0
 /// """
 pub fn get_node_gen_metric() -> PrometheusMetric {
-    let gen = match get_node_gen() {
-        Ok(gen) => gen,
+    let node_gen = match get_node_gen() {
+        Ok(node_gen) => node_gen,
         Err(e) => {
             eprintln!("Error getting node gen: {e}");
             HardwareGen::Unknown
         }
     };
 
-    let gen_string = gen.to_string();
+    let gen_string = node_gen.to_string();
     println!("Determined node generation: {gen_string}");
 
-    let metric_value = match gen {
+    let metric_value = match node_gen {
         HardwareGen::Unknown => 0.0,
         _ => 1.0,
     };
@@ -125,6 +125,7 @@ pub mod tests {
             parse_hardware_gen("model name      : Intel Fake Lake i5-1040 32-Core Processor")
                 .is_err()
         );
+        assert!(parse_hardware_gen("model name	: Intel(R) Xeon(R) E-2278G CPU @ 3.40GHz").is_err());
         assert!(parse_hardware_gen("Fast times at Ridgemont High").is_err());
         assert!(parse_hardware_gen("").is_err());
     }

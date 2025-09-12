@@ -29,7 +29,7 @@ fn find_path<'a>(
     for l in path.iter() {
         match tref {
             LabeledTree::Leaf(_) => return None,
-            LabeledTree::SubTree(ref mut children) => {
+            LabeledTree::SubTree(children) => {
                 tref = children.get_mut(&Label::from(l))?;
             }
         }

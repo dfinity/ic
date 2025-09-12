@@ -26,7 +26,7 @@ pub mod storage;
 
 // Feature flag for SNS Extensions
 thread_local! {
-    static SNS_EXTENSIONS_ENABLED: Cell<bool> = const { Cell::new(cfg!(feature = "test")) };
+    static SNS_EXTENSIONS_ENABLED: Cell<bool> = const { Cell::new(true) };
 }
 
 pub fn is_sns_extensions_enabled() -> bool {

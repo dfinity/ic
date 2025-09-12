@@ -95,10 +95,9 @@ fn ed25519_rejects_non_canonical_points_search() {
      */
 
     fn is_rejected_or_canonical(bytes: &[u8; 32]) -> bool {
-        if let Ok(pt) = EccPoint::deserialize(EccCurveType::Ed25519, bytes) {
-            pt.serialize() == bytes
-        } else {
-            true
+        match EccPoint::deserialize(EccCurveType::Ed25519, bytes) {
+            Ok(pt) => pt.serialize() == bytes,
+            _ => true,
         }
     }
 
@@ -392,7 +391,7 @@ fn test_point_mul_by_node_index() -> CanisterThresholdResult<()> {
         node_indices.push(u32::MAX - 1);
         node_indices.push(u32::MAX);
         for _ in 0..100 {
-            node_indices.push(rng.gen());
+            node_indices.push(rng.r#gen());
         }
 
         for node_index in node_indices {

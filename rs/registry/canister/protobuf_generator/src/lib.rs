@@ -2,7 +2,6 @@ use prost_build::Config;
 use std::path::Path;
 
 pub struct ProtoPaths<'a> {
-    pub transport: &'a Path,
     pub base_types: &'a Path,
     pub protobuf: &'a Path,
     pub nns_common: &'a Path,
@@ -18,10 +17,6 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     let mut config = Config::new();
     config.protoc_arg("--experimental_allow_proto3_optional");
 
-    config.extern_path(
-        ".ic_registry_transport.pb.v1",
-        "::ic-registry-transport::pb::v1",
-    );
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
 
     for type_name in [
@@ -58,7 +53,6 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
             &[proto_file],
             &[
                 proto.registry_canister,
-                proto.transport,
                 proto.protobuf,
                 proto.nns_common,
                 proto.base_types,

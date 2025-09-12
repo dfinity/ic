@@ -18,10 +18,9 @@ use crate::{
     pb::v1::{
         high_capacity_registry_get_value_response, high_capacity_registry_mutation,
         high_capacity_registry_value, registry_mutation, HighCapacityRegistryAtomicMutateRequest,
-        HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
-        HighCapacityRegistryMutation, HighCapacityRegistryValue, LargeValueChunkKeys,
-        RegistryAtomicMutateRequest, RegistryDelta, RegistryGetChangesSinceResponse,
-        RegistryMutation, RegistryValue,
+        HighCapacityRegistryDelta, HighCapacityRegistryMutation, HighCapacityRegistryValue,
+        LargeValueChunkKeys, RegistryAtomicMutateRequest, RegistryDelta, RegistryMutation,
+        RegistryValue,
     },
     Error,
 };
@@ -31,31 +30,6 @@ use mockall::automock;
 
 mod downgrade_get_changes_since_response {
     use super::*;
-
-    impl TryFrom<HighCapacityRegistryGetChangesSinceResponse> for RegistryGetChangesSinceResponse {
-        type Error = String;
-
-        fn try_from(
-            original: HighCapacityRegistryGetChangesSinceResponse,
-        ) -> Result<RegistryGetChangesSinceResponse, String> {
-            let HighCapacityRegistryGetChangesSinceResponse {
-                error,
-                version,
-                deltas,
-            } = original;
-
-            let deltas = deltas
-                .into_iter()
-                .map(RegistryDelta::try_from)
-                .collect::<Result<Vec<RegistryDelta>, String>>()?;
-
-            Ok(RegistryGetChangesSinceResponse {
-                error,
-                version,
-                deltas,
-            })
-        }
-    }
 
     impl TryFrom<HighCapacityRegistryDelta> for RegistryDelta {
         type Error = String;

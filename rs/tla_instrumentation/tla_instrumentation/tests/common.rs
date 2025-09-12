@@ -6,7 +6,8 @@ use tla_instrumentation::UpdateTrace;
 fn set_java_path() {
     let current_path = std::env::var("PATH").unwrap();
     let bazel_java = std::env::var("JAVABASE").unwrap();
-    std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin"));
+    // TODO: Audit that the environment access only happens in single-threaded code.
+    unsafe { std::env::set_var("PATH", format!("{current_path}:{bazel_java}/bin")) };
 }
 
 /// Returns the path to the TLA module (e.g. `Foo.tla` -> `/home/me/tla/Foo.tla`).

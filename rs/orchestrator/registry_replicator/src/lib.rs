@@ -307,7 +307,7 @@ impl RegistryReplicator {
         nns_urls: Vec<Url>,
         nns_pub_key: Option<ThresholdSigPublicKey>,
         cancellation_token: CancellationToken,
-    ) -> Result<impl Future<Output = ()>, Error> {
+    ) -> Result<impl Future<Output = ()> + use<>, Error> {
         if self.started.swap(true, Ordering::Relaxed) {
             return Err(Error::new(
                 ErrorKind::AlreadyExists,

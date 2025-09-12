@@ -221,7 +221,7 @@ impl CanisterManager {
             Ok(Ic00Method::FetchCanisterLogs) => Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "{} API is only accessible in non-replicated mode",
+                    "{} API is not accessible via ingress in replicated mode",
                     Ic00Method::FetchCanisterLogs
                 ),
             )),
@@ -641,8 +641,12 @@ impl CanisterManager {
             None => None,
         };
 
+        // For the sake of backward-compatibility, we do not record
+        // changes to canister environment variables in canister history.
+        // In particular, we never produce a canister history entry of the form `settings_change`.
+        /*
         match self.environment_variables_flag {
-            FlagStatus::Enabled => {
+                      FlagStatus::Enabled => {
                 let new_environment_variables_hash = validated_settings
                     .environment_variables()
                     .map(|environment_variables| environment_variables.hash());
@@ -659,15 +663,18 @@ impl CanisterManager {
                 }
             }
             FlagStatus::Disabled => {
-                if let Some(new_controllers) = new_controllers {
-                    canister.system_state.add_canister_change(
-                        timestamp_nanos,
-                        origin,
-                        CanisterChangeDetails::controllers_change(new_controllers),
-                    );
-                }
+        */
+        if let Some(new_controllers) = new_controllers {
+            canister.system_state.add_canister_change(
+                timestamp_nanos,
+                origin,
+                CanisterChangeDetails::controllers_change(new_controllers),
+            );
+        }
+        /*
             }
         }
+        */
 
         Ok(())
     }

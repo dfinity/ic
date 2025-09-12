@@ -56,7 +56,7 @@ enum GetEventsFile {
 }
 
 impl GetEventsFile {
-    fn deserialize(&self) -> impl Iterator<Item = Event> {
+    fn deserialize(&self) -> impl Iterator<Item = Event> + use<> {
         use crate::endpoints::events::GetEventsResult;
         use candid::Decode;
         use flate2::read::GzDecoder;

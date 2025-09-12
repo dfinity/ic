@@ -220,10 +220,10 @@ fn canister_queue_push_without_reserved_slot_panics() {
 /// Generator for an arbitrary inbound message reference.
 fn arbitrary_message_reference() -> impl Strategy<Value = InboundReference> + Clone {
     prop_oneof![
-        any::<u64>().prop_map(|gen| new_request_reference(gen, Class::GuaranteedResponse)),
-        any::<u64>().prop_map(|gen| new_request_reference(gen, Class::BestEffort)),
-        any::<u64>().prop_map(|gen| new_response_reference(gen, Class::GuaranteedResponse)),
-        any::<u64>().prop_map(|gen| new_response_reference(gen, Class::BestEffort)),
+        any::<u64>().prop_map(|r#gen| new_request_reference(r#gen, Class::GuaranteedResponse)),
+        any::<u64>().prop_map(|r#gen| new_request_reference(r#gen, Class::BestEffort)),
+        any::<u64>().prop_map(|r#gen| new_response_reference(r#gen, Class::GuaranteedResponse)),
+        any::<u64>().prop_map(|r#gen| new_response_reference(r#gen, Class::BestEffort)),
     ]
 }
 
