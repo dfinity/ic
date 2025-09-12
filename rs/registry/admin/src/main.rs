@@ -37,7 +37,7 @@ use ic_nervous_system_root::change_canister::{
     AddCanisterRequest, CanisterAction, ChangeCanisterRequest, StopOrStartCanisterRequest,
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
     add_or_remove_node_provider::Change,
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
@@ -51,7 +51,6 @@ use ic_nns_governance_api::{
         SwapParameters,
     },
     install_code::CanisterInstallMode as GovernanceInstallMode,
-    proposal::Action,
     proposal_submission_helpers::{
         create_external_update_proposal_candid, create_make_proposal_payload,
         decode_make_proposal_response,
@@ -135,6 +134,7 @@ use registry_canister::mutations::{
     do_remove_node_operators::RemoveNodeOperatorsPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
     do_set_firewall_config::SetFirewallConfigPayload,
+    do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload,
     do_update_api_boundary_nodes_version::DeployGuestosToSomeApiBoundaryNodes,
     do_update_elected_hostos_versions::ReviseElectedHostosVersionsPayload,
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
@@ -522,6 +522,9 @@ enum SubCommand {
 
     // Submit a root proposal to the root canister to upgrade the governance canister.
     SubmitRootProposalToUpgradeGovernanceCanister(SubmitRootProposalToUpgradeGovernanceCanisterCmd),
+
+    /// Swap nodes in subnet directly, without governance.
+    SwapNodeInSubnetDirectly(SwapNodeInSubnetDirectlyCmd),
 
     /// Update local registry store by pulling from remote URL
     UpdateRegistryLocalStore(UpdateRegistryLocalStoreCmd),
@@ -2593,6 +2596,18 @@ struct SubmitRootProposalToUpgradeGovernanceCanisterCmd {
     wasm_module_sha256: String,
 }
 
+#[derive(Parser)]
+struct SwapNodeInSubnetDirectlyCmd {
+    /// Represents the node principal id of a node which will be removed from a subnet.
+    #[clap(long)]
+    pub old_node_id: PrincipalId,
+
+    /// Represents the node principal id of a node which will be added to a subnet in
+    /// place of the `old_node_id`.
+    #[clap(long)]
+    pub new_node_id: PrincipalId,
+}
+
 /// Sub-command to vote on a root proposal to upgrade the governance canister.
 #[derive(Parser)]
 struct VoteOnRootProposalToUpgradeGovernanceCanisterCmd {
@@ -3783,6 +3798,7 @@ async fn main() {
             SubCommand::ProposeToUpdateSubnetType(_) => (),
             SubCommand::ProposeToUpdateXdrIcpConversionRate(_) => (),
             SubCommand::SubmitRootProposalToUpgradeGovernanceCanister(_) => (),
+            SubCommand::SwapNodeInSubnetDirectly(_) => (),
             SubCommand::VoteOnRootProposalToUpgradeGovernanceCanister(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
@@ -4544,6 +4560,9 @@ async fn main() {
             )
             .await
         }
+        SubCommand::SwapNodeInSubnetDirectly(cmd) => {
+            swap_node_in_subnet_directly(registry_canister, cmd).await;
+        }
         SubCommand::GetPendingRootProposalsToUpgradeGovernanceCanister => {
             get_pending_root_proposals_to_upgrade_governance_canister(make_canister_client(
                 reachable_nns_urls,
@@ -5296,7 +5315,7 @@ where
 
     let action = cmd.action().await;
 
-    print_proposal(&Action::from(action.clone()), &cmd);
+    print_proposal(&action, &cmd);
 
     if cmd.is_dry_run() {
         return;
@@ -6066,6 +6085,36 @@ fn generate_nonce() -> Vec<u8> {
         .as_nanos()
         .to_le_bytes()
         .to_vec()
+}
+
+async fn swap_node_in_subnet_directly(
+    registry_canister: RegistryCanister,
+    cmd: SwapNodeInSubnetDirectlyCmd,
+) {
+    let nonce = generate_nonce();
+    let request = SwapNodeInSubnetDirectlyPayload {
+        new_node_id: Some(cmd.new_node_id),
+        old_node_id: Some(cmd.old_node_id),
+    };
+
+    let payload = Encode!(&request).expect("Failed to serialize swap node request.");
+
+    let agent = registry_canister.choose_random_agent();
+
+    match agent
+        .execute_update(
+            &REGISTRY_CANISTER_ID,
+            &REGISTRY_CANISTER_ID,
+            "swap_node_in_subnet_directly",
+            payload,
+            nonce,
+        )
+        .await
+        .unwrap()
+    {
+        Some(_) => println!("Nodes swapped successfully."),
+        None => panic!("No response was received from swap_node_in_subnet_directly"),
+    }
 }
 
 /// A client view of an NNS canister.

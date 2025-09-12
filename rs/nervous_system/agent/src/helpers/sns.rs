@@ -17,7 +17,7 @@ use ic_sns_swap::{
 use icp_ledger::Tokens;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub enum SnsProposalError {
     #[error("Error submitting proposal: {0}")]
     ProposalSubmissionError(ProposalSubmissionError),
@@ -62,6 +62,7 @@ pub async fn wait_for_proposal_execution<
 ) -> Result<ProposalData, SnsProposalError> {
     // We create some blocks until the proposal has finished executing (`agent.progress(...)`).
     let mut last_proposal_data = None;
+
     for _attempt_count in 1..=50 {
         agent.progress(Duration::from_secs(1)).await;
         let proposal_result = sns_governance_canister

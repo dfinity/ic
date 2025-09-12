@@ -8,9 +8,10 @@ use std::{
     sync::Arc,
 };
 
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_replicated_state::canister_state::execution_state::WasmMetadata;
-use ic_types::{methods::WasmMethod, MemoryDiskBytes, NumInstructions};
+use ic_types::{methods::WasmMethod, DiskBytes, NumInstructions};
 use ic_wasm_types::WasmEngineError;
 use nix::sys::mman::{mmap, MapFlags, ProtFlags};
 use serde::{Deserialize, Serialize};
@@ -82,16 +83,6 @@ pub struct SerializedModule {
     pub is_wasm64: bool,
 }
 
-impl MemoryDiskBytes for SerializedModule {
-    fn memory_bytes(&self) -> usize {
-        self.bytes.0.len()
-    }
-
-    fn disk_bytes(&self) -> usize {
-        0
-    }
-}
-
 impl SerializedModule {
     pub(crate) fn new(
         module: &Module,
@@ -149,7 +140,7 @@ pub struct InitialStateData {
 /// descriptors are duplicated when passed to the sandbox for execution (this
 /// happens implicitly when sending over the socket). The files should only be
 /// accessed through mmap - otherwise seeks could interfere with each other.
-#[derive(Debug)]
+#[derive(Debug, DeterministicHeapBytes)]
 pub struct OnDiskSerializedModule {
     /// Bytes of the compilation artifact.
     pub bytes: File,
@@ -163,11 +154,7 @@ pub struct OnDiskSerializedModule {
     pub is_wasm64: bool,
 }
 
-impl MemoryDiskBytes for OnDiskSerializedModule {
-    fn memory_bytes(&self) -> usize {
-        std::mem::size_of::<Self>()
-    }
-
+impl DiskBytes for OnDiskSerializedModule {
     fn disk_bytes(&self) -> usize {
         (self.bytes.metadata().unwrap().len() + self.initial_state_data.metadata().unwrap().len())
             as usize

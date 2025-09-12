@@ -38,8 +38,7 @@ use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_node_operator_record_key, make_node_record_key,
-    make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
-    make_subnet_record_key,
+    make_replica_version_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
@@ -299,19 +298,11 @@ pub fn initial_routing_table_mutations(rt: &RoutingTable) -> Vec<RegistryMutatio
     let rt_pb = pb::RoutingTable::from(rt);
     let mut buf = vec![];
     rt_pb.encode(&mut buf).unwrap();
-    vec![
-        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
-        RegistryMutation {
-            mutation_type: Type::Upsert as i32,
-            key: make_routing_table_record_key().into_bytes(),
-            value: buf.clone(),
-        },
-        RegistryMutation {
-            mutation_type: Type::Upsert as i32,
-            key: make_canister_ranges_key(CanisterId::from(0)).into_bytes(),
-            value: buf,
-        },
-    ]
+    vec![RegistryMutation {
+        mutation_type: Type::Upsert as i32,
+        key: make_canister_ranges_key(CanisterId::from(0)).into_bytes(),
+        value: buf,
+    }]
 }
 
 /// Returns a mutation that sets the initial state of the registry to be
@@ -665,11 +656,6 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         insert(
             make_subnet_record_key(nns_subnet_id).as_bytes(),
             system_subnet.encode_to_vec(),
-        ),
-        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
-        insert(
-            make_routing_table_record_key().as_bytes(),
-            RoutingTablePB::from(routing_table.clone()).encode_to_vec(),
         ),
         insert(
             make_canister_ranges_key(CanisterId::from_u64(0)).as_bytes(),

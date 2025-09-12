@@ -29,9 +29,9 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
     FsEncryptionCiphertextBytes, FsEncryptionPop, FsEncryptionPublicKey,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
-use lazy_static::lazy_static;
 use rand::{CryptoRng, RngCore};
 use std::collections::LinkedList;
+use std::sync::LazyLock;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Constant which controls the upper limit of epochs
@@ -985,10 +985,8 @@ pub(crate) fn ftau_partial(tau: &Tau, sys: &SysParam) -> Option<G2Projective> {
     Some(id)
 }
 
-lazy_static! {
-    static ref SYSTEM_PARAMS: SysParam =
-        SysParam::create(b"DFX01-with-BLS12381G2_XMD:SHA-256_SSWU_RO_");
-}
+static SYSTEM_PARAMS: LazyLock<SysParam> =
+    LazyLock::new(|| SysParam::create(b"DFX01-with-BLS12381G2_XMD:SHA-256_SSWU_RO_"));
 
 impl SysParam {
     /// Create a set of system parameters

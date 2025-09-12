@@ -423,6 +423,9 @@ pub trait ConsensusBlockChain: Send + Sync {
 
     /// Returns the length of the chain.
     fn len(&self) -> usize;
+
+    /// Iterate over all Blocks above the given height.
+    fn iter_above(&self, height: Height) -> Box<dyn Iterator<Item = &Block> + '_>;
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]

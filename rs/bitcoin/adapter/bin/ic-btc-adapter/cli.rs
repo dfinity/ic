@@ -1,7 +1,7 @@
 //! A parser for the command line flags and configuration file.
 use clap::Parser;
 use http::Uri;
-use ic_btc_adapter::{address_limits, Config};
+use ic_btc_adapter::{address_limits, AdapterNetwork, Config};
 use std::{fs::File, io, path::PathBuf};
 use thiserror::Error;
 
@@ -25,10 +25,10 @@ pub struct Cli {
 
 impl Cli {
     /// Loads the config from the provided `config` argument.
-    pub fn get_config(&self) -> Result<Config, CliError> {
+    pub fn get_config(&self) -> Result<Config<AdapterNetwork>, CliError> {
         // The expected JSON config.
         let file = File::open(&self.config).map_err(CliError::Io)?;
-        let mut config: Config =
+        let mut config: Config<AdapterNetwork> =
             serde_json::from_reader(file).map_err(|err| CliError::Deserialize(err.to_string()))?;
 
         // Set the address limits based on the specified network.

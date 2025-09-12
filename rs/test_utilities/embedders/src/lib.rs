@@ -187,7 +187,7 @@ impl WasmtimeInstanceBuilder {
                 execution_mode: ExecutionMode::Replicated,
                 subnet_memory_saturation: ResourceSaturation::default(),
             },
-            SubnetAvailableMemory::new(
+            SubnetAvailableMemory::new_for_testing(
                 subnet_memory_capacity,
                 subnet_memory_capacity,
                 subnet_memory_capacity,

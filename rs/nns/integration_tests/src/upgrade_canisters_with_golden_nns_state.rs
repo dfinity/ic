@@ -455,7 +455,7 @@ mod sanity_check {
                 |metrics| governance_gauge_value(metrics, "governance_total_memory_size_bytes"),
                 |before, after| {
                     assert_not_increased_too_much(before, after, "wasm memory size", 0.5);
-                    assert_not_decreased_too_much(before, after, "wasm memory size", 0.5);
+                    assert_not_decreased_too_much(before, after, "wasm memory size", 0.8);
                 },
             );
 

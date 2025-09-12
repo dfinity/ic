@@ -19,7 +19,7 @@ use ic_icrc1::{
 use ic_icrc1_ledger::{
     balances_len, clear_stable_allowance_data, clear_stable_balances_data,
     clear_stable_blocks_data, get_allowances, is_ready, ledger_state, panic_if_not_ready,
-    set_ledger_state, LEDGER_VERSION, UPGRADES_MEMORY,
+    read_first_balance, set_ledger_state, wasm_token_type, LEDGER_VERSION, UPGRADES_MEMORY,
 };
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
 use ic_ledger_canister_core::ledger::{
@@ -231,6 +231,11 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
         state
     });
     ic_cdk::println!("Successfully read state from memory manager managed stable structures");
+
+    if state.token_type != wasm_token_type() {
+        panic!("Incompatible token type, the upgraded ledger token type is {}, current wasm token type is {}", state.token_type, wasm_token_type());
+    }
+
     LEDGER.with_borrow_mut(|ledger| *ledger = Some(state));
 
     let upgrade_from_version = Access::with_ledger_mut(|ledger| {
@@ -287,6 +292,12 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
             MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
         );
     }
+
+    // This will fail if we try to upgrade a u64 ledger with a u256 wasm and at least one balance is present.
+    // The wasms use incompatible encodings for storing numbers in stable structures.
+    // If the upgrade was successful, the ledger would later fail when trying to read the balances map.
+    // Upgrading a u256 ledger with a u64 wasm will fail earlier, while reading the `UPGRADES_MEMORY`.
+    read_first_balance();
 
     let end = ic_cdk::api::instruction_counter();
     let instructions_consumed = end - start;

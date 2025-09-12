@@ -1,9 +1,9 @@
-use std::{io::Write, net::Ipv6Addr, path::Path};
+use std::{net::Ipv6Addr, path::Path};
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
-    test_env_api::{get_dependency_path, SshSession},
+    test_env_api::{get_dependency_path, scp_send_to, SshSession},
     universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms},
 };
 
@@ -36,7 +36,7 @@ pub fn setup_upstreams_uvm(env: &TestEnv) {
         .block_on_bash_script(&format!(
             r#"
                 # Generate TLS certificates for the upstreams.
-                mkdir {CERTS_ROOT}
+                mkdir -p {CERTS_ROOT}
                 cd {CERTS_ROOT}
                 cp /config/minica.pem .
                 cp /config/minica-key.pem .
@@ -44,6 +44,18 @@ pub fn setup_upstreams_uvm(env: &TestEnv) {
                 docker run -v "$(pwd)":/output minica:image --domains {domains}
                 sudo mv {common_name}/cert.pem {common_name}/key.pem .
                 sudo chmod 644 cert.pem key.pem
+
+                # Serve a static file server with the TLS certificates.
+                mkdir -p {WEB_ROOT}
+                cd {WEB_ROOT}
+                docker load -i /config/static-file-server.tar
+                docker run -d \
+                       -p 443:8080 \
+                       -e TLS_CERT=/certs/cert.pem \
+                       -e TLS_KEY=/certs/key.pem \
+                       -v {CERTS_ROOT}:/certs \
+                       -v "$(pwd)":/web \
+                       static-file-server:image
             "#,
             domains = UPSTREAMS.join(","),
             common_name = UPSTREAMS[0],
@@ -51,58 +63,53 @@ pub fn setup_upstreams_uvm(env: &TestEnv) {
         .unwrap();
 }
 
+pub fn uvm_serve_guestos_image(
+    env: &TestEnv,
+    image_path: &Path,
+    image_version: &str,
+) -> Result<()> {
+    uvm_serve_file(
+        env,
+        image_path,
+        Path::new(&format!(
+            "ic/{}/guest-os/update-img/update-img.tar.zst",
+            image_version
+        )),
+    )
+}
+
 pub fn uvm_serve_recovery_artifacts(
     env: &TestEnv,
-    artifacts: Vec<u8>,
+    artifacts_path: &Path,
     artifacts_hash: &str,
 ) -> Result<()> {
     uvm_serve_file(
         env,
-        artifacts,
-        Path::new(&format!("ic/{}/recovery.tar.zst", artifacts_hash)),
+        artifacts_path,
+        Path::new(&format!("recovery/{}/recovery.tar.zst", artifacts_hash)),
     )
 }
 
-fn uvm_serve_file(env: &TestEnv, file: Vec<u8>, uri: &Path) -> Result<()> {
+fn uvm_serve_file(env: &TestEnv, local_path: &Path, uri: &Path) -> Result<()> {
     let uvm = get_upstreams_uvm(env);
+    let session = uvm.block_on_ssh_session()?;
 
     // Create the web root directory and the uri subdirectories.
-    let file_path = Path::new(WEB_ROOT).join(uri);
-    uvm.block_on_bash_script(&format!(
-        "mkdir -p {}",
-        file_path.parent().unwrap().display(),
-    ))?;
-    // Send the file to the UVM.
-    let session = uvm.block_on_ssh_session()?;
-    let mut remote_artifacts = session.scp_send(&file_path, 0o644, file.len() as u64, None)?;
-    remote_artifacts.write_all(&file)?;
-    remote_artifacts.send_eof()?;
-    remote_artifacts.wait_eof()?;
-    remote_artifacts.close()?;
-    remote_artifacts.wait_close()?;
+    let remote_path = Path::new(WEB_ROOT).join(uri);
+    uvm.block_on_bash_script_from_session(
+        &session,
+        &format!("mkdir -p {}", remote_path.parent().unwrap().display(),),
+    )?;
 
-    uvm.block_on_bash_script(&format!(
-        r#"
-            # Serve the recovery artifacts with a static file server.
-            cd {WEB_ROOT}
-            docker load -i /config/static-file-server.tar
-            docker run -d \
-                       -p 443:8080 \
-                       -e TLS_CERT=/certs/cert.pem \
-                       -e TLS_KEY=/certs/key.pem \
-                       -v {CERTS_ROOT}:/certs \
-                       -v "$(pwd)":/web \
-                       static-file-server:image
-        "#,
-    ))?;
+    // Send the file to the UVM.
+    scp_send_to(env.logger(), &session, local_path, &remote_path, 0o644);
+
+    // The static server is already running and will serve the file at the given URI.
 
     Ok(())
 }
 
-pub fn spoof_node_dns<T>(node: &T, server_ipv6: &Ipv6Addr)
-where
-    T: SshSession,
-{
+fn get_spoof_commands(server_ipv6: &Ipv6Addr) -> String {
     // File-system is read-only, so we modify /etc/hosts in a temporary file and replace the
     // original with a bind mount.
     let mut command = String::from(
@@ -128,7 +135,20 @@ where
         "#,
     );
 
-    node.block_on_bash_script(&command)
-        .map_err(|e| anyhow!("Failed to spoof DNS: {}", e))
-        .unwrap();
+    command
+}
+
+pub fn spoof_node_dns<T>(node: &T, server_ipv6: &Ipv6Addr) -> Result<String>
+where
+    T: SshSession,
+{
+    node.block_on_bash_script(&get_spoof_commands(server_ipv6))
+}
+
+pub async fn spoof_node_dns_async<T>(node: &T, server_ipv6: &Ipv6Addr) -> Result<String>
+where
+    T: SshSession + Sync,
+{
+    node.block_on_bash_script_async(&get_spoof_commands(server_ipv6))
+        .await
 }

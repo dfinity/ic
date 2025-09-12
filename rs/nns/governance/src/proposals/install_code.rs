@@ -390,7 +390,7 @@ mod tests {
             (SNS_WASM_CANISTER_ID, Topic::ServiceNervousSystemManagement),
             (
                 CanisterId::from_u64(123_456_789),
-                Topic::NetworkCanisterManagement,
+                Topic::ApplicationCanisterManagement,
             ),
         ];
 

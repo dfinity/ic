@@ -28,7 +28,10 @@ pub fn test_governance_mut() -> &'static mut Governance {
 
 #[test]
 fn test_neuron_async_lock_different_neurons_both_locked() {
-    let command = Command::Split(Split { amount_e8s: 1 });
+    let command = Command::Split(Split {
+        amount_e8s: 1,
+        memo: None,
+    });
     let _neuron_lock_1 = Governance::acquire_neuron_async_lock(
         &TEST_GOVERNANCE,
         NeuronId { id: 1 },
@@ -44,7 +47,10 @@ fn test_neuron_async_lock_different_neurons_both_locked() {
 #[test]
 fn test_neuron_async_lock_same_neuron_cannot_lock_twice() {
     let neuron_id = NeuronId { id: 1 };
-    let command = Command::Split(Split { amount_e8s: 1 });
+    let command = Command::Split(Split {
+        amount_e8s: 1,
+        memo: None,
+    });
 
     let _neuron_lock =
         Governance::acquire_neuron_async_lock(&TEST_GOVERNANCE, neuron_id, 1, command.clone())
@@ -58,7 +64,10 @@ fn test_neuron_async_lock_same_neuron_cannot_lock_twice() {
 #[test]
 fn test_neuron_async_lock_same_neuron_can_lock_after_unlock() {
     let neuron_id = NeuronId { id: 1 };
-    let command = Command::Split(Split { amount_e8s: 1 });
+    let command = Command::Split(Split {
+        amount_e8s: 1,
+        memo: None,
+    });
 
     {
         let _neuron_lock_1 =
@@ -72,7 +81,10 @@ fn test_neuron_async_lock_same_neuron_can_lock_after_unlock() {
 #[test]
 fn test_neuron_async_lock_same_neuron_cannot_lock_after_retained() {
     let neuron_id = NeuronId { id: 1 };
-    let command = Command::Split(Split { amount_e8s: 1 });
+    let command = Command::Split(Split {
+        amount_e8s: 1,
+        memo: None,
+    });
 
     {
         let mut neuron_lock =
@@ -101,7 +113,10 @@ fn test_neuron_async_lock_does_not_work_with_sync_command() {
 #[test]
 fn test_ledger_update_lock_different_neurons_both_locked() {
     let inflight_command = NeuronInFlightCommand {
-        command: Some(Command::Split(Split { amount_e8s: 1 })),
+        command: Some(Command::Split(Split {
+            amount_e8s: 1,
+            memo: None,
+        })),
         timestamp: 1,
     };
     let _neuron_lock = test_governance_mut()
@@ -116,7 +131,10 @@ fn test_ledger_update_lock_different_neurons_both_locked() {
 fn test_ledger_update_lock_same_neuron_cannot_lock_twice() {
     let neuron_id = NeuronId { id: 1 };
     let inflight_command = NeuronInFlightCommand {
-        command: Some(Command::Split(Split { amount_e8s: 1 })),
+        command: Some(Command::Split(Split {
+            amount_e8s: 1,
+            memo: None,
+        })),
         timestamp: 1,
     };
 
@@ -133,7 +151,10 @@ fn test_ledger_update_lock_same_neuron_cannot_lock_twice() {
 fn test_ledger_update_lock_same_neuron_can_lock_after_unlock() {
     let neuron_id = NeuronId { id: 1 };
     let inflight_command = NeuronInFlightCommand {
-        command: Some(Command::Split(Split { amount_e8s: 1 })),
+        command: Some(Command::Split(Split {
+            amount_e8s: 1,
+            memo: None,
+        })),
         timestamp: 1,
     };
 
@@ -152,7 +173,10 @@ fn test_ledger_update_lock_same_neuron_can_lock_after_unlock() {
 fn test_ledger_update_lock_same_neuron_cannot_lock_after_retained() {
     let neuron_id = NeuronId { id: 1 };
     let inflight_command = NeuronInFlightCommand {
-        command: Some(Command::Split(Split { amount_e8s: 1 })),
+        command: Some(Command::Split(Split {
+            amount_e8s: 1,
+            memo: None,
+        })),
         timestamp: 1,
     };
 
@@ -173,7 +197,10 @@ fn test_ledger_update_lock_compatible_with_neuron_async_lock() {
     // In this test we make sure that a neuron locked with `lock_neuron_for_command` cannot
     // `acquire_neuron_async_lock`, and vice versa.
     let neuron_id = NeuronId { id: 1 };
-    let command = Command::Split(Split { amount_e8s: 1 });
+    let command = Command::Split(Split {
+        amount_e8s: 1,
+        memo: None,
+    });
     let inflight_command = NeuronInFlightCommand {
         command: Some(command.clone()),
         timestamp: 1,

@@ -1,4 +1,5 @@
 use crate::{
+    canister_logs::fetch_canister_logs,
     canister_manager::{
         types::{
             CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult, InstallCodeContext,
@@ -38,9 +39,9 @@ use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
     CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, CreateCanisterArgs,
     DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EmptyBlob,
-    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
+    FetchCanisterLogsRequest, InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs,
+    LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs,
+    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
     ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
     SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
@@ -254,6 +255,7 @@ pub struct RoundLimits {
 
     /// The number of outgoing calls that can still be made across the subnet before
     /// canisters are limited to their own callback quota.
+    /// This is a soft cap which can be exceeded when executing canisters on threads.
     pub subnet_available_callbacks: i64,
 
     // TODO would be nice to change that to available, but this requires
@@ -340,7 +342,7 @@ pub struct ExecutionEnvironment {
     // This scaling factor accounts for the execution threads running in
     // parallel and potentially reserving resources. It should be initialized to
     // the number of scheduler cores.
-    resource_saturation_scaling: usize,
+    scheduler_cores: usize,
     deallocator_thread: DeallocatorThread,
 }
 
@@ -376,7 +378,7 @@ impl ExecutionEnvironment {
         compute_capacity: usize,
         config: ExecutionConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
-        resource_saturation_scaling: usize,
+        scheduler_cores: usize,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         heap_delta_rate_limit: NumBytes,
         upload_wasm_chunk_instructions: NumInstructions,
@@ -440,7 +442,7 @@ impl ExecutionEnvironment {
             own_subnet_id,
             own_subnet_type,
             paused_execution_registry: Default::default(),
-            resource_saturation_scaling,
+            scheduler_cores,
             deallocator_thread,
         }
     }
@@ -453,12 +455,16 @@ impl ExecutionEnvironment {
         &self.metrics.canister_not_found_error
     }
 
-    /// Computes the current amount of memory available on the subnet.
+    /// Computes the current amount of memory available for execution.
     ///
     /// Time complexity: `O(|canisters|)`.
-    pub fn subnet_available_memory(&self, state: &ReplicatedState) -> SubnetAvailableMemory {
+    pub fn scaled_subnet_available_memory(&self, state: &ReplicatedState) -> SubnetAvailableMemory {
         let memory_taken = state.memory_taken();
-        SubnetAvailableMemory::new(
+        // We apply the scaling factor `self.scheduler_cores`
+        // consistently with the scaling factor of `ResourceSaturation`
+        // in the function `self.subnet_memory_saturation`.
+        let scaling_factor = self.scheduler_cores as i64;
+        SubnetAvailableMemory::new_scaled(
             self.config.subnet_memory_capacity.get() as i64
                 - self.config.subnet_memory_reservation.get() as i64
                 - memory_taken.execution().get() as i64,
@@ -470,6 +476,7 @@ impl ExecutionEnvironment {
                 .subnet_wasm_custom_sections_memory_capacity
                 .get() as i64
                 - memory_taken.wasm_custom_sections().get() as i64,
+            scaling_factor,
         )
     }
 
@@ -1530,16 +1537,51 @@ impl ExecutionEnvironment {
                 }
             },
 
-            Ok(Ic00Method::FetchCanisterLogs) => ExecuteSubnetMessageResult::Finished {
-                response: Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    format!(
-                        "{} API is only accessible in non-replicated mode",
-                        Ic00Method::FetchCanisterLogs
-                    ),
-                )),
-                refund: msg.take_cycles(),
-            },
+            Ok(Ic00Method::FetchCanisterLogs) => {
+                match self.config.replicated_inter_canister_log_fetch {
+                    FlagStatus::Disabled => ExecuteSubnetMessageResult::Finished {
+                        response: Err(UserError::new(
+                            ErrorCode::CanisterRejectedMessage,
+                            format!(
+                                "{} API is only accessible to end users in non-replicated mode",
+                                Ic00Method::FetchCanisterLogs
+                            ),
+                        )),
+                        refund: msg.take_cycles(),
+                    },
+                    FlagStatus::Enabled => match &msg {
+                        CanisterCall::Request(request) => {
+                            let fetch_canister_logs_fee = Cycles::new(1_000_000); // TODO(EXC-2112): fix placeholder fees.
+
+                            let response = if request.payment < fetch_canister_logs_fee {
+                                Err(UserError::new(
+                                    ErrorCode::CanisterRejectedMessage,
+                                    format!(
+                                        "{} request sent with {} cycles, but {} cycles are required.",
+                                        Ic00Method::FetchCanisterLogs,
+                                        request.payment,
+                                        fetch_canister_logs_fee
+                                    ),
+                                ))
+                            } else {
+                                FetchCanisterLogsRequest::decode(payload)
+                                    .and_then(|args| {
+                                        fetch_canister_logs(*msg.sender(), &state, args)
+                                    })
+                                    .map(|resp| (Encode!(&resp).unwrap(), None))
+                            };
+
+                            ExecuteSubnetMessageResult::Finished {
+                                response,
+                                refund: msg.take_cycles(),
+                            }
+                        }
+                        CanisterCall::Ingress(_) => {
+                            self.reject_unexpected_ingress(Ic00Method::FetchCanisterLogs)
+                        }
+                    },
+                }
+            }
 
             Ok(Ic00Method::TakeCanisterSnapshot) => match TakeCanisterSnapshotArgs::decode(payload)
             {
@@ -1810,8 +1852,10 @@ impl ExecutionEnvironment {
             Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "http_request request sent with {} cycles, but {} cycles are required.",
-                    request.payment, http_request_fee
+                    "{} request sent with {} cycles, but {} cycles are required.",
+                    Ic00Method::HttpRequest,
+                    request.payment,
+                    http_request_fee
                 ),
             ))
         } else {
@@ -2809,10 +2853,14 @@ impl ExecutionEnvironment {
         // This function is called on an execution thread with a scaled
         // available memory. We also need to scale the subnet reservation in
         // order to be consistent with the scaling of the available memory.
-        let scaled_subnet_memory_reservation = NumBytes::new(
-            self.config.subnet_memory_reservation.get()
-                / round_limits.subnet_available_memory.get_scaling_factor() as u64,
-        );
+        // We apply the scaling factor `self.scheduler_cores`
+        // consistently with the scaling factor of `SubnetAvailableMemory`
+        // in the function `self.scaled_subnet_available_memory`.
+        // and the scaling factor of `ResourceSaturation`
+        // in the function `self.subnet_memory_saturation`.
+        let scaling_factor = self.scheduler_cores as u64;
+        let scaled_subnet_memory_reservation =
+            NumBytes::new(self.config.subnet_memory_reservation.get() / scaling_factor);
         execute_response(
             canister,
             response,
@@ -2935,7 +2983,7 @@ impl ExecutionEnvironment {
 
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
-        let subnet_available_memory = subnet_memory_capacity(&self.config);
+        let subnet_available_memory = full_subnet_memory_capacity(&self.config);
         let execution_parameters = self.execution_parameters(
             canister_state,
             instruction_limits,
@@ -4145,31 +4193,29 @@ impl ExecutionEnvironment {
         }
     }
 
-    // Returns the subnet memory saturation based on the given subnet available
-    // memory, which may have been scaled for the current thread.
+    // Returns the subnet memory saturation based on the given subnet available memory
+    // which is assumed to be scaled with the scaling factor `self.scheduler_cores`.
     fn subnet_memory_saturation(
         &self,
         subnet_available_memory: &SubnetAvailableMemory,
     ) -> ResourceSaturation {
-        // Compute the total subnet available memory based on the scaled subnet
-        // available memory. In other words, un-scale the scaled value.
-        let subnet_available_memory = subnet_available_memory
-            .get_execution_memory()
-            .saturating_mul(subnet_available_memory.get_scaling_factor())
-            .max(0) as u64;
+        // We apply the scaling factor `self.scheduler_cores`
+        // consistently with the scaling factor of `SubnetAvailableMemory`
+        // in the function `self.scaled_subnet_available_memory`.
+        let scaling_factor = self.scheduler_cores as u64;
 
-        // Compute the memory usage as the capacity minus the available memory.
-        let subnet_memory_usage = self
-            .config
-            .subnet_memory_capacity
-            .get()
-            .saturating_sub(subnet_available_memory);
+        // Compute the scaled memory usage as the scaled capacity minus the scaled available memory.
+        let scaled_subnet_memory_capacity: u64 =
+            self.config.subnet_memory_capacity.get() / scaling_factor;
+        let scaled_subnet_available_memory =
+            subnet_available_memory.get_execution_memory().max(0) as u64;
+        let scaled_subnet_memory_usage: u64 =
+            scaled_subnet_memory_capacity.saturating_sub(scaled_subnet_available_memory);
 
-        ResourceSaturation::new_scaled(
-            subnet_memory_usage,
-            self.config.subnet_memory_threshold.get(),
-            self.config.subnet_memory_capacity.get(),
-            self.resource_saturation_scaling as u64,
+        ResourceSaturation::new(
+            scaled_subnet_memory_usage,
+            self.config.subnet_memory_threshold.get() / scaling_factor,
+            scaled_subnet_memory_capacity,
         )
     }
 
@@ -4237,11 +4283,12 @@ impl CompilationCostHandling {
 }
 
 /// Returns the subnet's configured memory capacity (ignoring current usage).
-pub(crate) fn subnet_memory_capacity(config: &ExecutionConfig) -> SubnetAvailableMemory {
-    SubnetAvailableMemory::new(
+pub(crate) fn full_subnet_memory_capacity(config: &ExecutionConfig) -> SubnetAvailableMemory {
+    SubnetAvailableMemory::new_scaled(
         config.subnet_memory_capacity.get() as i64,
         config.guaranteed_response_message_memory_capacity.get() as i64,
         config.subnet_wasm_custom_sections_memory_capacity.get() as i64,
+        1,
     )
 }
 

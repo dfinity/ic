@@ -11,8 +11,8 @@ use maplit::{btreemap, hashmap};
 // ------------------------------------------------------------------------------------------------
 #[test]
 fn test_compute_subnets_nodes_fr() {
-    let day1 = "2024-01-01".into();
-    let day2 = "2024-01-02".into();
+    let day1 = "2024-01-01".try_into().unwrap();
+    let day2 = "2024-01-02".try_into().unwrap();
     let subnet1 = test_subnet_id(1);
     let subnet2 = test_subnet_id(2);
 
@@ -130,7 +130,7 @@ impl Default for NodeMetricsDaily {
 
 #[test]
 fn test_compute_providers_extrapolated_fr() {
-    let day = "2024-01-01".into();
+    let day = "2024-01-01".try_into().unwrap();
     let p1_node1 = test_node_id(1);
     let p2_node1 = test_node_id(2);
     let p2_node2 = test_node_id(3);
@@ -159,7 +159,7 @@ fn test_compute_providers_extrapolated_fr() {
 // ------------------------------------------------------------------------------------------------
 #[test]
 fn test_compute_nodes_performance_multiplier() {
-    let day = "2024-01-01".into();
+    let day = "2024-01-01".try_into().unwrap();
     let node_good = test_node_id(1); // FR below threshold
     let node_mid = test_node_id(2); // FR in penalty zone
     let node_bad = test_node_id(3); // FR above threshold
@@ -231,7 +231,7 @@ fn test_compute_nodes_performance_multiplier() {
 
 #[test]
 fn test_compute_base_rewards() {
-    let day = "2024-01-01".into();
+    let day = "2024-01-01".try_into().unwrap();
     let type1_node = test_node_id(1);
     let type3_node_ca = test_node_id(2);
     let type3_node_nv = test_node_id(3);
@@ -287,9 +287,9 @@ fn test_compute_base_rewards() {
 // ------------------------------------------------------------------------------------------------
 #[test]
 fn test_adjust_nodes_rewards() {
-    let day1 = "2024-01-01".into();
-    let day2 = "2024-01-02".into();
-    let day3 = "2024-01-03".into();
+    let day1 = "2024-01-01".try_into().unwrap();
+    let day2 = "2024-01-02".try_into().unwrap();
+    let day3 = "2024-01-03".try_into().unwrap();
     let node1 = test_node_id(1);
     let node2 = test_node_id(2);
     let node3 = test_node_id(3);

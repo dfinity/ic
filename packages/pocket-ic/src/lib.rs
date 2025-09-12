@@ -56,8 +56,9 @@
 use crate::{
     common::rest::{
         AutoProgressConfig, BlobCompression, BlobId, CanisterHttpRequest, ExtendedSubnetConfigSet,
-        HttpsConfig, IcpFeatures, InitialTime, InstanceId, MockCanisterHttpResponse,
-        RawEffectivePrincipal, RawMessageId, RawTime, SubnetId, SubnetKind, SubnetSpec, Topology,
+        HttpsConfig, IcpConfig, IcpFeatures, InitialTime, InstanceHttpGatewayConfig, InstanceId,
+        MockCanisterHttpResponse, RawEffectivePrincipal, RawMessageId, RawTime, SubnetId,
+        SubnetKind, SubnetSpec, Topology,
     },
     nonblocking::PocketIc as PocketIcAsync,
 };
@@ -99,7 +100,7 @@ use wslpath::windows_to_wsl;
 pub mod common;
 pub mod nonblocking;
 
-pub const EXPECTED_SERVER_VERSION: &str = "9.0.3";
+pub const EXPECTED_SERVER_VERSION: &str = "10.0.0";
 
 // the default timeout of a PocketIC operation
 const DEFAULT_MAX_REQUEST_TIME_MS: u64 = 300_000;
@@ -153,12 +154,13 @@ impl PocketIcState {
 
 pub struct PocketIcBuilder {
     config: Option<ExtendedSubnetConfigSet>,
+    http_gateway_config: Option<InstanceHttpGatewayConfig>,
     server_binary: Option<PathBuf>,
     server_url: Option<Url>,
     max_request_time_ms: Option<u64>,
     read_only_state_dir: Option<PathBuf>,
     state_dir: Option<PocketIcState>,
-    nonmainnet_features: bool,
+    icp_config: IcpConfig,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
     icp_features: IcpFeatures,
@@ -170,12 +172,13 @@ impl PocketIcBuilder {
     pub fn new() -> Self {
         Self {
             config: None,
+            http_gateway_config: None,
             server_binary: None,
             server_url: None,
             max_request_time_ms: Some(DEFAULT_MAX_REQUEST_TIME_MS),
             read_only_state_dir: None,
             state_dir: None,
-            nonmainnet_features: false,
+            icp_config: IcpConfig::default(),
             log_level: None,
             bitcoind_addr: None,
             icp_features: IcpFeatures::default(),
@@ -197,11 +200,12 @@ impl PocketIcBuilder {
             self.max_request_time_ms,
             self.read_only_state_dir,
             self.state_dir,
-            self.nonmainnet_features,
+            self.icp_config,
             self.log_level,
             self.bitcoind_addr,
             self.icp_features,
             self.initial_time,
+            self.http_gateway_config,
         )
     }
 
@@ -213,11 +217,12 @@ impl PocketIcBuilder {
             self.max_request_time_ms,
             self.read_only_state_dir,
             self.state_dir,
-            self.nonmainnet_features,
+            self.icp_config,
             self.log_level,
             self.bitcoind_addr,
             self.icp_features,
             self.initial_time,
+            self.http_gateway_config,
         )
         .await
     }
@@ -254,8 +259,8 @@ impl PocketIcBuilder {
         self
     }
 
-    pub fn with_nonmainnet_features(mut self, nonmainnet_features: bool) -> Self {
-        self.nonmainnet_features = nonmainnet_features;
+    pub fn with_icp_config(mut self, icp_config: IcpConfig) -> Self {
+        self.icp_config = icp_config;
         self
     }
 
@@ -412,13 +417,6 @@ impl PocketIcBuilder {
         self
     }
 
-    /// Enables all ICP features supported by PocketIC and implemented by system canisters
-    /// (deployed to the PocketIC instance automatically when creating a new PocketIC instance).
-    pub fn with_all_icp_features(mut self) -> Self {
-        self.icp_features = IcpFeatures::all_icp_features();
-        self
-    }
-
     /// Enables selected ICP features supported by PocketIC and implemented by system canisters
     /// (deployed to the PocketIC instance automatically when creating a new PocketIC instance).
     pub fn with_icp_features(mut self, icp_features: IcpFeatures) -> Self {
@@ -439,11 +437,16 @@ impl PocketIcBuilder {
     /// Configures the new instance to make progress automatically,
     /// i.e., periodically update the time of the IC instance
     /// to the real time and execute rounds on the subnets.
-    pub fn with_auto_progress(mut self, artificial_delay_ms: Option<u64>) -> Self {
+    pub fn with_auto_progress(mut self) -> Self {
         let config = AutoProgressConfig {
-            artificial_delay_ms,
+            artificial_delay_ms: None,
         };
         self.initial_time = Some(InitialTime::AutoProgress(config));
+        self
+    }
+
+    pub fn with_http_gateway(mut self, http_gateway_config: InstanceHttpGatewayConfig) -> Self {
+        self.http_gateway_config = Some(http_gateway_config);
         self
     }
 }
@@ -555,11 +558,12 @@ impl PocketIc {
         max_request_time_ms: Option<u64>,
         read_only_state_dir: Option<PathBuf>,
         state_dir: Option<PocketIcState>,
-        nonmainnet_features: bool,
+        icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
         initial_time: Option<InitialTime>,
+        http_gateway_config: Option<InstanceHttpGatewayConfig>,
     ) -> Self {
         let (tx, rx) = channel();
         let thread = thread::spawn(move || {
@@ -579,11 +583,12 @@ impl PocketIc {
                 max_request_time_ms,
                 read_only_state_dir,
                 state_dir,
-                nonmainnet_features,
+                icp_config,
                 log_level,
                 bitcoind_addr,
                 icp_features,
                 initial_time,
+                http_gateway_config,
             )
             .await
         });
@@ -780,13 +785,6 @@ impl PocketIc {
     /// and the HTTP gateway for this IC instance.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn stop_live(&mut self) {
-        let runtime = self.runtime.clone();
-        runtime.block_on(async { self.pocket_ic.stop_live().await })
-    }
-
-    #[deprecated(note = "Use `stop_live` instead.")]
-    /// Use `stop_live` instead.
-    pub fn make_deterministic(&mut self) {
         let runtime = self.runtime.clone();
         runtime.block_on(async { self.pocket_ic.stop_live().await })
     }
@@ -1903,36 +1901,39 @@ pub async fn start_server(params: StartServerParams) -> (Child, Url) {
         options.write(true).create_new(true);
         #[cfg(unix)]
         options.mode(0o777);
-        if let Ok(out) = options.open(&default_bin_path) {
-            #[cfg(target_os = "macos")]
-            let os = "darwin";
-            #[cfg(not(target_os = "macos"))]
-            let os = "linux";
-            #[cfg(target_arch = "aarch64")]
-            let arch = "arm64";
-            #[cfg(not(target_arch = "aarch64"))]
-            let arch = "x86_64";
-            let server_url = format!(
-                "https://github.com/dfinity/pocketic/releases/download/{}/pocket-ic-{}-{}.gz",
-                EXPECTED_SERVER_VERSION, arch, os
-            );
-            println!("Failed to validate PocketIC server binary: `{}`. Going to download PocketIC server {} from {} to the local path {}. To avoid downloads during test execution, please specify the path to the (ungzipped and executable) PocketIC server {} using the function `PocketIcBuilder::with_server_binary` or using the `POCKET_IC_BIN` environment variable.", e, EXPECTED_SERVER_VERSION, server_url, default_bin_path.display(), EXPECTED_SERVER_VERSION);
-            if let Err(e) = download_pocketic_server(server_url, out).await {
-                let _ = std::fs::remove_file(default_bin_path);
-                panic!("{}", e);
+        match options.open(&default_bin_path) {
+            Ok(out) => {
+                #[cfg(target_os = "macos")]
+                let os = "darwin";
+                #[cfg(not(target_os = "macos"))]
+                let os = "linux";
+                #[cfg(target_arch = "aarch64")]
+                let arch = "arm64";
+                #[cfg(not(target_arch = "aarch64"))]
+                let arch = "x86_64";
+                let server_url = format!(
+                    "https://github.com/dfinity/pocketic/releases/download/{}/pocket-ic-{}-{}.gz",
+                    EXPECTED_SERVER_VERSION, arch, os
+                );
+                println!("Failed to validate PocketIC server binary: `{}`. Going to download PocketIC server {} from {} to the local path {}. To avoid downloads during test execution, please specify the path to the (ungzipped and executable) PocketIC server {} using the function `PocketIcBuilder::with_server_binary` or using the `POCKET_IC_BIN` environment variable.", e, EXPECTED_SERVER_VERSION, server_url, default_bin_path.display(), EXPECTED_SERVER_VERSION);
+                if let Err(e) = download_pocketic_server(server_url, out).await {
+                    let _ = std::fs::remove_file(default_bin_path);
+                    panic!("{}", e);
+                }
             }
-        } else {
-            // PocketIC server has already been created: wait until it's fully downloaded.
-            let start = std::time::Instant::now();
-            loop {
-                if check_pocketic_server_version(&default_bin_path).is_ok() {
-                    break;
+            _ => {
+                // PocketIC server has already been created: wait until it's fully downloaded.
+                let start = std::time::Instant::now();
+                loop {
+                    if check_pocketic_server_version(&default_bin_path).is_ok() {
+                        break;
+                    }
+                    if start.elapsed() > std::time::Duration::from_secs(60) {
+                        let _ = std::fs::remove_file(&default_bin_path);
+                        panic!("Timed out waiting for PocketIC server being available at the local path {}.", default_bin_path.display());
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(100));
                 }
-                if start.elapsed() > std::time::Duration::from_secs(60) {
-                    let _ = std::fs::remove_file(&default_bin_path);
-                    panic!("Timed out waiting for PocketIC server being available at the local path {}.", default_bin_path.display());
-                }
-                std::thread::sleep(std::time::Duration::from_millis(100));
             }
         }
     }

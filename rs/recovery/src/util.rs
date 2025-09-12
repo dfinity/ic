@@ -6,9 +6,28 @@ use crate::{
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use serde::{Deserialize, Serialize};
 use slog::{o, Drain, Logger};
-use std::net::{IpAddr, Ipv6Addr};
+use std::{
+    fmt,
+    net::{IpAddr, Ipv6Addr},
+};
 use std::{future::Future, path::Path, str::FromStr};
 use tokio::runtime::Runtime;
+
+pub enum SshUser {
+    Admin,
+    Readonly,
+    Backup,
+}
+
+impl fmt::Display for SshUser {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SshUser::Admin => write!(f, "admin"),
+            SshUser::Readonly => write!(f, "readonly"),
+            SshUser::Backup => write!(f, "backup"),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum DataLocation {

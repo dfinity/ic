@@ -92,6 +92,7 @@ pub enum IDkgPayloadValidationFailure {
     IDkgVerifyTranscriptError(IDkgVerifyTranscriptError),
     IDkgVerifyInitialDealingsError(IDkgVerifyInitialDealingsError),
     NewSignatureBuildInputsError(BuildSignatureInputsError),
+    InvalidChainCacheError(InvalidChainCacheError),
 }
 
 #[derive(Debug)]
@@ -103,7 +104,6 @@ pub enum InvalidIDkgPayloadReason {
     // wrapper of other errors
     UnexpectedSummaryPayload(IDkgPayloadError),
     UnexpectedDataPayload(Option<IDkgPayloadError>),
-    InvalidChainCacheError(InvalidChainCacheError),
     TranscriptParamsError(idkg::TranscriptParamsError),
     ThresholdEcdsaVerifyCombinedSignatureError(ThresholdEcdsaVerifyCombinedSignatureError),
     ThresholdSchnorrVerifyCombinedSignatureError(ThresholdSchnorrVerifyCombinedSigError),
@@ -140,9 +140,9 @@ impl From<IDkgPayloadValidationFailure> for IDkgValidationError {
     }
 }
 
-impl From<InvalidChainCacheError> for InvalidIDkgPayloadReason {
+impl From<InvalidChainCacheError> for IDkgPayloadValidationFailure {
     fn from(err: InvalidChainCacheError) -> Self {
-        InvalidIDkgPayloadReason::InvalidChainCacheError(err)
+        IDkgPayloadValidationFailure::InvalidChainCacheError(err)
     }
 }
 
@@ -396,8 +396,20 @@ fn validate_data_payload(
                 parent_block.height()
             )
         });
-    let parent_chain = block_chain_cache(pool_reader, summary_block.height(), parent_block.clone())
-        .map_err(InvalidIDkgPayloadReason::from)?;
+    // In case the certified height is below the summary height, add the heights in
+    // between to the blockchain. This is needed to calculate the total number of pre-
+    // signatures in the certified state and every block since then.
+    // Note that blocks below the summary are not guaranteed to exist, because they are
+    // purged once the CUP exists. However, if the CUP exists, that implies there is
+    // already a finalized block b with b.certified_height >= summary_height, which means
+    // we should not be validating a block referencing a lower certified height manually here.
+    // This block should instead be validated via the notarization fast-path.
+    let start_height = context
+        .certified_height
+        .increment()
+        .min(summary_block.height());
+    let parent_chain = block_chain_cache(pool_reader, start_height, parent_block.clone())
+        .map_err(IDkgPayloadValidationFailure::from)?;
     let block_reader = IDkgBlockReaderImpl::new(parent_chain);
     let curr_height = parent_block.height().increment();
 
@@ -920,11 +932,15 @@ mod test {
     fn test_validate_new_signature_agreements_all_algorithms() {
         for key_id in fake_master_public_key_ids_for_all_idkg_algorithms() {
             println!("Running test for key ID {key_id}");
-            test_validate_new_signature_agreements(key_id);
+            test_validate_new_signature_agreements(&key_id, false);
+            test_validate_new_signature_agreements(&key_id, true);
         }
     }
 
-    fn test_validate_new_signature_agreements(key_id: IDkgMasterPublicKeyId) {
+    fn test_validate_new_signature_agreements(
+        key_id: &IDkgMasterPublicKeyId,
+        store_pre_signatures_in_state: bool,
+    ) {
         let subnet_id = subnet_test_id(0);
         let crypto = &CryptoReturningOk::default();
         let height = Height::from(1);
@@ -978,6 +994,7 @@ mod test {
             &mut idkg_payload,
             &valid_keys,
             None,
+            store_pre_signatures_in_state,
         );
         // First signature should now be in "unreported" agreement
         assert_eq!(idkg_payload.signature_agreements.len(), 1);
@@ -1004,6 +1021,7 @@ mod test {
             &mut idkg_payload,
             &valid_keys,
             None,
+            store_pre_signatures_in_state,
         );
         // First signature should now be reported, second unreported.
         assert_eq!(idkg_payload.signature_agreements.len(), 2);

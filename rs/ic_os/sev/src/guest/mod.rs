@@ -1,14 +1,16 @@
-use anyhow::{Context, Result};
-use raw_cpuid::CpuId;
-use std::fs::File;
-use std::os::unix::fs::FileExt;
-use std::path::Path;
-
 pub mod firmware;
 pub mod key_deriver;
+pub mod testing;
 
 /// Checks if SEV is active in the Guest Virtual Machine
-pub fn is_sev_active() -> Result<bool> {
+#[cfg(target_os = "linux")]
+pub fn is_sev_active() -> anyhow::Result<bool> {
+    use anyhow::Context;
+    use raw_cpuid::CpuId;
+    use std::fs::File;
+    use std::os::unix::fs::FileExt;
+    use std::path::Path;
+
     // See https://docs.kernel.org/6.2/x86/amd-memory-encryption.html
     const MSR_AMD64_SEV: u64 = 0xc0010131;
 

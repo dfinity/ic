@@ -493,6 +493,14 @@ impl ConsensusBlockChain for ConsensusBlockChainImpl {
     fn len(&self) -> usize {
         self.blocks.len()
     }
+
+    fn iter_above(&self, height: Height) -> Box<dyn Iterator<Item = &Block> + '_> {
+        Box::new(
+            self.blocks
+                .range(height.increment()..)
+                .map(|(_, block)| block),
+        )
+    }
 }
 
 #[cfg(test)]

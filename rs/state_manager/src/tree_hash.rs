@@ -203,7 +203,7 @@ mod tests {
                 StreamIndex::new(10),
             );
             let maybe_deadline = |i: u64| {
-                if certification_version >= CertificationVersion::V18 && i % 2 != 0 {
+                if i % 2 != 0 {
                     CoarseTime::from_secs_since_unix_epoch(i as u32)
                 } else {
                     NO_DEADLINE
@@ -233,14 +233,13 @@ mod tests {
             stream.set_reverse_stream_flags(StreamFlags {
                 deprecated_responses_only: true,
             });
-            if certification_version >= CertificationVersion::V19 {
-                stream.push_reject_signal(RejectReason::CanisterNotFound);
-                stream.push_reject_signal(RejectReason::QueueFull);
-                stream.push_reject_signal(RejectReason::CanisterStopped);
-                stream.push_reject_signal(RejectReason::OutOfMemory);
-                stream.push_reject_signal(RejectReason::Unknown);
-                stream.push_reject_signal(RejectReason::CanisterStopping);
-            }
+            stream.push_reject_signal(RejectReason::CanisterNotFound);
+            stream.push_reject_signal(RejectReason::QueueFull);
+            stream.push_reject_signal(RejectReason::CanisterStopped);
+            stream.push_reject_signal(RejectReason::OutOfMemory);
+            stream.push_reject_signal(RejectReason::Unknown);
+            stream.push_reject_signal(RejectReason::CanisterStopping);
+
             let loopback_stream = Stream::new(
                 StreamIndexedQueue::with_begin(StreamIndex::from(13)),
                 StreamIndex::new(13),
@@ -373,9 +372,7 @@ mod tests {
         // PLEASE INCREMENT THE CERTIFICATION VERSION AND PROVIDE APPROPRIATE
         // BACKWARD COMPATIBILITY CODE FOR OLD CERTIFICATION VERSIONS THAT
         // NEED TO BE SUPPORTED.
-        let expected_hashes: [&str; 5] = [
-            "CB4DB4435FBC2523AA796405460E9C7D7CDBD4AF03CA4085AE60387134F76AAC",
-            "32737514B5DDD50BA5F98E28B36B40543A5EFFFCFF98E1F9FD464026BE50F051",
+        let expected_hashes: [&str; 3] = [
             "47C3A071B293B4723FCACB17F2FD2FD75F68C010E333007ACC0EF425D92765FB",
             "3F9441CBAC0A00718BA6CB2D4D1B6FF7FF96F42051567365B670ACFC08AB96EA",
             "9D9C8D991198BCD0BCAA627F409181D08ADD8CA442730393D5A27FA1042D2477",

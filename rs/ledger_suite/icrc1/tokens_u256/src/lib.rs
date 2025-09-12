@@ -33,6 +33,7 @@ impl U256 {
     pub const ZERO: Self = Self(u256::ZERO);
     pub const ONE: Self = Self(u256::ONE);
     pub const MAX: Self = Self(u256::MAX);
+    pub const TYPE: &'static str = "U256";
 
     #[inline]
     pub const fn new(n: u256) -> Self {

@@ -45,9 +45,8 @@ use ic_registry_client::client::RegistryDataProviderError;
 use ic_registry_keys::{
     make_api_boundary_node_record_key, make_blessed_replica_versions_key, make_canister_ranges_key,
     make_data_center_record_key, make_firewall_rules_record_key, make_node_operator_record_key,
-    make_provisional_whitelist_record_key, make_replica_version_key, make_routing_table_record_key,
-    make_subnet_list_record_key, make_unassigned_nodes_config_record_key, FirewallRulesScope,
-    ROOT_SUBNET_ID_KEY,
+    make_provisional_whitelist_record_key, make_replica_version_key, make_subnet_list_record_key,
+    make_unassigned_nodes_config_record_key, FirewallRulesScope, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_local_store::{Changelog, KeyMutation, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -83,7 +82,7 @@ pub const IC_ROOT_PUB_KEY_PATH: &str = "nns_public_key.pem";
 /// For testing purposes, the bootstrapped nodes can be configured to have a
 /// node operator. The corresponding allowance is the number of configured
 /// initial nodes multiplied by this value.
-pub const INITIAL_NODE_ALLOWANCE_MULTIPLIER: usize = 4;
+pub const INITIAL_NODE_ALLOWANCE_MULTIPLIER: usize = 40;
 
 pub const INITIAL_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
 
@@ -300,6 +299,9 @@ pub struct IcConfig {
     /// give "readonly" access to all unassigned nodes.
     ssh_readonly_access_to_unassigned_nodes: Vec<String>,
 
+    /// Do not create an unassigned node record.
+    skip_unassigned_record: bool,
+
     /// Whether or not to assign canister ID allocation range for specified IDs to subnet.
     /// By default, it has the value 'false'.
     use_specified_ids_allocation_range: bool,
@@ -379,6 +381,10 @@ impl IcConfig {
         self.whitelisted_ports = whitelisted_ports;
     }
 
+    pub fn skip_unassigned_record(&mut self) {
+        self.skip_unassigned_record = true;
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn new<P: AsRef<Path>>(
         target_dir: P,
@@ -397,6 +403,7 @@ impl IcConfig {
         Self {
             target_dir: PathBuf::from(target_dir.as_ref()),
             topology_config,
+            skip_unassigned_record: false,
             initial_replica_version_id: replica_version_id,
             generate_subnet_records,
             nns_subnet_index,
@@ -602,15 +609,6 @@ impl IcConfig {
             routing_table_record.clone(),
         );
 
-        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
-        write_registry_entry(
-            &data_provider,
-            self.target_dir.as_path(),
-            &make_routing_table_record_key(),
-            version,
-            routing_table_record,
-        );
-
         fn opturl_to_string_vec(opt_url: Option<Url>) -> Vec<String> {
             opt_url.map(|u| vec![u.to_string()]).unwrap_or_default()
         }
@@ -689,13 +687,15 @@ impl IcConfig {
             ssh_readonly_access: self.ssh_readonly_access_to_unassigned_nodes,
         };
 
-        write_registry_entry(
-            &data_provider,
-            self.target_dir.as_path(),
-            &make_unassigned_nodes_config_record_key(),
-            version,
-            unassigned_nodes_config,
-        );
+        if !self.skip_unassigned_record {
+            write_registry_entry(
+                &data_provider,
+                self.target_dir.as_path(),
+                &make_unassigned_nodes_config_record_key(),
+                version,
+                unassigned_nodes_config,
+            );
+        }
 
         data_provider.write_to_file(InitializedIc::registry_path_(self.target_dir.as_path()));
 

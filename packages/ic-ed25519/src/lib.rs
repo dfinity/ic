@@ -13,7 +13,7 @@ use hex_literal::hex;
 use thiserror::Error;
 use zeroize::ZeroizeOnDrop;
 
-pub use candid::Principal as CanisterId;
+pub use ic_principal::Principal as CanisterId;
 
 /// An error if a private key cannot be decoded
 #[derive(Clone, Debug, Error)]
@@ -748,7 +748,7 @@ impl PublicKey {
             .collect::<Vec<_>>();
 
         // Select a random Scalar for each signature.
-        let zs: Vec<Scalar> = (0..n).map(|_| Scalar::from(rng.gen::<u128>())).collect();
+        let zs: Vec<Scalar> = (0..n).map(|_| Scalar::from(rng.r#gen::<u128>())).collect();
 
         let b_coefficient: Scalar = signatures
             .iter()

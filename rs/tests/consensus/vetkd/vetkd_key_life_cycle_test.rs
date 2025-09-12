@@ -312,7 +312,7 @@ async fn derive_vetkey_with_canister<R: Rng>(
     log: &slog::Logger,
     rng: &mut R,
 ) -> VetKey {
-    let tsk = TransportSecretKey::from_seed(rng.gen::<[u8; 32]>().to_vec())
+    let tsk = TransportSecretKey::from_seed(rng.r#gen::<[u8; 32]>().to_vec())
         .expect("Failed to generate transport secret key");
 
     info!(log, "Deriving vetKey...");

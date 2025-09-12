@@ -131,8 +131,10 @@ impl BitcoinPayloadBuilder {
             }
 
             let adapter_client = match request.network() {
-                Network::Mainnet => &self.bitcoin_mainnet_adapter_client,
-                Network::Testnet | Network::Regtest => &self.bitcoin_testnet_adapter_client,
+                Network::BitcoinMainnet => &self.bitcoin_mainnet_adapter_client,
+                Network::BitcoinTestnet | Network::BitcoinRegtest => {
+                    &self.bitcoin_testnet_adapter_client
+                }
                 Network::DogecoinMainnet => &self.dogecoin_mainnet_adapter_client,
                 Network::DogecoinTestnet | Network::DogecoinRegtest => {
                     &self.dogecoin_testnet_adapter_client

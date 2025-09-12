@@ -7,7 +7,7 @@ use hyper::{Method, Request, Response};
 use ic_agent::{agent::UpdateBuilder, export::Principal, identity::AnonymousIdentity, Agent};
 use ic_config::http_handler::Config;
 use ic_error_types::{ErrorCode, UserError};
-use ic_http_endpoints_public::{call_v2, IngressValidatorBuilder};
+use ic_http_endpoints_public::{call_async, IngressValidatorBuilder};
 use ic_interfaces::ingress_pool::IngressPoolThrottler;
 use ic_interfaces_registry::RegistryClient;
 use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
@@ -208,7 +208,7 @@ fn new_call_service(
             .layer(GlobalConcurrencyLimitLayer::new(
                 config.max_call_concurrent_requests,
             ))
-            .service(call_v2::new_service(call_handler)),
+            .service(call_async::new_service(call_handler)),
     );
     (ingress_filter_handle, call_service)
 }

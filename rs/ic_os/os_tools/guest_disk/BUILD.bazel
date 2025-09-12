@@ -15,6 +15,7 @@ DEPENDENCIES = [
     "@crate_index//:libcryptsetup-rs",
     "@crate_index//:nix",
     "@crate_index//:rand",
+    "@crate_index//:sev",
     "@crate_index//:tempfile",
 ]
 

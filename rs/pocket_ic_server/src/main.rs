@@ -57,7 +57,8 @@ const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
 
 #[derive(Parser)]
-#[clap(version = "9.0.3")]
+#[clap(name = "pocket-ic-server")]
+#[clap(version = "10.0.0")]
 struct Args {
     /// The IP address to which the PocketIC server should bind (defaults to 127.0.0.1)
     #[clap(long, short)]
@@ -82,7 +83,7 @@ fn current_binary_path() -> Option<PathBuf> {
 }
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-extern "C" {
+unsafe extern "C" {
     fn install_backtrace_handler();
 }
 
@@ -119,7 +120,10 @@ fn increase_nofile_limit(mut new_limit: u64) -> io::Result<()> {
 fn main() {
     let current_binary_path = current_binary_path().unwrap();
     let current_binary_name = current_binary_path.file_name().unwrap().to_str().unwrap();
-    if current_binary_name != "pocket-ic" && current_binary_name != "pocket-ic-server" {
+    let allowed_binary_names = ["pocket-ic", "pocket-ic-server", "pocket-ic-server-head-nns"];
+    if !allowed_binary_names.contains(&current_binary_name) {
+        // The fact that `pocket-ic-server-head-nns` is allowed is an internal implementation
+        // detail that we do not advertize in the public-facing error message.
         panic!("The PocketIc server binary name must be \"pocket-ic\" or \"pocket-ic-server\" (without quotes).")
     }
     // Check if `pocket-ic-server` is running in the canister sandbox mode where it waits
@@ -168,7 +172,8 @@ async fn start(runtime: Arc<Runtime>) {
 
     // Set RUST_MIN_STACK if not yet set:
     // the value of 8192000 is set according to `ic-os/components/ic/ic-replica.service`.
-    std::env::set_var("RUST_MIN_STACK", "8192000");
+    // TODO: Audit that the environment access only happens in single-threaded code.
+    unsafe { std::env::set_var("RUST_MIN_STACK", "8192000") };
 
     // Set the maximum number of open files:
     // the limit of 16777216 is set according to `ic-os/components/ic/ic-replica.service`.

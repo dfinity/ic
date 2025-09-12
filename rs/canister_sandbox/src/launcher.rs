@@ -29,7 +29,7 @@ use nix::{
 };
 
 /// The `main()` of the launcher binary. This function is called from
-/// binaries such as `ic-replay` and `drun` to run as a sandbox launcher.
+/// binaries such as `ic-replay` to run as a sandbox launcher.
 ///
 pub fn sandbox_launcher_main() {
     let socket = child_process_initialization();

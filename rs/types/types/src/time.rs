@@ -7,6 +7,7 @@ mod tests;
 
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT};
 #[cfg(test)]
 use proptest_derive::Arbitrary;
@@ -18,7 +19,19 @@ use thiserror::Error;
 
 /// Time since UNIX_EPOCH (in nanoseconds). Just like 'std::time::Instant' or
 /// 'std::time::SystemTime', [Time] does not implement the [Default] trait.
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Copy,
+    Clone,
+    Eq,
+    DeterministicHeapBytes,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    Deserialize,
+    Serialize,
+)]
 #[cfg_attr(test, derive(Arbitrary, ExhaustiveSet))]
 pub struct Time(u64);
 

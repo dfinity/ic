@@ -13,6 +13,7 @@ candid_parser = { workspace = true }
 clap = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
+maplit = "1.0.2"
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -21,6 +22,7 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+url = { workspace = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

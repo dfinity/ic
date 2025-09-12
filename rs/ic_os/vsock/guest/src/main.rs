@@ -2,13 +2,13 @@
 
 use clap::{Args, Parser};
 use vsock_lib::protocol::{Command, NotifyData, Payload, UpgradeData};
-use vsock_lib::send_command;
+use vsock_lib::{LinuxVSockClient, VSockClient};
 fn main() -> Result<(), String> {
     let cli = Cli::parse();
 
     let port = cli.port;
     let command = get_command(cli)?;
-    let payload = send_command(command, port)?;
+    let payload = LinuxVSockClient::with_port(port).send_command(command)?;
 
     // Output the values directly
     match payload {

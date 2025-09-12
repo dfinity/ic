@@ -126,12 +126,13 @@ fn test_creation_of_instance_extended() {
             ..Default::default()
         }
         .into(),
+        http_gateway_config: None,
         state_dir: None,
-        nonmainnet_features: false,
+        icp_config: None,
         log_level: None,
         bitcoind_addr: None,
         icp_features: None,
-        allow_incomplete_state: None,
+        incomplete_state: None,
         initial_time: None,
     };
     let response = client

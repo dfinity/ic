@@ -3,6 +3,7 @@ use group::{ff::Field, Group, GroupEncoding};
 use hex_literal::hex;
 use ic_crypto_sha2::Sha512;
 use std::ops::{Add, Mul, Neg, Sub};
+use std::sync::LazyLock;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -295,14 +296,13 @@ pub struct Point {
     p: curve25519_dalek::EdwardsPoint,
 }
 
-lazy_static::lazy_static! {
-
-    /// Static deserialization of the fixed alternative group generator
-    static ref ED25519_GENERATOR_H: Point = Point::deserialize(
-        &hex!("d0509f80e5df2c3865f3b4cda82cc5b5c5b33f9c0ee151bbba1ad5a0f6e507db"))
-        .expect("The ed25519 generator_h point is invalid");
-
-}
+/// Static deserialization of the fixed alternative group generator
+static ED25519_GENERATOR_H: LazyLock<Point> = LazyLock::new(|| {
+    Point::deserialize(&hex!(
+        "d0509f80e5df2c3865f3b4cda82cc5b5c5b33f9c0ee151bbba1ad5a0f6e507db"
+    ))
+    .expect("The ed25519 generator_h point is invalid")
+});
 
 impl Point {
     pub const BYTES: usize = 32;

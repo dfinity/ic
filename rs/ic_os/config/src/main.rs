@@ -3,7 +3,7 @@ use clap::{Args, Parser, Subcommand};
 use config::generate_testnet_config::{
     generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
 };
-use config::guestos::bootstrap_ic_node::bootstrap_ic_node;
+use config::guestos::{bootstrap_ic_node::bootstrap_ic_node, generate_ic_config};
 use config::serialize_and_write_config;
 use config::setupos::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::setupos::deployment_json::get_deployment_settings;
@@ -38,6 +38,15 @@ pub enum Commands {
     BootstrapICNode {
         #[arg(long, default_value = config::DEFAULT_BOOTSTRAP_TAR_PATH, value_name = "bootstrap.tar")]
         bootstrap_tar_path: PathBuf,
+    },
+    /// Generate IC configuration from template and guestos config
+    GenerateICConfig {
+        #[arg(long, default_value = config::DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, value_name = "config-guestos.json")]
+        guestos_config_json_path: PathBuf,
+        #[arg(long, default_value = config::DEFAULT_IC_JSON5_TEMPLATE_PATH, value_name = "ic.json5.template")]
+        template_path: PathBuf,
+        #[arg(long, default_value = config::DEFAULT_IC_JSON5_OUTPUT_PATH, value_name = "ic.json5")]
+        output_path: PathBuf,
     },
     /// Creates a GuestOSConfig object directly from GenerateTestnetConfigClapArgs. Only used for testing purposes.
     GenerateTestnetConfig(GenerateTestnetConfigClapArgs),
@@ -110,6 +119,8 @@ pub struct GenerateTestnetConfigClapArgs {
     pub query_stats_epoch_length: Option<u64>,
     #[arg(long)]
     pub bitcoind_addr: Option<String>,
+    #[arg(long)]
+    pub dogecoind_addr: Option<String>,
     #[arg(long)]
     pub jaeger_addr: Option<String>,
     #[arg(long)]
@@ -267,6 +278,20 @@ pub fn main() -> Result<()> {
             println!("Bootstrap IC Node from: {}", bootstrap_tar_path.display());
             bootstrap_ic_node(&bootstrap_tar_path)
         }
+        Some(Commands::GenerateICConfig {
+            guestos_config_json_path,
+            template_path,
+            output_path,
+        }) => {
+            println!(
+                "Generating IC configuration from template: {}",
+                template_path.display()
+            );
+            let guestos_config: GuestOSConfig =
+                config::deserialize_config(&guestos_config_json_path)?;
+
+            generate_ic_config::generate_ic_config(&guestos_config, &template_path, &output_path)
+        }
         Some(Commands::GenerateTestnetConfig(clap_args)) => {
             // Convert `clap_args` into `GenerateTestnetConfigArgs`
             let args = GenerateTestnetConfigArgs {
@@ -297,6 +322,7 @@ pub fn main() -> Result<()> {
                 malicious_behavior: clap_args.malicious_behavior,
                 query_stats_epoch_length: clap_args.query_stats_epoch_length,
                 bitcoind_addr: clap_args.bitcoind_addr,
+                dogecoind_addr: clap_args.dogecoind_addr,
                 jaeger_addr: clap_args.jaeger_addr,
                 socks_proxy: clap_args.socks_proxy,
                 hostname: clap_args.hostname,

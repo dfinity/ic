@@ -5,9 +5,7 @@ use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canister_profiler::{measure_span, measure_span_async};
-use ic_cdk::{
-    api::stable::stable_read, caller as cdk_caller, init, post_upgrade, pre_upgrade, query, update,
-};
+use ic_cdk::{caller as cdk_caller, init, post_upgrade, pre_upgrade, println, query, update};
 use ic_cdk_timers::TimerId;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::{cmc::CMCCanister, ledger::IcpLedgerCanister};
@@ -15,18 +13,18 @@ use ic_nervous_system_clients::{
     canister_status::CanisterStatusResultV2, ledger_client::LedgerCanister,
 };
 use ic_nervous_system_common::{
-    // TODO(NNS1-4037) Remove dfn_core_stable_mem_utils (and cargo/bazel deps) after release
-    dfn_core_stable_mem_utils::BufferedStableMemReader,
     memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
-    serve_logs,
-    serve_logs_v2,
-    serve_metrics,
+    serve_logs, serve_logs_v2, serve_metrics,
 };
 use ic_nervous_system_proto::pb::v1::{
     GetTimersRequest, GetTimersResponse, ResetTimersRequest, ResetTimersResponse, Timers,
 };
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
+#[cfg(feature = "test")]
+use ic_sns_governance::extensions::add_allowed_extension_spec;
+#[cfg(feature = "test")]
+use ic_sns_governance::pb::v1::AddAllowedExtensionRequest;
 use ic_sns_governance::{
     governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
     logs::{ERROR, INFO},
@@ -58,7 +56,6 @@ use ic_sns_governance_api::pb::v1::{
     AdvanceTargetVersionResponse, MintTokensRequest, MintTokensResponse,
     RefreshCachedUpgradeStepsRequest, RefreshCachedUpgradeStepsResponse,
 };
-use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::{
@@ -67,14 +64,6 @@ use std::{
     convert::TryFrom,
     time::{Duration, SystemTime},
 };
-
-/// Size of the buffer for stable memory reads and writes.
-///
-/// Smaller buffer size means more stable_write and stable_read calls. With
-/// 100MiB buffer size, when the heap is near full, we need ~40 system calls.
-/// Larger buffer size means we may not be able to serialize the heap fully in
-/// some cases.
-const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
 
 static mut GOVERNANCE: Option<Governance> = None;
 
@@ -285,41 +274,14 @@ fn canister_pre_upgrade() {
 fn canister_post_upgrade() {
     log!(INFO, "Executing post upgrade");
 
-    // Look for MemoryManager magic bytes
-    let mut magic_bytes = [0u8; 3];
-    stable_read(0, &mut magic_bytes);
-    let mut mgr_version_byte = [0u8; 1];
-    stable_read(3, &mut mgr_version_byte);
-
-    // For the version of MemoryManager we are using, the version byte will be 1
-    // We use the magic bytes, along with this, to identify if we are before or after the migration
-    // to MemoryManager.  Previously, the first 4 bytes contained a size.  b"MGR\1" evaluates to
-    // 22169421 bytes (which is ~22MB, and is much smaller than governance in mainnet (about 500MB))
-    // Meaning there is no real possibility of these bytes being misinterpreted
-    // TODO(NNS1-4037) Remove conditional after deploying the updated version to production
-    let governance_proto = if &magic_bytes == b"MGR" && mgr_version_byte[0] == 1 {
-        with_upgrades_memory(|memory| {
-            let result: Result<sns_gov_pb::Governance, _> = load_protobuf(memory);
-            result
-        })
-        .expect(
-            "Error deserializing canister state post-upgrade with MemoryManager memory segment. \
+    let governance_proto = with_upgrades_memory(|memory| {
+        let result: Result<sns_gov_pb::Governance, _> = load_protobuf(memory);
+        result
+    })
+    .expect(
+        "Error deserializing canister state post-upgrade with MemoryManager memory segment. \
              CANISTER MIGHT HAVE BROKEN STATE!!!!.",
-        )
-    } else {
-        let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
-        sns_gov_pb::Governance::decode(reader)
-            .map_err(|err| {
-                log!(
-                    ERROR,
-                    "Error deserializing canister state post-upgrade. \
-                 CANISTER MIGHT HAVE BROKEN STATE!!!!. Error: {:?}",
-                    err
-                );
-                err
-            })
-            .expect("Could not upgrade canister")
-    };
+    );
 
     canister_init_(governance_proto);
 
@@ -822,6 +784,19 @@ async fn refresh_cached_upgrade_steps(
         .refresh_cached_upgrade_steps(deployed_version)
         .await;
     RefreshCachedUpgradeStepsResponse {}
+}
+
+#[cfg(feature = "test")]
+#[update(hidden = true)]
+async fn add_allowed_extension(request: AddAllowedExtensionRequest) {
+    log!(INFO, "Adding an allowed extension!");
+    let hash = <[u8; 32]>::try_from(request.wasm_hash).expect("Hash must be valid 32-bytes");
+    let extension = request
+        .spec
+        .expect("ExtensionSpec is required")
+        .try_into()
+        .unwrap();
+    add_allowed_extension_spec(hash, extension);
 }
 
 fn main() {

@@ -24,6 +24,7 @@ end::catalog[] */
 use ic_system_test_driver::{
     canister_api::{CallMode, GenericRequest},
     driver::{
+        farm::HostFeature,
         ic::{ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
@@ -62,17 +63,20 @@ pub fn setup(
     env: TestEnv,
     nodes_app_subnet: usize,
     boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
+    required_host_features: Vec<HostFeature>,
 ) {
     let logger = env.logger();
     PrometheusVm::default()
+        .with_required_host_features(required_host_features.clone())
         .start(&env)
         .expect("failed to start prometheus VM");
     let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(8)),
+        vcpus: Some(NrOfVCPUs::new(16)),
         memory_kibibytes: None,
         boot_image_minimal_size_gibibytes,
     };
     InternetComputer::new()
+        .with_required_host_features(required_host_features)
         .add_fast_single_node_subnet(SubnetType::System)
         .with_default_vm_resources(vm_resources)
         .add_subnet(

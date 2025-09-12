@@ -263,11 +263,14 @@ async fn try_fetch_delegation_from_nns(
                         subnet_id.get().into(),
                         b"public_key".into(),
                     ]),
+                    // Old format of the canister ranges
                     Path::new(vec![
                         b"subnet".into(),
                         subnet_id.get().into(),
                         b"canister_ranges".into(),
                     ]),
+                    // New format of the canister ranges
+                    Path::new(vec![b"canister_ranges".into(), subnet_id.get().into()]),
                 ],
                 ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
                 nonce: None,
@@ -745,12 +748,10 @@ mod tests {
                 let mut time = time.write().unwrap();
                 *time += 1;
 
-                let certificate =
-                    if let Some(delegation) = override_nns_delegation.read().unwrap().deref() {
-                        delegation.certificate.clone()
-                    } else {
-                        Blob(create_certificate(*time))
-                    };
+                let certificate = match override_nns_delegation.read().unwrap().deref() {
+                    Some(delegation) => delegation.certificate.clone(),
+                    _ => Blob(create_certificate(*time)),
+                };
 
                 let body = serde_cbor::ser::to_vec(&HttpReadStateResponse { certificate }).unwrap();
                 (

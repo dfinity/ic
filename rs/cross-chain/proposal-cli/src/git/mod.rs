@@ -1,9 +1,6 @@
 use crate::candid::{encode_upgrade_args, UpgradeArgs};
 use crate::canister::TargetCanister;
-use candid::Principal;
 use std::fmt::{Display, Formatter};
-use std::fs::File;
-use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
@@ -92,33 +89,6 @@ impl GitRepository {
 
     pub fn candid_file(&self, canister: &TargetCanister) -> PathBuf {
         self.dir.path().join(canister.candid_file())
-    }
-
-    pub fn parse_canister_id_batch(&self, canisters: &[TargetCanister]) -> Vec<Principal> {
-        canisters
-            .iter()
-            .map(|canister| self.parse_canister_id(canister))
-            .collect()
-    }
-
-    pub fn parse_canister_id(&self, canister: &TargetCanister) -> Principal {
-        let canister_ids: serde_json::Value = {
-            let path = self.dir.path().join(canister.canister_ids_json_file());
-            let canister_ids_file =
-                File::open(&path).unwrap_or_else(|_| panic!("failed to open {:?}", path));
-            let reader = BufReader::new(canister_ids_file);
-            serde_json::from_reader(reader).expect("failed to parse json")
-        };
-        let canister_id = canister_ids
-            .as_object()
-            .unwrap()
-            .get(canister.canister_name())
-            .unwrap()
-            .get("ic")
-            .unwrap()
-            .as_str()
-            .unwrap();
-        Principal::from_text(canister_id).unwrap()
     }
 
     pub fn checkout(&mut self, commit: &GitCommitHash) {

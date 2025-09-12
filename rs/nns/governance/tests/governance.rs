@@ -5090,10 +5090,17 @@ fn test_rate_limiting_neuron_creation() {
             .neuron_store
             .with_neuron(&neuron_id, |neuron| neuron.controller())
             .unwrap();
-        gov.split_neuron(&neuron_id, &controller, &Split { amount_e8s: 5 * E8 })
-            .now_or_never()
-            .unwrap()
-            .unwrap();
+        gov.split_neuron(
+            &neuron_id,
+            &controller,
+            &Split {
+                amount_e8s: 5 * E8,
+                memo: None,
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap();
 
         // spawn should not be rate limited
         let controller = gov
@@ -5347,6 +5354,7 @@ fn test_neuron_split_fails() {
             &from,
             &Split {
                 amount_e8s: 1_000_000,
+                memo: None,
             },
         )
         .now_or_never()
@@ -5364,6 +5372,7 @@ fn test_neuron_split_fails() {
             &unauthorized_caller,
             &Split {
                 amount_e8s: 1_000_000,
+                memo: None,
             },
         )
         .now_or_never()
@@ -5380,6 +5389,7 @@ fn test_neuron_split_fails() {
             &from,
             &Split {
                 amount_e8s: 1_000_000_000 - min_neuron_stake + 1,
+                memo: None,
             },
         )
         .now_or_never()
@@ -5397,6 +5407,7 @@ fn test_neuron_split_fails() {
             &from,
             &Split {
                 amount_e8s: min_neuron_stake - 1 + transaction_fee,
+                memo: None,
             },
         )
         .now_or_never()
@@ -5476,6 +5487,7 @@ fn test_neuron_split() {
             &from,
             &Split {
                 amount_e8s: 200_000_000,
+                memo: None,
             },
         )
         .now_or_never()
@@ -5543,6 +5555,28 @@ fn test_neuron_split() {
     let neuron_ids = governance.get_neuron_ids_by_principal(&from);
     let expected_neuron_ids = btreeset! { id, child_nid };
     assert_eq!(neuron_ids, expected_neuron_ids);
+
+    let child_neuron_split_by_memo_id = governance
+        .split_neuron(
+            &id,
+            &from,
+            &Split {
+                amount_e8s: 200_000_000,
+                memo: Some(1234),
+            },
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(governance.neuron_store.len(), 3);
+    let child_neuron_split_by_memo = governance
+        .get_full_neuron(&child_neuron_split_by_memo_id, &from)
+        .expect("The child neuron is missing");
+    assert_eq!(
+        child_neuron_split_by_memo.account,
+        ledger::compute_neuron_split_subaccount_bytes(from, 1234).to_vec(),
+    );
 }
 
 #[test]
@@ -5596,6 +5630,7 @@ fn test_seed_neuron_split() {
             &from,
             &Split {
                 amount_e8s: 100_000_000 + transaction_fee,
+                memo: None,
             },
         )
         .now_or_never()
@@ -13474,7 +13509,7 @@ fn voting_period_seconds_topic_dependency() {
     assert_eq!(voting_period_fun(Topic::NeuronManagement), 2);
 
     assert_eq!(voting_period_fun(Topic::Governance), 3); // any other topic should be 3
-    assert_eq!(voting_period_fun(Topic::NetworkCanisterManagement), 3);
+    assert_eq!(voting_period_fun(Topic::ApplicationCanisterManagement), 3);
 }
 
 /// Our cast of characters in this scenario consists of a bunch of neurons, each
@@ -13511,16 +13546,16 @@ fn test_neuron_info_private_enforcement() {
 
     // Step 1.1: Select values that all neurons will share.
 
-    let controller = PrincipalId::new_user_test_id(random.gen());
-    let hot_key = PrincipalId::new_user_test_id(random.gen());
+    let controller = PrincipalId::new_user_test_id(random.r#gen());
+    let hot_key = PrincipalId::new_user_test_id(random.r#gen());
 
-    let proposal_id = random.gen();
+    let proposal_id = random.r#gen();
     let recent_ballots = vec![api::BallotInfo {
         proposal_id: Some(ProposalId { id: proposal_id }),
         vote: Vote::Yes as i32,
     }];
 
-    let joined_community_fund_timestamp_seconds = Some(random.gen());
+    let joined_community_fund_timestamp_seconds = Some(random.r#gen());
 
     // Step 1.2: Assemble the common neuron values.
     let base_neuron = {
@@ -13529,9 +13564,9 @@ fn test_neuron_info_private_enforcement() {
         let recent_ballots = recent_ballots.clone();
 
         let dissolve_state = Some(api::neuron::DissolveState::DissolveDelaySeconds(
-            random.gen(),
+            random.r#gen(),
         ));
-        let cached_neuron_stake_e8s = random.gen();
+        let cached_neuron_stake_e8s = random.r#gen();
 
         api::Neuron {
             controller,
@@ -13549,8 +13584,8 @@ fn test_neuron_info_private_enforcement() {
 
     // Step 1.3: Construct all neurons.
     let mut new_neuron = || {
-        let id = Some(NeuronId { id: random.gen() });
-        let account = (0..32).map(|_| random.gen()).collect();
+        let id = Some(NeuronId { id: random.r#gen() });
+        let account = (0..32).map(|_| random.r#gen()).collect();
 
         api::Neuron {
             id,

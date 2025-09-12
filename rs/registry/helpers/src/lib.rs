@@ -4,6 +4,7 @@
 //! to the respective crate/component at some point in the future.
 
 pub mod api_boundary_node;
+pub mod blessed_replica_version;
 pub mod chain_keys;
 pub mod crypto;
 pub mod ecdsa_keys;

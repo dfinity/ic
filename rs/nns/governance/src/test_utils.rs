@@ -108,6 +108,18 @@ impl IcpLedger for StubIcpLedger {
         unimplemented!()
     }
 
+    async fn icrc2_approve(
+        &self,
+        _spender: icrc_ledger_types::icrc1::account::Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<candid::Nat, NervousSystemError> {
+        unimplemented!()
+    }
+
     async fn icrc3_get_blocks(
         &self,
         _args: Vec<GetBlocksRequest>,
@@ -201,7 +213,7 @@ impl MockEnvironment {
         }
     }
 
-    pub fn now_setter(&self) -> impl Fn(u64) {
+    pub fn now_setter(&self) -> impl Fn(u64) + use<> {
         let arc = self.now.clone();
         move |new_now| {
             let mut now = arc.lock().unwrap();

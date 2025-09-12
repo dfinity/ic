@@ -17,6 +17,7 @@ pub struct U64(#[n(0)] u64);
 impl U64 {
     pub const ZERO: Self = Self(0);
     pub const MAX: Self = Self(u64::MAX);
+    pub const TYPE: &'static str = "U64";
 
     #[inline]
     pub const fn new(n: u64) -> Self {

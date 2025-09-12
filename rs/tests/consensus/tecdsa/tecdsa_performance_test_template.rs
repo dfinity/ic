@@ -296,6 +296,7 @@ pub fn tecdsa_performance_test(
                         1,
                         0,
                         key_id,
+                        None,
                     )
                 }
                 MasterPublicKeyId::VetKd(key_id) => {

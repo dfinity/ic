@@ -1345,7 +1345,10 @@ pub fn nns_split_neuron(
     neuron_id: NeuronId,
     amount: u64,
 ) -> ManageNeuronResponse {
-    let command = ManageNeuronCommandRequest::Split(Split { amount_e8s: amount });
+    let command = ManageNeuronCommandRequest::Split(Split {
+        amount_e8s: amount,
+        memo: None,
+    });
 
     manage_neuron_or_panic(state_machine, sender, neuron_id, command)
 }
@@ -2320,4 +2323,87 @@ pub fn setup_subnet_rental_canister_with_correct_canister_id(state_machine: &Sta
 
     // Subnet Rental Canister needs cycles to call XRC
     state_machine.add_cycles(canister_id, 100_000_000_000_000);
+}
+
+/// Helper function to register a known neuron via governance proposal.
+pub fn nns_register_known_neuron(
+    state_machine: &StateMachine,
+    proposer_principal: PrincipalId,
+    proposer_neuron_id: NeuronId,
+    known_neuron: ic_nns_governance_api::KnownNeuron,
+) {
+    let proposal = ic_nns_governance_api::MakeProposalRequest {
+        title: Some("Register Known Neuron".to_string()),
+        summary: "Proposal to register a neuron as a known neuron".to_string(),
+        url: "".to_string(),
+        action: Some(
+            ic_nns_governance_api::ProposalActionRequest::RegisterKnownNeuron(known_neuron),
+        ),
+    };
+
+    let manage_neuron_response = nns_governance_make_proposal(
+        state_machine,
+        proposer_principal,
+        proposer_neuron_id,
+        &proposal,
+    );
+
+    match manage_neuron_response.command.unwrap() {
+        ic_nns_governance_api::manage_neuron_response::Command::MakeProposal(response) => {
+            let proposal_id = response.proposal_id.unwrap();
+            nns_wait_for_proposal_execution(state_machine, proposal_id.id);
+        }
+        other => panic!("Expected MakeProposal response but got: {:?}", other),
+    }
+}
+
+/// Helper function to deregister a known neuron via governance proposal.
+pub fn nns_deregister_known_neuron(
+    state_machine: &StateMachine,
+    proposer_principal: PrincipalId,
+    proposer_neuron_id: NeuronId,
+    deregister_request: ic_nns_governance_api::DeregisterKnownNeuron,
+) {
+    let proposal = ic_nns_governance_api::MakeProposalRequest {
+        title: Some("Deregister Known Neuron".to_string()),
+        summary: "Proposal to deregister a known neuron".to_string(),
+        url: "".to_string(),
+        action: Some(
+            ic_nns_governance_api::ProposalActionRequest::DeregisterKnownNeuron(deregister_request),
+        ),
+    };
+
+    let manage_neuron_response = nns_governance_make_proposal(
+        state_machine,
+        proposer_principal,
+        proposer_neuron_id,
+        &proposal,
+    );
+
+    match manage_neuron_response.command.unwrap() {
+        ic_nns_governance_api::manage_neuron_response::Command::MakeProposal(response) => {
+            let proposal_id = response.proposal_id.unwrap();
+            nns_wait_for_proposal_execution(state_machine, proposal_id.id);
+        }
+        other => panic!("Expected MakeProposal response but got: {:?}", other),
+    }
+}
+
+/// Helper function to list known neurons.
+pub fn list_known_neurons(
+    state_machine: &StateMachine,
+) -> ic_nns_governance_api::ListKnownNeuronsResponse {
+    let response_bytes = query(
+        state_machine,
+        GOVERNANCE_CANISTER_ID,
+        "list_known_neurons",
+        Encode!(&()).unwrap(),
+    )
+    .expect("Error calling list_known_neurons");
+
+    Decode!(
+        &response_bytes,
+        ic_nns_governance_api::ListKnownNeuronsResponse
+    )
+    .expect("Error decoding ListKnownNeuronsResponse")
 }

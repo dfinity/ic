@@ -587,6 +587,80 @@ impl NnsFunction {
         };
         Ok((canister_id, method))
     }
+
+    fn compute_topic_at_creation(&self) -> Result<Topic, GovernanceError> {
+        let topic = match self {
+            NnsFunction::Unspecified => {
+                println!("{}ERROR: NnsFunction::Unspecified", LOG_PREFIX);
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    "NnsFunction::Unspecified",
+                ));
+            }
+            NnsFunction::BlessReplicaVersion
+            | NnsFunction::RetireReplicaVersion
+            | NnsFunction::UpdateElectedHostosVersions
+            | NnsFunction::UpdateApiBoundaryNodesVersion
+            | NnsFunction::UpdateNodesHostosVersion
+            | NnsFunction::UpdateUnassignedNodesConfig
+            | NnsFunction::NnsCanisterUpgrade
+            | NnsFunction::NnsRootUpgrade
+            | NnsFunction::UpdateAllowedPrincipals
+            | NnsFunction::IcpXdrConversionRate => match self.check_obsolete() {
+                Ok(_) => unreachable!("Obsolete NnsFunction not handled"),
+                Err(error_message) => {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        error_message,
+                    ));
+                }
+            },
+            NnsFunction::AssignNoid
+            | NnsFunction::UpdateNodeOperatorConfig
+            | NnsFunction::RemoveNodeOperators
+            | NnsFunction::RemoveNodes
+            | NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes => Topic::NodeAdmin,
+            NnsFunction::CreateSubnet
+            | NnsFunction::AddNodeToSubnet
+            | NnsFunction::RecoverSubnet
+            | NnsFunction::RemoveNodesFromSubnet
+            | NnsFunction::ChangeSubnetMembership
+            | NnsFunction::UpdateConfigOfSubnet => Topic::SubnetManagement,
+            NnsFunction::ReviseElectedGuestosVersions
+            | NnsFunction::ReviseElectedHostosVersions => Topic::IcOsVersionElection,
+            NnsFunction::DeployHostosToSomeNodes
+            | NnsFunction::DeployGuestosToAllSubnetNodes
+            | NnsFunction::DeployGuestosToSomeApiBoundaryNodes
+            | NnsFunction::DeployGuestosToAllUnassignedNodes => Topic::IcOsVersionDeployment,
+            NnsFunction::StopOrStartNnsCanister => Topic::ApplicationCanisterManagement,
+            NnsFunction::ClearProvisionalWhitelist => Topic::NetworkEconomics,
+            NnsFunction::SetAuthorizedSubnetworks => Topic::SubnetManagement,
+            NnsFunction::SetFirewallConfig => Topic::SubnetManagement,
+            NnsFunction::AddFirewallRules => Topic::SubnetManagement,
+            NnsFunction::RemoveFirewallRules => Topic::SubnetManagement,
+            NnsFunction::UpdateFirewallRules => Topic::SubnetManagement,
+            NnsFunction::UninstallCode => Topic::Governance,
+            NnsFunction::UpdateNodeRewardsTable => Topic::NetworkEconomics,
+            NnsFunction::AddOrRemoveDataCenters => Topic::ParticipantManagement,
+            NnsFunction::RerouteCanisterRanges => Topic::SubnetManagement,
+            NnsFunction::PrepareCanisterMigration => Topic::SubnetManagement,
+            NnsFunction::CompleteCanisterMigration => Topic::SubnetManagement,
+            NnsFunction::UpdateSubnetType => Topic::SubnetManagement,
+            NnsFunction::ChangeSubnetTypeAssignment => Topic::SubnetManagement,
+            NnsFunction::UpdateSnsWasmSnsSubnetIds => Topic::SubnetManagement,
+            NnsFunction::AddApiBoundaryNodes | NnsFunction::RemoveApiBoundaryNodes => {
+                Topic::ApiBoundaryNodeManagement
+            }
+            NnsFunction::SubnetRentalRequest => Topic::SubnetRental,
+            NnsFunction::NnsCanisterInstall
+            | NnsFunction::HardResetNnsRootToVersion
+            | NnsFunction::BitcoinSetConfig => Topic::ProtocolCanisterManagement,
+            NnsFunction::AddSnsWasm | NnsFunction::InsertSnsWasmUpgradePathEntries => {
+                Topic::ServiceNervousSystemManagement
+            }
+        };
+        Ok(topic)
+    }
 }
 
 impl Proposal {
@@ -604,130 +678,59 @@ impl Proposal {
 
     /// Computes a topic to a given proposal at the creation time. The topic of a proposal governs
     /// what followers that are taken into account when the proposal is voted on.
-    pub(crate) fn compute_topic_at_creation(&self) -> Topic {
-        if let Some(action) = &self.action {
-            match action {
-                Action::ManageNeuron(_) => Topic::NeuronManagement,
-                Action::ManageNetworkEconomics(_) => Topic::NetworkEconomics,
-                Action::Motion(_) => Topic::Governance,
-                Action::ApproveGenesisKyc(_) => Topic::Kyc,
-                Action::ExecuteNnsFunction(m) => {
-                    if let Ok(mt) = NnsFunction::try_from(m.nns_function) {
-                        match mt {
-                            NnsFunction::Unspecified => {
-                                println!("{}ERROR: NnsFunction::Unspecified", LOG_PREFIX);
-                                Topic::Unspecified
-                            }
+    pub(crate) fn compute_topic_at_creation(&self) -> Result<Topic, GovernanceError> {
+        let Some(action) = &self.action else {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("No action in proposal: {:#?}", self),
+            ));
+        };
 
-                            NnsFunction::AssignNoid
-                            | NnsFunction::UpdateNodeOperatorConfig
-                            | NnsFunction::RemoveNodeOperators
-                            | NnsFunction::RemoveNodes
-                            | NnsFunction::UpdateUnassignedNodesConfig
-                            | NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes => {
-                                Topic::NodeAdmin
-                            }
-                            NnsFunction::CreateSubnet
-                            | NnsFunction::AddNodeToSubnet
-                            | NnsFunction::RecoverSubnet
-                            | NnsFunction::RemoveNodesFromSubnet
-                            | NnsFunction::ChangeSubnetMembership
-                            | NnsFunction::UpdateConfigOfSubnet => Topic::SubnetManagement,
-                            NnsFunction::ReviseElectedGuestosVersions
-                            | NnsFunction::ReviseElectedHostosVersions => {
-                                Topic::IcOsVersionElection
-                            }
-                            NnsFunction::DeployHostosToSomeNodes
-                            | NnsFunction::DeployGuestosToAllSubnetNodes
-                            | NnsFunction::DeployGuestosToSomeApiBoundaryNodes
-                            | NnsFunction::DeployGuestosToAllUnassignedNodes => {
-                                Topic::IcOsVersionDeployment
-                            }
-                            NnsFunction::NnsCanisterUpgrade
-                            | NnsFunction::NnsRootUpgrade
-                            | NnsFunction::StopOrStartNnsCanister => {
-                                Topic::NetworkCanisterManagement
-                            }
-                            NnsFunction::IcpXdrConversionRate => Topic::ExchangeRate,
-                            NnsFunction::ClearProvisionalWhitelist => Topic::NetworkEconomics,
-                            NnsFunction::SetAuthorizedSubnetworks => Topic::SubnetManagement,
-                            NnsFunction::SetFirewallConfig => Topic::SubnetManagement,
-                            NnsFunction::AddFirewallRules => Topic::SubnetManagement,
-                            NnsFunction::RemoveFirewallRules => Topic::SubnetManagement,
-                            NnsFunction::UpdateFirewallRules => Topic::SubnetManagement,
-                            NnsFunction::UninstallCode => Topic::Governance,
-                            NnsFunction::UpdateNodeRewardsTable => Topic::NetworkEconomics,
-                            NnsFunction::AddOrRemoveDataCenters => Topic::ParticipantManagement,
-                            NnsFunction::RerouteCanisterRanges => Topic::SubnetManagement,
-                            NnsFunction::PrepareCanisterMigration => Topic::SubnetManagement,
-                            NnsFunction::CompleteCanisterMigration => Topic::SubnetManagement,
-                            NnsFunction::UpdateSubnetType => Topic::SubnetManagement,
-                            NnsFunction::ChangeSubnetTypeAssignment => Topic::SubnetManagement,
-                            NnsFunction::UpdateSnsWasmSnsSubnetIds => Topic::SubnetManagement,
-                            // Retired NnsFunctions
-                            NnsFunction::UpdateAllowedPrincipals => Topic::SnsAndCommunityFund,
-                            NnsFunction::UpdateNodesHostosVersion
-                            | NnsFunction::UpdateElectedHostosVersions => Topic::NodeAdmin,
-                            NnsFunction::BlessReplicaVersion
-                            | NnsFunction::RetireReplicaVersion => Topic::IcOsVersionElection,
-                            NnsFunction::AddApiBoundaryNodes
-                            | NnsFunction::RemoveApiBoundaryNodes
-                            | NnsFunction::UpdateApiBoundaryNodesVersion => {
-                                Topic::ApiBoundaryNodeManagement
-                            }
-                            NnsFunction::SubnetRentalRequest => Topic::SubnetRental,
-                            NnsFunction::NnsCanisterInstall
-                            | NnsFunction::HardResetNnsRootToVersion
-                            | NnsFunction::BitcoinSetConfig => Topic::ProtocolCanisterManagement,
-                            NnsFunction::AddSnsWasm
-                            | NnsFunction::InsertSnsWasmUpgradePathEntries => {
-                                Topic::ServiceNervousSystemManagement
-                            }
-                        }
-                    } else {
-                        println!(
-                            "{}ERROR: Unknown NnsFunction: {}",
-                            LOG_PREFIX, m.nns_function
-                        );
-                        Topic::Unspecified
-                    }
-                }
-                Action::AddOrRemoveNodeProvider(_) => Topic::ParticipantManagement,
-                Action::RewardNodeProvider(_) | Action::RewardNodeProviders(_) => {
-                    Topic::NodeProviderRewards
-                }
-                Action::SetDefaultFollowees(_) | Action::RegisterKnownNeuron(_) => {
-                    Topic::Governance
-                }
-                Action::SetSnsTokenSwapOpenTimeWindow(_)
-                | Action::OpenSnsTokenSwap(_)
-                | Action::CreateServiceNervousSystem(_) => Topic::SnsAndCommunityFund,
-                Action::InstallCode(install_code) => {
-                    // There should be a valid topic since the validation should be done when the
-                    // proposal is created. We avoid panicking here since `topic()` is called in a
-                    // lot of places.
-                    install_code.valid_topic().unwrap_or(Topic::Unspecified)
-                }
-                Action::StopOrStartCanister(stop_or_start) => {
-                    // There should be a valid topic since the validation should be done when the
-                    // proposal is created. We avoid panicking here since `topic()` is called in a
-                    // lot of places.
-                    stop_or_start.valid_topic().unwrap_or(Topic::Unspecified)
-                }
-                Action::UpdateCanisterSettings(update_canister_settings) => {
-                    // There should be a valid topic since the validation should be done when the
-                    // proposal is created. We avoid panicking here since `topic()` is called in a
-                    // lot of places.
-                    update_canister_settings
-                        .valid_topic()
-                        .unwrap_or(Topic::Unspecified)
-                }
-                Action::FulfillSubnetRentalRequest(_) => Topic::SubnetRental,
+        let topic = match action {
+            Action::ManageNeuron(_) => Topic::NeuronManagement,
+            Action::ManageNetworkEconomics(_) => Topic::NetworkEconomics,
+            Action::Motion(_) => Topic::Governance,
+            Action::ApproveGenesisKyc(_) => Topic::Kyc,
+            Action::ExecuteNnsFunction(m) => {
+                let nns_function = NnsFunction::try_from(m.nns_function).map_err(|_| {
+                    GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        format!("Invalid NnsFunction id: {}", m.nns_function),
+                    )
+                })?;
+                nns_function.compute_topic_at_creation()?
             }
-        } else {
-            println!("{}ERROR: No action -> no topic.", LOG_PREFIX);
-            Topic::Unspecified
-        }
+            Action::AddOrRemoveNodeProvider(_) => Topic::ParticipantManagement,
+            Action::RewardNodeProvider(_) | Action::RewardNodeProviders(_) => {
+                Topic::NodeProviderRewards
+            }
+            Action::SetDefaultFollowees(_)
+            | Action::RegisterKnownNeuron(_)
+            | Action::DeregisterKnownNeuron(_) => Topic::Governance,
+            Action::SetSnsTokenSwapOpenTimeWindow(_)
+            | Action::OpenSnsTokenSwap(_)
+            | Action::CreateServiceNervousSystem(_) => Topic::SnsAndCommunityFund,
+            Action::InstallCode(install_code) => {
+                // There should be a valid topic since the validation should be done when the
+                // proposal is created. We avoid panicking here since `topic()` is called in a
+                // lot of places.
+                install_code.valid_topic()?
+            }
+            Action::StopOrStartCanister(stop_or_start) => {
+                // There should be a valid topic since the validation should be done when the
+                // proposal is created. We avoid panicking here since `topic()` is called in a
+                // lot of places.
+                stop_or_start.valid_topic()?
+            }
+            Action::UpdateCanisterSettings(update_canister_settings) => {
+                // There should be a valid topic since the validation should be done when the
+                // proposal is created. We avoid panicking here since `topic()` is called in a
+                // lot of places.
+                update_canister_settings.valid_topic()?
+            }
+            Action::FulfillSubnetRentalRequest(_) => Topic::SubnetRental,
+        };
+        Ok(topic)
     }
 
     /// String value representing the action type of the proposal used in governance canister metrics.
@@ -780,6 +783,7 @@ impl Action {
             Action::RewardNodeProviders(_) => "ACTION_REWARD_NODE_PROVIDERS",
             Action::SetDefaultFollowees(_) => "ACTION_SET_DEFAULT_FOLLOWEES",
             Action::RegisterKnownNeuron(_) => "ACTION_REGISTER_KNOWN_NEURON",
+            Action::DeregisterKnownNeuron(_) => "ACTION_DEREGISTER_KNOWN_NEURON",
             Action::SetSnsTokenSwapOpenTimeWindow(_) => {
                 "ACTION_SET_SNS_TOKEN_SWAP_OPEN_TIME_WINDOW"
             }
@@ -2368,6 +2372,11 @@ impl Governance {
         // New neurons are not allowed when the heap is too large.
         self.check_heap_can_grow()?;
 
+        let &manage_neuron::Split {
+            amount_e8s: split_amount_e8s,
+            memo,
+        } = split;
+
         let min_stake = self
             .heap_data
             .economics
@@ -2393,14 +2402,14 @@ impl Governance {
             return Err(GovernanceError::new(ErrorType::NotAuthorized));
         }
 
-        if split.amount_e8s < min_stake + transaction_fee_e8s {
+        if split_amount_e8s < min_stake + transaction_fee_e8s {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
                 format!(
                     "Trying to split a neuron with argument {} e8s. This is too little: \
                       at the minimum, one needs the minimum neuron stake, which is {} e8s, \
                       plus the transaction fee, which is {}. Hence the minimum split amount is {}.",
-                    split.amount_e8s,
+                    split_amount_e8s,
                     min_stake,
                     transaction_fee_e8s,
                     min_stake + transaction_fee_e8s
@@ -2408,7 +2417,7 @@ impl Governance {
             ));
         }
 
-        if minted_stake_e8s < min_stake + split.amount_e8s {
+        if minted_stake_e8s < min_stake + split_amount_e8s {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
                 format!(
@@ -2416,7 +2425,7 @@ impl Governance {
                      This is not allowed, because the parent has stake {} e8s. \
                      If the requested amount was subtracted from it, there would be less than \
                      the minimum allowed stake, which is {} e8s. ",
-                    split.amount_e8s, id.id, minted_stake_e8s, min_stake
+                    split_amount_e8s, id.id, minted_stake_e8s, min_stake
                 ),
             ));
         }
@@ -2426,7 +2435,12 @@ impl Governance {
 
         let from_subaccount = parent_neuron.subaccount();
 
-        let to_subaccount = Subaccount(self.randomness.random_byte_array()?);
+        let to_subaccount_bytes = if let Some(memo) = memo {
+            ledger::compute_neuron_split_subaccount_bytes(parent_neuron.controller(), memo)
+        } else {
+            self.randomness.random_byte_array()?
+        };
+        let to_subaccount = Subaccount(to_subaccount_bytes);
 
         // Make sure there isn't already a neuron with the same sub-account.
         if self.neuron_store.has_neuron_with_subaccount(to_subaccount) {
@@ -2441,7 +2455,7 @@ impl Governance {
             command: Some(InFlightCommand::Split(*split)),
         };
 
-        let staked_amount = split.amount_e8s - transaction_fee_e8s;
+        let staked_amount = split_amount_e8s - transaction_fee_e8s;
 
         // Make sure the parent neuron is not already undergoing a ledger
         // update.
@@ -2484,12 +2498,12 @@ impl Governance {
         self.neuron_store.with_neuron_mut(id, |parent_neuron| {
             parent_neuron.cached_neuron_stake_e8s = parent_neuron
                 .cached_neuron_stake_e8s
-                .checked_sub(split.amount_e8s)
+                .checked_sub(split_amount_e8s)
                 .expect("Subtracting neuron stake underflows");
         })?;
 
         let now = self.env.now();
-        tla_log_locals! { sn_amount : split.amount_e8s, sn_child_neuron_id: child_nid.id, sn_parent_neuron_id: id.id, sn_child_account_id: tla::account_to_tla(neuron_subaccount(to_subaccount)) };
+        tla_log_locals! { sn_amount : split_amount_e8s, sn_child_neuron_id: child_nid.id, sn_parent_neuron_id: id.id, sn_child_account_id: tla::account_to_tla(neuron_subaccount(to_subaccount)) };
         let result: Result<u64, NervousSystemError> = self
             .ledger
             .transfer_funds(
@@ -2509,7 +2523,7 @@ impl Governance {
                 .with_neuron_mut(id, |parent_neuron| {
                     parent_neuron.cached_neuron_stake_e8s = parent_neuron
                         .cached_neuron_stake_e8s
-                        .checked_add(split.amount_e8s)
+                        .checked_add(split_amount_e8s)
                         .expect("Neuron stake overflows");
                 })
                 .expect("Expected the parent neuron to exist");
@@ -2544,7 +2558,7 @@ impl Governance {
             transfer_maturity_e8s,
             transfer_staked_maturity_e8s,
         } = calculate_split_neuron_effect(
-            split.amount_e8s,
+            split_amount_e8s,
             minted_stake_e8s,
             parent_maturity_e8s,
             parent_staked_maturity_e8s,
@@ -4358,6 +4372,10 @@ impl Governance {
                 let result = self.register_known_neuron(known_neuron);
                 self.set_proposal_execution_status(pid, result);
             }
+            Action::DeregisterKnownNeuron(deregister_request) => {
+                let result = deregister_request.execute(&mut self.neuron_store);
+                self.set_proposal_execution_status(pid, result);
+            }
             Action::CreateServiceNervousSystem(ref create_service_nervous_system) => {
                 self.create_service_nervous_system(pid, create_service_nervous_system)
                     .await;
@@ -4695,7 +4713,7 @@ impl Governance {
         // Step 3: React to response from deploy_new_sns (Ok or Err).
 
         // Step 3.1: If the call was not successful, issue refunds (and then, return).
-        if let Err(ref mut err) = &mut deploy_new_sns_response {
+        if let Err(err) = &mut deploy_new_sns_response {
             let refund_result = self.refund_maturity_to_neurons_fund(
                 &proposal_id,
                 initial_neurons_fund_participation_snapshot,
@@ -4938,10 +4956,6 @@ impl Governance {
             }
         }
 
-        if proposal.compute_topic_at_creation() == Topic::Unspecified {
-            Err(format!("Topic not specified. proposal: {:#?}", proposal))?;
-        }
-
         proposal_validation::validate_user_submitted_proposal_fields(&convert_proposal(
             proposal, true,
         ))?;
@@ -4994,6 +5008,9 @@ impl Governance {
             Action::UpdateCanisterSettings(update_settings) => update_settings.validate(),
             Action::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
                 fulfill_subnet_rental_request.validate()
+            }
+            Action::DeregisterKnownNeuron(deregister_known_neuron) => {
+                deregister_known_neuron.validate(&self.neuron_store)
             }
         }?;
 
@@ -5299,11 +5316,20 @@ impl Governance {
         caller: &PrincipalId,
         proposal: &Proposal,
     ) -> Result<ProposalId, GovernanceError> {
-        let topic = proposal.compute_topic_at_creation();
         let now_seconds = self.env.now();
 
         // Validate proposal
         let action = self.validate_proposal(proposal)?;
+
+        // At this point, the topic should be valid because the proposal was just validated, but we
+        // exit on error anyway and check for Topic::Unspecified, just to be safe.
+        let topic = proposal.compute_topic_at_creation()?;
+        if topic == Topic::Unspecified {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "Topic is unspecified. This should never happen.",
+            ));
+        }
 
         // Before actually modifying anything, we first make sure that
         // the neuron is allowed to make this proposal and create the
@@ -7035,7 +7061,7 @@ impl Governance {
     ///
     /// This function is "curried" to alleviate lifetime issues on the
     /// `self` parameter.
-    pub fn voting_period_seconds(&self) -> impl Fn(Topic) -> u64 {
+    pub fn voting_period_seconds(&self) -> impl Fn(Topic) -> u64 + use<> {
         let short = self.heap_data.short_voting_period_seconds;
         let private = self.heap_data.neuron_management_voting_period_seconds;
         let normal = self.heap_data.wait_for_quiet_threshold_seconds;

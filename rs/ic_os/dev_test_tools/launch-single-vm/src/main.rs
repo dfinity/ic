@@ -220,6 +220,7 @@ fn main() {
             malicious_behavior: None,
             query_stats_epoch_length: None,
             bitcoind_addr: None,
+            dogecoind_addr: None,
             jaeger_addr: None,
             socks_proxy: None,
             hostname: None,

@@ -14,9 +14,10 @@ use k256::{
     AffinePoint, Scalar, Secp256k1,
 };
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+use std::sync::LazyLock;
 use zeroize::ZeroizeOnDrop;
 
-pub use candid::Principal as CanisterId;
+pub use ic_principal::Principal as CanisterId;
 
 /// An error indicating that decoding a key failed
 #[derive(Clone, Debug)]
@@ -47,16 +48,15 @@ impl std::fmt::Display for KeyDecodingError {
 
 impl std::error::Error for KeyDecodingError {}
 
-lazy_static::lazy_static! {
+/// See RFC 3279 section 2.3.5
+static ECDSA_OID: LazyLock<simple_asn1::OID> =
+    LazyLock::new(|| simple_asn1::oid!(1, 2, 840, 10045, 2, 1));
 
-    /// See RFC 3279 section 2.3.5
-    static ref ECDSA_OID: simple_asn1::OID = simple_asn1::oid!(1, 2, 840, 10045, 2, 1);
-
-    /// See "SEC 2: Recommended Elliptic Curve Domain Parameters"
-    /// Section A.2.1
-    /// https://www.secg.org/sec2-v2.pdf
-    static ref SECP256K1_OID: simple_asn1::OID = simple_asn1::oid!(1, 3, 132, 0, 10);
-}
+/// See "SEC 2: Recommended Elliptic Curve Domain Parameters"
+/// Section A.2.1
+/// https://www.secg.org/sec2-v2.pdf
+static SECP256K1_OID: LazyLock<simple_asn1::OID> =
+    LazyLock::new(|| simple_asn1::oid!(1, 3, 132, 0, 10));
 
 /// A component of a derivation path
 #[derive(Clone, Debug)]
@@ -571,7 +571,7 @@ impl PrivateKey {
              * situation where k or s of zero is generated. If this occurs, simply retry
              * with a new aux_rand
              */
-            let aux_rand = rng.gen::<[u8; 32]>();
+            let aux_rand = rng.r#gen::<[u8; 32]>();
             if let Some(sig) = self.sign_bip340_with_aux_rand(message, &aux_rand) {
                 return sig;
             }
@@ -991,10 +991,9 @@ impl PublicKey {
         let pt = self.serialize_sec1(true);
 
         // from_bytes takes just the x coordinate encoding:
-        if let Ok(bip340) = k256::schnorr::VerifyingKey::from_bytes(&pt[1..]) {
-            bip340.verify_prehash(message, &signature).is_ok()
-        } else {
-            false
+        match k256::schnorr::VerifyingKey::from_bytes(&pt[1..]) {
+            Ok(bip340) => bip340.verify_prehash(message, &signature).is_ok(),
+            _ => false,
         }
     }
 

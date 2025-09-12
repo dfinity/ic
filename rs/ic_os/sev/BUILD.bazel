@@ -9,11 +9,17 @@ DEPENDENCIES = [
     "@crate_index//:der",
     "@crate_index//:hkdf",
     "@crate_index//:mockall",
+    "@crate_index//:p384",
+    "@crate_index//:rand",
     "@crate_index//:raw-cpuid",
+    "@crate_index//:rcgen",
     "@crate_index//:reqwest",
+    "@crate_index//:rsa",
     "@crate_index//:sev",
     "@crate_index//:sha2",
     "@crate_index//:tempfile",
+    "@crate_index//:tokio",
+    "@crate_index//:x509-cert",
 ]
 
 DEV_DEPENDENCIES = [
@@ -35,9 +41,6 @@ rust_library(
         "fixtures/mock_amd_key_server_response.crt",
     ],
     crate_name = "ic_sev",
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
     deps = DEPENDENCIES,
 )
 
