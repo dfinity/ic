@@ -366,12 +366,14 @@ pub fn setup_and_start_nested_vms(
             info!(logger, "No gateway found, using dummy URL");
             url::Url::parse("http://localhost:8080").unwrap()
         });
-
-    let nns_public_key = std::fs::read_to_string(env.prep_dir("").unwrap().root_public_key_path())
-        .unwrap_or_else(|_| {
+    let nns_public_key = env
+        .prep_dir("")
+        .and_then(|v| std::fs::read_to_string(v.root_public_key_path()).ok())
+        .unwrap_or_else(|| {
             info!(logger, "No NNS public key found, using dummy key");
             "dummy_public_key_for_recovery_test".to_string()
         });
+
     let setupos_url = get_setupos_img_url();
     let setupos_hash = get_setupos_img_sha256();
     let setupos_image_spec = AttachImageSpec::via_url(setupos_url, setupos_hash);
