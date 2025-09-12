@@ -153,6 +153,7 @@ pub async fn start_synching_blocks(
         if !is_initial_sync {
             heartbeat();
         }
+        let mut all_operations_success = true;
         // Verify and fix gaps in the database.
         let result = verify_and_fix_gaps(
             agent.clone(),
@@ -161,11 +162,10 @@ pub async fn start_synching_blocks(
         )
         .await;
         match result {
-            Ok(_) => {
-                current_failure_streak = 0;
-            }
+            Ok(_) => {}
             Err(e) => {
                 error!("Error while verifying and fixing gaps: {}", e);
+                all_operations_success = false;
                 current_failure_streak += 1;
             }
         }
@@ -179,11 +179,11 @@ pub async fn start_synching_blocks(
         .await
         {
             Ok(_) => {
-                current_failure_streak = 0;
                 is_initial_sync = false;
             }
             Err(e) => {
                 error!("Error while syncing blocks: {}", e);
+                all_operations_success = false;
                 current_failure_streak += 1;
             }
         }
@@ -191,13 +191,16 @@ pub async fn start_synching_blocks(
         // Update the account balances. When queried for its status, the ledger will return the
         // highest block index for which the account balances have been processed.
         match storage_client.update_account_balances() {
-            Ok(_) => {
-                current_failure_streak = 0;
-            }
+            Ok(_) => {}
             Err(e) => {
                 error!("Error while updating account balances: {}", e);
+                all_operations_success = false;
                 current_failure_streak += 1;
             }
+        }
+
+        if all_operations_success {
+            current_failure_streak = 0;
         }
 
         match recurrency_mode {
