@@ -116,3 +116,31 @@ pub struct RewardableNode {
     pub node_reward_type: NodeRewardType,
     pub dc_id: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::UnixTsNanos;
+    use chrono::{TimeZone, Utc};
+
+    fn ymdh_to_ts(year: i32, month: u32, day: u32, hour: u32) -> UnixTsNanos {
+        Utc.with_ymd_and_hms(year, month, day, hour, 0, 0)
+            .unwrap()
+            .timestamp_nanos_opt()
+            .unwrap() as UnixTsNanos
+    }
+
+    #[test]
+    fn test_valid_rewarding_period() {
+        let from_day: DayUtc = ymdh_to_ts(2020, 1, 12, 0).into();
+        let to_day = (ymdh_to_ts(2020, 1, 16, 0) - 1).into();
+        let days = from_day.days_until(&to_day).unwrap().len();
+
+        assert_eq!(days, 4);
+
+        let to_day = ymdh_to_ts(2020, 1, 12, 13).into();
+        let days = from_day.days_until(&to_day).unwrap().len();
+
+        assert_eq!(days, 1);
+    }
+}
