@@ -1,7 +1,7 @@
 //! Internet Computer Canister Signature Algorithm (ICCSA) types
 use ic_crypto_tree_hash::MixedHashTree;
-use ic_types::messages::Blob;
 use ic_types::CanisterId;
+use ic_types::messages::Blob;
 use serde::{Deserialize, Serialize};
 
 mod conversions;

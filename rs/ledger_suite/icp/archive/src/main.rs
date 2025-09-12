@@ -1,5 +1,5 @@
 #![allow(deprecated)]
-use candid::{candid_method, Decode};
+use candid::{Decode, candid_method};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::{
     api::{
@@ -16,17 +16,17 @@ use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_metrics_encoder::MetricsEncoder;
 use ic_stable_structures::{
-    cell::Cell as StableCell, log::Log as StableLog, memory_manager::MemoryManager,
-    storable::Bound, DefaultMemoryImpl,
+    DefaultMemoryImpl, cell::Cell as StableCell, log::Log as StableLog,
+    memory_manager::MemoryManager, storable::Bound,
 };
 use ic_stable_structures::{
-    memory_manager::{MemoryId, VirtualMemory},
     Storable,
+    memory_manager::{MemoryId, VirtualMemory},
 };
 use icp_ledger::{
-    from_proto_bytes, to_proto_bytes, Block, BlockRange, BlockRes, CandidBlock, GetBlocksArgs,
-    GetBlocksError, GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult, IterBlocksArgs,
-    IterBlocksRes,
+    Block, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError, GetBlocksRes,
+    GetBlocksResult, GetEncodedBlocksResult, IterBlocksArgs, IterBlocksRes, from_proto_bytes,
+    to_proto_bytes,
 };
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, cell::RefCell};
@@ -52,14 +52,14 @@ impl Storable for ArchiveState {
     fn to_bytes(&self) -> Cow<[u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(self, &mut buf).unwrap_or_else(|err| {
-            ic_cdk::api::trap(format!("{:?}", err));
+            ic_cdk::api::trap(format!("{err:?}"));
         });
         Cow::Owned(buf)
     }
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         ciborium::de::from_reader(&bytes[..]).unwrap_or_else(|err| {
-            ic_cdk::api::trap(format!("{:?}", err));
+            ic_cdk::api::trap(format!("{err:?}"));
         })
     }
 
@@ -105,16 +105,20 @@ fn stable_memory_version() -> u64 {
 }
 
 fn set_stable_memory_version() {
-    assert!(STABLE_MEMORY_VERSION
-        .with(|cell| cell.borrow_mut().set(MEMORY_VERSION_MEM_MGR_INSTALLED))
-        .is_ok());
+    assert!(
+        STABLE_MEMORY_VERSION
+            .with(|cell| cell.borrow_mut().set(MEMORY_VERSION_MEM_MGR_INSTALLED))
+            .is_ok()
+    );
 }
 
 fn set_archive_state(archive_state: ArchiveState) {
     ARCHIVE_STATE_CACHE.with(|c| *c.borrow_mut() = Some(archive_state));
-    assert!(ARCHIVE_STATE
-        .with(|cell| cell.borrow_mut().set(archive_state))
-        .is_ok());
+    assert!(
+        ARCHIVE_STATE
+            .with(|cell| cell.borrow_mut().set(archive_state))
+            .is_ok()
+    );
 }
 
 fn get_archive_state() -> ArchiveState {
@@ -206,10 +210,7 @@ fn blocks_len() -> u64 {
 fn append_block(block: &EncodedBlock) {
     BLOCKS.with_borrow_mut(|blocks| match blocks.append(&block.0) {
         Ok(_) => {}
-        Err(e) => ic_cdk::trap(format!(
-            "Could not append block to stable block log: {:?}",
-            e
-        )),
+        Err(e) => ic_cdk::trap(format!("Could not append block to stable block log: {e:?}")),
     });
 }
 
@@ -223,8 +224,7 @@ fn remaining_capacity() -> u64 {
         .checked_sub(total_block_size())
         .unwrap();
     print(format!(
-        "[archive node] remaining_capacity: {} bytes",
-        remaining_capacity
+        "[archive node] remaining_capacity: {remaining_capacity} bytes"
     ));
     remaining_capacity
 }
@@ -237,15 +237,12 @@ fn init(
     match max_memory_size_bytes {
         None => {
             print(format!(
-                "[archive node] init(): using default maximum memory size: {} bytes and height offset {}",
-                DEFAULT_MAX_MEMORY_SIZE,
-                block_height_offset
+                "[archive node] init(): using default maximum memory size: {DEFAULT_MAX_MEMORY_SIZE} bytes and height offset {block_height_offset}"
             ));
         }
         Some(max_memory_size_bytes) => {
             print(format!(
-                "[archive node] init(): using maximum memory size: {} bytes and height offset {}",
-                max_memory_size_bytes, block_height_offset
+                "[archive node] init(): using maximum memory size: {max_memory_size_bytes} bytes and height offset {block_height_offset}"
             ));
         }
     }
@@ -343,8 +340,13 @@ fn get_blocks_() {
         let local_blocks_range = from_offset..from_offset + blocks_len();
         let requested_range = start..start + length;
         if !range_utils::is_subrange(&requested_range, &local_blocks_range) {
-            let res = GetBlocksRes(Err(format!("Requested blocks outside the range stored in the archive node. Requested [{} .. {}]. Available [{} .. {}].",
-                requested_range.start, requested_range.end, local_blocks_range.start, local_blocks_range.end)));
+            let res = GetBlocksRes(Err(format!(
+                "Requested blocks outside the range stored in the archive node. Requested [{} .. {}]. Available [{} .. {}].",
+                requested_range.start,
+                requested_range.end,
+                local_blocks_range.start,
+                local_blocks_range.end
+            )));
             let res_proto = to_proto_bytes(res).expect("failed to encode get_blocks_pb response");
             reply_raw(&res_proto);
             return;
@@ -394,8 +396,7 @@ fn post_upgrade(upgrade_arg: Option<ArchiveUpgradeArgument>) {
     assert_eq!(stable_memory_version(), MEMORY_VERSION_MEM_MGR_INSTALLED);
     if let Some(max_memory_size_bytes) = arg_max_memory_size_bytes {
         print(format!(
-            "Changing the max_memory_size_bytes to {}",
-            max_memory_size_bytes
+            "Changing the max_memory_size_bytes to {max_memory_size_bytes}"
         ));
         set_max_memory_size_bytes(max_memory_size_bytes);
     }
@@ -462,7 +463,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
-                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
                     .build()
             }
         }

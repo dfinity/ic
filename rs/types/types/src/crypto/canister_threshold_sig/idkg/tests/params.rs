@@ -1,7 +1,7 @@
 use super::super::*;
-use crate::crypto::AlgorithmId;
 use crate::NodeId;
 use crate::RegistryVersion;
+use crate::crypto::AlgorithmId;
 use assert_matches::assert_matches;
 use maplit::btreeset;
 use rand::{CryptoRng, Rng};

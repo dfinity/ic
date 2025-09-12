@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use k8s_openapi::api::core::v1::{
     Container, PersistentVolumeClaimVolumeSource, Pod, PodSpec, Volume, VolumeMount,
 };
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
-use kube::api::{DeleteParams, ListParams, ObjectList, ObjectMeta, PostParams};
 use kube::Api;
+use kube::api::{DeleteParams, ListParams, ObjectList, ObjectMeta, PostParams};
 use tracing::*;
 
 pub async fn create_pod(
@@ -98,7 +98,7 @@ pub async fn get_pods(
     let label_selector = labels
         .map(|ls| {
             ls.iter()
-                .map(|(k, v)| format!("{}={}", k, v))
+                .map(|(k, v)| format!("{k}={v}"))
                 .collect::<Vec<String>>()
                 .join(",")
         })

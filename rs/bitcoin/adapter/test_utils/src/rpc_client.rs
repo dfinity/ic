@@ -1,14 +1,14 @@
 use bitcoin::{
+    Amount, Block as BtcBlock, BlockHash, Network as BtcNetwork, Transaction, Txid,
     address::{Address as BtcAddress, NetworkUnchecked, ParseError as BtcAddressParseError},
     amount::ParseAmountError,
     block::Header,
-    consensus::{encode, Decodable},
+    consensus::{Decodable, encode},
     dogecoin::{
-        address::ParseError as DogeAddressParseError, Address as DogeAddress, Block as DogeBlock,
-        Network as DogeNetwork,
+        Address as DogeAddress, Block as DogeBlock, Network as DogeNetwork,
+        address::ParseError as DogeAddressParseError,
     },
     hex::DisplayHex,
-    Amount, Block as BtcBlock, BlockHash, Network as BtcNetwork, Transaction, Txid,
 };
 use ic_config::adapters::AdaptersConfig;
 use std::collections::HashMap;

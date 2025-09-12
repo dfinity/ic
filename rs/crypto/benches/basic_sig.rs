@@ -1,5 +1,5 @@
 use criterion::measurement::Measurement;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
+use criterion::{BenchmarkGroup, Criterion, criterion_group, criterion_main};
 
 use ic_crypto_interfaces_sig_verification::BasicSigVerifierByPublicKey;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
@@ -11,7 +11,7 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::{
-    AlgorithmId, BasicSig, BasicSigOf, KeyPurpose, SignableMock, UserPublicKey, DOMAIN_IC_REQUEST,
+    AlgorithmId, BasicSig, BasicSigOf, DOMAIN_IC_REQUEST, KeyPurpose, SignableMock, UserPublicKey,
 };
 use ic_types::{NodeId, RegistryVersion};
 use ic_types_test_utils::ids::{NODE_1, NODE_2};
@@ -110,9 +110,11 @@ fn crypto_ed25519_basicsig_verify<M: Measurement, R: Rng + CryptoRng>(
 
     group.bench_function("verify", |bench| {
         bench.iter(|| {
-            assert!(temp_crypto
-                .verify_basic_sig(&signature, &msg, NODE_2, REGISTRY_VERSION,)
-                .is_ok());
+            assert!(
+                temp_crypto
+                    .verify_basic_sig(&signature, &msg, NODE_2, REGISTRY_VERSION,)
+                    .is_ok()
+            );
         })
     });
 }
@@ -132,9 +134,11 @@ fn crypto_ed25519_basicsig_sign<M: Measurement, R: Rng + CryptoRng>(
 
     group.bench_function("sign", |bench| {
         bench.iter(|| {
-            assert!(temp_crypto
-                .sign_basic(&message, NODE_1, REGISTRY_VERSION)
-                .is_ok());
+            assert!(
+                temp_crypto
+                    .sign_basic(&message, NODE_1, REGISTRY_VERSION)
+                    .is_ok()
+            );
         })
     });
 }
@@ -153,9 +157,11 @@ fn crypto_basicsig_verifybypubkey<M: Measurement, R: Rng + CryptoRng>(
 
     group.bench_function("verifybypubkey", |bench| {
         bench.iter(|| {
-            assert!(temp_crypto
-                .verify_basic_sig_by_public_key(&signature, &msg, &public_key,)
-                .is_ok());
+            assert!(
+                temp_crypto
+                    .verify_basic_sig_by_public_key(&signature, &msg, &public_key,)
+                    .is_ok()
+            );
         })
     });
 }

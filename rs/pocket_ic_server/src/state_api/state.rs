@@ -9,52 +9,52 @@ use crate::pocket_ic::{
 use crate::{InstanceId, OpId, Operation};
 use async_trait::async_trait;
 use axum::{
+    Router,
     extract::{Request as AxumRequest, State},
     response::{IntoResponse, Response},
     routing::get,
-    Router,
 };
-use axum_server::tls_rustls::RustlsConfig;
 use axum_server::Handle;
+use axum_server::tls_rustls::RustlsConfig;
 use base64;
 use clap::Parser;
 use fqdn::fqdn;
 use futures::future::Shared;
 use http::{
+    Method, StatusCode,
     header::{
         ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, COOKIE, DNT,
         IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
     },
-    Method, StatusCode,
 };
 use ic_agent::agent::route_provider::RoundRobinRouteProvider;
 use ic_gateway::ic_bn_lib::http::{
-    headers::{X_IC_CANISTER_ID, X_REQUESTED_WITH, X_REQUEST_ID},
-    proxy::proxy,
     Client, ConnInfo,
+    headers::{X_IC_CANISTER_ID, X_REQUEST_ID, X_REQUESTED_WITH},
+    proxy::proxy,
 };
-use ic_gateway::{setup_router, Cli};
-use ic_types::{canister_http::CanisterHttpRequestId, CanisterId, NodeId, PrincipalId, SubnetId};
+use ic_gateway::{Cli, setup_router};
+use ic_types::{CanisterId, NodeId, PrincipalId, SubnetId, canister_http::CanisterHttpRequestId};
 use itertools::Itertools;
+use pocket_ic::RejectResponse;
 use pocket_ic::common::rest::{
     AutoProgressConfig, CanisterHttpRequest, HttpGatewayBackend, HttpGatewayConfig,
     HttpGatewayDetails, HttpGatewayInfo, InstanceHttpGatewayConfig, Topology,
 };
-use pocket_ic::RejectResponse;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     path::PathBuf,
-    sync::atomic::AtomicU64,
     sync::Arc,
+    sync::atomic::AtomicU64,
     time::{Duration, SystemTime},
 };
 use tokio::{
-    sync::mpsc::error::TryRecvError,
     sync::mpsc::Receiver,
-    sync::{mpsc, Mutex, RwLock},
-    task::{spawn, spawn_blocking, JoinHandle, JoinSet},
+    sync::mpsc::error::TryRecvError,
+    sync::{Mutex, RwLock, mpsc},
+    task::{JoinHandle, JoinSet, spawn, spawn_blocking},
     time::{self, sleep},
 };
 use tower::ServiceExt;
@@ -100,7 +100,7 @@ pub struct InvalidSize;
 impl std::fmt::Debug for StateLabel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "StateLabel(")?;
-        self.0.iter().try_for_each(|b| write!(f, "{:02X}", b))?;
+        self.0.iter().try_for_each(|b| write!(f, "{b:02X}"))?;
         write!(f, ")")
     }
 }
@@ -255,40 +255,40 @@ impl std::fmt::Debug for OpOut {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             OpOut::NoOutput => write!(f, "NoOutput"),
-            OpOut::Time(x) => write!(f, "Time({})", x),
-            OpOut::Topology(t) => write!(f, "Topology({:?})", t),
-            OpOut::CanisterId(cid) => write!(f, "CanisterId({})", cid),
+            OpOut::Time(x) => write!(f, "Time({x})"),
+            OpOut::Topology(t) => write!(f, "Topology({t:?})"),
+            OpOut::CanisterId(cid) => write!(f, "CanisterId({cid})"),
             OpOut::Controllers(controllers) => write!(
                 f,
                 "Controllers({})",
                 controllers.iter().map(|c| c.to_string()).join(",")
             ),
-            OpOut::Cycles(x) => write!(f, "Cycles({})", x),
-            OpOut::CanisterResult(Ok(x)) => write!(f, "CanisterResult: Ok({:?})", x),
-            OpOut::CanisterResult(Err(x)) => write!(f, "CanisterResult: Err({})", x),
+            OpOut::Cycles(x) => write!(f, "Cycles({x})"),
+            OpOut::CanisterResult(Ok(x)) => write!(f, "CanisterResult: Ok({x:?})"),
+            OpOut::CanisterResult(Err(x)) => write!(f, "CanisterResult: Err({x})"),
             OpOut::Error(PocketIcError::CanisterNotFound(cid)) => {
-                write!(f, "CanisterNotFound({})", cid)
+                write!(f, "CanisterNotFound({cid})")
             }
             OpOut::Error(PocketIcError::CanisterIsEmpty(cid)) => {
-                write!(f, "CanisterIsEmpty({})", cid)
+                write!(f, "CanisterIsEmpty({cid})")
             }
             OpOut::Error(PocketIcError::BadIngressMessage(msg)) => {
-                write!(f, "BadIngressMessage({})", msg)
+                write!(f, "BadIngressMessage({msg})")
             }
             OpOut::Error(PocketIcError::SubnetNotFound(sid)) => {
-                write!(f, "SubnetNotFound({})", sid)
+                write!(f, "SubnetNotFound({sid})")
             }
             OpOut::Error(PocketIcError::BlockmakerNotFound(nid)) => {
-                write!(f, "BlockmakerNotFound({})", nid)
+                write!(f, "BlockmakerNotFound({nid})")
             }
             OpOut::Error(PocketIcError::BlockmakerContainedInFailed(nid)) => {
-                write!(f, "BlockmakerContainedInFailed({})", nid)
+                write!(f, "BlockmakerContainedInFailed({nid})")
             }
             OpOut::Error(PocketIcError::CanisterRequestRoutingError(msg)) => {
-                write!(f, "CanisterRequestRoutingError({:?})", msg)
+                write!(f, "CanisterRequestRoutingError({msg:?})")
             }
             OpOut::Error(PocketIcError::SubnetRequestRoutingError(msg)) => {
-                write!(f, "SubnetRequestRoutingError({:?})", msg)
+                write!(f, "SubnetRequestRoutingError({msg:?})")
             }
             OpOut::Error(PocketIcError::InvalidCanisterHttpRequestId((
                 subnet_id,
@@ -296,29 +296,27 @@ impl std::fmt::Debug for OpOut {
             ))) => {
                 write!(
                     f,
-                    "InvalidCanisterHttpRequestId({},{:?})",
-                    subnet_id, canister_http_request_id
+                    "InvalidCanisterHttpRequestId({subnet_id},{canister_http_request_id:?})"
                 )
             }
             OpOut::Error(PocketIcError::InvalidMockCanisterHttpResponses((actual, expected))) => {
                 write!(
                     f,
-                    "InvalidMockCanisterHttpResponses(actual={},expected={})",
-                    actual, expected
+                    "InvalidMockCanisterHttpResponses(actual={actual},expected={expected})"
                 )
             }
             OpOut::Error(PocketIcError::InvalidRejectCode(code)) => {
-                write!(f, "InvalidRejectCode({})", code)
+                write!(f, "InvalidRejectCode({code})")
             }
             OpOut::Error(PocketIcError::SettingTimeIntoPast((current, set))) => {
-                write!(f, "SettingTimeIntoPast(current={},set={})", current, set)
+                write!(f, "SettingTimeIntoPast(current={current},set={set})")
             }
             OpOut::Error(PocketIcError::Forbidden(msg)) => {
-                write!(f, "Forbidden({})", msg)
+                write!(f, "Forbidden({msg})")
             }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
             OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
-            OpOut::MaybeSubnetId(Some(subnet_id)) => write!(f, "SubnetId({})", subnet_id),
+            OpOut::MaybeSubnetId(Some(subnet_id)) => write!(f, "SubnetId({subnet_id})"),
             OpOut::MaybeSubnetId(None) => write!(f, "NoSubnetId"),
             OpOut::RawResponse(fut) => {
                 write!(
@@ -341,7 +339,7 @@ impl std::fmt::Debug for OpOut {
                 )
             }
             OpOut::CanisterHttp(canister_http_reqeusts) => {
-                write!(f, "CanisterHttp({:?})", canister_http_reqeusts)
+                write!(f, "CanisterHttp({canister_http_reqeusts:?})")
             }
         }
     }
@@ -511,7 +509,7 @@ impl ApiState {
                         if received_stop_signal(rx) {
                             break None;
                         }
-                    }
+                    };
                 }
                 UpdateReply::Busy { .. } => {}
                 UpdateReply::Output(op_out) => break Some(op_out),
@@ -652,9 +650,9 @@ impl ApiState {
     ) -> Result<std::net::TcpListener, String> {
         let ip_addr = ip_addr.clone().unwrap_or("127.0.0.1".to_string());
         let port = port.unwrap_or_default();
-        let addr = format!("{}:{}", ip_addr, port);
+        let addr = format!("{ip_addr}:{port}");
         std::net::TcpListener::bind(&addr)
-            .map_err(|e| format!("Failed to bind to address {}: {}", addr, e))
+            .map_err(|e| format!("Failed to bind to address {addr}: {e}"))
     }
 
     pub(crate) async fn create_http_gateway(
@@ -687,7 +685,7 @@ impl ApiState {
                     PathBuf::from(https_config.key_path.clone()),
                 )
                 .await
-                .map_err(|e| format!("TLS config could not be created: {}", e))?,
+                .map_err(|e| format!("TLS config could not be created: {e}"))?,
             )
         } else {
             None
@@ -697,10 +695,7 @@ impl ApiState {
         let replica_url = match http_gateway_config.forward_to {
             HttpGatewayBackend::Replica(ref replica_url) => replica_url.clone(),
             HttpGatewayBackend::PocketIcInstance(instance_id) => {
-                format!(
-                    "http://localhost:{}/instances/{}/",
-                    pocket_ic_server_port, instance_id
-                )
+                format!("http://localhost:{pocket_ic_server_port}/instances/{instance_id}/")
             }
         };
         let agent = ic_agent::Agent::builder()
@@ -709,8 +704,8 @@ impl ApiState {
             .unwrap();
         time::timeout(DEFAULT_SYNC_WAIT_DURATION, agent.fetch_root_key())
             .await
-            .map_err(|_| format!("{} (timeout)", UPSTREAM_ERROR))?
-            .map_err(|e| format!("{} ({})", UPSTREAM_ERROR, e))?;
+            .map_err(|_| format!("{UPSTREAM_ERROR} (timeout)"))?
+            .map_err(|e| format!("{UPSTREAM_ERROR} ({e})"))?;
 
         let handle = Handle::new();
         let axum_handle = handle.clone();
@@ -946,7 +941,7 @@ impl ApiState {
             let instance = &*instance.lock().await;
             match &instance.state {
                 InstanceState::Busy { state_label, op_id } => {
-                    res.push(format!("Busy({:?}, {:?})", state_label, op_id))
+                    res.push(format!("Busy({state_label:?}, {op_id:?})"))
                 }
                 InstanceState::Available(_) => res.push("Available".to_string()),
                 InstanceState::Deleted => res.push("Deleted".to_string()),
@@ -1014,8 +1009,7 @@ impl ApiState {
         let op_id = op.id().0;
         trace!(
             "update_with_timeout::start instance_id={} op_id={}",
-            instance_id,
-            op_id,
+            instance_id, op_id,
         );
         let instances_cloned = instances.clone();
         let instances_locked = instances_cloned.read().await;
@@ -1059,9 +1053,7 @@ impl ApiState {
                         move || {
                             trace!(
                                 "bg_task::start instance_id={} state_label={:?} op_id={}",
-                                instance_id,
-                                old_state_label,
-                                op_id.0,
+                                instance_id, old_state_label, op_id.0,
                             );
                             let result = op.compute(&mut pocket_ic);
                             pocket_ic.bump_state_label();
@@ -1076,7 +1068,9 @@ impl ApiState {
                             drop(graph_guard);
                             let mut instance = instances[instance_id].blocking_lock();
                             if let InstanceState::Deleted = &instance.state {
-                                error!("The instance is deleted immediately after an operation. This is a bug!");
+                                error!(
+                                    "The instance is deleted immediately after an operation. This is a bug!"
+                                );
                                 std::mem::drop(pocket_ic);
                             } else {
                                 instance.state = InstanceState::Available(pocket_ic);
@@ -1118,8 +1112,7 @@ impl ApiState {
             if let Ok(res) = time::timeout(sync_wait_time, bg_handle).await {
                 trace!(
                     "update_with_timeout::synchronous instance_id={} op_id={}",
-                    instance_id,
-                    op_id,
+                    instance_id, op_id,
                 );
                 return Ok(UpdateReply::Output(res.unwrap()));
             }
@@ -1127,16 +1120,14 @@ impl ApiState {
             let res = bg_handle.await;
             trace!(
                 "update_with_timeout::synchronous instance_id={} op_id={}",
-                instance_id,
-                op_id,
+                instance_id, op_id,
             );
             return Ok(UpdateReply::Output(res.unwrap()));
         }
 
         trace!(
             "update_with_timeout::timeout instance_id={} op_id={}",
-            instance_id,
-            op_id,
+            instance_id, op_id,
         );
         Ok(started_outcome)
     }

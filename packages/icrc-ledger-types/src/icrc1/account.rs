@@ -5,8 +5,8 @@ use std::{
 };
 
 use base32::Alphabet;
-use candid::{types::principal::PrincipalError, CandidType, Deserialize, Principal};
-use ic_stable_structures::{storable::Bound, Storable};
+use candid::{CandidType, Deserialize, Principal, types::principal::PrincipalError};
+use ic_stable_structures::{Storable, storable::Bound};
 use minicbor::{Decode, Encode};
 use serde::Serialize;
 use std::borrow::Cow;
@@ -114,10 +114,10 @@ impl Display for ICRC1TextReprError {
                 write!(f, "default subaccount should be omitted")
             }
             ICRC1TextReprError::InvalidChecksum { expected } => {
-                write!(f, "invalid checksum (expected: {})", expected)
+                write!(f, "invalid checksum (expected: {expected})")
             }
-            ICRC1TextReprError::InvalidPrincipal(e) => write!(f, "invalid principal: {}", e),
-            ICRC1TextReprError::InvalidSubaccount(e) => write!(f, "invalid subaccount: {}", e),
+            ICRC1TextReprError::InvalidPrincipal(e) => write!(f, "invalid principal: {e}"),
+            ICRC1TextReprError::InvalidSubaccount(e) => write!(f, "invalid subaccount: {e}"),
             ICRC1TextReprError::LeadingZeroesInSubaccount => {
                 write!(f, "subaccount should not have leading zeroes")
             }
@@ -138,7 +138,7 @@ impl FromStr for Account {
                     // The checksum is 7 characters (crc32 encoded via base32) while principal
                     // groups are 5 characters
                     Some((_, checksum)) if checksum.len() != 7 => {
-                        return Err(Self::Err::MissingChecksum)
+                        return Err(Self::Err::MissingChecksum);
                     }
                     Some(principal_and_checksum) => principal_and_checksum,
                     None => return Err(Self::Err::MissingChecksum),
@@ -147,7 +147,7 @@ impl FromStr for Account {
                     return Err(Self::Err::LeadingZeroesInSubaccount);
                 }
                 let owner = Principal::from_str(principal).map_err(Self::Err::InvalidPrincipal)?;
-                let subaccount = hex::decode(format!("{:0>64}", subaccount)).map_err(|e| {
+                let subaccount = hex::decode(format!("{subaccount:0>64}")).map_err(|e| {
                     Self::Err::InvalidSubaccount(format!("subaccount is not hex-encoded: {e}"))
                 })?;
                 let subaccount: Subaccount = subaccount.try_into().map_err(|_| {
@@ -220,7 +220,7 @@ mod tests {
     use candid::Principal;
 
     use crate::icrc1::account::{
-        principal_to_subaccount, subaccount_to_principal, Account, ICRC1TextReprError,
+        Account, ICRC1TextReprError, principal_to_subaccount, subaccount_to_principal,
     };
 
     pub fn principal_strategy() -> impl Strategy<Value = Principal> {
@@ -274,7 +274,10 @@ mod tests {
                 .unwrap(),
         );
         let account = Account { owner, subaccount };
-        assert_eq!(account.to_string(), "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae-dfxgiyy.102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20");
+        assert_eq!(
+            account.to_string(),
+            "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae-dfxgiyy.102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+        );
     }
 
     #[test]

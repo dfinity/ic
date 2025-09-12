@@ -7,7 +7,7 @@ use crate::{execution_environment::SUBNET_HEAP_DELTA_CAPACITY, flag_status::Flag
 use ic_base_types::NumBytes;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    consensus::idkg::STORE_PRE_SIGNATURES_IN_STATE, Cycles, ExecutionRound, NumInstructions,
+    Cycles, ExecutionRound, NumInstructions, consensus::idkg::STORE_PRE_SIGNATURES_IN_STATE,
 };
 use serde::{Deserialize, Serialize};
 

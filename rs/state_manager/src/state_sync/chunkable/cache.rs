@@ -116,9 +116,11 @@ impl StateSyncCache {
             }
         }
 
-        debug_assert!(missing_chunks
-            .iter()
-            .all(|i| *i + FILE_CHUNK_ID_OFFSET < FILE_GROUP_CHUNK_ID_OFFSET as usize));
+        debug_assert!(
+            missing_chunks
+                .iter()
+                .all(|i| *i + FILE_CHUNK_ID_OFFSET < FILE_GROUP_CHUNK_ID_OFFSET as usize)
+        );
 
         // We rename the folder to decouple the cache from active state syncs a bit.
         // Otherwise we'd have to assume that there won't be an active state sync at

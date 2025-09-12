@@ -25,7 +25,7 @@ impl Request {
 
         let Self { id, operation } = self;
 
-        let key = format!("daniel_wong_{}", id).bytes().collect::<Vec<u8>>();
+        let key = format!("daniel_wong_{id}").bytes().collect::<Vec<u8>>();
 
         match operation {
             UpsertSmall => upsert(key, b"small value"),

@@ -2,10 +2,10 @@ use super::Step;
 
 use anyhow::bail;
 use ic_agent::{
-    agent::http_transport::reqwest_transport::reqwest::{redirect::Policy, Client, ClientBuilder},
+    Agent,
+    agent::http_transport::reqwest_transport::reqwest::{Client, ClientBuilder, redirect::Policy},
     export::Principal,
     identity::AnonymousIdentity,
-    Agent,
 };
 use ic_boundary_nodes_system_test_utils::constants::COUNTER_CANISTER_WAT;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
@@ -16,7 +16,7 @@ use ic_system_test_driver::{
     retry_with_msg_async,
 };
 use ic_utils::interfaces::ManagementCanister;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::{net::SocketAddr, time::Duration};
 
 const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -123,14 +123,14 @@ async fn install_counter_canister(
         .with_effective_canister_id(effective_canister_id)
         .call_and_wait()
         .await
-        .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))
+        .map_err(|err| format!("Couldn't create canister with provisional API: {err}"))
         .unwrap();
     let canister_code = wat::parse_str(COUNTER_CANISTER_WAT).unwrap();
     let install_code = mgr.install_code(&canister_id, canister_code.as_slice());
     install_code
         .call_and_wait()
         .await
-        .map_err(|err| format!("Couldn't install canister: {}", err))
+        .map_err(|err| format!("Couldn't install canister: {err}"))
         .unwrap();
 
     Ok(canister_id)

@@ -7,7 +7,7 @@ use ic_btc_adapter_test_utils::{
 use ic_btc_interface::{Config, Network};
 use ic_config::execution_environment::BITCOIN_TESTNET_CANISTER_ID;
 use ic_nns_constants::ROOT_CANISTER_ID;
-use pocket_ic::{update_candid, PocketIc, PocketIcBuilder};
+use pocket_ic::{PocketIc, PocketIcBuilder, update_candid};
 use std::str::FromStr;
 use std::time::SystemTime;
 
@@ -126,11 +126,11 @@ fn bitcoin_integration_test() {
             Ok(_) => break,
             Err(RpcError::JsonRpc(err)) => {
                 if start.elapsed() > std::time::Duration::from_secs(30) {
-                    panic!("Timed out when waiting for bitcoind; last error: {}", err);
+                    panic!("Timed out when waiting for bitcoind; last error: {err}");
                 }
                 std::thread::sleep(std::time::Duration::from_millis(100));
             }
-            Err(err) => panic!("Unexpected error when talking to bitcoind: {:?}", err),
+            Err(err) => panic!("Unexpected error when talking to bitcoind: {err:?}"),
         }
     }
 
