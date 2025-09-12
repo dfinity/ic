@@ -1,6 +1,6 @@
 use crate::api_conversion::into_rewards_calculation_results;
 use crate::metrics::MetricsManager;
-use crate::pb::v1::RewardableNodesKey;
+use crate::pb::v1::{RewardableNodesKey, RewardableNodesValue};
 use crate::registry_querier::RegistryQuerier;
 use crate::storage::{REWARDABLE_NODES_CACHE, VM};
 use crate::KeyRange;
@@ -25,6 +25,7 @@ use ic_registry_keys::{
     DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
 };
 use ic_registry_node_provider_rewards::{calculate_rewards_v0, RewardsPerNodeProvider};
+use ic_types::registry::RegistryClientError;
 use ic_types::{RegistryVersion, Time};
 use rewards_calculation::performance_based_algorithm::results::RewardsCalculatorResults;
 use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
@@ -130,17 +131,6 @@ impl NodeRewardsCanister {
         });
     }
 
-    fn validate_reward_period(from_day: &DayUtc, to_day: &DayUtc) -> Result<(), String> {
-        let today: DayUtc = current_time().as_nanos_since_unix_epoch().into();
-        if from_day > to_day {
-            return Err("from_day must be before to_day".to_string());
-        }
-        if to_day >= &today {
-            return Err("to_day_timestamp_nanos must be earlier than today".to_string());
-        }
-        Ok(())
-    }
-
     fn get_cached_rewardable_nodes_per_provider(
         &self,
         version: RegistryVersion,
@@ -175,6 +165,54 @@ impl NodeRewardsCanister {
                 })
                 .collect()
         })
+    }
+
+    pub fn backfill_rewardable_nodes(
+        canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
+        day_utc: &DayUtc,
+    ) -> Result<(), RegistryClientError> {
+        let registry_client = canister.with_borrow(|canister| canister.get_registry_client());
+        let registry_querier = RegistryQuerier::new(registry_client.clone());
+        let registry_version = registry_querier
+            .version_for_timestamp(day_utc.unix_ts_at_day_end_nanoseconds())
+            .unwrap();
+        let cached_rewardable_nodes = canister.with_borrow(|canister| {
+            canister.get_cached_rewardable_nodes_per_provider(registry_version)
+        });
+        if cached_rewardable_nodes.is_empty() {
+            let rewardable_nodes = registry_querier.get_rewardable_nodes_per_provider(day_utc)?;
+
+            for (provider_id, rewardable_nodes_daily) in rewardable_nodes {
+                REWARDABLE_NODES_CACHE.with_borrow_mut(|rewardable_nodes_cache| {
+                    let key = RewardableNodesKey {
+                        registry_version: registry_version.get(),
+                        provider_id: Some(provider_id),
+                    };
+                    let value = RewardableNodesValue {
+                        rewardable_nodes: rewardable_nodes_daily
+                            .into_iter()
+                            .map(|node| node.into())
+                            .collect(),
+                    };
+                    rewardable_nodes_cache.insert(key, value);
+                });
+            }
+            ic_cdk::println!("Backfilled rewardable nodes for day {}", day_utc);
+        } else {
+            ic_cdk::println!("Rewardable nodes already backfilled for day {}", day_utc);
+        }
+        Ok(())
+    }
+
+    fn validate_reward_period(from_day: &DayUtc, to_day: &DayUtc) -> Result<(), String> {
+        let today: DayUtc = current_time().as_nanos_since_unix_epoch().into();
+        if from_day > to_day {
+            return Err("from_day must be before to_day".to_string());
+        }
+        if to_day >= &today {
+            return Err("to_day_timestamp_nanos must be earlier than today".to_string());
+        }
+        Ok(())
     }
 
     fn calculate_rewards(
