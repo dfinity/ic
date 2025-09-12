@@ -19,6 +19,7 @@ inputs:
 outputs:
   output:
     description: "JSON object containing all generated UUIDs"
+    value: ${{ steps.gen-uuids.outputs.output }}
 
 runs:
   using: "composite"
