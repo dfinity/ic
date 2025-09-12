@@ -200,7 +200,7 @@ mod get_master_public_key_from_transcript {
             registry_version: REG_V1,
             transcript_type,
             algorithm_id,
-            internal_transcript_raw: Arc::new(internal_transcript_raw),
+            internal_transcript_raw,
         }
     }
 

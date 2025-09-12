@@ -93,7 +93,7 @@ pub fn create_transcript<C: CspSigner>(
         verified_dealings: Arc::new(signed_dealings_by_index),
         transcript_type,
         algorithm_id: params.algorithm_id(),
-        internal_transcript_raw: Arc::new(internal_transcript_raw),
+        internal_transcript_raw,
     })
 }
 

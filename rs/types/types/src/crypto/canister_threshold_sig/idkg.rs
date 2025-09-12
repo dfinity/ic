@@ -725,7 +725,8 @@ pub struct IDkgTranscript {
     pub verified_dealings: Arc<BTreeMap<NodeIndex, BatchSignedIDkgDealing>>,
     pub transcript_type: IDkgTranscriptType,
     pub algorithm_id: AlgorithmId,
-    pub internal_transcript_raw: Arc<Vec<u8>>,
+    #[serde(with = "serde_bytes")]
+    pub internal_transcript_raw: Vec<u8>,
 }
 
 impl AsRef<IDkgReceivers> for IDkgTranscript {
@@ -967,7 +968,7 @@ impl IDkgTranscript {
     /// Returns a copy of the raw internal transcript.
     #[inline]
     pub fn transcript_to_bytes(&self) -> Vec<u8> {
-        self.internal_transcript_raw.to_vec()
+        self.internal_transcript_raw.clone()
     }
 }
 
@@ -987,7 +988,7 @@ impl Debug for IDkgTranscript {
         write!(
             f,
             ", internal_transcript_raw: 0x{}",
-            hex::encode(self.internal_transcript_raw.as_slice())
+            hex::encode(&self.internal_transcript_raw)
         )?;
         write!(f, " }}")?;
         Ok(())
@@ -1304,7 +1305,7 @@ fn should_fail_deserializing_invalid_initial_idkg_dealings() {
         verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random),
         algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-        internal_transcript_raw: Arc::new(vec![]),
+        internal_transcript_raw: vec![],
     };
 
     let dummy_transcript_masked = {

@@ -377,7 +377,7 @@ impl IDkgProtocol for CryptoReturningOk {
             verified_dealings: Arc::new(dealings_by_index),
             transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
             algorithm_id: AlgorithmId::Placeholder,
-            internal_transcript_raw: Arc::new(vec![]),
+            internal_transcript_raw: vec![],
         })
     }
 

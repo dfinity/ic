@@ -253,7 +253,7 @@ fn valid_transcript_and_params<R: Rng + CryptoRng>(
         registry_version,
         transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
         algorithm_id,
-        internal_transcript_raw: Arc::new(dummy_internal_transcript_raw()),
+        internal_transcript_raw: dummy_internal_transcript_raw(),
     };
 
     let params = IDkgTranscriptParams::new(
@@ -303,7 +303,7 @@ fn dummy_transcript() -> IDkgTranscript {
         registry_version: dummy_registry_version(),
         transcript_type: dummy_transcript_type(),
         algorithm_id: dummy_algorithm_id(),
-        internal_transcript_raw: Arc::new(dummy_internal_transcript_raw()),
+        internal_transcript_raw: dummy_internal_transcript_raw(),
     }
 }
 

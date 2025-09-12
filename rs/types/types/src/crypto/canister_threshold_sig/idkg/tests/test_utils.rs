@@ -72,6 +72,6 @@ pub fn mock_transcript<R: Rng + CryptoRng>(
         verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type,
         algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-        internal_transcript_raw: Arc::new(vec![]),
+        internal_transcript_raw: vec![],
     }
 }

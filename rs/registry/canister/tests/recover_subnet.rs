@@ -882,7 +882,7 @@ fn dummy_initial_idkg_dealing_for_tests<R: Rng + CryptoRng>(
             verified_dealings: Arc::new(BTreeMap::new()),
             transcript_type,
             algorithm_id: alg,
-            internal_transcript_raw: Arc::new(vec![]),
+            internal_transcript_raw: vec![],
         }
     };
     let dealers = set_of_nodes(&[35, 36, 38]);

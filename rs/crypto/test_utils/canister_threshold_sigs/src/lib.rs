@@ -92,7 +92,7 @@ pub fn mock_transcript<R: RngCore + CryptoRng>(
         verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type,
         algorithm_id: alg,
-        internal_transcript_raw: Arc::new(vec![]),
+        internal_transcript_raw: vec![],
     }
 }
 
@@ -2553,7 +2553,7 @@ impl IDkgTranscriptBuilder {
             verified_dealings: Arc::new(self.verified_dealings),
             transcript_type: self.transcript_type,
             algorithm_id: self.algorithm_id,
-            internal_transcript_raw: Arc::new(self.internal_transcript_raw),
+            internal_transcript_raw: self.internal_transcript_raw,
         }
     }
 
@@ -2645,7 +2645,7 @@ impl IntoBuilder for IDkgTranscript {
             verified_dealings: self.verified_dealings.as_ref().clone(),
             transcript_type: self.transcript_type,
             algorithm_id: self.algorithm_id,
-            internal_transcript_raw: self.internal_transcript_raw.to_vec(),
+            internal_transcript_raw: self.internal_transcript_raw,
         }
     }
 }

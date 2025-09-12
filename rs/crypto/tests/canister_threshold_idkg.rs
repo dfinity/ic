@@ -731,7 +731,7 @@ mod create_transcript {
                 rng,
             );
             // invalidate the encoding of transcript
-            masked_transcript.internal_transcript_raw = Arc::new(vec![0xFF; 100]);
+            masked_transcript.internal_transcript_raw = vec![0xFF; 100];
             let invalid_unmasked_params = build_params_from_previous(
                 masked_params,
                 IDkgTranscriptOperation::ReshareOfMasked(masked_transcript.clone()),
@@ -1582,7 +1582,7 @@ mod verify_transcript {
                 .run_idkg_and_create_and_verify_transcript(&params, rng);
 
             // invalidate the internal transcript
-            masked_key_transcript.internal_transcript_raw = Arc::new(vec![0xF; 100]);
+            masked_key_transcript.internal_transcript_raw = vec![0xF; 100];
 
             let invalid_params = IDkgTranscriptParams::new(
                 params.transcript_id(),
