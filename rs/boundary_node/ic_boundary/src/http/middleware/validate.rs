@@ -107,10 +107,10 @@ pub async fn validate_request(request: Request, next: Next) -> Result<impl IntoR
 mod test {
     use super::*;
     use anyhow::Error;
-    use axum::{body::Body, middleware, routing::method_routing::get, Router};
+    use axum::{Router, body::Body, middleware, routing::method_routing::get};
     use http::StatusCode;
     use tower::{Service, ServiceBuilder};
-    use tower_http::{request_id::MakeRequestUuid, ServiceBuilderExt};
+    use tower_http::{ServiceBuilderExt, request_id::MakeRequestUuid};
 
     #[tokio::test]
     async fn test_middleware_validate_canister_request() -> Result<(), Error> {
@@ -161,8 +161,9 @@ mod test {
 
         // case 3: 'x-request-id' header contains an invalid uuid
         #[allow(clippy::borrow_interior_mutable_const)]
-    let expected_failure =
-        format!("error: malformed_request\ndetails: Unable to parse the request ID in the '{X_REQUEST_ID}': the value is not in UUID format");
+        let expected_failure = format!(
+            "error: malformed_request\ndetails: Unable to parse the request ID in the '{X_REQUEST_ID}': the value is not in UUID format"
+        );
 
         let request = Request::builder()
             .method("GET")
@@ -258,8 +259,9 @@ mod test {
 
         // case 3: 'x-request-id' header contains an invalid uuid
         #[allow(clippy::borrow_interior_mutable_const)]
-    let expected_failure =
-        format!("error: malformed_request\ndetails: Unable to parse the request ID in the '{X_REQUEST_ID}': the value is not in UUID format");
+        let expected_failure = format!(
+            "error: malformed_request\ndetails: Unable to parse the request ID in the '{X_REQUEST_ID}': the value is not in UUID format"
+        );
 
         let request = Request::builder()
             .method("GET")

@@ -45,11 +45,11 @@ use ic_system_test_driver::{
         },
     },
     systest,
-    util::{block_on, UniversalCanister},
+    util::{UniversalCanister, block_on},
 };
 use ic_types::{CanisterId, PrincipalId};
 use reqwest::Response;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::net::SocketAddr;
 use url::Url;
 

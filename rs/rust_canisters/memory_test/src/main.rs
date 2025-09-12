@@ -253,8 +253,7 @@ fn stable_read() {
                     if let Some(expected_value) = operation.value {
                         if expected_value != value {
                             trap_with(&format!(
-                                "Value mismatch at {}, expected {}, got {}",
-                                i, expected_value, value
+                                "Value mismatch at {i}, expected {expected_value}, got {value}"
                             ));
                         }
                     }
@@ -272,8 +271,7 @@ fn stable_read() {
                     if let Some(expected_value) = operation.value {
                         if expected_value != value {
                             trap_with(&format!(
-                                "Value mismatch at {}, expected {}, got {}",
-                                i, expected_value, value
+                                "Value mismatch at {i}, expected {expected_value}, got {value}"
                             ));
                         }
                     }
@@ -520,20 +518,17 @@ fn main() {
     }
     MEMORY.with(|s| s.replace(memory));
     api::print(format!(
-        "Successfully initialized canister with {} bytes",
-        MEMORY_SIZE,
+        "Successfully initialized canister with {MEMORY_SIZE} bytes",
     ));
 
     // Grow stable memory by `STABLE_MEMORY_SIZE`.
     if stable::stable64_grow(STABLE_MEMORY_SIZE / WASM_PAGE_SIZE_IN_BYTES as u64) == -1 {
         api::trap_with(&format!(
-            "Could not grow stable memory by {} bytes",
-            STABLE_MEMORY_SIZE,
+            "Could not grow stable memory by {STABLE_MEMORY_SIZE} bytes",
         ));
     }
 
     api::print(format!(
-        "Successfully initialized canister with {} bytes of stable memory",
-        STABLE_MEMORY_SIZE,
+        "Successfully initialized canister with {STABLE_MEMORY_SIZE} bytes of stable memory",
     ));
 }

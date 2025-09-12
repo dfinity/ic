@@ -9,25 +9,25 @@ use crate::{
         driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
         farm::{AttachImageSpec, Farm, FarmResult, FileId},
         ic::{InternetComputer, Node},
-        nested::{HasNestedVms, UnassignedRecordConfig, NESTED_CONFIG_IMAGE_PATH},
+        nested::{HasNestedVms, NESTED_CONFIG_IMAGE_PATH, UnassignedRecordConfig},
         node_software_version::NodeSoftwareVersion,
         port_allocator::AddrType,
         resource::{AllocatedVm, HOSTOS_MEMORY_KIB_PER_VM, HOSTOS_VCPUS_PER_VM},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
+            HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo,
             get_build_setupos_config_image_tool, get_create_setupos_config_tool,
             get_guestos_img_version, get_guestos_initial_update_img_sha256,
             get_guestos_initial_update_img_url, get_setupos_img_sha256, get_setupos_img_url,
-            get_setupos_img_version, try_get_guestos_img_version, HasTopologySnapshot, HasVmName,
-            IcNodeContainer, NodesInfo,
+            get_setupos_img_version, try_get_guestos_img_version,
         },
         test_setup::InfraProvider,
     },
     k8s::job::wait_for_job_completion,
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use config::generate_testnet_config::{
-    generate_testnet_config, GenerateTestnetConfigArgs, Ipv6ConfigType,
+    GenerateTestnetConfigArgs, Ipv6ConfigType, generate_testnet_config,
 };
 use config::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config_types::DeploymentEnvironment;
@@ -41,7 +41,7 @@ use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
-use slog::{info, warn, Logger};
+use slog::{Logger, info, warn};
 use std::{
     collections::BTreeMap,
     convert::Into,
@@ -70,7 +70,7 @@ const JAEGER_ADDR_PATH: &str = "jaeger_addr";
 const SOCKS_PROXY_PATH: &str = "socks_proxy";
 
 fn mk_compressed_img_path() -> std::string::String {
-    format!("{}.zst", CONF_IMG_FNAME)
+    format!("{CONF_IMG_FNAME}.zst")
 }
 
 pub fn init_ic(
@@ -663,7 +663,7 @@ fn create_setupos_config_image(
     );
 
     // Create a unique temporary directory for this thread to avoid conflicts
-    let tmp_dir = env.get_path(format!("setupos_config_{}", name));
+    let tmp_dir = env.get_path(format!("setupos_config_{name}"));
     fs::create_dir_all(&tmp_dir)?;
 
     let build_setupos_config_image = get_build_setupos_config_image_tool();

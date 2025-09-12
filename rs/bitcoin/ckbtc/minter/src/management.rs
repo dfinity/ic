@@ -1,7 +1,7 @@
 //! This module contains async functions for interacting with the management canister.
 use crate::logs::P0;
 use crate::metrics::{observe_get_utxos_latency, observe_sign_with_ecdsa_latency};
-use crate::{tx, CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, Network};
+use crate::{CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, Network, tx};
 use candid::{CandidType, Principal};
 use ic_btc_checker::{
     CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs, CheckTransactionResponse,
@@ -74,9 +74,9 @@ impl fmt::Display for Reason {
         match self {
             Self::QueueIsFull => write!(fmt, "the canister queue is full"),
             Self::OutOfCycles => write!(fmt, "the canister is out of cycles"),
-            Self::CanisterError(msg) => write!(fmt, "canister error: {}", msg),
+            Self::CanisterError(msg) => write!(fmt, "canister error: {msg}"),
             Self::Rejected(msg) => {
-                write!(fmt, "the management canister rejected the call: {}", msg)
+                write!(fmt, "the management canister rejected the call: {msg}")
             }
         }
     }

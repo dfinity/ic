@@ -163,7 +163,7 @@ impl Sink for &'static GlobalBuffer {
 mod private {
     #[cfg(target_arch = "wasm32")]
     #[link(wasm_import_module = "ic0")]
-    extern "C" {
+    unsafe extern "C" {
         pub fn time() -> u64;
     }
 

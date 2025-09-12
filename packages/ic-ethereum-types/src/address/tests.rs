@@ -42,7 +42,7 @@ mod from_32_bytes {
         let address = Address::try_from(&address_hex).unwrap();
 
         assert_eq!(
-            format!("{:x}", address),
+            format!("{address:x}"),
             "0xdd2851cdd40ae6536831558dd46db62fac7a844d".to_string()
         );
     }

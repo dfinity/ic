@@ -54,12 +54,12 @@ impl RewardsCalculationV1 {
 
 mod tests {
     #![allow(dead_code)]
+    use crate::performance_based_algorithm::PerformanceBasedAlgorithm;
     use crate::performance_based_algorithm::test_utils::{
-        build_daily_metrics, create_rewards_table_for_region_test, generate_rewardable_nodes,
-        test_node_id, test_subnet_id, RewardableNode,
+        RewardableNode, build_daily_metrics, create_rewards_table_for_region_test,
+        generate_rewardable_nodes, test_node_id, test_subnet_id,
     };
     use crate::performance_based_algorithm::v1::RewardsCalculationV1;
-    use crate::performance_based_algorithm::PerformanceBasedAlgorithm;
     use crate::performance_based_algorithm::{AdjustedRewardsResults, BaseRewardsResults};
     use ic_protobuf::registry::node::v1::NodeRewardType;
     use maplit::btreemap;

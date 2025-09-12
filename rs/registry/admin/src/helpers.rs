@@ -1,6 +1,6 @@
 use crate::{
-    types::{NodeDetails, SubnetRecord},
     SubnetDescriptor,
+    types::{NodeDetails, SubnetRecord},
 };
 use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
@@ -100,14 +100,14 @@ pub(crate) fn get_proposer_and_sender(
 
 /// Shortens the provided `PrincipalId` to make it easier to display.
 pub(crate) fn shortened_pid_string(pid: &PrincipalId) -> String {
-    format!("{}", pid)[..5].to_string()
+    format!("{pid}")[..5].to_string()
 }
 
 /// Shortens the id of the provided subent to make it easier to display.
 pub(crate) fn shortened_subnet_string(subnet: &SubnetDescriptor) -> String {
     match *subnet {
         SubnetDescriptor::Id(pid) => shortened_pid_string(&pid),
-        SubnetDescriptor::Index(i) => format!("{}", i),
+        SubnetDescriptor::Index(i) => format!("{i}"),
     }
 }
 
@@ -129,16 +129,13 @@ pub(crate) async fn get_subnet_list_record(
     match subnet_list_record_result {
         Ok((bytes, _version)) => match SubnetListRecordPb::decode(&bytes[..]) {
             Ok(record) => (record, false),
-            Err(error) => panic!("Error decoding subnet list record: {:?}", error),
+            Err(error) => panic!("Error decoding subnet list record: {error:?}"),
         },
         Err(error) => match error {
             // It might be the first time we store a subnet, so we might
             // have to update the subnet list record.
             Error::KeyNotPresent(_) => (SubnetListRecordPb::default(), true),
-            _ => panic!(
-                "Error while fetching current subnet list record: {:?}",
-                error
-            ),
+            _ => panic!("Error while fetching current subnet list record: {error:?}"),
         },
     }
 }

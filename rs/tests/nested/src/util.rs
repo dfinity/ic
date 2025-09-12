@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::str::FromStr;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use canister_test::PrincipalId;
 use ic_canister_client::Sender;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
@@ -20,7 +20,7 @@ use ic_registry_transport::Error as RegistryTransportError;
 use ic_system_test_driver::{
     driver::{
         ic::{InternetComputer, Subnet},
-        ic_gateway_vm::{IcGatewayVm, IC_GATEWAY_VM_NAME},
+        ic_gateway_vm::{IC_GATEWAY_VM_NAME, IcGatewayVm},
         nested::NestedVm,
         test_env::TestEnv,
         test_env_api::*,
@@ -34,8 +34,7 @@ use ic_system_test_driver::{
     retry_with_msg_async_quiet,
     util::{block_on, runtime_from_url},
 };
-use ic_types::Height;
-use ic_types::{hostos_version::HostosVersion, NodeId, ReplicaVersion};
+use ic_types::{Height, NodeId, ReplicaVersion, hostos_version::HostosVersion};
 use prost::Message;
 use regex::Regex;
 use reqwest::Client;
@@ -43,7 +42,7 @@ use std::net::Ipv6Addr;
 use std::time::Duration;
 
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 pub const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);

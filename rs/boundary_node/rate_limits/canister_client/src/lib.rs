@@ -1,9 +1,9 @@
-use anyhow::{bail, Context, Error, Result};
+use anyhow::{Context, Error, Result, bail};
 use candid::{Decode, Encode, Principal};
 use ic_agent::Agent;
 use rate_limits_api::{
-    v1::{RateLimitRule, SCHEMA_VERSION},
     AddConfigError, AddConfigResponse, IncidentId, InputConfig, InputRule,
+    v1::{RateLimitRule, SCHEMA_VERSION},
 };
 use serde::Deserialize;
 use std::{fs, path::PathBuf, str};

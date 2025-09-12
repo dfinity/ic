@@ -7,8 +7,8 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
-use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
-use slog::{debug, info, warn, Logger};
+use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
+use slog::{Logger, debug, info, warn};
 
 use crate::{
     driver::{
@@ -318,8 +318,11 @@ fn emit_kibana_url_event(log: &slog::Logger, network_name: &str, start_time: &Da
         "kibana_url_created_event".to_string(),
         KibanaUrl {
             message: "Pulled replica logs will appear in Kibana".to_string(),
-            url: format!("https://kibana.testnet.dfinity.network/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:60000),time:(from:{},to:now))&_a=(columns:!(MESSAGE,ic_subnet,ic_node),filters:!(('$state':(store:appState),meta:(alias:!n,disabled:!f,field:ic,index:testnet-vector-push,key:ic,negate:!f,params:(query:{network_name}),type:phrase),query:(match_phrase:(ic:{network_name})))),hideChart:!f,index:testnet-vector-push,interval:auto,query:(language:kuery,query:''),sort:!(!(timestamp,desc)))", fmt(start_time))
-        }
+            url: format!(
+                "https://kibana.testnet.dfinity.network/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:60000),time:(from:{},to:now))&_a=(columns:!(MESSAGE,ic_subnet,ic_node),filters:!(('$state':(store:appState),meta:(alias:!n,disabled:!f,field:ic,index:testnet-vector-push,key:ic,negate:!f,params:(query:{network_name}),type:phrase),query:(match_phrase:(ic:{network_name})))),hideChart:!f,index:testnet-vector-push,interval:auto,query:(language:kuery,query:''),sort:!(!(timestamp,desc)))",
+                fmt(start_time)
+            ),
+        },
     );
 
     event.emit_log(log);
@@ -342,11 +345,11 @@ impl VectorSource {
         let command = [
             "/log-fetcher",
             "--url",
-            &format!("http://{}/entries?follow", socket),
+            &format!("http://{socket}/entries?follow"),
             "--name",
-            &format!("{}-node_exporter", target_id),
+            &format!("{target_id}-node_exporter"),
             "--cursor-path",
-            &format!("/data/{}-node_exporter/checkpoint.txt", target_id),
+            &format!("/data/{target_id}-node_exporter/checkpoint.txt"),
         ]
         .iter()
         .map(|s| s.to_string())
@@ -389,7 +392,7 @@ impl VectorTransform {
             .iter()
             // Might be dangerous as the tag value is coming from an outside source and
             // is not escaped.
-            .map(|(k, v)| format!(".{} = \"{}\"", k, v))
+            .map(|(k, v)| format!(".{k} = \"{v}\""))
             .collect::<Vec<String>>()
             .join("\n")
     }
@@ -416,7 +419,7 @@ fn add_vector_target(
     labels: Option<BTreeMap<String, String>>,
 ) {
     let source = VectorSource::new(target_id.clone(), ip);
-    let source_key = format!("{}-source", target_id);
+    let source_key = format!("{target_id}-source");
 
     let mut extended_labels = labels.unwrap_or_default();
     extended_labels.extend([
@@ -427,7 +430,7 @@ fn add_vector_target(
     let transform = VectorTransform::new(source_key.clone(), extended_labels);
 
     sources.insert(source_key, source);
-    transforms.insert(format!("{}-transform", target_id), transform);
+    transforms.insert(format!("{target_id}-transform"), transform);
 }
 
 pub trait HasVectorTargets {

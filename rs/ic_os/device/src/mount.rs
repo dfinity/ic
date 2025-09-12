@@ -209,9 +209,9 @@ impl Mounter for LoopDeviceMounter {
 pub mod testing {
     use super::*;
     use anyhow::Context;
+    use partition_tools::Partition;
     use partition_tools::ext::ExtPartition;
     use partition_tools::fat::FatPartition;
-    use partition_tools::Partition;
     use std::collections::HashMap;
     use std::path::{Path, PathBuf};
     use std::sync::Arc;

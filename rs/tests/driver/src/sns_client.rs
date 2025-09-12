@@ -10,11 +10,11 @@ use crate::{
         vote_execute_proposal_assert_executed,
     },
     util::{
-        block_on, create_service_nervous_system_into_params, deposit_cycles, runtime_from_url,
-        to_principal_id, UniversalCanister,
+        UniversalCanister, block_on, create_service_nervous_system_into_params, deposit_cycles,
+        runtime_from_url, to_principal_id,
     },
 };
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use candid::{Decode, Encode, Principal};
 use canister_test::{Project, Runtime};
 use dfn_candid::candid_one;
@@ -29,20 +29,20 @@ use ic_nervous_system_proto::pb::v1::{Duration, Image, Percentage, Tokens};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_governance_api::{
+    CreateServiceNervousSystem, ManageNeuron, ManageNeuronResponse, NnsFunction, OpenSnsTokenSwap,
+    Proposal,
     create_service_nervous_system::{
+        GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
         governance_parameters::VotingRewardParameters,
         initial_token_distribution::{
-            developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
-            TreasuryDistribution,
+            DeveloperDistribution, SwapDistribution, TreasuryDistribution,
+            developer_distribution::NeuronDistribution,
         },
         swap_parameters::NeuronBasketConstructionParameters,
-        GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
     },
     manage_neuron::Command,
     manage_neuron_response::Command as CommandResp,
     proposal::Action,
-    CreateServiceNervousSystem, ManageNeuron, ManageNeuronResponse, NnsFunction, OpenSnsTokenSwap,
-    Proposal,
 };
 use ic_nns_test_utils::sns_wasm::ensure_sns_wasm_gzipped;
 use ic_sns_governance::pb::v1::governance::Mode;
