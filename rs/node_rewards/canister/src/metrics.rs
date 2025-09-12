@@ -178,10 +178,9 @@ where
         }
     }
 
-    /// Computes daily node metrics per subnet within the specified time range.
+    /// Computes daily node metrics for a specific day.
     ///
-    /// For each node in every subnet, calculates the number of proposed and failed blocks
-    /// produced during each day. This is done by subtracting the total metrics of the
+    /// This is done by subtracting the total metrics of the
     /// previous day from those of the current day.
     pub fn metrics_by_subnet(
         &self,
@@ -208,7 +207,7 @@ where
 
         let mut initial_total_metrics: HashMap<_, _> = HashMap::new();
         if let Some((timestamp_nanos, _)) = subnets_metrics_by_day.first_key_value() {
-            if timestamp_nanos < &day_utc {
+            if timestamp_nanos < day_utc {
                 initial_total_metrics = subnets_metrics_by_day
                     .pop_first()
                     .unwrap()
