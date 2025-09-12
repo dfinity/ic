@@ -8,6 +8,7 @@ use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use ic_types::Time;
 use itertools::Itertools;
+use maplit::btreemap;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
@@ -98,7 +99,7 @@ pub trait DataProvider {
         &self,
         day: &DayUtc,
         provider_id: &PrincipalId,
-    ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, String>;
+    ) -> Result<Vec<RewardableNode>, String>;
 }
 
 trait PerformanceBasedAlgorithm {
@@ -182,7 +183,8 @@ trait PerformanceBasedAlgorithm {
         let rewards_table = data_provider.get_rewards_table(day)?;
         let metrics_by_subnet = data_provider.get_daily_metrics_by_subnet(day)?;
         let providers_rewardable_nodes = if let Some(provider_id) = node_provider_filter {
-            data_provider.get_provider_rewardable_nodes(day, provider_id)?
+            let rewardable_nodes = data_provider.get_provider_rewardable_nodes(day, provider_id)?;
+            btreemap! { provider_id.clone() => rewardable_nodes }
         } else {
             data_provider.get_rewardable_nodes(day)?
         };
@@ -306,11 +308,15 @@ trait PerformanceBasedAlgorithm {
                 })
                 .collect::<BTreeMap<_, _>>();
             let nodes_fr = nodes_original_fr.values().cloned().collect::<Vec<_>>();
-            let failure_rates = nodes_fr.iter().sorted().collect::<Vec<_>>();
-            let index = ((nodes_fr.len() as f64) * Self::SUBNET_FAILURE_RATE_PERCENTILE).ceil()
-                as usize
-                - 1;
-            let subnet_fr = *failure_rates[index];
+            let subnet_fr = if nodes_fr.is_empty() {
+                Decimal::ZERO
+            } else {
+                let failure_rates = nodes_fr.iter().sorted().collect::<Vec<_>>();
+                let index = ((nodes_fr.len() as f64) * Self::SUBNET_FAILURE_RATE_PERCENTILE).ceil()
+                    as usize
+                    - 1;
+                *failure_rates[index]
+            };
             result.subnets_fr.insert(subnet_id, subnet_fr);
 
             for NodeMetricsDailyRaw {
