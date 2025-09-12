@@ -9,7 +9,7 @@ use crate::{
         driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
         farm::{AttachImageSpec, Farm, FarmResult, FileId},
         ic::{InternetComputer, Node},
-        nested::{HasNestedVms, NESTED_CONFIG_IMAGE_PATH},
+        nested::{HasNestedVms, UnassignedRecordConfig, NESTED_CONFIG_IMAGE_PATH},
         node_software_version::NodeSoftwareVersion,
         port_allocator::AddrType,
         resource::{AllocatedVm, HOSTOS_MEMORY_KIB_PER_VM, HOSTOS_VCPUS_PER_VM},
@@ -18,7 +18,8 @@ use crate::{
             get_build_setupos_config_image_tool, get_create_setupos_config_tool,
             get_guestos_img_version, get_guestos_initial_update_img_sha256,
             get_guestos_initial_update_img_url, get_setupos_img_sha256, get_setupos_img_url,
-            HasTopologySnapshot, HasVmName, IcNodeContainer, NodesInfo,
+            get_setupos_img_version, try_get_guestos_img_version, HasTopologySnapshot, HasVmName,
+            IcNodeContainer, NodesInfo,
         },
         test_setup::InfraProvider,
     },
@@ -211,7 +212,7 @@ pub fn init_ic(
 
     ic_config.set_use_specified_ids_allocation_range(specific_ids);
 
-    if ic.skip_unassigned_record {
+    if let Some(UnassignedRecordConfig::Skip) = ic.unassigned_record_config {
         ic_config.skip_unassigned_record();
     }
 
@@ -352,6 +353,9 @@ pub fn setup_and_start_nested_vms(
     farm: &Farm,
     group_name: &str,
 ) -> anyhow::Result<()> {
+    // Check that versions are in line, or configured properly
+    validate_version_config(env);
+
     let logger = env.logger();
     info!(logger, "Setting up nested VM(s) ...");
 
@@ -425,6 +429,20 @@ pub fn setup_and_start_nested_vms(
     info!(logger, "Nested VM(s) setup complete!");
 
     result
+}
+
+fn validate_version_config(env: &TestEnv) {
+    if let Ok(guestos_version) = try_get_guestos_img_version() {
+        if (guestos_version != get_setupos_img_version())
+            && UnassignedRecordConfig::try_read_attribute(env).is_err()
+        {
+            panic!(
+                "Initial GuestOS and SetupOS versions do not match! \
+                If this is intended, set `without_unassigned_config` (avoid) \
+                or `with_unassigned_config` (ignore) on your IC."
+            );
+        }
+    }
 }
 
 pub fn upload_config_disk_image(

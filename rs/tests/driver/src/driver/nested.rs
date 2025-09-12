@@ -266,3 +266,18 @@ impl SshSession for GuestSsh {
         Ok(self.ip.into())
     }
 }
+
+#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
+pub enum UnassignedRecordConfig {
+    /// Do not create an UnassignedNodesConfigRecord
+    Skip,
+    /// Create an UnassignedNodesConfigRecord, ignore version mismatch
+    /// between initial GuestOS and SetupOS
+    Ignore,
+}
+
+impl TestEnvAttribute for UnassignedRecordConfig {
+    fn attribute_name() -> String {
+        "unassigned_record_config".to_string()
+    }
+}
