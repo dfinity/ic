@@ -163,7 +163,7 @@ trait PerformanceBasedAlgorithm {
         let metrics_by_subnet = data_provider.get_daily_metrics_by_subnet(day)?;
         let providers_rewardable_nodes = if let Some(provider_id) = node_provider_filter {
             let rewardable_nodes = data_provider.get_provider_rewardable_nodes(day, provider_id)?;
-            btreemap! { provider_id.clone() => rewardable_nodes }
+            btreemap! { *provider_id => rewardable_nodes }
         } else {
             data_provider.get_rewardable_nodes(day)?
         };
