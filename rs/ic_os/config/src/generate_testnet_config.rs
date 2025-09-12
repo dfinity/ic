@@ -233,7 +233,7 @@ fn create_guestos_config(config: GenerateTestnetConfigArgs) -> Result<GuestOSCon
         inject_ic_crypto: inject_ic_crypto.unwrap_or(false),
         inject_ic_state: inject_ic_state.unwrap_or(false),
         inject_ic_registry_local_store: inject_ic_registry_local_store.unwrap_or(false),
-        recovery_hash: recovery_hash,
+        recovery_hash,
         guestos_dev_settings,
     };
 
