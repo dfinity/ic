@@ -2180,10 +2180,49 @@ fn can_reject_an_ingress_when_canister_is_out_of_cycles() {
 fn message_to_empty_canister_is_rejected() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    let test_empty_canister = |test: &mut ExecutionTest| {
+        let err = test
+            .should_accept_ingress_message(canister, "query", vec![])
+            .unwrap_err();
+        assert_eq!(ErrorCode::CanisterWasmModuleNotFound, err.code());
+        let err = test
+            .non_replicated_query(canister, "query", wasm().reply().build())
+            .unwrap_err();
+        assert_eq!(ErrorCode::CanisterWasmModuleNotFound, err.code());
+    };
+
+    test_empty_canister(&mut test);
+
+    test.install_canister(canister, UNIVERSAL_CANISTER_WASM.to_vec())
+        .unwrap();
+
+    test.should_accept_ingress_message(canister, "query", vec![])
+        .unwrap();
+    test.non_replicated_query(canister, "query", wasm().reply().build())
+        .unwrap();
+
+    test.uninstall_code(canister).unwrap();
+
+    test_empty_canister(&mut test);
+}
+
+#[test]
+fn message_to_deleted_canister_is_rejected() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    test.stop_canister(canister);
+    test.process_stopping_canisters();
+    test.delete_canister(canister).unwrap();
     let err = test
-        .should_accept_ingress_message(canister, "", vec![])
+        .should_accept_ingress_message(canister, "query", vec![])
         .unwrap_err();
-    assert_eq!(ErrorCode::CanisterWasmModuleNotFound, err.code());
+    assert_eq!(ErrorCode::CanisterNotFound, err.code());
+    let err = test
+        .non_replicated_query(canister, "query", wasm().reply().build())
+        .unwrap_err();
+    assert_eq!(ErrorCode::CanisterNotFound, err.code());
 }
 
 #[test]
