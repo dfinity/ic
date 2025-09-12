@@ -9920,6 +9920,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-hash-of",
  "ic-ledger-suite-state-machine-tests",
+ "ic-ledger-suite-state-machine-tests-types",
  "ic-nns-test-utils-golden-nns-state",
  "ic-registry-subnet-type",
  "ic-state-machine-tests",

@@ -2,6 +2,7 @@ use candid::Encode;
 use candid::Principal;
 use ic_icp_rosetta_runner::start_rosetta;
 use ic_icp_rosetta_runner::RosettaOptionsBuilder;
+use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_rosetta_test_utils::path_from_env;
 use icp_ledger::LedgerCanisterInitPayload;
 use pocket_ic::PocketIcBuilder;
