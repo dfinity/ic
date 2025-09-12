@@ -21,7 +21,7 @@ Success::
 
 end::catalog[] */
 
-use anyhow::{anyhow, bail, ensure, Result};
+use anyhow::{anyhow, ensure, Result};
 use ic_consensus_system_test_utils::{
     impersonate_upstreams::{
         get_upstreams_uvm_ipv6, setup_upstreams_uvm, spoof_node_dns, uvm_serve_recovery_artifacts,
@@ -43,7 +43,6 @@ use ic_system_test_driver::{
 };
 use slog::info;
 use ssh2::Session;
-use std::time::Duration;
 
 fn verify_content(ssh_session: &Session, remote_file_path: &str, expected_b64: &str) -> Result<()> {
     // Protobuf files are binary files, and since we deserialize them into UTF-8 strings,
@@ -172,12 +171,6 @@ pub fn test(env: TestEnv) {
         read_dependency_from_env_to_string("RECOVERY_STORE_1_B64_PATH").unwrap();
     let expected_local_store_2_b64 =
         read_dependency_from_env_to_string("RECOVERY_STORE_2_B64_PATH").unwrap();
-    let recovery_short_hash = &read_dependency_from_env_to_string("RECOVERY_HASH_PATH")
-        .unwrap()
-        .trim()
-        .chars()
-        .take(6)
-        .collect::<String>();
 
     let node = env
         .topology_snapshot()
