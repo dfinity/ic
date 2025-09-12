@@ -80,3 +80,32 @@ pub fn do_copy_overwrite(log: &ReplicaLogger, src: &Path, dst: &Path) -> std::io
     }
     do_copy(log, src, dst)
 }
+
+/// Marks `src` as readonly and then hardlinks it to `dst` overwriting the destination if it exists.
+pub fn mark_readonly_and_hardlink_file(
+    _log: &ReplicaLogger,
+    src: &Path,
+    dst: &Path,
+) -> std::io::Result<()> {
+    let src_metadata = src.metadata()?;
+    if !src_metadata.permissions().readonly() {
+        // writable src should come from state_sync_cache, not checkpoint.
+        debug_assert!(src.to_string_lossy().contains("state_sync_cache"));
+        debug_assert!(!src.to_string_lossy().contains("checkpoint"));
+        // writable src should be newly downloaded, not hardlinked from checkpoint.
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::unix::fs::MetadataExt;
+            debug_assert_eq!(src_metadata.nlink(), 1);
+        }
+        // Mark src as readonly.
+        let mut permissions = src_metadata.permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(src, permissions)?;
+    }
+    // Hardlink requires the destination to not exist.
+    if dst.exists() {
+        std::fs::remove_file(dst)?;
+    }
+    std::fs::hard_link(src, dst)
+}

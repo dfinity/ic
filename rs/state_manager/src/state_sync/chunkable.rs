@@ -13,8 +13,10 @@ use crate::{
 };
 use ic_interfaces::p2p::state_sync::{AddChunkError, Chunk, ChunkId, Chunkable};
 use ic_logger::{debug, error, fatal, info, trace, warn, ReplicaLogger};
-use ic_state_layout::utils::do_copy_overwrite;
-use ic_state_layout::{error::LayoutError, CheckpointLayout, ReadOnly, RwPolicy, StateLayout};
+use ic_state_layout::{
+    error::LayoutError, utils::mark_readonly_and_hardlink_file, CheckpointLayout, ReadOnly,
+    RwPolicy, StateLayout,
+};
 use ic_sys::mmap::ScopedMmap;
 use ic_types::{malicious_flags::MaliciousFlags, CryptoHashOfState, Height};
 use std::os::unix::fs::FileExt;
@@ -309,15 +311,6 @@ impl IncompleteState {
                         *new_index,
                     );
 
-                    let original_perms = std::fs::metadata(&dst_path).unwrap_or_else(|err| {
-                        fatal!(
-                            log,
-                            "Failed to get metadata of file {}: {}",
-                            dst_path.display(),
-                            err
-                        )
-                    })
-                        .permissions();
                     if validate_data || ALWAYS_VALIDATE {
 
                         let src = std::fs::File::open(&src_path).unwrap_or_else(|err| {
@@ -428,20 +421,16 @@ impl IncompleteState {
                             && src_data.len()
                                 == manifest_old.file_table[*old_index].size_bytes as usize
                         {
-                            // All the hash sums and the file size match, so we can
-                            // simply copy the whole file.  That's much faster than
-                            // copying one chunk at a time.
-                            do_copy_overwrite(log, &src_path, &dst_path).unwrap_or_else(
-                                |err| {
-                                    fatal!(
-                                        log,
-                                        "Failed to copy file from {} to {}: {}",
-                                        src_path.display(),
-                                        dst_path.display(),
-                                        err
-                                    )
-                                },
-                            );
+                            mark_readonly_and_hardlink_file(log, &src_path, &dst_path).unwrap_or_else(|err| {
+                                fatal!(
+                                    log,
+                                    "Failed to hardlink file from {} to {}: {}",
+                                    src_path.display(),
+                                    dst_path.display(),
+                                    err
+                                )
+                            });
+
                             metrics
                                 .remaining
                                 .sub(new_chunk_range.len() as i64);
@@ -514,27 +503,20 @@ impl IncompleteState {
                     } else {
                         // Since we do not validate in this else branch, we can simply copy the
                         // file without any extra work
-                        do_copy_overwrite(log, &src_path, &dst_path).unwrap_or_else(|err| {
+                        mark_readonly_and_hardlink_file(log, &src_path, &dst_path).unwrap_or_else(|err| {
                             fatal!(
                                 log,
-                                "Failed to copy file from {} to {}: {}",
+                                "Failed to hardlink file from {} to {}: {}",
                                 src_path.display(),
                                 dst_path.display(),
                                 err
                             )
                         });
+
                         metrics
                             .remaining
                             .sub(new_chunk_range.len() as i64);
                     }
-                    std::fs::set_permissions(&dst_path, original_perms).unwrap_or_else(|err| {
-                        fatal!(
-                            log,
-                            "failed to set permissions for file {}: {}",
-                            dst_path.display(),
-                            err
-                        )
-                    });
                 });
             }
         });
