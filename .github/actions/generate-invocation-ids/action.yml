@@ -10,10 +10,13 @@ inputs:
         name: display name (e.g. Build, Test)
         output_id: GitHub Actions output variable
       Example:
-        - name: Build
-          output_id: build_id
-        - name: Test
-          output_id: test_id
+        [{
+          "name": "Build",
+          "output_id": "build_id"
+        },{
+          "name": "Test",
+          "output_id": "test_id"
+        }]
     required: true
 
 outputs:
@@ -30,6 +33,6 @@ runs:
       run: |
         set -euo pipefail
 
-        python ./.github/actions/generate-invocation-ids/generate-ids.py "${{ inputs.targets }}"
+        python ./.github/actions/generate-invocation-ids/generate-ids.py ${{ toJSON(inputs.targets) }}
 
 
