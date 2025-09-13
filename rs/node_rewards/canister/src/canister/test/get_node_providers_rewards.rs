@@ -301,29 +301,29 @@ fn setup_data_for_test_rewards_calculation(
     );
 }
 
-fn sync_all() {
-    let day1: DayUtc = DayUtc::try_from("2024-01-01").unwrap();
-    let day2: DayUtc = DayUtc::try_from("2024-01-02").unwrap();
-
-    NodeRewardsCanister::schedule_registry_sync(&CANISTER_TEST).now_or_never();
-    NodeRewardsCanister::schedule_metrics_sync(&CANISTER_TEST).now_or_never();
-    NodeRewardsCanister::backfill_rewardable_nodes(&CANISTER_TEST, &day1).unwrap();
-    NodeRewardsCanister::backfill_rewardable_nodes(&CANISTER_TEST, &day2).unwrap();
-}
-
 #[test]
 fn test_get_node_providers_rewards() {
     use pretty_assertions::assert_eq;
 
     let (fake_registry, metrics_manager) = setup_thread_local_canister_for_test();
     setup_data_for_test_rewards_calculation(fake_registry, metrics_manager);
-    sync_all();
-    let from = DayUtc::try_from("2024-01-01").unwrap();
-    let to = DayUtc::try_from("2024-01-02").unwrap();
+    let day1: DayUtc = DayUtc::try_from("2024-01-01").unwrap();
+    let day2: DayUtc = DayUtc::try_from("2024-01-02").unwrap();
+
+    NodeRewardsCanister::schedule_registry_sync(&CANISTER_TEST).now_or_never();
+    NodeRewardsCanister::schedule_metrics_sync(&CANISTER_TEST).now_or_never();
+    let _ = &CANISTER_TEST.with_borrow(|canister| {
+        canister
+            .backfill_rewardable_nodes_single_day(&day1)
+            .unwrap();
+        canister
+            .backfill_rewardable_nodes_single_day(&day2)
+            .unwrap();
+    });
 
     let request = GetNodeProvidersRewardsRequest {
-        from_day_timestamp_nanos: from.unix_ts_at_day_start_nanoseconds(),
-        to_day_timestamp_nanos: to.unix_ts_at_day_end_nanoseconds(),
+        from_day_timestamp_nanos: day1.unix_ts_at_day_start_nanoseconds(),
+        to_day_timestamp_nanos: day2.unix_ts_at_day_end_nanoseconds(),
     };
     let result_endpoint =
         NodeRewardsCanister::get_node_providers_rewards(&CANISTER_TEST, request.clone()).unwrap();

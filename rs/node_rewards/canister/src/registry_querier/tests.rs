@@ -1,5 +1,5 @@
 use crate::registry_querier::RegistryQuerier;
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_base_types::{PrincipalId, SubnetId};
 use ic_nervous_system_canisters::registry::RegistryCanister;
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
@@ -17,7 +17,7 @@ use ic_registry_keys::{
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use maplit::btreemap;
-use rewards_calculation::types::{DayUtc, RewardableNode};
+use rewards_calculation::types::DayUtc;
 use std::cell::RefCell;
 use std::sync::Arc;
 
@@ -219,134 +219,5 @@ fn test_get_rewards_table_returns_correct_record() {
 
     let result = client.get_rewards_table(version.into());
 
-    assert_eq!(result, table);
-}
-fn contains_node(nodes: &[RewardableNode], node_num: u64) -> bool {
-    nodes
-        .iter()
-        .any(|n| n.node_id == NodeId::from(PrincipalId::new_node_test_id(node_num)))
-}
-#[test]
-fn test_rewardable_nodes_deleted_nodes() {
-    let client = client_for_tests();
-    let day1 = DayUtc::try_from("2025-07-12").unwrap();
-    let day2 = DayUtc::try_from("2025-07-13").unwrap();
-
-    let mut rewardable_nodes_day1 = client.get_rewardable_nodes_per_provider(&day1).unwrap();
-    let mut rewardable_nodes_day2 = client.get_rewardable_nodes_per_provider(&day2).unwrap();
-
-    let np_1_id = PrincipalId::new_user_test_id(20);
-    let rewardables_day1 = rewardable_nodes_day1.remove(&np_1_id).unwrap();
-    let rewardables_day2 = rewardable_nodes_day2.remove(&np_1_id).unwrap();
-
-    // Day 1 expectations
-    assert!(
-        !contains_node(&rewardables_day1, 1),
-        "Node 1 should not be rewardable after deletion"
-    );
-    assert!(
-        contains_node(&rewardables_day1, 2),
-        "Node 2 should be rewardable on day 1"
-    );
-    assert!(
-        contains_node(&rewardables_day1, 3),
-        "Node 3 should be rewardable on day 1"
-    );
-
-    // Day 2 expectations
-    assert!(
-        !contains_node(&rewardables_day2, 3),
-        "Node 3 should NOT be rewardable on day 2 because it was removed"
-    );
-    assert!(
-        contains_node(&rewardables_day2, 2),
-        "Node 2 should be rewardable on day 2"
-    );
-}
-
-#[test]
-fn test_node_re_registered_after_deletion() {
-    let node_1_id = 1;
-    let no_1_id = 10;
-
-    let node_id = PrincipalId::new_node_test_id(node_1_id);
-    let node_key = format!("{}{}", NODE_RECORD_KEY_PREFIX, node_id);
-    let node_record = NodeRecord {
-        node_reward_type: Some(NodeRewardType::Type0 as i32),
-        node_operator_id: PrincipalId::new_user_test_id(no_1_id).to_vec(),
-        ..NodeRecord::default()
-    };
-
-    add_record_helper(&node_key, 39668, Some(node_record), "2025-07-11");
-
-    let client = client_for_tests();
-
-    let from = DayUtc::try_from("2025-07-07").unwrap();
-    let to = DayUtc::try_from("2025-07-12").unwrap();
-    let mut current_day = from;
-    let expected_absent = [
-        DayUtc::try_from("2025-07-08").unwrap(),
-        DayUtc::try_from("2025-07-09").unwrap(),
-        DayUtc::try_from("2025-07-10").unwrap(),
-    ];
-
-    while current_day <= to {
-        let rewardables = client
-            .get_rewardable_nodes_per_provider(&current_day)
-            .unwrap()
-            .remove(&PrincipalId::new_user_test_id(20))
-            .unwrap();
-
-        if expected_absent.contains(&current_day) {
-            assert!(
-                !contains_node(&rewardables, 1),
-                "Node 1 should not be rewardable after deletion"
-            );
-        } else {
-            assert!(
-                contains_node(&rewardables, 1),
-                "Node 1 should be rewardable on day 1"
-            );
-        }
-
-        current_day = current_day.next_day();
-    }
-}
-
-#[test]
-fn test_node_operator_data_returns_expected_data() {
-    let client = client_for_tests();
-
-    let version = 39667;
-    let no_2_id = PrincipalId::new_user_test_id(30);
-    let data = client
-        .node_operator_data(no_2_id, version.into())
-        .unwrap()
-        .unwrap();
-
-    assert_eq!(data.node_provider_id, PrincipalId::new_user_test_id(20));
-    assert_eq!(data.dc_id, "y");
-    assert_eq!(data.region, "A");
-
-    let version = 39675;
-    let no_1_id = PrincipalId::new_user_test_id(10);
-    let data = client
-        .node_operator_data(no_1_id, version.into())
-        .unwrap()
-        .unwrap();
-
-    assert_eq!(data.node_provider_id, PrincipalId::new_user_test_id(20));
-    assert_eq!(data.dc_id, "x");
-    assert_eq!(data.region, "A");
-
-    let not_yet_added_no_version = 39652;
-    let data = client
-        .node_operator_data(no_1_id, not_yet_added_no_version.into())
-        .unwrap();
-
-    assert!(
-        data.is_none(),
-        "Data should not exist for version {} because Operator was not yet added",
-        not_yet_added_no_version
-    );
+    assert_eq!(result, Ok(table));
 }

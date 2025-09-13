@@ -6,8 +6,9 @@
 // 5. Simple Organization
 
 use candid::Principal;
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_management_canister_types::NodeMetrics;
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_stable_structures::Storable;
 use ic_stable_structures::storable::Bound;
 use prost::Message;
@@ -175,6 +176,17 @@ impl From<RewardableNode> for pb::v1::RewardableNode {
             region: Some(value.region),
             dc_id: Some(value.dc_id),
             node_reward_type: Some(value.node_reward_type.into()),
+        }
+    }
+}
+
+impl From<pb::v1::RewardableNode> for RewardableNode {
+    fn from(value: pb::v1::RewardableNode) -> Self {
+        Self {
+            node_id: NodeId::from(value.node_id.unwrap()),
+            region: value.region.unwrap(),
+            node_reward_type: NodeRewardType::try_from(value.node_reward_type.unwrap()).unwrap(),
+            dc_id: value.dc_id.unwrap(),
         }
     }
 }

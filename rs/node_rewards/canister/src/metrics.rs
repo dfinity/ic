@@ -182,10 +182,10 @@ where
     ///
     /// This is done by subtracting the total metrics of the
     /// previous day from those of the current day.
-    pub fn metrics_by_subnet(
+    pub fn get_metrics_by_subnet(
         &self,
         day_utc: &DayUtc,
-    ) -> BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>> {
+    ) -> Result<BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>>, String> {
         let mut metrics_by_subnet = BTreeMap::new();
         let previous_day_ts = day_utc.previous_day().unix_ts_at_day_start_nanoseconds();
         let first_key = SubnetMetricsKey {
@@ -252,7 +252,11 @@ where
             }
         }
 
-        metrics_by_subnet
+        if !metrics_by_subnet.is_empty() {
+            Ok(metrics_by_subnet)
+        } else {
+            Err(format!("No metrics for the day: {}", day_utc))
+        }
     }
 }
 
