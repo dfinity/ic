@@ -1,9 +1,9 @@
 use super::*;
 use ic_nervous_system_chunks::test_data::MEGA_BLOB;
 use ic_registry_transport::pb::v1::{
-    high_capacity_registry_mutation, high_capacity_registry_value,
+    HighCapacityRegistryValue, Precondition, high_capacity_registry_mutation,
+    high_capacity_registry_value,
     registry_mutation::{self, Type as MutationType},
-    HighCapacityRegistryValue, Precondition,
 };
 use prost::Message;
 use std::{
@@ -111,12 +111,7 @@ fn test_dechunkify_mutation_chunked() {
     let mut chunks = Chunks::init(memory);
 
     let chunk_content_sha256s = chunks.upsert_monolithic_blob(b"blobity blob".to_vec());
-    assert_eq!(
-        chunk_content_sha256s.len(),
-        1,
-        "{:?}",
-        chunk_content_sha256s
-    );
+    assert_eq!(chunk_content_sha256s.len(), 1, "{chunk_content_sha256s:?}");
 
     let mutation = HighCapacityRegistryMutation {
         mutation_type: MutationType::Update as i32,
@@ -276,7 +271,7 @@ fn test_chunkify_composite_mutation() {
             chunk_content_sha256s,
         }) => chunk_content_sha256s.clone(),
 
-        _ => panic!("{:?}", upgraded_mutation),
+        _ => panic!("{upgraded_mutation:?}"),
     };
 
     // Assert that Chunks was populated, and we can reconstruct the original

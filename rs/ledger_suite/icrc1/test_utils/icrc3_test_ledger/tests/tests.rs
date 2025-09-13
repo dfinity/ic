@@ -2,8 +2,8 @@ use candid::{Decode, Encode, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cbor::CertificateToCbor;
 use ic_certification::{
-    hash_tree::{empty, HashTreeNode, Label, LookupResult, SubtreeLookupResult},
     Certificate, HashTree,
+    hash_tree::{HashTreeNode, Label, LookupResult, SubtreeLookupResult, empty},
 };
 use ic_icrc1_ledger::Tokens;
 use ic_icrc1_test_utils::icrc3::BlockBuilder;
@@ -56,15 +56,13 @@ fn add_block(
     canister_id: CanisterId,
     block: &ICRC3Value,
 ) -> Result<Nat, String> {
-    let result = Decode!(
+    Decode!(
         &env.execute_ingress(canister_id, "add_block", Encode!(block).unwrap())
             .expect("failed to add block")
             .bytes(),
         AddBlockResult
     )
-    .expect("failed to decode add_block response");
-
-    result
+    .expect("failed to decode add_block response")
 }
 
 fn icrc3_get_blocks(
@@ -408,8 +406,8 @@ fn production_ledger_wasm() -> Vec<u8> {
 
 #[test]
 fn test_icrc3_blocks_compatibility_with_production_ledger() {
-    use ic_ledger_suite_state_machine_tests::test_icrc3_blocks_compatibility_with_production_ledger;
     use ic_ledger_suite_state_machine_tests::InitArgs;
+    use ic_ledger_suite_state_machine_tests::test_icrc3_blocks_compatibility_with_production_ledger;
 
     fn encode_init_args(args: InitArgs) -> ic_icrc1_ledger::LedgerArgument {
         use ic_icrc1_ledger::{
@@ -463,8 +461,7 @@ fn lookup_hashtree(hash_tree: &HashTree, leaf_name: &str) -> Result<Vec<u8>, Str
             _ => Err("Expected a leaf node".to_string()),
         },
         _ => Err(format!(
-            "Expected to find a leaf node: Hash tree: {:?}, leaf_name: {}",
-            hash_tree, leaf_name
+            "Expected to find a leaf node: Hash tree: {hash_tree:?}, leaf_name: {leaf_name}"
         )
         .to_string()),
     }

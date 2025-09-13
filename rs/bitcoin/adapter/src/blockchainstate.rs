@@ -8,7 +8,7 @@ use crate::{
     },
     metrics::BlockchainStateMetrics,
 };
-use bitcoin::{block::Header as PureHeader, consensus::Encodable, BlockHash};
+use bitcoin::{BlockHash, block::Header as PureHeader, consensus::Encodable};
 use ic_btc_validation::HeaderStore;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -292,7 +292,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use bitcoin::{consensus::Decodable, Block, Network, TxMerkleNode};
+    use bitcoin::{Block, Network, TxMerkleNode, consensus::Decodable};
     use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use tempfile::tempdir;
@@ -451,8 +451,7 @@ mod test {
         let (_, maybe_err) = state.add_headers(&chain);
         assert!(
             maybe_err.is_none(),
-            "unsuccessfully added first chain: {:?}",
-            maybe_err
+            "unsuccessfully added first chain: {maybe_err:?}"
         );
 
         // Create a fork chain forking from chain_hashes[10] and adding to the BlockchainState.
@@ -466,8 +465,7 @@ mod test {
         let (_, maybe_err) = state.add_headers(&fork_chain);
         assert!(
             maybe_err.is_none(),
-            "unsuccessfully added fork chain: {:?}",
-            maybe_err
+            "unsuccessfully added fork chain: {maybe_err:?}"
         );
 
         let mut tips = state.header_cache.get_tips();

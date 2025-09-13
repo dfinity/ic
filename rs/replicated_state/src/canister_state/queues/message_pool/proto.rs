@@ -1,5 +1,5 @@
 use super::*;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::queues::v1 as pb_queues;
 
 impl<T> TryFrom<u64> for Reference<T>
@@ -13,8 +13,7 @@ where
             Ok(Reference(item, PhantomData))
         } else {
             Err(ProxyDecodeError::Other(format!(
-                "Mismatched reference context: {}",
-                item
+                "Mismatched reference context: {item}"
             )))
         }
     }
@@ -29,7 +28,7 @@ impl<T> From<&Reference<T>> for u64 {
 impl From<CallbackReference> for pb_queues::canister_queues::CallbackReference {
     fn from(item: CallbackReference) -> Self {
         Self {
-            id: item.0 .0,
+            id: item.0.0,
             callback_id: item.1.get(),
         }
     }

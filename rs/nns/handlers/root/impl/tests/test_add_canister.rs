@@ -88,18 +88,16 @@ fn test_add_nns_canister() {
             )
             .await
             .unwrap();
-        assert_eq!(status.status, Running, "{:?}", status);
+        assert_eq!(status.status, Running, "{status:?}");
         assert_eq!(
             status.module_hash,
             Some(EMPTY_WASM_SHA256.to_vec()),
-            "{:?}",
-            status
+            "{status:?}"
         );
         assert_eq!(
             status.settings.controllers,
             vec![root.canister_id().get()],
-            "{:?}",
-            status
+            "{status:?}"
         );
 
         Ok(())

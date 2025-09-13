@@ -1,6 +1,6 @@
 use bitcoin::consensus::{Decodable, Encodable};
 use bitcoin::p2p::Magic;
-use bitcoin::{block::Header as PureHeader, BlockHash, Work};
+use bitcoin::{BlockHash, Work, block::Header as PureHeader};
 use ic_btc_validation::{HeaderStore, ValidateHeaderError};
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
@@ -108,10 +108,10 @@ impl FromStr for AdapterNetwork {
             if let Ok(network) = bitcoin::dogecoin::Network::from_str(s) {
                 return Ok(network.into());
             }
-        } else if let Some(s) = s.strip_prefix("bitcoin:") {
-            if let Ok(network) = bitcoin::Network::from_str(s) {
-                return Ok(network.into());
-            }
+        } else if let Some(s) = s.strip_prefix("bitcoin:")
+            && let Ok(network) = bitcoin::Network::from_str(s)
+        {
+            return Ok(network.into());
         }
         Err(format!("unknown network name {s}"))
     }
@@ -353,7 +353,7 @@ pub mod test_common {
         net::SocketAddr,
     };
 
-    use bitcoin::{consensus::deserialize, Block};
+    use bitcoin::{Block, consensus::deserialize};
     use hex::FromHex;
 
     use crate::{Channel, ChannelError, Command};

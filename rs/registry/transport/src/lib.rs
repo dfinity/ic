@@ -4,17 +4,17 @@ pub mod pb;
 mod high_capacity;
 
 pub use high_capacity::{
-    dechunkify_delta, dechunkify_get_value_response_content, dechunkify_mutation_value, GetChunk,
-    MockGetChunk,
+    GetChunk, MockGetChunk, dechunkify_delta, dechunkify_get_value_response_content,
+    dechunkify_mutation_value,
 };
 
 use std::{fmt, str};
 
 use crate::pb::v1::{
-    registry_error::Code,
-    registry_mutation::{self, Type},
     HighCapacityRegistryDelta, HighCapacityRegistryGetChangesSinceResponse,
     HighCapacityRegistryGetValueResponse, Precondition, RegistryError, RegistryMutation,
+    registry_error::Code,
+    registry_mutation::{self, Type},
 };
 use prost::Message;
 use serde::{Deserialize, Serialize};
@@ -442,10 +442,10 @@ pub fn precondition(key: impl AsRef<[u8]>, version: u64) -> Precondition {
 mod tests {
     use super::*;
     use crate::pb::v1::{
+        HighCapacityRegistryAtomicMutateRequest, HighCapacityRegistryGetChangesSinceResponse,
+        HighCapacityRegistryMutation, RegistryAtomicMutateRequest,
         high_capacity_registry_get_value_response, high_capacity_registry_mutation,
-        registry_mutation, HighCapacityRegistryAtomicMutateRequest,
-        HighCapacityRegistryGetChangesSinceResponse, HighCapacityRegistryMutation,
-        RegistryAtomicMutateRequest,
+        registry_mutation,
     };
     use pretty_assertions::assert_eq;
 
@@ -594,8 +594,8 @@ mod tests {
                     .iter()
                     .map(|mutation_type| {
                         let mutation_type = *mutation_type as i32;
-                        let key = format!("key_{}", mutation_type).into_bytes();
-                        let value = format!("value {}", mutation_type).into_bytes();
+                        let key = format!("key_{mutation_type}").into_bytes();
+                        let value = format!("value {mutation_type}").into_bytes();
 
                         RegistryMutation {
                             mutation_type,
@@ -613,8 +613,8 @@ mod tests {
                 .iter()
                 .map(|mutation_type| {
                     let mutation_type = *mutation_type as i32;
-                    let key = format!("key_{}", mutation_type).into_bytes();
-                    let value = format!("value {}", mutation_type).into_bytes();
+                    let key = format!("key_{mutation_type}").into_bytes();
+                    let value = format!("value {mutation_type}").into_bytes();
                     let content = Some(high_capacity_registry_mutation::Content::Value(value));
 
                     HighCapacityRegistryMutation {

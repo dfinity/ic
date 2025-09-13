@@ -2,12 +2,13 @@
 
 use crate::common::{BlockHeight, BlockchainHeader};
 use bitcoin::{
+    BlockHash, Work,
     block::Header as PureHeader,
-    consensus::{encode, Decodable, Encodable},
-    io, BlockHash, Work,
+    consensus::{Decodable, Encodable, encode},
+    io,
 };
 use ic_btc_validation::ValidateHeaderError;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error};
 use lmdb::{
     Cursor, Database, DatabaseFlags, Environment, EnvironmentFlags, RoTransaction, RwTransaction,
     Transaction, WriteFlags,
@@ -239,16 +240,14 @@ fn create_db_env(path: &Path) -> Environment {
     // 3 databases: 1 for headers, 1 for tips, 1 for parent-child relation.
     builder.set_max_dbs(3);
     builder.set_map_size(MAX_LMDB_CACHE_SIZE);
-
-    let db_env = builder
+    builder
         .open_with_permissions(path, permission)
         .unwrap_or_else(|err| {
             panic!(
                 "Error opening LMDB environment with permissions at {:?}: {:?}",
                 path, err
             )
-        });
-    db_env
+        })
 }
 
 #[derive(Error, Debug)]

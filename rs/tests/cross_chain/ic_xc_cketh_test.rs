@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
@@ -6,7 +6,7 @@ use futures::future::FutureExt;
 use hex_literal::hex;
 use ic_cketh_minter::endpoints::{CandidBlockTag, MinterInfo};
 use ic_cketh_minter::lifecycle::upgrade::UpgradeArg as MinterUpgradeArg;
-use ic_cketh_minter::lifecycle::{init::InitArg as MinterInitArgs, EthereumNetwork, MinterArg};
+use ic_cketh_minter::lifecycle::{EthereumNetwork, MinterArg, init::InitArg as MinterInitArgs};
 use ic_cketh_minter::numeric::BlockNumber;
 use ic_consensus_system_test_utils::rw_message::install_nns_with_customizations_and_check_progress;
 use ic_consensus_threshold_sig_system_test_utils::{
@@ -30,8 +30,8 @@ use ic_system_test_driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-            NnsCustomizations, SshSession,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCustomizations, SshSession,
+            get_dependency_path,
         },
         universal_vm::{UniversalVm, UniversalVms},
     },
@@ -41,7 +41,7 @@ use ic_system_test_driver::{
 use ic_types::Height;
 use icrc_ledger_types::icrc1::account::Account;
 use reqwest::Client;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::env;
 use std::future::Future;
 use std::time::Duration;
@@ -247,7 +247,7 @@ async fn eth_block_number(foundry: &DeployedUniversalVm) -> BlockNumber {
     let foundry_ip = foundry.get_vm().unwrap().ipv6;
     let client = Client::new();
 
-    let url = format!("http://[{:?}]:{:?}", foundry_ip, FOUNDRY_PORT);
+    let url = format!("http://[{foundry_ip:?}]:{FOUNDRY_PORT:?}");
 
     let response = client
         .post(&url)
@@ -739,7 +739,7 @@ fn deploy_erc20_contract(
         &EthereumAccount::Erc20Deployer,
         "ERC20.sol",
         "EXLToken",
-        &format!("0x{:x}", initial_supply),
+        &format!("0x{initial_supply:x}"),
         logger,
     );
     //deployer has initial supply, transfer some ERC-20 tokens to user to play with
@@ -816,11 +816,13 @@ fn deploy_smart_contract(
     logger: &slog::Logger,
 ) -> (Address, BlockNumber) {
     let sender_private_key = sender.private_key();
-    let cmd = format!("\
+    let cmd = format!(
+        "\
         docker run --net {DOCKER_NETWORK_NAME} --rm \
         -v /config/{filename}:/contracts/{filename} \
         foundry \"forge create --json --rpc-url http://anvil:{FOUNDRY_PORT} --broadcast --private-key {sender_private_key} /contracts/{filename}:{contract_name} --constructor-args {constructor_args}\"\
-    ");
+    "
+    );
     let json_output = foundry.block_on_bash_script(&cmd).unwrap();
     info!(
         logger,
@@ -964,7 +966,7 @@ impl LedgerSuiteOrchestratorCanister<'_> {
             }
         )
         .await
-        .unwrap_or_else(|e| panic!("Canisters for ERC-20 {:?} were not created: {}", arg, e));
+        .unwrap_or_else(|e| panic!("Canisters for ERC-20 {arg:?} were not created: {e}"));
         info!(
             &logger,
             "Created canister IDs: {} for ERC-20 {:?}", created_canister_ids, arg

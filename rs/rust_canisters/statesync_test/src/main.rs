@@ -3,7 +3,7 @@
 /// been called.
 use ic_cdk::{query, update};
 use lazy_static::lazy_static;
-use rand::{rngs::SmallRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rngs::SmallRng};
 use std::sync::Mutex;
 
 /// Size of data vector in canister, 128 MB

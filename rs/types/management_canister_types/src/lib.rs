@@ -142,7 +142,7 @@ pub enum Method {
 fn candid_error_to_user_error(err: candid::Error) -> UserError {
     UserError::new(
         ErrorCode::InvalidManagementPayload,
-        format!("Error decoding candid: {:#}", err),
+        format!("Error decoding candid: {err:#}"),
     )
 }
 
@@ -902,15 +902,14 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
             ) => {
                 let snapshot_id = SnapshotId::try_from(canister_load_snapshot.snapshot_id)
                     .map_err(|e| {
-                        ProxyDecodeError::Other(format!("Failed to decode snapshot_id: {:?}", e))
+                        ProxyDecodeError::Other(format!("Failed to decode snapshot_id: {e:?}"))
                     })?;
 
                 let source = SnapshotSource::try_from(
                     pb_canister_state_bits::SnapshotSource::try_from(canister_load_snapshot.source)
                         .map_err(|e| {
                             ProxyDecodeError::Other(format!(
-                                "Failed to decode snapshot source: {:?}",
-                                e
+                                "Failed to decode snapshot source: {e:?}"
                             ))
                         })?,
                 )?;
@@ -2276,10 +2275,7 @@ impl SetupInitialDKGArgs {
             if !set.insert(NodeId::new(*node_id)) {
                 return Err(UserError::new(
                     ErrorCode::InvalidManagementPayload,
-                    format!(
-                        "Expected a set of NodeIds. The NodeId {} is repeated",
-                        node_id
-                    ),
+                    format!("Expected a set of NodeIds. The NodeId {node_id} is repeated"),
                 ));
             }
         }
@@ -2329,7 +2325,7 @@ impl SetupInitialDKGResponse {
         {
             Err(err) => Err(UserError::new(
                 ErrorCode::InvalidManagementPayload,
-                format!("Payload deserialization error: '{}'", err),
+                format!("Payload deserialization error: '{err}'"),
             )),
             Ok((
                 low_threshold_transcript_record,
@@ -2398,7 +2394,7 @@ impl TryFrom<pb_types::EcdsaCurve> for EcdsaCurve {
             pb_types::EcdsaCurve::Secp256k1 => Ok(EcdsaCurve::Secp256k1),
             pb_types::EcdsaCurve::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "EcdsaCurve",
-                err: format!("Unable to convert {:?} to an EcdsaCurve", item),
+                err: format!("Unable to convert {item:?} to an EcdsaCurve"),
             }),
         }
     }
@@ -2406,7 +2402,7 @@ impl TryFrom<pb_types::EcdsaCurve> for EcdsaCurve {
 
 impl std::fmt::Display for EcdsaCurve {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -2416,7 +2412,7 @@ impl FromStr for EcdsaCurve {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "secp256k1" => Ok(Self::Secp256k1),
-            _ => Err(format!("{} is not a recognized ECDSA curve", s)),
+            _ => Err(format!("{s} is not a recognized ECDSA curve")),
         }
     }
 }
@@ -2470,7 +2466,7 @@ impl FromStr for EcdsaKeyId {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (curve, name) = s
             .split_once(':')
-            .ok_or_else(|| format!("ECDSA key id {} does not contain a ':'", s))?;
+            .ok_or_else(|| format!("ECDSA key id {s} does not contain a ':'"))?;
         Ok(EcdsaKeyId {
             curve: curve.parse::<EcdsaCurve>()?,
             name: name.to_string(),
@@ -2535,7 +2531,7 @@ impl TryFrom<pb_types::SchnorrAlgorithm> for SchnorrAlgorithm {
             pb_types::SchnorrAlgorithm::Ed25519 => Ok(SchnorrAlgorithm::Ed25519),
             pb_types::SchnorrAlgorithm::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "SchnorrAlgorithm",
-                err: format!("Unable to convert {:?} to a SchnorrAlgorithm", item),
+                err: format!("Unable to convert {item:?} to a SchnorrAlgorithm"),
             }),
         }
     }
@@ -2543,7 +2539,7 @@ impl TryFrom<pb_types::SchnorrAlgorithm> for SchnorrAlgorithm {
 
 impl std::fmt::Display for SchnorrAlgorithm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -2554,7 +2550,7 @@ impl FromStr for SchnorrAlgorithm {
         match s.to_lowercase().as_str() {
             "bip340secp256k1" => Ok(Self::Bip340Secp256k1),
             "ed25519" => Ok(Self::Ed25519),
-            _ => Err(format!("{} is not a recognized Schnorr algorithm", s)),
+            _ => Err(format!("{s} is not a recognized Schnorr algorithm")),
         }
     }
 }
@@ -2590,7 +2586,7 @@ impl TryFrom<pb_types::SchnorrKeyId> for SchnorrKeyId {
             SchnorrAlgorithm::try_from(pb_types::SchnorrAlgorithm::try_from(algorithm).map_err(
                 |_| ProxyDecodeError::ValueOutOfRange {
                     typ: "SchnorrKeyId",
-                    err: format!("Unable to convert {} to a SchnorrAlgorithm", algorithm),
+                    err: format!("Unable to convert {algorithm} to a SchnorrAlgorithm"),
                 },
             )?)?;
         Ok(Self { algorithm, name })
@@ -2608,7 +2604,7 @@ impl FromStr for SchnorrKeyId {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (algorithm, name) = s
             .split_once(':')
-            .ok_or_else(|| format!("Schnorr key id {} does not contain a ':'", s))?;
+            .ok_or_else(|| format!("Schnorr key id {s} does not contain a ':'"))?;
         Ok(SchnorrKeyId {
             algorithm: algorithm.parse::<SchnorrAlgorithm>()?,
             name: name.to_string(),
@@ -2669,7 +2665,7 @@ impl TryFrom<pb_types::VetKdCurve> for VetKdCurve {
             pb_types::VetKdCurve::Bls12381G2 => Ok(VetKdCurve::Bls12_381_G2),
             pb_types::VetKdCurve::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "VetKdCurve",
-                err: format!("Unable to convert {:?} to a VetKdCurve", item),
+                err: format!("Unable to convert {item:?} to a VetKdCurve"),
             }),
         }
     }
@@ -2677,7 +2673,7 @@ impl TryFrom<pb_types::VetKdCurve> for VetKdCurve {
 
 impl std::fmt::Display for VetKdCurve {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -2687,7 +2683,7 @@ impl FromStr for VetKdCurve {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "bls12_381_g2" => Ok(Self::Bls12_381_G2),
-            _ => Err(format!("{} is not a recognized vetKD curve", s)),
+            _ => Err(format!("{s} is not a recognized vetKD curve")),
         }
     }
 }
@@ -2742,7 +2738,7 @@ impl FromStr for VetKdKeyId {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (curve, name) = s
             .split_once(':')
-            .ok_or_else(|| format!("vetKD key id {} does not contain a ':'", s))?;
+            .ok_or_else(|| format!("vetKD key id {s} does not contain a ':'"))?;
         Ok(VetKdKeyId {
             curve: curve.parse::<VetKdCurve>()?,
             name: name.to_string(),
@@ -2853,14 +2849,13 @@ impl FromStr for MasterPublicKeyId {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (scheme, key_id) = s
             .split_once(':')
-            .ok_or_else(|| format!("Master public key id {} does not contain a ':'", s))?;
+            .ok_or_else(|| format!("Master public key id {s} does not contain a ':'"))?;
         match scheme.to_lowercase().as_str() {
             "ecdsa" => Ok(Self::Ecdsa(EcdsaKeyId::from_str(key_id)?)),
             "schnorr" => Ok(Self::Schnorr(SchnorrKeyId::from_str(key_id)?)),
             "vetkd" => Ok(Self::VetKd(VetKdKeyId::from_str(key_id)?)),
             _ => Err(format!(
-                "Scheme {} in master public key id {} is not supported.",
-                scheme, s
+                "Scheme {scheme} in master public key id {s} is not supported."
             )),
         }
     }
@@ -2986,10 +2981,7 @@ impl ReshareChainKeyArgs {
             if !set.insert(NodeId::new(*node_id)) {
                 return Err(UserError::new(
                     ErrorCode::InvalidManagementPayload,
-                    format!(
-                        "Expected a set of NodeIds. The NodeId {} is repeated",
-                        node_id
-                    ),
+                    format!("Expected a set of NodeIds. The NodeId {node_id} is repeated"),
                 ));
             }
         }
@@ -3024,7 +3016,7 @@ impl ReshareChainKeyResponse {
         serde_cbor::from_slice::<Self>(&serde_encoded_bytes).map_err(|err| {
             UserError::new(
                 ErrorCode::InvalidManagementPayload,
-                format!("Payload deserialization error: '{}'", err),
+                format!("Payload deserialization error: '{err}'"),
             )
         })
     }
@@ -3956,7 +3948,7 @@ impl TryFrom<pb_canister_state_bits::SnapshotSource> for SnapshotSource {
             pb_canister_state_bits::SnapshotSource::Unspecified => {
                 Err(ProxyDecodeError::ValueOutOfRange {
                     typ: "SnapshotSource",
-                    err: format!("Unexpected value of SnapshotSource: {:?}", value),
+                    err: format!("Unexpected value of SnapshotSource: {value:?}"),
                 })
             }
             pb_canister_state_bits::SnapshotSource::TakenFromCanister => {
@@ -4097,8 +4089,7 @@ impl TryFrom<pb_canister_state_bits::OnLowWasmMemoryHookStatus> for OnLowWasmMem
                 Err(ProxyDecodeError::ValueOutOfRange {
                     typ: "OnLowWasmMemoryHookStatus",
                     err: format!(
-                        "Unexpected value of status of on low wasm memory hook: {:?}",
-                        value
+                        "Unexpected value of status of on low wasm memory hook: {value:?}"
                     ),
                 })
             }
@@ -4566,8 +4557,7 @@ mod tests {
                 assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
                 assert!(
                     error.description().contains(&format!(
-                        "Deserialize error: The number of elements exceeds maximum allowed {}",
-                        MAX_ALLOWED_CONTROLLERS_COUNT
+                        "Deserialize error: The number of elements exceeds maximum allowed {MAX_ALLOWED_CONTROLLERS_COUNT}"
                     )),
                     "Actual: {}",
                     error.description()
@@ -4625,7 +4615,7 @@ mod tests {
     #[test]
     fn ecdsa_curve_round_trip() {
         for curve in EcdsaCurve::iter() {
-            assert_eq!(format!("{}", curve).parse::<EcdsaCurve>().unwrap(), curve);
+            assert_eq!(format!("{curve}").parse::<EcdsaCurve>().unwrap(), curve);
         }
     }
 
@@ -4637,7 +4627,7 @@ mod tests {
                     curve,
                     name: name.to_string(),
                 };
-                assert_eq!(format!("{}", key).parse::<EcdsaKeyId>().unwrap(), key);
+                assert_eq!(format!("{key}").parse::<EcdsaKeyId>().unwrap(), key);
             }
         }
     }
@@ -4646,9 +4636,7 @@ mod tests {
     fn schnorr_algorithm_round_trip() {
         for algorithm in SchnorrAlgorithm::iter() {
             assert_eq!(
-                format!("{}", algorithm)
-                    .parse::<SchnorrAlgorithm>()
-                    .unwrap(),
+                format!("{algorithm}").parse::<SchnorrAlgorithm>().unwrap(),
                 algorithm
             );
         }
@@ -4662,7 +4650,7 @@ mod tests {
                     algorithm,
                     name: name.to_string(),
                 };
-                assert_eq!(format!("{}", key).parse::<SchnorrKeyId>().unwrap(), key);
+                assert_eq!(format!("{key}").parse::<SchnorrKeyId>().unwrap(), key);
             }
         }
     }
@@ -4670,7 +4658,7 @@ mod tests {
     #[test]
     fn vetkd_curve_round_trip() {
         for curve in VetKdCurve::iter() {
-            assert_eq!(format!("{}", curve).parse::<VetKdCurve>().unwrap(), curve);
+            assert_eq!(format!("{curve}").parse::<VetKdCurve>().unwrap(), curve);
         }
     }
 
@@ -4682,7 +4670,7 @@ mod tests {
                     curve,
                     name: name.to_string(),
                 };
-                assert_eq!(format!("{}", key).parse::<VetKdKeyId>().unwrap(), key);
+                assert_eq!(format!("{key}").parse::<VetKdKeyId>().unwrap(), key);
             }
         }
     }
@@ -4695,10 +4683,7 @@ mod tests {
                     algorithm,
                     name: name.to_string(),
                 });
-                assert_eq!(
-                    format!("{}", key).parse::<MasterPublicKeyId>().unwrap(),
-                    key
-                );
+                assert_eq!(format!("{key}").parse::<MasterPublicKeyId>().unwrap(), key);
             }
         }
 
@@ -4708,10 +4693,7 @@ mod tests {
                     curve,
                     name: name.to_string(),
                 });
-                assert_eq!(
-                    format!("{}", key).parse::<MasterPublicKeyId>().unwrap(),
-                    key
-                );
+                assert_eq!(format!("{key}").parse::<MasterPublicKeyId>().unwrap(), key);
             }
         }
 
@@ -4721,10 +4703,7 @@ mod tests {
                     curve,
                     name: name.to_string(),
                 });
-                assert_eq!(
-                    format!("{}", key).parse::<MasterPublicKeyId>().unwrap(),
-                    key
-                );
+                assert_eq!(format!("{key}").parse::<MasterPublicKeyId>().unwrap(), key);
             }
         }
     }
@@ -4774,8 +4753,7 @@ mod tests {
             assert_eq!(result.code(), ErrorCode::InvalidManagementPayload);
             assert!(
                 result.description().contains(&format!(
-                    "Deserialize error: The number of elements exceeds maximum allowed {}",
-                    MAXIMUM_DERIVATION_PATH_LENGTH
+                    "Deserialize error: The number of elements exceeds maximum allowed {MAXIMUM_DERIVATION_PATH_LENGTH}"
                 )),
                 "Actual: {}",
                 result.description()
@@ -4795,8 +4773,7 @@ mod tests {
             assert_eq!(result.code(), ErrorCode::InvalidManagementPayload);
             assert!(
                 result.description().contains(&format!(
-                    "Deserialize error: The number of elements exceeds maximum allowed {}",
-                    MAXIMUM_DERIVATION_PATH_LENGTH
+                    "Deserialize error: The number of elements exceeds maximum allowed {MAXIMUM_DERIVATION_PATH_LENGTH}"
                 )),
                 "Actual: {}",
                 result.description()
@@ -4816,8 +4793,7 @@ mod tests {
             assert_eq!(result.code(), ErrorCode::InvalidManagementPayload);
             assert!(
                 result.description().contains(&format!(
-                    "Deserialize error: The number of elements exceeds maximum allowed {}",
-                    MAXIMUM_DERIVATION_PATH_LENGTH
+                    "Deserialize error: The number of elements exceeds maximum allowed {MAXIMUM_DERIVATION_PATH_LENGTH}"
                 )),
                 "Actual: {}",
                 result.description()

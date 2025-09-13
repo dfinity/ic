@@ -2,7 +2,7 @@ mod common;
 
 use crate::common::raw_canister_id_range_into;
 use candid::Principal;
-use ic_registry_routing_table::{canister_id_into_u64, CanisterIdRange};
+use ic_registry_routing_table::{CanisterIdRange, canister_id_into_u64};
 use ic_registry_subnet_type::SubnetType;
 use pocket_ic::PocketIcBuilder;
 use rcgen::{CertificateParams, KeyPair};
@@ -99,7 +99,7 @@ fn setup_and_run_ic_ref_test(
                 .trim_end()
                 .parse()
                 .expect("Failed to parse port to number");
-            break format!("localhost:{}", port);
+            break format!("localhost:{port}");
         }
         std::thread::sleep(Duration::from_millis(20));
     };

@@ -24,7 +24,7 @@ end::catalog[] */
 
 use anyhow::Result;
 use ic_nested_nns_recovery_common::{
-    setup, test, SetupConfig, TestConfig, DKG_INTERVAL, SUBNET_SIZE,
+    DKG_INTERVAL, SUBNET_SIZE, SetupConfig, TestConfig, setup, test,
 };
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use std::time::Duration;
@@ -41,9 +41,7 @@ fn main() -> Result<()> {
                 },
             )
         })
-        .add_test(systest!(test; TestConfig {
-            subnet_size: SUBNET_SIZE,
-        }))
+        .add_test(systest!(test; TestConfig {}))
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .with_overall_timeout(Duration::from_secs(35 * 60))
         .execute_from_args()?;

@@ -1,10 +1,10 @@
 use crate::{common::BlockchainNetwork, config::Config};
 use bitcoin::p2p::Address;
 use bitcoin::p2p::ServiceFlags;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use rand::{
-    prelude::{IteratorRandom, SliceRandom, StdRng},
     SeedableRng,
+    prelude::{IteratorRandom, SliceRandom, StdRng},
 };
 use std::{
     collections::{HashSet, VecDeque},
@@ -304,7 +304,7 @@ pub fn validate_services(services: &ServiceFlags) -> bool {
 /// This is a simple utility function for creating a string that is a valid string
 /// for ToSocketAddrs.
 fn format_addr(seed: &str, port: u16) -> String {
-    format!("{}:{}", seed, port)
+    format!("{seed}:{port}")
 }
 
 #[cfg(test)]

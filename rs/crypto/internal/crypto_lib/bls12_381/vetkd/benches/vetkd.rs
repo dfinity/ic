@@ -67,7 +67,7 @@ fn vetkd_bench(c: &mut Criterion) {
         }
 
         group.bench_function(
-            format!("EncryptedKey::combine_valid_shares (n={})", nodes),
+            format!("EncryptedKey::combine_valid_shares (n={nodes})"),
             |b| {
                 b.iter(|| {
                     EncryptedKey::combine_valid_shares(

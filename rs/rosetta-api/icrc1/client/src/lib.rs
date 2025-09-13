@@ -1,5 +1,5 @@
-use anyhow::bail;
 use anyhow::Context;
+use anyhow::bail;
 use candid::Nat;
 use ic_icrc_rosetta::common::types::ApproveMetadata;
 use ic_icrc_rosetta::common::types::Error;

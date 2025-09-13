@@ -9,17 +9,17 @@ use ic_icrc1_ledger::{
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
-use ic_ledger_hash_of::{HashOf, HASH_LENGTH};
+use ic_ledger_hash_of::{HASH_LENGTH, HashOf};
 use ic_ledger_suite_state_machine_tests::archiving::icrc_archives;
 use ic_ledger_suite_state_machine_tests::fee_collector::BlockRetrieval;
 use ic_ledger_suite_state_machine_tests::in_memory_ledger::{
-    verify_ledger_state, AllowancesRecentlyPurged,
+    AllowancesRecentlyPurged, verify_ledger_state,
 };
 use ic_ledger_suite_state_machine_tests::{
-    get_all_ledger_and_archive_blocks, send_approval, send_transfer_from, AllowanceProvider,
-    ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES, FEE, INT_META_KEY,
-    INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
-    TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
+    ARCHIVE_TRIGGER_THRESHOLD, AllowanceProvider, BLOB_META_KEY, BLOB_META_VALUE, DECIMAL_PLACES,
+    FEE, INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE,
+    TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL, get_all_ledger_and_archive_blocks,
+    send_approval, send_transfer_from,
 };
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue;
@@ -1324,10 +1324,7 @@ fn test_icrc3_get_blocks() {
         assert_eq!(
             expected_block.hash(),
             block.clone().hash(),
-            "Block {} is different.\nExpected Block: {}\nActual   Block: {}",
-            block_index,
-            expected_block,
-            block,
+            "Block {block_index} is different.\nExpected Block: {expected_block}\nActual   Block: {block}",
         )
     }
 
@@ -1505,7 +1502,7 @@ fn test_icrc3_get_blocks() {
                 None => panic!("Got block with id {id} at position {pos} which doesn't exist"),
                 Some(expected_block) => expected_block,
             };
-            assert_eq!(expected_block, &block, "id: {}, position: {}", id, pos);
+            assert_eq!(expected_block, &block, "id: {id}, position: {pos}");
         }
     };
 
@@ -1696,8 +1693,7 @@ fn test_icrc3_certificate_ledger_upgrade() {
                 _ => Err("Expected a leaf node".to_string()),
             },
             _ => Err(format!(
-                "Expected to find a leaf node: Hash tree: {:?}, leaf_name: {}",
-                hash_tree, leaf_name
+                "Expected to find a leaf node: Hash tree: {hash_tree:?}, leaf_name: {leaf_name}"
             )
             .to_string()),
         }
@@ -1866,10 +1862,7 @@ fn is_valid_root_hash(
     let cert_hash = match certificate.tree.lookup_path(&certified_data_path) {
         LookupResult::Found(v) => v,
         _ => {
-            panic!(
-                "could not find certified_data for canister: {}",
-                ledger_canister_id
-            )
+            panic!("could not find certified_data for canister: {ledger_canister_id}")
         }
     };
 
@@ -1879,7 +1872,7 @@ fn is_valid_root_hash(
 mod verify_written_blocks {
     use super::*;
     use ic_icrc1_ledger::FeatureFlags;
-    use ic_ledger_suite_state_machine_tests::{system_time_to_nanos, MINTER};
+    use ic_ledger_suite_state_machine_tests::{MINTER, system_time_to_nanos};
     use ic_state_machine_tests::{StateMachine, WasmResult};
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::{Memo, NumTokens, TransferArg};
@@ -2172,7 +2165,7 @@ mod verify_written_blocks {
             {
                 WasmResult::Reply(bytes) => bytes,
                 WasmResult::Reject(reject) => {
-                    panic!("Expected a successful reply, got a reject: {}", reject)
+                    panic!("Expected a successful reply, got a reject: {reject}")
                 }
             };
             let mut response = Decode!(&wasm_result_bytes, GetTransactionsResponse).unwrap();
