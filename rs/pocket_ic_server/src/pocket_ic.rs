@@ -118,7 +118,7 @@ use pocket_ic::common::rest::{
     SubnetInstructionConfig, SubnetKind, TickConfigs, Topology,
 };
 use pocket_ic::{ErrorCode, RejectCode, RejectResponse, copy_dir};
-use registry_canister::init::RegistryCanisterInitPayload;
+use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use serde::{Deserialize, Serialize};
 use slog::Level;
 use std::cmp::max;
