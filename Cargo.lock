@@ -11912,6 +11912,7 @@ dependencies = [
  "ic-nervous-system-canisters",
  "ic-nervous-system-common",
  "ic-nervous-system-integration-tests",
+ "ic-nervous-system-timer-task",
  "ic-nns-constants",
  "ic-nns-test-utils",
  "ic-node-rewards-canister-api",

@@ -1,9 +1,9 @@
+use crate::KeyRange;
 use crate::api_conversion::into_rewards_calculation_results;
 use crate::metrics::MetricsManager;
 use crate::pb::v1::{RewardableNodesKey, RewardableNodesValue};
 use crate::registry_querier::RegistryQuerier;
 use crate::storage::{REWARDABLE_NODES_CACHE, VM};
-use crate::KeyRange;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_node_rewards_canister_api::monthly_rewards::{
@@ -20,11 +20,11 @@ use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
-use ic_registry_canister_client::{get_decoded_value, CanisterRegistryClient};
+use ic_registry_canister_client::{CanisterRegistryClient, get_decoded_value};
 use ic_registry_keys::{
     DATA_CENTER_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
 };
-use ic_registry_node_provider_rewards::{calculate_rewards_v0, RewardsPerNodeProvider};
+use ic_registry_node_provider_rewards::{RewardsPerNodeProvider, calculate_rewards_v0};
 use ic_types::registry::RegistryClientError;
 use ic_types::{RegistryVersion, Time};
 use rewards_calculation::performance_based_algorithm::results::RewardsCalculatorResults;
@@ -40,13 +40,13 @@ use std::thread::LocalKey;
 mod test;
 
 #[cfg(target_arch = "wasm32")]
-fn current_time() -> Time {
+pub fn current_time() -> Time {
     let current_time = ic_cdk::api::time();
     Time::from_nanos_since_unix_epoch(current_time)
 }
 
 #[cfg(not(any(target_arch = "wasm32")))]
-fn current_time() -> Time {
+pub fn current_time() -> Time {
     ic_types::time::current_time()
 }
 
@@ -77,7 +77,7 @@ impl NodeRewardsCanister {
         self.registry_client.clone()
     }
 
-    /// Gets Arc reference to MetricsManager
+    /// Gets Arc reference to RegistryQuerier
     pub fn get_metrics_manager(&self) -> Rc<MetricsManager<VM>> {
         self.metrics_manager.clone()
     }
@@ -268,18 +268,6 @@ impl rewards_calculation::performance_based_algorithm::DataProvider for &NodeRew
         } else {
             Ok(cached_rewardable_nodes)
         }
-    }
-
-    fn get_provider_rewardable_nodes(
-        &self,
-        day: &DayUtc,
-        provider_id: &PrincipalId,
-    ) -> Result<Vec<RewardableNode>, String> {
-        let mut all_rewardable_nodes = self.get_rewardable_nodes(day)?;
-        let rewardable_nodes = all_rewardable_nodes
-            .remove(provider_id)
-            .ok_or_else(|| format!("No rewardable nodes found for provider {}", provider_id))?;
-        Ok(rewardable_nodes)
     }
 }
 

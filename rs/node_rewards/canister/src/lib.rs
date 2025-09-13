@@ -21,6 +21,7 @@ pub mod pb;
 pub mod registry_querier;
 pub mod storage;
 pub mod telemetry;
+pub mod timer_tasks;
 
 // Maximum sizes for the storable types chosen as result of test `max_bound_size`
 const MAX_BYTES_SUBNET_ID_STORED: u32 = 33;
