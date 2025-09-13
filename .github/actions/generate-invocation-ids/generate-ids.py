@@ -80,7 +80,7 @@ _These links may not be immediately available; invocation details will eventuall
         path = os.environ.get(GITHUB_OUTPUT)
         logger.info("Will write output to %s", path)
         with open(path, "w") as f:
-            f.write(encoded_output)
+            f.write(f"output={encoded_output}")
     else:
         logger.warning("Didn't find %s in environment variables", GITHUB_OUTPUT)
 
