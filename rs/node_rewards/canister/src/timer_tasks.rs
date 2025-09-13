@@ -91,6 +91,8 @@ const CACHE_BACKFILL_START_DAY: u64 = 1746057600; // 1st May 2025
 
 impl PeriodicSyncTask for CacheSyncTask {
     fn execute(self) {
+        ic_cdk::println!("Executing cache sync task");
+
         let mut instructions_counter = telemetry::InstructionCounter::default();
         let today = DayUtc::from_secs(current_time().as_secs_since_unix_epoch());
         let start_backfill_day = DayUtc::from_secs(CACHE_BACKFILL_START_DAY);
@@ -107,22 +109,23 @@ impl PeriodicSyncTask for CacheSyncTask {
             .next();
 
         ic_cdk::println!(
-            "instructions counter for pre schedule cache sync: {}",
+            "instructions counter for evaluating cache: {}",
             instructions_counter.lap()
         );
 
         if let Some(day_to_backfill) = maybe_day_to_backfill {
-            ic_cdk::println!("Backfilling rewardable nodes for day {}", day_to_backfill);
             NodeRewardsCanister::backfill_rewardable_nodes(self.canister, &day_to_backfill)
                 .unwrap_or_else(|e| ic_cdk::println!("Failed to backfill: {:?}", e));
             ic_cdk::println!(
-                "instructions counter for pre schedule cache sync: {}",
-                instructions_counter.sum()
+                "instructions counter cache sync: {}",
+                instructions_counter.lap()
             );
+            ic_cdk::println!("Cache sync task finished: {}", instructions_counter.sum());
         } else {
             CACHE_SYNC_TIMER_ID.with(|id| {
                 if let Some(timer_id) = id.borrow_mut().take() {
                     clear_timer(timer_id);
+                    ic_cdk::println!("Timer cleared");
                 }
             });
         }
