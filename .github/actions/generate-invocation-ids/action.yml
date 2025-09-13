@@ -114,7 +114,7 @@ runs:
             else
                 output_yaml="$output_yaml"$'\n'"$output_id: \"$uuid\""
             fi
-        done < <(echo "$targets" | $yq_cmd -r '.[] | [.name, .output_id] | @tsv')
+        done < <(echo "$targets" | $yq_cmd -r '.[] | [.name, .output_id] | @tsv' | sed 's/"/\\"/g')
 
         # Convert YAML to JSON using yq and set as output
         # but unescaped.

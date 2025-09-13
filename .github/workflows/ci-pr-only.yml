@@ -36,7 +36,7 @@ jobs:
               output_id: test_id
       - name: Debug outputs
         env:
-          TEST_ID: ${{ fromJSON(toJSON(steps.gen-uuids.outputs.output)).test_id }}
+          TEST_ID: ${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}
         run: |
           echo "Available outputs:"
           echo "test_id = $TEST_ID"
@@ -44,6 +44,9 @@ jobs:
           echo ${{ fromJSON(steps.gen-uuids.outputs.output) }}
           echo "To json result:"
           echo ${{ toJSON(steps.gen-uuids.outputs.output) }}
+          echo "Raw output"
+          echo ${{ steps.gen-uuids.outputs.output }}
+          uu
       - name: Run insta-tests
         uses: ./.github/actions/bazel
         with:
