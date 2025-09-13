@@ -1,3 +1,5 @@
+use ic_metrics_encoder::MetricsEncoder;
+use ic_nervous_system_timer_task::TimerTaskMetricsRegistry;
 use std::{cell::RefCell, collections::HashMap};
 
 /// Instruction counter helper that counts instructions in the call context.
@@ -237,7 +239,11 @@ impl<'b> PrometheusMetrics<'b> {
         Ok(())
     }
 }
+fn encode_timer_task_metrics(encoder: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+    METRICS_REGISTRY.with(|registry| registry.borrow().encode("node_rewards", encoder))
+}
 
 thread_local! {
     pub static PROMETHEUS_METRICS: RefCell<PrometheusMetrics<'static>> = RefCell::new(PrometheusMetrics::new());
+    pub static METRICS_REGISTRY: RefCell<TimerTaskMetricsRegistry> = RefCell::new(TimerTaskMetricsRegistry::default());
 }
