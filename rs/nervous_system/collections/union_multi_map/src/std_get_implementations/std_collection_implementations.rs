@@ -2,7 +2,7 @@
 //! library, to wit, Vec, BTreeSet, HashSet.
 use super::*;
 use std::{
-    collections::{btree_set, hash_set, BTreeSet, HashSet},
+    collections::{BTreeSet, HashSet, btree_set, hash_set},
     ops::Deref,
 };
 

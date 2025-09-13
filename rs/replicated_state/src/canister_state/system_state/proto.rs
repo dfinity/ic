@@ -1,5 +1,5 @@
 use super::*;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 
 impl From<CyclesUseCase> for pb::CyclesUseCase {
@@ -32,7 +32,7 @@ impl TryFrom<pb::CyclesUseCase> for CyclesUseCase {
         match item {
             pb::CyclesUseCase::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "CyclesUseCase",
-                err: format!("Unexpected value of cycles use case: {:?}", item),
+                err: format!("Unexpected value of cycles use case: {item:?}"),
             }),
             pb::CyclesUseCase::Memory => Ok(Self::Memory),
             pb::CyclesUseCase::ComputeAllocation => Ok(Self::ComputeAllocation),
@@ -119,14 +119,14 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
             | ExecutionTask::OnLowWasmMemory
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_) => {
-                panic!("Attempt to serialize ephemeral task: {:?}.", item);
+                panic!("Attempt to serialize ephemeral task: {item:?}.");
             }
             ExecutionTask::AbortedExecution {
                 input,
                 prepaid_execution_cycles,
             } => {
                 use pb::execution_task::{
-                    aborted_execution::Input as PbInput, CanisterTask as PbCanisterTask,
+                    CanisterTask as PbCanisterTask, aborted_execution::Input as PbInput,
                 };
                 let input = match input {
                     CanisterMessageOrTask::Message(CanisterMessage::Response(v)) => {
@@ -185,7 +185,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
         let task = match task {
             pb::execution_task::Task::AbortedExecution(aborted) => {
                 use pb::execution_task::{
-                    aborted_execution::Input as PbInput, CanisterTask as PbCanisterTask,
+                    CanisterTask as PbCanisterTask, aborted_execution::Input as PbInput,
                 };
                 let input = aborted
                     .input
@@ -204,7 +204,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                         let task = CanisterTask::try_from(PbCanisterTask::try_from(val).map_err(
                             |_| ProxyDecodeError::ValueOutOfRange {
                                 typ: "CanisterTask",
-                                err: format!("Unexpected value of canister task: {}", val),
+                                err: format!("Unexpected value of canister task: {val}"),
                             },
                         )?)?;
                         CanisterMessageOrTask::Task(task)

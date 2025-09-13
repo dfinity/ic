@@ -7,9 +7,8 @@ use ic_nns_constants::{
 use ic_nns_test_utils::sns_wasm;
 use ic_sns_init::pb::v1::{DappCanisters, SnsInitPayload};
 use ic_sns_wasm::pb::v1::{
-    get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult,
     DappCanistersTransferResult, DeployNewSnsResponse, GetDeployedSnsByProposalIdResponse,
-    SnsCanisterIds,
+    SnsCanisterIds, get_deployed_sns_by_proposal_id_response::GetDeployedSnsByProposalIdResult,
 };
 use ic_test_utilities_types::ids::canister_test_id;
 

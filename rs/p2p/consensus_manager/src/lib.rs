@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     metrics::ConsensusManagerMetrics,
-    receiver::{build_axum_router, ConsensusManagerReceiver},
+    receiver::{ConsensusManagerReceiver, build_axum_router},
     sender::ConsensusManagerSender,
 };
 use axum::Router;
@@ -71,9 +71,11 @@ impl AbortableBroadcastChannelBuilder {
         let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
         let (inbound_tx, inbound_rx) = tokio::sync::mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
 
-        assert!(uri_prefix::<WireArtifact>()
-            .chars()
-            .all(char::is_alphabetic));
+        assert!(
+            uri_prefix::<WireArtifact>()
+                .chars()
+                .all(char::is_alphabetic)
+        );
         let (router, adverts_from_peers_rx) = build_axum_router(self.log.clone());
 
         let log = self.log.clone();

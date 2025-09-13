@@ -258,13 +258,13 @@ fn write_to_disk<P: Into<ProposalTemplate>>(
     let proposal = proposal.into();
     if output_dir.exists() {
         fs::remove_dir_all(&output_dir)
-            .unwrap_or_else(|_| panic!("failed to remove {:?}", output_dir));
+            .unwrap_or_else(|_| panic!("failed to remove {output_dir:?}"));
     }
-    fs::create_dir_all(&output_dir).unwrap_or_else(|_| panic!("failed to create {:?}", output_dir));
+    fs::create_dir_all(&output_dir).unwrap_or_else(|_| panic!("failed to create {output_dir:?}"));
 
     let bin_args_file_path = output_dir.join("args.bin");
     let mut args_file = fs::File::create(&bin_args_file_path)
-        .unwrap_or_else(|_| panic!("failed to create {:?}", bin_args_file_path));
+        .unwrap_or_else(|_| panic!("failed to create {bin_args_file_path:?}"));
     proposal.write_bin_args(&mut args_file);
     println!(
         "Binary upgrade args written to '{}'",
@@ -285,7 +285,7 @@ fn write_to_disk<P: Into<ProposalTemplate>>(
     }
     let proposal_summary = output_dir.join("summary.md");
     let mut summary_file = fs::File::create(&proposal_summary)
-        .unwrap_or_else(|_| panic!("failed to create {:?}", proposal_summary));
+        .unwrap_or_else(|_| panic!("failed to create {proposal_summary:?}"));
     summary_file
         .write_all(proposal_summary_content.as_bytes())
         .unwrap();
@@ -310,7 +310,7 @@ fn write_to_disk<P: Into<ProposalTemplate>>(
             .write(true)
             .mode(0o740) //ensure script is executable
             .open(submit_script.as_path())
-            .unwrap_or_else(|_| panic!("failed to create {:?}", submit_script));
+            .unwrap_or_else(|_| panic!("failed to create {submit_script:?}"));
         submit_file.write_all(command.as_bytes()).unwrap();
         println!("Submit script written to '{}'", submit_script.display());
     }
@@ -318,7 +318,7 @@ fn write_to_disk<P: Into<ProposalTemplate>>(
     if !errors.is_empty() {
         println!("Proposal was generated, but some errors were detected:");
         for error in errors {
-            println!("  * {}", error);
+            println!("  * {error}");
         }
         panic!("errors detected");
     }

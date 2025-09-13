@@ -2,14 +2,13 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use super::{
-    linker,
+    INSTRUCTIONS_COUNTER_GLOBAL_NAME, StoreData, linker,
     system_api::{
-        sandbox_safe_system_state::SandboxSafeSystemState, ApiType,
-        DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits, SystemApiImpl,
+        ApiType, DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits,
+        SystemApiImpl, sandbox_safe_system_state::SandboxSafeSystemState,
     },
-    StoreData, INSTRUCTIONS_COUNTER_GLOBAL_NAME,
 };
-use crate::{wasm_utils::validate_and_instrument_for_testing, WasmtimeEmbedder};
+use crate::{WasmtimeEmbedder, wasm_utils::validate_and_instrument_for_testing};
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
 use ic_config::{
@@ -25,8 +24,8 @@ use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, SystemSta
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
-    batch::CanisterCyclesCostSchedule, time::UNIX_EPOCH, ComputeAllocation, Cycles,
-    MemoryAllocation, NumBytes, NumInstructions,
+    ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+    batch::CanisterCyclesCostSchedule, time::UNIX_EPOCH,
 };
 use ic_wasm_types::BinaryEncodedWasm;
 
@@ -226,7 +225,7 @@ fn test_initial_wasmtime_config() {
             panic!("Error having `{proposal}` proposal enabled in the `wasmtime` config.")
         });
         // Format error message with cause using '{:?}'
-        let err_msg = format!("{:?}", err);
+        let err_msg = format!("{err:?}");
         // Verify that the error occurred because the expected feature was disabled.
         // If this test fails, check whether:
         // 1. The feature being tested is enabled by default (in that case, explicitly disable it in the config), or

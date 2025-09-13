@@ -54,9 +54,10 @@ async fn ensure_feature_is_turned_off() {
     )
     .await;
 
-    assert!(response.is_err_and(|err| err
-        .reject_message
-        .contains(&format!("{}", SwapError::FeatureDisabled))))
+    assert!(response.is_err_and(|err| {
+        err.reject_message
+            .contains(&format!("{}", SwapError::FeatureDisabled))
+    }))
 }
 struct NodeInformation {
     subnet_id: Option<SubnetId>,

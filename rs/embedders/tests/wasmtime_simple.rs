@@ -135,7 +135,7 @@ pub fn invoke(mut store: Store<()>, instance: &Instance, func_name: &str, args: 
         .get_export(&mut store, func_name)
         .unwrap()
         .into_func()
-        .unwrap_or_else(|| panic!("{} export is not a function", func_name))
+        .unwrap_or_else(|| panic!("{func_name} export is not a function"))
         .call(&mut store, args, &mut [])
         .unwrap()
 }
@@ -163,13 +163,10 @@ fn instantiate_module(
                         .into_extern(),
                 );
             } else {
-                panic!(
-                    "Import {} was not found in module {}",
-                    field_name, module_name
-                )
+                panic!("Import {field_name} was not found in module {module_name}")
             }
         } else {
-            panic!("Import module {} was not found", module_name)
+            panic!("Import module {module_name} was not found")
         }
     }
 

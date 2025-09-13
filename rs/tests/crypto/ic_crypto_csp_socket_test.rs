@@ -32,7 +32,7 @@ use ic_system_test_driver::driver::test_env_api::{
     GetFirstHealthyNodeSnapshot, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession,
 };
 use ic_system_test_driver::systest;
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -102,8 +102,7 @@ impl From<String> for SocketMetadata {
         let no_more_fields = field_iter.next();
         assert!(
             no_more_fields.is_none(),
-            "unexpected field: {:?}",
-            no_more_fields
+            "unexpected field: {no_more_fields:?}"
         );
 
         SocketMetadata {
@@ -117,7 +116,7 @@ impl From<String> for SocketMetadata {
 
 impl SocketMetadata {
     fn retrieve(socket: &str, path: &str, node: &IcNodeSnapshot, logger: &Logger) -> Self {
-        let stat_cmd = format!("sudo stat -c '%a %U %G %F' {}/{}", path, socket);
+        let stat_cmd = format!("sudo stat -c '%a %U %G %F' {path}/{socket}");
         info!(
             logger,
             "retrieving socket metadata using command: {}", stat_cmd

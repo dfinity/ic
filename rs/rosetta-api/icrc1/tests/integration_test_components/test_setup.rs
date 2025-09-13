@@ -15,8 +15,5 @@ fn smoke_test() {
         icrc_ledger_default_args_builder().build(),
         None,
     );
-    println!(
-        "The canister id of the icrc ledger is: {:?}",
-        icrc_ledger_canister_id
-    );
+    println!("The canister id of the icrc ledger is: {icrc_ledger_canister_id:?}");
 }

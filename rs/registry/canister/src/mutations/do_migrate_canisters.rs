@@ -35,7 +35,7 @@ impl Registry {
             .into_iter()
             .map(|canister_id| {
                 CanisterId::try_from_principal_id(canister_id)
-                    .map_err(|e| format!("Invalid canister id: {}", e))
+                    .map_err(|e| format!("Invalid canister id: {e}"))
             })
             .collect::<Result<Vec<_>, _>>()?;
 

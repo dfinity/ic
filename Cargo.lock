@@ -5392,7 +5392,6 @@ dependencies = [
  "config",
  "config_types",
  "indoc",
- "itertools 0.12.1",
  "network",
  "regex",
  "utils",
@@ -5808,7 +5807,9 @@ dependencies = [
  "config",
  "config_types",
  "deterministic_ips",
+ "itertools 0.12.1",
  "network",
+ "regex",
  "utils",
 ]
 
@@ -6728,6 +6729,7 @@ dependencies = [
  "bitcoin 0.32.5-doge.0",
  "clap 4.5.27",
  "criterion",
+ "flate2",
  "futures",
  "hashlink",
  "hex",
@@ -6740,6 +6742,7 @@ dependencies = [
  "ic-btc-service",
  "ic-btc-validation",
  "ic-config",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-http-endpoints-async-utils",
  "ic-interfaces-adapter-client",
  "ic-logger",
@@ -6750,8 +6753,10 @@ dependencies = [
  "prometheus 0.13.4",
  "prost 0.13.4",
  "rand 0.8.5",
+ "scrypt",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "slog",
  "slog-async",
  "static_assertions",
@@ -10709,12 +10714,20 @@ name = "ic-migration-canister"
 version = "0.9.0"
 dependencies = [
  "candid",
+ "canister-test",
  "futures",
+ "ic-base-types",
  "ic-cdk",
  "ic-cdk-timers",
+ "ic-management-canister-types",
+ "ic-nns-test-utils",
  "ic-stable-structures 0.7.0",
+ "pocket-ic",
+ "registry-canister",
  "serde",
  "serde_cbor",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -11485,6 +11498,7 @@ dependencies = [
  "bytes",
  "candid",
  "comparable",
+ "hex",
  "ic-base-types",
  "ic-crypto-sha2",
  "ic-nervous-system-clients",
@@ -11901,7 +11915,6 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-test-utils",
  "ic-node-rewards-canister-api",
- "ic-node-rewards-canister-protobuf",
  "ic-protobuf",
  "ic-registry-canister-client",
  "ic-registry-keys",
@@ -11924,22 +11937,8 @@ name = "ic-node-rewards-canister-api"
 version = "0.9.0"
 dependencies = [
  "candid",
- "ic-node-rewards-canister-protobuf",
- "rewards-calculation",
- "serde",
-]
-
-[[package]]
-name = "ic-node-rewards-canister-protobuf"
-version = "0.9.0"
-dependencies = [
- "candid",
  "ic-base-types",
- "ic-management-canister-types",
  "ic-nervous-system-proto",
- "ic-stable-structures 0.6.8",
- "prost 0.13.4",
- "rewards-calculation",
  "serde",
 ]
 
@@ -15318,6 +15317,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic_nested_nns_recovery_common"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "ic-recovery",
+ "ic-system-test-driver",
+ "ic_consensus_system_test_utils",
+ "nested",
+ "rand 0.8.5",
+ "sha2 0.10.9",
+ "slog",
+ "tokio",
+]
+
+[[package]]
 name = "ic_principal"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17527,22 +17541,6 @@ dependencies = [
  "reqwest 0.12.15",
  "slog",
  "url",
-]
-
-[[package]]
-name = "nested-nns-recovery"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "futures",
- "ic-recovery",
- "ic-system-test-driver",
- "ic-types",
- "ic_consensus_system_test_utils",
- "nested",
- "rand 0.8.5",
- "sha2 0.10.9",
- "slog",
 ]
 
 [[package]]
@@ -22645,7 +22643,6 @@ dependencies = [
  "ic-types",
  "lazy_static",
  "rand 0.8.5",
- "rand_pcg 0.3.1",
  "serde",
  "serde_json",
 ]
@@ -23238,6 +23235,8 @@ dependencies = [
  "ic-system-test-driver",
  "ic-xrc-types",
  "ic_consensus_system_test_utils",
+ "ic_nested_nns_recovery_common",
+ "nested",
  "nns_dapp",
  "os_qualification_utils",
  "reqwest 0.12.15",

@@ -1,9 +1,9 @@
 use crate::{
-    messages::{
-        http::representation_independent_hash_read_state, HttpReadState, HttpRequestError,
-        MessageId,
-    },
     PrincipalId, UserId,
+    messages::{
+        HttpReadState, HttpRequestError, MessageId,
+        http::representation_independent_hash_read_state,
+    },
 };
 use ic_crypto_tree_hash::Path;
 use std::convert::TryFrom;
@@ -35,8 +35,7 @@ impl TryFrom<HttpReadState> for ReadState {
         Ok(Self {
             source: UserId::from(PrincipalId::try_from(read_state.sender.0).map_err(|err| {
                 HttpRequestError::InvalidPrincipalId(format!(
-                    "Converting sender to PrincipalId failed with {}",
-                    err
+                    "Converting sender to PrincipalId failed with {err}"
                 ))
             })?),
             paths: read_state.paths,

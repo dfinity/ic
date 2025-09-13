@@ -1,21 +1,20 @@
 use std::rc::Rc;
 
 use crate::wasm_executor::{
-    get_execution_parameters, get_system_state, MAX_SUBNET_AVAILABLE_MEMORY,
+    MAX_SUBNET_AVAILABLE_MEMORY, get_execution_parameters, get_system_state,
 };
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_utils::instrumentation::WasmMemoryType,
     wasmtime_embedder::{
-        linker,
+        StoreData, WasmtimeEmbedder, linker,
         system_api::{ApiType, DefaultOutOfInstructionsHandler, SystemApiImpl},
-        StoreData, WasmtimeEmbedder,
     },
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::{Memory, MessageMemoryUsage, NumWasmPages};
 use ic_test_utilities_types::ids::user_test_id;
-use ic_types::{time::UNIX_EPOCH, NumBytes};
+use ic_types::{NumBytes, time::UNIX_EPOCH};
 use std::collections::{BTreeMap, HashMap};
 use wasm_encoder::{
     EntityType, FuncType, ImportSection, Module, TypeSection, ValType as EncodedValType,

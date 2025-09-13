@@ -171,7 +171,7 @@ fn create_model_neuron_builder(id: u64) -> NeuronBuilder {
         }
     })
     .with_known_neuron_data(Some(KnownNeuronData {
-        name: format!("known neuron data {}", id),
+        name: format!("known neuron data {id}"),
         description: None,
     }))
 }
@@ -519,12 +519,16 @@ fn update_neuron_update_known_neuron_name() {
     assert_eq!(indexes.add_neuron(&old_neuron), Ok(()));
 
     // Step 2: before updating, make sure the neuron can be looked up by the known neuron name.
-    assert!(indexes
-        .known_neuron()
-        .contains_known_neuron_name("known neuron data"));
-    assert!(!indexes
-        .known_neuron()
-        .contains_known_neuron_name("different known neuron data"));
+    assert!(
+        indexes
+            .known_neuron()
+            .contains_known_neuron_name("known neuron data")
+    );
+    assert!(
+        !indexes
+            .known_neuron()
+            .contains_known_neuron_name("different known neuron data")
+    );
 
     // Step 3: make a new neuron with different known neuron name and update the neuron.
     let mut new_neuron = old_neuron.clone();
@@ -536,10 +540,14 @@ fn update_neuron_update_known_neuron_name() {
 
     // Step 4: the neuron can no longer be looked up by the old known neuron name, but can be by the
     // new one.
-    assert!(!indexes
-        .known_neuron()
-        .contains_known_neuron_name("known neuron data"));
-    assert!(indexes
-        .known_neuron()
-        .contains_known_neuron_name("different known neuron data"));
+    assert!(
+        !indexes
+            .known_neuron()
+            .contains_known_neuron_name("known neuron data")
+    );
+    assert!(
+        indexes
+            .known_neuron()
+            .contains_known_neuron_name("different known neuron data")
+    );
 }

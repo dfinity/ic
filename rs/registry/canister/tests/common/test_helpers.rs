@@ -25,7 +25,7 @@ use ic_registry_keys::{
     make_catch_up_package_contents_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig};
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_types::ReplicaVersion;
 use pocket_ic::nonblocking::PocketIc;
@@ -272,11 +272,11 @@ async fn wait_for_ecdsa_setup(
             )
             .await,
         );
-        println!("Response: {:?}", public_key_result);
+        println!("Response: {public_key_result:?}");
         if public_key_result.as_ref().unwrap().is_ok() {
             break;
         }
-        println!("Waiting for public key... {}", i);
+        println!("Waiting for public key... {i}");
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     public_key_result.unwrap().unwrap();
@@ -306,11 +306,11 @@ async fn wait_for_schnorr_setup(
             )
             .await,
         );
-        println!("Response: {:?}", public_key_result);
+        println!("Response: {public_key_result:?}");
         if public_key_result.as_ref().unwrap().is_ok() {
             break;
         }
-        println!("Waiting for public key... {}", i);
+        println!("Waiting for public key... {i}");
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     public_key_result.unwrap().unwrap();
@@ -340,11 +340,11 @@ async fn wait_for_vetkd_setup(
             )
             .await,
         );
-        println!("Response: {:?}", public_key_result);
+        println!("Response: {public_key_result:?}");
         if public_key_result.as_ref().unwrap().is_ok() {
             break;
         }
-        println!("Waiting for public key... {}", i);
+        println!("Waiting for public key... {i}");
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
     public_key_result.unwrap().unwrap();
@@ -374,14 +374,11 @@ pub fn check_error_message<T: std::fmt::Debug>(
 ) {
     match result {
         Ok(value) => panic!(
-            "expected the call to fail with message '{}', got Ok({:?})",
-            expected_substring, value
+            "expected the call to fail with message '{expected_substring}', got Ok({value:?})"
         ),
         Err(e) => assert!(
             e.contains(expected_substring),
-            "expected the call to fail with message '{}', got:  {}",
-            expected_substring,
-            e
+            "expected the call to fail with message '{expected_substring}', got:  {e}"
         ),
     }
 }
