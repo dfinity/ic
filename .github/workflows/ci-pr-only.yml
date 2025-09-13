@@ -34,7 +34,7 @@ jobs:
           targets: |
             [{
               "name": "Test",
-              "output_id": "test_id",
+              "output_id": "test_id"
             }]
       - name: Debug outputs
         env:
