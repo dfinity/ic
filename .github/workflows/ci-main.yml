@@ -153,10 +153,13 @@ jobs:
         uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
-            - name: Build
-              output_id: build_id
-            - name: Test
-              output_id: test_id
+            [{
+              "name": "Test",
+              "output_id": "test_id",
+            }, {
+              "name": "Build",
+              "output_id": "build_id",
+            }]
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
         with:
@@ -269,10 +272,13 @@ jobs:
         uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
-            - name: Build
-              output_id: build_id
-            - name: Test
-              output_id: test_id
+            [{
+              "name": "Test",
+              "output_id": "test_id",
+            }, {
+              "name": "Build",
+              "output_id": "build_id",
+            }]
           # The amd64-darwin runners are pretty slow so we don't always run the tests -- we do however
           # wanna make sure bazel evaluates successfully.
       - name: Evaluate workspace
@@ -326,8 +332,10 @@ jobs:
         uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
-            - name: Test
-              output_id: test_id
+            [{
+              "name": "Test",
+              "output_id": "test_id",
+            }]
       - name: Build and Test
         run: |
           # run pocket-ic tests
@@ -366,8 +374,10 @@ jobs:
         uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
-            - name: Test
-              output_id: test_id
+            [{
+              "name": "Test",
+              "output_id": "test_id",
+            }]
       # Build and test, excluding 'upload' jobs that are not required on macOS (used in reproducibility tests)
       - name: Test
         run: |
@@ -530,8 +540,10 @@ jobs:
         uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
-            - name: Build
-              output_id: build_id
+            [{
+              "name": "Build",
+              "output_id": "build_id",
+            }]
       - name: Run Build IC
         uses: ./.github/actions/bazel
         with:
@@ -673,8 +685,10 @@ jobs:
         uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
-            - name: Build
-              output_id: build_id
+            [{
+              "name": "Build",
+              "output_id": "build_id",
+            }]
       - name: Run Bazel Build All No Cache
         uses: ./.github/actions/bazel
         with:

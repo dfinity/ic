@@ -32,8 +32,10 @@ jobs:
         uses: ./.github/actions/generate-invocation-ids
         with:
           targets: |
-            - name: Test
-              output_id: test_id
+            [{
+              "name": "Test",
+              "output_id": "test_id",
+            }]
       - name: Debug outputs
         env:
           TEST_ID: ${{ fromJSON(steps.gen-uuids.outputs.output).test_id }}

@@ -53,8 +53,10 @@ jobs:
       - <<: *generate-bazel-invocation-ids
         with:
           targets: |
-            - name: Test
-              output_id: test_id
+            [{
+              "name": "Test",
+              "output_id": "test_id",
+            }]
 
       - name: Debug outputs
         env:
