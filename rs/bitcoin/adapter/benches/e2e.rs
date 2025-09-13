@@ -199,7 +199,7 @@ fn add_800k_block_headers(criterion: &mut Criterion) {
             // Headers are processed in chunks of at most MAX_HEADERS_SIZE entries
             for chunk in bitcoin_headers_to_add.chunks(MAX_HEADERS_SIZE) {
                 let (added_headers, error) = blockchain_state.add_headers(chunk);
-                assert_eq!(error, None);
+                assert!(error.is_none());
                 assert_eq!(added_headers.len(), chunk.len())
             }
         })
