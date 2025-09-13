@@ -30,6 +30,6 @@ runs:
       run: |
         set -euo pipefail
 
-        python ./.github/actions/generate-invocation-ids/generate-ids.py ${{ toJSON(inputs.targets) }}
+        python ./.github/actions/generate-invocation-ids/generate-ids.py "${{ inputs.targets }}"
 
 
