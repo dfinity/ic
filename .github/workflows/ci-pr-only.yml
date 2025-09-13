@@ -46,7 +46,6 @@ jobs:
           echo ${{ toJSON(steps.gen-uuids.outputs.output) }}
           echo "Raw output"
           echo ${{ steps.gen-uuids.outputs.output }}
-          uu
       - name: Run insta-tests
         uses: ./.github/actions/bazel
         with:
