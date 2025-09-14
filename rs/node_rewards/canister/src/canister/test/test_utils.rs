@@ -33,7 +33,8 @@ thread_local! {
 
 test_registry_data_stable_memory_impl!(TestState, STATE_TEST);
 
-pub(crate) fn setup_thread_local_canister_for_test() -> (Arc<FakeRegistry>, Arc<MetricsManager>) {
+pub(crate) fn setup_thread_local_canister_for_test() -> (Arc<FakeRegistry>, Arc<MetricsManager<VM>>)
+{
     let fake_registry = Arc::new(FakeRegistry::new());
     let mut mock = crate::metrics::tests::mock::MockCanisterClient::new();
     mock.expect_node_metrics_history()

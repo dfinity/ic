@@ -53,8 +53,7 @@ impl RecurringAsyncTask for DailySyncTask {
                 run_rewardable_nodes_backfill_task(self.canister, self.metrics);
 
                 ic_cdk::futures::spawn_017_compat(async move {
-                    NodeRewardsCanister::schedule_metrics_sync(self.canister).await;
-                    ic_cdk::println!("Metrics sync done");
+                    NodeRewardsCanister::schedule_metrics_sync(self.canister).await
                 });
                 self.default_delay()
             }
@@ -63,6 +62,8 @@ impl RecurringAsyncTask for DailySyncTask {
                 RETRY_DELAY
             }
         };
+
+        ic_cdk::println!("Next daily sync in {} secs", delay.as_secs());
 
         (delay, self)
     }
@@ -100,7 +101,7 @@ impl PeriodicSyncTask for RewardableNodesBackfillTask {
                 ic_cdk::println!("Backfill completed");
             }
             BackfillRewardableNodesStatus::NotCompleted => {
-                ic_cdk::println!("Backfill not completed");
+                ic_cdk::println!("Backfill still in progress...");
             }
         }
     }

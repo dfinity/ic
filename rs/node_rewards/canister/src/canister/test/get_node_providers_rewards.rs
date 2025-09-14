@@ -1,5 +1,5 @@
 use crate::canister::NodeRewardsCanister;
-use crate::canister::test::test_utils::{CANISTER_TEST, setup_thread_local_canister_for_test};
+use crate::canister::test::test_utils::{CANISTER_TEST, VM, setup_thread_local_canister_for_test};
 use crate::metrics::MetricsManager;
 use crate::pb::v1::{NodeMetrics, SubnetMetricsKey, SubnetMetricsValue};
 use futures_util::FutureExt;
@@ -25,7 +25,7 @@ use std::sync::Arc;
 
 fn setup_data_for_test_rewards_calculation(
     fake_registry: Arc<FakeRegistry>,
-    metrics_manager: Arc<MetricsManager>,
+    metrics_manager: Arc<MetricsManager<VM>>,
 ) {
     let day1: DayUtc = DayUtc::try_from("2024-01-01").unwrap();
     let day2: DayUtc = DayUtc::try_from("2024-01-02").unwrap();

@@ -1,7 +1,6 @@
 #![allow(deprecated)]
 use crate::KeyRange;
 use crate::pb::v1::{SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue};
-use crate::storage::VM;
 use async_trait::async_trait;
 use candid::Principal;
 use ic_base_types::{NodeId, SubnetId};
@@ -45,14 +44,21 @@ impl ManagementCanisterClient for ICCanisterClient {
     }
 }
 
-pub struct MetricsManager {
+pub struct MetricsManager<Memory>
+where
+    Memory: ic_stable_structures::Memory,
+{
     pub(crate) client: Box<dyn ManagementCanisterClient>,
-    pub(crate) subnets_metrics: RefCell<StableBTreeMap<SubnetMetricsKey, SubnetMetricsValue, VM>>,
-    pub(crate) subnets_to_retry: RefCell<StableBTreeMap<SubnetIdKey, RetryCount, VM>>,
-    pub(crate) last_timestamp_per_subnet: RefCell<StableBTreeMap<SubnetIdKey, UnixTsNanos, VM>>,
+    pub(crate) subnets_metrics:
+        RefCell<StableBTreeMap<SubnetMetricsKey, SubnetMetricsValue, Memory>>,
+    pub(crate) subnets_to_retry: RefCell<StableBTreeMap<SubnetIdKey, RetryCount, Memory>>,
+    pub(crate) last_timestamp_per_subnet: RefCell<StableBTreeMap<SubnetIdKey, UnixTsNanos, Memory>>,
 }
 
-impl MetricsManager {
+impl<Memory> MetricsManager<Memory>
+where
+    Memory: ic_stable_structures::Memory + 'static,
+{
     pub async fn retry_failed_subnets(&self) {
         let subnets_to_retry: Vec<SubnetId> = self
             .subnets_to_retry
@@ -73,14 +79,13 @@ impl MetricsManager {
         last_timestamp_per_subnet: &BTreeMap<SubnetId, Option<UnixTsNanos>>,
     ) -> BTreeMap<SubnetId, CallResult<Vec<NodeMetricsHistoryRecord>>> {
         let mut subnets_history = Vec::new();
+        ic_cdk::println!(
+            "Updating node metrics for {} subnets",
+            last_timestamp_per_subnet.keys().count()
+        );
 
         for (subnet_id, last_stored_ts) in last_timestamp_per_subnet {
             let refresh_ts = last_stored_ts.unwrap_or_default();
-            ic_cdk::println!(
-                "Updating node metrics for subnet {}: Refreshing metrics from timestamp {}",
-                subnet_id,
-                refresh_ts
-            );
 
             let args = NodeMetricsHistoryArgs {
                 subnet_id: subnet_id.get().0,
@@ -112,12 +117,14 @@ impl MetricsManager {
             .collect();
 
         let subnets_metrics = self.fetch_subnets_metrics(&last_timestamp_per_subnet).await;
+        let mut updated_subnets = Vec::new();
         for (subnet_id, call_result) in subnets_metrics {
             match call_result {
                 Ok(subnet_update) => {
                     if subnet_update.is_empty() {
                         ic_cdk::println!("No updates for subnet {}", subnet_id);
                     } else {
+                        updated_subnets.push(subnet_id);
                         // Update the last timestamp for this subnet.
                         let last_timestamp = subnet_update
                             .last()
@@ -169,6 +176,12 @@ impl MetricsManager {
                         .insert(subnet_id.into(), retry_count);
                 }
             }
+        }
+        if !updated_subnets.is_empty() {
+            ic_cdk::println!(
+                "Successfully updated metrics for subnets: {:?}",
+                updated_subnets
+            );
         }
     }
 
