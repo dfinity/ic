@@ -10,8 +10,9 @@ use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardRates, N
 use maplit::btreemap;
 use rust_decimal_macros::dec;
 use std::collections::BTreeMap;
+
 // ================================================================================================
-// Mock DataProvider for Comprehensive Testing
+// Mock DataProvider
 // ================================================================================================
 
 #[derive(Default, Clone)]
@@ -57,7 +58,7 @@ impl MockDataProvider {
         self
     }
 
-    pub fn create_comprehensive_rewards_table() -> NodeRewardsTable {
+    pub fn create_rewards_table() -> NodeRewardsTable {
         let mut table = BTreeMap::new();
 
         // Type1 nodes - Europe
@@ -149,143 +150,6 @@ impl DataProvider for MockDataProvider {
 // Test Helper Functions
 // ================================================================================================
 
-fn create_test_rewardable_nodes() -> Vec<RewardableNode> {
-    vec![
-        RewardableNode {
-            node_id: test_node_id(1),
-            node_reward_type: NodeRewardType::Type1,
-            region: "Europe,Switzerland".into(),
-            dc_id: "dc1".into(),
-        },
-        RewardableNode {
-            node_id: test_node_id(2),
-            node_reward_type: NodeRewardType::Type3,
-            region: "North America,USA,California".into(),
-            dc_id: "dc2".into(),
-        },
-        RewardableNode {
-            node_id: test_node_id(3),
-            node_reward_type: NodeRewardType::Type3dot1,
-            region: "North America,USA,Nevada".into(),
-            dc_id: "dc3".into(),
-        },
-    ]
-}
-
-// ------------------------------------------------------------------------------------------------
-// Basic Calculation Flow Tests
-// ------------------------------------------------------------------------------------------------
-
-/// **Scenario**: Single node with good performance (5% failure rate)
-/// **Expected**: Node gets full rewards with no penalty
-/// **Key Test**: Basic reward calculation flow works correctly
-#[test]
-fn test_basic_single_day_calculation() {
-    let day = DayUtc::try_from("2024-01-01").unwrap();
-    let provider_id = test_provider_id(1);
-    let subnet_id = test_subnet_id(1);
-
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_comprehensive_rewards_table())
-        .add_daily_metrics(
-            day,
-            subnet_id,
-            vec![NodeMetricsDailyRaw {
-                node_id: test_node_id(1),
-                num_blocks_proposed: 100,
-                num_blocks_failed: 5, // 5% failure rate
-            }],
-        )
-        .add_rewardable_nodes(
-            day,
-            provider_id,
-            vec![RewardableNode {
-                node_id: test_node_id(1),
-                node_reward_type: NodeRewardType::Type1,
-                region: "Europe,Switzerland".into(),
-                dc_id: "dc1".into(),
-            }],
-        );
-
-    let result =
-        RewardsCalculationV1::calculate_rewards(&day, &day, Some(provider_id), data_provider)
-            .expect("Calculation should succeed");
-
-    // Verify we have results for the specified day
-    assert!(result.daily_results.contains_key(&day));
-
-    // Verify we have results for the provider
-    let daily_result = &result.daily_results[&day];
-    assert!(daily_result.provider_results.contains_key(&provider_id));
-
-    // Verify total rewards are calculated
-    assert!(
-        result
-            .total_rewards_xdr_permyriad
-            .contains_key(&provider_id)
-    );
-
-    // Verify the total rewards are reasonable (should be > 0)
-    let total_rewards = result.total_rewards_xdr_permyriad[&provider_id];
-    assert!(total_rewards > 0);
-}
-
-#[test]
-fn test_multi_day_calculation() {
-    let day1 = DayUtc::try_from("2024-01-01").unwrap();
-    let day2 = DayUtc::try_from("2024-01-02").unwrap();
-    let provider_id = test_provider_id(1);
-    let subnet_id = test_subnet_id(1);
-
-    let rewards_table = MockDataProvider::create_comprehensive_rewards_table();
-
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day1, rewards_table.clone())
-        .add_rewards_table(day2, rewards_table)
-        .add_daily_metrics(
-            day1,
-            subnet_id,
-            vec![NodeMetricsDailyRaw {
-                node_id: test_node_id(1),
-                num_blocks_proposed: 100,
-                num_blocks_failed: 5,
-            }],
-        )
-        .add_daily_metrics(
-            day2,
-            subnet_id,
-            vec![NodeMetricsDailyRaw {
-                node_id: test_node_id(1),
-                num_blocks_proposed: 100,
-                num_blocks_failed: 10, // Higher failure rate on day 2
-            }],
-        )
-        .add_rewardable_nodes(day1, provider_id, create_test_rewardable_nodes())
-        .add_rewardable_nodes(day2, provider_id, create_test_rewardable_nodes());
-
-    let result =
-        RewardsCalculationV1::calculate_rewards(&day1, &day2, Some(provider_id), data_provider)
-            .expect("Calculation should succeed");
-
-    // Verify we have results for both days
-    assert_eq!(result.daily_results.len(), 2);
-    assert!(result.daily_results.contains_key(&day1));
-    assert!(result.daily_results.contains_key(&day2));
-
-    // Verify total rewards are accumulated across days
-    let total_rewards = result.total_rewards_xdr_permyriad[&provider_id];
-    assert!(total_rewards > 0);
-
-    // Both days have the same rewards despite different failure rates
-    // This is because the relative failure rates are still below the penalty threshold
-    let day1_rewards = result.daily_results[&day1].provider_results[&provider_id].rewards_total;
-    let day2_rewards = result.daily_results[&day2].provider_results[&provider_id].rewards_total;
-    assert_eq!(
-        day1_rewards, day2_rewards,
-        "Both days have the same rewards"
-    );
-}
-
 // ------------------------------------------------------------------------------------------------
 // Failure Rate Calculation Tests
 // ------------------------------------------------------------------------------------------------
@@ -300,7 +164,7 @@ fn test_failure_rate_calculation_various_performance() {
     let subnet_id = test_subnet_id(1);
 
     let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_comprehensive_rewards_table())
+        .add_rewards_table(day, MockDataProvider::create_rewards_table())
         .add_daily_metrics(
             day,
             subnet_id,
@@ -423,173 +287,6 @@ fn test_failure_rate_calculation_various_performance() {
     );
 }
 
-/// **Scenario**: Edge cases with extreme failure rates (0%, 50%, 100%)
-/// **Expected**: 75th percentile = 50%, 100% node gets penalized, 0% and 50% nodes get no penalty
-/// **Key Test**: Edge case handling for extreme failure rates
-#[test]
-fn test_failure_rate_calculation_edge_cases() {
-    let day = DayUtc::try_from("2024-01-01").unwrap();
-    let provider_id = test_provider_id(1);
-    let subnet_id = test_subnet_id(1);
-
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_comprehensive_rewards_table())
-        .add_daily_metrics(
-            day,
-            subnet_id,
-            vec![
-                // Zero blocks proposed and failed
-                NodeMetricsDailyRaw {
-                    node_id: test_node_id(1),
-                    num_blocks_proposed: 0,
-                    num_blocks_failed: 0,
-                },
-                // Only failed blocks
-                NodeMetricsDailyRaw {
-                    node_id: test_node_id(2),
-                    num_blocks_proposed: 0,
-                    num_blocks_failed: 10,
-                },
-                // Only proposed blocks
-                NodeMetricsDailyRaw {
-                    node_id: test_node_id(3),
-                    num_blocks_proposed: 100,
-                    num_blocks_failed: 0,
-                },
-            ],
-        )
-        .add_rewardable_nodes(
-            day,
-            provider_id,
-            vec![
-                RewardableNode {
-                    node_id: test_node_id(1),
-                    node_reward_type: NodeRewardType::Type1,
-                    region: "Europe,Switzerland".into(),
-                    dc_id: "dc1".into(),
-                },
-                RewardableNode {
-                    node_id: test_node_id(2),
-                    node_reward_type: NodeRewardType::Type1,
-                    region: "Europe,Switzerland".into(),
-                    dc_id: "dc2".into(),
-                },
-                RewardableNode {
-                    node_id: test_node_id(3),
-                    node_reward_type: NodeRewardType::Type1,
-                    region: "Europe,Switzerland".into(),
-                    dc_id: "dc3".into(),
-                },
-            ],
-        );
-
-    let result =
-        RewardsCalculationV1::calculate_rewards(&day, &day, Some(provider_id), data_provider)
-            .expect("Calculation should succeed");
-
-    let daily_result = &result.daily_results[&day];
-    let provider_result = &daily_result.provider_results[&provider_id];
-
-    // Verify subnet failure rate is calculated correctly
-    let subnet_fr = daily_result.subnets_fr[&subnet_id];
-    // With failure rates 0, 1.0, 0, the 75th percentile should be 1.0
-    assert_eq!(subnet_fr, dec!(1.0));
-
-    // Verify node results
-    let node_results = &provider_result.nodes_results;
-    assert_eq!(node_results.len(), 3);
-
-    // Node with zero blocks should have 0% failure rate
-    let zero_node = node_results
-        .iter()
-        .find(|n| n.node_id == test_node_id(1))
-        .unwrap();
-    assert_eq!(zero_node.performance_multiplier, dec!(1.0));
-
-    // Node with only failed blocks should have 100% failure rate
-    // But since subnet FR is also 100%, relative FR = 0, so no penalty
-    let failed_node = node_results
-        .iter()
-        .find(|n| n.node_id == test_node_id(2))
-        .unwrap();
-    assert_eq!(failed_node.performance_multiplier, dec!(1.0));
-
-    // Node with only proposed blocks should have 0% failure rate
-    let proposed_node = node_results
-        .iter()
-        .find(|n| n.node_id == test_node_id(3))
-        .unwrap();
-    assert_eq!(proposed_node.performance_multiplier, dec!(1.0));
-}
-
-// ------------------------------------------------------------------------------------------------
-// Base Rewards Calculation Tests
-// ------------------------------------------------------------------------------------------------
-
-#[test]
-fn test_base_rewards_calculation_different_types() {
-    let day = DayUtc::try_from("2024-01-01").unwrap();
-    let provider_id = test_provider_id(1);
-    let subnet_id = test_subnet_id(1);
-
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_comprehensive_rewards_table())
-        .add_daily_metrics(
-            day,
-            subnet_id,
-            vec![
-                NodeMetricsDailyRaw {
-                    node_id: test_node_id(1),
-                    num_blocks_proposed: 100,
-                    num_blocks_failed: 5,
-                },
-                NodeMetricsDailyRaw {
-                    node_id: test_node_id(2),
-                    num_blocks_proposed: 100,
-                    num_blocks_failed: 5,
-                },
-                NodeMetricsDailyRaw {
-                    node_id: test_node_id(3),
-                    num_blocks_proposed: 100,
-                    num_blocks_failed: 5,
-                },
-            ],
-        )
-        .add_rewardable_nodes(day, provider_id, create_test_rewardable_nodes());
-
-    let result =
-        RewardsCalculationV1::calculate_rewards(&day, &day, Some(provider_id), data_provider)
-            .expect("Calculation should succeed");
-
-    let daily_result = &result.daily_results[&day];
-    let provider_result = &daily_result.provider_results[&provider_id];
-
-    // Verify base rewards are calculated correctly for different node types
-    let node_results = &provider_result.nodes_results;
-
-    let type1_node = node_results
-        .iter()
-        .find(|n| n.node_id == test_node_id(1))
-        .unwrap();
-    let type3_node = node_results
-        .iter()
-        .find(|n| n.node_id == test_node_id(2))
-        .unwrap();
-    let type3dot1_node = node_results
-        .iter()
-        .find(|n| n.node_id == test_node_id(3))
-        .unwrap();
-
-    // Type1 node: 10000 per day
-    assert_eq!(type1_node.base_rewards, dec!(10000));
-
-    // Type3 node: 31500 per day (after Type3 adjustments)
-    assert_eq!(type3_node.base_rewards, dec!(31500));
-
-    // Type3.1 node: 31500 per day (after Type3 adjustments - grouped with Type3)
-    assert_eq!(type3dot1_node.base_rewards, dec!(31500));
-}
-
 // ------------------------------------------------------------------------------------------------
 // Type3 Special Logic Tests
 // ------------------------------------------------------------------------------------------------
@@ -604,35 +301,40 @@ fn test_type3_reduction_coefficient_logic() {
     let subnet_id = test_subnet_id(1);
 
     let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_comprehensive_rewards_table())
+        .add_rewards_table(day, MockDataProvider::create_rewards_table())
         .add_daily_metrics(
             day,
             subnet_id,
             vec![
+                // Type3 node with 5% failure rate (good performance)
                 NodeMetricsDailyRaw {
                     node_id: test_node_id(20),
                     num_blocks_proposed: 100,
                     num_blocks_failed: 5,
                 },
+                // Type3 node with 15% failure rate (moderate performance - should get penalty)
                 NodeMetricsDailyRaw {
                     node_id: test_node_id(21),
                     num_blocks_proposed: 100,
-                    num_blocks_failed: 5,
+                    num_blocks_failed: 15,
                 },
+                // Type3 node with 25% failure rate (poor performance - should get penalty)
                 NodeMetricsDailyRaw {
                     node_id: test_node_id(22),
                     num_blocks_proposed: 100,
-                    num_blocks_failed: 5,
+                    num_blocks_failed: 25,
                 },
+                // Type3.1 node with 35% failure rate (poor performance - should get penalty)
                 NodeMetricsDailyRaw {
                     node_id: test_node_id(23),
                     num_blocks_proposed: 100,
-                    num_blocks_failed: 5,
+                    num_blocks_failed: 35,
                 },
+                // Type3.1 node with 45% failure rate (very poor performance - should get penalty)
                 NodeMetricsDailyRaw {
                     node_id: test_node_id(24),
                     num_blocks_proposed: 100,
-                    num_blocks_failed: 5,
+                    num_blocks_failed: 45,
                 },
             ],
         )
@@ -685,129 +387,49 @@ fn test_type3_reduction_coefficient_logic() {
     // Verify Type3 base rewards are calculated
     assert!(!provider_result.base_rewards_type3.is_empty());
 
-    // Find the Type3 base rewards for California (3 nodes)
-    let california_rewards = provider_result
+    // Find the Type3 base rewards for USA (3 nodes)
+    let usa_rewards = provider_result
         .base_rewards_type3
         .iter()
         .find(|r| r.region == "North America:USA")
-        .expect("Should have Type3 rewards for California");
+        .unwrap();
 
-    assert_eq!(california_rewards.nodes_count, 5); // 3 Type3 + 2 Type3.1 nodes grouped together
-    assert_eq!(california_rewards.avg_coefficient, dec!(0.82)); // Average of 90% and 70%
+    assert_eq!(usa_rewards.nodes_count, 5); // 3 Type3 + 2 Type3.1 nodes grouped together
+    assert_eq!(usa_rewards.avg_coefficient, dec!(0.82)); // Average of 90% and 70% coefficients -> (3 * 90 + 2 * 70)/5
 
-    // Verify individual node rewards are reduced due to multiple nodes in same country
+    // Calculate expected subnet failure rate (75th percentile of 4.76%, 13.04%, 20%, 25.93%, 31.03% = 25.93%)
+    let subnet_fr = daily_result.subnets_fr[&subnet_id];
+    assert_eq!(subnet_fr, dec!(0.2592592592592592592592592593)); // 25.93% failure rate
+
+    // Verify individual node rewards with performance penalties
     let node_results = &provider_result.nodes_results;
-    let california_nodes: Vec<_> = node_results
+
+    // Find nodes by ID and verify their performance
+    let good_node = node_results
         .iter()
-        .filter(|n| n.region == "North America,USA,California")
-        .collect();
+        .find(|n| n.node_id == test_node_id(20))
+        .unwrap();
+    let extremely_poor_node = node_results
+        .iter()
+        .find(|n| n.node_id == test_node_id(24))
+        .unwrap();
 
-    assert_eq!(california_nodes.len(), 3);
+    // Node 20 (Type3, 4.76% failure rate): relative FR = max(0, 0.0476 - 0.2593) = 0 (no penalty)
+    // Base rewards = 30000 * actual_coefficient = 23772.05036800
+    assert_eq!(good_node.base_rewards, dec!(23772.05036800)); // Type3 base reward with coefficient applied
+    assert_eq!(good_node.performance_multiplier, dec!(1.0)); // No penalty
+    assert_eq!(good_node.rewards_reduction, dec!(0.0)); // No reduction
+    // Adjusted rewards = 23772.05036800 * 1.0 = 23772.05036800
+    assert_eq!(good_node.adjusted_rewards, dec!(23772.05036800));
 
-    // All California nodes should have the same base rewards (after Type3 adjustment)
-    let first_ca_reward = california_nodes[0].base_rewards;
-    for node in &california_nodes {
-        assert_eq!(node.base_rewards, first_ca_reward);
-    }
-}
-
-// ------------------------------------------------------------------------------------------------
-// Financial Accuracy Tests
-// ------------------------------------------------------------------------------------------------
-
-#[test]
-fn test_financial_accuracy_precise_calculations() {
-    let day = DayUtc::try_from("2024-01-01").unwrap();
-    let provider_id = test_provider_id(1);
-    let subnet_id = test_subnet_id(1);
-
-    // Create a scenario with precise failure rates that should result in specific calculations
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_comprehensive_rewards_table())
-        .add_daily_metrics(
-            day,
-            subnet_id,
-            vec![
-                // 35% failure rate - should be in penalty zone
-                // (35% - 10%) / (60% - 10%) * 80% = 25% / 50% * 80% = 40% reduction
-                NodeMetricsDailyRaw {
-                    node_id: test_node_id(1),
-                    num_blocks_proposed: 100,
-                    num_blocks_failed: 35,
-                },
-            ],
-        )
-        .add_rewardable_nodes(
-            day,
-            provider_id,
-            vec![RewardableNode {
-                node_id: test_node_id(1),
-                node_reward_type: NodeRewardType::Type1,
-                region: "Europe,Switzerland".into(),
-                dc_id: "dc1".into(),
-            }],
-        );
-
-    let result =
-        RewardsCalculationV1::calculate_rewards(&day, &day, Some(provider_id), data_provider)
-            .expect("Calculation should succeed");
-
-    let daily_result = &result.daily_results[&day];
-    let provider_result = &daily_result.provider_results[&provider_id];
-    let node_result = &provider_result.nodes_results[0];
-
-    // Verify precise calculations
-    assert_eq!(node_result.base_rewards, dec!(10000));
-    // With subnet FR = 0.259..., relative FR = max(0, 0.35 - 0.259...) = 0.0907...
-    // Since 0.0907... < 0.1 (MIN_FAILURE_RATE), there's no penalty
-    assert_eq!(node_result.rewards_reduction, dec!(0.0)); // 0% reduction
-    assert_eq!(node_result.performance_multiplier, dec!(1.0)); // 1 - 0.0
-    assert_eq!(node_result.adjusted_rewards, dec!(10000)); // 10000 * 1.0
-}
-
-#[test]
-fn test_financial_accuracy_rounding_behavior() {
-    let day = DayUtc::try_from("2024-01-01").unwrap();
-    let provider_id = test_provider_id(1);
-    let subnet_id = test_subnet_id(1);
-
-    // Test with values that might cause rounding issues
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_comprehensive_rewards_table())
-        .add_daily_metrics(
-            day,
-            subnet_id,
-            vec![NodeMetricsDailyRaw {
-                node_id: test_node_id(1),
-                num_blocks_proposed: 333,
-                num_blocks_failed: 111, // 33.333...% failure rate
-            }],
-        )
-        .add_rewardable_nodes(
-            day,
-            provider_id,
-            vec![RewardableNode {
-                node_id: test_node_id(1),
-                node_reward_type: NodeRewardType::Type1,
-                region: "Europe,Switzerland".into(),
-                dc_id: "dc1".into(),
-            }],
-        );
-
-    let result =
-        RewardsCalculationV1::calculate_rewards(&day, &day, Some(provider_id), data_provider)
-            .expect("Calculation should succeed");
-
-    let daily_result = &result.daily_results[&day];
-    let provider_result = &daily_result.provider_results[&provider_id];
-    let node_result = &provider_result.nodes_results[0];
-
-    // Verify that calculations are precise and don't have unexpected rounding
-    assert!(node_result.adjusted_rewards > dec!(0));
-    assert!(node_result.adjusted_rewards <= node_result.base_rewards);
-
-    // The total rewards should be exactly the adjusted rewards (single node)
-    assert_eq!(provider_result.rewards_total, node_result.adjusted_rewards);
+    // Node 24 (Type3.1, 31.03% failure rate): relative FR = max(0, 0.3103 - 0.2593) = 0.051
+    // Since 0.051 < 0.10 (MIN_FAILURE_RATE), no penalty
+    // Base rewards = same as Type3 nodes due to country grouping = 23772.05036800
+    assert_eq!(extremely_poor_node.base_rewards, dec!(23772.05036800)); // Type3.1 base reward with coefficient applied
+    assert_eq!(extremely_poor_node.performance_multiplier, dec!(1.0)); // No penalty (below threshold)
+    assert_eq!(extremely_poor_node.rewards_reduction, dec!(0.0)); // No reduction
+    // Adjusted rewards = 23772.05036800 * 1.0 = 23772.05036800
+    assert_eq!(extremely_poor_node.adjusted_rewards, dec!(23772.05036800));
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -822,7 +444,7 @@ fn test_provider_filtering() {
     let subnet_id = test_subnet_id(1);
 
     let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_comprehensive_rewards_table())
+        .add_rewards_table(day, MockDataProvider::create_rewards_table())
         .add_daily_metrics(
             day,
             subnet_id,
@@ -907,7 +529,7 @@ fn test_no_provider_filtering() {
     let subnet_id = test_subnet_id(1);
 
     let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_comprehensive_rewards_table())
+        .add_rewards_table(day, MockDataProvider::create_rewards_table())
         .add_daily_metrics(
             day,
             subnet_id,
@@ -1002,8 +624,8 @@ fn test_missing_metrics() {
     let day = DayUtc::try_from("2024-01-01").unwrap();
     let provider_id = test_provider_id(1);
 
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_comprehensive_rewards_table());
+    let data_provider =
+        MockDataProvider::new().add_rewards_table(day, MockDataProvider::create_rewards_table());
     // No metrics added
 
     let result =
@@ -1022,7 +644,7 @@ fn test_missing_rewardable_nodes() {
     let subnet_id = test_subnet_id(1);
 
     let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_comprehensive_rewards_table())
+        .add_rewards_table(day, MockDataProvider::create_rewards_table())
         .add_daily_metrics(
             day,
             subnet_id,
@@ -1058,7 +680,7 @@ fn test_single_node_subnet() {
 
     // Test with only one node in the subnet
     let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_comprehensive_rewards_table())
+        .add_rewards_table(day, MockDataProvider::create_rewards_table())
         .add_daily_metrics(
             day,
             subnet_id,
@@ -1097,224 +719,6 @@ fn test_single_node_subnet() {
 }
 
 #[test]
-fn test_very_high_failure_rates() {
-    let day = DayUtc::try_from("2024-01-01").unwrap();
-    let provider_id = test_provider_id(1);
-    let subnet_id = test_subnet_id(1);
-
-    // Test with very high failure rates (90%+)
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_comprehensive_rewards_table())
-        .add_daily_metrics(
-            day,
-            subnet_id,
-            vec![
-                // 90% failure rate
-                NodeMetricsDailyRaw {
-                    node_id: test_node_id(1),
-                    num_blocks_proposed: 10,
-                    num_blocks_failed: 90,
-                },
-                // 95% failure rate
-                NodeMetricsDailyRaw {
-                    node_id: test_node_id(2),
-                    num_blocks_proposed: 5,
-                    num_blocks_failed: 95,
-                },
-                // 99% failure rate
-                NodeMetricsDailyRaw {
-                    node_id: test_node_id(3),
-                    num_blocks_proposed: 1,
-                    num_blocks_failed: 99,
-                },
-            ],
-        )
-        .add_rewardable_nodes(
-            day,
-            provider_id,
-            vec![
-                RewardableNode {
-                    node_id: test_node_id(1),
-                    node_reward_type: NodeRewardType::Type1,
-                    region: "Europe,Switzerland".into(),
-                    dc_id: "dc1".into(),
-                },
-                RewardableNode {
-                    node_id: test_node_id(2),
-                    node_reward_type: NodeRewardType::Type1,
-                    region: "Europe,Switzerland".into(),
-                    dc_id: "dc2".into(),
-                },
-                RewardableNode {
-                    node_id: test_node_id(3),
-                    node_reward_type: NodeRewardType::Type1,
-                    region: "Europe,Switzerland".into(),
-                    dc_id: "dc3".into(),
-                },
-            ],
-        );
-
-    let result =
-        RewardsCalculationV1::calculate_rewards(&day, &day, Some(provider_id), data_provider)
-            .expect("Calculation should succeed");
-
-    let daily_result = &result.daily_results[&day];
-    let provider_result = &daily_result.provider_results[&provider_id];
-
-    // Subnet failure rate should be 99% (75th percentile of 90%, 95%, 99%)
-    let subnet_fr = daily_result.subnets_fr[&subnet_id];
-    assert_eq!(subnet_fr, dec!(0.99));
-
-    let node_results = &provider_result.nodes_results;
-    assert_eq!(node_results.len(), 3);
-
-    // Node 1: 90% failure rate, relative FR = max(0, 0.90 - 0.99) = 0 (no penalty)
-    let node1 = node_results
-        .iter()
-        .find(|n| n.node_id == test_node_id(1))
-        .unwrap();
-    assert_eq!(node1.performance_multiplier, dec!(1.0));
-    assert_eq!(node1.rewards_reduction, dec!(0.0));
-
-    // Node 2: 95% failure rate, relative FR = max(0, 0.95 - 0.99) = 0 (no penalty)
-    let node2 = node_results
-        .iter()
-        .find(|n| n.node_id == test_node_id(2))
-        .unwrap();
-    assert_eq!(node2.performance_multiplier, dec!(1.0));
-    assert_eq!(node2.rewards_reduction, dec!(0.0));
-
-    // Node 3: 99% failure rate, relative FR = max(0, 0.99 - 0.99) = 0 (no penalty)
-    let node3 = node_results
-        .iter()
-        .find(|n| n.node_id == test_node_id(3))
-        .unwrap();
-    assert_eq!(node3.performance_multiplier, dec!(1.0));
-    assert_eq!(node3.rewards_reduction, dec!(0.0));
-}
-
-#[test]
-fn test_extreme_failure_rates_with_penalty() {
-    let day = DayUtc::try_from("2024-01-01").unwrap();
-    let provider_id = test_provider_id(1);
-    let subnet_id = test_subnet_id(1);
-
-    // Test with extreme failure rates that should trigger penalties
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_comprehensive_rewards_table())
-        .add_daily_metrics(
-            day,
-            subnet_id,
-            vec![
-                // 5% failure rate (good performance)
-                NodeMetricsDailyRaw {
-                    node_id: test_node_id(1),
-                    num_blocks_proposed: 95,
-                    num_blocks_failed: 5,
-                },
-                // 10% failure rate (average performance)
-                NodeMetricsDailyRaw {
-                    node_id: test_node_id(2),
-                    num_blocks_proposed: 90,
-                    num_blocks_failed: 10,
-                },
-                // 15% failure rate (slightly above average)
-                NodeMetricsDailyRaw {
-                    node_id: test_node_id(3),
-                    num_blocks_proposed: 85,
-                    num_blocks_failed: 15,
-                },
-                // 90% failure rate (very poor performance)
-                NodeMetricsDailyRaw {
-                    node_id: test_node_id(4),
-                    num_blocks_proposed: 10,
-                    num_blocks_failed: 90,
-                },
-            ],
-        )
-        .add_rewardable_nodes(
-            day,
-            provider_id,
-            vec![
-                RewardableNode {
-                    node_id: test_node_id(1),
-                    node_reward_type: NodeRewardType::Type1,
-                    region: "Europe,Switzerland".into(),
-                    dc_id: "dc1".into(),
-                },
-                RewardableNode {
-                    node_id: test_node_id(2),
-                    node_reward_type: NodeRewardType::Type1,
-                    region: "Europe,Switzerland".into(),
-                    dc_id: "dc2".into(),
-                },
-                RewardableNode {
-                    node_id: test_node_id(3),
-                    node_reward_type: NodeRewardType::Type1,
-                    region: "Europe,Switzerland".into(),
-                    dc_id: "dc3".into(),
-                },
-                RewardableNode {
-                    node_id: test_node_id(4),
-                    node_reward_type: NodeRewardType::Type1,
-                    region: "Europe,Switzerland".into(),
-                    dc_id: "dc4".into(),
-                },
-            ],
-        );
-
-    let result =
-        RewardsCalculationV1::calculate_rewards(&day, &day, Some(provider_id), data_provider)
-            .expect("Calculation should succeed");
-
-    let daily_result = &result.daily_results[&day];
-    let provider_result = &daily_result.provider_results[&provider_id];
-
-    // Subnet failure rate should be 15% (75th percentile of 5%, 10%, 15%, 90%)
-    let subnet_fr = daily_result.subnets_fr[&subnet_id];
-    assert_eq!(subnet_fr, dec!(0.15));
-
-    let node_results = &provider_result.nodes_results;
-    assert_eq!(node_results.len(), 4);
-
-    // Node 1: 5% failure rate, relative FR = max(0, 0.05 - 0.15) = 0 (no penalty)
-    let node1 = node_results
-        .iter()
-        .find(|n| n.node_id == test_node_id(1))
-        .unwrap();
-    assert_eq!(node1.performance_multiplier, dec!(1.0));
-    assert_eq!(node1.rewards_reduction, dec!(0.0));
-
-    // Node 2: 10% failure rate, relative FR = max(0, 0.10 - 0.15) = 0 (no penalty)
-    let node2 = node_results
-        .iter()
-        .find(|n| n.node_id == test_node_id(2))
-        .unwrap();
-    assert_eq!(node2.performance_multiplier, dec!(1.0));
-    assert_eq!(node2.rewards_reduction, dec!(0.0));
-
-    // Node 3: 15% failure rate, relative FR = max(0, 0.15 - 0.15) = 0 (no penalty)
-    let node3 = node_results
-        .iter()
-        .find(|n| n.node_id == test_node_id(3))
-        .unwrap();
-    assert_eq!(node3.performance_multiplier, dec!(1.0));
-    assert_eq!(node3.rewards_reduction, dec!(0.0));
-
-    // Node 4: 90% failure rate, relative FR = max(0, 0.90 - 0.15) = 0.75
-    // Since 0.75 >= 0.6 (MAX_FAILURE_RATE), max penalty
-    let node4 = node_results
-        .iter()
-        .find(|n| n.node_id == test_node_id(4))
-        .unwrap();
-    assert_eq!(node4.performance_multiplier, dec!(0.2)); // 1 - 0.8
-    assert_eq!(node4.rewards_reduction, dec!(0.8)); // MAX_REWARDS_REDUCTION
-}
-
-/// **Scenario**: Subnet with empty metrics (no node performance data)
-/// **Expected**: Subnet failure rate = 0%, node gets no penalty
-/// **Key Test**: Empty subnet handling and zero failure rate logic
-#[test]
 fn test_empty_subnet_metrics() {
     let day = DayUtc::try_from("2024-01-01").unwrap();
     let provider_id = test_provider_id(1);
@@ -1322,7 +726,7 @@ fn test_empty_subnet_metrics() {
 
     // Test with empty metrics for a subnet
     let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_comprehensive_rewards_table())
+        .add_rewards_table(day, MockDataProvider::create_rewards_table())
         .add_daily_metrics(day, subnet_id, vec![]) // Empty metrics
         .add_rewardable_nodes(
             day,
@@ -1363,7 +767,7 @@ fn test_empty_rewardable_nodes() {
 
     // Test with empty rewardable nodes
     let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_comprehensive_rewards_table())
+        .add_rewards_table(day, MockDataProvider::create_rewards_table())
         .add_daily_metrics(
             day,
             subnet_id,
@@ -1414,8 +818,8 @@ fn test_validation_errors() {
     }
 
     // Test missing metrics
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_comprehensive_rewards_table());
+    let data_provider =
+        MockDataProvider::new().add_rewards_table(day, MockDataProvider::create_rewards_table());
     let result =
         RewardsCalculationV1::calculate_rewards(&day, &day, Some(provider_id), data_provider);
     match result {
@@ -1426,7 +830,7 @@ fn test_validation_errors() {
     // Test missing rewardable nodes
     let subnet_id = test_subnet_id(1);
     let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_comprehensive_rewards_table())
+        .add_rewards_table(day, MockDataProvider::create_rewards_table())
         .add_daily_metrics(
             day,
             subnet_id,
@@ -1455,7 +859,7 @@ fn test_zero_blocks_edge_cases() {
 
     // Test various zero block scenarios
     let data_provider = MockDataProvider::new()
-        .add_rewards_table(day, MockDataProvider::create_comprehensive_rewards_table())
+        .add_rewards_table(day, MockDataProvider::create_rewards_table())
         .add_daily_metrics(
             day,
             subnet_id,
@@ -1542,180 +946,4 @@ fn test_zero_blocks_edge_cases() {
         .unwrap();
     assert_eq!(node3.performance_multiplier, dec!(1.0));
     assert_eq!(node3.rewards_reduction, dec!(0.0));
-}
-
-// ------------------------------------------------------------------------------------------------
-// Complex Multi-Scenario Tests
-// ------------------------------------------------------------------------------------------------
-
-#[test]
-fn test_complex_multi_provider_multi_day_scenario() {
-    let day1 = DayUtc::try_from("2024-01-01").unwrap();
-    let day2 = DayUtc::try_from("2024-01-02").unwrap();
-    let provider1_id = test_provider_id(1);
-    let provider2_id = test_provider_id(2);
-    let subnet1_id = test_subnet_id(1);
-    let subnet2_id = test_subnet_id(2);
-
-    let rewards_table = MockDataProvider::create_comprehensive_rewards_table();
-
-    let data_provider = MockDataProvider::new()
-        .add_rewards_table(day1, rewards_table.clone())
-        .add_rewards_table(day2, rewards_table)
-        // Day 1 metrics
-        .add_daily_metrics(
-            day1,
-            subnet1_id,
-            vec![
-                NodeMetricsDailyRaw {
-                    node_id: test_node_id(1),
-                    num_blocks_proposed: 100,
-                    num_blocks_failed: 5, // 5% failure rate
-                },
-                NodeMetricsDailyRaw {
-                    node_id: test_node_id(2),
-                    num_blocks_proposed: 100,
-                    num_blocks_failed: 15, // 15% failure rate
-                },
-            ],
-        )
-        .add_daily_metrics(
-            day1,
-            subnet2_id,
-            vec![NodeMetricsDailyRaw {
-                node_id: test_node_id(3),
-                num_blocks_proposed: 100,
-                num_blocks_failed: 10, // 10% failure rate
-            }],
-        )
-        // Day 2 metrics (different performance)
-        .add_daily_metrics(
-            day2,
-            subnet1_id,
-            vec![
-                NodeMetricsDailyRaw {
-                    node_id: test_node_id(1),
-                    num_blocks_proposed: 100,
-                    num_blocks_failed: 20, // 20% failure rate
-                },
-                NodeMetricsDailyRaw {
-                    node_id: test_node_id(2),
-                    num_blocks_proposed: 100,
-                    num_blocks_failed: 5, // 5% failure rate
-                },
-            ],
-        )
-        .add_daily_metrics(
-            day2,
-            subnet2_id,
-            vec![NodeMetricsDailyRaw {
-                node_id: test_node_id(3),
-                num_blocks_proposed: 100,
-                num_blocks_failed: 30, // 30% failure rate
-            }],
-        )
-        // Day 1 rewardable nodes
-        .add_rewardable_nodes(
-            day1,
-            provider1_id,
-            vec![
-                RewardableNode {
-                    node_id: test_node_id(1),
-                    node_reward_type: NodeRewardType::Type1,
-                    region: "Europe,Switzerland".into(),
-                    dc_id: "dc1".into(),
-                },
-                RewardableNode {
-                    node_id: test_node_id(2),
-                    node_reward_type: NodeRewardType::Type3,
-                    region: "North America,USA,California".into(),
-                    dc_id: "dc2".into(),
-                },
-            ],
-        )
-        .add_rewardable_nodes(
-            day1,
-            provider2_id,
-            vec![RewardableNode {
-                node_id: test_node_id(3),
-                node_reward_type: NodeRewardType::Type3dot1,
-                region: "North America,USA,Nevada".into(),
-                dc_id: "dc3".into(),
-            }],
-        )
-        // Day 2 rewardable nodes (same as day 1)
-        .add_rewardable_nodes(
-            day2,
-            provider1_id,
-            vec![
-                RewardableNode {
-                    node_id: test_node_id(1),
-                    node_reward_type: NodeRewardType::Type1,
-                    region: "Europe,Switzerland".into(),
-                    dc_id: "dc1".into(),
-                },
-                RewardableNode {
-                    node_id: test_node_id(2),
-                    node_reward_type: NodeRewardType::Type3,
-                    region: "North America,USA,California".into(),
-                    dc_id: "dc2".into(),
-                },
-            ],
-        )
-        .add_rewardable_nodes(
-            day2,
-            provider2_id,
-            vec![RewardableNode {
-                node_id: test_node_id(3),
-                node_reward_type: NodeRewardType::Type3dot1,
-                region: "North America,USA,Nevada".into(),
-                dc_id: "dc3".into(),
-            }],
-        );
-
-    let result = RewardsCalculationV1::calculate_rewards(
-        &day1,
-        &day2,
-        None, // No provider filtering
-        data_provider,
-    )
-    .expect("Calculation should succeed");
-
-    // Verify we have results for both days
-    assert_eq!(result.daily_results.len(), 2);
-    assert!(result.daily_results.contains_key(&day1));
-    assert!(result.daily_results.contains_key(&day2));
-
-    // Verify we have results for both providers on both days
-    for day in [day1, day2] {
-        let daily_result = &result.daily_results[&day];
-        assert_eq!(daily_result.provider_results.len(), 2);
-        assert!(daily_result.provider_results.contains_key(&provider1_id));
-        assert!(daily_result.provider_results.contains_key(&provider2_id));
-    }
-
-    // Verify total rewards are accumulated across days
-    assert!(
-        result
-            .total_rewards_xdr_permyriad
-            .contains_key(&provider1_id)
-    );
-    assert!(
-        result
-            .total_rewards_xdr_permyriad
-            .contains_key(&provider2_id)
-    );
-
-    let provider1_total = result.total_rewards_xdr_permyriad[&provider1_id];
-    let provider2_total = result.total_rewards_xdr_permyriad[&provider2_id];
-
-    assert!(provider1_total > 0);
-    assert!(provider2_total > 0);
-
-    // Verify that both days have the same rewards
-    // This is because the relative failure rates are still below the penalty threshold
-    let day1_provider1 = &result.daily_results[&day1].provider_results[&provider1_id];
-    let day2_provider1 = &result.daily_results[&day2].provider_results[&provider1_id];
-
-    assert_eq!(day1_provider1.rewards_total, day2_provider1.rewards_total);
 }

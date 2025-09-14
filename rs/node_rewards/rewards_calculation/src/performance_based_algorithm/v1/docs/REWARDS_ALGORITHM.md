@@ -4,12 +4,28 @@
 
 The Internet Computer (IC) uses a performance-based rewards system to incentivize reliable node operation. This document explains how rewards are calculated for node providers based on their nodes' performance.
 
+# RewardsCalculationV1
+
+## Algorithm Overview
+
+The `RewardsCalculationV1` algorithm implements a performance-based reward distribution system for Internet Computer nodes. It calculates daily rewards based on node performance relative to subnet peers using a 75th percentile threshold.
+
+## Core Constants
+
+```rust
+const SUBNET_FAILURE_RATE_PERCENTILE: f64 = 0.75;  // 75th percentile
+const MIN_FAILURE_RATE: Decimal = 0.1;             // 10% minimum for penalties
+const MAX_FAILURE_RATE: Decimal = 0.6;             // 60% maximum penalty threshold
+const MIN_REWARDS_REDUCTION: Decimal = 0.0;        // 0% minimum reduction
+const MAX_REWARDS_REDUCTION: Decimal = 0.8;        // 80% maximum reduction
+const REWARDS_TABLE_DAYS: f64 = 30.4375;           // Average days per month
+```
+
 ## Key Concepts
 
 ### What Are Rewards?
 - **Daily rewards** are distributed to node providers based on their nodes' performance
-- Rewards are calculated in **XDR** (Special Drawing Rights) - a stable international currency
-- Only **rewardable nodes** (active, healthy nodes) are eligible for rewards
+- Rewards are calculated in **XDR** (Special Drawing Rights)
 
 ### Performance Measurement
 - **Failure Rate** = Failed Blocks ÷ (Proposed Blocks + Failed Blocks)
@@ -105,7 +121,7 @@ For Type3 and Type3.1 nodes in the same country:
 Final Rewards = Base Rewards × Performance Multiplier × Type3 Coefficient (if applicable)
 ```
 
-## Real-World Examples
+## Examples
 
 ### Example 1: Excellent Performance
 - **Node**: Type1 in Europe
@@ -135,62 +151,3 @@ Final Rewards = Base Rewards × Performance Multiplier × Type3 Coefficient (if 
 - **Type3 Group**: 5 nodes in USA (3 Type3 + 2 Type3.1)
 - **Group Coefficient**: 82%
 - **Final Rewards**: 30,000 × 1.0 × 0.82 = **24,600 XDR**
-
-## Penalty Thresholds
-
-| Relative Performance | Penalty | Performance Multiplier |
-|---------------------|---------|----------------------|
-| 0% - 9.99%          | 0%      | 100%                 |
-| 10% - 59.99%        | 0% - 80%| 100% - 20%           |
-| 60%+                | 80%     | 20%                  |
-
-## Key Benefits
-
-### For Node Providers
-1. **Fair Rewards**: Only nodes performing worse than 75% of their peers get penalized
-2. **Clear Metrics**: Simple failure rate calculation based on block production
-3. **Predictable**: Performance thresholds are clearly defined
-4. **Incentivized**: Rewards encourage reliable node operation
-
-### For the Network
-1. **Reliability**: Penalties discourage poor performance
-2. **Stability**: 75th percentile reduces impact of outlier nodes
-3. **Transparency**: All calculations are deterministic and verifiable
-4. **Scalability**: Algorithm works regardless of subnet size
-
-## Important Notes
-
-### Zero Blocks Handling
-- If a node has 0 proposed and 0 failed blocks: 0% failure rate
-- If a node has 0 proposed but some failed blocks: 100% failure rate
-- Empty subnets have 0% failure rate
-
-### Single Node Subnets
-- Subnet performance equals the single node's failure rate
-- The node gets no penalty (relative performance = 0)
-
-### Multi-Day Calculations
-- Rewards are calculated daily
-- Each day's performance is independent
-- Total rewards = Sum of daily rewards
-
-## Monitoring Your Performance
-
-To maximize your rewards:
-
-1. **Monitor Block Production**: Ensure your nodes are consistently proposing blocks
-2. **Minimize Failures**: Keep failure rates below 10% relative to subnet performance
-3. **Check Subnet Performance**: Understand how your nodes compare to peers
-4. **Review Daily Reports**: Track performance trends over time
-
-## Technical Details
-
-- **Calculation Frequency**: Daily
-- **Data Source**: Block production metrics
-- **Precision**: Decimal arithmetic for financial accuracy
-- **Rounding**: Standard financial rounding rules apply
-- **Validation**: All calculations are verified and auditable
-
----
-
-*This documentation is based on the RewardsCalculationV1 algorithm implementation. For technical details, refer to the source code in the rewards-calculation module.*
