@@ -1,8 +1,10 @@
 use crate::canister::{BackfillRewardableNodesStatus, NodeRewardsCanister, current_time};
+use async_trait::async_trait;
 use ic_cdk_timers::{TimerId, clear_timer};
-use ic_nervous_system_timer_task::{PeriodicSyncTask, RecurringSyncTask, TimerTaskMetricsRegistry};
+use ic_nervous_system_timer_task::{
+    PeriodicSyncTask, RecurringAsyncTask, TimerTaskMetricsRegistry,
+};
 use std::cell::RefCell;
-use std::sync::Arc;
 use std::thread::LocalKey;
 use std::time::Duration;
 
@@ -42,27 +44,26 @@ impl DailySyncTask {
     }
 }
 
-impl RecurringSyncTask for DailySyncTask {
-    fn execute(self) -> (Duration, Self) {
-        let delay: Arc<RefCell<Duration>> = Arc::new(RefCell::new(self.default_delay()));
-        let delay_inner = delay.clone();
-        ic_cdk::futures::spawn_017_compat(async move {
-            let registry_sync_result =
-                NodeRewardsCanister::schedule_registry_sync(self.canister).await;
-            match registry_sync_result {
-                Ok(_) => {
-                    run_rewardable_nodes_backfill_task(self.canister, self.metrics);
+#[async_trait]
+impl RecurringAsyncTask for DailySyncTask {
+    async fn execute(self) -> (Duration, Self) {
+        let registry_sync_result = NodeRewardsCanister::schedule_registry_sync(self.canister).await;
+        let delay = match registry_sync_result {
+            Ok(_) => {
+                run_rewardable_nodes_backfill_task(self.canister, self.metrics);
 
-                    NodeRewardsCanister::schedule_metrics_sync(self.canister).await;
-                }
-                Err(e) => {
-                    ic_cdk::println!("Failed to sync registry: {:?}", e);
-                    *delay_inner.borrow_mut() = RETRY_DELAY;
-                }
+                ic_cdk::futures::spawn_017_compat(async move {
+                    NodeRewardsCanister::schedule_metrics_sync(self.canister).await
+                });
+                self.default_delay()
             }
-        });
+            Err(e) => {
+                ic_cdk::println!("Failed to sync registry: {:?}", e);
+                RETRY_DELAY
+            }
+        };
 
-        (delay.take(), self)
+        (delay, self)
     }
 
     fn initial_delay(&self) -> Duration {

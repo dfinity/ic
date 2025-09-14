@@ -20,13 +20,12 @@ use rewards_calculation::performance_based_algorithm::test_utils::{
     create_rewards_table_for_region_test, test_node_id, test_provider_id, test_subnet_id,
 };
 use rewards_calculation::types::DayUtc;
-use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
 
 fn setup_data_for_test_rewards_calculation(
     fake_registry: Arc<FakeRegistry>,
-    metrics_manager: Rc<MetricsManager<VM>>,
+    metrics_manager: Arc<MetricsManager<VM>>,
 ) {
     let day1: DayUtc = DayUtc::try_from("2024-01-01").unwrap();
     let day2: DayUtc = DayUtc::try_from("2024-01-02").unwrap();

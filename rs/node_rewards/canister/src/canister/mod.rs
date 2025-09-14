@@ -32,7 +32,6 @@ use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
 use rewards_calculation::types::{DayUtc, NodeMetricsDailyRaw, RewardableNode};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashSet};
-use std::rc::Rc;
 use std::sync::Arc;
 use std::thread::LocalKey;
 
@@ -55,8 +54,8 @@ pub fn current_time() -> Time {
 /// through arguments and responses with almost no logic.
 pub struct NodeRewardsCanister {
     registry_client: Arc<dyn CanisterRegistryClient>,
-    metrics_manager: Rc<MetricsManager<VM>>,
-    registry_querier: Rc<RegistryQuerier>,
+    metrics_manager: Arc<MetricsManager<VM>>,
+    registry_querier: Arc<RegistryQuerier>,
     last_metrics_update: RegistryVersion,
 }
 
@@ -64,10 +63,10 @@ pub struct NodeRewardsCanister {
 impl NodeRewardsCanister {
     pub fn new(
         registry_client: Arc<dyn CanisterRegistryClient>,
-        metrics_manager: Rc<MetricsManager<VM>>,
+        metrics_manager: Arc<MetricsManager<VM>>,
     ) -> Self {
         Self {
-            registry_querier: Rc::new(RegistryQuerier::new(registry_client.clone())),
+            registry_querier: Arc::new(RegistryQuerier::new(registry_client.clone())),
             last_metrics_update: registry_client.get_latest_version(),
             registry_client,
             metrics_manager,
@@ -80,12 +79,12 @@ impl NodeRewardsCanister {
     }
 
     /// Gets Arc reference to MetricsManager
-    pub fn get_metrics_manager(&self) -> Rc<MetricsManager<VM>> {
+    pub fn get_metrics_manager(&self) -> Arc<MetricsManager<VM>> {
         self.metrics_manager.clone()
     }
 
     /// Gets Arc reference to RegistryQuerier
-    pub fn get_registry_querier(&self) -> Rc<RegistryQuerier> {
+    pub fn get_registry_querier(&self) -> Arc<RegistryQuerier> {
         self.registry_querier.clone()
     }
 

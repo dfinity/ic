@@ -236,6 +236,8 @@ impl<'b> PrometheusMetrics<'b> {
             }
         }
 
+        encode_timer_task_metrics(w)?;
+
         Ok(())
     }
 }
