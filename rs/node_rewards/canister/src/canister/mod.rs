@@ -1,9 +1,9 @@
-use crate::KeyRange;
 use crate::api_conversion::into_rewards_calculation_results;
 use crate::metrics::MetricsManager;
 use crate::pb::v1::{RewardableNodesKey, RewardableNodesValue};
 use crate::registry_querier::RegistryQuerier;
 use crate::storage::{REWARDABLE_NODES_CACHE, VM};
+use crate::{KeyRange, telemetry};
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_node_rewards_canister_api::monthly_rewards::{
@@ -26,6 +26,7 @@ use ic_registry_keys::{
 };
 use ic_registry_node_provider_rewards::{RewardsPerNodeProvider, calculate_rewards_v0};
 use ic_types::{RegistryVersion, Time};
+use itertools::Itertools;
 use rewards_calculation::performance_based_algorithm::DataProvider;
 use rewards_calculation::performance_based_algorithm::results::RewardsCalculatorResults;
 use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
@@ -175,28 +176,34 @@ pub enum BackfillRewardableNodesStatus {
 
 impl NodeRewardsCanister {
     pub fn backfill_rewardable_nodes(&self) -> BackfillRewardableNodesStatus {
+        let instructions_count = telemetry::InstructionCounter::default();
         let today = DayUtc::from_secs(current_time().as_secs_since_unix_epoch());
         let start_backfill_day = DayUtc::from_secs(CACHE_BACKFILL_START_DAY);
         let end_backfill_day = today.previous_day();
-        let maybe_day_to_backfill: Option<DayUtc> = start_backfill_day
+        let mut days_to_backfill: Vec<DayUtc> = start_backfill_day
             .days_until(&end_backfill_day)
             .expect("Start day always before today")
             .into_iter()
-            .rev()
             .filter(|day| self.get_rewardable_nodes(day).is_err())
-            .next();
+            .collect_vec();
 
-        if let Some(day_to_backfill) = maybe_day_to_backfill {
+        if let Some(day_to_backfill) = days_to_backfill.pop() {
             ic_cdk::println!("Backfilling rewardable nodes for day: {}", day_to_backfill);
 
             self.backfill_rewardable_nodes_single_day(&day_to_backfill)
                 .unwrap_or_else(|e| {
                     ic_cdk::println!("Failed to backfill: {:?}", e);
                 });
-            BackfillRewardableNodesStatus::NotCompleted
-        } else {
-            BackfillRewardableNodesStatus::Completed
+
+            ic_cdk::println!(
+                "Single day backfill Instructions count: {:?}",
+                instructions_count.sum()
+            );
+            if !days_to_backfill.is_empty() {
+                return BackfillRewardableNodesStatus::NotCompleted;
+            }
         }
+        BackfillRewardableNodesStatus::Completed
     }
 
     fn backfill_rewardable_nodes_single_day(&self, day_utc: &DayUtc) -> Result<(), String> {

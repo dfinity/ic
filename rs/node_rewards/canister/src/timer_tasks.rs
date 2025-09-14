@@ -36,11 +36,10 @@ impl DailySyncTask {
         let mut next_sync_target_secs =
             now_secs + DAILY_SYNC_AT_SECONDS_AFTER_MIDNIGHT - since_midnight;
         if since_midnight > DAILY_SYNC_AT_SECONDS_AFTER_MIDNIGHT {
-            // already past today's SYNC_AT_SECONDS_AFTER_MIDNIGHT → use tomorrow
             next_sync_target_secs += DAY_IN_SECONDS;
-        };
+        }
 
-        Duration::from_secs(next_sync_target_secs)
+        Duration::from_secs(next_sync_target_secs - now_secs)
     }
 }
 
