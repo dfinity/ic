@@ -181,9 +181,7 @@ impl NodeRewardsCanister {
         let end_backfill_day = today.previous_day();
 
         let all_days = start_backfill_day.days_until(&end_backfill_day).unwrap();
-        all_days
-            .into_iter()
-            .for_each(|day| ic_cdk::println!("Day to backfill: {}", day));
+        ic_cdk::println!("Day to backfill: {}", all_days);
         let mut days_to_backfill: Vec<DayUtc> = start_backfill_day
             .days_until(&end_backfill_day)
             .expect("Start day always before today")
