@@ -125,7 +125,9 @@ fn run_rewardable_nodes_backfill_task(
     metrics: &'static LocalKey<RefCell<TimerTaskMetricsRegistry>>,
 ) {
     REWARDABLE_NODES_BACKFILL_TIMER_ID.with(|id| {
-        let timer_id = RewardableNodesBackfillTask::new(canister).schedule(metrics);
-        id.borrow_mut().replace(timer_id);
+        if id.borrow().is_none() {
+            let timer_id = RewardableNodesBackfillTask::new(canister).schedule(metrics);
+            id.borrow_mut().replace(timer_id);
+        }
     });
 }
