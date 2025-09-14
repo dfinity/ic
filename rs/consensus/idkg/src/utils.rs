@@ -11,7 +11,7 @@ use ic_interfaces::{
     idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::registry::subnet::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -20,27 +20,27 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::{
     SignWithThresholdContext, ThresholdArguments,
 };
 use ic_types::{
+    Height, RegistryVersion, SubnetId,
     batch::{AvailablePreSignatures, ConsensusResponse},
     consensus::{
+        Block, HasHeight,
         idkg::{
-            common::{BuildSignatureInputsError, ThresholdSigInputs},
             CompletedSignature, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId,
             IDkgMessage, IDkgPayload, IDkgTranscriptParamsRef, PreSigId, RequestId,
             TranscriptLookupError, TranscriptRef,
+            common::{BuildSignatureInputsError, ThresholdSigInputs},
         },
-        Block, HasHeight,
     },
     crypto::{
+        ExtendedDerivationPath,
         canister_threshold_sig::{
-            idkg::{IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings},
             MasterPublicKey, ThresholdEcdsaSigInputs, ThresholdSchnorrSigInputs,
+            idkg::{IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings},
         },
         vetkd::{VetKdArgs, VetKdDerivationContext},
-        ExtendedDerivationPath,
     },
     messages::CallbackId,
     registry::RegistryClientError,
-    Height, RegistryVersion, SubnetId,
 };
 use phantom_newtype::Id;
 use std::{
@@ -149,16 +149,14 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
                     idkg_payload
                 } else {
                     return Err(format!(
-                        "transcript(): chain look up failed {:?}: IDkgPayload not found",
-                        transcript_ref
+                        "transcript(): chain look up failed {transcript_ref:?}: IDkgPayload not found"
                     ));
                 }
             }
             Err(err) => {
                 return Err(format!(
-                    "transcript(): chain look up failed {:?}: {:?}",
-                    transcript_ref, err
-                ))
+                    "transcript(): chain look up failed {transcript_ref:?}: {err:?}"
+                ));
             }
         };
 
@@ -166,23 +164,28 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
             .idkg_transcripts
             .get(&transcript_ref.transcript_id)
             .ok_or(format!(
-                "transcript(): missing idkg_transcript: {:?}",
-                transcript_ref
+                "transcript(): missing idkg_transcript: {transcript_ref:?}"
             ))
             .cloned()
+    }
+
+    fn iter_above(&self, height: Height) -> Box<dyn Iterator<Item = &IDkgPayload> + '_> {
+        Box::new(
+            self.chain
+                .iter_above(height)
+                .flat_map(|block| block.payload.as_ref().as_idkg()),
+        )
     }
 }
 
 pub(super) fn block_chain_reader(
     pool_reader: &PoolReader<'_>,
-    summary_block: &Block,
-    parent_block: &Block,
+    start_height: Height,
+    parent_block: Block,
     idkg_payload_metrics: Option<&IDkgPayloadMetrics>,
     log: &ReplicaLogger,
 ) -> Result<IDkgBlockReaderImpl, InvalidChainCacheError> {
-    // Resolve the transcript refs pointing into the parent chain,
-    // copy the resolved transcripts into the summary block.
-    block_chain_cache(pool_reader, summary_block, parent_block)
+    block_chain_cache(pool_reader, start_height, parent_block)
         .map(IDkgBlockReaderImpl::new)
         .map_err(|err| {
             warn!(
@@ -199,11 +202,12 @@ pub(super) fn block_chain_reader(
 /// Wrapper to build the chain cache and perform sanity checks on the returned chain
 pub(super) fn block_chain_cache(
     pool_reader: &PoolReader<'_>,
-    start: &Block,
-    end: &Block,
+    start_height: Height,
+    end: Block,
 ) -> Result<Arc<dyn ConsensusBlockChain>, InvalidChainCacheError> {
-    let chain = pool_reader.pool().build_block_chain(start, end);
-    let expected_len = (end.height().get() - start.height().get() + 1) as usize;
+    let end_height = end.height();
+    let expected_len = (end_height.get() - start_height.get() + 1) as usize;
+    let chain = pool_reader.pool().build_block_chain(start_height, end);
     let chain_len = chain.len();
     if chain_len == expected_len {
         Ok(chain)
@@ -214,8 +218,8 @@ pub(super) fn block_chain_cache(
              notarized_height = {:?}, finalized_height = {:?}, CUP height = {:?}",
             expected_len,
             chain_len,
-            start.height(),
-            end.height(),
+            start_height,
+            end_height,
             chain.tip().height(),
             pool_reader.get_notarized_height(),
             pool_reader.get_finalized_height(),
@@ -376,14 +380,14 @@ pub fn inspect_idkg_chain_key_initializations(
             .clone()
             .ok_or("Failed to find key_id in ecdsa_initializations")?
             .try_into()
-            .map_err(|err| format!("Error reading ECDSA key_id: {:?}", err))?;
+            .map_err(|err| format!("Error reading ECDSA key_id: {err:?}"))?;
 
         let dealings = ecdsa_init
             .dealings
             .as_ref()
             .ok_or("Failed to find dealings in ecdsa_initializations")?
             .try_into()
-            .map_err(|err| format!("Error reading ECDSA dealings: {:?}", err))?;
+            .map_err(|err| format!("Error reading ECDSA dealings: {err:?}"))?;
 
         initial_dealings_per_key_id.insert(
             MasterPublicKeyId::Ecdsa(ecdsa_key_id).try_into().unwrap(),
@@ -397,7 +401,7 @@ pub fn inspect_idkg_chain_key_initializations(
             .clone()
             .ok_or("Failed to find key_id in chain_key_initializations")?
             .try_into()
-            .map_err(|err| format!("Error reading Master public key_id: {:?}", err))?;
+            .map_err(|err| format!("Error reading Master public key_id: {err:?}"))?;
 
         // Skip non-idkg keys
         let key_id = match key_id.try_into() {
@@ -410,13 +414,13 @@ pub fn inspect_idkg_chain_key_initializations(
             Some(pb::chain_key_initialization::Initialization::TranscriptRecord(_)) | None => {
                 return Err(
                     "Error: Failed to find dealings in chain_key_initializations".to_string(),
-                )
+                );
             }
         };
 
         let dealings = dealings
             .try_into()
-            .map_err(|err| format!("Error reading initial IDkg dealings: {:?}", err))?;
+            .map_err(|err| format!("Error reading initial IDkg dealings: {err:?}"))?;
 
         initial_dealings_per_key_id.insert(key_id, dealings);
     }
@@ -491,7 +495,7 @@ pub fn get_idkg_subnet_public_keys_and_pre_signatures(
 
     let chain = pool
         .pool()
-        .build_block_chain(last_dkg_summary_block, current_block);
+        .build_block_chain(last_dkg_summary_block.height(), current_block.clone());
     let block_reader = IDkgBlockReaderImpl::new(chain);
 
     let mut public_keys = BTreeMap::new();
@@ -591,14 +595,14 @@ pub(crate) fn update_purge_height(cell: &RefCell<Height>, new_height: Height) ->
 mod tests {
     use super::*;
     use crate::test_utils::{
-        create_available_pre_signature_with_key_transcript_and_height, set_up_idkg_payload,
-        IDkgPayloadTestHelper,
+        IDkgPayloadTestHelper, create_available_pre_signature_with_key_transcript_and_height,
+        set_up_idkg_payload,
     };
     use ic_config::artifact_pool::ArtifactPoolConfig;
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        dummy_values::dummy_initial_idkg_dealing_for_tests, generate_key_transcript,
-        IDkgParticipants,
+        IDkgParticipants, dummy_values::dummy_initial_idkg_dealing_for_tests,
+        generate_key_transcript,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_logger::no_op_logger;
@@ -607,14 +611,14 @@ mod tests {
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_consensus::{fake::Fake, idkg::*};
-    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
         batch::ValidationContext,
         consensus::{
+            BlockPayload, Payload, SummaryPayload,
             dkg::DkgSummary,
             idkg::{IDkgPayload, UnmaskedTranscript},
-            BlockPayload, Payload, SummaryPayload,
         },
         crypto::{AlgorithmId, CryptoHashOf},
         time::UNIX_EPOCH,
@@ -1018,9 +1022,11 @@ mod tests {
                 .keys()
                 .copied()
                 .collect();
-            assert!(!pre_signature_ids_not_to_be_delivered
-                .into_iter()
-                .any(|pid| delivered_ids.contains(&pid)));
+            assert!(
+                !pre_signature_ids_not_to_be_delivered
+                    .into_iter()
+                    .any(|pid| delivered_ids.contains(&pid))
+            );
             assert_eq!(
                 BTreeSet::from_iter(pre_signature_ids_to_be_delivered),
                 delivered_ids

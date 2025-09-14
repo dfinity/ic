@@ -4,23 +4,23 @@ use ic_test_utilities_consensus::{
     make_genesis,
 };
 use ic_types::{
+    Height,
     artifact::ConsensusMessageId,
     batch::{BatchPayload, IngressPayload},
     consensus::{
-        dkg::{DkgDataPayload, DkgSummary},
         Block, BlockPayload, BlockProposal, ConsensusMessage, ConsensusMessageHash, DataPayload,
         Payload, Rank,
+        dkg::{DkgDataPayload, DkgSummary},
     },
     crypto::{CryptoHash, CryptoHashOf},
     messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress},
     time::UNIX_EPOCH,
-    Height,
 };
 use ic_types_test_utils::ids::node_test_id;
 
 use super::types::{
-    stripped::{StrippedBlockProposal, StrippedIngressPayload},
     SignedIngressId,
+    stripped::{StrippedBlockProposal, StrippedIngressPayload},
 };
 
 pub(crate) fn fake_ingress_message(method_name: &str) -> (SignedIngress, SignedIngressId) {

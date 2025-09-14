@@ -20,8 +20,8 @@ Success::
 
 end::catalog[] */
 
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use ic_canister_client::Sender;
 use ic_consensus_system_test_utils::upgrade::{
     fetch_unassigned_node_version, get_blessed_replica_versions,
@@ -29,8 +29,8 @@ use ic_consensus_system_test_utils::upgrade::{
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     ssh_access::{
-        generate_key_strings, get_updatesshreadonlyaccesskeyspayload,
-        update_ssh_keys_for_all_unassigned_nodes, wait_until_authentication_is_granted, AuthMean,
+        AuthMean, generate_key_strings, get_updatesshreadonlyaccesskeyspayload,
+        update_ssh_keys_for_all_unassigned_nodes, wait_until_authentication_is_granted,
     },
 };
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
@@ -87,11 +87,9 @@ fn test(env: TestEnv) {
     let original_version = fetch_unassigned_node_version(&unassigned_node).unwrap();
     info!(logger, "Original replica version: {}", original_version);
 
-    let upgrade_url = get_guestos_update_img_url()
-        .expect("no image URL")
-        .to_string();
+    let upgrade_url = get_guestos_update_img_url().to_string();
     info!(logger, "Upgrade URL: {}", upgrade_url);
-    let target_version = get_guestos_update_img_version().unwrap();
+    let target_version = get_guestos_update_img_version();
     info!(logger, "Target replica version: {}", target_version);
 
     let registry_canister = RegistryCanister::new(vec![nns_node.get_public_url()]);
@@ -102,10 +100,9 @@ fn test(env: TestEnv) {
         info!(logger, "Registry version: {}", reg_ver);
         let blessed_versions = get_blessed_replica_versions(&registry_canister).await;
         info!(logger, "Initial: {:?}", blessed_versions);
-        let sha256 = get_guestos_update_img_sha256().expect("no SHA256 hash");
+        let sha256 = get_guestos_update_img_sha256();
         info!(logger, "Update image SHA256: {}", sha256);
-        let guest_launch_measurements =
-            get_guestos_launch_measurements().expect("no launch measurements");
+        let guest_launch_measurements = get_guestos_launch_measurements();
 
         // prepare for the 1. proposal
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());

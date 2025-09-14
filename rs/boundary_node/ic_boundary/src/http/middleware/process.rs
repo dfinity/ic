@@ -1,21 +1,20 @@
 use std::{sync::Arc, time::Duration};
 
-use axum::{body::Body, extract::Request, middleware::Next, response::IntoResponse, Extension};
+use axum::{Extension, body::Body, extract::Request, middleware::Next, response::IntoResponse};
 use bytes::Bytes;
 use candid::{Decode, Principal};
-use http::header::{HeaderValue, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
-use ic_bn_lib::http::{body::buffer_body, cache::CacheStatus, headers::*, Error as IcBnError};
+use http::header::{CONTENT_TYPE, HeaderValue, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
+use ic_bn_lib::http::{Error as IcBnError, body::buffer_body, cache::CacheStatus, headers::*};
 pub use ic_bn_lib::types::RequestType;
 use ic_types::messages::Blob;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    core::{decoder_config, MAX_REQUEST_BODY_SIZE},
+    core::{MAX_REQUEST_BODY_SIZE, decoder_config},
     errors::{ApiError, ErrorCause},
     http::middleware::retry::RetryResult,
-    persist::RouteSubnet,
     routes::{HttpRequest, RequestContext},
-    snapshot::Node,
+    snapshot::{Node, Subnet},
 };
 
 const METHOD_HTTP: &str = "http_request";
@@ -160,7 +159,7 @@ pub async fn postprocess_response(request: Request, next: Next) -> impl IntoResp
         }
     }
 
-    if let Some(v) = response.extensions().get::<Arc<RouteSubnet>>().cloned() {
+    if let Some(v) = response.extensions().get::<Arc<Subnet>>().cloned() {
         response.headers_mut().insert(
             X_IC_SUBNET_ID,
             HeaderValue::from_maybe_shared(Bytes::from(v.id.to_string())).unwrap(),

@@ -77,8 +77,7 @@ impl rustls::sign::Signer for CspServerEd25519Signer {
                 | CspTlsSignError::SigningFailed { .. }
                 | CspTlsSignError::TransientInternalError { .. } => TLSError::General(format!(
                     "Failed to create signature during \
-                     TLS handshake by means of the CspServerEd25519Signer: {:?}",
-                    e
+                     TLS handshake by means of the CspServerEd25519Signer: {e:?}"
                 )),
             })?;
         match csp_signature {

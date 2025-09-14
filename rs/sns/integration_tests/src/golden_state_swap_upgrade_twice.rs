@@ -30,12 +30,7 @@ fn get_state(
     let args = Encode!(&GetStateRequest {}).unwrap();
     let state_before_upgrade = state_machine
         .execute_ingress(swap_canister_id, "get_state", args)
-        .unwrap_or_else(|err| {
-            panic!(
-                "Unable to get state of {}'s Swap canister: {}",
-                sns_name, err,
-            )
-        });
+        .unwrap_or_else(|err| panic!("Unable to get state of {sns_name}'s Swap canister: {err}",));
     Decode!(&state_before_upgrade.bytes(), GetStateResponse).unwrap()
 }
 
@@ -49,7 +44,7 @@ fn upgrade_swap_to_tip_of_master(
 
     state_machine
         .upgrade_canister(swap_canister_id, swap_wasm.wasm, swap_upgrade_arg)
-        .unwrap_or_else(|err| panic!("Cannot upgrade {}'s Swap canister: {}", sns_name, err));
+        .unwrap_or_else(|err| panic!("Cannot upgrade {sns_name}'s Swap canister: {err}"));
 }
 
 /// Returns the pre-upgrade and post-upgrade states of the Swap.

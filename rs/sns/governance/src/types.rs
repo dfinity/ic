@@ -1,32 +1,13 @@
 use crate::{
     following::TOPICS,
-    governance::{Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
+    governance::{Governance, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER, TimeWarp},
     logs::INFO,
     pb::{
         sns_root_types::{
-            set_dapp_controllers_request::CanisterIds, ManageDappCanisterSettingsRequest,
-            RegisterDappCanistersRequest, SetDappControllersRequest,
+            ManageDappCanisterSettingsRequest, RegisterDappCanistersRequest,
+            SetDappControllersRequest, set_dapp_controllers_request::CanisterIds,
         },
         v1::{
-            claim_swap_neurons_request::{
-                neuron_recipe::{self, Participant},
-                NeuronRecipe, NeuronRecipes,
-            },
-            claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
-            get_neuron_response,
-            governance::{
-                self,
-                neuron_in_flight_command::{self, SyncCommand},
-                Mode, SnsMetadata, Version,
-            },
-            governance_error::ErrorType,
-            manage_neuron,
-            manage_neuron_response::{
-                self, DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
-            },
-            nervous_system_function::FunctionType,
-            neuron::{FolloweesForTopic, TopicFollowees},
-            proposal::Action,
             ChunkedCanisterWasm, ClaimSwapNeuronsError, ClaimSwapNeuronsResponse,
             ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters, Empty,
             ExecuteGenericNervousSystemFunction, Followee, GovernanceError,
@@ -36,6 +17,24 @@ use crate::{
             NeuronPermissionList, NeuronPermissionType, ProposalId, RegisterDappCanisters,
             RewardEvent, SnsVersion, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
             UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+            claim_swap_neurons_request::{
+                NeuronRecipe, NeuronRecipes,
+                neuron_recipe::{self, Participant},
+            },
+            claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
+            get_neuron_response,
+            governance::{
+                self, Mode, SnsMetadata, Version,
+                neuron_in_flight_command::{self, SyncCommand},
+            },
+            governance_error::ErrorType,
+            manage_neuron,
+            manage_neuron_response::{
+                self, DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
+            },
+            nervous_system_function::FunctionType,
+            neuron::{FolloweesForTopic, TopicFollowees},
+            proposal::Action,
         },
     },
     proposal::ValidGenericNervousSystemFunction,
@@ -51,8 +50,8 @@ use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterInstallModeError, StoredChunksReply,
 };
 use ic_nervous_system_common::{
-    hash_to_hex_string, ledger_validation::MAX_LOGO_LENGTH, NervousSystemError,
-    DEFAULT_TRANSFER_FEE, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
+    DEFAULT_TRANSFER_FEE, NervousSystemError, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS,
+    hash_to_hex_string, ledger_validation::MAX_LOGO_LENGTH,
 };
 use ic_nervous_system_common_validation::validate_proposal_url;
 use ic_nervous_system_proto::pb::v1::{Duration as PbDuration, Percentage};
@@ -143,6 +142,9 @@ pub mod native_action_ids {
     /// ExecuteExtensionOperation Action.
     pub const EXECUTE_EXTENSION_OPERATION: u64 = 18;
 
+    /// UpgradeExtension Action.
+    pub const UPGRADE_EXTENSION: u64 = 19;
+
     // When adding something to this list, make sure to update the below function.
     pub fn nervous_system_functions() -> Vec<NervousSystemFunction> {
         vec![
@@ -164,6 +166,7 @@ pub mod native_action_ids {
             NervousSystemFunction::set_topics_for_custom_proposals(),
             NervousSystemFunction::register_extension(),
             NervousSystemFunction::execute_extension_operation(),
+            NervousSystemFunction::upgrade_extension(),
         ]
     }
 }
@@ -213,8 +216,7 @@ impl governance::Mode {
             format!(
                 "Because governance is currently in PreInitializationSwap mode, \
                  manage_neuron commands of this type are not allowed \
-                 (caller_is_swap_canister={}). command: {:#?}",
-                caller_is_swap_canister, command,
+                 (caller_is_swap_canister={caller_is_swap_canister}). command: {command:#?}",
             ),
         ))
     }
@@ -322,8 +324,7 @@ impl governance::Mode {
                     ErrorType::NotFound,
                     format!(
                         "ExecuteGenericNervousSystemFunction specifies an unknown function ID: \
-                         {:#?}.\nKnown functions: {:#?}",
-                        execute, id_to_nervous_system_function,
+                         {execute:#?}.\nKnown functions: {id_to_nervous_system_function:#?}",
                     ),
                 )
             })?;
@@ -613,9 +614,8 @@ impl NervousSystemParameters {
 
         if neuron_minimum_stake_e8s <= transaction_fee_e8s {
             Err(format!(
-                "NervousSystemParameters.neuron_minimum_stake_e8s ({}) must be greater than \
-                NervousSystemParameters.transaction_fee_e8s ({})",
-                neuron_minimum_stake_e8s, neuron_minimum_stake_e8s
+                "NervousSystemParameters.neuron_minimum_stake_e8s ({neuron_minimum_stake_e8s}) must be greater than \
+                NervousSystemParameters.transaction_fee_e8s ({neuron_minimum_stake_e8s})"
             ))
         } else {
             Ok(())
@@ -710,7 +710,8 @@ impl NervousSystemParameters {
         } else if wait_for_quiet_deadline_increase_seconds > initial_voting_period_seconds / 2 {
             Err(format!(
                 "NervousSystemParameters.wait_for_quiet_deadline_increase_seconds is {}, but must be less than or equal to half the initial voting period, {}",
-                initial_voting_period_seconds, initial_voting_period_seconds / 2
+                initial_voting_period_seconds,
+                initial_voting_period_seconds / 2
             ))
         } else {
             Ok(())
@@ -767,9 +768,8 @@ impl NervousSystemParameters {
 
         if neuron_minimum_dissolve_delay_to_vote_seconds > max_dissolve_delay_seconds {
             Err(format!(
-                "The minimum dissolve delay to vote ({}) cannot be greater than the max \
-                dissolve delay ({})",
-                neuron_minimum_dissolve_delay_to_vote_seconds, max_dissolve_delay_seconds
+                "The minimum dissolve delay to vote ({neuron_minimum_dissolve_delay_to_vote_seconds}) cannot be greater than the max \
+                dissolve delay ({max_dissolve_delay_seconds})"
             ))
         } else {
             Ok(())
@@ -891,9 +891,9 @@ impl NervousSystemParameters {
 
         if max_number_of_principals_per_neuron < Self::MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_FLOOR {
             Err(format!(
-                    "NervousSystemParameters.max_number_of_principals_per_neuron must be greater than or equal to {}",
-                    Self::MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_FLOOR
-                ))
+                "NervousSystemParameters.max_number_of_principals_per_neuron must be greater than or equal to {}",
+                Self::MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_FLOOR
+            ))
         } else if max_number_of_principals_per_neuron
             > Self::MAX_NUMBER_OF_PRINCIPALS_PER_NEURON_CEILING
         {
@@ -970,8 +970,7 @@ impl NervousSystemParameters {
                 ErrorType::AccessControlList,
                 format!(
                     "Cannot grant permissions as one or more permissions is not \
-                    allowed to be granted. Illegal Permissions: {:?}",
-                    illegal_permissions
+                    allowed to be granted. Illegal Permissions: {illegal_permissions:?}"
                 ),
             ));
         }
@@ -1028,7 +1027,7 @@ impl From<prost::DecodeError> for GovernanceError {
     fn from(decode_error: prost::DecodeError) -> Self {
         GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
-            format!("Invalid mode for install_code: {}", decode_error),
+            format!("Invalid mode for install_code: {decode_error}"),
         )
     }
 }
@@ -1037,7 +1036,7 @@ impl From<prost::UnknownEnumValue> for GovernanceError {
     fn from(unknown_enum_value: prost::UnknownEnumValue) -> Self {
         GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
-            format!("Unknown enum value: {}", unknown_enum_value),
+            format!("Unknown enum value: {unknown_enum_value}"),
         )
     }
 }
@@ -1171,6 +1170,17 @@ impl NervousSystemFunction {
             name: "Execute SNS extension operation".to_string(),
             description: Some(
                 "Proposal to execute an operation on a registered SNS extension.".to_string(),
+            ),
+            function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+        }
+    }
+
+    fn upgrade_extension() -> NervousSystemFunction {
+        NervousSystemFunction {
+            id: native_action_ids::UPGRADE_EXTENSION,
+            name: "Upgrade SNS extension".to_string(),
+            description: Some(
+                "Proposal to upgrade the WASM of a registered SNS extension.".to_string(),
             ),
             function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
         }
@@ -1323,6 +1333,7 @@ impl From<Action> for NervousSystemFunction {
             }
             Action::RegisterDappCanisters(_) => NervousSystemFunction::register_dapp_canisters(),
             Action::RegisterExtension(_) => NervousSystemFunction::register_extension(),
+            Action::UpgradeExtension(_) => NervousSystemFunction::upgrade_extension(),
             Action::DeregisterDappCanisters(_) => {
                 NervousSystemFunction::deregister_dapp_canisters()
             }
@@ -1439,7 +1450,7 @@ impl ManageNeuronResponse {
 
     pub fn expect(self, msg: &str) -> Self {
         if let Some(manage_neuron_response::Command::Error(err)) = &self.command {
-            panic!("{}: {}", msg, err);
+            panic!("{msg}: {err}");
         }
         self
     }
@@ -1610,12 +1621,13 @@ impl SnsMetadata {
         // TODO: Should we check that it's a valid PNG?
         if logo.len() > MAX_LOGO_LENGTH {
             return Err(format!(
-                "SnsMetadata.logo must be less than {} characters, roughly 256 Kb",
-                MAX_LOGO_LENGTH
+                "SnsMetadata.logo must be less than {MAX_LOGO_LENGTH} characters, roughly 256 Kb"
             ));
         }
         if !logo.starts_with(PREFIX) {
-            return Err(format!("SnsMetadata.logo must be a base64 encoded PNG, but the provided string does't begin with `{PREFIX}`."));
+            return Err(format!(
+                "SnsMetadata.logo must be a base64 encoded PNG, but the provided string does't begin with `{PREFIX}`."
+            ));
         }
         if base64::decode(&logo[PREFIX.len()..]).is_err() {
             return Err("Couldn't decode base64 in SnsMetadata.logo".to_string());
@@ -1863,7 +1875,7 @@ fn summarize_blob_field(blob: &[u8]) -> Vec<u8> {
     fn format_u8_slice(blob: &[u8]) -> String {
         blob.iter()
             // Hexify each element.
-            .map(|elt| format!("{:02X?}", elt))
+            .map(|elt| format!("{elt:02X?}"))
             // Join them with a space. (To do that, we must first collect them into a Vec.)
             .collect::<Vec<String>>()
             .join(" ")
@@ -1910,6 +1922,7 @@ impl From<&Action> for u64 {
             Action::ExecuteExtensionOperation(_) => native_action_ids::EXECUTE_EXTENSION_OPERATION,
             Action::RegisterDappCanisters(_) => native_action_ids::REGISTER_DAPP_CANISTERS,
             Action::RegisterExtension(_) => native_action_ids::REGISTER_EXTENSION,
+            Action::UpgradeExtension(_) => native_action_ids::UPGRADE_EXTENSION,
             Action::DeregisterDappCanisters(_) => native_action_ids::DEREGISTER_DAPP_CANISTERS,
             Action::ManageSnsMetadata(_) => native_action_ids::MANAGE_SNS_METADATA,
             Action::TransferSnsTreasuryFunds(_) => native_action_ids::TRANSFER_SNS_TREASURY_FUNDS,
@@ -2088,7 +2101,7 @@ impl Drop for LedgerUpdateLock {
         // may be inconsistent with the internal state of governance.  In that case,
         // we want to prevent further operations with that neuron until the issue can be
         // investigated and resolved, which will require code changes.
-        if ic_cdk::api::call::is_recovering_from_trap() {
+        if ic_cdk::futures::is_recovering_from_trap() {
             return;
         }
         // It's always ok to dereference the governance when a LedgerUpdateLock
@@ -2143,8 +2156,7 @@ impl NeuronRecipe {
         if let Some(stake_e8s) = stake_e8s {
             if *stake_e8s < neuron_minimum_stake_e8s {
                 defects.push(format!(
-                    "Provided stake_e8s ({}) is less than the required neuron_minimum_stake_e8s({})",
-                    stake_e8s, neuron_minimum_stake_e8s
+                    "Provided stake_e8s ({stake_e8s}) is less than the required neuron_minimum_stake_e8s({neuron_minimum_stake_e8s})"
                 ));
             }
         } else {
@@ -2352,7 +2364,7 @@ impl NeuronRecipe {
                 "Neuron-basket-main".to_string()
             } else {
                 // This is not currently used, as each neuron basket has a single root neuron.
-                format!("Followee-{}", followee_neuron_index)
+                format!("Followee-{followee_neuron_index}")
             }
         };
 
@@ -2450,7 +2462,7 @@ impl TryFrom<NeuronPermissionList> for BTreeSet<NeuronPermissionType> {
             .into_iter()
             .map(|p| {
                 NeuronPermissionType::try_from(p)
-                    .map_err(|err| format!("Invalid permission: {}, err: {}", p, err))
+                    .map_err(|err| format!("Invalid permission: {p}, err: {err}"))
             })
             .collect()
     }
@@ -2682,8 +2694,7 @@ fn validate_wasm_bytes(
     {
         defects.push(format!(
             "the maximum canister WASM and argument size \
-            for UpgradeSnsControlledCanister is {} bytes.",
-            MAX_INSTALL_CODE_WASM_AND_ARG_SIZE
+            for UpgradeSnsControlledCanister is {MAX_INSTALL_CODE_WASM_AND_ARG_SIZE} bytes."
         ));
     }
 
@@ -2904,6 +2915,36 @@ impl TryFrom<&UpgradeSnsControlledCanister> for Wasm {
     }
 }
 
+impl TryFrom<&crate::pb::v1::Wasm> for Wasm {
+    type Error = String;
+
+    fn try_from(wasm_wrapper: &crate::pb::v1::Wasm) -> Result<Self, Self::Error> {
+        let Some(wasm) = &wasm_wrapper.wasm else {
+            return Err("wasm.wasm field is required".to_string());
+        };
+
+        match wasm {
+            crate::pb::v1::wasm::Wasm::Bytes(bytes) => Ok(Self::Bytes(bytes.clone())),
+            crate::pb::v1::wasm::Wasm::Chunked(ChunkedCanisterWasm {
+                wasm_module_hash,
+                store_canister_id,
+                chunk_hashes_list,
+            }) => {
+                let Some(store_canister_id) = store_canister_id else {
+                    return Err("wasm.chunked.store_canister_id must be specified.".to_string());
+                };
+                let store_canister_id = CanisterId::try_from_principal_id(*store_canister_id)
+                    .map_err(|err| format!("wasm.chunked.store_canister_id: {err}"))?;
+                Ok(Self::Chunked {
+                    wasm_module_hash: wasm_module_hash.clone(),
+                    store_canister_id,
+                    chunk_hashes_list: chunk_hashes_list.clone(),
+                })
+            }
+        }
+    }
+}
+
 impl UpgradeSnsControlledCanister {
     // Gets the install mode if it is set, otherwise defaults to Upgrade.
     // This function is not called `mode_or_default` because `or_default` usually
@@ -3115,8 +3156,7 @@ pub mod test_helpers {
                 required_calls.try_write().unwrap().clear();
                 assert!(
                     invocations.is_empty(),
-                    "Not all required calls were executed: {:?}",
-                    invocations
+                    "Not all required calls were executed: {invocations:?}"
                 );
             })
         }
@@ -3131,8 +3171,7 @@ pub mod test_helpers {
             let invocations = self.required_canister_call_invocations.try_read().unwrap();
             assert!(
                 invocations.is_empty(),
-                "Not all required calls were executed: {:?}",
-                invocations
+                "Not all required calls were executed: {invocations:?}"
             );
         }
     }
@@ -3144,7 +3183,7 @@ pub mod test_helpers {
         }
 
         fn insecure_random_u64(&mut self) -> u64 {
-            rand::thread_rng().gen()
+            rand::thread_rng().r#gen()
         }
 
         async fn call_canister(

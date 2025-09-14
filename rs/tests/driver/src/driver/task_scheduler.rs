@@ -2,7 +2,7 @@
 use std::collections::BTreeMap;
 use std::time::{Duration, SystemTime};
 
-use slog::{debug, info, Logger};
+use slog::{Logger, debug, info};
 
 use crate::driver::action_graph::ActionGraph;
 use crate::driver::event::TaskId;
@@ -51,13 +51,15 @@ impl TaskScheduler {
                     Node::Running { active: 0, .. } => {
                         // stop this task if it is still running
                         if let Some(task_id) = maybe_task_id {
-                            let (th, _node_handle) =
-                                if let Some(item) = self.running_tasks.remove(&task_id) {
+                            let (th, _node_handle) = match self.running_tasks.remove(&task_id) {
+                                Some(item) => {
                                     Self::record_time(&mut self.end_times, &task_id);
                                     item
-                                } else {
+                                }
+                                _ => {
                                     continue;
-                                };
+                                }
+                            };
                             // debug!(log, "ag: Stopping node {:?} task {}", &node, &task_id);
                             th.cancel();
 
@@ -86,13 +88,15 @@ impl TaskScheduler {
                     }
                     Node::Failed { .. } => {
                         if let Some(task_id) = maybe_task_id {
-                            let (th, _node_handle) =
-                                if let Some(item) = self.running_tasks.remove(&task_id) {
+                            let (th, _node_handle) = match self.running_tasks.remove(&task_id) {
+                                Some(item) => {
                                     Self::record_time(&mut self.end_times, &task_id);
                                     item
-                                } else {
+                                }
+                                _ => {
                                     continue;
-                                };
+                                }
+                            };
                             // debug!(log, "ag: Failing node {:?} task {}", &node, &task_id);
                             th.cancel();
                         }

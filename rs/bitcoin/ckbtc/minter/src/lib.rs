@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::address::BitcoinAddress;
 use crate::logs::{P0, P1};
 use crate::management::CallError;
@@ -13,7 +14,7 @@ use ic_cdk::api::management_canister::bitcoin;
 use ic_management_canister_types_private::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
-use scopeguard::{guard, ScopeGuard};
+use scopeguard::{ScopeGuard, guard};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 use std::cmp::max;
@@ -49,6 +50,18 @@ const MIN_NANOS: u64 = 60 * SEC_NANOS;
 /// a batch transaction.
 pub const MIN_PENDING_REQUESTS: usize = 20;
 pub const MAX_REQUESTS_PER_BATCH: usize = 100;
+/// Reimbursement fee for when a batch of *pending* withdrawal requests would require more than [`MAX_NUM_INPUTS_IN_TRANSACTION`] inputs.
+///
+/// No transaction was issued (not signed and not sent) but the minter still did some work:
+/// 1) Burn on the ledger for each withdrawal request.
+/// 2) Build transaction candidate to cover the amount in the batch of withdrawal requests.
+///
+/// Heuristic:
+/// * charge 1B cycles for each request (a burn on the ledger on the fiduciary subnet is probably around 50M cycles) and to simplify, since there are at most
+///   [`MAX_REQUESTS_PER_BATCH`] withdrawal requests in a transaction to cancel, we charge [`MAX_REQUESTS_PER_BATCH`] times that amount.
+/// * For the cycles, we use a lower bound on the price of Bitcoin of 1 BTC = 10_000 XDR, so that 10 sats correspond to 1B cycles.
+pub const REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS: u64 =
+    (MAX_REQUESTS_PER_BATCH as u64) * 10;
 
 /// The constants used to compute the minter's fee to cover its own cycle consumption.
 pub const MINTER_FEE_PER_INPUT: u64 = 146;
@@ -300,7 +313,12 @@ fn reimburse_canceled_requests<R: CanisterRuntime>(
     assert!(!requests.is_empty());
     let fees = distribute(total_fee, requests.len() as u64);
     // This assertion makes sure the fee is smaller than each request amount
-    assert!(fees[0] <= state.retrieve_btc_min_amount);
+    assert!(
+        fees[0] <= state.retrieve_btc_min_amount,
+        "BUG: fees {fees:?} for {} withdrawal requests are larger than `retrieve_btc_min_amount` {}",
+        requests.len(),
+        state.retrieve_btc_min_amount
+    );
     for (request, fee) in requests.into_iter().zip(fees.into_iter()) {
         if let Some(account) = request.reimbursement_account {
             let amount = request.amount.saturating_sub(fee);
@@ -403,18 +421,26 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                     "[submit_pending_requests]: error in building transaction ({:?})",
                     err
                 );
-                // Since the transaction otherwise would have more than MAX_NUM_INPUTS, it
-                // is reasonable to charge a fee based on it.
-                let fee = MINTER_FEE_PER_INPUT * MAX_NUM_INPUTS_IN_TRANSACTION as u64;
                 let reason = reimbursement::WithdrawalReimbursementReason::InvalidTransaction(err);
-                reimburse_canceled_requests(s, batch, reason, fee, runtime);
+                reimburse_canceled_requests(
+                    s,
+                    batch,
+                    reason,
+                    REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS,
+                    runtime,
+                );
                 None
             }
             Err(BuildTxError::AmountTooLow) => {
-                log!(P0,
+                log!(
+                    P0,
                     "[submit_pending_requests]: dropping requests for total BTC amount {} to addresses {} (too low to cover the fees)",
                     tx::DisplayAmount(batch.iter().map(|req| req.amount).sum::<u64>()),
-                    batch.iter().map(|req| req.address.display(s.btc_network)).collect::<Vec<_>>().join(",")
+                    batch
+                        .iter()
+                        .map(|req| req.address.display(s.btc_network))
+                        .collect::<Vec<_>>()
+                        .join(",")
                 );
 
                 // There is no point in retrying the request because the
@@ -430,9 +456,11 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                 None
             }
             Err(BuildTxError::DustOutput { address, amount }) => {
-                log!(P0,
+                log!(
+                    P0,
                     "[submit_pending_requests]: dropping a request for BTC amount {} to {} (too low to cover the fees)",
-                     tx::DisplayAmount(amount), address.display(s.btc_network)
+                    tx::DisplayAmount(amount),
+                    address.display(s.btc_network)
                 );
 
                 let mut requests_to_put_back = BTreeSet::new();
@@ -457,9 +485,14 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                 None
             }
             Err(BuildTxError::NotEnoughFunds) => {
-                log!(P0,
+                log!(
+                    P0,
                     "[submit_pending_requests]: not enough funds to unsigned transaction for requests at block indexes [{}]",
-                    batch.iter().map(|req| req.block_index.to_string()).collect::<Vec<_>>().join(",")
+                    batch
+                        .iter()
+                        .map(|req| req.block_index.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
                 );
 
                 s.push_from_in_flight_to_pending_requests(batch);
@@ -878,14 +911,16 @@ pub async fn resubmit_transactions<
                     // replacement transactions with each resubmission. However, since replacing a
                     // transaction with itself is not allowed, we still handle the transaction
                     // equality in case the fee computation rules change in the future.
-                    log!(P0,
+                    log!(
+                        P0,
                         "[finalize_requests]: resent transaction {} with a new signature. TX bytes: {}",
                         &new_txid,
                         hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                     );
                     continue;
                 }
-                log!(P0,
+                log!(
+                    P0,
                     "[finalize_requests]: sent transaction {} to replace stuck transaction {}. TX bytes: {}",
                     &new_txid,
                     &old_txid,
@@ -903,7 +938,9 @@ pub async fn resubmit_transactions<
                 replace_transaction(old_txid, new_tx, replaced_reason);
             }
             Err(err) => {
-                log!(P0, "[finalize_requests]: failed to send transaction bytes {} to replace stuck transaction {}: {}",
+                log!(
+                    P0,
+                    "[finalize_requests]: failed to send transaction bytes {} to replace stuck transaction {}: {}",
                     hex::encode(tx::encode_into(&signed_tx, Vec::new())),
                     &old_txid,
                     err,
@@ -1009,7 +1046,7 @@ pub async fn sign_transaction<R: CanisterRuntime, F: Fn(&tx::OutPoint) -> Option
         let outpoint = &input.previous_output;
 
         let account = lookup_outpoint_account(outpoint)
-            .unwrap_or_else(|| panic!("bug: no account for outpoint {:?}", outpoint));
+            .unwrap_or_else(|| panic!("bug: no account for outpoint {outpoint:?}"));
 
         let path = derivation_path(&account);
         let pubkey = ByteBuf::from(derive_public_key(ecdsa_public_key, &account).public_key);

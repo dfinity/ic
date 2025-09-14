@@ -4,8 +4,30 @@ use std::collections::BTreeMap;
 
 pub mod topics;
 
+/// Types of extension operations
+#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
+pub enum ExtensionOperationType {
+    TreasuryManagerDeposit,
+    TreasuryManagerWithdraw,
+}
+
+/// Specification for an extension operation
+#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
+pub struct ExtensionOperationSpec {
+    pub operation_type: Option<ExtensionOperationType>,
+    pub description: Option<String>,
+    pub extension_type: Option<ExtensionType>,
+    pub topic: Option<topics::Topic>,
+}
+
+/// Types of extensions that can be registered
+#[derive(Debug, candid::CandidType, candid::Deserialize, Clone, PartialEq, Serialize)]
+pub enum ExtensionType {
+    TreasuryManager,
+}
+
 /// A principal with a particular set of permissions over a neuron.
-#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]
+#[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq, Serialize)]
 pub struct NeuronPermission {
     /// The principal that has the permissions.
     pub principal: Option<PrincipalId>,
@@ -513,6 +535,29 @@ pub struct RegisterExtension {
 #[derive(
     candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
 )]
+pub enum Wasm {
+    Bytes(Vec<u8>),
+    Chunked(ChunkedCanisterWasm),
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
+)]
+pub struct ExtensionUpgradeArg {
+    pub value: Option<PreciseValue>,
+}
+
+#[derive(
+    candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
+)]
+pub struct UpgradeExtension {
+    pub extension_canister_id: Option<PrincipalId>,
+    pub wasm: Option<Wasm>,
+    pub canister_upgrade_arg: Option<ExtensionUpgradeArg>,
+}
+#[derive(
+    candid::CandidType, candid::Deserialize, comparable::Comparable, Clone, Debug, PartialEq,
+)]
 pub struct ExtensionOperationArg {
     pub value: Option<PreciseValue>,
 }
@@ -700,6 +745,10 @@ pub mod proposal {
         ///
         /// Id = 18.
         ExecuteExtensionOperation(super::ExecuteExtensionOperation),
+        /// Upgrade an SNS extension canister.
+        ///
+        /// Id = 19.
+        UpgradeExtension(super::UpgradeExtension),
     }
 }
 #[derive(Default, candid::CandidType, candid::Deserialize, Debug, Clone, PartialEq)]

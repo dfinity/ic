@@ -12,6 +12,10 @@ Target canister: `{{canister_id}}`
 
 Previous {{canister}} proposal: {{Self::previous_upgrade_proposal_url(self)}}
 
+{% if !canister.forum_discussion().is_empty() -%}
+Forum discussion: {{canister.forum_discussion()}}
+
+{% endif -%}
 ---
 
 ## Motivation

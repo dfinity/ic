@@ -1,19 +1,19 @@
 mod ecdsa_sign_share {
+    use crate::LocalCspVault;
     use crate::key_id::KeyId;
     use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
     use crate::types::CspSecretKey;
     use crate::vault::api::{IDkgTranscriptInternalBytes, ThresholdEcdsaSignerCspVault};
-    use crate::LocalCspVault;
     use assert_matches::assert_matches;
     use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
         CombinedCommitment, CommitmentOpeningBytes, EccCurveType, EccPoint, EccScalarBytes,
         IDkgTranscriptInternal, PolynomialCommitment, SimpleCommitment,
         ThresholdEcdsaSigShareInternal,
     };
-    use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCreateSigShareError;
+    use ic_types::Randomness;
     use ic_types::crypto::AlgorithmId;
     use ic_types::crypto::ExtendedDerivationPath;
-    use ic_types::Randomness;
+    use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCreateSigShareError;
     use proptest::collection::vec;
     use proptest::prelude::any;
     use proptest::proptest;
@@ -479,15 +479,23 @@ mod ecdsa_sign_share {
 
     impl Default for EcdsaSignShareParameters {
         fn default() -> Self {
-            let [key, kappa_unmasked, lambda_masked, kappa_times_lambda, key_times_lambda] =
-                distinct_transcripts();
+            let [
+                key,
+                kappa_unmasked,
+                lambda_masked,
+                kappa_times_lambda,
+                key_times_lambda,
+            ] = distinct_transcripts();
             let kappa_unmasked = IDkgTranscriptInternal {
                 combined_commitment: CombinedCommitment::BySummation(
                     kappa_unmasked.combined_commitment.commitment().clone(),
                 ),
             };
-            let [lambda_masked_commitment, kappa_times_lambda_commitment, key_times_lambda_commitment] =
-                distinct_idkg_commitment_openings();
+            let [
+                lambda_masked_commitment,
+                kappa_times_lambda_commitment,
+                key_times_lambda_commitment,
+            ] = distinct_idkg_commitment_openings();
 
             EcdsaSignShareParameters {
                 derivation_path: some_derivation_path(),
@@ -623,8 +631,10 @@ mod ecdsa_sign_share {
                         }),
                     ),
                 };
-                assert!(serialized_transcripts
-                    .insert(transcript.serialize().expect("can serialize transcript")));
+                assert!(
+                    serialized_transcripts
+                        .insert(transcript.serialize().expect("can serialize transcript"))
+                );
                 transcript
             })
             .collect();
@@ -652,8 +662,7 @@ mod ecdsa_sign_share {
                 .expect("add_points failed");
             assert!(
                 serialized_points.insert(current_point.serialize()),
-                "Duplicate point {:?} generated",
-                current_point
+                "Duplicate point {current_point:?} generated"
             );
             points.push(current_point.clone());
         }

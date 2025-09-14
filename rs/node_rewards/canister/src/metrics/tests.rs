@@ -3,10 +3,9 @@ use crate::pb::v1::SubnetMetricsKey;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_cdk::api::call::{CallResult, RejectionCode};
 use ic_management_canister_types::{NodeMetrics, NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
-use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::DefaultMemoryImpl;
-use rewards_calculation::rewards_calculator_results::DayUtc;
-use rewards_calculation::types::NodeMetricsDailyRaw;
+use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
+use rewards_calculation::types::{DayUtc, NodeMetricsDailyRaw};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 
@@ -123,8 +122,7 @@ async fn multiple_subnets_metrics_added_correctly() {
             };
             assert!(
                 mm.subnets_metrics.borrow().get(&key).is_some(),
-                "Metrics missing for subnet {:?}",
-                subnet
+                "Metrics missing for subnet {subnet:?}"
             );
         }
     }
@@ -147,8 +145,7 @@ async fn retry_count_increments_on_failure() {
         assert_eq!(
             mm.subnets_to_retry.borrow().get(&subnet_1.into()),
             Some(retry_attempt),
-            "Retry count should be {}",
-            retry_attempt
+            "Retry count should be {retry_attempt}"
         );
     }
 }

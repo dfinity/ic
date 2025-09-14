@@ -34,7 +34,7 @@ use ic_consensus_system_test_utils::{
     },
     set_sandbox_env_vars,
 };
-use ic_recovery::{file_sync_helper, get_node_metrics, RecoveryArgs};
+use ic_recovery::{RecoveryArgs, file_sync_helper, get_node_metrics};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_subnet_splitting::subnet_splitting::{StepType, SubnetSplitting, SubnetSplittingArgs};
@@ -53,7 +53,7 @@ use ic_types::{CanisterId, Height, PrincipalId, ReplicaVersion};
 
 use anyhow::Result;
 use candid::Principal;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::{thread, time::Duration};
 
 const DKG_INTERVAL: u64 = 9;
@@ -98,7 +98,7 @@ fn subnet_splitting_test(env: TestEnv) {
     //
     let logger = env.logger();
 
-    let initial_replica_version = get_guestos_img_version().expect("Failed to get master version");
+    let initial_replica_version = get_guestos_img_version();
 
     let (source_subnet, destination_subnet) = get_subnets(&env);
 
@@ -173,7 +173,7 @@ fn subnet_splitting_test(env: TestEnv) {
 
         info!(logger, "{}", step.descr());
         step.exec()
-            .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
+            .unwrap_or_else(|e| panic!("Execution of step {step_type:?} failed: {e}"));
 
         if step_type == StepType::HaltSourceSubnetAtCupHeight {
             wait_until_halted_at_cup_height(&source_subnet, &logger);
@@ -323,11 +323,13 @@ fn verify_common(
     info!(logger, "Verifying the subnet record in the registry");
     assert!(!subnet.raw_subnet_record().halt_at_cup_height);
     assert!(!subnet.raw_subnet_record().is_halted);
-    assert!(subnet
-        .subnet_canister_ranges()
-        .iter()
-        .any(|canister_id_range| canister_id_range
-            .contains(&canister_id_from_principal(canister_id))));
+    assert!(
+        subnet
+            .subnet_canister_ranges()
+            .iter()
+            .any(|canister_id_range| canister_id_range
+                .contains(&canister_id_from_principal(canister_id)))
+    );
 
     info!(logger, "Verifying that the subnet is healthy");
     assert_subnet_is_healthy(

@@ -2,6 +2,36 @@
 
 INSERT NEW RELEASES HERE
 
+# 2025-08-30: Proposal 138288
+
+http://dashboard.internetcomputer.org/proposal/138288
+
+## Added
+
+* Add get_node_providers_rewards endpoint, to be used by the Governance to compute performance-based rewards.
+* Store rewards (including intermediate results) in stable memory for client retrieval.
+* Add get_node_provider_rewards_calculation endpoint to compute ongoing rewards and fetch historical ones.
+* Add get_historical_reward_periods endpoint to fetch historical reward periods and the providers rewarded.
+
+## Fixed
+
+* Fix rewards calculation algorithm to extrapolate with 0% failure rate node's performance for node providers with no
+  assigned nodes on a given day.
+* Replicated execution of the query endpoints `get_node_provider_rewards_calculation` and `get_historical_reward_periods`
+  is disabled.
+
+# 2025-08-15: Proposal 137910
+
+http://dashboard.internetcomputer.org/proposal/137910
+
+* Hourly sync nodes metrics, in preparation for performance based rewards calculation.
+* Extract rewardable nodes between two timestamps, in preparation for performance based rewards calculation.
+* Compute daily failure rate extrapolation in rewards-calculation lib., in preparation for performance based rewards
+  calculation.
+* Add telemetry for the canister
+* Removed the registry store cleanup function, which was previously used to resynchronize registry data with timestamp
+  to registry versions mapping.
+
 # 2025-07-11: Proposal 137348
 
 http://dashboard.internetcomputer.org/proposal/137348

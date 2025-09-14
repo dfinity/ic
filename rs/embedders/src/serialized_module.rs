@@ -8,11 +8,12 @@ use std::{
     sync::Arc,
 };
 
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_replicated_state::canister_state::execution_state::WasmMetadata;
-use ic_types::{methods::WasmMethod, MemoryDiskBytes, NumInstructions};
+use ic_types::{DiskBytes, NumInstructions, methods::WasmMethod};
 use ic_wasm_types::WasmEngineError;
-use nix::sys::mman::{mmap, MapFlags, ProtFlags};
+use nix::sys::mman::{MapFlags, ProtFlags, mmap};
 use serde::{Deserialize, Serialize};
 use wasmtime::Module;
 
@@ -30,8 +31,7 @@ impl TryFrom<&Module> for SerializedModuleBytes {
     fn try_from(module: &Module) -> Result<Self, Self::Error> {
         module.serialize().map(Self).map_err(|e| {
             HypervisorError::WasmEngineError(WasmEngineError::FailedToSerializeModule(format!(
-                "{:?}",
-                e
+                "{e:?}"
             )))
         })
     }
@@ -80,16 +80,6 @@ pub struct SerializedModule {
     pub imports_details: WasmImportsDetails,
     /// Boolean value that indicates whether this is a Wasm64 module or not.
     pub is_wasm64: bool,
-}
-
-impl MemoryDiskBytes for SerializedModule {
-    fn memory_bytes(&self) -> usize {
-        self.bytes.0.len()
-    }
-
-    fn disk_bytes(&self) -> usize {
-        0
-    }
 }
 
 impl SerializedModule {
@@ -149,7 +139,7 @@ pub struct InitialStateData {
 /// descriptors are duplicated when passed to the sandbox for execution (this
 /// happens implicitly when sending over the socket). The files should only be
 /// accessed through mmap - otherwise seeks could interfere with each other.
-#[derive(Debug)]
+#[derive(Debug, DeterministicHeapBytes)]
 pub struct OnDiskSerializedModule {
     /// Bytes of the compilation artifact.
     pub bytes: File,
@@ -163,11 +153,7 @@ pub struct OnDiskSerializedModule {
     pub is_wasm64: bool,
 }
 
-impl MemoryDiskBytes for OnDiskSerializedModule {
-    fn memory_bytes(&self) -> usize {
-        std::mem::size_of::<Self>()
-    }
-
+impl DiskBytes for OnDiskSerializedModule {
     fn disk_bytes(&self) -> usize {
         (self.bytes.metadata().unwrap().len() + self.initial_state_data.metadata().unwrap().len())
             as usize
@@ -269,10 +255,7 @@ impl OnDiskSerializedModule {
             )
         }
         .unwrap_or_else(|err| {
-            panic!(
-                "Reading OnDiskSerializedModule initial_state failed: {:?}",
-                err
-            )
+            panic!("Reading OnDiskSerializedModule initial_state failed: {err:?}")
         }) as *mut u8;
         // Safety: allocation was made with length `mmap_size`.
         let data = unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) };
@@ -301,7 +284,7 @@ mod test {
                 0,
             )
         }
-        .unwrap_or_else(|err| panic!("Reading OnDiskSerializedModule failed: {:?}", err))
+        .unwrap_or_else(|err| panic!("Reading OnDiskSerializedModule failed: {err:?}"))
             as *mut u8;
         unsafe { std::slice::from_raw_parts(mmap_ptr, mmap_size) }.to_vec()
     }

@@ -1,4 +1,4 @@
-use on_wire::{witness, FromWire, IntoWire, NewType};
+use on_wire::{FromWire, IntoWire, NewType, witness};
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
 

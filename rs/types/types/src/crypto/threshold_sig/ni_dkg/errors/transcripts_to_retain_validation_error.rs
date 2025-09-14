@@ -11,6 +11,6 @@ pub enum TranscriptsToRetainValidationError {
 
 impl fmt::Display for TranscriptsToRetainValidationError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }

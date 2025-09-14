@@ -10,9 +10,9 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-error-types",
+        "//rs/interfaces/adapter_client",
         "//rs/protobuf",
         "@crate_index//:candid",
-        "@crate_index//:ic-btc-interface",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
     ],

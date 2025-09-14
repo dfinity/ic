@@ -1,9 +1,9 @@
 use crate::{
+    CountBytes, Time,
     artifact::IngressMessageId,
     messages::{
-        HttpRequestError, MessageId, SignedIngress, SignedRequestBytes, EXPECTED_MESSAGE_ID_LENGTH,
+        EXPECTED_MESSAGE_ID_LENGTH, HttpRequestError, MessageId, SignedIngress, SignedRequestBytes,
     },
-    CountBytes, Time,
 };
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;

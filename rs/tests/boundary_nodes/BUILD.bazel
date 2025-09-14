@@ -7,7 +7,6 @@ CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS = ["//rs/boundary_node/certificate_issuanc
 
 system_test_nns(
     name = "api_bn_integration_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
     ],
@@ -24,11 +23,18 @@ system_test_nns(
 
 system_test_nns(
     name = "api_bn_update_workload_test",
-    tags = [
-        "experimental_system_test_colocation",
-        "long_test",
+    additional_colocate_tags = [
+        "system_test_benchmark",
     ],
-    test_timeout = "long",
+    colocated_test_driver_vm_required_host_features = ["performance"],
+    colocated_test_driver_vm_resources = {
+        "vcpus": 16,
+    },
+    enable_head_nns_variant = False,
+    tags = [
+        "colocate",
+    ],
+    test_timeout = "eternal",
     runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = [
         "//rs/tests/driver:ic-system-test-driver",
@@ -104,6 +110,7 @@ system_test_nns(
     proc_macro_deps = ["@crate_index//:async-trait"],
     tags = [
         "k8s",
+        "long_test",  # the P90 duration was over 5 minutes for the week starting on 2025-08-25.
     ],
     runtime_deps = [
         "//rs/boundary_node/rate_limits:rate_limit_canister",
@@ -197,7 +204,6 @@ system_test(
 
 system_test_nns(
     name = "api_bn_decentralization_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "k8s",
         "long_test",  # since it takes longer than 5 minutes.

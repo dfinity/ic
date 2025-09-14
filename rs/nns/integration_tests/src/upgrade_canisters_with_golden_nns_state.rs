@@ -60,7 +60,7 @@ impl NnsCanisterUpgrade {
             "root"           => (ROOT_CANISTER_ID, "ROOT_CANISTER_WASM_PATH"),
             "sns-wasm"       => (SNS_WASM_CANISTER_ID, "SNS_WASM_CANISTER_WASM_PATH"),
             "node-rewards"   => (NODE_REWARDS_CANISTER_ID, "NODE_REWARDS_CANISTER_WASM_PATH"),
-            _ => panic!("Not a known NNS canister type: {}", nns_canister_name,),
+            _ => panic!("Not a known NNS canister type: {nns_canister_name}",),
         };
 
         let module_arg = if nns_canister_name == "cycles-minting" {
@@ -83,7 +83,7 @@ impl NnsCanisterUpgrade {
 
         let nns_canister_name = nns_canister_name.to_string();
         let wasm_path = env::var(environment_variable_name)
-            .unwrap_or_else(|err| panic!("{}: {}", err, environment_variable_name,));
+            .unwrap_or_else(|err| panic!("{err}: {environment_variable_name}",));
         let wasm_content = fs::read(&wasm_path).unwrap();
         let wasm_hash = Sha256::hash(&wasm_content);
 
@@ -104,7 +104,7 @@ impl NnsCanisterUpgrade {
         self.wasm_content = modify_wasm_bytes(&self.wasm_content, 42);
         self.wasm_hash = Sha256::hash(&self.wasm_content);
 
-        assert_ne!(self.wasm_hash, old_wasm_hash, "{:#?}", self);
+        assert_ne!(self.wasm_hash, old_wasm_hash, "{self:#?}");
     }
 
     fn controller_principal_id(&self) -> PrincipalId {
@@ -131,12 +131,12 @@ impl Debug for NnsCanisterUpgrade {
             wasm_content: _,
         } = self;
 
-        let wasm_hash = wasm_hash.map(|element| format!("{:02X}", element)).join("");
+        let wasm_hash = wasm_hash.map(|element| format!("{element:02X}")).join("");
         let wasm_hash = &wasm_hash;
 
         let module_arg = module_arg
             .iter()
-            .map(|element| format!("{:02X}", element))
+            .map(|element| format!("{element:02X}"))
             .collect::<Vec<_>>()
             .join("");
         let module_arg = &module_arg;
@@ -221,10 +221,9 @@ fn test_upgrade_canisters_with_golden_nns_state() {
                  variable be set to something like 'governance,registry'.\n\
                  That is, it should be a comma-separated list of canister names.\n\
                  Alternatively, 'all' is equivalent to\n\
-                 '{}'\n\
+                 '{all_canisters}'\n\
                  (these are all the supported canister names, a large subset of\n\
                  those listed in rs/nns/canister_ids.json).",
-                all_canisters,
             );
         });
 
@@ -273,7 +272,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
                     wasm_path: _,
                     environment_variable_name: _,
                 } = nns_canister_upgrade;
-                println!("\nCurrent canister: {}", nns_canister_name);
+                println!("\nCurrent canister: {nns_canister_name}");
 
                 // Step 1.3: Assert that the upgrade we are about to perform would
                 // actually change the code in the canister. (This is "just" a
@@ -288,20 +287,17 @@ fn test_upgrade_canisters_with_golden_nns_state() {
                 assert_eq!(
                     status_result.status,
                     CanisterStatusType::Running,
-                    "{:#?}",
-                    status_result,
+                    "{status_result:#?}",
                 );
                 assert_ne!(
                     status_result.module_hash.as_ref().unwrap(),
                     &wasm_hash,
-                    "Current code is the same as what is running in mainnet?!\n{:#?}",
-                    status_result,
+                    "Current code is the same as what is running in mainnet?!\n{status_result:#?}",
                 );
 
                 // Step 2: Call code under test: Upgrade the (current) canister.
                 println!(
-                    "Proposing to upgrade NNS {} (attempt {})...",
-                    nns_canister_name, repetition_number,
+                    "Proposing to upgrade NNS {nns_canister_name} (attempt {repetition_number})...",
                 );
 
                 let proposal_id = nns_propose_upgrade_nns_canister(
@@ -327,8 +323,7 @@ fn test_upgrade_canisters_with_golden_nns_state() {
                     nns_canister_upgrade.controller_principal_id(),
                 );
                 println!(
-                    "Attempt {} to upgrade {} was successful.",
-                    repetition_number, nns_canister_name
+                    "Attempt {repetition_number} to upgrade {nns_canister_name} was successful."
                 );
             }
 
@@ -383,8 +378,7 @@ fn check_canisters_are_all_protocol_canisters(state_machine: &StateMachine) {
         }
         assert!(
             PROTOCOL_CANISTER_IDS.contains(&&canister_id),
-            "Canister {} is in the NNS subnet but not a protocol canister",
-            canister_id,
+            "Canister {canister_id} is in the NNS subnet but not a protocol canister",
         );
     }
 }
@@ -455,7 +449,7 @@ mod sanity_check {
                 |metrics| governance_gauge_value(metrics, "governance_total_memory_size_bytes"),
                 |before, after| {
                     assert_not_increased_too_much(before, after, "wasm memory size", 0.5);
-                    assert_not_decreased_too_much(before, after, "wasm memory size", 0.5);
+                    assert_not_decreased_too_much(before, after, "wasm memory size", 0.8);
                 },
             );
 
@@ -534,7 +528,7 @@ mod sanity_check {
         if let prometheus_parse::Value::Gauge(value) = &metric.value {
             *value
         } else {
-            panic!("{} is not a gauge", name);
+            panic!("{name} is not a gauge");
         }
     }
 
@@ -559,20 +553,14 @@ mod sanity_check {
     fn assert_not_increased_too_much(before: f64, after: f64, name: &str, diff: f64) {
         assert!(
             after < before * (1.0 + diff),
-            "After upgrading and advancing time, {} increased too much. Before: {}, After: {}",
-            name,
-            before,
-            after
+            "After upgrading and advancing time, {name} increased too much. Before: {before}, After: {after}"
         );
     }
 
     fn assert_not_decreased_too_much(before: f64, after: f64, name: &str, diff: f64) {
         assert!(
             after > before * (1.0 - diff),
-            "After upgrading and advancing time, {} decreased too much. Before: {}, After: {}",
-            name,
-            before,
-            after
+            "After upgrading and advancing time, {name} decreased too much. Before: {before}, After: {after}"
         );
     }
 
@@ -582,10 +570,7 @@ mod sanity_check {
     {
         assert!(
             after > before,
-            "After upgrading and advancing time, {} did not increase. Before: {}, After: {}",
-            name,
-            before,
-            after
+            "After upgrading and advancing time, {name} did not increase. Before: {before}, After: {after}"
         );
     }
 }

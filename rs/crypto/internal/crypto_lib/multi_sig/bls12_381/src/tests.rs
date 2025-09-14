@@ -1,8 +1,9 @@
 //! Tests for multisignatures
 
 use crate::{
-    api, crypto as multi_crypto, types as multi_types, types::arbitrary, types::CombinedSignature,
+    api, crypto as multi_crypto, types as multi_types, types::CombinedSignature,
     types::IndividualSignature, types::PublicKey, types::SecretKey, types::SecretKeyBytes,
+    types::arbitrary,
 };
 use ic_crypto_internal_bls12_381_type::G1Projective;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -85,7 +86,8 @@ mod stability {
 
         assert_eq!(
             hex::encode(serde_cbor::to_vec(&public_key_bytes).unwrap()),
-            "5860805197d0cf9a60da1acc5750be523048f14622dadef70e7c2648b674181555881092e20e26440f6ad277380b33ea84f412f99c5fe4c993198e5c5233e39d1dd55656add17bdbf65d889fec7cc05befb0466bc9ad1b55bb57539c4f9d74c43c5a")
+            "5860805197d0cf9a60da1acc5750be523048f14622dadef70e7c2648b674181555881092e20e26440f6ad277380b33ea84f412f99c5fe4c993198e5c5233e39d1dd55656add17bdbf65d889fec7cc05befb0466bc9ad1b55bb57539c4f9d74c43c5a"
+        )
     }
 }
 
