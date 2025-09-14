@@ -176,7 +176,6 @@ pub enum BackfillRewardableNodesStatus {
 
 impl NodeRewardsCanister {
     pub fn backfill_rewardable_nodes(&self) -> BackfillRewardableNodesStatus {
-        let instructions_count = telemetry::InstructionCounter::default();
         let today = DayUtc::from_secs(current_time().as_secs_since_unix_epoch());
         let start_backfill_day = DayUtc::from_secs(CACHE_BACKFILL_START_DAY);
         let end_backfill_day = today.previous_day();
@@ -187,18 +186,13 @@ impl NodeRewardsCanister {
             .filter(|day| self.get_rewardable_nodes(day).is_err())
             .collect_vec();
 
-        if let Some(day_to_backfill) = days_to_backfill.pop() {
-            ic_cdk::println!("Backfilling rewardable nodes for day: {}", day_to_backfill);
+        if let Some(day) = days_to_backfill.pop() {
+            ic_cdk::println!("Backfilling rewardable nodes for day: {}", day);
 
-            self.backfill_rewardable_nodes_single_day(&day_to_backfill)
+            self.backfill_rewardable_nodes_single_day(&day)
                 .unwrap_or_else(|e| {
                     ic_cdk::println!("Failed to backfill: {:?}", e);
                 });
-
-            ic_cdk::println!(
-                "Single day backfill Instructions count: {:?}",
-                instructions_count.sum()
-            );
             if !days_to_backfill.is_empty() {
                 return BackfillRewardableNodesStatus::NotCompleted;
             }
