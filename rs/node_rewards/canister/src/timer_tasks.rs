@@ -53,7 +53,8 @@ impl RecurringAsyncTask for DailySyncTask {
                 run_rewardable_nodes_backfill_task(self.canister, self.metrics);
 
                 ic_cdk::futures::spawn_017_compat(async move {
-                    NodeRewardsCanister::schedule_metrics_sync(self.canister).await
+                    NodeRewardsCanister::schedule_metrics_sync(self.canister).await;
+                    ic_cdk::println!("Metrics sync done");
                 });
                 self.default_delay()
             }

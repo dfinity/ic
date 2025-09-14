@@ -29,7 +29,7 @@ thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
 
-    pub static METRICS_MANAGER: Arc<MetricsManager<VM>> = {
+    pub static METRICS_MANAGER: Arc<MetricsManager> = {
         let metrics_manager = MetricsManager {
             client: Box::new(ICCanisterClient),
             subnets_to_retry: RefCell::new(stable_btreemap_init(SUBNETS_TO_RETRY_MEMORY_ID)),
