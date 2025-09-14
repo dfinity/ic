@@ -258,9 +258,13 @@ pub struct Observability {
     #[clap(env, long, default_value = "100000")]
     pub obs_log_websocket_max_topics: u64,
 
-    /// Websocket broker max subscribers (per-topic)
+    /// Websocket broker max subscribers (per-Topic total)
     #[clap(env, long, default_value = "1000")]
-    pub obs_log_websocket_max_subscribers: usize,
+    pub obs_log_websocket_max_subscribers_per_topic: usize,
+
+    /// Websocket max subscribers (per-Topic per-IP), 2^16 max
+    #[clap(env, long, default_value = "5")]
+    pub obs_log_websocket_max_subscribers_per_topic_per_ip: u16,
 
     /// Enables logging to /dev/null (to benchmark logging)
     #[clap(env, long)]

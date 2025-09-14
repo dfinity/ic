@@ -53,7 +53,7 @@ fn create_unique_working_dir() -> PathBuf {
         .prefix(prefix_path.as_os_str())
         .tempdir()
         .unwrap()
-        .into_path();
+        .keep();
     // Test driver assumes that "root_env" dir already exists prior to starting execution.
     std::fs::create_dir(path.join("root_env")).unwrap();
     path
@@ -542,10 +542,12 @@ fn test_setup_failure_file_written() {
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
-    assert!(working_dir
-        .join("setup")
-        .join("setup_succeeded.json")
-        .exists());
+    assert!(
+        working_dir
+            .join("setup")
+            .join("setup_succeeded.json")
+            .exists()
+    );
 }
 
 #[test]
@@ -567,10 +569,12 @@ fn test_setup_failure_file_not_written() {
         "{}",
         String::from_utf8_lossy(&result.stderr)
     );
-    assert!(!working_dir
-        .join("setup")
-        .join("setup_succeeded.json")
-        .exists());
+    assert!(
+        !working_dir
+            .join("setup")
+            .join("setup_succeeded.json")
+            .exists()
+    );
     let summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
     assert!(summary.failure.len() == 2);
 }

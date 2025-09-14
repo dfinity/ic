@@ -191,6 +191,9 @@ rust_binary(
 
 rust_ic_test_suite(
     name = "integration_tests",
+    # the test sometimes times out on CI with default timeout
+    # of "moderate" (5 minutes) - 2025-07-11
+    timeout = "long",
     srcs = glob(["tests/**/*.rs"]),
     data = [
         ":cketh_minter_debug.wasm.gz",

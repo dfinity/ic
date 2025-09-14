@@ -1,25 +1,26 @@
 use crate::common::{
-    account, default_archive_options, index_ng_wasm, install_index_ng, install_ledger,
-    ledger_get_all_blocks, ledger_wasm, wait_until_sync_is_completed, ARCHIVE_TRIGGER_THRESHOLD,
-    FEE, MAX_BLOCKS_FROM_ARCHIVE,
+    ARCHIVE_TRIGGER_THRESHOLD, FEE, MAX_BLOCKS_FROM_ARCHIVE, account, default_archive_options,
+    index_ng_wasm, install_index_ng, install_ledger, ledger_get_all_blocks, ledger_wasm,
+    wait_until_sync_is_completed,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::identity::Identity;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::{
-    FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
-    GetAccountTransactionsResult, GetBlocksResponse, IndexArg, InitArg as IndexInitArg,
-    ListSubaccountsArgs, TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+    DEFAULT_MAX_BLOCKS_PER_RESPONSE, FeeCollectorRanges, GetAccountTransactionsArgs,
+    GetAccountTransactionsResponse, GetAccountTransactionsResult, GetBlocksResponse, IndexArg,
+    InitArg as IndexInitArg, ListSubaccountsArgs, TransactionWithId,
 };
 use ic_icrc1_ledger::{ChangeFeeCollector, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs};
 use ic_icrc1_test_utils::{
-    minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
+    ArgWithCaller, LedgerEndpointArg, minter_identity, valid_transactions_strategy,
 };
 use ic_rosetta_test_utils::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use icrc_ledger_types::icrc3::transactions::{Mint, Transaction, Transfer};
 use num_traits::cast::ToPrimitive;
@@ -149,6 +150,32 @@ fn icrc1_transfer(
         })
 }
 
+fn icrc2_transfer_from(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    caller: PrincipalId,
+    arg: TransferFromArgs,
+) -> BlockIndex {
+    let req = Encode!(&arg).expect("Failed to encode TransferFromArgs");
+    let res = env
+        .execute_ingress_as(caller, ledger_id, "icrc2_transfer_from", req)
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to transfer tokens. caller:{} arg:{:?} error:{}",
+                caller, arg, e
+            )
+        })
+        .bytes();
+    Decode!(&res, Result<BlockIndex, TransferFromError>)
+        .expect("Failed to decode Result<BlockIndex, TransferFromError>")
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to transfer tokens. caller:{} arg:{:?} error:{}",
+                caller, arg, e
+            )
+        })
+}
+
 fn apply_arg_with_caller(
     env: &StateMachine,
     ledger_id: CanisterId,
@@ -166,6 +193,12 @@ fn apply_arg_with_caller(
             ledger_id,
             PrincipalId(arg.caller.sender().unwrap()),
             transfer_arg,
+        ),
+        LedgerEndpointArg::TransferFromArg(transfer_from_arg) => icrc2_transfer_from(
+            env,
+            ledger_id,
+            PrincipalId(arg.caller.sender().unwrap()),
+            transfer_from_arg,
         ),
     }
 }
@@ -311,7 +344,10 @@ fn assert_ledger_index_parity(env: &StateMachine, ledger_id: CanisterId, index_i
         // We use the hash because nat64 and nat are not equal
         // but ICRC-3 doesn't have nat64.
         if ledger_block.hash() != index_block.hash() {
-            panic!("Ledger block at index {} is different from the index block at the same index\nLedger block: {:?}\nIndex block:  {:?}", index, ledger_block, index_block);
+            panic!(
+                "Ledger block at index {} is different from the index block at the same index\nLedger block: {:?}\nIndex block:  {:?}",
+                index, ledger_block, index_block
+            );
         }
     }
 }
@@ -850,13 +886,15 @@ fn test_list_subaccounts() {
     );
 
     // List account_3.owner subaccounts when an existing starting subaccount is specified but no subaccount is in that range.
-    assert!(list_subaccounts(
-        env,
-        index_id,
-        PrincipalId(account_3.owner),
-        Some(*account(3, 1).effective_subaccount())
-    )
-    .is_empty());
+    assert!(
+        list_subaccounts(
+            env,
+            index_id,
+            PrincipalId(account_3.owner),
+            Some(*account(3, 1).effective_subaccount())
+        )
+        .is_empty()
+    );
 
     // List account_4.owner subaccounts should return the default subaccount
     // mapped to [0;32].

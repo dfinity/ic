@@ -15,7 +15,5 @@ rust_library(
         # Keep sorted.
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "@crate_index//:candid",
-        "@crate_index//:ic-cdk",
-        "@crate_index//:serde",
     ],
 )

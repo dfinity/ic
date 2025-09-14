@@ -7,17 +7,20 @@ usage() {
     echo " "
     echo "Options:"
     echo "-h, --help   show brief help"
-    echo "-b, --bazel  only build bazel image"
-    exit 0
 }
 
 while test $# -gt 0; do
     case "$1" in
-        -h | --help) usage ;;
-        -b* | --bazel*)
-            ONLY_BAZEL=true
-            shift
+        -h | --help)
+            usage >&2
+            exit 0
             ;;
+        *)
+            echo "unknown argument: $1" >&2
+            usage >&2
+            exit 1
+            ;;
+
     esac
 done
 
@@ -28,7 +31,6 @@ pushd "$REPO_ROOT"
 
 # we can pass '--no-cache' from env
 BUILD_ARGS=("${DOCKER_BUILD_ARGS:---rm=true}")
-RUST_VERSION=$(grep channel rust-toolchain.toml | sed -e 's/.*=//' | tr -d '"')
 
 if findmnt /hoststorage >/dev/null; then
     ARGS=(--root /hoststorage/podman-root)
@@ -40,12 +42,6 @@ DOCKER_BUILDKIT=1 docker "${ARGS[@]}" build "${BUILD_ARGS[@]}" \
     -t ic-build:"$DOCKER_IMG_TAG" \
     -t ghcr.io/dfinity/ic-build:"$DOCKER_IMG_TAG" \
     -t ghcr.io/dfinity/ic-build:latest \
-    --build-arg RUST_VERSION="$RUST_VERSION" \
     -f ci/container/Dockerfile .
-
-if [ "${ONLY_BAZEL:-false}" == "true" ]; then
-    popd
-    exit 0
-fi
 
 popd

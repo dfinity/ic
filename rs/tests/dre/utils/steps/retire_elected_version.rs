@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use super::Step;
 use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
@@ -11,14 +12,13 @@ use ic_system_test_driver::{
     },
     util::runtime_from_url,
 };
+use ic_types::ReplicaVersion;
 use itertools::Itertools;
 use slog::info;
 
-use super::Step;
-
 #[derive(Clone)]
 pub struct RetireElectedVersions {
-    pub versions: Vec<String>,
+    pub versions: Vec<ReplicaVersion>,
 }
 
 // Retire only if the version uses "disk-img"
@@ -34,7 +34,7 @@ impl Step for RetireElectedVersions {
         let mut versions_to_unelect = self
             .versions
             .iter()
-            .filter(|version| elected_versions.contains(version))
+            .filter(|version| elected_versions.iter().any(|v| v == version.as_ref()))
             .cloned()
             .collect_vec();
 
@@ -59,7 +59,7 @@ impl Step for RetireElectedVersions {
             let record = replica_versions
                 .iter()
                 .find_map(|(key, rec)| {
-                    if key.eq(r) {
+                    if key == r.as_ref() {
                         return Some(rec);
                     }
                     None
@@ -90,6 +90,7 @@ impl Step for RetireElectedVersions {
             None,
             None,
             vec![],
+            None,
             versions_to_unelect,
         ));
 

@@ -8,19 +8,20 @@ mod query_scheduler;
 #[cfg(test)]
 mod tests;
 
-use crate::execution_environment::subnet_memory_capacity;
+use crate::execution_environment::full_subnet_memory_capacity;
 use crate::{
+    canister_logs::fetch_canister_logs,
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
 use candid::Encode;
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
-use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
+use ic_crypto_tree_hash::{Label, LabeledTree, LabeledTree::SubTree, flatmap};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
-    QueryExecutionError, QueryExecutionResponse, QueryExecutionService,
+    QueryExecutionError, QueryExecutionInput, QueryExecutionResponse, QueryExecutionService,
 };
 use ic_interfaces_state_manager::{Labeled, StateReader};
 use ic_logger::ReplicaLogger;
@@ -28,14 +29,15 @@ use ic_metrics::MetricsRegistry;
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
-use ic_types::batch::QueryStats;
 use ic_types::QueryStatsEpoch;
+use ic_types::batch::QueryStats;
+use ic_types::messages::CertificateDelegationMetadata;
 use ic_types::{
+    CanisterId, NumInstructions,
     ingress::WasmResult,
     messages::{Blob, Certificate, CertificateDelegation, Query},
-    CanisterId, NumInstructions, PrincipalId,
 };
-use prometheus::{histogram_opts, labels, Histogram};
+use prometheus::{Histogram, histogram_opts, labels};
 use serde::Serialize;
 use std::convert::Infallible;
 use std::str::FromStr;
@@ -47,12 +49,10 @@ use std::{
     time::Instant,
 };
 use tokio::sync::oneshot;
-use tower::{util::BoxCloneService, Service};
+use tower::{Service, util::BoxCloneService};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
-use ic_management_canister_types_private::{
-    FetchCanisterLogsRequest, FetchCanisterLogsResponse, LogVisibilityV2, Payload, QueryMethod,
-};
+use ic_management_canister_types_private::{FetchCanisterLogsRequest, Payload, QueryMethod};
 
 /// Convert an object into CBOR binary.
 fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
@@ -195,6 +195,7 @@ impl InternalHttpQueryHandler {
         query: Query,
         state: Labeled<Arc<ReplicatedState>>,
         data_certificate: Vec<u8>,
+        certificate_delegation_metadata: Option<CertificateDelegationMetadata>,
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
 
@@ -203,11 +204,12 @@ impl InternalHttpQueryHandler {
             match QueryMethod::from_str(&query.method_name) {
                 Ok(QueryMethod::FetchCanisterLogs) => {
                     let since = Instant::now(); // Start logging execution time.
-                    let result = fetch_canister_logs(
+                    let response = fetch_canister_logs(
                         query.source(),
                         state.get_ref(),
                         FetchCanisterLogsRequest::decode(&query.method_payload)?,
-                    );
+                    )?;
+                    let result = Ok(WasmResult::Reply(Encode!(&response).unwrap()));
                     self.metrics.observe_subnet_query_message(
                         QueryMethod::FetchCanisterLogs,
                         since.elapsed().as_secs_f64(),
@@ -234,7 +236,7 @@ impl InternalHttpQueryHandler {
         // If a valid cache entry found, the result will be immediately returned.
         // Otherwise, the key will be kept for the `push` below.
         let cache_entry_key = if self.config.query_caching == FlagStatus::Enabled {
-            let key = query_cache::EntryKey::from(&query);
+            let key = query_cache::EntryKey::new(&query, certificate_delegation_metadata);
             let state = state.get_ref().as_ref();
             if let Some(result) =
                 self.query_cache
@@ -249,7 +251,7 @@ impl InternalHttpQueryHandler {
 
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
-        let subnet_available_memory = subnet_memory_capacity(&self.config);
+        let subnet_available_memory = full_subnet_memory_capacity(&self.config);
         // We apply the (rather high) subnet soft limit for callbacks because the
         // instruction limit for the whole composite query tree imposes a much lower
         // implicit bound anyway.
@@ -267,8 +269,6 @@ impl InternalHttpQueryHandler {
             subnet_available_memory,
             subnet_available_callbacks,
             self.config.canister_guaranteed_callback_quota as u64,
-            self.config.max_canister_memory_size_wasm32,
-            self.config.max_canister_memory_size_wasm64,
             self.max_instructions_per_query,
             self.config.max_query_call_graph_depth,
             self.config.max_query_call_graph_instructions,
@@ -299,46 +299,6 @@ impl InternalHttpQueryHandler {
     }
 }
 
-fn fetch_canister_logs(
-    sender: PrincipalId,
-    state: &ReplicatedState,
-    args: FetchCanisterLogsRequest,
-) -> Result<WasmResult, UserError> {
-    let canister_id = args.get_canister_id();
-    let canister = state.canister_state(&canister_id).ok_or_else(|| {
-        UserError::new(
-            ErrorCode::CanisterNotFound,
-            format!("Canister {canister_id} not found"),
-        )
-    })?;
-
-    match canister.log_visibility() {
-        LogVisibilityV2::Public => Ok(()),
-        LogVisibilityV2::Controllers if canister.controllers().contains(&sender) => Ok(()),
-        LogVisibilityV2::AllowedViewers(principals) if principals.get().contains(&sender) => Ok(()),
-        LogVisibilityV2::AllowedViewers(_) if canister.controllers().contains(&sender) => Ok(()),
-        LogVisibilityV2::AllowedViewers(_) | LogVisibilityV2::Controllers => Err(UserError::new(
-            ErrorCode::CanisterRejectedMessage,
-            format!(
-                "Caller {} is not allowed to query ic00 method {}",
-                sender,
-                QueryMethod::FetchCanisterLogs
-            ),
-        )),
-    }?;
-
-    let response = FetchCanisterLogsResponse {
-        canister_log_records: canister
-            .system_state
-            .canister_log
-            .records()
-            .iter()
-            .cloned()
-            .collect(),
-    };
-    Ok(WasmResult::Reply(Encode!(&response).unwrap()))
-}
-
 impl HttpQueryHandler {
     pub(crate) fn new_service(
         internal: Arc<InternalHttpQueryHandler>,
@@ -356,7 +316,7 @@ impl HttpQueryHandler {
     }
 }
 
-impl Service<(Query, Option<CertificateDelegation>)> for HttpQueryHandler {
+impl Service<QueryExecutionInput> for HttpQueryHandler {
     type Response = QueryExecutionResponse;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
@@ -368,7 +328,10 @@ impl Service<(Query, Option<CertificateDelegation>)> for HttpQueryHandler {
 
     fn call(
         &mut self,
-        (query, certificate_delegation): (Query, Option<CertificateDelegation>),
+        QueryExecutionInput {
+            query,
+            certificate_delegation_with_metadata,
+        }: QueryExecutionInput,
     ) -> Self::Future {
         let internal = Arc::clone(&self.internal);
         let state_reader = Arc::clone(&self.state_reader);
@@ -386,6 +349,13 @@ impl Service<(Query, Option<CertificateDelegation>)> for HttpQueryHandler {
                 // Retrieving the state must be done here in the query handler, and should be immediately used.
                 // Otherwise, retrieving the state in the Query service in `http_endpoints` can lead to queries being queued up,
                 // with a reference to older states which can cause out-of-memory crashes.
+
+                let (certificate_delegation, certificate_delegation_metadata) =
+                    match certificate_delegation_with_metadata {
+                        Some((delegation, metadata)) => (Some(delegation), Some(metadata)),
+                        None => (None, None),
+                    };
+
                 let result = match get_latest_certified_state_and_data_certificate(
                     state_reader,
                     certificate_delegation,
@@ -402,7 +372,8 @@ impl Service<(Query, Option<CertificateDelegation>)> for HttpQueryHandler {
                             .height_diff_during_query_scheduling
                             .observe(height_diff as f64);
 
-                        let response = internal.query(query, state, cert);
+                        let response =
+                            internal.query(query, state, cert, certificate_delegation_metadata);
 
                         Ok((response, time))
                     }

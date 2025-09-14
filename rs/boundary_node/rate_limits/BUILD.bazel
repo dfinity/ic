@@ -3,41 +3,34 @@ load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-http-types",
-    "//rs/boundary_node/rate_limits/api:rate_limits_api",
-    "//rs/nns/constants",
-    "//rs/rust_canisters/canister_log",
-    "@crate_index//:anyhow",
-    "@crate_index//:candid",
-    "@crate_index//:getrandom",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:ic-cdk-timers",
-    "@crate_index//:ic-stable-structures",
-    "@crate_index//:mockall",
-    "@crate_index//:prometheus",
-    "@crate_index//:rand_chacha",
-    "@crate_index//:serde",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:serde_json",
-    "@crate_index//:strum",
-    "@crate_index//:thiserror",
-    "@crate_index//:uuid",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-]
-
 rust_canister(
     name = "rate_limit_canister",
     srcs = glob(["canister/**/*.rs"]),
     crate_name = "rate_limit_canister",
     crate_root = "canister/lib.rs",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = "canister/interface.did",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-http-types",
+        "//rs/boundary_node/rate_limits/api:rate_limits_api",
+        "//rs/nns/constants",
+        "//rs/rust_canisters/canister_log",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:getrandom",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:mockall",
+        "@crate_index//:prometheus",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:serde_json",
+        "@crate_index//:strum",
+        "@crate_index//:thiserror",
+        "@crate_index//:uuid",
+    ],
 )
 
 rust_test(
@@ -46,6 +39,27 @@ rust_test(
     crate_name = "rate_limit_canister",
     crate_root = "canister/lib.rs",
     data = ["canister/interface.did"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + ["@crate_index//:candid_parser"],
+    deps = [
+        # Keep sorted.
+        "//packages/ic-http-types",
+        "//rs/boundary_node/rate_limits/api:rate_limits_api",
+        "//rs/nns/constants",
+        "//rs/rust_canisters/canister_log",
+        "@crate_index//:anyhow",
+        "@crate_index//:candid",
+        "@crate_index//:candid_parser",
+        "@crate_index//:getrandom",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:mockall",
+        "@crate_index//:prometheus",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:serde_json",
+        "@crate_index//:strum",
+        "@crate_index//:thiserror",
+        "@crate_index//:uuid",
+    ],
 )

@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use config_types::*;
 use std::fs;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -6,33 +6,45 @@ use std::path::Path;
 
 /// Generates fixtures for the current version, enforcing version increment if config_types has been modified
 pub fn generate_fixtures(fixtures_dir: &Path) -> Result<()> {
-    let fixture_path = fixtures_dir.join(format!("hostos_v{}.json", CONFIG_VERSION));
-    if config_structure_changed(&fixture_path)? {
-        bail!("CONFIG_VERSION in lib.rs ({}) already has a fixture, but the config structure has changed. Please increment config_types CONFIG_VERSION before generating a new fixture.", CONFIG_VERSION);
-    }
-
-    let hostos_config = generate_default_hostos_config();
-
-    serde_json::to_writer_pretty(fs::File::create(fixture_path)?, &hostos_config)?;
+    generate_fixture_for_config(fixtures_dir, "hostos", generate_default_hostos_config())?;
+    generate_fixture_for_config(fixtures_dir, "guestos", generate_default_guestos_config())?;
 
     Ok(())
 }
 
-/// Checks if the current config_types structure has changed compared to the existing fixture version
-fn config_structure_changed(existing_hostos_fixture: &Path) -> Result<bool> {
-    let new_hostos_fixture = generate_default_hostos_config();
+fn generate_fixture_for_config<T>(fixtures_dir: &Path, config_type: &str, config: T) -> Result<()>
+where
+    T: serde::Serialize + serde::de::DeserializeOwned + PartialEq,
+{
+    let fixture_path = fixtures_dir.join(format!("{config_type}_v{CONFIG_VERSION}.json"));
 
+    if config_structure_changed(&fixture_path, &config)? {
+        bail!(
+            "CONFIG_VERSION in lib.rs ({CONFIG_VERSION}) already has a fixture, but the config \
+            structure has changed. Please increment config_types CONFIG_VERSION before generating \
+            a new fixture.",
+        );
+    }
+
+    serde_json::to_writer_pretty(fs::File::create(&fixture_path)?, &config)?;
+    Ok(())
+}
+
+/// Checks if the current config_types structure has changed compared to the existing fixture version
+fn config_structure_changed<T>(existing_fixture_path: &Path, new_config: &T) -> Result<bool>
+where
+    T: serde::Serialize + serde::de::DeserializeOwned,
+{
     // If an existing fixture doesn't exist, this is a new config version
-    if !existing_hostos_fixture.exists() {
+    if !existing_fixture_path.exists() {
         return Ok(false);
     }
 
-    let file = fs::File::open(existing_hostos_fixture)?;
+    let existing_json = fs::read_to_string(existing_fixture_path)?;
+    let new_json = serde_json::to_string_pretty(new_config)?;
 
-    match serde_json::from_reader::<_, HostOSConfig>(file) {
-        Ok(existing_config) => Ok(existing_config != new_hostos_fixture),
-        Err(_) => Ok(true), // If we can't parse the existing fixture, assume structure changed
-    }
+    // Compare the JSON strings - if they're different, the config structure or default values have changed
+    Ok(existing_json != new_json)
 }
 
 fn generate_default_hostos_config() -> HostOSConfig {
@@ -77,5 +89,25 @@ fn generate_default_hostos_config() -> HostOSConfig {
         icos_settings,
         hostos_settings,
         guestos_settings: GuestOSSettings::default(),
+    }
+}
+
+fn generate_default_guestos_config() -> GuestOSConfig {
+    let sev_cert_chain_pem = "-----BEGIN CERTIFICATE-----\
+                                     -----END CERTIFICATE-----"
+        .to_string();
+    let default_hostos_config = generate_default_hostos_config();
+    GuestOSConfig {
+        config_version: CONFIG_VERSION.to_string(),
+        network_settings: default_hostos_config.network_settings,
+        icos_settings: default_hostos_config.icos_settings,
+        guestos_settings: default_hostos_config.guestos_settings,
+        guest_vm_type: GuestVMType::Default,
+        upgrade_config: GuestOSUpgradeConfig {
+            peer_guest_vm_address: Some("2a00:fb01:400:200:6801:95ff:fed7:d475".parse().unwrap()),
+        },
+        trusted_execution_environment_config: Some(TrustedExecutionEnvironmentConfig {
+            sev_cert_chain_pem,
+        }),
     }
 }

@@ -8,24 +8,24 @@ use std::{
 };
 
 use crate::page_map::{
+    FileDescriptor, MAX_NUMBER_OF_FILES, MemoryInstructions, MemoryMapOrData, PageAllocator,
+    PageDelta, PageMap, PersistenceError, StorageMetrics,
     storage::{
-        validate, Checkpoint, FileIndex, MergeCandidate, MergeDestination, OverlayFile,
-        PageIndexRange, Shard, Storage, StorageLayout, CURRENT_OVERLAY_VERSION,
-        PAGE_INDEX_RANGE_NUM_BYTES, SIZE_NUM_BYTES, VERSION_NUM_BYTES,
+        CURRENT_OVERLAY_VERSION, Checkpoint, FileIndex, MergeCandidate, MergeDestination,
+        OverlayFile, PAGE_INDEX_RANGE_NUM_BYTES, PageIndexRange, SIZE_NUM_BYTES, Shard, Storage,
+        StorageLayout, VERSION_NUM_BYTES, validate,
     },
-    test_utils::{base_only_storage_layout, ShardedTestStorageLayout, TestStorageLayout},
-    FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocator, PageDelta, PageMap,
-    PersistenceError, StorageMetrics, MAX_NUMBER_OF_FILES,
+    test_utils::{ShardedTestStorageLayout, TestStorageLayout, base_only_storage_layout},
 };
 use assert_matches::assert_matches;
 use bit_vec::BitVec;
 use ic_config::state_manager::LsmtConfig;
 use ic_metrics::MetricsRegistry;
-use ic_sys::{PageIndex, PAGE_SIZE};
+use ic_sys::{PAGE_SIZE, PageIndex};
 use ic_test_utilities_io::{make_mutable, make_readonly, write_all_at};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_types::Height;
-use tempfile::{tempdir, Builder, TempDir};
+use tempfile::{Builder, TempDir, tempdir};
 
 #[cfg(feature = "fuzzing_code")]
 use arbitrary::Arbitrary;
@@ -111,8 +111,7 @@ fn verify_overlays(
                 .metadata()
                 .map_or(0, |m| m.len()),
             size,
-            "Shard: {}",
-            shard
+            "Shard: {shard}"
         );
     }
     // Check that the content of expected page delta matches the overlays.
@@ -127,7 +126,7 @@ fn verify_overlays(
         ) {
             (Some(overlay), Some(delta)) => assert_eq!(overlay, delta),
             (None, Some(delta)) => assert_eq!(delta, &zeroes),
-            (Some(overlay), None) => panic!("Overlay: {:#?}", overlay),
+            (Some(overlay), None) => panic!("Overlay: {overlay:#?}"),
             (None, None) => (),
         }
     }
@@ -625,7 +624,7 @@ fn write_overlays_and_verify_with_tempdir(
                                 lsmt_config,
                             );
                         }
-                        MergeDestination::BaseFile(ref path) => {
+                        MergeDestination::BaseFile(path) => {
                             verify_merge_to_base(
                                 path,
                                 &merged_base,
@@ -716,7 +715,7 @@ pub fn write_overlays_and_verify(instructions: Vec<Instruction>) {
 #[doc(hidden)]
 #[cfg(feature = "fuzzing_code")]
 fn remove_tempdir(tdir: TempDir) {
-    let tmp_path = tdir.into_path();
+    let tmp_path = tdir.keep();
     std::fs::remove_dir_all(tmp_path).expect("Unable to delete temporary directoy");
 }
 
@@ -769,7 +768,7 @@ fn no_back_to_back_ranges() {
     match OverlayFile::load(path) {
         Err(e) => match e {
             PersistenceError::InvalidOverlay { .. } => (),
-            _ => panic!("Unexpected load error: {}", e),
+            _ => panic!("Unexpected load error: {e}"),
         },
         _ => panic!("Overlay load must fail"),
     }
@@ -921,10 +920,12 @@ fn wrong_shard_pages_is_an_error() {
     )
     .unwrap();
     assert!(!merge_candidates.is_empty());
-    assert!(std::panic::catch_unwind(|| merge_candidates[0]
-        .apply(&StorageMetrics::new(&MetricsRegistry::new()))
-        .unwrap())
-    .is_err());
+    assert!(
+        std::panic::catch_unwind(|| merge_candidates[0]
+            .apply(&StorageMetrics::new(&MetricsRegistry::new()))
+            .unwrap())
+        .is_err()
+    );
 }
 
 #[test]
@@ -1367,23 +1368,27 @@ fn overlapping_shards_is_an_error() {
             tempdir.path().join("000000_010_vmemory_0.overlay"),
         ]
     );
-    assert!(validate(&ShardedTestStorageLayout {
-        dir_path: tempdir.path().to_path_buf(),
-        base: tempdir.path().join("vmemory_0.bin"),
-        overlay_suffix: "vmemory_0.overlay".to_owned(),
-    })
-    .is_ok());
+    assert!(
+        validate(&ShardedTestStorageLayout {
+            dir_path: tempdir.path().to_path_buf(),
+            base: tempdir.path().join("vmemory_0.bin"),
+            overlay_suffix: "vmemory_0.overlay".to_owned(),
+        })
+        .is_ok()
+    );
     std::fs::copy(
         tempdir.path().join("000000_010_vmemory_0.overlay"),
         tempdir.path().join("000000_011_vmemory_0.overlay"),
     )
     .unwrap();
-    assert!(validate(&ShardedTestStorageLayout {
-        dir_path: tempdir.path().to_path_buf(),
-        base: tempdir.path().join("vmemory_0.bin"),
-        overlay_suffix: "vmemory_0.overlay".to_owned(),
-    })
-    .is_err());
+    assert!(
+        validate(&ShardedTestStorageLayout {
+            dir_path: tempdir.path().to_path_buf(),
+            base: tempdir.path().join("vmemory_0.bin"),
+            overlay_suffix: "vmemory_0.overlay".to_owned(),
+        })
+        .is_err()
+    );
 }
 
 #[test]
@@ -1407,8 +1412,7 @@ fn returns_an_error_if_file_size_is_not_a_multiple_of_page_size() {
     match validate(&base_only_storage_layout(heap_file.to_path_buf())) {
         Err(err) => assert!(
             err.is_invalid_heap_file(),
-            "Expected invalid heap file error, got {:?}",
-            err
+            "Expected invalid heap file error, got {err:?}"
         ),
         Ok(_) => panic!("Expected a invalid heap file error, got Ok(_)"),
     }
@@ -1435,14 +1439,18 @@ fn sharded_base_file() {
         false,
     );
     // get_base_memory_instructions is exhaustive => empty get_memory_instructions.
-    assert!(storage
-        .get_memory_instructions(full_range.clone(), &mut filter.clone())
-        .instructions
-        .is_empty());
-    assert!(!storage
-        .get_base_memory_instructions()
-        .instructions
-        .is_empty());
+    assert!(
+        storage
+            .get_memory_instructions(full_range.clone(), &mut filter.clone())
+            .instructions
+            .is_empty()
+    );
+    assert!(
+        !storage
+            .get_base_memory_instructions()
+            .instructions
+            .is_empty()
+    );
 
     // Base files plus one overlay on top; some instructions needed beyond
     // get_base_memory_instructions.
@@ -1462,10 +1470,12 @@ fn sharded_base_file() {
         overlay_suffix: "vmemory_0.overlay".to_owned(),
     }))
     .unwrap();
-    assert!(!storage
-        .get_memory_instructions(full_range, &mut filter.clone())
-        .instructions
-        .is_empty())
+    assert!(
+        !storage
+            .get_memory_instructions(full_range, &mut filter.clone())
+            .instructions
+            .is_empty()
+    )
 }
 
 #[test]

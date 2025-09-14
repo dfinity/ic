@@ -1,12 +1,15 @@
-use anyhow::{bail, Result};
-use bitcoincore_rpc::{Auth, Client, RpcApi};
+use anyhow::{Result, bail};
 use candid::Decode;
+use ic_btc_adapter_test_utils::{
+    bitcoin,
+    rpc_client::{Auth, RpcClient},
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SshSession,
-    READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    SshSession, get_dependency_path,
 };
 use ic_system_test_driver::{
     driver::{
@@ -14,7 +17,7 @@ use ic_system_test_driver::{
         universal_vm::{UniversalVm, UniversalVms},
     },
     systest,
-    util::{block_on, runtime_from_url, UniversalCanister},
+    util::{UniversalCanister, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::install_bitcoin_canister;
 use ic_types::Height;
@@ -116,7 +119,8 @@ pub fn get_balance(env: TestEnv) {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
 
     let btc_rpc = Arc::new(
-        self::Client::new(
+        self::RpcClient::new(
+            bitcoin::Network::Regtest,
             &format!(
                 "http://[{}]:8332",
                 deployed_universal_vm.get_vm().unwrap().ipv6
@@ -126,36 +130,14 @@ pub fn get_balance(env: TestEnv) {
                 "Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ksXQ5I2_-Hm4w=".to_string(),
             ),
         )
+        .unwrap()
+        .ensure_wallet()
         .unwrap(),
     );
 
-    // Create a wallet.
-    // Retry since the bitcoind VM might not be up yet.
-    let btc_rpc_c = btc_rpc.clone();
-    ic_system_test_driver::retry_with_msg!(
-        "create wallet",
-        logger.clone(),
-        READY_WAIT_TIMEOUT,
-        RETRY_BACKOFF,
-        move || match btc_rpc_c.create_wallet("mywallet", None, None, None, None) {
-            Ok(_) => Ok(()),
-            Err(err) => {
-                bail!("Connecting to btc rpc failed {err}")
-            }
-        }
-    )
-    .unwrap();
-
     // Generate an address.
-    let btc_address = btc_rpc
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
-    info!(
-        &logger,
-        "Created temporary btc address: {}",
-        btc_address.to_string()
-    );
+    let btc_address = btc_rpc.get_new_address().unwrap();
+    info!(&logger, "Created temporary btc address: {btc_address}");
 
     // Mint some blocks for the address we generated.
     let block = btc_rpc.generate_to_address(101, &btc_address).unwrap();

@@ -4,6 +4,9 @@ use crate::canister_http::{
     CanisterHttpResponse, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
 };
 use crate::consensus::{
+    Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
+    CatchUpShareContent, ConsensusMessage, EquivocationProof, FinalizationContent, HashedBlock,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent,
     certification::{
         Certification, CertificationContent, CertificationMessage, CertificationShare,
     },
@@ -12,9 +15,6 @@ use crate::consensus::{
         EcdsaSigShare, IDkgComplaintContent, IDkgMessage, IDkgOpeningContent, SchnorrSigShare,
         VetKdKeyShare,
     },
-    Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
-    CatchUpShareContent, ConsensusMessage, EquivocationProof, FinalizationContent, HashedBlock,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgDealingSupport, IDkgTranscript, SignedIDkgDealing,

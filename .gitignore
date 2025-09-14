@@ -94,7 +94,6 @@ cpp/**/network_info.o
 **/build-out
 **/boot/version.txt
 **/bin/canister_sandbox
-**/bin/ic-btc-adapter
 **/bin/ic-https-outcalls-adapter
 **/bin/ic-consensus-pool-util
 **/bin/ic-crypto-csp

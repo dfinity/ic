@@ -4,13 +4,13 @@ use std::{
 };
 
 use crate::invariants::common::{
-    get_subnet_ids_from_snapshot, InvariantCheckError, RegistrySnapshot,
+    InvariantCheckError, RegistrySnapshot, get_subnet_ids_from_snapshot,
 };
 
 use ic_base_types::{NodeId, PrincipalId};
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType};
-use ic_registry_keys::{make_node_record_key, make_subnet_record_key, SUBNET_RECORD_KEY_PREFIX};
+use ic_registry_keys::{SUBNET_RECORD_KEY_PREFIX, make_node_record_key, make_subnet_record_key};
 use prost::Message;
 
 /// Subnet invariants hold iff:
@@ -32,10 +32,7 @@ pub(crate) fn check_subnet_invariants(
         let subnet_record = subnet_records_map
             .remove(&make_subnet_record_key(subnet_id).into_bytes())
             .unwrap_or_else(|| {
-                panic!(
-                    "Subnet {:} is in subnet list but no record exists",
-                    subnet_id
-                )
+                panic!("Subnet {subnet_id:} is in subnet list but no record exists")
             });
 
         if subnet_record.ssh_readonly_access.len() > MAX_NUM_SSH_KEYS
@@ -66,18 +63,18 @@ pub(crate) fn check_subnet_invariants(
             let node_key = make_node_record_key(k);
             let node_exists = snapshot.contains_key(node_key.as_bytes());
             if !node_exists {
-                panic!("Node {} does not exist in Subnet {}", k, subnet_id);
+                panic!("Node {k} does not exist in Subnet {subnet_id}");
             }
             node_exists
         });
 
         // Each node appears at most once in a subnet membership
         if num_nodes > subnet_members.len() {
-            panic!("Repeated nodes in subnet {:}", subnet_id);
+            panic!("Repeated nodes in subnet {subnet_id:}");
         }
         // Each subnet contains at least one node
         if subnet_members.is_empty() {
-            panic!("No node in subnet {:}", subnet_id);
+            panic!("No node in subnet {subnet_id:}");
         }
         let intersection = accumulated_nodes_in_subnets
             .intersection(&subnet_members)
@@ -85,10 +82,7 @@ pub(crate) fn check_subnet_invariants(
         // Each node appears at most once in at most one subnet membership
         if !intersection.is_empty() {
             return Err(InvariantCheckError {
-                msg: format!(
-                    "Nodes in subnet {:} also belong to other subnets",
-                    subnet_id
-                ),
+                msg: format!("Nodes in subnet {subnet_id:} also belong to other subnets"),
                 source: None,
             });
         }
@@ -98,8 +92,11 @@ pub(crate) fn check_subnet_invariants(
             system_subnet_count += 1;
         }
     }
-    // There is at least one system subnet
-    if system_subnet_count < 1 {
+    // There is at least one system subnet. Note that we disable this invariant for benchmarks, as
+    // the code to set up "invariants compliant" registry mostly depends on "test-only" code, and
+    // it's very difficult to conform canbench benchmarks to test-only code. It's also risky to move
+    // those "test-only" code towards "non-test-only" code.
+    if system_subnet_count < 1 && !cfg!(feature = "canbench-rs") {
         return Err(InvariantCheckError {
             msg: "no system subnet".to_string(),
             source: None,

@@ -6,7 +6,7 @@ use dfn_protobuf::protobuf;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common::{
-    ledger::compute_neuron_staking_subaccount_bytes, ONE_DAY_SECONDS, ONE_YEAR_SECONDS,
+    ONE_DAY_SECONDS, ONE_YEAR_SECONDS, ledger::compute_neuron_staking_subaccount_bytes,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
@@ -16,32 +16,32 @@ use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::governance::INITIAL_NEURON_DISSOLVE_DELAY;
 use ic_nns_governance_api::{
+    Account as GovernanceAccount, GovernanceError, ListNeurons, MakeProposalRequest, ManageNeuron,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Motion, Neuron,
+    NeuronState, ProposalActionRequest, Topic,
     governance_error::ErrorType,
     list_neurons::NeuronSubaccount,
     manage_neuron::{Command, DisburseMaturity, Merge, NeuronIdOrSubaccount, Spawn},
     manage_neuron_response::{self, Command as CommandResponse},
     neuron::DissolveState,
-    Account as GovernanceAccount, GovernanceError, ListNeurons, MakeProposalRequest, ManageNeuron,
-    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Motion, Neuron,
-    NeuronState, ProposalActionRequest, Topic,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
     state_test_helpers::{
         ledger_account_balance, list_neurons, list_neurons_by_principal, nns_add_hot_key,
         nns_claim_or_refresh_neuron, nns_disburse_maturity, nns_disburse_neuron,
         nns_governance_get_full_neuron, nns_governance_get_neuron_info,
         nns_governance_make_proposal, nns_increase_dissolve_delay, nns_join_community_fund,
         nns_leave_community_fund, nns_remove_hot_key, nns_send_icp_to_claim_or_refresh_neuron,
-        nns_set_followees_for_neuron, nns_start_dissolving, setup_nns_canisters,
-        state_machine_builder_for_nns_tests,
+        nns_set_auto_stake_maturity, nns_set_followees_for_neuron, nns_start_dissolving,
+        setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
-    protobuf::AccountIdentifier as AccountIdentifierProto, tokens_from_proto, AccountBalanceArgs,
-    AccountIdentifier, BinaryAccountBalanceArgs, Subaccount, Tokens,
+    AccountBalanceArgs, AccountIdentifier, BinaryAccountBalanceArgs, Subaccount, Tokens,
+    protobuf::AccountIdentifier as AccountIdentifierProto, tokens_from_proto,
 };
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -221,7 +221,7 @@ fn test_spawn_neuron() {
 
         let spawned_neuron_id = match spawn_res.clone().command.unwrap() {
             CommandResponse::Spawn(res) => res.created_neuron_id.unwrap(),
-            _ => panic!("Unexpected response: {:?}", spawn_res),
+            _ => panic!("Unexpected response: {spawn_res:?}"),
         };
 
         // Neuron should now exist and be in "spawning" state.
@@ -285,7 +285,7 @@ fn test_spawn_neuron() {
                 assert_eq!(spawned_neuron.maturity_e8s_equivalent, 0);
                 return Ok(());
             } else {
-                println!("Neuron not spawned yet: {:?}", spawned_neuron);
+                println!("Neuron not spawned yet: {spawned_neuron:?}");
             }
         }
 
@@ -311,6 +311,7 @@ fn create_neuron_with_maturity(
     state_machine: &StateMachine,
     neuron_controller: PrincipalId,
     stake: Tokens,
+    auto_stake: bool,
 ) -> NeuronIdProto {
     let neuron_id = create_neuron_with_stake(state_machine, neuron_controller, stake);
     nns_increase_dissolve_delay(
@@ -320,6 +321,10 @@ fn create_neuron_with_maturity(
         ONE_YEAR_SECONDS * 7,
     )
     .unwrap();
+    if auto_stake {
+        nns_set_auto_stake_maturity(state_machine, neuron_controller, neuron_id, true)
+            .panic_if_error("Failed to set auto stake maturity to true");
+    }
     nns_governance_make_proposal(
         state_machine,
         neuron_controller,
@@ -332,7 +337,8 @@ fn create_neuron_with_maturity(
                 motion_text: "some motion text".to_string(),
             })),
         },
-    );
+    )
+    .panic_if_error("Failed to make proposal");
     state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS * 5));
     for _ in 0..100 {
         state_machine.advance_time(Duration::from_secs(1));
@@ -341,7 +347,11 @@ fn create_neuron_with_maturity(
 
     let neuron = nns_governance_get_full_neuron(state_machine, neuron_controller, neuron_id.id)
         .expect("Failed to get neuron");
-    assert!(neuron.maturity_e8s_equivalent > 0);
+    if auto_stake {
+        assert!(neuron.staked_maturity_e8s_equivalent.unwrap() > 0);
+    } else {
+        assert!(neuron.maturity_e8s_equivalent > 0);
+    }
 
     neuron_id
 }
@@ -388,11 +398,13 @@ fn test_neuron_disburse_maturity() {
         &state_machine,
         neuron_1_controller,
         Tokens::from_tokens(1000).unwrap(),
+        false,
     );
     let neuron_id_2 = create_neuron_with_maturity(
         &state_machine,
         neuron_2_controller,
         Tokens::from_tokens(1000).unwrap(),
+        false,
     );
 
     // Step 1.3: check that both neurons have no maturity disbursement in progress, and record their
@@ -431,7 +443,7 @@ fn test_neuron_disburse_maturity() {
     let Some(CommandResponse::DisburseMaturity(disburse_maturity_response)) =
         disburse_response.command
     else {
-        panic!("Failed to disburse maturity: {:#?}", disburse_response)
+        panic!("Failed to disburse maturity: {disburse_response:#?}")
     };
     assert!(disburse_maturity_response.amount_disbursed_e8s.unwrap() > 0);
 
@@ -478,7 +490,7 @@ fn test_neuron_disburse_maturity() {
     let Some(CommandResponse::DisburseMaturity(disburse_maturity_response)) =
         disburse_response.command
     else {
-        panic!("Failed to disburse maturity: {:#?}", disburse_response)
+        panic!("Failed to disburse maturity: {disburse_response:#?}")
     };
     assert!(disburse_maturity_response.amount_disbursed_e8s.unwrap() > 0);
 
@@ -541,7 +553,7 @@ fn test_neuron_disburse_maturity() {
     let Some(CommandResponse::DisburseMaturity(disburse_maturity_response)) =
         disburse_response.command
     else {
-        panic!("Failed to disburse maturity: {:#?}", disburse_response)
+        panic!("Failed to disburse maturity: {disburse_response:#?}")
     };
     assert!(disburse_maturity_response.amount_disbursed_e8s.unwrap() > 0);
 
@@ -589,8 +601,7 @@ fn test_neuron_disburse_maturity() {
     assert!(
         disburse_destination_1_balance as f64
             > maturity_disbursement_1.amount_e8s.unwrap() as f64 * 0.95,
-        "Disbursement 1 balance is too low: {}",
-        disburse_destination_1_balance
+        "Disbursement 1 balance is too low: {disburse_destination_1_balance}"
     );
 
     // Step 8.3: Check that the neuron 1 still has one disbursement in progress, which is the second one.
@@ -621,8 +632,7 @@ fn test_neuron_disburse_maturity() {
     assert!(
         disburse_destination_2_balance as f64
             > maturity_disbursement_2.amount_e8s.unwrap() as f64 * 0.95,
-        "Disbursement 2 balance is too low: {}",
-        disburse_destination_2_balance
+        "Disbursement 2 balance is too low: {disburse_destination_2_balance}"
     );
 
     // Step 9.3: Check that the neuron 2 has no maturity disbursement in progress.
@@ -653,8 +663,7 @@ fn test_neuron_disburse_maturity() {
     assert!(
         disburse_destination_3_balance as f64
             > maturity_disbursement_3.amount_e8s.unwrap() as f64 * 0.95,
-        "Disbursement 3 balance is too low: {}",
-        disburse_destination_3_balance
+        "Disbursement 3 balance is too low: {disburse_destination_3_balance}"
     );
 
     // Step 10.3: Check that the neuron 1 has no maturity disbursement in progress.
@@ -678,7 +687,7 @@ fn check_state_machine_tla_traces(
 ) {
     use candid::{Decode, Encode};
     use canister_test::WasmResult;
-    use ic_nns_governance::governance::tla::{perform_trace_check, UpdateTrace};
+    use ic_nns_governance::governance::tla::{UpdateTrace, perform_trace_check};
     let wasm_res = sm
         .query(
             gov_canister_id,
@@ -687,7 +696,7 @@ fn check_state_machine_tla_traces(
         )
         .expect("Couldn't call get_tla_traces");
     let traces = match wasm_res {
-        WasmResult::Reject(r) => panic!("get_tla_traces failed: {}", r),
+        WasmResult::Reject(r) => panic!("get_tla_traces failed: {r}"),
         WasmResult::Reply(r) => {
             Decode!(&r, Vec<UpdateTrace>).expect("Couldn't decode get_tla_traces response")
         }
@@ -721,6 +730,7 @@ fn test_neuron_disburse_maturity_through_neuron_management_proposal() {
         &state_machine,
         managed_neuron_controller,
         Tokens::from_tokens(1000).unwrap(),
+        false,
     );
 
     // Step 1.3: check that the neuron has no maturity disbursement in progress, and record its
@@ -838,7 +848,7 @@ fn test_neuron_controller_is_not_removed_from_principal_to_neuron_index() {
 
     match response.command {
         Some(manage_neuron_response::Command::Configure(_)) => (),
-        _ => panic!("Failed to add hot key: {:#?}", response),
+        _ => panic!("Failed to add hot key: {response:#?}"),
     };
 
     let list_neurons_response =
@@ -854,7 +864,7 @@ fn test_neuron_controller_is_not_removed_from_principal_to_neuron_index() {
 
     match response.command {
         Some(manage_neuron_response::Command::Configure(_)) => (),
-        _ => panic!("Failed to remove hot key: {:#?}", response),
+        _ => panic!("Failed to remove hot key: {response:#?}"),
     };
 
     let list_neurons_response =
@@ -894,7 +904,7 @@ fn test_hotkey_can_join_and_leave_community_fund() {
                         manage_neuron_response::ConfigureResponse {},
                     )),
             } => (),
-            _ => panic!("{:#?}", manage_neuron_response),
+            _ => panic!("{manage_neuron_response:#?}"),
         }
     }
     assert_ok(&join_response);
@@ -921,19 +931,14 @@ fn test_hotkey_can_join_and_leave_community_fund() {
             assert_eq!(
                 error.error_type,
                 ErrorType::NotAuthorized as i32,
-                "{:?}",
-                error
+                "{error:?}"
             );
             assert!(
                 error.error_message.contains("must be the controller"),
-                "{:?}",
-                error
+                "{error:?}"
             );
         }
-        _ => panic!(
-            "Unexpected response to AddHotKey:\n{:#?}",
-            add_hot_key_response
-        ),
+        _ => panic!("Unexpected response to AddHotKey:\n{add_hot_key_response:#?}"),
     }
 
     // Steps 2d, 3d: Controller can perform any neuron configure operation.
@@ -1011,6 +1016,71 @@ fn test_claim_neuron() {
 }
 
 #[test]
+fn test_unstake_maturity_of_dissolved_neurons() {
+    // Step 1: Prepare the world.
+    let controller = PrincipalId::new_self_authenticating(b"controller");
+    let state_machine = state_machine_builder_for_nns_tests().build();
+    let nns_init_payloads = NnsInitPayloadsBuilder::new()
+        .with_ledger_account(
+            AccountIdentifier::new(controller, None),
+            Tokens::from_tokens(2000).unwrap(),
+        )
+        .build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    let neuron_id = create_neuron_with_maturity(
+        &state_machine,
+        controller,
+        Tokens::from_tokens(1000).unwrap(),
+        true,
+    );
+
+    // Step 2: Create a neuron with some staked maturity.
+    let full_neuron =
+        nns_governance_get_full_neuron(&state_machine, controller, neuron_id.id).unwrap();
+    assert_eq!(full_neuron.auto_stake_maturity, Some(true));
+    assert!(full_neuron.staked_maturity_e8s_equivalent.unwrap() > 0);
+    let dissolve_state = full_neuron.dissolve_state.unwrap();
+    let dissolve_delay = match dissolve_state {
+        DissolveState::DissolveDelaySeconds(dissolve_delay) => {
+            // The dissolve delay here should be around 7 years, but in the test we only want to make sure
+            // it's reasonably large enough for the test to continue.
+            assert!(
+                dissolve_delay > 3600,
+                "The dissolve delay should be much greater than 1 hour"
+            );
+            dissolve_delay
+        }
+        _ => panic!("Unexpected dissolve state: {dissolve_state:#?}"),
+    };
+
+    // Step 2: Start dissolving the neuron and advance time to be close to the dissolve delay.
+    nns_start_dissolving(&state_machine, controller, neuron_id).unwrap();
+    state_machine.advance_time(Duration::from_secs(dissolve_delay - 3600));
+    for _ in 0..20 {
+        state_machine.advance_time(Duration::from_secs(5));
+        state_machine.tick();
+    }
+
+    // Step 3: Check that the neuron still has some maturity staked.
+    let full_neuron =
+        nns_governance_get_full_neuron(&state_machine, controller, neuron_id.id).unwrap();
+    assert!(full_neuron.staked_maturity_e8s_equivalent.unwrap() > 0);
+
+    // Step 4: Advance time to be after the dissolve delay.
+    state_machine.advance_time(Duration::from_secs(3600));
+    for _ in 0..20 {
+        state_machine.advance_time(Duration::from_secs(5));
+        state_machine.tick();
+    }
+
+    // Step 5: Check that the neuron has no maturity staked.
+    let full_neuron =
+        nns_governance_get_full_neuron(&state_machine, controller, neuron_id.id).unwrap();
+    assert_eq!(full_neuron.staked_maturity_e8s_equivalent, None);
+}
+
+#[test]
 fn test_list_neurons() {
     // Step 1.1: Prepare the world by setting up NNS canisters with 2 princials both with 10 ICP.
     let state_machine = state_machine_builder_for_nns_tests().build();
@@ -1072,7 +1142,7 @@ fn test_list_neurons() {
         ManageNeuronResponse {
             command: Some(manage_neuron_response::Command::Disburse(_)),
         } => (),
-        disburse_result => panic!("Failed to disburse neuron: {:#?}", disburse_result),
+        disburse_result => panic!("Failed to disburse neuron: {disburse_result:#?}"),
     }
 
     // Step 2: test listing neurons by ids with an anonymous principal.

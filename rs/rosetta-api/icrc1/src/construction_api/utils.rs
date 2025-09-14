@@ -4,7 +4,7 @@ use super::types::{
 use crate::common::utils::utils::{
     icrc1_operation_to_rosetta_core_operations, rosetta_core_operations_to_icrc1_operation,
 };
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use candid::{Decode, Encode, Principal};
 use ic_agent::agent::{Envelope, EnvelopeContent};
 use ic_rosetta_api::models::ConstructionParseResponse;
@@ -28,7 +28,7 @@ fn build_serialized_bytes<T: serde::Serialize + std::fmt::Debug>(
 ) -> anyhow::Result<Vec<u8>> {
     let mut buf = vec![];
     ciborium::ser::into_writer(&object, &mut buf)
-        .with_context(|| format!("Failed to serialize object {:?}", object))?;
+        .with_context(|| format!("Failed to serialize object {object:?}"))?;
     Ok(buf)
 }
 
@@ -111,7 +111,7 @@ pub fn build_icrc1_transaction_from_canister_method_args(
                 memo,
                 created_at_time,
             } = Decode!(&candid_bytes, ApproveArgs).with_context(|| {
-                format!("Could not decode approve args from: {:?} ", candid_bytes)
+                format!("Could not decode approve args from: {candid_bytes:?} ")
             })?;
 
             let operation = crate::common::storage::types::IcrcOperation::Approve {
@@ -141,10 +141,7 @@ pub fn build_icrc1_transaction_from_canister_method_args(
                 memo,
                 created_at_time,
             } = Decode!(&candid_bytes, TransferFromArgs).with_context(|| {
-                format!(
-                    "Could not decode transfer from args from: {:?} ",
-                    candid_bytes
-                )
+                format!("Could not decode transfer from args from: {candid_bytes:?} ")
             })?;
 
             let operation = crate::common::storage::types::IcrcOperation::Transfer {
@@ -172,7 +169,7 @@ pub fn build_icrc1_transaction_from_canister_method_args(
                 memo,
                 created_at_time,
             } = Decode!(&candid_bytes, TransferArg).with_context(|| {
-                format!("Could not decode transfer args from: {:?} ", candid_bytes)
+                format!("Could not decode transfer args from: {candid_bytes:?} ")
             })?;
 
             let operation = crate::common::storage::types::IcrcOperation::Transfer {
@@ -321,7 +318,9 @@ pub fn handle_construction_hash(
 
     // We expect only one icrc1 ledger transaction in the signed transaction
     if tx_hashes.len() > 1 {
-        bail!("Only one icrc1 ledger transaction is supported per signed transaction. Found more than one icrc1 ledger transaction.");
+        bail!(
+            "Only one icrc1 ledger transaction is supported per signed transaction. Found more than one icrc1 ledger transaction."
+        );
     }
 
     Ok(ConstructionHashResponse {
@@ -536,10 +535,10 @@ pub fn handle_construction_parse(
 mod test {
     use super::*;
     use ic_agent::Identity;
+    use ic_icrc1_test_utils::DEFAULT_TRANSFER_FEE;
+    use ic_icrc1_test_utils::LedgerEndpointArg;
     use ic_icrc1_test_utils::minter_identity;
     use ic_icrc1_test_utils::valid_transactions_strategy;
-    use ic_icrc1_test_utils::LedgerEndpointArg;
-    use ic_icrc1_test_utils::DEFAULT_TRANSFER_FEE;
     use proptest::strategy::Strategy;
     use proptest::test_runner::Config as TestRunnerConfig;
     use proptest::test_runner::TestRunner;
@@ -574,6 +573,10 @@ mod test {
                             LedgerEndpointArg::ApproveArg(args) => {
                                 (CanisterMethodName::Icrc2Approve, Encode!(&args).unwrap())
                             }
+                            LedgerEndpointArg::TransferFromArg(args) => (
+                                CanisterMethodName::Icrc2TransferFrom,
+                                Encode!(&args).unwrap(),
+                            ),
                         };
 
                         let icrc1_transaction = build_icrc1_transaction_from_canister_method_args(
@@ -640,6 +643,28 @@ mod test {
                                         assert_eq!(
                                             icrc1_transaction.created_at_time,
                                             args.created_at_time
+                                        );
+                                    }
+                                    _ => panic!("Operation type mismatch"),
+                                }
+                            }
+                            LedgerEndpointArg::TransferFromArg(args) => {
+                                match icrc1_transaction.operation {
+                                    crate::common::storage::types::IcrcOperation::Transfer {
+                                        to,
+                                        amount,
+                                        from,
+                                        fee,
+                                        ..
+                                    } => {
+                                        assert_eq!(to, args.to);
+                                        assert_eq!(args.amount, amount);
+                                        assert_eq!(from, args.from);
+                                        assert_eq!(fee, args.fee);
+                                        assert_eq!(args.memo, icrc1_transaction.memo);
+                                        assert_eq!(
+                                            args.created_at_time,
+                                            icrc1_transaction.created_at_time
                                         );
                                     }
                                     _ => panic!("Operation type mismatch"),

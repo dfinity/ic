@@ -1,9 +1,10 @@
+pub mod disburse_maturity_response;
 mod handle_add_hotkey;
 mod handle_change_auto_stake_maturity;
 mod handle_disburse;
+mod handle_disburse_maturity;
 mod handle_follow;
 mod handle_list_neurons;
-mod handle_merge_maturity;
 mod handle_neuron_info;
 mod handle_refresh_voting_power;
 mod handle_register_vote;
@@ -17,6 +18,7 @@ mod handle_start_dissolve;
 mod handle_stop_dissolve;
 pub mod list_known_neurons_response;
 pub mod list_neurons_response;
+pub mod minimum_dissolve_delay_response;
 pub mod neuron_response;
 pub mod pending_proposals_response;
 pub mod proposal_info_response;
@@ -25,10 +27,12 @@ use candid::{Decode, Encode};
 use core::ops::Deref;
 use ic_agent::agent::{RejectCode, RejectResponse, RequestStatusResponse};
 use ic_agent::{Agent, RequestId};
-use ic_nns_governance_api::{KnownNeuron, ListKnownNeuronsResponse, ProposalInfo};
+use ic_nns_governance_api::{
+    KnownNeuron, ListKnownNeuronsResponse, NetworkEconomics, ProposalInfo,
+};
 use std::{
     convert::TryFrom,
-    sync::{atomic::AtomicBool, Arc},
+    sync::{Arc, atomic::AtomicBool},
     thread, time,
     time::{Duration, Instant},
 };
@@ -39,27 +43,27 @@ use reqwest::{Client, StatusCode};
 use tracing::{debug, error, warn};
 
 use ic_ledger_canister_blocks_synchronizer::{
-    blocks::{Blocks, RosettaBlocksMode},
-    canister_access::{make_agent, CanisterAccess},
+    blocks::{Blocks, IndexOptimization, RosettaBlocksConfig, RosettaBlocksMode, RosettaDbConfig},
+    canister_access::{CanisterAccess, make_agent},
     certification::VerificationInfo,
     ledger_blocks_sync::LedgerBlocksSynchronizer,
 };
-use ic_nns_governance_api::{manage_neuron::NeuronIdOrSubaccount, GovernanceError, NeuronInfo};
+use ic_nns_governance_api::{GovernanceError, NeuronInfo, manage_neuron::NeuronIdOrSubaccount};
 use ic_types::{
+    CanisterId,
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{HttpCallContent, MessageId, SignedRequestBytes},
-    CanisterId,
 };
-use icp_ledger::{BlockIndex, Symbol, TransferFee, TransferFeeArgs, DEFAULT_TRANSFER_FEE};
+use icp_ledger::{BlockIndex, DEFAULT_TRANSFER_FEE, Symbol, TransferFee, TransferFeeArgs};
 
 use crate::{
     convert,
     errors::{ApiError, Details, ICError},
     ledger_client::{
-        handle_add_hotkey::handle_add_hotkey,
+        disburse_maturity_response::DisburseMaturityResponse, handle_add_hotkey::handle_add_hotkey,
         handle_change_auto_stake_maturity::handle_change_auto_stake_maturity,
-        handle_disburse::handle_disburse, handle_follow::handle_follow,
-        handle_merge_maturity::handle_merge_maturity, handle_neuron_info::handle_neuron_info,
+        handle_disburse::handle_disburse, handle_disburse_maturity::handle_disburse_maturity,
+        handle_follow::handle_follow, handle_neuron_info::handle_neuron_info,
         handle_refresh_voting_power::handle_refresh_voting_power,
         handle_register_vote::handle_register_vote, handle_remove_hotkey::handle_remove_hotkey,
         handle_send::handle_send, handle_set_dissolve_timestamp::handle_set_dissolve_timestamp,
@@ -68,7 +72,7 @@ use crate::{
         handle_stop_dissolve::handle_stop_dissolve, neuron_response::NeuronResponse,
     },
     models::{EnvelopePair, SignedTransaction},
-    request::{request_result::RequestResult, transaction_results::TransactionResults, Request},
+    request::{Request, request_result::RequestResult, transaction_results::TransactionResults},
     request_types::{RequestType, Status},
     transaction_id::TransactionIdentifier,
 };
@@ -99,6 +103,7 @@ pub trait LedgerAccess {
     async fn list_known_neurons(&self) -> Result<Vec<KnownNeuron>, ApiError>;
     async fn transfer_fee(&self) -> Result<TransferFee, ApiError>;
     async fn rosetta_blocks_mode(&self) -> RosettaBlocksMode;
+    async fn minimum_dissolve_delay(&self) -> Result<Option<u64>, ApiError>;
 }
 
 pub struct LedgerClient {
@@ -113,22 +118,21 @@ pub struct LedgerClient {
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::large_enum_variant)]
 pub enum OperationOutput {
     BlockIndex(BlockIndex),
     NeuronId(u64),
     NeuronResponse(NeuronResponse),
     ProposalInfoResponse(ProposalInfoResponse),
     ListNeuronsResponse(ListNeuronsResponse),
+    DisburseMaturityResponse(DisburseMaturityResponse),
 }
 
 impl TryFrom<ObjectMap> for OperationOutput {
     type Error = ApiError;
     fn try_from(o: ObjectMap) -> Result<Self, Self::Error> {
         serde_json::from_value(serde_json::Value::Object(o)).map_err(|e| {
-            ApiError::internal_error(format!(
-                "Could not parse OperationOutput from Object: {}",
-                e
-            ))
+            ApiError::internal_error(format!("Could not parse OperationOutput from Object: {e}"))
         })
     }
 }
@@ -150,6 +154,7 @@ impl LedgerClient {
         offline: bool,
         root_key: Option<ThresholdSigPublicKey>,
         enable_rosetta_blocks: bool,
+        optimize_search_indexes: bool,
     ) -> Result<LedgerClient, ApiError> {
         let canister_access = if offline {
             None
@@ -160,7 +165,7 @@ impl LedgerClient {
                 root_key.map(public_key_to_der).transpose()?,
             )
             .await
-            .map_err(|e| ApiError::internal_error(format!("{}", e)))?;
+            .map_err(|e| ApiError::internal_error(format!("{e}")))?;
             LedgerClient::check_ledger_symbol(&token_symbol, &canister_access).await?;
             Some(Arc::new(canister_access))
         };
@@ -173,19 +178,32 @@ impl LedgerClient {
                 root_key.map(public_key_to_der).transpose()?,
             )
             .await
-            .map_err(|e| ApiError::internal_error(format!("{}", e)))?;
+            .map_err(|e| ApiError::internal_error(format!("{e}")))?;
             Some(agent)
         };
         let verification_info = root_key.map(|root_key| VerificationInfo {
             root_key,
             canister_id,
         });
+        let config = RosettaDbConfig::new(
+            if enable_rosetta_blocks {
+                RosettaBlocksConfig::Enabled
+            } else {
+                RosettaBlocksConfig::Disabled
+            },
+            if optimize_search_indexes {
+                IndexOptimization::Enabled
+            } else {
+                IndexOptimization::Disabled
+            },
+        );
+
         let ledger_blocks_synchronizer = LedgerBlocksSynchronizer::new(
             canister_access.clone(),
             store_location,
             store_max_blocks,
             verification_info,
-            enable_rosetta_blocks,
+            config,
         )
         .await?;
 
@@ -206,7 +224,7 @@ impl LedgerClient {
         canister_access: &CanisterAccess,
     ) -> Result<(), ApiError> {
         let arg = Encode!(&())
-            .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
+            .map_err(|e| ApiError::internal_error(format!("Serialization failed: {e:?}")))?;
 
         let symbol_res: Result<Symbol, String> = canister_access
             .agent
@@ -214,25 +232,25 @@ impl LedgerClient {
             .with_arg(arg)
             .call()
             .await
-            .map_err(|e| format!("{}", e))
+            .map_err(|e| format!("{e}"))
             .and_then(|bytes| Decode!(&bytes, Symbol).map_err(|e| e.to_string()));
 
         match symbol_res {
             Ok(Symbol { symbol }) => {
                 if symbol != token_symbol {
                     return Err(ApiError::internal_error(format!(
-                        "The ledger serves a different token ({}) than specified ({})",
-                        symbol, token_symbol
+                        "The ledger serves a different token ({symbol}) than specified ({token_symbol})"
                     )));
                 }
             }
             Err(e) => {
                 if e.contains("has no query method") || e.contains("not found") {
-                    tracing::warn!("Symbol endpoint not present in the ledger canister. Couldn't verify token symbol.");
+                    tracing::warn!(
+                        "Symbol endpoint not present in the ledger canister. Couldn't verify token symbol."
+                    );
                 } else {
                     return Err(ApiError::internal_error(format!(
-                        "Failed to fetch symbol name from the ledger: {}",
-                        e
+                        "Failed to fetch symbol name from the ledger: {e}"
                     )));
                 }
             }
@@ -328,18 +346,18 @@ impl LedgerAccess for LedgerClient {
         let agent = &self.canister_access.as_ref().unwrap().agent;
 
         let arg = Encode!(&proposal_id)
-            .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
+            .map_err(|e| ApiError::internal_error(format!("Serialization failed: {e:?}")))?;
         let bytes = agent
             .query(&self.governance_canister_id.get().0, "get_proposal_info")
             .with_arg(arg)
             .call()
             .await
-            .map_err(|e| ApiError::invalid_request(format!("{}", e)))?;
+            .map_err(|e| ApiError::invalid_request(format!("{e}")))?;
         let proposal_info_response =
             Decode!(bytes.as_slice(), Option<ProposalInfo>).map_err(|err| {
                 ApiError::InvalidRequest(
                     false,
-                    Details::from(format!("Could not decode ProposalInfo response: {}", err)),
+                    Details::from(format!("Could not decode ProposalInfo response: {err}")),
                 )
             })?;
         match proposal_info_response {
@@ -366,16 +384,42 @@ impl LedgerAccess for LedgerClient {
             .with_arg(arg)
             .call()
             .await
-            .map_err(|e| ApiError::invalid_request(format!("{}", e)))?;
+            .map_err(|e| ApiError::invalid_request(format!("{e}")))?;
         Decode!(bytes.as_slice(), Vec<ProposalInfo>).map_err(|err| {
             ApiError::InvalidRequest(
                 false,
-                Details::from(format!(
-                    "Could not decode PendingProposals response: {}",
-                    err
-                )),
+                Details::from(format!("Could not decode PendingProposals response: {err}")),
             )
         })
+    }
+    async fn minimum_dissolve_delay(&self) -> Result<Option<u64>, ApiError> {
+        if self.offline {
+            return Err(ApiError::NotAvailableOffline(false, Details::default()));
+        }
+        let agent = &self.canister_access.as_ref().unwrap().agent;
+        let arg = Encode!().unwrap();
+        let bytes = agent
+            .query(
+                &self.governance_canister_id.get().0,
+                "get_network_economics_parameters",
+            )
+            .with_arg(arg)
+            .call()
+            .await
+            .map_err(|e| ApiError::invalid_request(format!("{e}")))?;
+        Decode!(bytes.as_slice(), NetworkEconomics)
+            .map_err(|err| {
+                ApiError::InvalidRequest(
+                    false,
+                    Details::from(format!("Could not decode NetworkEconomics response: {err}")),
+                )
+            })
+            .map(
+                |network_economics| match network_economics.voting_power_economics {
+                    Some(vpe) => vpe.neuron_minimum_dissolve_delay_to_vote_seconds,
+                    None => None,
+                },
+            )
     }
     async fn list_known_neurons(&self) -> Result<Vec<KnownNeuron>, ApiError> {
         if self.offline {
@@ -388,14 +432,13 @@ impl LedgerAccess for LedgerClient {
             .with_arg(arg)
             .call()
             .await
-            .map_err(|e| ApiError::invalid_request(format!("{}", e)))?;
+            .map_err(|e| ApiError::invalid_request(format!("{e}")))?;
         Decode!(bytes.as_slice(), ListKnownNeuronsResponse)
             .map_err(|err| {
                 ApiError::InvalidRequest(
                     false,
                     Details::from(format!(
-                        "Could not decode ListKnownNeuronsResponse response: {}",
-                        err
+                        "Could not decode ListKnownNeuronsResponse response: {err}"
                     )),
                 )
             })
@@ -413,7 +456,7 @@ impl LedgerAccess for LedgerClient {
         let agent = &self.canister_access.as_ref().unwrap().agent;
 
         let arg = Encode!(&acc_id)
-            .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
+            .map_err(|e| ApiError::internal_error(format!("Serialization failed: {e:?}")))?;
         let bytes = if verified {
             agent
                 .update(
@@ -433,13 +476,12 @@ impl LedgerAccess for LedgerClient {
                 .call()
                 .await
         }
-        .map_err(|e| ApiError::invalid_request(format!("{}", e)))?;
+        .map_err(|e| ApiError::invalid_request(format!("{e}")))?;
         let ninfo: Result<Result<NeuronInfo, GovernanceError>, _> =
             Decode!(&bytes, Result<NeuronInfo, GovernanceError>);
         let ninfo = ninfo.map_err(|e| {
             ApiError::internal_error(format!(
-                "Deserialization of get_neuron_info response failed: {:?}",
-                e
+                "Deserialization of get_neuron_info response failed: {e:?}"
             ))
         })?;
 
@@ -450,7 +492,7 @@ impl LedgerAccess for LedgerClient {
         let ninfo = ninfo.map_err(|e| {
             ApiError::ICError(ICError {
                 retriable: false,
-                error_message: format!("{}", e),
+                error_message: format!("{e}"),
                 ic_http_status: 0,
             })
         })?;
@@ -461,7 +503,7 @@ impl LedgerAccess for LedgerClient {
     async fn transfer_fee(&self) -> Result<TransferFee, ApiError> {
         let agent = &self.canister_access.as_ref().unwrap().agent;
         let arg = Encode!(&TransferFeeArgs {})
-            .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
+            .map_err(|e| ApiError::internal_error(format!("Serialization failed: {e:?}")))?;
 
         let res = agent
             .query(&self.canister_id.get().0, "transfer_fee")
@@ -488,9 +530,8 @@ impl LedgerAccess for LedgerClient {
                     transfer_fee: DEFAULT_TRANSFER_FEE,
                 })
             }
-            Ok(bytes) => Decode!(&bytes, TransferFee).map_err(|e| {
-                ApiError::internal_error(format!("Error querying transfer_fee: {}", e))
-            }),
+            Ok(bytes) => Decode!(&bytes, TransferFee)
+                .map_err(|e| ApiError::internal_error(format!("Error querying transfer_fee: {e}"))),
         }
     }
 
@@ -502,7 +543,7 @@ impl LedgerAccess for LedgerClient {
 
 /// The HTTP path for update calls on the replica.
 fn update_path(cid: CanisterId) -> String {
-    format!("api/v2/canister/{}/call", cid)
+    format!("api/v2/canister/{cid}/call")
 }
 
 impl LedgerClient {
@@ -541,8 +582,7 @@ impl LedgerClient {
             HttpCallContent::Call { update } => CanisterId::try_from(update.canister_id.0.clone())
                 .map_err(|e| {
                     ApiError::internal_error(format!(
-                        "Cannot parse canister ID found in submit call: {}",
-                        e
+                        "Cannot parse canister ID found in submit call: {e}"
                     ))
                 })?,
         };
@@ -556,15 +596,13 @@ impl LedgerClient {
 
         let http_body = SignedRequestBytes::try_from(update).map_err(|e| {
             ApiError::internal_error(format!(
-                "Cannot serialize the submit request in CBOR format because of: {}",
-                e
+                "Cannot serialize the submit request in CBOR format because of: {e}"
             ))
         })?;
 
         let read_state_http_body = SignedRequestBytes::try_from(read_state).map_err(|e| {
             ApiError::internal_error(format!(
-                "Cannot serialize the read state request in CBOR format because of: {}",
-                e
+                "Cannot serialize the read state request in CBOR format because of: {e}"
             ))
         })?;
 
@@ -678,6 +716,9 @@ impl LedgerClient {
                     OperationOutput::ListNeuronsResponse(response) => {
                         result.response = Some(ObjectMap::try_from(response)?)
                     }
+                    OperationOutput::DisburseMaturityResponse(response) => {
+                        result.response = Some(ObjectMap::try_from(response)?)
+                    }
                 }
                 result.status = Status::Completed;
                 Ok(())
@@ -690,7 +731,7 @@ impl LedgerClient {
             Ok(Err(err)) => Err(err),
             // Some other error, transaction might still be processed by the IC
             Err(err) => {
-                let e_msg = format!("Error submitting transaction {:?}: {}.", txn_id, err);
+                let e_msg = format!("Error submitting transaction {txn_id:?}: {err}.");
                 error!("{}", e_msg);
                 // We can't continue with the next request since
                 // we don't know if the previous one succeeded.
@@ -723,7 +764,7 @@ impl LedgerClient {
                     read_state_http_body.clone().into(),
                 )
                 .await
-                .map_err(|err| format!("While parsing the read state response: {}", err))?
+                .map_err(|err| format!("While parsing the read state response: {err}"))?
                 .0;
 
             debug!("Read state response: {:?}", status);
@@ -773,8 +814,8 @@ impl LedgerClient {
         match request_type.clone() {
             RequestType::AddHotKey { .. } => handle_add_hotkey(bytes),
             RequestType::Disburse { .. } => handle_disburse(bytes),
+            RequestType::DisburseMaturity { .. } => handle_disburse_maturity(bytes),
             RequestType::Follow { .. } => handle_follow(bytes),
-            RequestType::MergeMaturity { .. } => handle_merge_maturity(bytes),
             RequestType::RegisterVote { .. } => handle_register_vote(bytes),
             RequestType::StakeMaturity { .. } => handle_stake_maturity(bytes),
             RequestType::NeuronInfo { .. } => handle_neuron_info(bytes),
@@ -805,12 +846,12 @@ async fn send_post_request(
         .timeout(timeout)
         .send()
         .await
-        .map_err(|err| format!("sending post request failed with {}: ", err))?;
+        .map_err(|err| format!("sending post request failed with {err}: "))?;
     let resp_status = resp.status();
     let resp_body = resp
         .bytes()
         .await
-        .map_err(|err| format!("receive post response failed with {}: ", err))?
+        .map_err(|err| format!("receive post response failed with {err}: "))?
         .to_vec();
     Ok((resp_body, resp_status))
 }

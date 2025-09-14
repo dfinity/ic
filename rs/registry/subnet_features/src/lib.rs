@@ -1,8 +1,8 @@
 use candid::CandidType;
-use ic_management_canister_types_private::{EcdsaKeyId, MasterPublicKeyId};
+use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::types::v1 as pb_types;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     registry::subnet::v1 as pb,
 };
 use serde::{Deserialize, Serialize};
@@ -80,21 +80,12 @@ impl FromStr for SubnetFeatures {
                 "canister_sandboxing" => features.canister_sandboxing = true,
                 "http_requests" => features.http_requests = true,
                 "sev_enabled" => features.sev_enabled = true,
-                _ => return Err(format!("Unknown feature {:?} in {:?}", feature, string)),
+                _ => return Err(format!("Unknown feature {feature:?} in {string:?}")),
             }
         }
 
         Ok(features)
     }
-}
-
-#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
-pub struct EcdsaConfig {
-    pub quadruples_to_create_in_advance: u32,
-    pub key_ids: Vec<EcdsaKeyId>,
-    pub max_queue_size: Option<u32>,
-    pub signature_request_timeout_ns: Option<u64>,
-    pub idkg_key_rotation_period_ms: Option<u64>,
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -147,14 +138,25 @@ pub struct ChainKeyConfig {
     pub key_configs: Vec<KeyConfig>,
     pub signature_request_timeout_ns: Option<u64>,
     pub idkg_key_rotation_period_ms: Option<u64>,
+    pub max_parallel_pre_signature_transcripts_in_creation: Option<u32>,
 }
 
 impl ChainKeyConfig {
+    /// Returns the list of key IDs for which there are key configs.
+    /// Note that a registry invariant ensures that there is at most one config for each key ID.
     pub fn key_ids(&self) -> Vec<MasterPublicKeyId> {
         self.key_configs
             .iter()
             .map(|key_config| key_config.key_id.clone())
             .collect()
+    }
+
+    /// Returns the key config for the given key ID, if it exists.
+    /// Note that a registry invariant ensures that there is at most one config for each key ID.
+    pub fn key_config(&self, key_id: &MasterPublicKeyId) -> Option<&KeyConfig> {
+        self.key_configs
+            .iter()
+            .find(|config| config.key_id == *key_id)
     }
 }
 
@@ -164,6 +166,7 @@ impl From<ChainKeyConfig> for pb::ChainKeyConfig {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         } = src;
 
         let key_configs = key_configs.into_iter().map(pb::KeyConfig::from).collect();
@@ -172,6 +175,7 @@ impl From<ChainKeyConfig> for pb::ChainKeyConfig {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         }
     }
 }
@@ -188,13 +192,15 @@ impl TryFrom<pb::ChainKeyConfig> for ChainKeyConfig {
             key_configs,
             signature_request_timeout_ns: value.signature_request_timeout_ns,
             idkg_key_rotation_period_ms: value.idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation: value
+                .max_parallel_pre_signature_transcripts_in_creation,
         })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use ic_management_canister_types_private::{EcdsaCurve, VetKdCurve, VetKdKeyId};
+    use ic_management_canister_types_private::{EcdsaCurve, EcdsaKeyId, VetKdCurve, VetKdKeyId};
 
     use super::*;
     use std::str::FromStr;
@@ -241,6 +247,7 @@ mod tests {
             ],
             signature_request_timeout_ns: Some(123_456),
             idkg_key_rotation_period_ms: Some(321_654),
+            max_parallel_pre_signature_transcripts_in_creation: Some(123_654),
         };
 
         let chain_key_config_pb = pb::ChainKeyConfig::from(chain_key_config.clone());
@@ -275,6 +282,7 @@ mod tests {
             ],
             signature_request_timeout_ns: Some(123_456),
             idkg_key_rotation_period_ms: Some(321_654),
+            max_parallel_pre_signature_transcripts_in_creation: Some(123_654),
         };
 
         assert_eq!(chain_key_config_pb, expected_chain_key_config_pb,);

@@ -11,17 +11,17 @@ use std::{
 };
 
 use crate::page_map::{
+    CheckpointSerialization, LABEL_OP_FLUSH, LABEL_OP_MERGE, LABEL_TYPE_INDEX,
+    LABEL_TYPE_PAGE_DATA, MappingSerialization, MemoryInstruction, MemoryInstructions,
+    MemoryMapOrData, PageDelta, PersistenceError, StorageMetrics,
     checkpoint::{Checkpoint, Mapping, ZEROED_PAGE},
-    CheckpointSerialization, MappingSerialization, MemoryInstruction, MemoryInstructions,
-    MemoryMapOrData, PageDelta, PersistenceError, StorageMetrics, LABEL_OP_FLUSH, LABEL_OP_MERGE,
-    LABEL_TYPE_INDEX, LABEL_TYPE_PAGE_DATA,
 };
 
 use bit_vec::BitVec;
 use ic_config::state_manager::LsmtConfig;
-use ic_sys::{PageBytes, PageIndex, PAGE_SIZE};
+use ic_sys::{PAGE_SIZE, PageBytes, PageIndex};
 use ic_types::Height;
-use itertools::{izip, Itertools};
+use itertools::{Itertools, izip};
 use phantom_newtype::{AmountOf, Id};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -302,11 +302,12 @@ impl StorageImpl {
             }
         }
 
-        let base = if let Some(base) = base_path.as_deref().map(Checkpoint::open).transpose()? {
-            assert!(base_overlays.is_empty());
-            BaseFile::Base(base)
-        } else {
-            BaseFile::Overlay(base_overlays)
+        let base = match base_path.as_deref().map(Checkpoint::open).transpose()? {
+            Some(base) => {
+                assert!(base_overlays.is_empty());
+                BaseFile::Base(base)
+            }
+            _ => BaseFile::Overlay(base_overlays),
         };
 
         Ok(Self { base, overlays })
@@ -411,7 +412,7 @@ impl StorageImpl {
 
 /// A single overlay file describing a not necessarily exhaustive set of pages.
 #[derive(Clone)]
-pub(crate) struct OverlayFile {
+pub struct OverlayFile {
     /// A memory map of the entire file.
     /// Invariant: `mapping` satisfies `check_correctness(&mapping)`.
     mapping: Arc<Mapping>,
@@ -548,7 +549,7 @@ impl OverlayFile {
 
     /// Number of pages in this overlay file containing data.
     #[allow(dead_code)]
-    fn num_pages(&self) -> usize {
+    pub fn num_pages(&self) -> usize {
         num_pages(&self.mapping)
     }
 
@@ -720,8 +721,14 @@ impl OverlayFile {
     }
 
     /// Iterate over all ranges in the index.
-    fn index_iter(&self) -> impl Iterator<Item = PageIndexRange> + '_ {
+    pub fn index_iter(&self) -> impl Iterator<Item = PageIndexRange> + '_ {
         self.index_slice().iter().map(PageIndexRange::from)
+    }
+}
+
+impl std::fmt::Debug for OverlayFile {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt.debug_list().entries(self.index_iter()).finish()
     }
 }
 
@@ -847,8 +854,7 @@ fn check_mapping_correctness(mapping: &Mapping, path: &Path) -> Result<(), Persi
             return Err(PersistenceError::InvalidOverlay {
                 path: path.display().to_string(),
                 message: format!(
-                    "Broken overlay file: First PageIndexRange ({:?}) does not start at file_index 0",
-                    entry,
+                    "Broken overlay file: First PageIndexRange ({entry:?}) does not start at file_index 0",
                 ),
             });
         }
@@ -1505,11 +1511,7 @@ impl MergeCandidate {
             (existing_lengths.len() + 1).saturating_sub(MAX_NUMBER_OF_FILES),
         );
         assert!(result <= existing_lengths.len());
-        if result <= 1 {
-            None
-        } else {
-            Some(result)
-        }
+        if result <= 1 { None } else { Some(result) }
     }
 }
 
@@ -1520,7 +1522,7 @@ type FileIndex = Id<FileIndexTag, u64>;
 
 /// A representation of a range of `PageIndex` backed by an overlay file.
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-struct PageIndexRange {
+pub struct PageIndexRange {
     /// Start of the range in the `PageMap`, i.e. where to mmap to.
     start_page: PageIndex,
     /// End of the range in the `PageMap`.
@@ -1565,6 +1567,11 @@ impl PageIndexRange {
                 FileIndex::from(i - self.start_page.get() + self.start_file_index.get()),
             )
         })
+    }
+
+    #[allow(clippy::len_without_is_empty)]
+    pub fn len(&self) -> u64 {
+        self.end_page.get() - self.start_page.get()
     }
 }
 

@@ -7,7 +7,7 @@ use super::super::types::{
 };
 use crate::crypto::hash_message_to_g1;
 use crate::types::PublicKey;
-use ic_crypto_internal_bls12_381_type::{G2Projective, LagrangeCoefficients, Scalar};
+use ic_crypto_internal_bls12_381_type::{G2Projective, LagrangeCoefficients, NodeIndices, Scalar};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::error::InvalidArgumentError;
@@ -31,8 +31,7 @@ pub mod util {
             assert_eq!(
                 crypto::individual_public_key(public_coefficients, index as NodeIndex),
                 crypto::public_key_from_secret_key(secret_key),
-                "Individual public key match failed for index {}",
-                index
+                "Individual public key match failed for index {index}"
             )
         }
     }
@@ -42,7 +41,7 @@ pub mod util {
     /// original secret polynomial.
     pub fn combined_secret_key(secret_keys: &[SecretKey]) -> SecretKey {
         let node_ids = (0..secret_keys.len() as NodeIndex).collect::<Vec<_>>();
-        let interp = LagrangeCoefficients::at_zero(&node_ids).unwrap();
+        let interp = LagrangeCoefficients::at_zero(&NodeIndices::from_slice(&node_ids).unwrap());
         interp.interpolate_scalar(secret_keys).unwrap()
     }
 
@@ -115,9 +114,7 @@ pub mod util {
             let some_individual_signature = signatures[0].clone();
             assert!(
                 !crypto::verify(message, &some_individual_signature, &public_key),
-                "Signature verification passed with incorrect signature: got {:?} expected {:?}",
-                some_individual_signature,
-                signature
+                "Signature verification passed with incorrect signature: got {some_individual_signature:?} expected {signature:?}"
             );
         }
         if public_coefficients.coefficients.len() > 1 {
@@ -241,7 +238,7 @@ fn test_combined_secret_key() {
     let rng = &mut reproducible_rng();
     for _trial in 0..3 {
         let num_receivers = rng.gen_range::<u8, _>(1..=u8::MAX) as NodeIndex;
-        let poly_degree = rng.gen::<u8>() as usize;
+        let poly_degree = rng.r#gen::<u8>() as usize;
 
         let polynomial = Polynomial::random(poly_degree, rng);
 
@@ -350,7 +347,7 @@ mod resharing_util {
     /// values) interpolate the value at zero.
     pub fn interpolate_secret_key(shares: &[SecretKey]) -> SecretKey {
         let node_ids = (0..shares.len() as NodeIndex).collect::<Vec<_>>();
-        let interp = LagrangeCoefficients::at_zero(&node_ids).unwrap();
+        let interp = LagrangeCoefficients::at_zero(&NodeIndices::from_slice(&node_ids).unwrap());
         interp.interpolate_scalar(shares).unwrap()
     }
 

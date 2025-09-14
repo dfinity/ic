@@ -3,7 +3,7 @@
 # Build subnet based on subnet.json and transform it into removable media.
 
 # Build Requirements:
-# - Operating System: Ubuntu 20.04
+# - Operating System: Ubuntu 24.04
 # - Packages: coreutils, jq, mtools, tar, util-linux, wget, rclone
 
 set -o errexit
@@ -129,12 +129,7 @@ fi
 CONFIG="$(cat ${INPUT})"
 
 # Read all the top-level values out in one swoop
-VALUES=$(echo ${CONFIG} | jq -r -c '[
-    .deployment,
-    (.elasticsearch_hosts | join(" ")),
-    (.elasticsearch_tags | join(" "))
-] | join("\u0001")')
-IFS=$'\1' read -r DEPLOYMENT ELASTICSEARCH_HOSTS ELASTICSEARCH_TAGS < <(echo $VALUES)
+DEPLOYMENT=$(echo ${CONFIG} | jq -r '.deployment')
 
 # Read all the node info out in one swoop
 NODES=0

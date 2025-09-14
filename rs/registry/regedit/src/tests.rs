@@ -1,6 +1,6 @@
 #![cfg(test)]
 use crate::{
-    args::{universal_projection, Command, RegistrySpec, SourceSpec, VersionSpec},
+    args::{Command, RegistrySpec, SourceSpec, VersionSpec, universal_projection},
     diff::DELETED_MARKER,
     execute_command, normalization,
     snapshot::SPECIAL_FIELD_PREFIX,
@@ -50,18 +50,18 @@ fn adding_deleting_values_shows_up_in_diff() {
     let mut arbitrary_obj = "(binary-data)".to_string();
     arbitrary_bytes
         .iter()
-        .for_each(|x| arbitrary_obj.push_str(&format!("{:02x}", x)));
+        .for_each(|x| arbitrary_obj.push_str(&format!("{x:02x}")));
     let arbitrary_value = serde_json::to_value(&arbitrary_obj).unwrap();
     obj.insert(new_key.clone(), arbitrary_value);
 
     let digest = ic_crypto_sha2::Sha256::hash(arbitrary_bytes.as_slice());
     let digest_hex = digest
         .iter()
-        .map(|x| format!("{:02X}", x))
+        .map(|x| format!("{x:02X}"))
         .collect::<Vec<_>>()
         .join("");
     let expected_arbitrary_value =
-        serde_json::to_value(format!("(binary-data|sha256){}", digest_hex)).unwrap();
+        serde_json::to_value(format!("(binary-data|sha256){digest_hex}")).unwrap();
 
     let cmd = Command::ShowDiff {
         registry_spec: registry_spec.clone(),
@@ -176,6 +176,7 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
         /* nns_subnet_index= */ Some(0),
         /* release_package_url= */ None,
         /* release_package_sha256_hex */ None,
+        /* guest_launch_measurements */ None,
         Some(ProvisionalWhitelist::All),
         None,
         None,

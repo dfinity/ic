@@ -24,10 +24,10 @@ use ic_system_test_driver::{
     },
     util::*,
 };
-use ic_types::{malicious_behaviour::MaliciousBehaviour, Height};
+use ic_types::{Height, malicious_behavior::MaliciousBehavior};
 use ic_universal_canister::wasm;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use slog::info;
 use std::time::Duration;
 
@@ -35,14 +35,14 @@ const DKG_INTERVAL: u64 = 9;
 const FAULT_HEIGHT: u64 = DKG_INTERVAL + 1;
 
 fn setup(env: TestEnv) {
-    let malicious_behaviour =
-        MaliciousBehaviour::new(true).set_maliciously_corrupt_own_state_at_heights(FAULT_HEIGHT);
+    let malicious_behavior =
+        MaliciousBehavior::new(true).set_maliciously_corrupt_own_state_at_heights(FAULT_HEIGHT);
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .add_nodes(3)
-                .add_malicious_nodes(1, malicious_behaviour),
+                .add_malicious_nodes(1, malicious_behavior),
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
@@ -120,10 +120,10 @@ fn test(env: TestEnv) {
             }
 
             info!(log, "Checking for malicious logs...");
-            // Use unspecific allow_malicious_behaviour instead of specific maliciously_corrupt_own_state_at_heights
+            // Use unspecific allow_malicious_behavior instead of specific maliciously_corrupt_own_state_at_heights
             assert_node_malicious(
                 malicious_node.clone(),
-                vec!["allow_malicious_behaviour: true"],
+                vec!["allow_malicious_behavior: true"],
             )
             .await;
             info!(log, "Malicious log check succeeded.");

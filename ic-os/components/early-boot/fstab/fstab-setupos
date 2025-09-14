@@ -1,7 +1,7 @@
 PARTUUID=7c0a626e-e5ea-e543-b5c5-300eb8304db7 /   ext4    ro,errors=remount-ro    0   1
 tmpfs    /tmp    tmpfs   defaults 0   2
 PARTUUID=b78084e2-3363-1346-8c25-d426f26b8928   /boot/efi   vfat    defaults    0   2
-PARTUUID=6788e4cf-f456-104e-9a34-a2c58cfb0ee6   /grub  vfat    defaults    0   2
+PARTUUID=6788e4cf-f456-104e-9a34-a2c58cfb0ee6   /boot/grub  vfat    defaults    0   2
 PARTUUID=a5ba3816-beaa-d74d-993e-cfa5aa6ba1f6   /config    vfat    defaults    0   2
 PARTUUID=ddf618fe-7244-b446-a175-3296e6b9d02e   /boot    ext4    defaults,sync    0   2
 PARTUUID=e97bf7b1-9400-439f-93d0-13276111f989   /data    ext4    defaults,sync    0   2

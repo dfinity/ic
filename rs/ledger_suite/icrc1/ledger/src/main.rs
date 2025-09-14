@@ -1,8 +1,9 @@
+#![allow(deprecated)]
 #[cfg(feature = "canbench-rs")]
 mod benches;
 
+use candid::Principal;
 use candid::types::number::Nat;
-use candid::{candid_method, Principal};
 use ic_canister_log::{declare_log_buffer, export, log};
 use ic_cdk::api::stable::StableReader;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
@@ -12,18 +13,18 @@ use ic_cdk::api::instruction_counter;
 use ic_cdk::init;
 use ic_cdk::{post_upgrade, pre_upgrade, query, update};
 use ic_icrc1::{
-    endpoints::{convert_transfer_error, StandardRecord},
     Operation, Transaction,
-};
-use ic_icrc1_ledger::{
-    balances_len, clear_stable_allowance_data, clear_stable_balances_data,
-    clear_stable_blocks_data, get_allowances, is_ready, ledger_state, panic_if_not_ready,
-    set_ledger_state, LEDGER_VERSION, UPGRADES_MEMORY,
+    endpoints::{StandardRecord, convert_transfer_error},
 };
 use ic_icrc1_ledger::{InitArgs, Ledger, LedgerArgument, LedgerField, LedgerState};
+use ic_icrc1_ledger::{
+    LEDGER_VERSION, UPGRADES_MEMORY, balances_len, clear_stable_allowance_data,
+    clear_stable_balances_data, clear_stable_blocks_data, get_allowances, is_ready, ledger_state,
+    panic_if_not_ready, read_first_balance, set_ledger_state, wasm_token_type,
+};
 use ic_ledger_canister_core::ledger::{
-    apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
-    TransferError as CoreTransferError,
+    LedgerAccess, LedgerContext, LedgerData, TransferError as CoreTransferError, apply_transaction,
+    archive_blocks,
 };
 use ic_ledger_canister_core::runtime::heap_memory_size_bytes;
 use ic_ledger_core::block::BlockIndex;
@@ -31,19 +32,19 @@ use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Zero;
 use ic_stable_structures::reader::{BufferedReader, Reader};
 use ic_stable_structures::writer::{BufferedWriter, Writer};
-use icrc_ledger_types::icrc103::get_allowances::{
-    Allowances, GetAllowancesArgs, GetAllowancesError,
-};
-use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
-use icrc_ledger_types::icrc21::{
-    errors::Icrc21Error, lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
-    requests::ConsentMessageRequest, responses::ConsentInfo,
-};
 use icrc_ledger_types::icrc3::blocks::DataCertificate;
 #[cfg(not(feature = "get-blocks-disabled"))]
 use icrc_ledger_types::icrc3::blocks::GetBlocksResponse;
 use icrc_ledger_types::icrc3::blocks::ICRC3DataCertificate;
+use icrc_ledger_types::icrc21::{
+    errors::Icrc21Error, lib::build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints,
+    requests::ConsentMessageRequest, responses::ConsentInfo,
+};
+use icrc_ledger_types::icrc103::get_allowances::{
+    Allowances, GetAllowancesArgs, GetAllowancesError,
+};
+use icrc_ledger_types::icrc106::errors::Icrc106Error;
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc3::{
@@ -67,7 +68,7 @@ use icrc_ledger_types::{
     icrc1::transfer::{TransferArg, TransferError},
     icrc2::transfer_from::{TransferFromArgs, TransferFromError},
 };
-use num_traits::{bounds::Bounded, ToPrimitive};
+use num_traits::{ToPrimitive, bounds::Bounded};
 use serde_bytes::ByteBuf;
 use std::{
     cell::RefCell,
@@ -119,13 +120,14 @@ impl LedgerAccess for Access {
 }
 
 #[cfg(not(feature = "canbench-rs"))]
-#[candid_method(init)]
 #[init]
 fn init(args: LedgerArgument) {
     match args {
         LedgerArgument::Init(init_args) => init_state(init_args),
         LedgerArgument::Upgrade(_) => {
-            panic!("Cannot initialize the canister with an Upgrade argument. Please provide an Init argument.");
+            panic!(
+                "Cannot initialize the canister with an Upgrade argument. Please provide an Init argument."
+            );
         }
     }
     ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
@@ -231,6 +233,15 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
         state
     });
     ic_cdk::println!("Successfully read state from memory manager managed stable structures");
+
+    if state.token_type != wasm_token_type() {
+        panic!(
+            "Incompatible token type, the upgraded ledger token type is {}, current wasm token type is {}",
+            state.token_type,
+            wasm_token_type()
+        );
+    }
+
     LEDGER.with_borrow_mut(|ledger| *ledger = Some(state));
 
     let upgrade_from_version = Access::with_ledger_mut(|ledger| {
@@ -247,7 +258,9 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
 
     if let Some(args) = args {
         match args {
-            LedgerArgument::Init(_) => panic!("Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."),
+            LedgerArgument::Init(_) => panic!(
+                "Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."
+            ),
             LedgerArgument::Upgrade(upgrade_args) => {
                 if let Some(upgrade_args) = upgrade_args {
                     Access::with_ledger_mut(|ledger| ledger.upgrade(&LOG, upgrade_args));
@@ -275,7 +288,9 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
     }
     if upgrade_from_version == 0 {
         set_ledger_state(LedgerState::Migrating(LedgerField::Allowances));
-        log_message("Upgrading from version 0 which does not use stable structures, clearing stable allowance data.");
+        log_message(
+            "Upgrading from version 0 which does not use stable structures, clearing stable allowance data.",
+        );
         clear_stable_allowance_data();
         Access::with_ledger_mut(|ledger| {
             ledger.clear_arrivals();
@@ -287,6 +302,12 @@ fn post_upgrade_internal(args: Option<LedgerArgument>) {
             MAX_INSTRUCTIONS_PER_UPGRADE.saturating_sub(pre_upgrade_instructions_consumed),
         );
     }
+
+    // This will fail if we try to upgrade a u64 ledger with a u256 wasm and at least one balance is present.
+    // The wasms use incompatible encodings for storing numbers in stable structures.
+    // If the upgrade was successful, the ledger would later fail when trying to read the balances map.
+    // Upgrading a u256 ledger with a u64 wasm will fail earlier, while reading the `UPGRADES_MEMORY`.
+    read_first_balance();
 
     let end = ic_cdk::api::instruction_counter();
     let instructions_consumed = end - start;
@@ -352,8 +373,10 @@ fn migrate_next_part(instruction_limit: u64) {
             }
         }
         let instructions_migration = instruction_counter() - instructions_migration_start;
-        let msg = format!("Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances} blocks: {migrated_blocks}. Migration step instructions: {instructions_migration}, total instructions used in message: {}." ,
-            instruction_counter());
+        let msg = format!(
+            "Number of elements migrated: allowances: {migrated_allowances} expirations: {migrated_expirations} balances: {migrated_balances} blocks: {migrated_blocks}. Migration step instructions: {instructions_migration}, total instructions used in message: {}.",
+            instruction_counter()
+        );
         if !is_ready() {
             log_message(
                 format!("Migration partially done. Scheduling the next part. {msg}").as_str(),
@@ -496,10 +519,9 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
                     "Total number of archives.",
                 )?;
             }
-            Err(err) => Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to read number of archives: {}", err),
-            ))?,
+            Err(err) => Err(std::io::Error::other(format!(
+                "Failed to read number of archives: {err}"
+            )))?,
         }
         if is_ready() {
             w.encode_gauge(
@@ -556,7 +578,10 @@ fn tokens_to_f64(tokens: Tokens) -> f64 {
     tokens.to_u256().as_f64()
 }
 
-#[query(hidden = true, decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
         let mut writer =
@@ -569,7 +594,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                 .with_body_and_content_length(writer.into_inner())
                 .build(),
             Err(err) => {
-                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
                     .build()
             }
         }
@@ -594,49 +619,41 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_name() -> String {
     Access::with_ledger(|ledger| ledger.token_name().to_string())
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_symbol() -> String {
     Access::with_ledger(|ledger| ledger.token_symbol().to_string())
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_decimals() -> u8 {
     Access::with_ledger(|ledger| ledger.decimals())
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_fee() -> Nat {
     Access::with_ledger(|ledger| ledger.transfer_fee().into())
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_metadata() -> Vec<(String, Value)> {
     Access::with_ledger(|ledger| ledger.metadata())
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc1_minting_account() -> Option<Account> {
     Access::with_ledger(|ledger| Some(*ledger.minting_account()))
 }
 
 #[query(name = "icrc1_balance_of")]
-#[candid_method(query, rename = "icrc1_balance_of")]
 fn icrc1_balance_of(account: Account) -> Nat {
     Access::with_ledger(|ledger| ledger.balances().account_balance(&account).into())
 }
 
 #[query(name = "icrc1_total_supply")]
-#[candid_method(query, rename = "icrc1_total_supply")]
 fn icrc1_total_supply() -> Nat {
     Access::with_ledger(|ledger| ledger.balances().total_supply().into())
 }
@@ -683,7 +700,7 @@ fn execute_transfer_not_async(
 
         match memo.as_ref() {
             Some(memo) if memo.0.len() > ledger.max_memo_length() as usize => {
-                ic_cdk::trap(&format!(
+                ic_cdk::trap(format!(
                     "the memo field size of {} bytes is above the allowed limit of {} bytes",
                     memo.0.len(),
                     ledger.max_memo_length()
@@ -773,7 +790,6 @@ fn execute_transfer_not_async(
 }
 
 #[update]
-#[candid_method(update)]
 async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
     panic_if_not_ready();
     let from_account = Account {
@@ -801,7 +817,6 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
 }
 
 #[update]
-#[candid_method(update)]
 async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
     panic_if_not_ready();
     let spender_account = Account {
@@ -853,7 +868,6 @@ fn archives() -> Vec<ArchiveInfo> {
 }
 
 #[query(name = "icrc1_supported_standards")]
-#[candid_method(query, rename = "icrc1_supported_standards")]
 fn supported_standards() -> Vec<StandardRecord> {
     let standards = vec![
         StandardRecord {
@@ -889,7 +903,6 @@ fn supported_standards() -> Vec<StandardRecord> {
 }
 
 #[query]
-#[candid_method(query)]
 fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
     panic_if_not_ready();
     let (start, length) = req
@@ -900,7 +913,6 @@ fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
 
 #[cfg(not(feature = "get-blocks-disabled"))]
 #[query]
-#[candid_method(query)]
 fn get_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
     panic_if_not_ready();
     let (start, length) = req
@@ -910,7 +922,6 @@ fn get_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
 }
 
 #[query]
-#[candid_method(query)]
 fn get_data_certificate() -> DataCertificate {
     panic_if_not_ready();
     let hash_tree = Access::with_ledger(|ledger| ledger.construct_hash_tree());
@@ -997,7 +1008,6 @@ fn icrc2_approve_not_async(caller: Principal, arg: ApproveArgs) -> Result<u64, A
 }
 
 #[update]
-#[candid_method(update)]
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     let block_idx = icrc2_approve_not_async(ic_cdk::api::caller(), arg)?;
 
@@ -1010,7 +1020,6 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
     Access::with_ledger(|ledger| {
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
@@ -1025,13 +1034,11 @@ fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_get_archives(args: GetArchivesArgs) -> GetArchivesResult {
     Access::with_ledger(|ledger| ledger.icrc3_get_archives(args))
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
     panic_if_not_ready();
     let certificate = ByteBuf::from(ic_cdk::api::data_certificate()?);
@@ -1045,7 +1052,6 @@ fn icrc3_get_tip_certificate() -> Option<ICRC3DataCertificate> {
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::SupportedBlockType> {
     use icrc_ledger_types::icrc3::blocks::SupportedBlockType;
 
@@ -1057,6 +1063,11 @@ fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::Suppor
         },
         SupportedBlockType {
             block_type: "1mint".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md"
+                .to_string(),
+        },
+        SupportedBlockType {
+            block_type: "1xfer".to_string(),
             url: "https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md"
                 .to_string(),
         },
@@ -1074,20 +1085,17 @@ fn icrc3_supported_block_types() -> Vec<icrc_ledger_types::icrc3::blocks::Suppor
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc3_get_blocks(args: Vec<GetBlocksRequest>) -> GetBlocksResult {
     panic_if_not_ready();
     Access::with_ledger(|ledger| ledger.icrc3_get_blocks(args))
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc10_supported_standards() -> Vec<StandardRecord> {
     supported_standards()
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc106_get_index_principal() -> Result<Principal, Icrc106Error> {
     Access::with_ledger(|ledger| match ledger.index_principal() {
         None => Err(Icrc106Error::IndexPrincipalNotSet),
@@ -1096,13 +1104,13 @@ fn icrc106_get_index_principal() -> Result<Principal, Icrc106Error> {
 }
 
 #[update]
-#[candid_method(update)]
 fn icrc21_canister_call_consent_message(
     consent_msg_request: ConsentMessageRequest,
 ) -> Result<ConsentInfo, Icrc21Error> {
     let caller_principal = ic_cdk::api::caller();
     let ledger_fee = icrc1_fee();
     let token_symbol = icrc1_symbol();
+    let token_name = icrc1_name();
     let decimals = icrc1_decimals();
 
     build_icrc21_consent_info_for_icrc1_and_icrc2_endpoints(
@@ -1110,18 +1118,17 @@ fn icrc21_canister_call_consent_message(
         caller_principal,
         ledger_fee,
         token_symbol,
+        token_name,
         decimals,
     )
 }
 
 #[query]
-#[candid_method(query)]
 fn is_ledger_ready() -> bool {
     is_ready()
 }
 
 #[query]
-#[candid_method(query)]
 fn icrc103_get_allowances(arg: GetAllowancesArgs) -> Result<Allowances, GetAllowancesError> {
     let from_account = arg.from_account.unwrap_or_else(|| Account {
         owner: ic_cdk::api::caller(),
@@ -1152,7 +1159,7 @@ fn main() {}
 
 #[test]
 fn check_candid_interface() {
-    use candid_parser::utils::{service_equal, CandidSource};
+    use candid_parser::utils::{CandidSource, service_equal};
 
     let new_interface = __export_service();
     let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());

@@ -4,8 +4,8 @@ use crate::{convert, errors::ApiError, request_types::RequestType};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_hash_of::HashOf;
 use ic_types::{
-    messages::{HttpCallContent, HttpRequestEnvelope},
     PrincipalId,
+    messages::{HttpCallContent, HttpRequestEnvelope},
 };
 use icp_ledger::{SendArgs, Transaction};
 use serde::{Deserialize, Serialize};
@@ -62,12 +62,12 @@ impl TransactionIdentifier {
             | RequestType::RemoveHotKey { .. }
             | RequestType::Spawn { .. }
             | RequestType::RegisterVote { .. }
-            | RequestType::MergeMaturity { .. }
             | RequestType::StakeMaturity { .. }
             | RequestType::NeuronInfo { .. }
             | RequestType::ListNeurons { .. }
             | RequestType::RefreshVotingPower { .. }
-            | RequestType::Follow { .. } => {
+            | RequestType::Follow { .. }
+            | RequestType::DisburseMaturity { .. } => {
                 // Unfortunately, staking operations don't really have a transaction ID
                 Ok(TransactionIdentifier::from(
                     NEURON_MANAGEMENT_PSEUDO_HASH.to_string(),
@@ -92,7 +92,7 @@ impl From<String> for TransactionIdentifier {
 impl From<&HashOf<Transaction>> for TransactionIdentifier {
     fn from(hash: &HashOf<Transaction>) -> Self {
         TransactionIdentifier(crate::models::TransactionIdentifier {
-            hash: (format!("{}", hash)),
+            hash: (format!("{hash}")),
         })
     }
 }

@@ -1,16 +1,18 @@
 use crate::common::constants::MAX_ROSETTA_SYNC_ATTEMPTS;
 use candid::{Decode, Encode};
-use ic_agent::identity::BasicIdentity;
 use ic_agent::Agent;
 use ic_agent::Identity;
+use ic_agent::identity::BasicIdentity;
 use ic_icp_rosetta_client::RosettaClient;
 use ic_ledger_core::block::BlockType;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance_api::{GovernanceError, ListNeurons, ListNeuronsResponse};
 use ic_rosetta_api::convert::to_hash;
-use icp_ledger::GetBlocksArgs;
-use icp_ledger::QueryEncodedBlocksResponse;
+use icp_ledger::{
+    AccountIdentifier, BinaryAccountBalanceArgs, GetBlocksArgs, QueryEncodedBlocksResponse, Tokens,
+};
+use pocket_ic::nonblocking::PocketIc;
 use rosetta_core::identifiers::NetworkIdentifier;
 use std::sync::Arc;
 use url::Url;
@@ -31,7 +33,7 @@ pub async fn get_test_agent(port: u16) -> Agent {
 
 pub async fn get_custom_agent(basic_identity: Arc<dyn Identity>, port: u16) -> Agent {
     // The local replica will be running on the localhost
-    let replica_url = Url::parse(&format!("http://localhost:{}", port)).unwrap();
+    let replica_url = Url::parse(&format!("http://localhost:{port}")).unwrap();
 
     // Setup the agent
     let agent = Agent::builder()
@@ -81,7 +83,7 @@ pub async fn wait_for_rosetta_to_sync_up_to_block(
                 return Some(last_block);
             }
         } else {
-            eprintln!("Failed to get network status: {:?}", response);
+            eprintln!("Failed to get network status: {response:?}");
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
@@ -203,5 +205,29 @@ pub async fn update_neuron(agent: &Agent, neuron: ic_nns_governance_api::Neuron)
         Option<GovernanceError>
     )
     .unwrap();
-    assert!(result.is_none(), "Failed to update neuron: {:?}", result);
+    assert!(result.is_none(), "Failed to update neuron: {result:?}");
+}
+
+// Get the balance by directly calling the PocketIC, without agent. Useful
+// if the agent time is behind the PocketIC time due to advanving the PocketIC time.
+pub async fn account_balance(pocket_ic: &PocketIc, account: &AccountIdentifier) -> Tokens {
+    let arg = Encode!(&BinaryAccountBalanceArgs {
+        account: account.to_address(),
+    })
+    .unwrap();
+    match pocket_ic
+        .query_call(
+            candid::Principal::from(LEDGER_CANISTER_ID),
+            candid::Principal::anonymous(),
+            "account_balance",
+            arg,
+        )
+        .await
+    {
+        Err(err) => {
+            panic!("failed to get the balance of account id: {account}, error msg: {err}");
+        }
+        Ok(res) => Decode!(&res, Tokens)
+            .unwrap_or_else(|_| panic!("error decoding account_balance response")),
+    }
 }

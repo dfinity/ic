@@ -20,6 +20,7 @@ DEPENDENCIES = [
     "//rs/sns/governance/api",
     "//rs/sns/root",
     "//rs/sns/swap",
+    "//rs/sns/treasury_manager",
     "//rs/types/base_types",
     "@crate_index//:anyhow",
     "@crate_index//:candid",

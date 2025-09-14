@@ -12,8 +12,8 @@ pub enum Payload {
 impl fmt::Display for Payload {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Payload::HostOSVsockVersion(version) => write!(f, "HostOSVsockVersion({})", version),
-            Payload::HostOSVersion(version) => write!(f, "HostOSVersion({})", version),
+            Payload::HostOSVsockVersion(version) => write!(f, "HostOSVsockVersion({version})"),
+            Payload::HostOSVersion(version) => write!(f, "HostOSVersion({version})"),
             Payload::NoPayload => write!(f, "NoPayload"),
         }
     }
@@ -50,6 +50,9 @@ pub enum Command {
     Notify(NotifyData),
     GetVsockProtocol,
     GetHostOSVersion,
+    /// Start the Upgrade Guest VM. If it's already running, the VM will be stopped and restarted.
+    #[serde(rename = "start-upgrade-guest-vm")]
+    StartUpgradeGuestVM,
 }
 
 impl fmt::Display for Command {
@@ -69,6 +72,7 @@ impl fmt::Display for Command {
             ),
             Command::GetVsockProtocol => write!(f, "Command: Get Vsock Protocol"),
             Command::GetHostOSVersion => write!(f, "Command: Get HostOS Version"),
+            Command::StartUpgradeGuestVM => write!(f, "Command: Start Upgrade Guest VM"),
         }
     }
 }

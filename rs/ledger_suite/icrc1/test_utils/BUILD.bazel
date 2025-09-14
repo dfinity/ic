@@ -21,6 +21,12 @@ DEV_DEPENDENCIES = [
     "@crate_index//:rand_chacha",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_json",
+    "@crate_index//:strum",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:strum_macros",
 ]
 
 rust_library(
@@ -28,6 +34,7 @@ rust_library(
     testonly = True,
     srcs = glob(["src/**"]),
     crate_name = "ic_icrc1_test_utils",
+    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = DEV_DEPENDENCIES,
 )

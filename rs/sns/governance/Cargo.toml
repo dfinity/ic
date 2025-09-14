@@ -30,6 +30,7 @@ build-info = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 candid = { workspace = true }
+candid-utils = { path = "../../nervous_system/candid_utils" }
 clap = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
 hex = { workspace = true }
@@ -52,18 +53,21 @@ ic-nervous-system-collections-union-multi-map = { path = "../../nervous_system/c
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-validation = { path = "../../nervous_system/common/validation" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
+ic-stable-structures = { workspace = true }
 ic-nervous-system-governance = { path = "../../nervous_system/governance" }
 ic-nervous-system-linear-map = { path = "../../nervous_system/linear_map" }
 ic-nervous-system-lock = { path = "../../nervous_system/lock" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
+ic-nervous-system-temporary = { path = "../../nervous_system/temporary" }
 ic-nervous-system-timestamp = { path = "../../nervous_system/timestamp" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-sns-governance-api = { path = "./api" }
 ic-sns-governance-proposal-criticality = { path = "./proposal_criticality" }
 ic-sns-governance-proposals-amount-total-limit = { path = "./proposals_amount_total_limit" }
 ic-sns-governance-token-valuation = { path = "./token_valuation" }
+sns-treasury-manager = { path = "../../sns/treasury_manager" }
 ic-protobuf = { path = "../../protobuf" }
 ic-utils = { path = "../../utils" }
 lazy_static = { workspace = true }
@@ -82,7 +86,7 @@ serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
-canbench-rs = { version = "0.1.7", optional = true }
+canbench-rs = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]

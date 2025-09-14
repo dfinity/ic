@@ -68,6 +68,10 @@ impl VotingPowerSnapshot {
 
         (ballots, total_potential_voting_power)
     }
+
+    pub fn total_potential_voting_power(&self) -> u64 {
+        self.total_potential_voting_power
+    }
 }
 
 impl From<VotingPowerSnapshot> for (NeuronIdToVotingPowerMap, VotingPowerTotal) {

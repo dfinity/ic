@@ -9,7 +9,7 @@ use ic_system_test_driver::{
 
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance_api::NnsFunction;
-use ic_types::{time::current_time, SubnetId};
+use ic_types::{SubnetId, time::current_time};
 use openssh_keys::PublicKey;
 use registry_canister::mutations::{
     do_update_ssh_readonly_access_for_all_unassigned_nodes::UpdateSshReadOnlyAccessForAllUnassignedNodesPayload,
@@ -70,7 +70,7 @@ impl Default for SshSession {
 
 impl SshSession {
     pub fn login(&mut self, ip: &IpAddr, username: &str, mean: &AuthMean) -> Result<(), String> {
-        let ip_str = format!("[{}]:22", ip);
+        let ip_str = format!("[{ip}]:22");
         let tcp = TcpStream::connect(ip_str).map_err(|err| err.to_string())?;
         self.session.set_tcp_stream(tcp);
         self.session.handshake().map_err(|err| err.to_string())?;
@@ -102,7 +102,7 @@ pub fn wait_until_authentication_is_granted(ip: &IpAddr, username: &str, mean: &
     loop {
         match SshSession::default().login(ip, username, mean) {
             Ok(_) => return,
-            Err(e) if current_time() > deadline => panic!("Authentication failed: {}", e),
+            Err(e) if current_time() > deadline => panic!("Authentication failed: {e}"),
             _ => {}
         }
     }
@@ -225,17 +225,25 @@ pub async fn fail_updating_ssh_keys_for_all_unassigned_nodes(
 }
 
 pub fn execute_bash_command(sess: &Session, command: String) -> Result<String, String> {
-    let mut channel = sess.channel_session().map_err(|e| e.to_string())?;
-    channel.exec("bash").map_err(|e| e.to_string())?;
+    let mut channel = sess
+        .channel_session()
+        .map_err(|e| format!("Failed to establish a new session channel: {e}"))?;
+    channel
+        .exec("bash")
+        .map_err(|e| format!("Failed to execute bash: {e}"))?;
     channel
         .write_all(command.as_bytes())
-        .map_err(|e| e.to_string())?;
-    channel.flush().map_err(|e| e.to_string())?;
-    channel.send_eof().map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Failed to write the command to the channel: {e}"))?;
+    channel
+        .flush()
+        .map_err(|e| format!("Failed to flush the stream: {e}"))?;
+    channel
+        .send_eof()
+        .map_err(|e| format!("Failed to send eof to the channel: {e}"))?;
     let mut out = String::new();
     channel
         .read_to_string(&mut out)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("Failed to read from the channel: {e}"))?;
     let mut err_str = String::new();
     match channel.exit_status() {
         Ok(status) => match status {
@@ -244,10 +252,9 @@ pub fn execute_bash_command(sess: &Session, command: String) -> Result<String, S
                 channel
                     .stderr()
                     .read_to_string(&mut err_str)
-                    .map_err(|e| e.to_string())?;
+                    .map_err(|e| format!("Failed to read stderr from the channel: {e}"))?;
                 Err(format!(
-                    "Error in: {}\nErr code: {}\nstdout: \n{}\nstderr: \n{}",
-                    command, status, out, err_str
+                    "Error in: {command}\nErr code: {status}\nstdout: \n{out}\nstderr: \n{err_str}"
                 ))
             }
         },
@@ -255,10 +262,9 @@ pub fn execute_bash_command(sess: &Session, command: String) -> Result<String, S
             channel
                 .stderr()
                 .read_to_string(&mut err_str)
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| format!("Failed to read stderr from the channel: {e}"))?;
             Err(format!(
-                "Error in: {}\nError: {}\nstdout: \n{}\nstderr: \n{}",
-                command, e, out, err_str
+                "Error in: {command}\nError: {e}\nstdout: \n{out}\nstderr: \n{err_str}"
             ))
         }
     }

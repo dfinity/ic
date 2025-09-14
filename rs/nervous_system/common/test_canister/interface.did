@@ -1,6 +1,9 @@
 service : {
+  // Implementation of explode.
   explode : (text) -> () query;
   get_build_metadata : () -> (text) query;
+  // Implementation of get_integer.
   get_integer : (null) -> (int32) query;
+  // Implementation of set_integer.
   set_integer : (int32) -> ();
 }

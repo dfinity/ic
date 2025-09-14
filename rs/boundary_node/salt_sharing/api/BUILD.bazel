@@ -2,17 +2,13 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:candid",
-    "@crate_index//:serde",
-]
-
 rust_library(
     name = "salt_sharing_api",
     srcs = glob(["src/**/*.rs"]),
-    aliases = {},
     crate_name = "salt_sharing_api",
-    proc_macro_deps = [],
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:serde",
+    ],
 )

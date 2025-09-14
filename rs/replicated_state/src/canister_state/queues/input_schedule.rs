@@ -1,13 +1,11 @@
-use super::queue::InputQueue;
 use super::CanisterQueues;
+use super::queue::InputQueue;
 use crate::{InputQueueType, InputSource};
-use ic_protobuf::proxy::ProxyDecodeError;
-use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
-use ic_protobuf::types::v1 as pb_types;
 use ic_types::CanisterId;
 use std::collections::{BTreeSet, VecDeque};
 use std::convert::TryFrom;
 
+pub mod proto;
 #[cfg(test)]
 mod tests;
 
@@ -197,10 +195,10 @@ impl InputSchedule {
                 .chain(remote_schedule.iter())
                 .any(|canister_id| !self.scheduled_senders.contains(canister_id))
         {
-            return Err(
-                format!("Inconsistent input schedules:\n  `local_sender_schedule`: {:?}\n  `remote_sender_schedule`: {:?}\n  `scheduled_senders`: {:?}",
-                self.local_sender_schedule, self.remote_sender_schedule, self.scheduled_senders)
-            );
+            return Err(format!(
+                "Inconsistent input schedules:\n  `local_sender_schedule`: {:?}\n  `remote_sender_schedule`: {:?}\n  `scheduled_senders`: {:?}",
+                self.local_sender_schedule, self.remote_sender_schedule, self.scheduled_senders
+            ));
         }
 
         for (canister_id, input_queue) in input_queues {
@@ -212,16 +210,14 @@ impl InputSchedule {
                 InputQueueType::LocalSubnet => {
                     if !local_schedule.remove(canister_id) {
                         return Err(format!(
-                            "Local canister with non-empty input queue ({:?}) absent from `local_sender_schedule`",
-                            canister_id
+                            "Local canister with non-empty input queue ({canister_id:?}) absent from `local_sender_schedule`"
                         ));
                     }
                 }
                 InputQueueType::RemoteSubnet => {
                     if !remote_schedule.remove(canister_id) && !local_schedule.remove(canister_id) {
                         return Err(format!(
-                            "Remote canister with non-empty input queue ({:?}) absent from `remote_sender_schedule`",
-                            canister_id
+                            "Remote canister with non-empty input queue ({canister_id:?}) absent from `remote_sender_schedule`"
                         ));
                     }
                 }
@@ -232,62 +228,6 @@ impl InputSchedule {
         // schedule before all its messages expired or were shed.
 
         Ok(())
-    }
-}
-
-impl From<&InputSchedule> for (i32, Vec<pb_types::CanisterId>, Vec<pb_types::CanisterId>) {
-    fn from(item: &InputSchedule) -> Self {
-        let next_input_source = NextInputQueue::from(&item.next_input_source).into();
-        let local_sender_schedule = item
-            .local_sender_schedule
-            .iter()
-            .map(|sender| pb_types::CanisterId::from(*sender))
-            .collect();
-        let remote_sender_schedule = item
-            .remote_sender_schedule
-            .iter()
-            .map(|sender| pb_types::CanisterId::from(*sender))
-            .collect();
-        (
-            next_input_source,
-            local_sender_schedule,
-            remote_sender_schedule,
-        )
-    }
-}
-
-impl TryFrom<(i32, Vec<pb_types::CanisterId>, Vec<pb_types::CanisterId>)> for InputSchedule {
-    type Error = ProxyDecodeError;
-    fn try_from(
-        (next_input_source, local_sender_schedule, remote_sender_schedule): (
-            i32,
-            Vec<pb_types::CanisterId>,
-            Vec<pb_types::CanisterId>,
-        ),
-    ) -> Result<Self, Self::Error> {
-        let next_input_source =
-            InputSource::from(NextInputQueue::try_from(next_input_source).unwrap_or_default());
-
-        let local_sender_schedule = local_sender_schedule
-            .into_iter()
-            .map(CanisterId::try_from)
-            .collect::<Result<VecDeque<_>, _>>()?;
-        let remote_sender_schedule = remote_sender_schedule
-            .into_iter()
-            .map(CanisterId::try_from)
-            .collect::<Result<VecDeque<_>, _>>()?;
-        let scheduled_senders = local_sender_schedule
-            .iter()
-            .cloned()
-            .chain(remote_sender_schedule.iter().cloned())
-            .collect();
-
-        Ok(InputSchedule {
-            next_input_source,
-            local_sender_schedule,
-            remote_sender_schedule,
-            scheduled_senders,
-        })
     }
 }
 

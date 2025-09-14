@@ -1,11 +1,11 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:anyhow",
-    "@crate_index//:clap",
+    "@crate_index//:gpt",
     "@crate_index//:itertools",
     "@crate_index//:pcre2",
     "@crate_index//:tempfile",
@@ -32,4 +32,20 @@ rust_test(
     crate = ":partition_tools",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "extract-guestos",
+    srcs = ["src/bin/extract_guestos.rs"],
+    version = "0.1.0",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":partition_tools",
+        "@crate_index//:anyhow",
+        "@crate_index//:clap",
+        "@crate_index//:tar",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+        "@crate_index//:zstd",
+    ],
 )

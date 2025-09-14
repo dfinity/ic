@@ -11,11 +11,11 @@ use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_types::{ReplicaVersion, SubnetId};
 use rand::{seq::SliceRandom, thread_rng};
-use slog::{debug, error, info, warn, Logger};
+use slog::{Logger, debug, error, info, warn};
 use std::{
     collections::BTreeMap,
     ffi::OsStr,
-    fs::{create_dir_all, read_dir, remove_dir_all, DirEntry, File},
+    fs::{DirEntry, File, create_dir_all, read_dir, remove_dir_all},
     io::Write,
     net::IpAddr,
     path::{Path, PathBuf},
@@ -66,7 +66,7 @@ enum DiskStats {
 
 impl BackupHelper {
     fn binary_dir(&self, replica_version: &ReplicaVersion) -> PathBuf {
-        create_if_not_exists(self.root_dir.join(format!("binaries/{}", replica_version)))
+        create_if_not_exists(self.root_dir.join(format!("binaries/{replica_version}")))
     }
 
     fn binary_file(&self, executable: &str, replica_version: &ReplicaVersion) -> PathBuf {
@@ -106,7 +106,7 @@ impl BackupHelper {
     }
 
     fn archive_height_dir(&self, last_height: u64) -> PathBuf {
-        create_if_not_exists(self.archive_dir().join(format!("{}", last_height)))
+        create_if_not_exists(self.archive_dir().join(format!("{last_height}")))
     }
 
     fn work_dir(&self) -> PathBuf {
@@ -186,7 +186,7 @@ impl BackupHelper {
                         Err("Error getting first node.".to_string())
                     }
                 }
-                Err(e) => Err(format!("Error fetching subnet node list: {:?}", e)),
+                Err(e) => Err(format!("Error fetching subnet node list: {e:?}")),
             }
         } else {
             Ok(())
@@ -204,7 +204,7 @@ impl BackupHelper {
         for _ in 0..RETRIES_BINARY_DOWNLOAD {
             let res = block_on(download_binary(
                 &self.log,
-                replica_version.clone(),
+                replica_version,
                 binary_name.to_string(),
                 &self.binary_dir(replica_version),
             ));
@@ -219,10 +219,9 @@ impl BackupHelper {
         }
         // Without the binaries we can't replay...
         self.notification_client
-            .report_failure_slack(format!("Couldn't download: {}", binary_name));
+            .report_failure_slack(format!("Couldn't download: {binary_name}"));
         Err(format!(
-            "Binary {} is required for the replica {}",
-            binary_name, replica_version
+            "Binary {binary_name} is required for the replica {replica_version}"
         ))
     }
 
@@ -306,10 +305,9 @@ impl BackupHelper {
         cmd.arg("--min-size=1").arg(remote_dir).arg(local_dir);
         debug!(self.log, "Will execute: {:?}", cmd);
 
-        if let Err(e) = exec_cmd(&mut cmd) {
-            Err(format!("Error: {}", e))
-        } else {
-            Ok(())
+        match exec_cmd(&mut cmd) {
+            Err(e) => Err(format!("Error: {e}")),
+            _ => Ok(()),
         }
     }
 
@@ -367,8 +365,7 @@ impl BackupHelper {
                 })
                 .collect::<Vec<_>>()),
             other => Err(format!(
-                "no node ids found in the registry for subnet_id={}: {:?}",
-                subnet_id, other
+                "no node ids found in the registry for subnet_id={subnet_id}: {other:?}"
             )),
         }?;
         result
@@ -376,7 +373,7 @@ impl BackupHelper {
             .filter_map(|node_record| {
                 node_record.http.map(|http| {
                     http.ip_addr.parse().map_err(|err| {
-                        format!("couldn't parse ip address from the registry: {:?}", err)
+                        format!("couldn't parse ip address from the registry: {err:?}")
                     })
                 })
             })
@@ -400,9 +397,8 @@ impl BackupHelper {
                 Ok(ReplayResult::UpgradeRequired(upgrade_version)) => {
                     // replayed the current version, but if there is upgrade try to do it again
                     self.notification_client.message_slack(format!(
-                        "Replica version upgrade detected (current: {} new: {}): \
-                        upgrading the ic-replay tool to retry... 🤞",
-                        current_replica_version, upgrade_version
+                        "Replica version upgrade detected (current: {current_replica_version} new: {upgrade_version}): \
+                        upgrading the ic-replay tool to retry... 🤞"
                     ));
                     current_replica_version = upgrade_version;
                 }
@@ -420,8 +416,7 @@ impl BackupHelper {
 
             if self.archive_state(finish_height).is_ok() {
                 self.notification_client.message_slack(format!(
-                    "✅ Successfully restored the state at height *{}*",
-                    finish_height
+                    "✅ Successfully restored the state at height *{finish_height}*"
                 ));
                 let duration = start_time.elapsed();
                 let minutes = duration.as_secs() / 60;
@@ -525,9 +520,9 @@ impl BackupHelper {
         let file_name = self.logs_dir().join(log_file_name);
         debug!(self.log, "Write replay log to: {:?}", file_name);
         let mut file =
-            File::create(file_name).map_err(|err| format!("Error creating log file: {:?}", err))?;
+            File::create(file_name).map_err(|err| format!("Error creating log file: {err:?}"))?;
         file.write_all(stdout.as_bytes())
-            .map_err(|err| format!("Error writing log file: {:?}", err))?;
+            .map_err(|err| format!("Error writing log file: {err:?}"))?;
         Ok(())
     }
 
@@ -601,13 +596,13 @@ impl BackupHelper {
                         }
                         Ok(n)
                     } else {
-                        Err(format!("Error converting number from: {:?}", str))
+                        Err(format!("Error converting number from: {str:?}"))
                     }
                 } else {
-                    Err(format!("Error converting disk stats: {:?}", str))
+                    Err(format!("Error converting disk stats: {str:?}"))
                 }
             }
-            Err(err) => Err(format!("Error fetching disk stats: {}", err)),
+            Err(err) => Err(format!("Error fetching disk stats: {err}")),
         }
     }
 
@@ -652,7 +647,7 @@ impl BackupHelper {
                 .for_each(|(_, filename)| {
                     let _ = remove_dir_all(filename.path());
                 }),
-            Err(err) => return Err(format!("Error reading archive checkpoints: {}", err)),
+            Err(err) => return Err(format!("Error reading archive checkpoints: {err}")),
         };
         debug!(self.log, "[#{}] State archived!", self.thread_id);
 
@@ -749,7 +744,7 @@ impl BackupHelper {
             let mut cmd = Command::new("mv");
             cmd.arg(dir).arg(&work_dir);
             debug!(self.log, "Will execute: {:?}", cmd);
-            exec_cmd(&mut cmd).map_err(|err| format!("Error moving artifacts: {:?}", err))?;
+            exec_cmd(&mut cmd).map_err(|err| format!("Error moving artifacts: {err:?}"))?;
         }
         // we have moved all the artifacts from the spool directory,
         // so don't need the mutex guard anymore
@@ -773,8 +768,7 @@ impl BackupHelper {
                 let timestamp = Utc::now().timestamp();
                 let (top_height, _) = fetch_top_height(&pack_dir);
                 let packed_file = format!(
-                    "{}/{:010}_{:012}_{}.txz",
-                    work_dir_str, timestamp, top_height, replica_version
+                    "{work_dir_str}/{timestamp:010}_{top_height:012}_{replica_version}.txz"
                 );
                 let mut cmd = Command::new("tar");
                 cmd.arg("cJvf");
@@ -783,13 +777,13 @@ impl BackupHelper {
                 cmd.arg(&replica_version);
                 cmd.env("XZ_OPT", "-9");
                 debug!(self.log, "Will execute: {:?}", cmd);
-                exec_cmd(&mut cmd).map_err(|err| format!("Error packing artifacts: {:?}", err))?;
+                exec_cmd(&mut cmd).map_err(|err| format!("Error packing artifacts: {err:?}"))?;
 
                 info!(self.log, "Copy packed file of {}", replica_version);
                 let mut cmd2 = Command::new("cp");
                 cmd2.arg(packed_file).arg(&cold_storage_artifacts_dir);
                 debug!(self.log, "Will execute: {:?}", cmd2);
-                exec_cmd(&mut cmd2).map_err(|err| format!("Error copying artifacts: {:?}", err))?;
+                exec_cmd(&mut cmd2).map_err(|err| format!("Error copying artifacts: {err:?}"))?;
             }
             ls_path(
                 &self.log,
@@ -800,7 +794,7 @@ impl BackupHelper {
         }
 
         info!(self.log, "Remove leftovers");
-        remove_dir_all(work_dir).map_err(|err| format!("Error deleting leftovers: {:?}", err))?;
+        remove_dir_all(work_dir).map_err(|err| format!("Error deleting leftovers: {err:?}"))?;
 
         Ok(max_height)
     }
@@ -865,7 +859,7 @@ impl BackupHelper {
                 cmd.arg("-a");
                 cmd.arg(dir).arg(self.cold_storage_states_dir());
                 debug!(self.log, "Will execute: {:?}", cmd);
-                exec_cmd(&mut cmd).map_err(|err| format!("Error copying states: {:?}", err))?;
+                exec_cmd(&mut cmd).map_err(|err| format!("Error copying states: {err:?}"))?;
             }
         }
 
@@ -875,10 +869,10 @@ impl BackupHelper {
             let mut cmd = Command::new("mv");
             cmd.arg(dir.1).arg(&trash_dir);
             debug!(self.log, "Will execute: {:?}", cmd);
-            exec_cmd(&mut cmd).map_err(|err| format!("Error moving artifacts: {:?}", err))?;
+            exec_cmd(&mut cmd).map_err(|err| format!("Error moving artifacts: {err:?}"))?;
         }
 
-        remove_dir_all(trash_dir).map_err(|err| format!("Error deleting trash dir: {:?}", err))?;
+        remove_dir_all(trash_dir).map_err(|err| format!("Error deleting trash dir: {err:?}"))?;
 
         Ok(())
     }
@@ -933,8 +927,8 @@ pub(crate) fn ls_path(log: &Logger, dir: &Path) -> Result<(), String> {
     let mut cmd = Command::new("ls");
     cmd.arg(dir);
     debug!(log, "Will execute: {:?}", cmd);
-    let res = exec_cmd(&mut cmd)
-        .map_err(|err| format!("Error listing cold store directory: {:?}", err))?;
+    let res =
+        exec_cmd(&mut cmd).map_err(|err| format!("Error listing cold store directory: {err:?}"))?;
     debug!(log, "{:?}", res);
     Ok(())
 }
@@ -965,14 +959,14 @@ fn collect_only_dirs(path: &PathBuf) -> Result<Vec<DirEntry>, String> {
 fn fetch_top_height(replica_version_dir: &DirEntry) -> (u64, PathBuf) {
     let replica_version_path = replica_version_dir.path();
     let height_bucket = last_dir_height(&replica_version_path, 10);
-    let top_height = last_dir_height(&replica_version_path.join(format!("{}", height_bucket)), 10);
+    let top_height = last_dir_height(&replica_version_path.join(format!("{height_bucket}")), 10);
     (top_height, replica_version_path)
 }
 
 fn is_height_in_spool(replica_version_dir: &DirEntry, height: u64) -> bool {
     let replica_version_path = replica_version_dir.path();
     let height_bucket = height / BUCKET_SIZE * BUCKET_SIZE;
-    let path = replica_version_path.join(format!("{}/{}", height_bucket, height));
+    let path = replica_version_path.join(format!("{height_bucket}/{height}"));
     path.exists()
 }
 

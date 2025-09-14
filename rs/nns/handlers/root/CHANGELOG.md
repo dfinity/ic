@@ -11,6 +11,36 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-08-15: Proposal 137916
+
+http://dashboard.internetcomputer.org/proposal/137916
+
+## Fixed
+
+- A lock was added to `change_canister` to prevent two simultaneous upgrade operations from being executed  
+  at the same time. The second upgrade will now fail immediately instead of attempting to run, which prevents
+  dangerous edge cases where the canister is restarted by one operation while being upgraded by another.
+
+
+# 2025-08-01: Proposal 137685
+
+http://dashboard.internetcomputer.org/proposal/137685
+
+## Added
+
+NNS Root now returns the field `memory_metrics` from the `canister_status` API.
+
+
+# 2025-07-06: Proposal 137253
+
+http://dashboard.internetcomputer.org/proposal/137253
+
+## Changed
+
+* Root now gets the NNS subnet via `get_subnet_for_canister` instead of getting the routing table bytes from the
+  registry. This change is needed, as the routing table records will be sharded into multiple records moving forward.
+
+
 # 2025-06-06: Proposal 136891
 
 http://dashboard.internetcomputer.org/proposal/136891

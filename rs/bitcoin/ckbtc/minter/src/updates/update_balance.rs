@@ -1,8 +1,8 @@
+use crate::GetUtxosResponse;
 use crate::logs::{P0, P1};
 use crate::memo::MintMemo;
-use crate::state::{mutate_state, read_state, SuspendedReason, UtxoCheckStatus};
-use crate::tasks::{schedule_now, TaskType};
-use crate::GetUtxosResponse;
+use crate::state::{SuspendedReason, UtxoCheckStatus, mutate_state, read_state};
+use crate::tasks::{TaskType, schedule_now};
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_btc_checker::CheckTransactionResponse;
 use ic_btc_interface::{GetUtxosError, OutPoint, Utxo};
@@ -21,13 +21,13 @@ const MAX_CHECK_TRANSACTION_RETRY: usize = 10;
 use super::get_btc_address::init_ecdsa_public_key;
 
 use crate::{
-    guard::{balance_update_guard, GuardError},
-    management::{get_utxos, CallError, CallSource},
+    CanisterRuntime, Timestamp,
+    guard::{GuardError, balance_update_guard},
+    management::{CallError, CallSource, get_utxos},
     metrics::observe_update_call_latency,
     state,
     tx::{DisplayAmount, DisplayOutpoint},
     updates::get_btc_address,
-    CanisterRuntime, Timestamp,
 };
 
 /// The argument of the [update_balance] endpoint.
@@ -120,7 +120,7 @@ impl From<GetUtxosError> for UpdateBalanceError {
     fn from(e: GetUtxosError) -> Self {
         Self::GenericError {
             error_code: ErrorCode::ConfigurationError as u64,
-            error_message: format!("failed to get UTXOs from the Bitcoin canister: {}", e),
+            error_message: format!("failed to get UTXOs from the Bitcoin canister: {e}"),
         }
     }
 }
@@ -129,7 +129,7 @@ impl From<TransferError> for UpdateBalanceError {
     fn from(e: TransferError) -> Self {
         Self::GenericError {
             error_code: ErrorCode::ConfigurationError as u64,
-            error_message: format!("failed to mint tokens on the ledger: {:?}", e),
+            error_message: format!("failed to mint tokens on the ledger: {e:?}"),
         }
     }
 }
@@ -344,7 +344,7 @@ pub async fn update_balance<R: CanisterRuntime>(
         scopeguard::ScopeGuard::into_inner(guard);
     }
 
-    schedule_now(TaskType::ProcessLogic, runtime);
+    schedule_now(TaskType::ProcessLogic(false), runtime);
 
     observe_update_call_latency(utxo_statuses.len(), start_time, runtime.time());
 
@@ -356,7 +356,7 @@ async fn check_utxo<R: CanisterRuntime>(
     args: &UpdateBalanceArgs,
     runtime: &R,
 ) -> Result<UtxoCheckStatus, UpdateBalanceError> {
-    use ic_btc_checker::{CheckTransactionStatus, CHECK_TRANSACTION_CYCLES_REQUIRED};
+    use ic_btc_checker::{CHECK_TRANSACTION_CYCLES_REQUIRED, CheckTransactionStatus};
 
     let btc_checker_principal = read_state(|s| {
         s.btc_checker_principal
@@ -378,8 +378,7 @@ async fn check_utxo<R: CanisterRuntime>(
             .await
             .map_err(|call_err| {
                 UpdateBalanceError::TemporarilyUnavailable(format!(
-                    "Failed to call Bitcoin checker canister: {}",
-                    call_err
+                    "Failed to call Bitcoin checker canister: {call_err}"
                 ))
             })? {
             CheckTransactionResponse::Failed(addresses) => {
@@ -408,15 +407,14 @@ async fn check_utxo<R: CanisterRuntime>(
                     status
                 );
                 return Err(UpdateBalanceError::TemporarilyUnavailable(format!(
-                    "The Bitcoin checker canister is temporarily unavailable: {:?}",
-                    status
+                    "The Bitcoin checker canister is temporarily unavailable: {status:?}"
                 )));
             }
             CheckTransactionResponse::Unknown(CheckTransactionStatus::Error(error)) => {
                 log!(P1, "Bitcoin checker error: {:?}", error);
                 return Err(UpdateBalanceError::GenericError {
                     error_code: ErrorCode::KytError as u64,
-                    error_message: format!("Bitcoin checker error: {:?}", error),
+                    error_message: format!("Bitcoin checker error: {error:?}"),
                 });
             }
         }
@@ -447,8 +445,7 @@ pub(crate) async fn mint(amount: u64, to: Account, memo: Memo) -> Result<u64, Up
         .await
         .map_err(|(code, msg)| {
             UpdateBalanceError::TemporarilyUnavailable(format!(
-                "cannot mint ckbtc: {} (reject_code = {})",
-                msg, code
+                "cannot mint ckbtc: {msg} (reject_code = {code})"
             ))
         })??;
     Ok(block_index.0.to_u64().expect("nat does not fit into u64"))

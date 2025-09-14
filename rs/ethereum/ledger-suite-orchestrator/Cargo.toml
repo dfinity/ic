@@ -29,7 +29,7 @@ ic-management-canister-types = { workspace = true }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-stable-structures = { workspace = true }
-ic0 = "0.21.1"
+ic0 = { workspace = true }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 num-traits = { workspace = true }
 scopeguard = "1.1.0"

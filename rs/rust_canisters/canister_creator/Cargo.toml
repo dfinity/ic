@@ -24,7 +24,6 @@ wat = { workspace = true }
 [dev-dependencies]
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
-ic-test-utilities = { path = "../../test_utilities" }
 ic-types = { path = "../../types/types" }
 
 [[test]]

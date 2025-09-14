@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use candid::Encode;
 use dfn_candid::candid;
-use ic_base_types::{subnet_id_try_from_protobuf, PrincipalId, SubnetId};
+use ic_base_types::{PrincipalId, SubnetId, subnet_id_try_from_protobuf};
 use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
     VetKdKeyId,
@@ -15,7 +15,9 @@ use ic_nns_test_utils::{
     registry::{get_value_or_panic, invariant_compliant_mutation_as_atomic_req},
 };
 use ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList;
-use ic_protobuf::registry::subnet::v1::{ChainKeyConfig as ChainKeyConfigPb, SubnetRecord};
+use ic_protobuf::registry::subnet::v1::{
+    CanisterCyclesCostSchedule, ChainKeyConfig as ChainKeyConfigPb, SubnetRecord,
+};
 use ic_registry_keys::{make_chain_key_enabled_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{
     ChainKeyConfig as ChainKeyConfigInternal, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
@@ -150,6 +152,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             chain_key_config: None,
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
         };
 
         // An attacker got a canister that is trying to pass for the governance
@@ -272,6 +275,8 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                             ssh_readonly_access: vec![],
                             ssh_backup_access: vec![],
                             chain_key_config: None,
+                            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal
+                                as i32,
                         }
                         .encode_to_vec(),
                     )],
@@ -362,6 +367,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
                 ssh_backup_access: vec!["pub_key_1".to_string()],
                 chain_key_config: None,
+                canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             }
         );
 
@@ -401,22 +407,20 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
         "Canister rejected with \
         message: IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister \
         called `ic0.trap` with message: 'Panicked at '[Registry] Proposal attempts to enable \
-        signing for chain key '{}' on Subnet \
+        signing for chain key '{key_id}' on Subnet \
         'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', but the \
         subnet does not hold the given key. A proposal to add that key to the subnet \
-        must first be separately submitted.'",
-        key_id
+        must first be separately submitted.'"
     );
 
     let no_chain_key_config_reject_msg = format!(
         "Canister rejected with message: \
         IC0503: Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called \
         `ic0.trap` with message: 'Panicked at '[Registry] Proposal attempts to enable signing \
-        for chain key '{}' \
+        for chain key '{key_id}' \
         on Subnet 'bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae', \
         but the subnet does not hold the given key. A proposal to add that key to the subnet \
-        must first be separately submitted.'",
-        key_id
+        must first be separately submitted.'"
     );
 
     local_test_on_nns_subnet(|runtime| async move {
@@ -446,6 +450,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             chain_key_config: None,
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
         };
 
         // Just create the registry canister and wait until the subnet_handler ID is
@@ -477,6 +482,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
 
         let signature_request_timeout_ns = Some(12345);
         let idkg_key_rotation_period_ms = Some(12345);
+        let max_parallel_pre_signature_transcripts_in_creation = Some(12345);
 
         let chain_key_config = ChainKeyConfig {
             key_configs: vec![KeyConfig {
@@ -490,6 +496,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
             }],
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         };
 
         // update payload message
@@ -509,9 +516,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
         let error_text = assert_matches!(response, Err(error_text) => error_text);
         assert!(
             error_text.starts_with(&enable_before_adding_reject_msg),
-            "Unexpected error: `{}` (does not start with `{}`).",
-            error_text,
-            enable_before_adding_reject_msg,
+            "Unexpected error: `{error_text}` (does not start with `{enable_before_adding_reject_msg}`).",
         );
 
         let subnet_record = get_value_or_panic::<SubnetRecord>(
@@ -542,9 +547,7 @@ fn test_subnets_configuration_chain_key_fields_are_updated_correctly(key_id: Mas
 
         assert!(
             err_text.contains(&no_chain_key_config_reject_msg),
-            "Error `{}` does not contain expected substring\n{}",
-            err_text,
-            no_chain_key_config_reject_msg,
+            "Error `{err_text}` does not contain expected substring\n{no_chain_key_config_reject_msg}",
         );
 
         let subnet_record = get_value_or_panic::<SubnetRecord>(

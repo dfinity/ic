@@ -4,7 +4,7 @@ use crate::{
     state::CanisterApi,
     types::{AddConfigError, DiscloseRulesError, Timestamp},
 };
-use ic_cdk::api::stable::WASM_PAGE_SIZE_IN_BYTES;
+use ic_cdk::stable::WASM_PAGE_SIZE_IN_BYTES;
 use ic_http_types::{HttpResponse, HttpResponseBuilder};
 use prometheus::{
     CounterVec, Encoder, Gauge, IntGauge, Opts, Registry, Result as PrometheusResult, TextEncoder,
@@ -134,8 +134,7 @@ pub fn export_metrics_as_http_response(
             .build(),
         Err(err) => {
             // Return an HTTP 500 error with detailed error information
-            HttpResponseBuilder::server_error(format!("Failed to encode metrics: {:?}", err))
-                .build()
+            HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err:?}")).build()
         }
     }
 }
@@ -144,7 +143,7 @@ pub fn recompute_metrics(canister_api: impl CanisterApi) {
     METRICS.with(|cell| {
         let mut cell = cell.borrow_mut();
 
-        let memory = (ic_cdk::api::stable::stable_size() * WASM_PAGE_SIZE_IN_BYTES) as f64;
+        let memory = (ic_cdk::stable::stable_size() * WASM_PAGE_SIZE_IN_BYTES) as f64;
 
         cell.stable_memory_size.borrow_mut().set(memory);
         cell.api_boundary_nodes_count

@@ -5,24 +5,14 @@ use ic_base_types::CanisterId;
 use ic_cbor::CertificateToCbor;
 use ic_certificate_verification::VerifyCertificate;
 use ic_certification::{Certificate, HashTree, LookupResult};
-use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL};
-use ic_nns_common::{
-    pb::v1::NeuronId,
-    types::{UpdateIcpXdrConversionRatePayload, UpdateIcpXdrConversionRatePayloadReason},
-};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, EXCHANGE_RATE_CANISTER_INDEX,
-};
-use ic_nns_governance_api::{
-    manage_neuron_response, ExecuteNnsFunction, MakeProposalRequest, NnsFunction,
-    ProposalActionRequest,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
         create_canister_at_specified_id, get_average_icp_xdr_conversion_rate,
-        get_icp_xdr_conversion_rate, nns_governance_make_proposal, nns_wait_for_proposal_execution,
-        setup_nns_canisters, state_machine_builder_for_nns_tests,
+        get_icp_xdr_conversion_rate, setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -55,54 +45,6 @@ fn reinstall_mock_exchange_rate_canister(
     machine
         .reinstall_canister(canister_id, wasm.bytes(), Encode!(&payload).unwrap())
         .expect("Failed to reinstall mock XRC canister");
-}
-
-// Creates an ICP/XDR conversion rate proposal.
-fn propose_icp_xdr_rate(
-    machine: &StateMachine,
-    xdr_permyriad_per_icp: u64,
-    timestamp_seconds: u64,
-    reason: Option<UpdateIcpXdrConversionRatePayloadReason>,
-) -> u64 {
-    let payload = UpdateIcpXdrConversionRatePayload {
-        data_source: "".to_string(),
-        timestamp_seconds,
-        xdr_permyriad_per_icp,
-        reason,
-    };
-
-    // Use TEST_NEURON_1_ID as it is loaded with tokens.
-    let neuron_id = NeuronId {
-        id: TEST_NEURON_1_ID,
-    };
-
-    let proposal = MakeProposalRequest {
-        title: Some(format!("Update ICP/XDR rate to {}", xdr_permyriad_per_icp)),
-        summary: "".to_string(),
-        url: "".to_string(),
-        action: Some(ProposalActionRequest::ExecuteNnsFunction(
-            ExecuteNnsFunction {
-                nns_function: NnsFunction::IcpXdrConversionRate as i32,
-                payload: Encode!(&payload).unwrap(),
-            },
-        )),
-    };
-
-    let response = nns_governance_make_proposal(
-        machine,
-        *TEST_NEURON_1_OWNER_PRINCIPAL,
-        neuron_id,
-        &proposal,
-    );
-    match response.command {
-        Some(manage_neuron_response::Command::MakeProposal(make_proposal_response)) => {
-            match make_proposal_response.proposal_id {
-                Some(proposal_id) => proposal_id.id,
-                None => panic!("Unable to find proposal ID!"),
-            }
-        }
-        _ => panic!("Unable to submit the proposal: {:?}", response),
-    }
 }
 
 fn new_icp_cxdr_mock_exchange_rate_canister_init_payload(
@@ -283,8 +225,7 @@ fn test_enable_retrieving_rate_from_exchange_rate_canister() {
         let response = get_icp_xdr_conversion_rate(&state_machine);
         assert_eq!(
             response.data.timestamp_seconds, expected_timestamp,
-            "failed at iteration: {}",
-            i
+            "failed at iteration: {i}"
         );
     }
 
@@ -330,165 +271,6 @@ fn test_enable_retrieving_rate_from_exchange_rate_canister() {
         cmc_first_rate_timestamp_seconds + (FIVE_MINUTES_SECONDS * 4) + 22
     );
     assert_eq!(response.data.xdr_permyriad_per_icp, 210_000);
-}
-
-#[test]
-fn test_disabling_and_reenabling_exchange_rate_canister_calling_via_exchange_rate_proposal() {
-    // Step 1: Prepare the world.
-    let state_machine = state_machine_builder_for_nns_tests()
-        .with_time(GENESIS)
-        .build();
-
-    // Set up NNS.
-    let nns_init_payload = NnsInitPayloadsBuilder::new()
-        .with_test_neurons()
-        .with_exchange_rate_canister(EXCHANGE_RATE_CANISTER_ID)
-        .build();
-    setup_nns_canisters(&state_machine, nns_init_payload);
-
-    // Install exchange rate canister.
-    setup_mock_exchange_rate_canister(
-        &state_machine,
-        new_icp_cxdr_mock_exchange_rate_canister_init_payload(25_000_000_000, None, None),
-    );
-
-    // Check that the canister is initialized with the default rate.
-    let cmc_first_rate_timestamp_seconds: u64 = 1620633600; // 10 May 2021 10:00:00 AM CEST
-    let response = get_icp_xdr_conversion_rate(&state_machine);
-    assert_eq!(
-        response.data.timestamp_seconds,
-        cmc_first_rate_timestamp_seconds
-    );
-    assert_eq!(response.data.xdr_permyriad_per_icp, 1_000_000);
-
-    // Step 2: Verify that the rate has been set by calling the cycles minting canister.
-
-    // The CMC will not call the exchange rate canister, as
-    // the current time is set to genesis. We need to advance the time
-    // to the CMC's first rate then add five minutes to ensure the heartbeat
-    // is triggered (the CMC only calls the exchange rate canister
-    // every five minutes: :05, :10, :15 and so on).
-    let genesis_seconds = GENESIS.as_millis_since_unix_epoch() / 1_000;
-    let seconds_diff =
-        cmc_first_rate_timestamp_seconds.abs_diff(genesis_seconds) + FIVE_MINUTES_SECONDS;
-    state_machine.advance_time(Duration::from_secs(seconds_diff));
-
-    // Start testing. Advance the state machine so the heartbeat triggers
-    // at the new time.
-    state_machine.tick();
-
-    // Step 3: Verify that the rate has been set by calling the cycles minting canister.
-    let response = get_icp_xdr_conversion_rate(&state_machine);
-
-    // The rate's timestamp should be the CMC's first rate timestamp + five minutes + 8 secs.
-    // Note on the 8 secs:
-    // The mock exchange rate canister takes the current time and adds 6 seconds
-    // to differentiate the timestamps between canisters. An additional 2 is
-    // added for retrieving the rate initially.
-    assert_eq!(
-        response.data.timestamp_seconds,
-        cmc_first_rate_timestamp_seconds + FIVE_MINUTES_SECONDS + 8
-    );
-    assert_eq!(response.data.xdr_permyriad_per_icp, 250_000);
-
-    // Step 3: Send in a proposal with a diverged rate reason. Ensure that the CMC
-    // stops calling the mock exchange rate canister.
-    let proposal_id = propose_icp_xdr_rate(
-        &state_machine,
-        210_000,
-        cmc_first_rate_timestamp_seconds + FIVE_MINUTES_SECONDS + ONE_MINUTE_SECONDS,
-        Some(UpdateIcpXdrConversionRatePayloadReason::DivergedRate),
-    );
-    nns_wait_for_proposal_execution(&state_machine, proposal_id);
-
-    // Check if proposal has set the rate.
-    let response = get_icp_xdr_conversion_rate(&state_machine);
-    assert_eq!(
-        response.data.timestamp_seconds,
-        cmc_first_rate_timestamp_seconds + FIVE_MINUTES_SECONDS + ONE_MINUTE_SECONDS
-    );
-    assert_eq!(response.data.xdr_permyriad_per_icp, 210_000);
-
-    // Advance the time by 5 minutes and attempt to trigger a
-    // call to the exchange rate canister.
-    state_machine.advance_time(Duration::from_secs(FIVE_MINUTES_SECONDS));
-    // Trigger the heartbeat.
-    state_machine.tick();
-
-    // Retrieve the current rate. It should still be 210_000.
-    let response = get_icp_xdr_conversion_rate(&state_machine);
-    assert_eq!(
-        response.data.timestamp_seconds,
-        cmc_first_rate_timestamp_seconds + FIVE_MINUTES_SECONDS + ONE_MINUTE_SECONDS
-    );
-    assert_eq!(response.data.xdr_permyriad_per_icp, 210_000);
-
-    // Ensure that a proposal with a OldRate reason does not reactivate the
-    // update cycle.
-    let proposal_id = propose_icp_xdr_rate(
-        &state_machine,
-        200_000,
-        cmc_first_rate_timestamp_seconds + FIVE_MINUTES_SECONDS * 2,
-        Some(UpdateIcpXdrConversionRatePayloadReason::OldRate),
-    );
-    nns_wait_for_proposal_execution(&state_machine, proposal_id);
-
-    let response = get_icp_xdr_conversion_rate(&state_machine);
-    assert_eq!(
-        response.data.timestamp_seconds,
-        cmc_first_rate_timestamp_seconds + FIVE_MINUTES_SECONDS * 2
-    );
-    assert_eq!(response.data.xdr_permyriad_per_icp, 200_000);
-
-    // Advance the time again and trigger the heartbeat.
-    state_machine.advance_time(Duration::from_secs(FIVE_MINUTES_SECONDS));
-    state_machine.tick();
-
-    let response = get_icp_xdr_conversion_rate(&state_machine);
-    assert_eq!(
-        response.data.timestamp_seconds,
-        cmc_first_rate_timestamp_seconds + FIVE_MINUTES_SECONDS * 2
-    );
-    assert_eq!(response.data.xdr_permyriad_per_icp, 200_000);
-
-    // Re-enable calls to the exchange rate canister.
-    let proposal_id = propose_icp_xdr_rate(
-        &state_machine,
-        220_000,
-        cmc_first_rate_timestamp_seconds + FIVE_MINUTES_SECONDS * 3,
-        Some(UpdateIcpXdrConversionRatePayloadReason::EnableAutomaticExchangeRateUpdates),
-    );
-    nns_wait_for_proposal_execution(&state_machine, proposal_id);
-
-    let response = get_icp_xdr_conversion_rate(&state_machine);
-    assert_eq!(
-        response.data.timestamp_seconds,
-        cmc_first_rate_timestamp_seconds + FIVE_MINUTES_SECONDS * 3
-    );
-    assert_eq!(response.data.xdr_permyriad_per_icp, 220_000);
-
-    let response = get_icp_xdr_conversion_rate(&state_machine);
-    assert_eq!(response.data.xdr_permyriad_per_icp, 220_000);
-    assert_eq!(
-        response.data.timestamp_seconds,
-        cmc_first_rate_timestamp_seconds + FIVE_MINUTES_SECONDS * 3
-    );
-
-    // Advance the time again and trigger the heartbeat.
-    state_machine.advance_time(Duration::from_secs(FIVE_MINUTES_SECONDS));
-    state_machine.tick();
-
-    let response = get_icp_xdr_conversion_rate(&state_machine);
-    assert_eq!(response.data.xdr_permyriad_per_icp, 250_000);
-    // The rate's timestamp should be the CMC's first rate timestamp + twenty minutes + 22 secs.
-    // Note on the 22 secs:
-    // The mock exchange rate canister takes the current time and adds 6 seconds
-    // to differentiate the timestamps between canisters. An additional 2 is
-    // added for retrieving the rate initially.
-    assert_eq!(
-        response.data.timestamp_seconds,
-        cmc_first_rate_timestamp_seconds + FIVE_MINUTES_SECONDS * 4 + 22
-    );
 }
 
 fn verify_cmc_certified_data<Data>(

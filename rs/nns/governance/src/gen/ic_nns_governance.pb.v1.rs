@@ -427,7 +427,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 29, 22, 23, 24, 25, 26, 27, 28"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -506,6 +506,9 @@ pub mod proposal {
         /// Register Known Neuron
         #[prost(message, tag = "21")]
         RegisterKnownNeuron(super::KnownNeuron),
+        /// Deregister Known Neuron
+        #[prost(message, tag = "29")]
+        DeregisterKnownNeuron(super::DeregisterKnownNeuron),
         /// Obsolete. Superseded by CreateServiceNervousSystem. Kept for Candid compatibility.
         #[prost(message, tag = "22")]
         SetSnsTokenSwapOpenTimeWindow(super::SetSnsTokenSwapOpenTimeWindow),
@@ -527,6 +530,9 @@ pub mod proposal {
         /// Update the settings of a canister that is controlled by the NNS.
         #[prost(message, tag = "27")]
         UpdateCanisterSettings(super::UpdateCanisterSettings),
+        /// Create a rented subnet.
+        #[prost(message, tag = "28")]
+        FulfillSubnetRentalRequest(super::FulfillSubnetRentalRequest),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -567,7 +573,7 @@ pub struct ManageNeuron {
     pub neuron_id_or_subaccount: ::core::option::Option<manage_neuron::NeuronIdOrSubaccount>,
     #[prost(
         oneof = "manage_neuron::Command",
-        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16, 17"
+        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16, 17, 18"
     )]
     pub command: ::core::option::Option<manage_neuron::Command>,
 }
@@ -820,6 +826,9 @@ pub mod manage_neuron {
         /// The amount to split to the child neuron.
         #[prost(uint64, tag = "1")]
         pub amount_e8s: u64,
+        /// The memo to use for the child neuron.
+        #[prost(uint64, optional, tag = "2")]
+        pub memo: ::core::option::Option<u64>,
     }
     /// Merge another neuron into this neuron.
     #[derive(
@@ -1086,6 +1095,37 @@ pub mod manage_neuron {
         pub to_account_identifier:
             ::core::option::Option<::icp_ledger::protobuf::AccountIdentifier>,
     }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct SetFollowing {
+        #[prost(message, repeated, tag = "1")]
+        pub topic_following: ::prost::alloc::vec::Vec<set_following::FolloweesForTopic>,
+    }
+    /// Nested message and enum types in `SetFollowing`.
+    pub mod set_following {
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            comparable::Comparable,
+            Clone,
+            PartialEq,
+            ::prost::Message,
+        )]
+        pub struct FolloweesForTopic {
+            #[prost(message, repeated, tag = "1")]
+            pub followees: ::prost::alloc::vec::Vec<::ic_nns_common::pb::v1::NeuronId>,
+            #[prost(enumeration = "super::super::Topic", optional, tag = "2")]
+            pub topic: ::core::option::Option<i32>,
+        }
+    }
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
     #[derive(
         candid::CandidType,
@@ -1141,6 +1181,8 @@ pub mod manage_neuron {
         RefreshVotingPower(RefreshVotingPower),
         #[prost(message, tag = "17")]
         DisburseMaturity(DisburseMaturity),
+        #[prost(message, tag = "18")]
+        SetFollowing(SetFollowing),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
@@ -1412,6 +1454,12 @@ pub struct ProposalData {
     /// The topic of the proposal.
     #[prost(enumeration = "Topic", optional, tag = "23")]
     pub topic: ::core::option::Option<i32>,
+    /// When a voting power spike is detected, ballots are created using a previous snapshot of the
+    /// voting power, and this field indicates the timestamp at which the snapshot was taken. This
+    /// field should not be set in normal circumstances, and if it is set, it is an indicator that a
+    /// bug might have caused the voting power spike.
+    #[prost(uint64, optional, tag = "24")]
+    pub previous_ballots_timestamp_seconds: ::core::option::Option<u64>,
 }
 /// This structure contains data for settling the Neurons' Fund participation in an SNS token swap.
 #[derive(
@@ -2120,6 +2168,21 @@ pub struct KnownNeuronData {
     #[prost(string, optional, tag = "2")]
     pub description: ::core::option::Option<::prost::alloc::string::String>,
 }
+/// Proposal action to deregister a known neuron by removing its name and description.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct DeregisterKnownNeuron {
+    #[prost(message, optional, tag = "1")]
+    pub id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
+}
 /// Proposal action to call the "open" method of an SNS token swap canister.
 #[derive(
     candid::CandidType,
@@ -2694,6 +2757,23 @@ pub mod update_canister_settings {
         }
     }
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct FulfillSubnetRentalRequest {
+    #[prost(message, optional, tag = "1")]
+    pub user: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(message, repeated, tag = "3")]
+    pub node_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    #[prost(string, tag = "2")]
+    pub replica_version_id: ::prost::alloc::string::String,
+}
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
 /// across upgrades of the NNS governance system.
@@ -2800,8 +2880,6 @@ pub struct Governance {
     /// that it should finish before being called again.
     #[prost(bool, optional, tag = "19")]
     pub spawning_neurons: ::core::option::Option<bool>,
-    #[prost(message, optional, tag = "20")]
-    pub making_sns_proposal: ::core::option::Option<governance::MakingSnsProposal>,
     /// Local cache for XDR-related conversion rates (the source of truth is in the CMC canister).
     #[prost(message, optional, tag = "26")]
     pub xdr_conversion_rate: ::core::option::Option<XdrConversionRate>,
@@ -2969,6 +3047,8 @@ pub mod governance {
         pub not_dissolving_neurons_e8s_buckets_seed: ::std::collections::HashMap<u64, f64>,
         #[prost(map = "uint64, double", tag = "35")]
         pub not_dissolving_neurons_e8s_buckets_ect: ::std::collections::HashMap<u64, f64>,
+        #[prost(uint64, tag = "42")]
+        pub spawning_neurons_count: u64,
         /// Deprecated. Use non_self_authenticating_controller_neuron_subset_metrics instead.
         #[prost(uint64, optional, tag = "36")]
         pub total_voting_power_non_self_authenticating_controller: ::core::option::Option<u64>,
@@ -3042,31 +3122,6 @@ pub mod governance {
             #[prost(map = "uint64, uint64", tag = "14")]
             pub potential_voting_power_buckets: ::std::collections::HashMap<u64, u64>,
         }
-    }
-    /// Records that making an OpenSnsTokenSwap (OSTS) or CreateServiceNervousSystem (CSNS)
-    /// proposal is in progress. We only want one of these to be happening at the same time,
-    /// because otherwise, it is error prone to enforce that open OSTS or CSNS proposals are
-    /// unique. In particular, the result of checking that the proposal currently being made
-    /// would be unique is liable to becoming invalid during an .await.
-    ///
-    /// This is a temporary measure, because OSTS is part of the SNS flow that will
-    /// be replaced by 1-proposal very soon.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct MakingSnsProposal {
-        #[prost(message, optional, tag = "1")]
-        pub proposer_id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
-        #[prost(message, optional, tag = "2")]
-        pub caller: ::core::option::Option<::ic_base_types::PrincipalId>,
-        #[prost(message, optional, tag = "3")]
-        pub proposal: ::core::option::Option<super::Proposal>,
     }
 }
 #[derive(
@@ -4071,7 +4126,8 @@ pub struct FinalizeDisburseMaturity {
 pub enum Topic {
     /// The `Unspecified` topic is used as a fallback when
     /// following. That is, if no followees are specified for a given
-    /// topic, the followees for this topic are used instead.
+    /// topic (other than the "Governance" and "SNS & Neurons' Fund" topics),
+    /// the followees for this topic are used instead.
     Unspecified = 0,
     /// A special topic by means of which a neuron can be managed by the
     /// followees for this topic (in this case, there is no fallback to
@@ -4116,7 +4172,7 @@ pub enum Topic {
     SubnetManagement = 7,
     /// All proposals to manage NNS-controlled canisters not covered by other topics (Protocol Canister
     /// Management or Service Nervous System Management).
-    NetworkCanisterManagement = 8,
+    ApplicationCanisterManagement = 8,
     /// Proposals that update KYC information for regulatory purposes,
     /// for example during the initial Genesis distribution of ICP in the
     /// form of neurons.
@@ -4173,7 +4229,7 @@ impl Topic {
             Self::NodeAdmin => "TOPIC_NODE_ADMIN",
             Self::ParticipantManagement => "TOPIC_PARTICIPANT_MANAGEMENT",
             Self::SubnetManagement => "TOPIC_SUBNET_MANAGEMENT",
-            Self::NetworkCanisterManagement => "TOPIC_NETWORK_CANISTER_MANAGEMENT",
+            Self::ApplicationCanisterManagement => "TOPIC_APPLICATION_CANISTER_MANAGEMENT",
             Self::Kyc => "TOPIC_KYC",
             Self::NodeProviderRewards => "TOPIC_NODE_PROVIDER_REWARDS",
             Self::IcOsVersionDeployment => "TOPIC_IC_OS_VERSION_DEPLOYMENT",
@@ -4196,7 +4252,7 @@ impl Topic {
             "TOPIC_NODE_ADMIN" => Some(Self::NodeAdmin),
             "TOPIC_PARTICIPANT_MANAGEMENT" => Some(Self::ParticipantManagement),
             "TOPIC_SUBNET_MANAGEMENT" => Some(Self::SubnetManagement),
-            "TOPIC_NETWORK_CANISTER_MANAGEMENT" => Some(Self::NetworkCanisterManagement),
+            "TOPIC_APPLICATION_CANISTER_MANAGEMENT" => Some(Self::ApplicationCanisterManagement),
             "TOPIC_KYC" => Some(Self::Kyc),
             "TOPIC_NODE_PROVIDER_REWARDS" => Some(Self::NodeProviderRewards),
             "TOPIC_IC_OS_VERSION_DEPLOYMENT" => Some(Self::IcOsVersionDeployment),

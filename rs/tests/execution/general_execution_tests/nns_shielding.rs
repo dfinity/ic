@@ -3,8 +3,8 @@ end::catalog[] */
 
 use candid::{Encode, Principal};
 use ic_agent::{
-    agent::{RejectCode, RejectResponse},
     AgentError,
+    agent::{RejectCode, RejectResponse},
 };
 use ic_base_types::RegistryVersion;
 use ic_management_canister_types_private::SetupInitialDKGArgs;
@@ -21,73 +21,6 @@ const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 lazy_static! {
     static ref INITIAL_CYCLES: Cycles =
         CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
-}
-
-// Wasm for a canister that calls mint_cycles
-// Replies `CanisterError` if canister is not on NNS subnet
-const MINT_CYCLES: &str = r#"(module
-                  (import "ic0" "msg_reply_data_append"
-                            (func $msg_reply_data_append (param i32) (param i32)))
-                  (import "ic0" "mint_cycles" (func $ic0_mint_cycles (param i64) (result i64)))
-                  (import "ic0" "msg_reply" (func $ic0_msg_reply))
-
-
-                  (func $test
-                        (i64.store
-                            (i32.const 0) ;; store at the beginning of the heap
-                            (call $ic0_mint_cycles (i64.const 10000000000))
-                        )
-                        (call $msg_reply_data_append (i32.const 0) (i32.const 8))
-                        (call $ic0_msg_reply)
-                  )
-
-
-                  (export "canister_update test" (func $test))
-                  (memory $memory 1)
-                  (export "memory" (memory $memory))
-              )"#;
-
-pub fn mint_cycles_not_supported_on_application_subnet(env: TestEnv) {
-    let initial_cycles = CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
-    let app_node = env.get_first_healthy_application_node_snapshot();
-    let agent = app_node.build_default_agent();
-    block_on(async move {
-        let wasm = wat::parse_str(MINT_CYCLES).unwrap();
-        let canister_id: Principal = create_and_install_with_cycles(
-            &agent,
-            app_node.effective_canister_id(),
-            wasm.as_slice(),
-            initial_cycles * 3u64,
-        )
-        .await;
-
-        let before_balance = get_balance(&canister_id, &agent).await;
-        assert!(
-            Cycles::from(before_balance) > initial_cycles * 2u64,
-            "expected {} > {}",
-            before_balance,
-            initial_cycles * 2u64
-        );
-        assert!(
-            Cycles::from(before_balance) <= initial_cycles * 3u64,
-            "expected {} <= {}",
-            before_balance,
-            initial_cycles * 3u64
-        );
-
-        // The test function on the wasm module will call the mint_cycles system
-        // call.
-        let res = agent.update(&canister_id, "test").call_and_wait().await;
-
-        assert_reject(res, RejectCode::CanisterError);
-        let after_balance = get_balance(&canister_id, &agent).await;
-        assert!(
-            after_balance < before_balance,
-            "expected {} < {}",
-            after_balance,
-            before_balance
-        );
-    });
 }
 
 fn setup_ucan_and_try_mint128(node: IcNodeSnapshot) -> (AgentError, u128, u128, String) {
@@ -130,21 +63,19 @@ pub fn mint_cycles128_not_supported_on_application_subnet(env: TestEnv) {
     let app_node = env.get_first_healthy_application_node_snapshot();
     let (res, before_balance, after_balance, canister_id) = setup_ucan_and_try_mint128(app_node);
     let expected_reject = RejectResponse {
-                reject_code: RejectCode::CanisterError,
-                reject_message: format!(
-                    "Error from Canister {}: Canister violated contract: ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}.\nIf you are running this canister in a test environment (e.g., dfx), make sure the test environment is up to date. Otherwise, this is likely an error with the compiler/CDK toolchain being used to build the canister. Please report the error to IC devs on the forum: https://forum.dfinity.org and include which language/CDK was used to create the canister.",
-                    canister_id, canister_id,
-                    CYCLES_MINTING_CANISTER_ID),
-                error_code: Some("IC0504".to_string())};
+        reject_code: RejectCode::CanisterError,
+        reject_message: format!(
+            "Error from Canister {canister_id}: Canister violated contract: ic0.mint_cycles128 cannot be executed on non Cycles Minting Canister: {canister_id} != {CYCLES_MINTING_CANISTER_ID}.\nIf you are running this canister in a test environment (e.g., dfx), make sure the test environment is up to date. Otherwise, this is likely an error with the compiler/CDK toolchain being used to build the canister. Please report the error to IC devs on the forum: https://forum.dfinity.org and include which language/CDK was used to create the canister."
+        ),
+        error_code: Some("IC0504".to_string()),
+    };
     match res {
         AgentError::CertifiedReject { reject, .. } => assert_eq!(reject, expected_reject),
-        _ => panic!("Unexpected error: {:?}", res),
+        _ => panic!("Unexpected error: {res:?}"),
     };
     assert!(
         after_balance <= before_balance,
-        "expected {} <= {}",
-        after_balance,
-        before_balance
+        "expected {after_balance} <= {before_balance}"
     );
 }
 
@@ -195,9 +126,7 @@ pub fn no_cycle_balance_limit_on_nns_subnet(env: TestEnv) {
         assert_eq!(
             Cycles::from(balance),
             CYCLES_LIMIT_PER_CANISTER,
-            "expected {} == {}",
-            balance,
-            CYCLES_LIMIT_PER_CANISTER
+            "expected {balance} == {CYCLES_LIMIT_PER_CANISTER}"
         );
 
         let balance = get_balance_via_canister(&canister_b_id, &canister_a).await;

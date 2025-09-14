@@ -29,6 +29,7 @@ rust_test(
         # Keep sorted.
         ":evm-rpc-client",
         "@crate_index//:mockall",
+        "@crate_index//:serde_json",
         "@crate_index//:tokio",
     ],
 )

@@ -5,7 +5,7 @@ use crate::{
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
+use ic_nervous_system_common::{E8, assert_is_err, assert_is_ok};
 #[cfg(feature = "test")]
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::pb::v1::NeuronId;
@@ -25,6 +25,7 @@ mod list_proposals;
 mod neurons_fund;
 mod node_provider_rewards;
 mod stake_maturity;
+mod update_node_provider;
 
 #[test]
 fn test_time_warp() {
@@ -39,8 +40,8 @@ fn test_time_warp() {
 }
 
 mod settle_neurons_fund_participation_request_tests {
-    use settle_neurons_fund_participation_request::{Aborted, Committed, Result};
     use SettleNeuronsFundParticipationRequest;
+    use settle_neurons_fund_participation_request::{Aborted, Committed, Result};
 
     use super::*;
 
@@ -139,8 +140,8 @@ mod settle_neurons_fund_participation_mem_tests {
     use crate::{
         governance::MAX_NEURONS_FUND_PARTICIPANTS,
         neurons_fund::{
-            neurons_fund_neuron::MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON, NeuronsFundNeuronPortion,
-            NeuronsFundSnapshot,
+            NeuronsFundNeuronPortion, NeuronsFundSnapshot,
+            neurons_fund_neuron::MAX_HOTKEYS_FROM_NEURONS_FUND_NEURON,
         },
         pb::v1 as gov_pb,
     };
@@ -507,7 +508,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
 
         // Step 3: Inspect the result: Err must contain "wait for quiet".
         match converted {
-            Ok(ok) => panic!("Invalid data was not rejected. Result: {:#?}", ok),
+            Ok(ok) => panic!("Invalid data was not rejected. Result: {ok:#?}"),
             Err(err) => assert!(err.contains("wait_for_quiet"), "{}", err),
         }
     }
@@ -856,7 +857,7 @@ mod metrics_tests {
     use crate::{
         encode_metrics,
         governance::Governance,
-        pb::v1::{proposal, Motion, Proposal, ProposalData, Tally, Topic},
+        pb::v1::{Motion, Proposal, ProposalData, Tally, Topic, proposal},
         test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
     };
 
@@ -1035,22 +1036,22 @@ mod neuron_archiving_tests {
             NOW,
         )
         .build();
-        assert!(model_neuron.is_inactive(NOW), "{:#?}", model_neuron);
+        assert!(model_neuron.is_inactive(NOW), "{model_neuron:#?}");
 
         // Case Some(positive): Active.
         let mut neuron = model_neuron.clone();
         neuron.joined_community_fund_timestamp_seconds = Some(42);
-        assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
+        assert!(!neuron.is_inactive(NOW), "{neuron:#?}");
 
         // Case Some(0): Inactive.
         let mut neuron = model_neuron.clone();
         neuron.joined_community_fund_timestamp_seconds = Some(0);
-        assert!(neuron.is_inactive(NOW), "{:#?}", neuron);
+        assert!(neuron.is_inactive(NOW), "{neuron:#?}");
 
         // Case None: Same as Some(0), i.e. Inactive
         let mut neuron = model_neuron.clone();
         neuron.joined_community_fund_timestamp_seconds = None;
-        assert!(neuron.is_inactive(NOW), "{:#?}", neuron);
+        assert!(neuron.is_inactive(NOW), "{neuron:#?}");
 
         // This is just so that clone is always called in all of the above cases.
         drop(model_neuron);
@@ -1077,28 +1078,28 @@ mod neuron_archiving_tests {
             neuron_with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds: 42,
             });
-        assert!(neuron.is_inactive(NOW), "{:#?}", neuron);
+        assert!(neuron.is_inactive(NOW), "{neuron:#?}");
 
         // Case 1b: Dissolved right now: Active
         let neuron =
             neuron_with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds: NOW,
             });
-        assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
+        assert!(!neuron.is_inactive(NOW), "{neuron:#?}");
 
         // Case 1c: Soon to be dissolved: Active (again).
         let neuron =
             neuron_with_dissolve_state_and_age(DissolveStateAndAge::DissolvingOrDissolved {
                 when_dissolved_timestamp_seconds: NOW + 42,
             });
-        assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
+        assert!(!neuron.is_inactive(NOW), "{neuron:#?}");
 
         // Case 2: DissolveDelay(positive): Active
         let neuron = neuron_with_dissolve_state_and_age(DissolveStateAndAge::NotDissolving {
             dissolve_delay_seconds: 42,
             aging_since_timestamp_seconds: NOW,
         });
-        assert!(!neuron.is_inactive(NOW), "{:#?}", neuron);
+        assert!(!neuron.is_inactive(NOW), "{neuron:#?}");
     }
 
     proptest! {
@@ -1289,20 +1290,9 @@ fn test_validate_execute_nns_function() {
                 nns_function: NnsFunction::IcpXdrConversionRate as i32,
                 payload: vec![],
             },
-            "The payload could not be decoded into a UpdateIcpXdrConversionRatePayload: \
-             Cannot parse header "
+            "Proposal is obsolete because NNS_FUNCTION_ICP_XDR_CONVERSION_RATE is obsolete as \
+            conversion rates are now provided by the exchange rate canister automatically."
                 .to_string(),
-        ),
-        (
-            ExecuteNnsFunction {
-                nns_function: NnsFunction::IcpXdrConversionRate as i32,
-                payload: Encode!(&UpdateIcpXdrConversionRatePayload {
-                    xdr_permyriad_per_icp: 0,
-                    ..Default::default()
-                })
-                .unwrap(),
-            },
-            "The proposed rate 0 is below the minimum allowable rate".to_string(),
         ),
         (
             ExecuteNnsFunction {
@@ -1428,14 +1418,6 @@ fn test_validate_execute_nns_function() {
             payload: vec![1u8; PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX],
         },
         ExecuteNnsFunction {
-            nns_function: NnsFunction::IcpXdrConversionRate as i32,
-            payload: Encode!(&UpdateIcpXdrConversionRatePayload {
-                xdr_permyriad_per_icp: 101,
-                ..Default::default()
-            })
-            .unwrap(),
-        },
-        ExecuteNnsFunction {
             nns_function: NnsFunction::AssignNoid as i32,
             payload: Encode!(&AddNodeOperatorPayload {
                 node_provider_principal_id: Some(PrincipalId::new_node_test_id(1)),
@@ -1490,6 +1472,17 @@ fn test_canister_and_function_no_unreachable() {
         // This will return either `Ok(_)` for nns functions that are still used, or `Err(_)` for
         // obsolete ones. The test just makes sure that it doesn't panic.
         let _ = nns_function.canister_and_function();
+    }
+}
+
+#[test]
+fn test_compute_topic_at_creation_no_unreachable() {
+    use strum::IntoEnumIterator;
+
+    for nns_function in NnsFunction::iter() {
+        // This will return either `Ok(_)` for nns functions that are still used, or `Err(_)` for
+        // obsolete ones. The test just makes sure that it doesn't panic.
+        let _ = nns_function.compute_topic_at_creation();
     }
 }
 
@@ -1576,10 +1569,7 @@ fn test_update_neuron_errors_out_expectedly() {
         governance.update_neuron(new_neuron(vec![0; 32]).into_api(0, &Default::default())),
         Err(GovernanceError::new_with_message(
             ErrorType::PreconditionFailed,
-            format!(
-                "Cannot change the subaccount {} of a neuron.",
-                neuron_subaccount
-            ),
+            format!("Cannot change the subaccount {neuron_subaccount} of a neuron."),
         )),
     );
 }
@@ -1637,7 +1627,7 @@ fn test_compute_ballots_for_new_proposal() {
         neuron_id_or_subaccount: None,
         command: None,
     }));
-    let (ballots, tot_potential_voting_power) = governance
+    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
         .compute_ballots_for_new_proposal(&manage_neuron_action, &NeuronId { id: 10 }, now_seconds)
         .expect("Failed computing ballots for new proposal");
 
@@ -1657,7 +1647,7 @@ fn test_compute_ballots_for_new_proposal() {
     );
 
     let motion_action = Action::Motion(Default::default());
-    let (ballots, tot_potential_voting_power) = governance
+    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
         .compute_ballots_for_new_proposal(&motion_action, &NeuronId { id: 10 }, now_seconds)
         .expect("Failed computing ballots for new proposal");
     // Similar to previous; this time though, Action::ManageNeuron, the weird
@@ -1688,7 +1678,7 @@ fn test_compute_ballots_for_new_proposal() {
     // Not affected by refresh.
     let now_seconds = CREATED_TIMESTAMP_SECONDS + 20 * ONE_YEAR_SECONDS;
 
-    let (ballots, tot_potential_voting_power) = governance
+    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
         .compute_ballots_for_new_proposal(&motion_action, &NeuronId { id: 10 }, now_seconds)
         .expect("Failed computing ballots for new proposal");
     let expected: u64 = governance.neuron_store.with_active_neurons_iter(|iter| {
@@ -1704,5 +1694,129 @@ fn test_compute_ballots_for_new_proposal() {
             200 => Ballot { voting_power: deciding_vote(&governance, 200, now_seconds), vote: Vote::Unspecified as i32 },
             3_000 => Ballot { voting_power: deciding_vote(&governance,3_000 , now_seconds), vote: Vote::Unspecified as i32 },
         }
+    );
+}
+
+#[test]
+fn test_validate_add_or_remove_node_provider() {
+    let node_provider_id = PrincipalId::new_user_test_id(1);
+    let existing_node_provider = api::NodeProvider {
+        id: Some(node_provider_id),
+        reward_account: None,
+    };
+
+    let governance = Governance::new(
+        api::Governance {
+            node_providers: vec![existing_node_provider.clone()],
+            ..Default::default()
+        },
+        Arc::new(MockEnvironment::new(vec![], 100)),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
+    );
+
+    let existing_node_provider = NodeProvider::from(existing_node_provider);
+
+    // Test case 1: No change field
+    let add_or_remove_no_change = AddOrRemoveNodeProvider { change: None };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_no_change);
+    assert!(result.is_err());
+
+    // Test case 2: ToAdd with new node provider (should succeed)
+    let new_node_provider_id = PrincipalId::new_user_test_id(2);
+    let valid_account = AccountIdentifier::new(new_node_provider_id, None);
+
+    let new_node_provider = NodeProvider {
+        id: Some(new_node_provider_id),
+        reward_account: Some(valid_account.into_proto_with_checksum()),
+    };
+    let add_or_remove_add_new = AddOrRemoveNodeProvider {
+        change: Some(Change::ToAdd(new_node_provider)),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_add_new);
+    assert!(
+        result.is_ok(),
+        "Expected to succeed, but got error: {result:?}"
+    );
+
+    // Test case 3: ToAdd with existing node provider (should fail)
+    let add_or_remove_add_existing = AddOrRemoveNodeProvider {
+        change: Some(Change::ToAdd(existing_node_provider.clone())),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_add_existing);
+    assert!(result.is_err());
+
+    // Test case 4: ToAdd with invalid account identifier (should fail)
+    let node_provider_with_invalid_account = NodeProvider {
+        id: Some(PrincipalId::new_user_test_id(3)),
+        reward_account: Some(icp_ledger::protobuf::AccountIdentifier {
+            hash: vec![1, 2, 3], // Invalid length
+        }),
+    };
+    let add_or_remove_invalid_account = AddOrRemoveNodeProvider {
+        change: Some(Change::ToAdd(node_provider_with_invalid_account)),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_invalid_account);
+    assert!(result.is_err());
+
+    // Test case 5: ToAdd with 28-byte length (should fail)
+    let node_provider_with_invalid_account = NodeProvider {
+        id: Some(PrincipalId::new_user_test_id(3)),
+        reward_account: Some(icp_ledger::protobuf::AccountIdentifier {
+            hash: vec![1; 28], // 32-byte required, but only 28 bytes provided
+        }),
+    };
+    let add_or_remove_invalid_account = AddOrRemoveNodeProvider {
+        change: Some(Change::ToAdd(node_provider_with_invalid_account)),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_invalid_account);
+    assert!(result.is_err());
+
+    // Test case 6: ToRemove with existing node provider (should succeed)
+    let add_or_remove_remove_existing = AddOrRemoveNodeProvider {
+        change: Some(Change::ToRemove(existing_node_provider)),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_remove_existing);
+    assert!(result.is_ok());
+
+    // Test case 7: ToRemove with non-existing node provider (should fail)
+    let non_existing_node_provider = NodeProvider {
+        id: Some(PrincipalId::new_user_test_id(999)),
+        reward_account: None,
+    };
+    let add_or_remove_remove_non_existing = AddOrRemoveNodeProvider {
+        change: Some(Change::ToRemove(non_existing_node_provider)),
+    };
+    let result =
+        governance.validate_add_or_remove_node_provider(&add_or_remove_remove_non_existing);
+    assert!(result.is_err());
+
+    // Test Case 8: ToAdd with no NodeProvider ID (should fail)
+    let node_provider_without_id = NodeProvider {
+        id: None,
+        reward_account: Some(valid_account.into_proto_with_checksum()),
+    };
+    let add_or_remove_no_id = AddOrRemoveNodeProvider {
+        change: Some(Change::ToAdd(node_provider_without_id)),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_no_id);
+    assert!(
+        result.is_err(),
+        "Expected to fail, but got success: {result:?}"
+    );
+
+    // Test Case 9: ToRemove with no NodeProvider ID (should fail)
+    let node_provider_without_id = NodeProvider {
+        id: None,
+        reward_account: None,
+    };
+    let add_or_remove_no_id = AddOrRemoveNodeProvider {
+        change: Some(Change::ToRemove(node_provider_without_id)),
+    };
+    let result = governance.validate_add_or_remove_node_provider(&add_or_remove_no_id);
+    assert!(
+        result.is_err(),
+        "Expected to fail, but got success: {result:?}"
     );
 }

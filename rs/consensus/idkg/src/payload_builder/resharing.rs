@@ -1,8 +1,6 @@
 use crate::{payload_builder::IDkgDealingContext, pre_signer::IDkgTranscriptBuilder};
-use ic_logger::{warn, ReplicaLogger};
-use ic_management_canister_types_private::{
-    ComputeInitialIDkgDealingsResponse, ReshareChainKeyResponse,
-};
+use ic_logger::{ReplicaLogger, warn};
+use ic_management_canister_types_private::ReshareChainKeyResponse;
 use ic_types::{
     batch::ConsensusResponse,
     consensus::idkg::{self, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgReshareRequest},
@@ -62,21 +60,15 @@ fn make_reshare_dealings_response(
 ) -> Option<ConsensusResponse> {
     idkg_dealings_contexts
         .iter()
-        .find(|(_, context)| *request == reshare_request_from_dealings_context(context))
-        .map(|(callback_id, context)| {
-            let data = match context.request.method_name.as_str() {
-                // TODO(CRP-2613): Remove the different cases and always return a ReshareChainKeyResponse
-                // once the registry has been migrated
-                "reshare_chain_key" => {
-                    ReshareChainKeyResponse::IDkg(initial_dealings.into()).encode()
-                }
-                _ => ComputeInitialIDkgDealingsResponse {
-                    initial_dkg_dealings: initial_dealings.into(),
-                }
-                .encode(),
-            };
-
-            ConsensusResponse::new(*callback_id, Payload::Data(data))
+        .find_map(|(callback_id, context)| {
+            if *request == reshare_request_from_dealings_context(context) {
+                Some(ConsensusResponse::new(
+                    *callback_id,
+                    Payload::Data(ReshareChainKeyResponse::IDkg(initial_dealings.into()).encode()),
+                ))
+            } else {
+                None
+            }
         })
 }
 
@@ -186,10 +178,9 @@ mod tests {
     use crate::{
         payload_builder::filter_idkg_reshare_chain_key_contexts,
         test_utils::{
-            create_reshare_request, set_up_idkg_payload, TestIDkgBlockReader,
-            TestIDkgTranscriptBuilder,
+            TestIDkgBlockReader, TestIDkgTranscriptBuilder, create_reshare_request,
+            set_up_idkg_payload,
         },
-        utils::algorithm_for_key_id,
     };
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::{
@@ -197,10 +188,13 @@ mod tests {
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_management_canister_types_private::ComputeInitialIDkgDealingsResponse;
+    use ic_management_canister_types_private::ReshareChainKeyResponse;
     use ic_test_utilities_consensus::idkg::*;
     use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::consensus::idkg::{IDkgMasterPublicKeyId, IDkgPayload};
+    use ic_types::{
+        consensus::idkg::{IDkgMasterPublicKeyId, IDkgPayload},
+        crypto::AlgorithmId,
+    };
 
     fn set_up(
         key_ids: Vec<IDkgMasterPublicKeyId>,
@@ -225,10 +219,7 @@ mod tests {
         ic_types::batch::ConsensusResponse::new(
             callback_id,
             ic_types::messages::Payload::Data(
-                ic_management_canister_types_private::ComputeInitialIDkgDealingsResponse {
-                    initial_dkg_dealings: initial_dealings.into(),
-                }
-                .encode(),
+                ReshareChainKeyResponse::IDkg(initial_dealings.into()).encode(),
             ),
         )
     }
@@ -248,7 +239,7 @@ mod tests {
             initial_dealings.insert(
                 i,
                 dummy_initial_idkg_dealing_for_tests(
-                    algorithm_for_key_id(key_id),
+                    AlgorithmId::from(key_id.inner()),
                     &mut reproducible_rng(),
                 ),
             );
@@ -273,9 +264,12 @@ mod tests {
                 panic!("Request should have a data response");
             };
 
-            let response = ComputeInitialIDkgDealingsResponse::decode(&data)
-                .expect("Failed to decode response");
-            let dealings = InitialIDkgDealings::try_from(&response.initial_dkg_dealings)
+            let response =
+                ReshareChainKeyResponse::decode(&data).expect("Failed to decode response");
+            let ReshareChainKeyResponse::IDkg(initial_idkg_dealings) = response else {
+                panic!("Expected an Idkg response");
+            };
+            let dealings = InitialIDkgDealings::try_from(&initial_idkg_dealings)
                 .expect("Failed to convert dealings");
             assert_eq!(initial_dealings.get(&i).unwrap(), &dealings);
         }
@@ -324,7 +318,10 @@ mod tests {
                 .ongoing_xnet_reshares
                 .get(&request)
                 .expect("should exist");
-            assert_eq!(params.as_ref().algorithm_id, algorithm_for_key_id(&key_id));
+            assert_eq!(
+                params.as_ref().algorithm_id,
+                AlgorithmId::from(key_id.inner())
+            );
 
             assert!(payload.xnet_reshare_agreements.is_empty());
         }
@@ -348,14 +345,17 @@ mod tests {
                 .ongoing_xnet_reshares
                 .get(&request)
                 .expect("should exist");
-            assert_eq!(params.as_ref().algorithm_id, algorithm_for_key_id(&key_id));
+            assert_eq!(
+                params.as_ref().algorithm_id,
+                AlgorithmId::from(key_id.inner())
+            );
             let params_2 = payload
                 .ongoing_xnet_reshares
                 .get(&request_2)
                 .expect("should exist");
             assert_eq!(
                 params_2.as_ref().algorithm_id,
-                algorithm_for_key_id(&key_id)
+                AlgorithmId::from(key_id.inner())
             );
             assert!(payload.xnet_reshare_agreements.is_empty());
         }
@@ -426,7 +426,10 @@ mod tests {
             .unwrap()
             .as_ref()
             .clone();
-        assert_eq!(reshare_params_1.algorithm_id, algorithm_for_key_id(&key_id));
+        assert_eq!(
+            reshare_params_1.algorithm_id,
+            AlgorithmId::from(key_id.inner())
+        );
         let dealings_1 = dummy_dealings(reshare_params_1.transcript_id, &reshare_params_1.dealers);
         transcript_builder.add_dealings(reshare_params_1.transcript_id, dealings_1.clone());
         update_completed_reshare_requests(
@@ -460,7 +463,10 @@ mod tests {
             .unwrap()
             .as_ref()
             .clone();
-        assert_eq!(reshare_params_2.algorithm_id, algorithm_for_key_id(&key_id));
+        assert_eq!(
+            reshare_params_2.algorithm_id,
+            AlgorithmId::from(key_id.inner())
+        );
         let dealings_2 = dummy_dealings(reshare_params_2.transcript_id, &reshare_params_2.dealers);
         transcript_builder.add_dealings(reshare_params_2.transcript_id, dealings_2.clone());
         update_completed_reshare_requests(

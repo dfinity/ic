@@ -76,7 +76,8 @@ def format_account(account):
         return "None"
 
     addr = account.get("address", "")
-    sub = account.get("metadata", {}).get("sub_account", "")
+    sub_account = account.get("sub_account", {})
+    sub = sub_account.get("address", "") if sub_account else ""
 
     if sub:
         return f"{addr} (sub:{sub})"

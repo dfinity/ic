@@ -1,10 +1,12 @@
 #![allow(dead_code)]
 use crate::driver::constants;
+use crate::driver::test_env::HasIcPrepDir;
+use crate::driver::vector_vm::VectorVm;
 use crate::driver::{
     farm::{Farm, HostFeature},
     resource::AllocatedVm,
     task_scheduler::TaskScheduler,
-    test_env_api::{FarmBaseUrl, HasGroupSetup, HasIcDependencies},
+    test_env_api::{FarmBaseUrl, HasFarmUrl, HasGroupSetup},
     universal_vm::UNIVERSAL_VMS_DIR,
     {
         action_graph::ActionGraph,
@@ -25,12 +27,15 @@ use crate::driver::{
 };
 use crate::k8s::tnet::TNet;
 use crate::util::block_on;
+use chrono::Utc;
+use regex::Regex;
 use walkdir::WalkDir;
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Parser;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
@@ -45,7 +50,7 @@ use crate::driver::{
     task::{SkipTestTask, Task},
     timeout::TimeoutTask,
 };
-use slog::{debug, error, info, trace, warn, Logger};
+use slog::{Logger, debug, error, info, trace, warn};
 use std::{
     collections::{BTreeMap, HashMap},
     iter::once,
@@ -64,6 +69,7 @@ const DEBUG_KEEPALIVE_TASK_NAME: &str = "debug_keepalive";
 const REPORT_TASK_NAME: &str = "report";
 const KEEPALIVE_TASK_NAME: &str = "keepalive";
 const UVMS_LOGS_STREAM_TASK_NAME: &str = "uvms_logs_stream";
+const VECTOR_TASK_NAME: &str = "vector_logging";
 const SETUP_TASK_NAME: &str = "setup";
 const LIFETIME_GUARD_TASK_PREFIX: &str = "lifetime_guard_";
 pub const COLOCATE_CONTAINER_NAME: &str = "system_test";
@@ -130,6 +136,15 @@ pub struct CliArgs {
         value_parser = CliArgs::parse_host_feature
     )]
     pub required_host_features: Option<Vec<HostFeature>>,
+
+    #[clap(long = "no-logs", help = "If set, the vector vm will not be spawned.")]
+    pub no_logs: bool,
+
+    #[clap(
+        long = "exclude-logs",
+        help = "The list of regexes which will be skipped from the streaming."
+    )]
+    pub exclude_logs: Vec<Regex>,
 }
 
 impl CliArgs {
@@ -192,7 +207,7 @@ impl TestEnvAttribute for SetupResult {
 }
 
 pub fn is_task_visible_to_user(task_id: &TaskId) -> bool {
-    matches!(task_id, TaskId::Test(task_name) if task_name.ne(REPORT_TASK_NAME) && task_name.ne(KEEPALIVE_TASK_NAME) && task_name.ne(UVMS_LOGS_STREAM_TASK_NAME) && !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX) && !task_name.starts_with("dummy("))
+    matches!(task_id, TaskId::Test(task_name) if task_name.ne(REPORT_TASK_NAME) && task_name.ne(KEEPALIVE_TASK_NAME) && task_name.ne(UVMS_LOGS_STREAM_TASK_NAME) && task_name.ne(VECTOR_TASK_NAME) && !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX) && !task_name.starts_with("dummy("))
 }
 
 pub struct ComposeContext<'a> {
@@ -220,9 +235,7 @@ fn timed(
 ) -> Plan<Box<dyn Task>> {
     trace!(
         ctx.logger,
-        "timed(plan={:?}, timeout={:?})",
-        &plan,
-        &timeout
+        "timed(plan={:?}, timeout={:?})", &plan, &timeout
     );
     let timeout_task = TimeoutTask::new(
         ctx.rh.clone(),
@@ -244,10 +257,7 @@ fn compose(
 ) -> Plan<Box<dyn Task>> {
     trace!(
         ctx.logger,
-        "compose(root={:?}, ordering={:?}, children={:?})",
-        &root_task,
-        &ordering,
-        &children
+        "compose(root={:?}, ordering={:?}, children={:?})", &root_task, &ordering, &children
     );
     let root_task = match root_task {
         Some(task) => task,
@@ -379,7 +389,9 @@ impl SystemTestSubGroup {
                         let env = get_or_create_env(group_ctx, task_id).unwrap();
                         // This function will only be called after setup finishes
                         if SetupResult::try_read_attribute(&env).is_err() {
-                            panic!("Failed to find SetupResult attribute after setup. Cancelling test function.");
+                            panic!(
+                                "Failed to find SetupResult attribute after setup. Cancelling test function."
+                            );
                         }
                         task_fn(env)
                     }
@@ -417,6 +429,18 @@ impl Plan<Box<dyn Task>> {
             Plan::Supervised { supervisor, .. } => supervisor.task_id(),
             Plan::Leaf { task } => task.task_id(),
         }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CliArguments {
+    #[serde(with = "serde_regex")]
+    pub exclude_logs: Vec<Regex>,
+}
+
+impl TestEnvAttribute for CliArguments {
+    fn attribute_name() -> String {
+        "cli_arguments".to_string()
     }
 }
 
@@ -539,6 +563,7 @@ impl SystemTestGroup {
 
     fn make_plan(self, rh: &Handle, group_ctx: GroupContext) -> Result<Plan<Box<dyn Task>>> {
         debug!(group_ctx.log(), "SystemTestGroup.make_plan");
+        let start_time = Utc::now();
 
         let mut compose_ctx = ComposeContext {
             rh,
@@ -561,9 +586,7 @@ impl SystemTestGroup {
                             .max_blocking_threads(1)
                             .enable_all()
                             .build()
-                            .unwrap_or_else(|err| {
-                                panic!("Could not create tokio runtime: {}", err)
-                            });
+                            .unwrap_or_else(|err| panic!("Could not create tokio runtime: {err}"));
                         let root_search_dir = {
                             let root_env = group_ctx
                                 .clone()
@@ -576,11 +599,30 @@ impl SystemTestGroup {
                                 .to_path_buf()
                         };
                         let mut streamed_uvms: HashMap<String, Ipv6Addr> = HashMap::new();
+                        let mut skipped_uvms: BTreeSet<String> = BTreeSet::new();
                         debug!(logger, ">>> {UVMS_LOGS_STREAM_TASK_NAME}");
                         loop {
                             match discover_uvms(root_search_dir.clone()) {
                                 Ok(discovered_uvms) => {
                                     for (key, value) in discovered_uvms {
+                                        if skipped_uvms.contains(&key) {
+                                            continue;
+                                        }
+
+                                        let key_match = group_ctx
+                                            .exclude_logs
+                                            .iter()
+                                            .any(|pattern| pattern.is_match(&key));
+
+                                        if key_match {
+                                            debug!(
+                                                logger,
+                                                "Skipping journald streaming of [uvm={key}] because it was excluded by the `--exclude-logs` pattern"
+                                            );
+                                            skipped_uvms.insert(key);
+                                            continue;
+                                        }
+
                                         streamed_uvms.entry(key.clone()).or_insert_with(|| {
                                                 let logger = logger.clone();
                                                 info!(
@@ -629,28 +671,30 @@ impl SystemTestGroup {
                                     setup_dir,
                                     logger.clone(),
                                 );
-                                if let Ok(group_setup) = GroupSetup::try_read_attribute(&env) {
-                                    let farm_url = env.get_farm_url().unwrap();
-                                    let farm = Farm::new(farm_url.clone(), env.logger());
-                                    let group_name = group_setup.infra_group_name;
-                                    if let Err(e) = farm.set_group_ttl(&group_name, GROUP_TTL) {
-                                        panic!(
-                                            "{}",
-                                            format!(
-                                                "Failed to keep group {} alive via endpoint {:?}: {:?}",
-                                                group_name, farm_url, e
+                                match GroupSetup::try_read_attribute(&env) {
+                                    Ok(group_setup) => {
+                                        let farm_url = env.get_farm_url().unwrap();
+                                        let farm = Farm::new(farm_url.clone(), env.logger());
+                                        let group_name = group_setup.infra_group_name;
+                                        if let Err(e) = farm.set_group_ttl(&group_name, GROUP_TTL) {
+                                            panic!(
+                                                "{}",
+                                                format!(
+                                                    "Failed to keep group {group_name} alive via endpoint {farm_url:?}: {e:?}"
+                                                )
                                             )
-                                        )
-                                    };
-                                    debug!(
-                                        logger,
-                                        "Group {} TTL set to +{:?} from now (Farm endpoint: {:?})",
-                                        group_name,
-                                        GROUP_TTL,
-                                        farm_url
-                                    );
-                                } else {
-                                    info!(logger, "Farm group not created yet.");
+                                        };
+                                        debug!(
+                                            logger,
+                                            "Group {} TTL set to +{:?} from now (Farm endpoint: {:?})",
+                                            group_name,
+                                            GROUP_TTL,
+                                            farm_url
+                                        );
+                                    }
+                                    _ => {
+                                        info!(logger, "Farm group not created yet.");
+                                    }
                                 }
                             } else {
                                 info!(logger, "Setup directory not created yet.");
@@ -665,6 +709,44 @@ impl SystemTestGroup {
             Box::from(EmptyTask::new(keepalive_task_id)) as Box<dyn Task>
         };
 
+        let logging_task_id = TaskId::Test(String::from(VECTOR_TASK_NAME));
+        let log_task = if group_ctx.logs_enabled {
+            let logger = group_ctx.logger().clone();
+            let group_ctx = group_ctx.clone();
+
+            let log_task = subproc(
+                logging_task_id,
+                move || {
+                    debug!(logger, ">>> log_fn");
+
+                    let setup_dir = group_ctx.group_dir.join(constants::GROUP_SETUP_DIR);
+                    let env =
+                        TestEnv::new_without_duplicating_logger(setup_dir.clone(), logger.clone());
+                    while !setup_dir.exists() || env.prep_dir("").is_none() {
+                        info!(logger, "Setup and/or prep directories not created yet.");
+                        std::thread::sleep(KEEPALIVE_INTERVAL);
+                    }
+
+                    let mut vector_vm = VectorVm::new().with_start_time(start_time);
+                    vector_vm.start(&env).expect("Failed to start Vector VM");
+
+                    loop {
+                        if let Err(e) = vector_vm.sync_with_vector(&env) {
+                            warn!(logger, "Failed to sync with vector vm due to: {:?}", e);
+                        }
+
+                        std::thread::sleep(KEEPALIVE_INTERVAL);
+                    }
+                },
+                &mut compose_ctx,
+            );
+
+            Box::from(log_task) as Box<dyn Task>
+        } else {
+            debug!(group_ctx.logger(), "Not spawning logs task");
+            Box::from(EmptyTask::new(logging_task_id)) as Box<dyn Task>
+        };
+
         let setup_plan = {
             let logger = group_ctx.logger().clone();
             let group_ctx = group_ctx.clone();
@@ -675,7 +757,15 @@ impl SystemTestGroup {
                 TaskId::Test(String::from(SETUP_TASK_NAME)),
                 move || {
                     debug!(logger, ">>> setup_fn");
+                    let cli_arguments = CliArguments {
+                        exclude_logs: group_ctx.exclude_logs.clone(),
+                    };
+
                     let env = ensure_setup_env(group_ctx);
+
+                    // Persist the cli arguments in case the test needs them
+                    cli_arguments.write_attribute(&env);
+
                     setup_fn(env.clone());
                     SetupResult {}.write_attribute(&env);
                 },
@@ -720,6 +810,13 @@ impl SystemTestGroup {
                 &mut compose_ctx,
             );
 
+            let logs_plan = compose(
+                Some(log_task),
+                EvalOrder::Sequential,
+                vec![uvms_stream_plan],
+                &mut compose_ctx,
+            );
+
             // TODO: k8s
             let report_plan = Ok(compose(
                 Some(Box::new(EmptyTask::new(TaskId::Test(
@@ -728,13 +825,13 @@ impl SystemTestGroup {
                 EvalOrder::Sequential,
                 vec![if let Some(overall_timeout) = self.overall_timeout {
                     timed(
-                        uvms_stream_plan,
+                        logs_plan,
                         overall_timeout,
                         Some(String::from("::group")),
                         &mut compose_ctx,
                     )
                 } else {
-                    uvms_stream_plan
+                    logs_plan
                 }],
                 &mut compose_ctx,
             ));
@@ -756,6 +853,13 @@ impl SystemTestGroup {
             Some(uvms_logs_stream_task),
             EvalOrder::Sequential,
             vec![keepalive_plan],
+            &mut compose_ctx,
+        );
+
+        let logs_plan = compose(
+            Some(log_task),
+            EvalOrder::Sequential,
+            vec![uvms_stream_plan],
             &mut compose_ctx,
         );
 
@@ -783,7 +887,7 @@ impl SystemTestGroup {
         Ok(compose(
             Some(keepalive_task),
             EvalOrder::Parallel,
-            vec![report_plan, uvms_stream_plan],
+            vec![report_plan, logs_plan],
             &mut compose_ctx,
         ))
     }
@@ -809,6 +913,8 @@ impl SystemTestGroup {
             args.no_farm_keepalive || args.no_group_ttl,
             args.group_base_name,
             args.k8s,
+            !args.no_logs,
+            args.exclude_logs,
         )?;
 
         let with_farm = self.with_farm && !args.k8s;
@@ -876,8 +982,7 @@ impl SystemTestGroup {
                     "Test function names must be unique across an entire SystemTestGroup instance"
                         .to_string(),
                 counterexample: format!(
-                    "test function name {} is specified more than once",
-                    duplicate_task_id
+                    "test function name {duplicate_task_id} is specified more than once"
                 )
             })
         }
@@ -1005,13 +1110,13 @@ impl std::fmt::Display for JournalRecord {
         }
         let mut display = format!("message: \"{}\"", self.message);
         if let Some(x) = &self.system_unit {
-            display += format!(", system_unit: \"{}\"", x).as_str()
+            display += format!(", system_unit: \"{x}\"").as_str()
         }
         if let Some(x) = &self.container_name {
-            display += format!(", container_name: \"{}\"", x).as_str()
+            display += format!(", container_name: \"{x}\"").as_str()
         }
         if let Some(x) = &self.comm {
-            display += format!(", comm: \"{}\"", x).as_str()
+            display += format!(", comm: \"{x}\"").as_str()
         }
         write!(f, "JournalRecord {{{display}}}")
     }
@@ -1077,13 +1182,13 @@ impl std::fmt::Display for Cursor {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Cursor::Start => write!(f, ""),
-            Cursor::Position(x) => write!(f, "{}", x),
+            Cursor::Position(x) => write!(f, "{x}"),
         }
     }
 }
 
 macro_rules! unwrap_or_return {
-    ( $val1:expr, $val2:expr ) => {
+    ( $val1:expr_2021, $val2:expr_2021 ) => {
         match $val2 {
             Ok(x) => x,
             Err(x) => return ($val1, Err(x.into())),

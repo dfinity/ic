@@ -19,11 +19,11 @@ pub enum OperationType {
     AddHotkey,
     RemoveHotkey,
     Spawn,
-    MergeMaturity,
     RegisterVote,
     StakeMaturity,
     NeuronInfo,
     ListNeurons,
     Follow,
     RefreshVotingPower,
+    DisburseMaturity,
 }

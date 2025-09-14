@@ -1,67 +1,80 @@
 use super::{parse_principal_id, verify_principal_ids};
 use crate::{
-    common::{build_validator, into_cbor, validation_error_to_http_error, Cbor, WithTimeout},
     HttpError, ReplicaHealthStatus,
+    common::{Cbor, WithTimeout, build_validator, into_cbor, validation_error_to_http_error},
 };
 
 use axum::{
+    Router,
     body::Body,
     extract::{DefaultBodyLimit, State},
     response::{IntoResponse, Response},
-    Router,
 };
 use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::StatusCode;
 use ic_crypto_interfaces_sig_verification::IngressSigVerifier;
-use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
+use ic_crypto_tree_hash::{Label, Path, TooLongPathError, sparse_labeled_tree_from_paths};
 use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
+use ic_nns_delegation_manager::{CanisterRangesFilter, NNSDelegationReader};
 use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
-use ic_replicated_state::{canister_state::execution_state::CustomSectionType, ReplicatedState};
+use ic_replicated_state::{ReplicatedState, canister_state::execution_state::CustomSectionType};
 use ic_types::{
+    CanisterId, PrincipalId, UserId,
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, Certificate, CertificateDelegation, HttpReadStateContent, HttpReadStateResponse,
-        HttpRequest, HttpRequestEnvelope, MessageId, ReadState, EXPECTED_MESSAGE_ID_LENGTH,
+        Blob, Certificate, EXPECTED_MESSAGE_ID_LENGTH, HttpReadStateContent, HttpReadStateResponse,
+        HttpRequest, HttpRequestEnvelope, MessageId, ReadState,
     },
-    CanisterId, PrincipalId, UserId,
 };
 use ic_validator::{CanisterIdSet, HttpRequestVerifier};
 use std::{
     convert::{Infallible, TryFrom},
     sync::Arc,
 };
-use tokio::sync::watch;
-use tower::{util::BoxCloneService, ServiceBuilder};
+use tower::{ServiceBuilder, util::BoxCloneService};
+
+#[derive(Copy, Clone, Debug)]
+pub enum Version {
+    // Endpoint with the NNS delegation using the flat format of the canister ranges.
+    V2,
+    // Endpoint with the NNS delegation using the tree format of the canister ranges.
+    V3,
+}
 
 #[derive(Clone)]
 pub struct CanisterReadStateService {
     log: ReplicaLogger,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     time_source: Arc<dyn TimeSource>,
     validator: Arc<dyn HttpRequestVerifier<ReadState, RegistryRootOfTrustProvider>>,
     registry_client: Arc<dyn RegistryClient>,
+    version: Version,
 }
 
 pub struct CanisterReadStateServiceBuilder {
     log: ReplicaLogger,
     health_status: Option<Arc<AtomicCell<ReplicaHealthStatus>>>,
     malicious_flags: Option<MaliciousFlags>,
-    delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+    nns_delegation_reader: NNSDelegationReader,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     time_source: Option<Arc<dyn TimeSource>>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
+    version: Version,
 }
 
 impl CanisterReadStateService {
-    pub(crate) fn route() -> &'static str {
-        "/api/v2/canister/{effective_canister_id}/read_state"
+    pub(crate) fn route(version: Version) -> &'static str {
+        match version {
+            Version::V2 => "/api/v2/canister/{effective_canister_id}/read_state",
+            Version::V3 => "/api/v3/canister/{effective_canister_id}/read_state",
+        }
     }
 }
 
@@ -71,17 +84,19 @@ impl CanisterReadStateServiceBuilder {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         registry_client: Arc<dyn RegistryClient>,
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
-        delegation_from_nns: watch::Receiver<Option<CertificateDelegation>>,
+        nns_delegation_reader: NNSDelegationReader,
+        version: Version,
     ) -> Self {
         Self {
             log,
             health_status: None,
             malicious_flags: None,
-            delegation_from_nns,
+            nns_delegation_reader,
             state_reader,
             time_source: None,
             ingress_verifier,
             registry_client,
+            version,
         }
     }
 
@@ -109,14 +124,15 @@ impl CanisterReadStateServiceBuilder {
             health_status: self
                 .health_status
                 .unwrap_or_else(|| Arc::new(AtomicCell::new(ReplicaHealthStatus::Healthy))),
-            delegation_from_nns: self.delegation_from_nns,
+            nns_delegation_reader: self.nns_delegation_reader,
             state_reader: self.state_reader,
             time_source: self.time_source.unwrap_or(Arc::new(SysTimeSource::new())),
             validator: build_validator(self.ingress_verifier, self.malicious_flags),
             registry_client: self.registry_client,
+            version: self.version,
         };
         Router::new().route(
-            CanisterReadStateService::route(),
+            CanisterReadStateService::route(self.version),
             axum::routing::post(canister_read_state)
                 .with_state(state)
                 .layer(ServiceBuilder::new().layer(DefaultBodyLimit::disable())),
@@ -134,11 +150,12 @@ pub(crate) async fn canister_read_state(
     State(CanisterReadStateService {
         log,
         health_status,
-        delegation_from_nns,
+        nns_delegation_reader,
         state_reader,
         time_source,
         validator,
         registry_client,
+        version,
     }): State<CanisterReadStateService>,
     WithTimeout(Cbor(request)): WithTimeout<Cbor<HttpRequestEnvelope<HttpReadStateContent>>>,
 ) -> impl IntoResponse {
@@ -151,14 +168,12 @@ pub(crate) async fn canister_read_state(
         return (status, text).into_response();
     }
 
-    let delegation_from_nns = delegation_from_nns.borrow().clone();
-
     // Convert the message to a strongly-typed struct.
     let request = match HttpRequest::<ReadState>::try_from(request) {
         Ok(request) => request,
         Err(e) => {
             let status = StatusCode::BAD_REQUEST;
-            let text = format!("Malformed request: {:?}", e);
+            let text = format!("Malformed request: {e:?}");
             return (status, text).into_response();
         }
     };
@@ -225,6 +240,11 @@ pub(crate) async fn canister_read_state(
         };
 
         let signature = certification.signed.signature.signature.get().0;
+        let delegation_from_nns = match version {
+            Version::V2 => nns_delegation_reader.get_delegation(CanisterRangesFilter::Flat),
+            Version::V3 => nns_delegation_reader
+                .get_delegation(CanisterRangesFilter::Tree(effective_canister_id)),
+        };
         let res = HttpReadStateResponse {
             certificate: Blob(into_cbor(&Certificate {
                 tree,
@@ -267,7 +287,7 @@ fn verify_paths(
             [b"canister", canister_id, b"metadata", name] => {
                 let name = String::from_utf8(Vec::from(*name)).map_err(|err| HttpError {
                     status: StatusCode::BAD_REQUEST,
-                    message: format!("Could not parse the custom section name: {}.", err),
+                    message: format!("Could not parse the custom section name: {err}."),
                 })?;
 
                 // Get principal id from byte slice.
@@ -283,27 +303,39 @@ fn verify_paths(
             }
             [b"api_boundary_nodes"] => {}
             [b"api_boundary_nodes", _node_id]
-            | [b"api_boundary_nodes", _node_id, b"domain" | b"ipv4_address" | b"ipv6_address"] => {}
+            | [
+                b"api_boundary_nodes",
+                _node_id,
+                b"domain" | b"ipv4_address" | b"ipv6_address",
+            ] => {}
             [b"subnet"] => {}
             [b"subnet", _subnet_id]
-            | [b"subnet", _subnet_id, b"public_key" | b"canister_ranges" | b"node"] => {}
+            | [
+                b"subnet",
+                _subnet_id,
+                b"public_key" | b"canister_ranges" | b"node",
+            ] => {}
             [b"subnet", _subnet_id, b"node", _node_id]
             | [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {}
             [b"request_status", request_id]
-            | [b"request_status", request_id, b"status" | b"reply" | b"reject_code" | b"reject_message" | b"error_code"] =>
-            {
+            | [
+                b"request_status",
+                request_id,
+                b"status" | b"reply" | b"reject_code" | b"reject_message" | b"error_code",
+            ] => {
                 let message_id = MessageId::try_from(*request_id).map_err(|_| HttpError {
                     status: StatusCode::BAD_REQUEST,
-                    message: format!("Invalid request id in paths. Maybe the request ID is not of {} bytes in length?!", EXPECTED_MESSAGE_ID_LENGTH)
+                    message: format!("Invalid request id in paths. Maybe the request ID is not of {EXPECTED_MESSAGE_ID_LENGTH} bytes in length?!")
                 })?;
 
                 if let Some(x) = last_request_status_id {
                     if x != message_id {
                         return Err(HttpError {
-                                status: StatusCode::BAD_REQUEST,
-                                message: format!("More than one non-unique request ID exists in request_status paths: {} and {}.",
-                                   x, message_id),
-                            });
+                            status: StatusCode::BAD_REQUEST,
+                            message: format!(
+                                "More than one non-unique request ID exists in request_status paths: {x} and {message_id}."
+                            ),
+                        });
                     }
                 }
                 last_request_status_id = Some(message_id.clone());
@@ -373,8 +405,7 @@ fn can_read_canister_metadata(
                 return Err(HttpError {
                     status: StatusCode::FORBIDDEN,
                     message: format!(
-                        "Custom section {:.100} can only be requested by the controllers of the canister.",
-                        custom_section_name
+                        "Custom section {custom_section_name:.100} can only be requested by the controllers of the canister."
                     ),
                 });
             }
@@ -389,14 +420,14 @@ fn can_read_canister_metadata(
 mod test {
     use super::*;
     use crate::{
-        common::test::{array, assert_cbor_ser_equal, bytes, int},
         HttpError,
+        common::test::{array, assert_cbor_ser_equal, bytes, int},
     };
     use hyper::StatusCode;
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree, Path};
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        canister_snapshots::CanisterSnapshots, CanisterQueues, ReplicatedState, SystemMetadata,
+        CanisterQueues, ReplicatedState, SystemMetadata, canister_snapshots::CanisterSnapshots,
     };
     use ic_test_utilities_state::insert_dummy_canister;
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
@@ -513,6 +544,31 @@ mod test {
     }
 
     #[test]
+    fn test_canister_ranges_are_not_allowed() {
+        let state = ReplicatedState::new_from_checkpoint(
+            BTreeMap::new(),
+            SystemMetadata::new(subnet_test_id(1), SubnetType::Application),
+            CanisterQueues::default(),
+            RawQueryStats::default(),
+            CanisterSnapshots::default(),
+        );
+
+        let error = verify_paths(
+            &state,
+            &user_test_id(1),
+            &[Path::new(vec![
+                Label::from("canister_ranges"),
+                [0; 32].into(),
+            ])],
+            &CanisterIdSet::all(),
+            canister_test_id(1).get(),
+        )
+        .expect_err("Should fail because canister_ranges are not allowed");
+
+        assert_eq!(error.status, StatusCode::NOT_FOUND)
+    }
+
+    #[test]
     fn test_verify_path() {
         let subnet_id = subnet_test_id(1);
         let mut metadata = SystemMetadata::new(subnet_id, SubnetType::Application);
@@ -548,23 +604,25 @@ mod test {
                         Label::from("request_status"),
                         [0; 32].into(),
                         Label::from("reply")
-                    ])
+                    ]),
                 ],
                 &CanisterIdSet::all(),
                 canister_test_id(1).get(),
             ),
             Ok(())
         );
-        assert!(verify_paths(
-            &state,
-            &user_test_id(1),
-            &[
-                Path::new(vec![Label::from("request_status"), [0; 32].into()]),
-                Path::new(vec![Label::from("request_status"), [1; 32].into()])
-            ],
-            &CanisterIdSet::all(),
-            canister_test_id(1).get(),
-        )
-        .is_err());
+        assert!(
+            verify_paths(
+                &state,
+                &user_test_id(1),
+                &[
+                    Path::new(vec![Label::from("request_status"), [0; 32].into()]),
+                    Path::new(vec![Label::from("request_status"), [1; 32].into()])
+                ],
+                &CanisterIdSet::all(),
+                canister_test_id(1).get(),
+            )
+            .is_err()
+        );
     }
 }

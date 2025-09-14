@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::logs::DEBUG;
 use async_trait::async_trait;
 use candid::{CandidType, Encode, Principal};
@@ -63,12 +64,12 @@ impl fmt::Display for Reason {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::OutOfCycles => write!(fmt, "the canister is out of cycles"),
-            Self::CanisterError(msg) => write!(fmt, "canister error: {}", msg),
+            Self::CanisterError(msg) => write!(fmt, "canister error: {msg}"),
             Self::Rejected(msg) => {
-                write!(fmt, "the management canister rejected the call: {}", msg)
+                write!(fmt, "the management canister rejected the call: {msg}")
             }
-            Reason::TransientInternalError(msg) => write!(fmt, "transient internal error: {}", msg),
-            Reason::InternalError(msg) => write!(fmt, "internal error: {}", msg),
+            Reason::TransientInternalError(msg) => write!(fmt, "transient internal error: {msg}"),
+            Reason::InternalError(msg) => write!(fmt, "internal error: {msg}"),
         }
     }
 }
@@ -83,8 +84,7 @@ impl Reason {
             | RejectionCode::SysFatal
             | RejectionCode::DestinationInvalid
             | RejectionCode::Unknown => Self::InternalError(format!(
-                "rejection code: {:?}, rejection message: {}",
-                reject_code, reject_message
+                "rejection code: {reject_code:?}, rejection message: {reject_message}"
             )),
         }
     }
@@ -192,11 +192,7 @@ impl CanisterRuntime for IcCanisterRuntime {
     }
 
     fn global_timer_set(&self, timestamp: u64) {
-        // SAFETY: setting the global timer is always safe; it does not
-        // mutate any canister memory.
-        unsafe {
-            ic0::global_timer_set(timestamp as i64);
-        }
+        ic0::global_timer_set(timestamp);
     }
 
     async fn create_canister(

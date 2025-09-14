@@ -6,6 +6,7 @@ use std::{fmt::Display, future::Future};
 
 pub mod agent_impl;
 pub mod helpers;
+pub mod icrc2;
 pub mod ledger;
 pub mod management_canister;
 pub mod mock;
@@ -32,6 +33,11 @@ pub trait Request: Send {
     fn method(&self) -> &'static str;
     fn update(&self) -> bool;
     fn payload(&self) -> Result<Vec<u8>, candid::Error>;
+
+    /// See https://internetcomputer.org/docs/references/ic-interface-spec#http-interface
+    fn effective_canister_id(&self) -> Option<Principal> {
+        None
+    }
     type Response: CandidType + DeserializeOwned + Send;
 }
 

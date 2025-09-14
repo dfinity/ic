@@ -3,7 +3,7 @@ Title:: Soak test for the http_requests feature
 
 Goal:: Measure the evolving qps of http_requests originating from one canister. The test should be run with the following command:
 ```
-ict testnet create canister_http_soak_test --lifetime-mins=180 --output-dir=./canister_http_soak_test -- --test_tmpdir=./canister_http_soak_test
+ict testnet create //rs/tests/networking:canister_http_soak_test --lifetime-mins=180 --output-dir=./canister_http_soak_test -- --test_tmpdir=./canister_http_soak_test
 ```
 
 Runbook::
@@ -15,9 +15,10 @@ Success::
 1. The proxy canister is left sending requests in batches of 500 to track the qps in grafana.
 
 end::catalog[] */
+#![allow(deprecated)]
 
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use canister_http::*;
 use canister_test::Canister;
 use dfn_candid::candid_one;
@@ -36,7 +37,7 @@ use proxy_canister::RemoteHttpRequest;
 use proxy_canister::RemoteHttpResponse;
 use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
 use serde::{Deserialize, Serialize};
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct BenchmarkResult {
@@ -116,6 +117,7 @@ async fn leave_proxy_canister_running(proxy_canister: &Canister<'_>, url: String
                             }),
                             method: HttpMethod::GET,
                             max_response_bytes: None,
+                            is_replicated: Some(true),
                         },
                         cycles: 500_000_000_000,
                     },

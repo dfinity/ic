@@ -7,10 +7,11 @@ to run them and baseline results for comparing new changes.
 Quick Start
 -----------
 
-1. To run all benchmarks and compare them to the committed baseline:
+1. To run all benchmarks and compare them to the committed baseline
+   in a dev container on the `zh1-spm34` host:
 
    ```sh
-   ./rs/execution_environment/benches/run-all-benchmarks.sh | tee summary.txt
+   HOST=zh1-spm34 ./rs/execution_environment/benches/run-all-benchmarks.sh | tee summary.txt
    ```
 
    The summary will be generated in the `summary.txt` file.
@@ -18,7 +19,7 @@ Quick Start
    To run only the Embedders Heap benchmarks for `wasm32` query reads:
 
    ```sh
-   INCLUDE=heap FILTER=wasm32_query_read ./rs/execution_environment/benches/run-all-benchmarks.sh
+   INCLUDE=heap FILTER=wasm32_query_read HOST=zh1-spm34 ./rs/execution_environment/benches/run-all-benchmarks.sh
    ```
 
 2. To update the baseline:
@@ -80,6 +81,15 @@ different hosts.
 
 The best candidates for running the benchmarks are the `zh1-spm34` or `dm1-dll46` hosts.
 
+If running the benchmarks in a dev container, the hostname must be set explicitly:
+
+   ```sh
+   HOST=zh1-spm34 ./rs/execution_environment/benches/run-all-benchmarks.sh | tee summary.txt
+   ```
+
+This is required because the dev container hostname is statically set
+to `devenv-container`.
+
 Adding New Benchmarks
 ---------------------
 
@@ -90,7 +100,8 @@ Adding New Benchmarks
    ```Starlark
    rust_ic_bench(
       name = "my_new_bench",
-      with_test = True,
+      test_name = "my_new_bench_test",
+      test_timeout = "long", # default to "moderate"
       [...]
    )
    ```

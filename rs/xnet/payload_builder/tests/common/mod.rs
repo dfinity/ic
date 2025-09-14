@@ -8,23 +8,23 @@ use ic_interfaces_state_manager::*;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{testing::ReplicatedStateTesting, Stream};
+use ic_replicated_state::{Stream, testing::ReplicatedStateTesting};
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities_consensus::fake::{Fake, FakeVerifier};
 use ic_test_utilities_metrics::{
-    fetch_gauge, fetch_histogram_stats, fetch_int_counter_vec, HistogramStats, MetricVec,
+    HistogramStats, MetricVec, fetch_gauge, fetch_histogram_stats, fetch_int_counter_vec,
 };
 use ic_test_utilities_types::ids::{SUBNET_1, SUBNET_42};
 use ic_types::{
+    Height, SubnetId,
     consensus::certification::{Certification, CertificationContent},
     crypto::Signed,
     signature::ThresholdSignature,
     xnet::{CertifiedStreamSlice, StreamIndex},
-    Height, SubnetId,
 };
 use ic_xnet_payload_builder::certified_slice_pool::{
-    UnpackedStreamSlice, METRIC_POOL_SIZE_BYTES, METRIC_TAKE_COUNT, METRIC_TAKE_GCED_MESSAGES,
-    METRIC_TAKE_MESSAGES, METRIC_TAKE_SIZE_BYTES,
+    METRIC_POOL_SIZE_BYTES, METRIC_TAKE_COUNT, METRIC_TAKE_GCED_MESSAGES, METRIC_TAKE_MESSAGES,
+    METRIC_TAKE_SIZE_BYTES, UnpackedStreamSlice,
 };
 use std::{convert::TryFrom, sync::Arc};
 use tempfile::{Builder, TempDir};
@@ -43,13 +43,18 @@ pub struct StateManagerFixture {
 }
 
 impl StateManagerFixture {
-    /// Creates a new `Fixture` around an empty state.
-    pub fn new(log: ReplicaLogger) -> Self {
-        Self::with_subnet_type(SubnetType::Application, log)
+    /// Creates a new `StateManagerFixture` for `OWN_SUBNET`.
+    pub fn local(log: ReplicaLogger) -> Self {
+        Self::for_subnet(OWN_SUBNET, SubnetType::Application, log)
+    }
+
+    /// Creates a new `StateManagerFixture` for `REMOTE_SUBNET`.
+    pub fn remote(log: ReplicaLogger) -> Self {
+        Self::for_subnet(REMOTE_SUBNET, SubnetType::Application, log)
     }
 
     /// Creates a new `Fixture` around an empty state.
-    pub fn with_subnet_type(subnet_type: SubnetType, log: ReplicaLogger) -> Self {
+    pub fn for_subnet(subnet_id: SubnetId, subnet_type: SubnetType, log: ReplicaLogger) -> Self {
         let temp_dir = Builder::new().prefix("test").tempdir().unwrap();
         let config = Config::new(temp_dir.path().into());
         let metrics = MetricsRegistry::new();
@@ -57,7 +62,7 @@ impl StateManagerFixture {
 
         let state_manager = StateManagerImpl::new(
             verifier,
-            OWN_SUBNET,
+            subnet_id,
             subnet_type,
             log.clone(),
             &metrics,
@@ -222,8 +227,6 @@ fn opt_slice_to_string(slice: Option<CertifiedStreamSlice>) -> String {
 }
 
 fn slice_to_string(slice: CertifiedStreamSlice) -> String {
-    UnpackedStreamSlice::try_from(slice.clone()).map_or_else(
-        |_| format!("{:?}", slice),
-        |unpacked| format!("{:?}", unpacked),
-    )
+    UnpackedStreamSlice::try_from(slice.clone())
+        .map_or_else(|_| format!("{slice:?}"), |unpacked| format!("{unpacked:?}"))
 }

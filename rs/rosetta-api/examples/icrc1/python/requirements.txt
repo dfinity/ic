@@ -1,8 +1,8 @@
-certifi==2025.1.31
+certifi==2025.6.15
 cffi==1.17.1
-charset-normalizer==3.4.1
-cryptography==44.0.2
+charset-normalizer==3.4.2
+cryptography==45.0.4
 idna==3.10
 pycparser==2.22
-requests==2.32.3
-urllib3==2.2.3 
+requests==2.32.4
+urllib3==2.5.0

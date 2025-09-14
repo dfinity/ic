@@ -1,4 +1,4 @@
-//! This module defines malicious behaviour regarding the consensus crate,
+//! This module defines malicious behavior regarding the consensus crate,
 //! enabling testing consensus algorithm and implementation in the presence
 //! of malicious nodes.
 use crate::consensus::{
@@ -7,14 +7,15 @@ use crate::consensus::{
 };
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::consensus_pool::{ChangeAction, HeightRange, Mutations};
-use ic_logger::{info, trace, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, trace};
 use ic_types::{
+    Time,
     consensus::{
-        hashed, Block, BlockMetadata, BlockProposal, ConsensusMessage, ConsensusMessageHashable,
+        Block, BlockMetadata, BlockProposal, ConsensusMessage, ConsensusMessageHashable,
         FinalizationContent, FinalizationShare, HasHeight, HashedBlock, NotarizationShare, Rank,
+        hashed,
     },
     malicious_flags::MaliciousFlags,
-    Time,
 };
 use std::time::Duration;
 
@@ -59,8 +60,8 @@ fn maliciously_propose_blocks(
     maliciously_propose_empty_blocks: bool,
     maliciously_equivocation_blockmaker: bool,
 ) -> Vec<BlockProposal> {
-    use ic_protobuf::log::malicious_behaviour_log_entry::v1::{
-        MaliciousBehaviour, MaliciousBehaviourLogEntry,
+    use ic_protobuf::log::malicious_behavior_log_entry::v1::{
+        MaliciousBehavior, MaliciousBehaviorLogEntry,
     };
     trace!(block_maker.log, "maliciously_propose_blocks");
     let number_of_proposals = 5;
@@ -139,7 +140,7 @@ fn maliciously_propose_blocks(
                     ic_logger::info!(
                         block_maker.log,
                         "[MALICIOUS] proposing empty blocks";
-                        malicious_behaviour => MaliciousBehaviourLogEntry { malicious_behaviour: MaliciousBehaviour::ProposeEmptyBlocks as i32}
+                        malicious_behavior => MaliciousBehaviorLogEntry { malicious_behavior: MaliciousBehavior::ProposeEmptyBlocks as i32}
                     );
                 }
                 if maliciously_equivocation_blockmaker {
@@ -147,7 +148,7 @@ fn maliciously_propose_blocks(
                         block_maker.log,
                         "[MALICIOUS] proposing {} equivocation blocks",
                         proposals.len();
-                        malicious_behaviour => MaliciousBehaviourLogEntry { malicious_behaviour: MaliciousBehaviour::ProposeEquivocatingBlocks as i32}
+                        malicious_behavior => MaliciousBehaviorLogEntry { malicious_behavior: MaliciousBehavior::ProposeEquivocatingBlocks as i32}
                     );
                 }
 
@@ -195,8 +196,8 @@ fn maliciously_propose_empty_block(
 
 /// Maliciously notarize all unnotarized proposals for the current height.
 fn maliciously_notarize_all(notary: &Notary, pool: &PoolReader<'_>) -> Vec<NotarizationShare> {
-    use ic_protobuf::log::malicious_behaviour_log_entry::v1::{
-        MaliciousBehaviour, MaliciousBehaviourLogEntry,
+    use ic_protobuf::log::malicious_behavior_log_entry::v1::{
+        MaliciousBehavior, MaliciousBehaviorLogEntry,
     };
     trace!(notary.log, "maliciously_notarize");
     let mut notarization_shares = Vec::<NotarizationShare>::new();
@@ -224,7 +225,7 @@ fn maliciously_notarize_all(notary: &Notary, pool: &PoolReader<'_>) -> Vec<Notar
             notary.log,
             "[MALICIOUS] maliciously notarizing all {} proposals",
             notarization_shares.len();
-            malicious_behaviour => MaliciousBehaviourLogEntry { malicious_behaviour: MaliciousBehaviour::NotarizeAll as i32}
+            malicious_behavior => MaliciousBehaviorLogEntry { malicious_behavior: MaliciousBehavior::NotarizeAll as i32}
         );
     }
 
@@ -237,8 +238,8 @@ fn maliciously_finalize_all(
     finalizer: &Finalizer,
     pool: &PoolReader<'_>,
 ) -> Vec<FinalizationShare> {
-    use ic_protobuf::log::malicious_behaviour_log_entry::v1::{
-        MaliciousBehaviour, MaliciousBehaviourLogEntry,
+    use ic_protobuf::log::malicious_behavior_log_entry::v1::{
+        MaliciousBehavior, MaliciousBehaviorLogEntry,
     };
     trace!(finalizer.log, "maliciously_finalize");
     let mut finalization_shares = Vec::new();
@@ -279,7 +280,7 @@ fn maliciously_finalize_all(
             finalizer.log,
             "[MALICIOUS] maliciously finalizing {} proposals",
             finalization_shares.len();
-            malicious_behaviour => MaliciousBehaviourLogEntry { malicious_behaviour: MaliciousBehaviour::FinalizeAll as i32}
+            malicious_behavior => MaliciousBehaviorLogEntry { malicious_behavior: MaliciousBehavior::FinalizeAll as i32}
         );
     }
 

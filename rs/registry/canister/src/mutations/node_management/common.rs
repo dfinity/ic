@@ -8,9 +8,9 @@ use ic_protobuf::registry::{
 };
 use ic_registry_canister_chunkify::decode_high_capacity_registry_value;
 use ic_registry_keys::{
-    make_crypto_node_key, make_crypto_tls_cert_key, make_firewall_rules_record_key,
-    make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key,
-    FirewallRulesScope, NODE_RECORD_KEY_PREFIX,
+    FirewallRulesScope, NODE_RECORD_KEY_PREFIX, make_crypto_node_key, make_crypto_tls_cert_key,
+    make_firewall_rules_record_key, make_node_operator_record_key, make_node_record_key,
+    make_subnet_list_record_key,
 };
 use ic_registry_transport::{
     delete, insert,
@@ -42,14 +42,14 @@ pub fn get_subnet_list_record(registry: &Registry) -> SubnetListRecord {
         value: subnet_list_record_vec,
         version: _,
         deletion_marker: _,
+        timestamp_nanoseconds: _,
     } = registry
         .get(
             make_subnet_list_record_key().as_bytes(),
             registry.latest_version(),
         )
         .ok_or(format!(
-            "{}do_remove_nodes: Subnet List not found in the registry, aborting node removal.",
-            LOG_PREFIX
+            "{LOG_PREFIX}do_remove_nodes: Subnet List not found in the registry, aborting node removal."
         ))
         .unwrap();
 
@@ -64,7 +64,7 @@ pub fn get_node_operator_id_for_node(
     registry
         .get(node_key.as_bytes(), registry.latest_version())
         .map_or(
-            Err(format!("Node Id {:} not found in the registry", node_id)),
+            Err(format!("Node Id {node_id:} not found in the registry")),
             |result| {
                 PrincipalId::try_from(
                     NodeRecord::decode(result.value.as_slice())
@@ -72,10 +72,7 @@ pub fn get_node_operator_id_for_node(
                         .node_operator_id,
                 )
                 .map_err(|_| {
-                    format!(
-                        "Could not decode node_record's node_operator_id for Node Id {}",
-                        node_id
-                    )
+                    format!("Could not decode node_record's node_operator_id for Node Id {node_id}")
                 })
             },
         )
@@ -90,24 +87,21 @@ pub fn get_node_provider_id_for_operator_id(
         .get(node_operator_key.as_bytes(), registry.latest_version())
         .map_or(
             Err(format!(
-                "Node Operator Id {:} not found in the registry.",
-                node_operator_key
+                "Node Operator Id {node_operator_key:} not found in the registry."
             )),
             |result| {
                 PrincipalId::try_from(
                     NodeOperatorRecord::decode(result.value.as_slice())
                         .map_err(|_| {
                             format!(
-                                "Could not decode node_operator_record for Node Operator Id {}",
-                                node_operator_id
+                                "Could not decode node_operator_record for Node Operator Id {node_operator_id}"
                             )
                         })?
                         .node_provider_principal_id,
                 )
                 .map_err(|_| {
                     format!(
-                        "Could not decode node_provider_id from the Node Operator Record for the Id {}",
-                        node_operator_id
+                        "Could not decode node_provider_id from the Node Operator Record for the Id {node_operator_id}"
                     )
                 })
             },
@@ -123,8 +117,7 @@ pub fn get_node_operator_record(
         .get(node_operator_key.as_bytes(), registry.latest_version())
         .map_or(
             Err(format!(
-                "Node Operator Id {:} not found in the registry.",
-                node_operator_key
+                "Node Operator Id {node_operator_key:} not found in the registry."
             )),
             |result| {
                 let decoded = NodeOperatorRecord::decode(result.value.as_slice()).unwrap();
@@ -213,7 +206,8 @@ pub fn make_remove_node_registry_mutations(
     ];
 
     let latest_version = registry.latest_version();
-    let mutations = keys_to_maybe_remove
+
+    keys_to_maybe_remove
         .iter()
         .flat_map(|key| {
             // It is possible, for example, that IDkgMEGaEncryption key is not present
@@ -224,9 +218,7 @@ pub fn make_remove_node_registry_mutations(
                 .get(key.as_bytes(), latest_version)
                 .map(|_| delete(key))
         })
-        .collect::<Vec<_>>();
-
-    mutations
+        .collect::<Vec<_>>()
 }
 
 /// Scan through the registry, returning a list of any nodes with the given IP.
@@ -257,6 +249,9 @@ pub fn node_exists_with_ipv4(registry: &Registry, ipv4_addr: &str) -> bool {
 /// Similar to `get_key_family` on the `RegistryClient`, return a list of
 /// tuples, (ID, value).  This strips the prefix from the key and returns the
 /// value as a decoded struct.
+///
+/// This function must return keys in order of their bytes, which should
+/// also be the same order as the string representations.
 pub(crate) fn get_key_family<T: prost::Message + Default>(
     registry: &Registry,
     prefix: &str,
@@ -264,6 +259,8 @@ pub(crate) fn get_key_family<T: prost::Message + Default>(
     get_key_family_iter(registry, prefix).collect()
 }
 
+/// This function must return keys in order of their bytes, which should
+/// also be the same order as the string representations.
 pub(crate) fn get_key_family_iter<'a, T: prost::Message + Default>(
     registry: &'a Registry,
     prefix: &'a str,
@@ -271,27 +268,45 @@ pub(crate) fn get_key_family_iter<'a, T: prost::Message + Default>(
     get_key_family_iter_at_version(registry, prefix, registry.latest_version())
 }
 
+/// This function must return keys in order of their bytes, which should
+/// also be the same order as the string representations.
 pub(crate) fn get_key_family_iter_at_version<'a, T: prost::Message + Default>(
     registry: &'a Registry,
     prefix: &'a str,
     version: u64,
 ) -> impl Iterator<Item = (String, T)> + 'a {
+    get_key_family_raw_iter_at_version(registry, prefix, version).filter_map(|(id, value)| {
+        let latest_value: Option<T> =
+            with_chunks(|chunks| decode_high_capacity_registry_value::<T, _>(value, chunks));
+
+        let latest_value = latest_value?;
+
+        Some((id, latest_value))
+    })
+}
+
+/// This function must return keys in order of their bytes, which should
+/// also be the same order as the string representations.
+pub(crate) fn get_key_family_raw_iter_at_version<'a>(
+    registry: &'a Registry,
+    prefix: &'a str,
+    version: u64,
+) -> impl Iterator<Item = (String, &'a HighCapacityRegistryValue)> + 'a {
     let prefix_bytes = prefix.as_bytes();
     let start = prefix_bytes.to_vec();
 
+    // Note, using the 'store' which is a BTreeMap is what guarantees the order of keys.
     registry
         .store
         .range(start..)
         .take_while(|(k, _)| k.starts_with(prefix_bytes))
         .filter_map(move |(key, values)| {
-            let value: &HighCapacityRegistryValue =
+            let latest_value: &HighCapacityRegistryValue =
                 values.iter().rev().find(|value| value.version <= version)?;
 
-            let latest_value: Option<T> =
-                with_chunks(|chunks| decode_high_capacity_registry_value::<T, _>(value, chunks));
-
-            // Skip deleted values.
-            let latest_value = latest_value?;
+            if !latest_value.is_present() {
+                return None; // Deleted or otherwise empty value.
+            }
 
             let id = key
                 .strip_prefix(prefix_bytes)

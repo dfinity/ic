@@ -2,8 +2,8 @@ use candid::Encode;
 use certificate_orchestrator_interface::{
     BoundedString, ExportPackage, IcCertificate, Id, LABEL_DOMAINS, LEFT_GUARD, RIGHT_GUARD,
 };
-use ic_cdk::api::{data_certificate, set_certified_data};
-use ic_certified_map::{labeled, labeled_hash, AsHashTree, Hash as ICHash, RbTree};
+use ic_cdk::api::{certified_data_set, data_certificate};
+use ic_certified_map::{AsHashTree, Hash as ICHash, RbTree, labeled, labeled_hash};
 use serde::Serialize;
 use serde_cbor::Serializer;
 use sha2::{Digest, Sha256};
@@ -19,13 +19,13 @@ pub fn init_cert_tree() {
         let value: Vec<u8> = Vec::new();
         tree.insert(LEFT_GUARD.into(), Sha256::digest(&value).into());
         tree.insert(RIGHT_GUARD.into(), Sha256::digest(&value).into());
-        set_certified_data(&labeled_hash(LABEL_DOMAINS, &tree.root_hash()));
+        certified_data_set(labeled_hash(LABEL_DOMAINS, &tree.root_hash()));
     });
 }
 
 pub fn set_root_hash() {
     let root_hash = CERT_TREE.with(|tree| labeled_hash(LABEL_DOMAINS, &tree.borrow().root_hash()));
-    set_certified_data(&root_hash);
+    certified_data_set(root_hash);
 }
 
 pub fn remove_cert(key: BoundedString<64>) {

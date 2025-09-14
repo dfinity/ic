@@ -9,24 +9,25 @@ mod tests {
 
 use super::CheckpointError;
 use crate::{
+    BundledManifest, CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
+    CRITICAL_ERROR_REUSED_CHUNK_HASH, LABEL_VALUE_HASHED, LABEL_VALUE_HASHED_AND_COMPARED,
+    LABEL_VALUE_REUSED, ManifestMetrics, NUMBER_OF_CHECKPOINT_THREADS,
     manifest::hash::{meta_manifest_hasher, sub_manifest_hasher},
     state_sync::types::{
-        encode_manifest, ChunkInfo, FileGroupChunks, FileInfo, Manifest, MetaManifest,
-        DEFAULT_CHUNK_SIZE, FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET,
-        MAX_SUPPORTED_STATE_SYNC_VERSION,
+        ChunkInfo, DEFAULT_CHUNK_SIZE, FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET,
+        FileGroupChunks, FileInfo, MAX_SUPPORTED_STATE_SYNC_VERSION, Manifest, MetaManifest,
+        encode_manifest,
     },
-    BundledManifest, ManifestMetrics, CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
-    CRITICAL_ERROR_REUSED_CHUNK_HASH, LABEL_VALUE_HASHED, LABEL_VALUE_HASHED_AND_COMPARED,
-    LABEL_VALUE_REUSED, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use bit_vec::BitVec;
-use hash::{chunk_hasher, file_hasher, manifest_hasher, ManifestHash};
+use hash::{ManifestHash, chunk_hasher, file_hasher, manifest_hasher};
 use ic_crypto_sha2::Sha256;
-use ic_logger::{error, fatal, replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, fatal, replica_logger::no_op_logger};
 use ic_metrics::MetricsRegistry;
-use ic_state_layout::{CheckpointLayout, ReadOnly, CANISTER_FILE, UNVERIFIED_CHECKPOINT_MARKER};
-use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
-use ic_types::{crypto::CryptoHash, state_sync::StateSyncVersion, CryptoHashOfState, Height};
+use ic_state_layout::{CANISTER_FILE, CheckpointLayout, ReadOnly, UNVERIFIED_CHECKPOINT_MARKER};
+use ic_sys::{PAGE_SIZE, mmap::ScopedMmap};
+use ic_types::{CryptoHashOfState, Height, crypto::CryptoHash, state_sync::StateSyncVersion};
+use ic_utils::thread::parallel_map;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -105,10 +106,9 @@ impl fmt::Display for ManifestValidationError {
                 max_supported_version,
             } => write!(
                 f,
-                "manifest version {} not supported, maximum supported version {}",
-                manifest_version, max_supported_version,
+                "manifest version {manifest_version} not supported, maximum supported version {max_supported_version}",
             ),
-            Self::InconsistentManifest { reason } => write!(f, "inconsistent manifest: {}", reason),
+            Self::InconsistentManifest { reason } => write!(f, "inconsistent manifest: {reason}"),
         }
     }
 }
@@ -153,16 +153,14 @@ impl fmt::Display for ChunkValidationError {
                 actual_size,
             } => write!(
                 f,
-                "chunk {} size mismatch, expected {}, got {}",
-                chunk_ix, expected_size, actual_size
+                "chunk {chunk_ix} size mismatch, expected {expected_size}, got {actual_size}"
             ),
             Self::InvalidChunkIndex {
                 chunk_ix,
                 actual_length,
             } => write!(
                 f,
-                "chunk index {} is out of the vector length {}",
-                chunk_ix, actual_length
+                "chunk index {chunk_ix} is out of the vector length {actual_length}"
             ),
         }
     }
@@ -293,8 +291,8 @@ fn uses_chunk_size(manifest: &Manifest, max_chunk_size: u32) -> bool {
     })
 }
 
-// Computes file_table and chunk_table of a manifest using a parallel algorithm.
-// All the parallel work is spawned in the specified thread pool.
+/// Computes file_table and chunk_table of a manifest using a parallel algorithm.
+/// All the parallel work is spawned in the specified thread pool.
 fn build_chunk_table_parallel(
     thread_pool: &mut scoped_threadpool::Pool,
     metrics: &ManifestMetrics,
@@ -394,7 +392,6 @@ fn build_chunk_table_parallel(
                         metrics.chunk_bytes.with_label_values(&[LABEL_VALUE_HASHED_AND_COMPARED]).inc_by(chunk_info.size_bytes as u64);
 
                         let recomputed_hash = recompute_chunk_hash();
-                        debug_assert_eq!(recomputed_hash, precomputed_hash);
                         if recomputed_hash != precomputed_hash {
                             metrics.reused_chunk_hash_error_count.inc();
                             error!(
@@ -481,7 +478,6 @@ fn build_chunk_table_sequential(
                         // We have both a reused and a recomputed hash, so we can compare them to
                         // monitor for issues
                         let recomputed_chunk_hash = recompute_chunk_hash();
-                        debug_assert_eq!(recomputed_chunk_hash, reused_chunk_hash);
                         if recomputed_chunk_hash != reused_chunk_hash {
                             metrics.reused_chunk_hash_error_count.inc();
                             error!(
@@ -544,13 +540,15 @@ fn build_chunk_table_sequential(
     (file_table, chunk_table)
 }
 
-/// Traverses root recursively and populates the `files` vector with entries of
-/// the form `(relative_file_name, file_len)`.
-fn files_with_sizes(
+enum FileWithSizeOrDir {
+    File(FileWithSize),
+    Dir(Vec<PathBuf>),
+}
+
+fn file_with_size_or_dir(
     root: &Path,
     relative_path: PathBuf,
-    files: &mut Vec<FileWithSize>,
-) -> Result<(), CheckpointError> {
+) -> Result<FileWithSizeOrDir, CheckpointError> {
     let absolute_path = root.join(&relative_path);
     let metadata = absolute_path
         .metadata()
@@ -561,30 +559,59 @@ fn files_with_sizes(
         })?;
 
     if metadata.is_file() {
-        files.push(FileWithSize(relative_path, metadata.len()))
+        Ok(FileWithSizeOrDir::File(FileWithSize(
+            relative_path,
+            metadata.len(),
+        )))
     } else {
         assert!(
             metadata.is_dir(),
             "Checkpoints must not contain special files, found one at {}",
             absolute_path.display()
         );
-        for entry_result in absolute_path
-            .read_dir()
-            .map_err(|io_err| CheckpointError::IoError {
-                path: absolute_path.clone(),
-                message: "failed to read dir".to_string(),
-                io_err: io_err.to_string(),
-            })?
-        {
-            let entry = entry_result.map_err(|io_err| CheckpointError::IoError {
-                path: absolute_path.clone(),
-                message: "failed to read dir entry".to_string(),
-                io_err: io_err.to_string(),
-            })?;
-            files_with_sizes(root, relative_path.join(entry.file_name()), files)?;
-        }
+        Ok(FileWithSizeOrDir::Dir(
+            absolute_path
+                .read_dir()
+                .map_err(|io_err| CheckpointError::IoError {
+                    path: absolute_path.clone(),
+                    message: "failed to read dir".to_string(),
+                    io_err: io_err.to_string(),
+                })?
+                .map(|entry_result| {
+                    let entry = entry_result.map_err(|io_err| CheckpointError::IoError {
+                        path: absolute_path.clone(),
+                        message: "failed to read dir entry".to_string(),
+                        io_err: io_err.to_string(),
+                    })?;
+                    Ok(relative_path.join(entry.file_name()))
+                })
+                .collect::<Result<Vec<_>, CheckpointError>>()?,
+        ))
     }
-    Ok(())
+}
+
+/// Traverses root recursively and populates the `files` vector with entries of
+/// the form `(relative_file_name, file_len)`.
+fn files_with_sizes(
+    root: &Path,
+    relative_path: PathBuf,
+    thread_pool: &mut scoped_threadpool::Pool,
+) -> Result<Vec<FileWithSize>, CheckpointError> {
+    let mut files = Vec::new();
+    let mut paths_to_process = vec![relative_path];
+    while !paths_to_process.is_empty() {
+        let mut next_paths = Vec::new();
+        for entry in parallel_map(thread_pool, paths_to_process.into_iter(), |relative_path| {
+            file_with_size_or_dir(root, relative_path.to_path_buf())
+        }) {
+            match entry? {
+                FileWithSizeOrDir::File(file) => files.push(file),
+                FileWithSizeOrDir::Dir(mut paths) => next_paths.append(&mut paths),
+            }
+        }
+        paths_to_process = next_paths;
+    }
+    Ok(files)
 }
 
 /// Returns the range of chunks belonging to the file with the specified index.
@@ -710,6 +737,7 @@ fn dirty_pages_to_dirty_chunks(
     checkpoint: &CheckpointLayout<ReadOnly>,
     files: &[FileWithSize],
     max_chunk_size: u32,
+    thread_pool: &mut scoped_threadpool::Pool,
 ) -> Result<BTreeMap<PathBuf, BitVec>, CheckpointError> {
     debug_assert!(uses_chunk_size(
         &manifest_delta.base_manifest,
@@ -732,38 +760,54 @@ fn dirty_pages_to_dirty_chunks(
         debug_assert!(false);
         return Ok(dirty_chunks);
     }
-    for FileWithSize(path, size_bytes) in files.iter() {
-        use std::os::unix::fs::MetadataExt;
-        let new_path = checkpoint.raw_path().join(path);
-        let old_path = manifest_delta.base_checkpoint.raw_path().join(path);
-        if !old_path.exists() {
-            continue;
-        }
-        let new_metadata = new_path.metadata();
-        let old_metadata = old_path.metadata();
-        if new_metadata.is_err() || old_metadata.is_err() {
-            error!(
-                log,
-                "Failed to get metadata for an existing path. {} -> {:#?}, {} -> {:#?}",
-                &old_path.display(),
-                &old_metadata,
-                &new_path.display(),
-                &new_metadata
-            );
-            debug_assert!(false);
-            continue;
-        }
-        let new_metadata = new_metadata.unwrap();
-        let old_metadata = old_metadata.unwrap();
-        if new_metadata.ino() == old_metadata.ino() && new_metadata.dev() == old_metadata.dev() {
-            let num_chunks = count_chunks(*size_bytes, max_chunk_size);
-            let chunks_bitmap = BitVec::from_elem(num_chunks, false);
-            let _prev_chunk = dirty_chunks.insert(path.clone(), chunks_bitmap);
-            // Check that for hardlinked files there are no dirty pages.
-            debug_assert!(_prev_chunk.is_none());
-        }
+    let path_to_num_chunks_for_same_files = parallel_map(
+        thread_pool,
+        files.iter(),
+        |FileWithSize(path, size_bytes)| {
+            use std::os::unix::fs::MetadataExt;
+            let new_path = checkpoint.raw_path().join(path);
+            let old_path = manifest_delta.base_checkpoint.raw_path().join(path);
+            if !old_path.exists() {
+                return None;
+            }
+            let new_metadata = new_path.metadata();
+            let old_metadata = old_path.metadata();
+            if new_metadata.is_err() || old_metadata.is_err() {
+                error!(
+                    log,
+                    "Failed to get metadata for an existing path. {} -> {:#?}, {} -> {:#?}",
+                    &old_path.display(),
+                    &old_metadata,
+                    &new_path.display(),
+                    &new_metadata
+                );
+                debug_assert!(false);
+                return None;
+            }
+            let new_metadata = new_metadata.unwrap();
+            let old_metadata = old_metadata.unwrap();
+            if new_metadata.ino() == old_metadata.ino() && new_metadata.dev() == old_metadata.dev()
+            {
+                return Some(FileWithSize(path.clone(), *size_bytes));
+            }
+            None
+        },
+    );
+    for FileWithSize(path, size_bytes) in path_to_num_chunks_for_same_files.into_iter().flatten() {
+        let num_chunks = count_chunks(size_bytes, max_chunk_size);
+        let chunks_bitmap = BitVec::from_elem(num_chunks, false);
+        let _prev_chunk = dirty_chunks.insert(path.clone(), chunks_bitmap);
+        // Check that for hardlinked files there are no dirty pages.
+        debug_assert!(_prev_chunk.is_none());
     }
+
     Ok(dirty_chunks)
+}
+
+#[derive(PartialEq, Eq)]
+pub enum RehashManifest {
+    Yes,
+    No,
 }
 
 /// Computes manifest for the checkpoint located at `checkpoint_root_path`.
@@ -775,10 +819,10 @@ pub fn compute_manifest(
     checkpoint: &CheckpointLayout<ReadOnly>,
     max_chunk_size: u32,
     opt_manifest_delta: Option<ManifestDelta>,
+    rehash: RehashManifest,
 ) -> Result<Manifest, CheckpointError> {
     let mut files = {
-        let mut files = Vec::new();
-        files_with_sizes(checkpoint.raw_path(), "".into(), &mut files)?;
+        let mut files = files_with_sizes(checkpoint.raw_path(), "".into(), thread_pool)?;
         // We sort the table to make sure that the table is the same on all replicas
         files.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
         files
@@ -793,9 +837,11 @@ pub fn compute_manifest(
         files.retain(|FileWithSize(p, _)| {
             checkpoint.raw_path().join(p) != checkpoint.unverified_checkpoint_marker()
         });
-        assert!(!files
-            .iter()
-            .any(|FileWithSize(p, _)| p.ends_with(UNVERIFIED_CHECKPOINT_MARKER)));
+        assert!(
+            !files
+                .iter()
+                .any(|FileWithSize(p, _)| p.ends_with(UNVERIFIED_CHECKPOINT_MARKER))
+        );
     }
 
     let chunk_actions = match opt_manifest_delta {
@@ -812,6 +858,7 @@ pub fn compute_manifest(
                     checkpoint,
                     &files,
                     max_chunk_size,
+                    thread_pool,
                 )?;
                 hash_plan(
                     &manifest_delta.base_manifest,
@@ -819,7 +866,11 @@ pub fn compute_manifest(
                     dirty_file_chunks,
                     max_chunk_size,
                     manifest_delta.target_height.get(),
-                    REHASH_EVERY_NTH_CHUNK,
+                    if rehash == RehashManifest::Yes {
+                        REHASH_EVERY_NTH_CHUNK
+                    } else {
+                        u64::MAX
+                    },
                 )
             } else {
                 default_hash_plan(&files, max_chunk_size)
@@ -853,7 +904,6 @@ pub fn compute_manifest(
         chunk_actions,
         version,
     );
-
     #[cfg(debug_assertions)]
     {
         assert_eq!(file_table, seq_file_table);
@@ -887,7 +937,6 @@ pub fn compute_manifest(
 
     // Sanity check: ensure that we have produced a valid manifest.
     debug_assert_eq!(Ok(()), validate_manifest_internal_consistency(&manifest));
-
     Ok(manifest)
 }
 
@@ -1234,7 +1283,7 @@ pub fn diff_manifest(
         let chunk_info = manifest_old
             .chunk_table
             .get(*chunk_index)
-            .unwrap_or_else(|| panic!("Invalid chunk index {}", chunk_index));
+            .unwrap_or_else(|| panic!("Invalid chunk index {chunk_index}"));
 
         chunk_info.file_index as usize
     };
@@ -1338,10 +1387,11 @@ pub fn manifest_from_path(path: &Path) -> Result<Manifest, CheckpointError> {
             .map_err(|v| CheckpointError::ProtoError {
                 path: path.to_path_buf(),
                 field: "SystemMetadata::state_sync_version".into(),
-                proto_err: format!("Replica does not implement state sync version {}", v),
+                proto_err: format!("Replica does not implement state sync version {v}"),
             })?,
         &cp_layout,
         DEFAULT_CHUNK_SIZE,
         None,
+        RehashManifest::No,
     )
 }

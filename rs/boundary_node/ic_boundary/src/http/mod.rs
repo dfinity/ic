@@ -34,9 +34,7 @@ pub fn error_infer(e: &impl std::error::Error) -> ErrorCause {
     // Check if it's a Rustls error
     if let Some(e) = error_source::<RustlsError>(&e) {
         return match e {
-            RustlsError::InvalidCertificate(v) => {
-                ErrorCause::ReplicaTLSErrorCert(format!("{:?}", v))
-            }
+            RustlsError::InvalidCertificate(v) => ErrorCause::ReplicaTLSErrorCert(format!("{v:?}")),
             RustlsError::NoCertificatesPresented => {
                 ErrorCause::ReplicaTLSErrorCert("no certificate presented".into())
             }

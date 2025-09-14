@@ -11,7 +11,7 @@ mod tests;
 mod xnet_client_tests;
 
 use crate::certified_slice_pool::{
-    certified_slice_count_bytes, CertifiedSliceError, CertifiedSlicePool, CertifiedSliceResult,
+    CertifiedSliceError, CertifiedSlicePool, CertifiedSliceResult, certified_slice_count_bytes,
 };
 use async_trait::async_trait;
 use http_body_util::BodyExt;
@@ -29,14 +29,14 @@ use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
-use ic_logger::{error, info, log, warn, ReplicaLogger};
-use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
+use ic_logger::{ReplicaLogger, error, info, log, warn};
 use ic_metrics::MetricsRegistry;
+use ic_metrics::buckets::{decimal_buckets, decimal_buckets_with_zero};
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetListRegistry};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{replicated_state::ReplicatedStateMessageRouting, ReplicatedState};
+use ic_replicated_state::{ReplicatedState, replicated_state::ReplicatedStateMessageRouting};
 use ic_types::batch::{ValidationContext, XNetPayload};
 use ic_types::registry::RegistryClientError;
 use ic_types::state_manager::StateManagerError;
@@ -46,7 +46,7 @@ use ic_xnet_hyper::TlsConnector;
 use ic_xnet_uri::XNetAuthority;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 pub use proximity::{GenRangeFn, ProximityMap};
-use rand::{rngs::StdRng, thread_rng, Rng};
+use rand::{Rng, rngs::StdRng, thread_rng};
 use std::collections::{BTreeMap, VecDeque};
 use std::net::SocketAddr;
 use std::ops::DerefMut;
@@ -256,9 +256,6 @@ pub struct XNetPayloadBuilderImpl {
     /// `XNetPayloads`.
     registry: Arc<dyn RegistryClient>,
 
-    /// A deterministic pseudo-random number generator.
-    deterministic_rng_for_testing: Arc<Option<Mutex<StdRng>>>,
-
     /// A pool of slices, filled in the background by an async task.
     slice_pool: Box<dyn XNetSlicePool>,
 
@@ -270,6 +267,15 @@ pub struct XNetPayloadBuilderImpl {
     /// `crate::certified_slice_pool::certified_slice_count_bytes()` in
     /// production code, only replaced in unit tests.
     count_bytes_fn: fn(&CertifiedStreamSlice) -> CertifiedSliceResult<usize>,
+
+    /// Conservative minimum slice size in bytes. We stop trying to add slices to
+    /// the payload once we're this close to the payload size limit.
+    ///
+    /// Always `SLICE_BYTE_SIZE_MIN` in production, can be overridden for testing.
+    slice_byte_size_min: usize,
+
+    /// A deterministic pseudo-random number generator.
+    deterministic_rng_for_testing: Arc<Option<Mutex<StdRng>>>,
 
     metrics: Arc<XNetPayloadBuilderMetrics>,
 
@@ -367,6 +373,7 @@ impl XNetPayloadBuilderImpl {
             certified_stream_store,
             registry,
             deterministic_rng_for_testing,
+            None,
             slice_pool,
             refill_task_handle,
             metrics,
@@ -382,6 +389,7 @@ impl XNetPayloadBuilderImpl {
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
         registry: Arc<dyn RegistryClient>,
         deterministic_rng_for_testing: Arc<Option<Mutex<StdRng>>>,
+        slice_byte_size_min_override: Option<usize>,
         slice_pool: Box<dyn XNetSlicePool>,
         refill_task_handle: RefillTaskHandle,
         metrics: Arc<XNetPayloadBuilderMetrics>,
@@ -392,6 +400,7 @@ impl XNetPayloadBuilderImpl {
             certified_stream_store,
             registry,
             deterministic_rng_for_testing,
+            slice_byte_size_min: slice_byte_size_min_override.unwrap_or(SLICE_BYTE_SIZE_MIN),
             slice_pool,
             refill_task_handle,
             count_bytes_fn: certified_slice_count_bytes,
@@ -528,11 +537,7 @@ impl XNetPayloadBuilderImpl {
         // Must expect signal for existing message (or just beyond last message).
         assert!(
             self_messages_begin <= expected && expected <= self_messages_end,
-            "Subnet {}: invalid expected signal; messages_begin() ({}) <= expected ({}) <= messages_end() ({})",
-            subnet_id,
-            self_messages_begin,
-            expected,
-            self_messages_end
+            "Subnet {subnet_id}: invalid expected signal; messages_begin() ({self_messages_begin}) <= expected ({expected}) <= messages_end() ({self_messages_end})"
         );
 
         if expected > signals_end || signals_end > self_messages_end {
@@ -634,8 +639,7 @@ impl XNetPayloadBuilderImpl {
                     "Failed to decode stream slice from subnet {}: {}", subnet_id, err
                 );
                 return SliceValidationResult::Invalid(format!(
-                    "Invalid stream from {}: {}",
-                    subnet_id, err
+                    "Invalid stream from {subnet_id}: {err}"
                 ));
             }
         };
@@ -651,8 +655,7 @@ impl XNetPayloadBuilderImpl {
                 slice.header().end()
             );
             return SliceValidationResult::Invalid(format!(
-                "Invalid stream bounds in stream from {}",
-                subnet_id
+                "Invalid stream bounds in stream from {subnet_id}"
             ));
         }
 
@@ -671,8 +674,7 @@ impl XNetPayloadBuilderImpl {
                 slice.header().end()
             );
             return SliceValidationResult::Invalid(format!(
-                "Unexpected messages in stream from {}",
-                subnet_id
+                "Unexpected messages in stream from {subnet_id}"
             ));
         }
 
@@ -697,8 +699,7 @@ impl XNetPayloadBuilderImpl {
                     slice.header().end()
                 );
                 return SliceValidationResult::Invalid(format!(
-                    "Invalid slice bounds in stream from {}",
-                    subnet_id
+                    "Invalid slice bounds in stream from {subnet_id}"
                 ));
             }
 
@@ -713,8 +714,7 @@ impl XNetPayloadBuilderImpl {
                     messages.begin()
                 );
                 return SliceValidationResult::Invalid(format!(
-                    "Unexpected messages in stream from {}",
-                    subnet_id
+                    "Unexpected messages in stream from {subnet_id}"
                 ));
             }
 
@@ -730,8 +730,7 @@ impl XNetPayloadBuilderImpl {
                         msg_limit
                     );
                     return SliceValidationResult::Invalid(format!(
-                        "Stream from {}: slice length above limit",
-                        subnet_id
+                        "Stream from {subnet_id}: slice length above limit"
                     ));
                 }
             }
@@ -748,8 +747,7 @@ impl XNetPayloadBuilderImpl {
                     max_message_index
                 );
                 return SliceValidationResult::Invalid(format!(
-                    "Stream from {}: inducting slice would produce too many signals",
-                    subnet_id
+                    "Stream from {subnet_id}: inducting slice would produce too many signals"
                 ));
             }
         }
@@ -767,8 +765,7 @@ impl XNetPayloadBuilderImpl {
                 );
                 self.metrics.critical_error_slice_count_bytes_failed.inc();
                 return SliceValidationResult::Invalid(format!(
-                    "Failed to compute CertifiedStreamSlice byte size: {}",
-                    e
+                    "Failed to compute CertifiedStreamSlice byte size: {e}"
                 ));
             }
         };
@@ -783,26 +780,17 @@ impl XNetPayloadBuilderImpl {
             state,
             log_level,
         ) {
-            SignalsValidationResult::Valid => {
-                self.metrics
-                    .slice_messages
-                    .observe(slice.messages().map_or(0, |m| m.len()) as f64);
-                self.metrics
-                    .slice_payload_size
-                    .observe(certified_slice.payload.len() as f64);
-
-                SliceValidationResult::Valid {
-                    messages_end: slice
-                        .messages()
-                        .map_or(expected.message_index, |messages| messages.end()),
-                    signals_end: slice.header().signals_end(),
-                    byte_size,
-                }
-            }
+            SignalsValidationResult::Valid => SliceValidationResult::Valid {
+                messages_end: slice
+                    .messages()
+                    .map_or(expected.message_index, |messages| messages.end()),
+                signals_end: slice.header().signals_end(),
+                message_count: slice.messages().map_or(0, |messages| messages.len()),
+                byte_size,
+            },
 
             SignalsValidationResult::Invalid => SliceValidationResult::Invalid(format!(
-                "Unexpected signals in stream from {}",
-                subnet_id
+                "Unexpected signals in stream from {subnet_id}"
             )),
         }
     }
@@ -845,8 +833,8 @@ impl XNetPayloadBuilderImpl {
 
         // Random shuffle, so all slices have equal chances to be picked if `byte_limit`
         // would be exceeded.
-        let mut rotated_stream_positions: Vec<_> = stream_positions.clone().into_iter().collect();
-        self.random_shuffle(&mut rotated_stream_positions);
+        let mut shuffled_stream_positions: Vec<_> = stream_positions.clone().into_iter().collect();
+        self.random_shuffle(&mut shuffled_stream_positions);
 
         let mut bytes_left = byte_limit.get() as usize;
         let mut stream_slices = BTreeMap::new();
@@ -857,25 +845,23 @@ impl XNetPayloadBuilderImpl {
             // Trim off messages in the state or past payloads.
             self.slice_pool.garbage_collect(stream_positions);
 
-            // Keep adding slices until we run out of payload space.
-            for (subnet_id, begin) in rotated_stream_positions {
-                if !stream_slices.is_empty() && bytes_left < SLICE_BYTE_SIZE_MIN {
-                    // Byte limit reached.
-                    break;
-                }
-
-                let msg_limit = get_msg_limit(subnet_id, &state);
+            // Takes from the pool a slice of the stream from `subnet_id` starting at
+            // `begin`, of at most `msg_limit` messages and `byte_limit` bytes.
+            //
+            // If the slice is valid, returns it, its message count and its byte size.
+            // If no slice is available or the slice is empty / invalid, returns `None`.
+            let take_valid_slice = |subnet_id, begin, msg_limit, byte_limit| {
                 let (slice, slice_bytes) = match self.slice_pool.take_slice(
                     subnet_id,
                     Some(&begin),
                     msg_limit,
-                    Some(bytes_left),
+                    Some(byte_limit),
                 ) {
                     Ok(Some(slice)) => slice,
-                    Ok(None) => continue,
-                    Err(_) => continue,
+                    Ok(None) => return None,
+                    Err(_) => return None,
                 };
-                debug_assert!(slice_bytes <= bytes_left);
+                debug_assert!(slice_bytes <= byte_limit);
 
                 // Filter out invalid slices.
                 let validation_result = self.validate_slice(
@@ -886,11 +872,13 @@ impl XNetPayloadBuilderImpl {
                     &state,
                     slog::Level::Info,
                 );
-                if let SliceValidationResult::Valid { byte_size, .. } = validation_result {
-                    if byte_size != slice_bytes || byte_size > bytes_left {
+                match validation_result {
+                    SliceValidationResult::Valid { byte_size, .. }
+                        if byte_size != slice_bytes || byte_size > byte_limit =>
+                    {
+                        // This is a bug: inconsistent size estimate between packed and unpacked slice.
                         let message = format!(
-                            "Slice from {} has packed byte size {}, unpacked byte size {}, limit was {}",
-                            subnet_id, byte_size, slice_bytes, bytes_left
+                            "Slice from {subnet_id} has packed byte size {byte_size}, unpacked byte size {slice_bytes}, limit was {byte_limit}"
                         );
                         debug_assert!(false, "{}", message);
                         error!(
@@ -898,16 +886,82 @@ impl XNetPayloadBuilderImpl {
                             "{}: {}", CRITICAL_ERROR_SLICE_INVALID_COUNT_BYTES, message
                         );
                         self.metrics.critical_error_slice_count_bytes_invalid.inc();
-                        continue;
                     }
-                    bytes_left = bytes_left.saturating_sub(slice_bytes);
-                    stream_slices.insert(subnet_id, slice);
-                } else {
-                    info!(
-                        self.log,
-                        "Invalid slice from {}: {:?}", subnet_id, validation_result
-                    );
+
+                    SliceValidationResult::Valid { message_count, .. } => {
+                        return Some((slice, message_count, slice_bytes));
+                    }
+
+                    SliceValidationResult::Invalid(_) => {
+                        info!(
+                            self.log,
+                            "Invalid slice from {}: {:?}", subnet_id, validation_result
+                        );
+                    }
+
+                    // No messages and no new signals. Skip it.
+                    SliceValidationResult::Empty => {}
                 }
+
+                None
+            };
+
+            // Observes slice metrics. We only call this for slices that will make it into
+            // the payload.
+            let observe_slice = |message_count: usize, size_bytes: usize| {
+                self.metrics.slice_messages.observe(message_count as f64);
+                self.metrics.slice_payload_size.observe(size_bytes as f64);
+            };
+
+            // Prioritize signals over messages, as signals are orders of magnitude smaller;
+            // they unblock reverse streams; and may contain reject signals, equivalent to a
+            // reject response.
+            //
+            // To do that, we add header-only slices in a first iteration. Then, we replace
+            // as many of them as possible with slices containing messages, until we run out
+            // of space.
+            //
+            // Note that if a stream only consists of signals, taking the header-only slice
+            // will remove it from the pool, so a second `take_slice()` call with non-zero
+            // message limit will return `None`. Hence we must actually add the header-only
+            // slices first; and then replace them with message slices, where available.
+            let mut header_sizes = BTreeMap::new();
+            for (subnet_id, begin) in shuffled_stream_positions.iter() {
+                if bytes_left < self.slice_byte_size_min {
+                    // Byte limit reached.
+                    break;
+                }
+                if let Some((header_only_slice, _, size_bytes)) =
+                    take_valid_slice(*subnet_id, begin.clone(), Some(0), bytes_left)
+                {
+                    header_sizes.insert(*subnet_id, size_bytes);
+                    bytes_left = bytes_left.saturating_sub(size_bytes);
+                    stream_slices.insert(*subnet_id, header_only_slice);
+                }
+            }
+
+            // Replace with / add "message slices" until we run out of payload space.
+            for (subnet_id, begin) in shuffled_stream_positions {
+                if bytes_left < self.slice_byte_size_min {
+                    break;
+                }
+
+                let header_bytes = header_sizes.get(&subnet_id).cloned().unwrap_or_default();
+                let msg_limit = get_msg_limit(subnet_id, &state);
+                if let Some((slice, message_count, slice_bytes)) =
+                    take_valid_slice(subnet_id, begin, msg_limit, bytes_left + header_bytes)
+                {
+                    debug_assert!(slice_bytes >= header_bytes);
+                    header_sizes.remove(&subnet_id);
+                    bytes_left = (bytes_left + header_bytes).saturating_sub(slice_bytes);
+                    stream_slices.insert(subnet_id, slice);
+                    observe_slice(message_count, slice_bytes);
+                }
+            }
+
+            // Also observe all the header-only slices that we have not replaced.
+            for header_bytes in header_sizes.values() {
+                observe_slice(0, *header_bytes);
             }
         }
 
@@ -993,14 +1047,17 @@ impl XNetEndpointResolver {
         log: ReplicaLogger,
     ) -> Self {
         let newest_registry = registry.get_latest_version();
-        let node_operator_id =
-            get_node_operator_id(&node_id, registry.as_ref(), &newest_registry, &log)
-                .unwrap_or_else(|| {
-                    panic!(
-                    "Could not read own node's ({:?}) node record from registry of version ({:?}).",
-                    node_id, newest_registry
-                )
-                });
+        let node_operator_id = get_node_operator_id(
+            &node_id,
+            registry.as_ref(),
+            &newest_registry,
+            &log,
+        )
+        .unwrap_or_else(|| {
+            panic!(
+                "Could not read own node's ({node_id:?}) node record from registry of version ({newest_registry:?})."
+            )
+        });
         Self {
             registry,
             subnet_id,
@@ -1059,7 +1116,7 @@ impl XNetEndpointResolver {
 
         url.parse::<Uri>()
             .map_err(|e| {
-                panic!("Could not parse URL {} : {}", url, e);
+                panic!("Could not parse URL {url} : {e}");
             })
             .map(|url| EndpointLocator {
                 node_id: node,
@@ -1150,8 +1207,13 @@ impl XNetPayloadBuilder for XNetPayloadBuilderImpl {
                 SliceValidationResult::Valid {
                     messages_end,
                     signals_end,
+                    message_count,
                     byte_size,
                 } => {
+                    self.metrics.slice_messages.observe(message_count as f64);
+                    self.metrics
+                        .slice_payload_size
+                        .observe(certified_slice.payload.len() as f64);
                     new_stream_positions.push((*subnet_id, messages_end, signals_end));
                     payload_byte_size += byte_size;
                 }
@@ -1518,6 +1580,7 @@ enum SliceValidationResult {
     Valid {
         messages_end: StreamIndex,
         signals_end: StreamIndex,
+        message_count: usize,
         byte_size: usize,
     },
     /// Slice is invalid for the given reason.
@@ -1751,9 +1814,9 @@ impl XNetClientError {
 /// Internal functionality, exposed for use by integration tests.
 pub mod testing {
     pub use super::{
-        EndpointLocator, GenRangeFn, PoolRefillTask, ProximityMap, RefillTaskHandle, XNetClient,
-        XNetClientError, XNetEndpointResolver, XNetPayloadBuilderMetrics, LABEL_STATUS,
-        METRIC_BUILD_PAYLOAD_DURATION, METRIC_SLICE_MESSAGES, METRIC_SLICE_PAYLOAD_SIZE,
-        POOL_SLICE_BYTE_SIZE_MAX, STATUS_SUCCESS,
+        EndpointLocator, GenRangeFn, LABEL_STATUS, METRIC_BUILD_PAYLOAD_DURATION,
+        METRIC_SLICE_MESSAGES, METRIC_SLICE_PAYLOAD_SIZE, POOL_SLICE_BYTE_SIZE_MAX, PoolRefillTask,
+        ProximityMap, RefillTaskHandle, STATUS_SUCCESS, XNetClient, XNetClientError,
+        XNetEndpointResolver, XNetPayloadBuilderMetrics,
     };
 }

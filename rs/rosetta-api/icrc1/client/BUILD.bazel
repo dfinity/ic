@@ -18,6 +18,7 @@ DEPENDENCIES = [
     "@crate_index//:num-bigint",
     "@crate_index//:reqwest",
     "@crate_index//:serde",
+    "@crate_index//:serde_json",
     "@crate_index//:tokio",
     "@crate_index//:url",
 ]
@@ -25,9 +26,12 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     ":ic-icrc-rosetta-client",
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//packages/pocket-ic:pocket-ic",
+    "//rs/rosetta-api/common/rosetta_core:rosetta-core",
     "//rs/rosetta-api/icrc1/runner:ic-icrc-rosetta-runner",
     "@crate_index//:candid",
+    "@crate_index//:serde_json",
     "@crate_index//:tokio",
 ]
 

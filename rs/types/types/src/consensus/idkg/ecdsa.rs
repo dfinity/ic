@@ -1,16 +1,13 @@
 //! Threshold ECDSA transcripts and references related definitions.
-use crate::crypto::ExtendedDerivationPath;
+use crate::Height;
 use crate::crypto::{
-    canister_threshold_sig::error::{
-        EcdsaPresignatureQuadrupleCreationError, ThresholdEcdsaSigInputsCreationError,
-    },
-    canister_threshold_sig::{EcdsaPreSignatureQuadruple, ThresholdEcdsaSigInputs},
+    canister_threshold_sig::EcdsaPreSignatureQuadruple,
+    canister_threshold_sig::error::EcdsaPresignatureQuadrupleCreationError,
 };
-use crate::{Height, Randomness};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::EcdsaKeyId;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
 use std::convert::{AsMut, AsRef, TryFrom, TryInto};
@@ -391,61 +388,5 @@ impl TryFrom<&pb::PreSignatureQuadrupleRef> for PreSignatureQuadrupleRef {
             key_times_lambda_ref,
             key_unmasked_ref,
         })
-    }
-}
-
-/// Counterpart of ThresholdEcdsaSigInputs that holds transcript references,
-/// instead of the transcripts.
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct ThresholdEcdsaSigInputsRef {
-    pub derivation_path: ExtendedDerivationPath,
-    pub hashed_message: [u8; 32],
-    pub nonce: Randomness,
-    pub presig_quadruple_ref: PreSignatureQuadrupleRef,
-}
-
-#[derive(Clone, Debug)]
-pub enum ThresholdEcdsaSigInputsError {
-    PreSignatureQuadruple(PreSignatureQuadrupleError),
-    KeyTranscript(TranscriptLookupError),
-    Failed(ThresholdEcdsaSigInputsCreationError),
-}
-
-impl ThresholdEcdsaSigInputsRef {
-    pub fn new(
-        derivation_path: ExtendedDerivationPath,
-        hashed_message: [u8; 32],
-        nonce: Randomness,
-        presig_quadruple_ref: PreSignatureQuadrupleRef,
-    ) -> Self {
-        Self {
-            derivation_path,
-            hashed_message,
-            nonce,
-            presig_quadruple_ref,
-        }
-    }
-
-    /// Resolves the refs to get the ThresholdEcdsaSigInputs.
-    pub fn translate(
-        &self,
-        resolver: &dyn IDkgBlockReader,
-    ) -> Result<ThresholdEcdsaSigInputs, ThresholdEcdsaSigInputsError> {
-        let presig_quadruple = self
-            .presig_quadruple_ref
-            .translate(resolver)
-            .map_err(ThresholdEcdsaSigInputsError::PreSignatureQuadruple)?;
-        let key_transcript = resolver
-            .transcript(self.presig_quadruple_ref.key_unmasked_ref.as_ref())
-            .map_err(ThresholdEcdsaSigInputsError::KeyTranscript)?;
-        ThresholdEcdsaSigInputs::new(
-            &self.derivation_path,
-            &self.hashed_message,
-            self.nonce,
-            presig_quadruple,
-            key_transcript,
-        )
-        .map_err(ThresholdEcdsaSigInputsError::Failed)
     }
 }

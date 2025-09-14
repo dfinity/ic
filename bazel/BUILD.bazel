@@ -1,19 +1,6 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
-load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
-load("@rules_python//python:py_binary.bzl", "py_binary")
 load("//bazel:defs.bzl", "write_info_file_var")
-
-py_proto_library(
-    name = "spawn_py_pb2",
-    deps = ["@spawn_proto_library//:spawn_pb2"],
-)
-
-py_binary(
-    name = "execution_log_compact_to_csv",
-    srcs = ["execution_log_compact_to_csv.py"],
-    deps = [":spawn_py_pb2"],
-)
 
 bool_flag(
     name = "enable_malicious_code",

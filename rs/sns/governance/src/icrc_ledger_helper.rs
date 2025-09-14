@@ -61,10 +61,10 @@ impl<'a> ICRCLedgerHelper<'a> {
             blocks => {
                 return Err(format!(
                     "Error parsing response from {}.icrc3_get_blocks: expected a single block,
-                 got {} blocks.",
+                     got {} blocks.",
                     self.ledger.canister_id(),
                     blocks.len(),
-                ))
+                ));
             }
         };
 
@@ -83,15 +83,13 @@ impl<'a> ICRCLedgerHelper<'a> {
 
         let Some(timestamp) = map_val.get(TIMESTAMP) else {
             return Err(format!(
-                "Error parsing the block: missing timestamp attribute `{}`",
-                TIMESTAMP
+                "Error parsing the block: missing timestamp attribute `{TIMESTAMP}`"
             ));
         };
 
         let ICRC3Value::Nat(timestamp) = timestamp else {
             return Err(format!(
-                "Error parsing the block: timestamp attribute `{}` must be Nat.",
-                TIMESTAMP
+                "Error parsing the block: timestamp attribute `{TIMESTAMP}` must be Nat."
             ));
         };
 
@@ -105,25 +103,40 @@ fn decode_nat_to_u64(value: Nat) -> Result<u64, String> {
     let u64_digit_components = value.0.to_u64_digits();
 
     match &u64_digit_components[..] {
+        [] => Ok(0),
         [val] => Ok(*val),
-        vals => Err(format!(
-            "Error parsing a Nat value `{:?}` to u64: expected a single u64 value, got {:?}",
+        _ => Err(format!(
+            "Nat value `{:?}` is too large, max supported value: {}",
             &value,
-            vals.len(),
+            u64::MAX,
         )),
     }
 }
 
 #[test]
 fn test_decoding_nat() {
-    let num_nat = Nat::from(1234_u64);
-    let decoding_result = decode_nat_to_u64(num_nat.clone());
+    let test_cases = [
+        (Nat::from(0_u64), Ok(0_u64)),
+        (Nat::from(1_u64), Ok(1_u64)),
+        (Nat::from(1234_u64), Ok(1234_u64)),
+        (Nat::from(1_000_000_000_u64), Ok(1_000_000_000_u64)),
+        (Nat::from(u64::MAX), Ok(u64::MAX)),
+        (
+            Nat::from(u64::MAX) + Nat::from(1_u64),
+            Err(format!(
+                "Nat value `Nat(18446744073709551616)` is too large, max supported value: {}",
+                u64::MAX
+            )),
+        ),
+    ];
 
-    assert!(
-        matches!(decoding_result, Ok(value) if value == 1234_u64),
-        "Decoding {:?} to u64 failed",
-        num_nat
-    );
+    for (num_nat, expected) in test_cases {
+        let decoding_result = decode_nat_to_u64(num_nat.clone());
+        assert_eq!(
+            decoding_result, expected,
+            "Decoding {num_nat:?} to u64 failed"
+        );
+    }
 }
 
 #[test]
@@ -149,9 +162,7 @@ fn test_get_block_timestamp_nanos() {
     assert_eq!(
         observed_ts_nanos,
         Nat::from(expected_timestamp),
-        "decoded timestamp {} doesn't match the actual value {}",
-        observed_ts_nanos,
-        expected_timestamp
+        "decoded timestamp {observed_ts_nanos} doesn't match the actual value {expected_timestamp}"
     );
 
     let observed_ts = observed_ts_nanos / Nat::from(ONE_SEC_NANOSEC);
@@ -163,8 +174,6 @@ fn test_get_block_timestamp_nanos() {
     let expected_time = expected_timestamp / ONE_SEC_NANOSEC;
     assert!(
         matches!(observed_ts_u64, time if time == expected_time),
-        "observed timestamp {:?} doesn't match the expected {:?}",
-        observed_ts_u64,
-        expected_time
+        "observed timestamp {observed_ts_u64:?} doesn't match the expected {expected_time:?}"
     );
 }

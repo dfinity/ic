@@ -1,5 +1,6 @@
-use crate::{CallCanisters, CallCanistersWithStoppedCanisterError, ProgressNetwork};
-use crate::{CanisterInfo, Request};
+use crate::{
+    CallCanisters, CallCanistersWithStoppedCanisterError, CanisterInfo, ProgressNetwork, Request,
+};
 use candid::Principal;
 use ic_agent::agent::{RejectCode, RejectResponse};
 use ic_agent::{Agent, AgentError};
@@ -34,25 +35,34 @@ impl CallCanisters for Agent {
         request: R,
     ) -> Result<R::Response, Self::Error> {
         let canister_id = canister_id.into();
-        let request_bytes = request.payload().map_err(AgentCallError::CandidEncode)?;
+        let method = request.method();
+        let payload = request.payload().map_err(AgentCallError::CandidEncode)?;
+
         let response = if request.update() {
-            let request = self
-                .update(&canister_id, request.method())
-                .with_arg(request_bytes)
-                .call()
-                .await?;
-            let (response, _cert) = match request {
+            let mut call = self.update(&canister_id, method).with_arg(payload);
+
+            if let Some(effective_canister_id) = request.effective_canister_id() {
+                call = call.with_effective_canister_id(effective_canister_id);
+            }
+
+            let response = call.call().await?;
+
+            let (response, _cert) = match response {
                 ic_agent::agent::CallResponse::Response(response) => response,
                 ic_agent::agent::CallResponse::Poll(request_id) => {
                     self.wait(&request_id, canister_id).await?
                 }
             };
+
             response
         } else {
-            self.query(&canister_id, request.method())
-                .with_arg(request_bytes)
-                .call()
-                .await?
+            let mut call = self.query(&canister_id, method).with_arg(payload);
+
+            if let Some(effective_canister_id) = request.effective_canister_id() {
+                call = call.with_effective_canister_id(effective_canister_id);
+            }
+
+            call.call().await?
         };
 
         let response =
@@ -87,29 +97,25 @@ impl CallCanisters for Agent {
             .map_err(AgentCallError::Agent)?;
 
         let cbor: Value = serde_cbor::from_slice(&controllers_blob).map_err(|err| {
-            Self::Error::CanisterControllers(format!("Failed decoding CBOR data: {:?}", err))
+            Self::Error::CanisterControllers(format!("Failed decoding CBOR data: {err:?}"))
         })?;
 
         let Value::Array(controllers) = cbor else {
             return Err(Self::Error::CanisterControllers(format!(
-                "Expected controllers to be an array, but got {:?}",
-                cbor
+                "Expected controllers to be an array, but got {cbor:?}"
             )));
         };
 
         let (controllers, errors): (Vec<_>, Vec<_>) =
             controllers.into_iter().partition_map(|value| {
                 let Value::Bytes(bytes) = value else {
-                    let err = format!(
-                        "Expected canister controller to be of type bytes, got {:?}",
-                        value
-                    );
+                    let err =
+                        format!("Expected canister controller to be of type bytes, got {value:?}");
                     return Either::Right(err);
                 };
                 match Principal::try_from(&bytes) {
                     Err(err) => {
-                        let err =
-                            format!("Cannot interpret canister controller principal: {}", err);
+                        let err = format!("Cannot interpret canister controller principal: {err}");
                         Either::Right(err)
                     }
                     Ok(principal) => Either::Left(principal),
@@ -166,7 +172,7 @@ impl CallCanistersWithStoppedCanisterError for Agent {
 impl ProgressNetwork for Agent {
     async fn progress(&self, duration: Duration) {
         if duration > Duration::from_secs(5) {
-            eprintln!("Warning: waiting for {:?}, this may take a while", duration);
+            eprintln!("Warning: waiting for {duration:?}, this may take a while");
             eprintln!("Consider using shorter duration in 'progress' method calls");
         }
         tokio::time::sleep(duration).await;

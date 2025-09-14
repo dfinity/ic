@@ -56,11 +56,10 @@ pub fn validate_proposal_url(
     };
 
     match allowed_domains {
-        Some(allowed) => match allowed.iter().any(|allowed| domain == *allowed) {
+        Some(allowed) => match allowed.contains(&domain) {
             true => Ok(()),
             false => Err(format!(
-                "{field_name} was not in the list of allowed domains: {:?}",
-                allowed
+                "{field_name} was not in the list of allowed domains: {allowed:?}"
             )),
         },
         None => Ok(()),

@@ -1,6 +1,6 @@
 use ic_metrics::{
-    buckets::{add_bucket, decimal_buckets, linear_buckets},
     MetricsRegistry,
+    buckets::{add_bucket, decimal_buckets, linear_buckets},
 };
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 
@@ -14,19 +14,19 @@ pub const LABEL_HTTP_VERSION: &str = "http_version";
 pub const LABEL_HEALTH_STATUS_BEFORE: &str = "before";
 pub const LABEL_HEALTH_STATUS_AFTER: &str = "after";
 
-pub const LABEL_CALL_V3_CERTIFICATE_STATUS: &str = "status";
-
-// Call v3 labels
+// Sync Call labels
 // !!! Be careful to update alert queries in k8s repo if changing these constants.!!!
-pub const LABEL_CALL_V3_EARLY_RESPONSE_TRIGGER: &str = "trigger";
-pub const CALL_V3_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING: &str = "ingress_watcher_not_running";
-pub const CALL_V3_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION: &str = "duplicate_subscription";
-pub const CALL_V3_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT: &str = "subscription_timeout";
-pub const CALL_V3_EARLY_RESPONSE_CERTIFICATION_TIMEOUT: &str = "certification_timeout";
-pub const CALL_V3_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE: &str =
+const LABEL_SYNC_CALL_CERTIFICATE_STATUS: &str = "status";
+const LABEL_SYNC_CALL_EARLY_RESPONSE_TRIGGER: &str = "trigger";
+pub const SYNC_CALL_EARLY_RESPONSE_INGRESS_WATCHER_NOT_RUNNING: &str =
+    "ingress_watcher_not_running";
+pub const SYNC_CALL_EARLY_RESPONSE_DUPLICATE_SUBSCRIPTION: &str = "duplicate_subscription";
+pub const SYNC_CALL_EARLY_RESPONSE_SUBSCRIPTION_TIMEOUT: &str = "subscription_timeout";
+pub const SYNC_CALL_EARLY_RESPONSE_CERTIFICATION_TIMEOUT: &str = "certification_timeout";
+pub const SYNC_CALL_EARLY_RESPONSE_MESSAGE_ALREADY_IN_CERTIFIED_STATE: &str =
     "message_already_in_certified_state";
-pub const CALL_V3_STATUS_IS_NOT_LEAF: &str = "not_leaf";
-pub const CALL_V3_STATUS_IS_INVALID_UTF8: &str = "is_invalid_utf8";
+pub const SYNC_CALL_STATUS_IS_NOT_LEAF: &str = "not_leaf";
+pub const SYNC_CALL_STATUS_IS_INVALID_UTF8: &str = "is_invalid_utf8";
 
 /// Placeholder used when we can't determine the appropriate prometheus label.
 pub const LABEL_UNKNOWN: &str = "unknown";
@@ -68,9 +68,9 @@ pub struct HttpHandlerMetrics {
     pub ingress_watcher_wait_for_certification_duration_seconds: Histogram,
     pub ingress_watcher_messages_completed_execution_channel_capacity: IntGauge,
 
-    // Call v3 handler metrics
-    pub call_v3_early_response_trigger_total: IntCounterVec,
-    pub call_v3_certificate_status_total: IntCounterVec,
+    // sync call handler metrics
+    pub sync_call_early_response_trigger_total: IntCounterVec,
+    pub sync_call_certificate_status_total: IntCounterVec,
 }
 
 // There is a mismatch between the labels and the public spec.
@@ -157,15 +157,18 @@ impl HttpHandlerMetrics {
             ),
             ingress_watcher_tracked_messages: metrics_registry.int_gauge(
                 "replica_http_ingress_watcher_tracked_messages",
-            "The current number of messages being tracked in the ingress watcher waiting for certification"
+                "The current number of messages being tracked in the ingress watcher \
+                waiting for certification"
             ),
             ingress_watcher_heights_waiting_for_certification: metrics_registry.int_gauge(
                 "replica_http_ingress_watcher_heights_waiting_for_certification",
-                "The current number of unique heights that the ingress watcher is waiting for certification on."
+                "The current number of unique heights that the ingress watcher \
+                is waiting for certification on."
             ),
             ingress_watcher_subscription_latency_duration_seconds: metrics_registry.histogram(
                 "replica_http_ingress_watcher_subscription_latency_duration_seconds",
-                "The duration the call v3 handler waits for subscribing to a message. I.e. `IngressWatcherHandle::subscribe_for_certification()`.",
+                "The duration the sync call handler waits for subscribing to a message. \
+                I.e. `IngressWatcherHandle::subscribe_for_certification()`.",
                 // 0.1ms - 500ms
                 decimal_buckets(-4, -1),
             ),
@@ -175,7 +178,8 @@ impl HttpHandlerMetrics {
             ),
             ingress_watcher_wait_for_certification_duration_seconds: metrics_registry.histogram(
                 "replica_http_ingress_watcher_wait_for_certification_duration_seconds",
-                "The duration the call v3 handler waits for a message to complete execution at some height, h, and for h to become certified.",
+                "The duration the sync call handler waits for a message to complete execution \
+                at some height, h, and for h to become certified.",
                 // 52 buckets
                 // 0.50s - 0.60s - ... - 4.5s - 5.0s - 5.5s - ... - 12s - 14s - 16s
                 {
@@ -192,50 +196,16 @@ impl HttpHandlerMetrics {
                 },
 
             ),
-            call_v3_certificate_status_total: metrics_registry.int_counter_vec(
+            // TODO(CON-1576): rename the metric names and add `api_version` label to them
+            sync_call_certificate_status_total: metrics_registry.int_counter_vec(
                 "replica_http_call_v3_certificate_status_total",
-                "The count of certificate states returned by the /v3/.../call endpoint. I.e. replied, rejected, unknown, etc.",
-                &[LABEL_CALL_V3_CERTIFICATE_STATUS],
+                "The count of certificate states returned by the /{v3,v4}/.../call endpoint. I.e. replied, rejected, unknown, etc.",
+                &[LABEL_SYNC_CALL_CERTIFICATE_STATUS],
             ),
-            call_v3_early_response_trigger_total: metrics_registry.int_counter_vec(
+            sync_call_early_response_trigger_total: metrics_registry.int_counter_vec(
                 "replica_http_call_v3_early_response_trigger_total",
-                "The count of early response triggers for the /v3/.../call endpoint.",
-                &[LABEL_CALL_V3_EARLY_RESPONSE_TRIGGER],
-            ),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub(crate) struct DelegationManagerMetrics {
-    pub(crate) update_duration: Histogram,
-    pub(crate) delegation_size: Histogram,
-    pub(crate) updates: IntCounter,
-    pub(crate) errors: IntCounter,
-}
-
-impl DelegationManagerMetrics {
-    pub(crate) fn new(metrics_registry: &MetricsRegistry) -> Self {
-        Self {
-            updates: metrics_registry.int_counter(
-                "nns_delegation_manager_updates_total",
-                "How many times has the nns delegation been updated",
-            ),
-            update_duration: metrics_registry.histogram(
-                "nns_delegation_manager_update_duration_seconds",
-                "How long it took to update the nns delegation, in seconds",
-                // (1ms, 2ms, 5ms, ..., 10s, 20s, 50s)
-                decimal_buckets(-3, 1),
-            ),
-            delegation_size: metrics_registry.histogram(
-                "nns_delegation_manager_delegation_size_bytes",
-                "How big is the delegation, in bytes",
-                // (1, 2, 5, ..., 1MB, 2MB, 5MB)
-                decimal_buckets(0, 6),
-            ),
-            errors: metrics_registry.int_counter(
-                "nns_delegation_manager_errors_total",
-                "Number of errors encountered while fetching nns delegations",
+                "The count of early response triggers for the /{v3,v4}/.../call endpoint.",
+                &[LABEL_SYNC_CALL_EARLY_RESPONSE_TRIGGER],
             ),
         }
     }

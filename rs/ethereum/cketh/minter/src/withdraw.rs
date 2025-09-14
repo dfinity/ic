@@ -1,19 +1,18 @@
 use crate::eth_logs::LedgerSubaccount;
-use crate::eth_rpc_client::responses::TransactionReceipt;
 use crate::eth_rpc_client::EthRpcClient;
 use crate::eth_rpc_client::MultiCallError;
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{GasAmount, LedgerBurnIndex, LedgerMintIndex, TransactionCount};
-use crate::state::audit::{process_event, EventType};
+use crate::state::audit::{EventType, process_event};
 use crate::state::transactions::{
-    create_transaction, CreateTransactionError, Reimbursed, ReimbursementIndex,
-    ReimbursementRequest, WithdrawalRequest,
+    CreateTransactionError, Reimbursed, ReimbursementIndex, ReimbursementRequest,
+    WithdrawalRequest, create_transaction,
 };
-use crate::state::{mutate_state, read_state, State, TaskType};
-use crate::tx::{lazy_refresh_gas_fee_estimate, GasFeeEstimate};
+use crate::state::{State, TaskType, mutate_state, read_state};
+use crate::tx::{GasFeeEstimate, lazy_refresh_gas_fee_estimate};
 use candid::Nat;
-use evm_rpc_client::SendRawTransactionStatus;
+use evm_rpc_client::{SendRawTransactionStatus, TransactionReceipt as EvmTransactionReceipt};
 use futures::future::join_all;
 use ic_canister_log::log;
 use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
@@ -172,7 +171,7 @@ pub async fn process_retrieve_eth_requests() {
     if read_state(|s| s.eth_transactions.has_pending_requests()) {
         ic_cdk_timers::set_timer(
             crate::PROCESS_ETH_RETRIEVE_TRANSACTIONS_RETRY_INTERVAL,
-            || ic_cdk::spawn(process_retrieve_eth_requests()),
+            || ic_cdk::futures::spawn_017_compat(process_retrieve_eth_requests()),
         );
     }
 }
@@ -384,15 +383,21 @@ async fn finalize_transactions_batch() {
                     .map(|hash| rpc_client.eth_get_transaction_receipt(*hash)),
             )
             .await;
-            let mut receipts: BTreeMap<LedgerBurnIndex, TransactionReceipt> = BTreeMap::new();
+            let mut receipts: BTreeMap<LedgerBurnIndex, EvmTransactionReceipt> = BTreeMap::new();
             for ((hash, withdrawal_id), result) in zip(txs_to_finalize, results) {
                 match result {
                     Ok(Some(receipt)) => {
-                        log!(DEBUG, "Received transaction receipt {receipt:?} for transaction {hash} and withdrawal ID {withdrawal_id}");
+                        log!(
+                            DEBUG,
+                            "Received transaction receipt {receipt:?} for transaction {hash} and withdrawal ID {withdrawal_id}"
+                        );
                         match receipts.get(&withdrawal_id) {
                             // by construction we never query twice the same transaction hash, which is a field in TransactionReceipt.
                             Some(existing_receipt) => {
-                                log!(INFO, "ERROR: received different receipts for transaction {hash} with withdrawal ID {withdrawal_id}: {existing_receipt:?} and {receipt:?}. Will retry later");
+                                log!(
+                                    INFO,
+                                    "ERROR: received different receipts for transaction {hash} with withdrawal ID {withdrawal_id}: {existing_receipt:?} and {receipt:?}. Will retry later"
+                                );
                                 return;
                             }
                             None => {
@@ -426,7 +431,7 @@ async fn finalize_transactions_batch() {
                         s,
                         EventType::FinalizedTransaction {
                             withdrawal_id,
-                            transaction_receipt,
+                            transaction_receipt: transaction_receipt.into(),
                         },
                     );
                 });

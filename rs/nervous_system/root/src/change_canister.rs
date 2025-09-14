@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::LOG_PREFIX;
 use candid::{CandidType, Deserialize, Encode, Principal};
 use dfn_core::api::CanisterId;
@@ -5,17 +6,14 @@ use dfn_core::api::CanisterId;
 use dfn_core::println;
 use ic_crypto_sha2::Sha256;
 use ic_management_canister_types_private::{
-    CanisterInstallMode, CanisterInstallModeV2, ChunkHash, InstallChunkedCodeArgs, InstallCodeArgs,
-    IC_00,
+    CanisterInstallMode, CanisterInstallModeV2, ChunkHash, IC_00, InstallChunkedCodeArgs,
+    InstallCodeArgs,
 };
-use ic_nervous_system_clients::{
-    canister_id_record::CanisterIdRecord,
-    canister_status::{
-        canister_status, CanisterStatusResultFromManagementCanister, CanisterStatusType,
-    },
-};
+use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
+use ic_nervous_system_lock::acquire_for;
 use ic_nervous_system_runtime::Runtime;
 use serde::Serialize;
+use std::{cell::RefCell, collections::BTreeMap};
 
 /// The structure allows reconstructing a potentially large WASM from chunks needed to upgrade or
 /// reinstall some target canister.
@@ -86,9 +84,9 @@ impl ChangeCanisterRequest {
             .field("stop_before_installing", &self.stop_before_installing)
             .field("mode", &self.mode)
             .field("canister_id", &self.canister_id)
-            .field("wasm_module_sha256", &format!("{:x?}", wasm_sha))
+            .field("wasm_module_sha256", &format!("{wasm_sha:x?}"))
             .field("chunked_canister_wasm", &self.chunked_canister_wasm)
-            .field("arg_sha256", &format!("{:x?}", arg_sha))
+            .field("arg_sha256", &format!("{arg_sha:x?}"))
             .finish()
     }
 }
@@ -183,8 +181,8 @@ impl AddCanisterRequest {
 
         f.debug_struct("AddCanisterRequest")
             .field("name", &self.name)
-            .field("wasm_module_sha256", &format!("{:x?}", wasm_sha))
-            .field("arg_sha256", &format!("{:x?}", arg_sha))
+            .field("wasm_module_sha256", &format!("{wasm_sha:x?}"))
+            .field("arg_sha256", &format!("{arg_sha:x?}"))
             .field("compute_allocation", &self.compute_allocation)
             .field("memory_allocation", &self.memory_allocation)
             .field("initial_cycles", &self.initial_cycles)
@@ -218,6 +216,13 @@ pub struct StopOrStartCanisterRequest {
     pub action: CanisterAction,
 }
 
+// Thread-local storage for per-canister locks
+// Key: CanisterId, Value: ChangeCanisterRequest (for debugging/logging)
+thread_local! {
+    static CANISTER_CHANGE_LOCKS: RefCell<BTreeMap<CanisterId, ChangeCanisterRequest>> =
+        const {RefCell::new(BTreeMap::new()) };
+}
+
 pub async fn change_canister<Rt>(request: ChangeCanisterRequest) -> Result<(), String>
 where
     Rt: Runtime,
@@ -225,26 +230,35 @@ where
     let canister_id = request.canister_id;
     let stop_before_installing = request.stop_before_installing;
 
+    // Try to acquire lock for this canister - fail immediately if locked
+    let _guard = match acquire_for(&CANISTER_CHANGE_LOCKS, canister_id, request.clone()) {
+        Ok(guard) => guard,
+        Err(conflicting_request) => {
+            return Err(format!(
+                "Canister {canister_id} is currently locked by another change operation. Conflicting request: {conflicting_request:?}"
+            ));
+        }
+    };
+
     if stop_before_installing {
         let stop_result = stop_canister::<Rt>(canister_id).await;
         if stop_result.is_err() {
-            println!(
-                "{}change_canister: Failed to stop canister, trying to restart...",
-                LOG_PREFIX
-            );
+            println!("{LOG_PREFIX}change_canister: Failed to stop canister, trying to restart...");
             return match start_canister::<Rt>(canister_id).await {
-                Ok(_) => {
-                    Err(format!("Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and succeeded in that."))
-                }
+                Ok(_) => Err(format!(
+                    "Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and succeeded in that."
+                )),
                 Err(_) => {
-                    println!("{}change_canister: Failed to restart canister.", LOG_PREFIX);
-                    Err(format!("Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and failed in that."))
+                    println!("{LOG_PREFIX}change_canister: Failed to restart canister.");
+                    Err(format!(
+                        "Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and failed in that."
+                    ))
                 }
             };
         }
     }
 
-    let request_str = format!("{:?}", request);
+    let request_str = format!("{request:?}");
 
     // Ship code to the canister.
     //
@@ -346,15 +360,17 @@ where
     .await;
 
     if res.is_ok() {
-        println!("{}start_canister call successful. {res:?}", LOG_PREFIX);
+        println!("{LOG_PREFIX}start_canister call successful. {res:?}");
     }
     res
 }
 
-/// Stops the given canister, and polls until the `Stopped` state is reached.
-///
-/// Warning: there's no guarantee that this ever finishes!
-/// TODO(IC-1099)
+/// Stops the given canister.  If 'stop_canister' times out, this returns an Err.  Otherwise,
+/// the canister has reached the "Stopped" state.  If 'stop_canister' times out, the canister
+/// may later reach a "Stopped" state.  Therefore, if this method returns an Err,
+/// the caller should usually call "start_canister" to avoid leaving the canister in a Stopped state.
+/// Alternately, the caller can retry "stop_canister", which will again return Ok when the canister
+/// stops, and an error if it times out.
 pub async fn stop_canister<Rt>(canister_id: CanisterId) -> Result<(), (i32, String)>
 where
     Rt: Runtime,
@@ -368,21 +384,10 @@ where
     )
     .await?;
 
-    loop {
-        let status: CanisterStatusResultFromManagementCanister =
-            canister_status::<Rt>(CanisterIdRecord::from(canister_id))
-                .await
-                .unwrap();
-
-        if status.status == CanisterStatusType::Stopped {
-            return Ok(());
-        }
-
-        println!(
-            "{}Waiting for {:?} to stop. Current status: {}",
-            LOG_PREFIX, canister_id, status.status
-        );
-    }
+    // If we successfully get here, we know the canister is stopped.  While a canister could be in
+    // "Stopping" state, "stop_canister" does not successfully return until it is "Stopped".
+    // Therefore, we do not check canister status.
+    Ok(())
 }
 
 // Use a serde field attribute to custom serialize the Nat candid type.
@@ -393,5 +398,110 @@ where
     match nat.as_ref() {
         Some(num) => serializer.serialize_str(&num.to_string()),
         None => serializer.serialize_none(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_trait::async_trait;
+    use candid::utils::{ArgumentDecoder, ArgumentEncoder};
+    use dfn_core::api::CanisterId;
+    use std::future::Future;
+
+    // Mock runtime that returns errors for all inter-canister calls
+    // This allows us to test the locking behavior without actually making calls
+    struct MockRuntime;
+
+    #[async_trait]
+    impl Runtime for MockRuntime {
+        async fn call_without_cleanup<In, Out>(
+            _id: CanisterId,
+            _method: &str,
+            _args: In,
+        ) -> Result<Out, (i32, String)>
+        where
+            In: ArgumentEncoder + Send,
+            Out: for<'a> ArgumentDecoder<'a>,
+        {
+            Err((
+                1,
+                "MockRuntime: call_without_cleanup not implemented".to_string(),
+            ))
+        }
+
+        async fn call_with_cleanup<In, Out>(
+            _id: CanisterId,
+            _method: &str,
+            _args: In,
+        ) -> Result<Out, (i32, String)>
+        where
+            In: ArgumentEncoder + Send,
+            Out: for<'a> ArgumentDecoder<'a>,
+        {
+            Err((
+                1,
+                "MockRuntime: call_with_cleanup not implemented".to_string(),
+            ))
+        }
+
+        async fn call_bytes_with_cleanup(
+            _id: CanisterId,
+            _method: &str,
+            _args: &[u8],
+        ) -> Result<Vec<u8>, (i32, String)> {
+            Err((
+                1,
+                "MockRuntime: call_bytes_with_cleanup not implemented".to_string(),
+            ))
+        }
+
+        fn spawn_future<F: 'static + Future<Output = ()>>(_future: F) {
+            // Do nothing - we don't need to actually spawn
+        }
+
+        fn canister_version() -> u64 {
+            1
+        }
+    }
+
+    #[tokio::test]
+    async fn test_change_canister_fails_when_lock_exists() {
+        let canister_id = CanisterId::from_u64(42);
+
+        // Create a request that we'll use to pre-populate the lock
+        let conflicting_request = ChangeCanisterRequest {
+            stop_before_installing: false,
+            canister_id,
+            mode: CanisterInstallMode::Install,
+            wasm_module: vec![1, 2, 3],
+            chunked_canister_wasm: None,
+            arg: vec![7, 8, 9],
+        };
+
+        // Manually insert a lock for this canister to simulate a concurrent operation
+        CANISTER_CHANGE_LOCKS.with(|locks| {
+            locks
+                .borrow_mut()
+                .insert(canister_id, conflicting_request.clone());
+        });
+
+        // Now try to call change_canister on the same canister - this should fail
+        let new_request = ChangeCanisterRequest {
+            stop_before_installing: true,
+            canister_id,
+            mode: CanisterInstallMode::Upgrade,
+            wasm_module: vec![10, 11, 12],
+            chunked_canister_wasm: None,
+            arg: vec![16, 17, 18],
+        };
+
+        let result = change_canister::<MockRuntime>(new_request).await;
+
+        // Should return an error indicating the canister is locked
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err();
+        assert!(error_msg.contains("currently locked by another change operation"));
+        assert!(error_msg.contains(&format!("{canister_id}")));
     }
 }

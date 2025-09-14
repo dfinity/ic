@@ -1,9 +1,9 @@
+pub mod proto;
+
 use crate::ExecutionTask;
 use ic_config::flag_status::FlagStatus;
 use ic_interfaces::execution_environment::ExecutionRoundType;
 use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
-use ic_protobuf::proxy::ProxyDecodeError;
-use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_types::CanisterId;
 use ic_types::NumBytes;
 use num_traits::SaturatingSub;
@@ -60,7 +60,8 @@ impl TaskQueue {
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::PausedInstallCode(_)
             | ExecutionTask::AbortedExecution { .. } => unreachable!(
-                "Unsuccessful removal of the task {:?}. Removal of task from TaskQueue is only supported for OnLowWasmMemory type.", task
+                "Unsuccessful removal of the task {:?}. Removal of task from TaskQueue is only supported for OnLowWasmMemory type.",
+                task
             ),
         };
     }
@@ -97,9 +98,18 @@ impl TaskQueue {
             }
     }
 
-    /// This function is used only in tests.
     pub fn peek_hook_status(&self) -> OnLowWasmMemoryHookStatus {
         self.on_low_wasm_memory_hook_status
+    }
+
+    /// This function should only be used to restore the hook status
+    /// when loading a canister snapshot.
+    /// Otherwise, invalid state transitions might happen.
+    pub fn set_on_low_wasm_memory_hook_status_from_snapshot(
+        &mut self,
+        on_low_wasm_memory_hook_status: OnLowWasmMemoryHookStatus,
+    ) {
+        self.on_low_wasm_memory_hook_status = on_low_wasm_memory_hook_status;
     }
 
     /// `check_dts_invariants` should only be called after round execution.
@@ -119,19 +129,15 @@ impl TaskQueue {
             match paused_or_aborted_task {
                 ExecutionTask::PausedExecution { .. } | ExecutionTask::PausedInstallCode(_) => {
                     assert_eq!(
-                    current_round_type,
-                    ExecutionRoundType::OrdinaryRound,
-                    "Unexpected paused execution {:?} after a checkpoint round in canister {:?}",
-                    paused_or_aborted_task,
-                    id
-                );
+                        current_round_type,
+                        ExecutionRoundType::OrdinaryRound,
+                        "Unexpected paused execution {paused_or_aborted_task:?} after a checkpoint round in canister {id:?}"
+                    );
 
                     assert_eq!(
                         deterministic_time_slicing,
                         FlagStatus::Enabled,
-                        "Unexpected paused execution {:?} with disabled DTS in canister: {:?}",
-                        paused_or_aborted_task,
-                        id
+                        "Unexpected paused execution {paused_or_aborted_task:?} with disabled DTS in canister: {id:?}"
                     );
                 }
                 ExecutionTask::AbortedExecution { .. }
@@ -140,7 +146,8 @@ impl TaskQueue {
                 | ExecutionTask::GlobalTimer
                 | ExecutionTask::OnLowWasmMemory => {
                     unreachable!(
-                        "Unexpected on task type {:?} in TaskQueue::paused_or_aborted_task in canister {:?} .", paused_or_aborted_task, id
+                        "Unexpected on task type {:?} in TaskQueue::paused_or_aborted_task in canister {:?} .",
+                        paused_or_aborted_task, id
                     )
                 }
             }
@@ -149,16 +156,10 @@ impl TaskQueue {
         if let Some(task) = self.queue.front() {
             match task {
                 ExecutionTask::Heartbeat => {
-                    panic!(
-                        "Unexpected heartbeat task after a round in canister {:?}",
-                        id
-                    );
+                    panic!("Unexpected heartbeat task after a round in canister {id:?}");
                 }
                 ExecutionTask::GlobalTimer => {
-                    panic!(
-                        "Unexpected global timer task after a round in canister {:?}",
-                        id
-                    );
+                    panic!("Unexpected global timer task after a round in canister {id:?}");
                 }
                 ExecutionTask::OnLowWasmMemory
                 | ExecutionTask::AbortedExecution { .. }
@@ -166,7 +167,8 @@ impl TaskQueue {
                 | ExecutionTask::PausedExecution { .. }
                 | ExecutionTask::PausedInstallCode(_) => {
                     unreachable!(
-                        "Unexpected task type {:?} in TaskQueue::queue, after a round in canister {:?}", task, id
+                        "Unexpected task type {:?} in TaskQueue::queue, after a round in canister {:?}",
+                        task, id
                     );
                 }
             }
@@ -185,8 +187,7 @@ impl TaskQueue {
         for task in self.queue.iter() {
             debug_assert!(
                 *task == ExecutionTask::Heartbeat || *task == ExecutionTask::GlobalTimer,
-                "Unexpected task type {:?} in TaskQueue::queue.",
-                task
+                "Unexpected task type {task:?} in TaskQueue::queue."
             );
         }
 
@@ -251,43 +252,6 @@ impl TaskQueue {
     }
 }
 
-impl From<&TaskQueue> for pb::TaskQueue {
-    fn from(item: &TaskQueue) -> Self {
-        Self {
-            paused_or_aborted_task: item.paused_or_aborted_task.as_ref().map(|task| task.into()),
-            on_low_wasm_memory_hook_status: pb::OnLowWasmMemoryHookStatus::from(
-                &item.on_low_wasm_memory_hook_status,
-            )
-            .into(),
-            queue: item.queue.iter().map(|task| task.into()).collect(),
-        }
-    }
-}
-
-impl TryFrom<pb::TaskQueue> for TaskQueue {
-    type Error = ProxyDecodeError;
-
-    fn try_from(item: pb::TaskQueue) -> Result<Self, Self::Error> {
-        Ok(Self {
-            paused_or_aborted_task: item
-                .paused_or_aborted_task
-                .map(|task| task.try_into())
-                .transpose()?,
-            on_low_wasm_memory_hook_status: pb::OnLowWasmMemoryHookStatus::try_from(
-                item.on_low_wasm_memory_hook_status,
-            )
-            .map_err(|e| ProxyDecodeError::Other(
-                format!("Error while trying to decode pb::TaskQueue::on_low_wasm_memory_hook_status, {:?}", e)))?
-            .try_into()?,
-            queue: item
-                .queue
-                .into_iter()
-                .map(|task| task.try_into())
-                .collect::<Result<VecDeque<_>, _>>()?,
-        })
-    }
-}
-
 /// Condition for `OnLowWasmMemoryHook` is satisfied if the following holds:
 ///
 /// 1. In the case of `memory_allocation`
@@ -311,9 +275,7 @@ pub fn is_low_wasm_memory_hook_condition_satisfied(
 
     debug_assert!(
         wasm_memory_usage <= memory_usage,
-        "Wasm memory usage {} is greater that memory usage {}.",
-        wasm_memory_usage,
-        memory_usage
+        "Wasm memory usage {wasm_memory_usage} is greater that memory usage {memory_usage}."
     );
 
     let memory_usage_without_wasm_memory = memory_usage.saturating_sub(&wasm_memory_usage);
@@ -344,15 +306,15 @@ pub fn is_low_wasm_memory_hook_condition_satisfied(
 mod tests {
     use std::sync::Arc;
 
-    use crate::{metadata_state::subnet_call_context_manager::InstallCodeCallId, ExecutionTask};
+    use crate::{ExecutionTask, metadata_state::subnet_call_context_manager::InstallCodeCallId};
 
     use super::TaskQueue;
     use crate::canister_state::system_state::PausedExecutionId;
     use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
     use ic_test_utilities_types::messages::IngressBuilder;
     use ic_types::{
-        messages::{CanisterCall, CanisterMessageOrTask, CanisterTask},
         Cycles,
+        messages::{CanisterCall, CanisterMessageOrTask, CanisterTask},
     };
 
     #[test]

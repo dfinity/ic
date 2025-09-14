@@ -1,15 +1,18 @@
 //! An implementation of RegistryClient intended to be used in canister
 //! where polling in the background is not required because handed over to a timer.
 //! The code is entirely copied from `ic-registry-client-fake` and more tests added.
+
 use async_trait::async_trait;
 use ic_interfaces_registry::{RegistryClientResult, RegistryClientVersionedResult};
+use ic_types::RegistryVersion;
 use ic_types::registry::RegistryClientError;
 use ic_types::registry::RegistryClientError::DecodeError;
-use ic_types::RegistryVersion;
+use std::collections::{BTreeMap, HashSet};
 
 mod stable_canister_client;
 mod stable_memory;
 
+use crate::stable_memory::UnixTsNanos;
 pub use stable_canister_client::StableCanisterRegistryClient;
 pub use stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue};
 
@@ -18,7 +21,7 @@ pub use stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableR
 /// method to retrieve the "timestamp" that a version was first added to the local
 /// canister.
 #[async_trait]
-pub trait CanisterRegistryClient: Send + Sync {
+pub trait CanisterRegistryClient {
     /// The following holds:
     ///
     /// (1) ∀ k: get_value(k, get_latest_version()).is_ok()
@@ -100,6 +103,11 @@ pub trait CanisterRegistryClient: Send + Sync {
     /// over multiple messages.  It should generally be scheduled in a timer, but if it's never called
     /// the local registry data will not be in sync with the data in the Registry canister.
     async fn sync_registry_stored(&self) -> Result<RegistryVersion, String>;
+
+    /// Returns a map from timestamps in nanoseconds to a set of `RegistryVersion`s.
+    /// Each key represents the timestamps when the registry versions have been added,
+    /// and the associated value is the set of all registry versions introduced at that timestamp.
+    fn timestamp_to_versions_map(&self) -> BTreeMap<UnixTsNanos, HashSet<RegistryVersion>>;
 }
 
 // Helpers
@@ -114,7 +122,7 @@ pub fn get_decoded_value<T: prost::Message + Default>(
         .get_value(key, version)?
         .map(|bytes| {
             T::decode(bytes.as_slice()).map_err(|e| DecodeError {
-                error: format!("{:?}", e),
+                error: format!("{e:?}"),
             })
         })
         .transpose()

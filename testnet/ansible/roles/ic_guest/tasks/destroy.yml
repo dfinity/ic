@@ -1,6 +1,6 @@
 ---
 - name: Destroy guests
-  shell: |
+  ansible.builtin.shell: |
     set -euo pipefail
 
     # Destroy (stop) all existing VMs from this deployment running on this node

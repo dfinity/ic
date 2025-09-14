@@ -40,3 +40,27 @@ bazel run //rs/cross-chain/proposal-cli:make_proposal -- upgrade cketh-ledger --
 . Candid encoding of the given uprade arguments or use default empty ones.
 . Generates a proposal summary based on the previous information, where only the Motivation section remains to be (manually) filled out.
 . Generates a shell script to submit the proposal using the `ic-admin` command-line tool.
+
+== Create a Forum Topic
+
+As part of the Voting Neuron Grants season 2, teams submitting canister upgrade proposals are required to https://forum.dfinity.org/t/nns-proposal-discussions/34492[create a forum topic] for every proposal or group of proposals in the https://forum.dfinity.org/c/governance/nns-proposal-discussions/76[NNS proposal discussions] category with the tag https://forum.dfinity.org/tags/c/governance/nns-proposal-discussions/76/application-canister-mgmt[Application-canister-mgmt].
+
+Once the proposal is published, the corresponding proposal ID can be used to create an appropriate forum topic.
+
+NOTE: Using this functionality requires having an API key and username for the https://forum.dfinity.org/[DFINITY developer forum]. See the https://docs.discourse.org/[Discourse API] for more information.
+
+.Create a new forum topic for a single canister upgrade proposal (ckETH minter)
+====
+[source,shell]
+----
+bazel run //rs/cross-chain/proposal-cli:make_proposal -- create-forum-post --api-key "1234" --api-user "team" 136787
+----
+====
+
+.Create a new forum topic for multiple canister upgrade proposals (ckBTC ledger suite)
+====
+[source,shell]
+----
+bazel run //rs/cross-chain/proposal-cli:make_proposal -- create-forum-post --api-key "1234" --api-user "team" 137359 137360 137361
+----
+====

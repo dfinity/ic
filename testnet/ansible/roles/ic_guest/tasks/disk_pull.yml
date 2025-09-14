@@ -4,7 +4,7 @@
     aux_nodes: "{{ hostvars[inventory_hostname].groups.aux | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(aux_nodes) | difference(boundary_nodes) }}"
-  shell: |
+  ansible.builtin.shell: |
     set -eExuo pipefail
     # check if disk image is available on the new or the old location for the given hash
     PROXY_CONNECT_TIMEOUT=5
@@ -97,7 +97,7 @@
     aux_nodes: "{{ hostvars[inventory_hostname].groups.aux | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(aux_nodes) | difference(boundary_nodes) }}"
-  shell: |
+  ansible.builtin.shell: |
     # if the unpacked file does not exist or if the archive is newer than the unpacked file
     set -eExuo pipefail
 

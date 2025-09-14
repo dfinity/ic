@@ -76,7 +76,6 @@ package_group(
         "//rs/recovery/...",
         "//rs/registry/regedit/...",
         "//rs/replay/...",
-        "//rs/starter/...",
         "//rs/state_tool/...",
     ],
 )

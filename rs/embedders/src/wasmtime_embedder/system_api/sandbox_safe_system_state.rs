@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    cycles_balance_change::CyclesBalanceChange, routing, routing::ResolveDestinationError, ApiType,
-    CERTIFIED_DATA_MAX_LENGTH,
+    ApiType, CERTIFIED_DATA_MAX_LENGTH, cycles_balance_change::CyclesBalanceChange, routing,
+    routing::ResolveDestinationError,
 };
 use ic_base_types::{CanisterId, NumBytes, NumOsPages, NumSeconds, PrincipalId, SubnetId};
 use ic_cycles_account_manager::{
@@ -11,26 +11,28 @@ use ic_cycles_account_manager::{
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use ic_management_canister_types_private::{
-    CanisterStatusType, CreateCanisterArgs, InstallChunkedCodeArgs, InstallCodeArgsV2,
+    CanisterStatusType, CreateCanisterArgs, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
     LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
+    ProvisionalCreateCanisterWithCyclesArgs, RenameCanisterArgs, UninstallCodeArgs,
+    UpdateSettingsArgs,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::{
-    is_low_wasm_memory_hook_condition_satisfied, CyclesUseCase,
+    CyclesUseCase, is_low_wasm_memory_hook_condition_satisfied,
 };
 use ic_replicated_state::{
-    canister_state::execution_state::WasmExecutionMode, canister_state::DEFAULT_QUEUE_CAPACITY,
     CallOrigin, ExecutionTask, MessageMemoryUsage, NetworkTopology, SystemState,
+    canister_state::DEFAULT_QUEUE_CAPACITY, canister_state::execution_state::WasmExecutionMode,
 };
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
-    messages::{CallContextId, CallbackId, RejectContext, Request, RequestMetadata, NO_DEADLINE},
+    CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
+    messages::{CallContextId, CallbackId, NO_DEADLINE, RejectContext, Request, RequestMetadata},
     methods::Callback,
     time::CoarseTime,
-    CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
 };
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
@@ -178,7 +180,7 @@ impl SystemStateModifications {
         );
         system_state
             .reject_subnet_output_request(msg, reject_context, subnet_ids)
-            .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {:?}", e)))?;
+            .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {e:?}")))?;
         Ok(())
     }
 
@@ -200,7 +202,7 @@ impl SystemStateModifications {
         let reject_context = RejectContext::new(err.code().into(), err.to_string());
         system_state
             .reject_subnet_output_request(msg, reject_context, subnet_ids)
-            .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {:?}", e)))?;
+            .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {e:?}")))?;
         Ok(())
     }
 
@@ -214,7 +216,7 @@ impl SystemStateModifications {
         let msg_receiver = msg.receiver;
         system_state
             .push_output_request(msg.into(), time)
-            .map_err(|e| Self::error(format!("Failed to push output request: {:?}", e)))?;
+            .map_err(|e| Self::error(format!("Failed to push output request: {e:?}")))?;
         if sent_cycles > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
             info!(
                 logger,
@@ -247,6 +249,8 @@ impl SystemStateModifications {
             }
             Ok(Ic00Method::LoadCanisterSnapshot) => LoadCanisterSnapshotArgs::decode(payload)
                 .map(|record| record.get_sender_canister_version()),
+            Ok(Ic00Method::RenameCanister) => RenameCanisterArgs::decode(payload)
+                .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::SignWithECDSA)
             | Ok(Ic00Method::CanisterStatus)
             | Ok(Ic00Method::CanisterInfo)
@@ -258,7 +262,6 @@ impl SystemStateModifications {
             | Ok(Ic00Method::HttpRequest)
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::ECDSAPublicKey)
-            | Ok(Ic00Method::ComputeInitialIDkgDealings)
             | Ok(Ic00Method::ReshareChainKey)
             | Ok(Ic00Method::SchnorrPublicKey)
             | Ok(Ic00Method::SignWithSchnorr)
@@ -303,9 +306,11 @@ impl SystemStateModifications {
                     Ok(())
                 } else {
                     Err(UserError::new(
-                      ErrorCode::CanisterContractViolation,
-                      format!("Management canister call payload includes sender canister version {:?} that does not match the actual sender canister version {}.", sender_canister_version, canister_version_from_system))
-                    )
+                        ErrorCode::CanisterContractViolation,
+                        format!(
+                            "Management canister call payload includes sender canister version {sender_canister_version:?} that does not match the actual sender canister version {canister_version_from_system}."
+                        ),
+                    ))
                 }
             }
         }
@@ -319,6 +324,7 @@ impl SystemStateModifications {
         system_state: &mut SystemState,
         network_topology: &NetworkTopology,
         own_subnet_id: SubnetId,
+        is_composite_query: bool,
         logger: &ReplicaLogger,
     ) -> HypervisorResult<RequestMetadataStats> {
         // Verify total cycle change is not positive and update cycles balance.
@@ -397,6 +403,9 @@ impl SystemStateModifications {
                             msg.method_name.as_str(),
                             msg.method_payload.as_slice(),
                             own_subnet_id,
+                            system_state.canister_id,
+                            is_composite_query,
+                            logger,
                         )
                         .map(CanisterId::unchecked_from_principal)
                         {
@@ -593,11 +602,13 @@ pub struct SandboxSafeSystemState {
     pub(super) status: CanisterStatusView,
     pub(super) subnet_type: SubnetType,
     pub(super) subnet_size: usize,
+    pub(super) cost_schedule: CanisterCyclesCostSchedule,
     dirty_page_overhead: NumInstructions,
     freeze_threshold: NumSeconds,
     memory_allocation: MemoryAllocation,
     wasm_memory_threshold: NumBytes,
     compute_allocation: ComputeAllocation,
+    environment_variables: BTreeMap<String, String>,
     initial_cycles_balance: Cycles,
     initial_reserved_balance: Cycles,
     reserved_balance_limit: Option<Cycles>,
@@ -634,6 +645,7 @@ impl SandboxSafeSystemState {
         memory_allocation: MemoryAllocation,
         wasm_memory_threshold: NumBytes,
         compute_allocation: ComputeAllocation,
+        environment_variables: BTreeMap<String, String>,
         initial_cycles_balance: Cycles,
         initial_reserved_balance: Cycles,
         reserved_balance_limit: Option<Cycles>,
@@ -647,6 +659,7 @@ impl SandboxSafeSystemState {
         ic00_available_request_slots: usize,
         ic00_aliases: BTreeSet<CanisterId>,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
         dirty_page_overhead: NumInstructions,
         global_timer: CanisterTimer,
         canister_version: u64,
@@ -662,9 +675,11 @@ impl SandboxSafeSystemState {
             status,
             subnet_type: cycles_account_manager.subnet_type(),
             subnet_size,
+            cost_schedule,
             dirty_page_overhead,
             freeze_threshold,
             memory_allocation,
+            environment_variables,
             wasm_memory_threshold,
             compute_allocation,
             system_state_modifications: SystemStateModifications {
@@ -705,6 +720,7 @@ impl SandboxSafeSystemState {
         request_metadata: RequestMetadata,
         caller: Option<PrincipalId>,
         call_context_id: Option<CallContextId>,
+        cost_schedule: CanisterCyclesCostSchedule,
     ) -> Self {
         Self::new(
             system_state,
@@ -718,6 +734,7 @@ impl SandboxSafeSystemState {
             call_context_id,
             // We can assume a Wasm32 environment in tests for now.
             false,
+            cost_schedule,
         )
     }
 
@@ -732,6 +749,7 @@ impl SandboxSafeSystemState {
         caller: Option<PrincipalId>,
         call_context_id: Option<CallContextId>,
         is_wasm64_execution: bool,
+        cost_schedule: CanisterCyclesCostSchedule,
     ) -> Self {
         let call_context = call_context_id.and_then(|call_context_id| {
             system_state
@@ -783,6 +801,7 @@ impl SandboxSafeSystemState {
             system_state.memory_allocation,
             system_state.wasm_memory_threshold,
             compute_allocation,
+            system_state.environment_variables.clone().into(),
             system_state.balance(),
             system_state.reserved_balance(),
             system_state.reserved_balance_limit(),
@@ -798,6 +817,7 @@ impl SandboxSafeSystemState {
             ic00_available_request_slots,
             ic00_aliases,
             subnet_size,
+            cost_schedule,
             dirty_page_overhead,
             system_state.global_timer,
             system_state.canister_version,
@@ -820,6 +840,14 @@ impl SandboxSafeSystemState {
 
     pub fn canister_version(&self) -> u64 {
         self.canister_version
+    }
+
+    pub fn environment_variables(&self) -> &BTreeMap<String, String> {
+        &self.environment_variables
+    }
+
+    pub fn cost_schedule(&self) -> CanisterCyclesCostSchedule {
+        self.cost_schedule
     }
 
     pub fn set_global_timer(&mut self, timer: CanisterTimer) {
@@ -881,6 +909,7 @@ impl SandboxSafeSystemState {
             current_message_memory_usage,
             self.compute_allocation,
             self.subnet_size,
+            self.cost_schedule,
             self.reserved_balance(),
         );
         // Here we rely on the saturating subtraction for Cycles.
@@ -925,9 +954,7 @@ impl SandboxSafeSystemState {
         let old_balance = self.cycles_balance();
         assert!(
             new_balance <= old_balance,
-            "Unexpected increase of cycles balances {} => {}",
-            old_balance,
-            new_balance
+            "Unexpected increase of cycles balances {old_balance} => {new_balance}"
         );
 
         self.system_state_modifications
@@ -965,6 +992,7 @@ impl SandboxSafeSystemState {
             canister_current_message_memory_usage,
             self.compute_allocation,
             self.subnet_size,
+            self.cost_schedule,
             self.reserved_balance(),
         );
         self.update_balance_change_consuming(
@@ -987,10 +1015,11 @@ impl SandboxSafeSystemState {
         // available only forApiType::{Update, ReplicatedQuery, ReplyCallback,
         // RejectCallBack} and all of them have CallContextId, hence
         // SystemStateModifications::call_context_balance_taken will never be `None`.
-        debug_assert!(self
-            .system_state_modifications
-            .call_context_balance_taken
-            .is_some());
+        debug_assert!(
+            self.system_state_modifications
+                .call_context_balance_taken
+                .is_some()
+        );
 
         let balance_taken = &mut self
             .system_state_modifications
@@ -1024,13 +1053,14 @@ impl SandboxSafeSystemState {
         self.cycles_account_manager
             .prepayment_for_response_execution(
                 self.subnet_size,
+                self.cost_schedule,
                 WasmExecutionMode::from_is_wasm64(self.is_wasm64_execution),
             )
     }
 
     pub fn prepayment_for_response_transmission(&self) -> Cycles {
         self.cycles_account_manager
-            .prepayment_for_response_transmission(self.subnet_size)
+            .prepayment_for_response_transmission(self.subnet_size, self.cost_schedule)
     }
 
     pub(super) fn withdraw_cycles_for_transfer(
@@ -1053,6 +1083,7 @@ impl SandboxSafeSystemState {
                 &mut new_balance,
                 amount,
                 self.subnet_size,
+                self.cost_schedule,
                 self.reserved_balance(),
                 reveal_top_up,
             )
@@ -1088,6 +1119,7 @@ impl SandboxSafeSystemState {
             prepayment_for_response_execution,
             prepayment_for_response_transmission,
             self.subnet_size,
+            self.cost_schedule,
             self.reserved_balance(),
             // if the canister is frozen, the controller should call canister_status
             // to learn the top up balance instead of getting it from an error
@@ -1131,7 +1163,12 @@ impl SandboxSafeSystemState {
             .get()
             .overflowing_mul(self.dirty_page_overhead.get());
         if overflow {
-            Err(HypervisorError::ToolchainContractViolation{error: format!("Overflow calculating instruction cost for dirty pages - conversion rate: {}, dirty_pages: {}", self.dirty_page_overhead, dirty_pages)})
+            Err(HypervisorError::ToolchainContractViolation {
+                error: format!(
+                    "Overflow calculating instruction cost for dirty pages - conversion rate: {}, dirty_pages: {}",
+                    self.dirty_page_overhead, dirty_pages
+                ),
+            })
         } else {
             Ok(NumInstructions::from(inst))
         }
@@ -1175,6 +1212,7 @@ impl SandboxSafeSystemState {
                     current_message_memory_usage,
                     self.compute_allocation,
                     self.subnet_size,
+                    self.cost_schedule,
                     self.reserved_balance(),
                 );
                 if self.cycles_balance() >= threshold {
@@ -1220,6 +1258,7 @@ impl SandboxSafeSystemState {
             new_message_memory_usage,
             self.compute_allocation,
             self.subnet_size,
+            self.cost_schedule,
             self.reserved_balance(),
         );
         if self.cycles_balance() >= threshold {
@@ -1249,7 +1288,8 @@ impl SandboxSafeSystemState {
 
             ApiType::InspectMessage { .. }
             | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. } => {
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. } => {
                 // Queries do not check the freezing threshold because the state
                 // changes are disarded anyways.
                 false
@@ -1257,7 +1297,10 @@ impl SandboxSafeSystemState {
 
             ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::Cleanup { .. } => {
+            | ApiType::Cleanup { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::CompositeCleanup { .. } => {
                 // Response callbacks are specified to not check the freezing
                 // threshold.
                 false
@@ -1291,6 +1334,7 @@ impl SandboxSafeSystemState {
                     allocated_bytes,
                     subnet_memory_saturation,
                     self.subnet_size,
+                    self.cost_schedule,
                 );
 
                 if let Some(limit) = self.reserved_balance_limit {
@@ -1365,7 +1409,11 @@ impl SandboxSafeSystemState {
 
             ApiType::InspectMessage { .. }
             | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. } => {
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::CompositeCleanup { .. } => {
                 // Queries do not reserve storage cycles because the state
                 // changes are discarded anyways.
                 false
@@ -1416,13 +1464,26 @@ impl SandboxSafeSystemState {
     }
 
     /// Look up key in `chain_key_enabled_subnets`, then extract all subnets
-    /// for that key and return the replication factor of the biggest one.
-    pub fn get_key_replication_factor(&self, key: MasterPublicKeyId) -> Option<usize> {
+    /// for that key and return the replication factor, cost_schedule and subnet_id of the biggest one.
+    /// These data are all returned together because their existence is contingent on the key.
+    pub fn get_key_subnet_details(
+        &self,
+        key: MasterPublicKeyId,
+    ) -> Option<(usize, CanisterCyclesCostSchedule, SubnetId)> {
         let subnets_with_key = self.network_topology.chain_key_enabled_subnets(&key);
         subnets_with_key
             .iter()
             .map(|subnet_id| {
-                self.network_topology.get_subnet_size(subnet_id).unwrap() // we got the subnet_id from the same collection
+                (
+                    // unwraps: we got the subnet_id from the same collection
+                    self.network_topology.get_subnet_size(subnet_id).unwrap(),
+                    self.network_topology
+                        .subnets
+                        .get(subnet_id)
+                        .unwrap()
+                        .cost_schedule,
+                    *subnet_id,
+                )
             })
             .max()
     }
@@ -1449,14 +1510,15 @@ mod tests {
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        canister_state::system_state::CyclesUseCase, NetworkTopology, SystemState,
+        NetworkTopology, SystemState, canister_state::system_state::CyclesUseCase,
     };
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
-        messages::{RequestMetadata, NO_DEADLINE},
-        time::CoarseTime,
         CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
         Time,
+        batch::CanisterCyclesCostSchedule,
+        messages::{NO_DEADLINE, RequestMetadata},
+        time::CoarseTime,
     };
 
     use super::{CanisterStatusView, SandboxSafeSystemState, SystemStateModifications};
@@ -1532,6 +1594,7 @@ mod tests {
             MemoryAllocation::BestEffort,
             NumBytes::new(0),
             ComputeAllocation::default(),
+            Default::default(),
             Cycles::new(1_000_000),
             Cycles::zero(),
             None,
@@ -1550,6 +1613,7 @@ mod tests {
             0,
             BTreeSet::new(),
             SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
             SchedulerConfig::application_subnet().dirty_page_overhead,
             CanisterTimer::Inactive,
             0,
@@ -1583,6 +1647,7 @@ mod tests {
             MemoryAllocation::BestEffort,
             NumBytes::new(wasm_memory_threshold),
             ComputeAllocation::default(),
+            Default::default(),
             Cycles::new(1_000_000),
             Cycles::zero(),
             None,
@@ -1601,6 +1666,7 @@ mod tests {
             0,
             BTreeSet::new(),
             SMALL_APP_SUBNET_MAX_SIZE,
+            CanisterCyclesCostSchedule::Normal,
             SchedulerConfig::application_subnet().dirty_page_overhead,
             CanisterTimer::Inactive,
             0,

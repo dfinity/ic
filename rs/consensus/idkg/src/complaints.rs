@@ -1,27 +1,27 @@
 //! The complaint handling
 use crate::{
-    metrics::{timed_call, IDkgComplaintMetrics},
-    utils::{update_purge_height, IDkgBlockReaderImpl},
+    metrics::{IDkgComplaintMetrics, timed_call},
+    utils::{IDkgBlockReaderImpl, update_purge_height},
 };
-use ic_consensus_utils::{crypto::ConsensusCrypto, RoundRobin};
+use ic_consensus_utils::{RoundRobin, crypto::ConsensusCrypto};
 use ic_interfaces::{
     consensus_pool::ConsensusBlockCache,
     crypto::{ErrorReproducibility, IDkgProtocol},
     idkg::{IDkgChangeAction, IDkgChangeSet, IDkgPool},
 };
-use ic_logger::{debug, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, warn};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
+    Height, NodeId, RegistryVersion,
     artifact::IDkgMessageId,
     consensus::idkg::{
-        complaint_prefix, opening_prefix, IDkgBlockReader, IDkgComplaintContent, IDkgMessage,
-        IDkgOpeningContent, SignedIDkgComplaint, SignedIDkgOpening, TranscriptRef,
+        IDkgBlockReader, IDkgComplaintContent, IDkgMessage, IDkgOpeningContent,
+        SignedIDkgComplaint, SignedIDkgOpening, TranscriptRef, complaint_prefix, opening_prefix,
     },
     crypto::canister_threshold_sig::{
         error::IDkgLoadTranscriptError,
         idkg::{IDkgComplaint, IDkgOpening, IDkgTranscript, IDkgTranscriptId},
     },
-    Height, NodeId, RegistryVersion,
 };
 use std::{
     cell::RefCell,
@@ -122,10 +122,7 @@ impl IDkgComplaintHandlerImpl {
                     .complaint_errors_inc("duplicate_complaints_in_batch");
                 ret.push(IDkgChangeAction::HandleInvalid(
                     id,
-                    format!(
-                        "Duplicate complaint in unvalidated batch: {}",
-                        signed_complaint
-                    ),
+                    format!("Duplicate complaint in unvalidated batch: {signed_complaint}"),
                 ));
                 continue;
             }
@@ -146,7 +143,7 @@ impl IDkgComplaintHandlerImpl {
                         self.metrics.complaint_errors_inc("duplicate_complaint");
                         ret.push(IDkgChangeAction::HandleInvalid(
                             id,
-                            format!("Duplicate complaint: {}", signed_complaint),
+                            format!("Duplicate complaint: {signed_complaint}"),
                         ));
                     } else {
                         match self.resolve_ref(transcript_ref, block_reader, "validate_complaints")
@@ -163,8 +160,7 @@ impl IDkgComplaintHandlerImpl {
                                 ret.push(IDkgChangeAction::HandleInvalid(
                                     id,
                                     format!(
-                                        "validate_complaints(): failed to resolve: {}",
-                                        signed_complaint
+                                        "validate_complaints(): failed to resolve: {signed_complaint}"
                                     ),
                                 ));
                             }
@@ -246,7 +242,7 @@ impl IDkgComplaintHandlerImpl {
                     .complaint_errors_inc("duplicate_openings_in_batch");
                 ret.push(IDkgChangeAction::HandleInvalid(
                     id,
-                    format!("Duplicate opening in unvalidated batch: {}", signed_opening),
+                    format!("Duplicate opening in unvalidated batch: {signed_opening}"),
                 ));
                 continue;
             }
@@ -268,7 +264,7 @@ impl IDkgComplaintHandlerImpl {
                         self.metrics.complaint_errors_inc("duplicate_opening");
                         ret.push(IDkgChangeAction::HandleInvalid(
                             id,
-                            format!("Duplicate opening: {}", signed_opening),
+                            format!("Duplicate opening: {signed_opening}"),
                         ));
                     } else if let Some(signed_complaint) =
                         self.get_complaint_for_opening(idkg_pool, &signed_opening)
@@ -290,8 +286,7 @@ impl IDkgComplaintHandlerImpl {
                                 ret.push(IDkgChangeAction::HandleInvalid(
                                     id,
                                     format!(
-                                        "validate_openings(): failed to resolve: {}",
-                                        signed_opening
+                                        "validate_openings(): failed to resolve: {signed_opening}"
                                     ),
                                 ));
                             }
@@ -444,8 +439,7 @@ impl IDkgComplaintHandlerImpl {
                 return Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
-                        "Complaint signature validation(permanent error): {}, error = {:?}",
-                        signed_complaint, error
+                        "Complaint signature validation(permanent error): {signed_complaint}, error = {error:?}"
                     ),
                 ));
             } else {
@@ -473,8 +467,7 @@ impl IDkgComplaintHandlerImpl {
                 Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
-                        "Complaint validation(permanent error): {}, error = {:?}",
-                        signed_complaint, error
+                        "Complaint validation(permanent error): {signed_complaint}, error = {error:?}"
                     ),
                 ))
             }
@@ -571,8 +564,7 @@ impl IDkgComplaintHandlerImpl {
                 return Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
-                        "Opening signature validation(permanent error): {}, error = {:?}",
-                        signed_opening, error
+                        "Opening signature validation(permanent error): {signed_opening}, error = {error:?}"
                     ),
                 ));
             } else {
@@ -601,8 +593,7 @@ impl IDkgComplaintHandlerImpl {
                 Some(IDkgChangeAction::HandleInvalid(
                     id,
                     format!(
-                        "Opening validation(permanent error): {}, error = {:?}",
-                        signed_opening, error
+                        "Opening validation(permanent error): {signed_opening}, error = {error:?}"
                     ),
                 ))
             }
@@ -783,15 +774,15 @@ impl IDkgComplaintHandler for IDkgComplaintHandlerImpl {
         let metrics = self.metrics.clone();
 
         let mut changes =
-            update_purge_height(&self.prev_finalized_height, block_reader.tip_height())
-                .then(|| {
-                    timed_call(
-                        "purge_artifacts",
-                        || self.purge_artifacts(idkg_pool, &block_reader),
-                        &metrics.on_state_change_duration,
-                    )
-                })
-                .unwrap_or_default();
+            if update_purge_height(&self.prev_finalized_height, block_reader.tip_height()) {
+                timed_call(
+                    "purge_artifacts",
+                    || self.purge_artifacts(idkg_pool, &block_reader),
+                    &metrics.on_state_change_duration,
+                )
+            } else {
+                IDkgChangeSet::default()
+            };
 
         let validate_complaints = || {
             timed_call(
@@ -977,7 +968,7 @@ impl<'a> Action<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{test_utils::*, utils::algorithm_for_key_id};
+    use crate::test_utils::*;
     use assert_matches::assert_matches;
     use ic_consensus_utils::crypto::SignVerify;
     use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
@@ -987,10 +978,10 @@ mod tests {
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use ic_types::{
+        Height,
         consensus::idkg::{IDkgMasterPublicKeyId, IDkgObject, TranscriptRef},
         crypto::AlgorithmId,
         time::UNIX_EPOCH,
-        Height,
     };
 
     // Tests the Action logic
@@ -1915,7 +1906,7 @@ mod tests {
             with_test_replica_logger(|logger| {
                 let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
                 let (_, _, transcript) =
-                    create_corrupted_transcript(&env, &mut rng, algorithm_for_key_id(&key_id));
+                    create_corrupted_transcript(&env, &mut rng, AlgorithmId::from(key_id.inner()));
 
                 let crypto = env
                     .nodes

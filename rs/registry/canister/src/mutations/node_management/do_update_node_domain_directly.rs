@@ -26,8 +26,7 @@ impl Registry {
     pub fn do_update_node_domain_directly(&mut self, payload: UpdateNodeDomainDirectlyPayload) {
         let caller_id = dfn_core::api::caller();
         println!(
-            "{}do_update_node_domain_directly started: {:?} caller: {:?}",
-            LOG_PREFIX, payload, caller_id
+            "{LOG_PREFIX}do_update_node_domain_directly started: {payload:?} caller: {caller_id:?}"
         );
         self.do_update_node_domain(payload, caller_id);
     }
@@ -44,7 +43,7 @@ impl Registry {
 
         // Ensure caller is an actual node operator of the node
         let node_operator_id = get_node_operator_id_for_node(self, node_id)
-            .map_err(|e| format!("Failed to obtain the node operator ID: {}", e))
+            .map_err(|e| format!("Failed to obtain the node operator ID: {e}"))
             .unwrap();
 
         assert_eq!(
@@ -252,7 +251,7 @@ mod tests {
                 ReplicaVersionRecord {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
-                    guest_launch_measurement_sha256_hex: None,
+                    guest_launch_measurements: None,
                 }
                 .encode_to_vec(),
             ),

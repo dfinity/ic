@@ -30,29 +30,30 @@
 
 use crate::internal_state::InternalState;
 use ic_config::{
-    metrics::{Config as MetricsConfig, Exporter},
     Config,
+    metrics::{Config as MetricsConfig, Exporter},
 };
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_interfaces_registry::{RegistryClient, RegistryDataProvider, ZERO_REGISTRY_VERSION};
-use ic_logger::{debug, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore, LocalStoreImpl};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, NodeId, RegistryVersion};
+use ic_types::{NodeId, RegistryVersion, crypto::threshold_sig::ThresholdSigPublicKey};
 use metrics::RegistryreplicatorMetrics;
 use std::{
     future::Future,
     io::{Error, ErrorKind},
     net::SocketAddr,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
     time::Duration,
 };
+use tokio_util::sync::CancellationToken;
 use url::Url;
 
 pub mod args;
@@ -157,7 +158,7 @@ impl RegistryReplicator {
         ));
 
         if let Err(e) = registry_client.fetch_and_start_polling() {
-            panic!("fetch_and_start_polling failed: {}", e);
+            panic!("fetch_and_start_polling failed: {e}");
         };
 
         registry_client
@@ -305,7 +306,8 @@ impl RegistryReplicator {
         &self,
         nns_urls: Vec<Url>,
         nns_pub_key: Option<ThresholdSigPublicKey>,
-    ) -> Result<impl Future<Output = ()>, Error> {
+        cancellation_token: CancellationToken,
+    ) -> Result<impl Future<Output = ()> + use<>, Error> {
         if self.started.swap(true, Ordering::Relaxed) {
             return Err(Error::new(
                 ErrorKind::AlreadyExists,
@@ -334,6 +336,8 @@ impl RegistryReplicator {
         let poll_delay = self.poll_delay;
 
         let future = async move {
+            // TODO: consider having only one way of cancelling this future,
+            // instead of having both `cancelled` and `cancellation_token`.
             while !cancelled.load(Ordering::Relaxed) {
                 let timer = metrics.poll_duration.start_timer();
                 // The relevant I/O-operation of the poll() function is querying
@@ -352,7 +356,11 @@ impl RegistryReplicator {
                 metrics
                     .registry_version
                     .set(registry_client.get_latest_version().get() as i64);
-                tokio::time::sleep(poll_delay).await;
+
+                tokio::select! {
+                   _ = tokio::time::sleep(poll_delay) => {}
+                   _ = cancellation_token.cancelled() => break
+                };
             }
         };
 

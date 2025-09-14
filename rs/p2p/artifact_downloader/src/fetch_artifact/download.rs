@@ -4,29 +4,29 @@ use std::{
 };
 
 use axum::{
+    Router,
     extract::{DefaultBodyLimit, State},
     http::{Request, StatusCode},
     routing::any,
-    Router,
 };
-use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
+use backoff::{ExponentialBackoffBuilder, backoff::Backoff};
 use bytes::Bytes;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::consensus::{
     ArtifactAssembler, AssembleResult, Bouncer, BouncerFactory, BouncerValue, Peers,
     ValidatedPoolReader,
 };
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProtoProxy;
 use ic_quic_transport::Transport;
 use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
-use rand::{rngs::SmallRng, seq::IteratorRandom, SeedableRng};
+use rand::{SeedableRng, rngs::SmallRng, seq::IteratorRandom};
 use tokio::{
     runtime::Handle,
     sync::watch,
     task::JoinHandle,
-    time::{sleep_until, timeout_at, Instant},
+    time::{Instant, sleep_until, timeout_at},
 };
 use tracing::instrument;
 

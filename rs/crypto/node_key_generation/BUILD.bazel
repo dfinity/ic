@@ -32,7 +32,6 @@ DEV_DEPENDENCIES = [
     "//rs/monitoring/metrics",
     "//rs/registry/fake",
     "//rs/registry/proto_data_provider",
-    "//rs/test_utilities",
     "//rs/types/base_types",
     "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",

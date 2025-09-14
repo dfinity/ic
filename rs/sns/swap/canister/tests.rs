@@ -1,5 +1,6 @@
 use super::*;
-use candid_parser::utils::{service_equal, CandidSource};
+use candid_parser::utils::{CandidSource, service_equal};
+use ic_nervous_system_clients::canister_status::MemoryMetricsFromManagementCanister;
 use ic_nervous_system_clients::{
     canister_status::{
         CanisterStatusResultFromManagementCanister, CanisterStatusResultV2, CanisterStatusType,
@@ -57,6 +58,7 @@ async fn test_get_canister_status() {
             wasm_memory_threshold: Some(candid::Nat::from(0_u32)),
         },
         memory_size: candid::Nat::from(0_u32),
+        memory_metrics: Some(MemoryMetricsFromManagementCanister::default().into()),
         cycles: candid::Nat::from(0_u32),
         idle_cycles_burned_per_day: candid::Nat::from(0_u32),
         query_stats: Some(QueryStats {
@@ -73,6 +75,7 @@ async fn test_get_canister_status() {
                 status: CanisterStatusType::Running,
                 module_hash: Some(vec![0_u8]),
                 memory_size: candid::Nat::from(0_u32),
+                memory_metrics: Default::default(),
                 settings: DefiniteCanisterSettingsFromManagementCanister {
                     controllers: vec![PrincipalId::new_user_test_id(0_u64)],
                     compute_allocation: candid::Nat::from(0_u32),

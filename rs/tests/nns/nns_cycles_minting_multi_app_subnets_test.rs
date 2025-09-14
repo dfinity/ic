@@ -1,6 +1,6 @@
 use anyhow::Result;
-use cycles_minting::{make_user_ed25519, TestAgent, UserHandle};
-use cycles_minting_canister::{SubnetFilter, SubnetSelection, CREATE_CANISTER_REFUND_FEE};
+use cycles_minting::{TestAgent, UserHandle, make_user_ed25519};
+use cycles_minting_canister::{CREATE_CANISTER_REFUND_FEE, SubnetFilter, SubnetSelection};
 use dfn_candid::candid_one;
 use ic_canister_client::{HttpClient, Sender};
 use ic_management_canister_types_private::{CanisterIdRecord, CanisterStatusResultV2};
@@ -20,7 +20,7 @@ use ic_system_test_driver::{
     nns::{
         change_subnet_type_assignment, change_subnet_type_assignment_with_failure,
         set_authorized_subnetwork_list, set_authorized_subnetwork_list_with_failure,
-        update_subnet_type, update_xdr_per_icp,
+        update_subnet_type,
     },
     util::{block_on, runtime_from_url},
 };
@@ -77,19 +77,6 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
             LEDGER_CANISTER_ID,
             CYCLES_MINTING_CANISTER_ID,
         );
-
-        let xdr_permyriad_per_icp = 5_000; // = 0.5 XDR/ICP
-
-        let timestamp = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-
-        // Set the XDR-to-cycles conversion rate.
-        info!(logger, "setting CYCLES_PER_XDR");
-        update_xdr_per_icp(&nns, timestamp, xdr_permyriad_per_icp)
-            .await
-            .unwrap();
 
         // The first attempt to create a canister should fail because we
         // haven't registered any subnets with the cycles minting canister.
@@ -167,7 +154,7 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
         //  - a specific subnet of another type
         // and confirm the canisters are created on the expected subnet on each case.
         info!(logger, "creating canisters");
-        let initial_amount = Tokens::new(10_000, 0).unwrap();
+        let initial_amount = Tokens::new(50, 0).unwrap();
 
         let canister_on_authorized_subnet = user1
             .create_canister_cmc(initial_amount, None, &controller_user, None, None)

@@ -7,21 +7,21 @@ mod provisional;
 #[cfg(feature = "fuzzing_code")]
 use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
 pub use bounded_vec::*;
-use candid::{CandidType, Decode, DecoderConfig, Deserialize, Encode};
+use candid::{CandidType, Decode, DecoderConfig, Deserialize, Encode, Reserved};
 pub use data_size::*;
 pub use http::{
     BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader,
     HttpMethod, TransformArgs, TransformContext, TransformFunc,
 };
 use ic_base_types::{
-    CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion, SnapshotId, SubnetId,
+    CanisterId, EnvironmentVariables, NodeId, NumBytes, PrincipalId, RegistryVersion, SnapshotId,
+    SubnetId,
 };
 use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::proxy::{try_decode_hash, try_from_option_field};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::subnet::v1::{InitialIDkgDealings, InitialNiDkgTranscriptRecord};
-use ic_protobuf::state::canister_snapshot_bits::v1 as pb_canister_snapshot_bits;
 use ic_protobuf::state::canister_state_bits::v1 as pb_canister_state_bits;
 use ic_protobuf::types::v1 as pb_types;
 use ic_protobuf::types::v1::CanisterInstallModeV2 as CanisterInstallModeV2Proto;
@@ -43,7 +43,7 @@ use strum_macros::{Display, EnumCount, EnumIter, EnumString};
 /// The id of the management canister.
 pub const IC_00: CanisterId = CanisterId::ic_00();
 pub const MAX_CONTROLLERS: usize = 10;
-const WASM_HASH_LENGTH: usize = 32;
+pub const HASH_LENGTH: usize = 32;
 /// The maximum length of a BIP32 derivation path
 ///
 /// The extended public key format uses a byte to represent the derivation
@@ -85,7 +85,6 @@ pub enum Method {
     StopCanister,
     UninstallCode,
     UpdateSettings,
-    ComputeInitialIDkgDealings,
     ReshareChainKey,
 
     // Schnorr interface.
@@ -135,12 +134,15 @@ pub enum Method {
     ReadCanisterSnapshotData,
     UploadCanisterSnapshotMetadata,
     UploadCanisterSnapshotData,
+
+    // Support for canister migration
+    RenameCanister,
 }
 
 fn candid_error_to_user_error(err: candid::Error) -> UserError {
     UserError::new(
         ErrorCode::InvalidManagementPayload,
-        format!("Error decoding candid: {:#}", err),
+        format!("Error decoding candid: {err:#}"),
     )
 }
 
@@ -257,16 +259,22 @@ impl CanisterChangeOrigin {
 /// ```text
 /// record {
 ///   controllers : vec principal;
+///   environment_variables_hash: opt blob;
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterCreationRecord {
     controllers: Vec<PrincipalId>,
+    environment_variables_hash: Option<[u8; HASH_LENGTH]>,
 }
 
 impl CanisterCreationRecord {
     pub fn controllers(&self) -> &[PrincipalId] {
         &self.controllers
+    }
+
+    pub fn environment_variables_hash(&self) -> Option<[u8; HASH_LENGTH]> {
+        self.environment_variables_hash
     }
 }
 
@@ -280,14 +288,14 @@ impl CanisterCreationRecord {
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterCodeDeploymentRecord {
     mode: CanisterInstallMode,
-    module_hash: [u8; WASM_HASH_LENGTH],
+    module_hash: [u8; HASH_LENGTH],
 }
 
 impl CanisterCodeDeploymentRecord {
     pub fn mode(&self) -> CanisterInstallMode {
         self.mode
     }
-    pub fn module_hash(&self) -> [u8; WASM_HASH_LENGTH] {
+    pub fn module_hash(&self) -> [u8; HASH_LENGTH] {
         self.module_hash
     }
 }
@@ -315,22 +323,32 @@ impl CanisterControllersChangeRecord {
 ///    canister_version : nat64;
 ///    snapshot_id : blob;
 ///    taken_at_timestamp : nat64;
+///    source: variant {
+///         taken_from_canister : reserved;
+///         metadata_upload : reserved;
+///    };
 /// }
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterLoadSnapshotRecord {
     canister_version: u64,
-    #[serde(with = "serde_bytes")]
-    snapshot_id: Vec<u8>,
+    snapshot_id: SnapshotId,
     taken_at_timestamp: u64,
+    source: SnapshotSource,
 }
 
 impl CanisterLoadSnapshotRecord {
-    pub fn new(canister_version: u64, snapshot_id: SnapshotId, taken_at_timestamp: u64) -> Self {
+    pub fn new(
+        canister_version: u64,
+        snapshot_id: SnapshotId,
+        taken_at_timestamp: u64,
+        source: SnapshotSource,
+    ) -> Self {
         Self {
             canister_version,
-            snapshot_id: snapshot_id.to_vec(),
+            snapshot_id,
             taken_at_timestamp,
+            source,
         }
     }
 
@@ -343,10 +361,61 @@ impl CanisterLoadSnapshotRecord {
     }
 
     pub fn snapshot_id(&self) -> SnapshotId {
-        // Safe to unwrap:
-        // `CanisterLoadSnapshotRecord` contains only valid snapshot IDs.
-        SnapshotId::try_from(&self.snapshot_id).unwrap()
+        self.snapshot_id
     }
+
+    pub fn source(&self) -> SnapshotSource {
+        self.source
+    }
+}
+
+/// `CandidType` for `CanisterSettingsChangeRecord`
+/// ``` text
+/// record {
+///   controllers : opt vec principal;
+///   environment_variables_hash: opt blob;
+/// }
+/// ```
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct CanisterSettingsChangeRecord {
+    controllers: Option<Vec<PrincipalId>>,
+    environment_variables_hash: Option<[u8; HASH_LENGTH]>,
+}
+
+impl CanisterSettingsChangeRecord {
+    pub fn controllers(&self) -> Option<&[PrincipalId]> {
+        self.controllers.as_deref()
+    }
+
+    pub fn environment_variables_hash(&self) -> Option<[u8; HASH_LENGTH]> {
+        self.environment_variables_hash
+    }
+}
+
+/// `CandidType` for `CanisterRenameRecord`
+/// ```text
+/// record {
+///    canister_id : principal;
+///    total_num_changes : nat64;
+///    rename_to : record {
+///        canister_id : principal;
+///        version : nat64;
+///        total_num_changes : nat64;
+///    };
+/// }
+/// ```
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct CanisterRenameRecord {
+    canister_id: PrincipalId,
+    total_num_changes: u64,
+    rename_to: RenameToRecord,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub struct RenameToRecord {
+    canister_id: PrincipalId,
+    version: u64,
+    total_num_changes: u64,
 }
 
 /// `CandidType` for `CanisterChangeDetails`
@@ -354,6 +423,7 @@ impl CanisterLoadSnapshotRecord {
 /// variant {
 ///   creation : record {
 ///     controllers : vec principal;
+///     environment_variables_hash: opt blob;
 ///   };
 ///   code_uninstall;
 ///   code_deployment : record {
@@ -367,6 +437,10 @@ impl CanisterLoadSnapshotRecord {
 ///     canister_version: nat64;
 ///     snapshot_id: blob;
 ///     taken_at_timestamp: nat64;
+///   };
+///   settings_change : record {
+///     controllers : opt vec principal;
+///     environment_variables_hash: opt blob;
 ///   };
 /// }
 /// ```
@@ -382,16 +456,26 @@ pub enum CanisterChangeDetails {
     CanisterControllersChange(CanisterControllersChangeRecord),
     #[serde(rename = "load_snapshot")]
     CanisterLoadSnapshot(CanisterLoadSnapshotRecord),
+    #[serde(rename = "settings_change")]
+    CanisterSettingsChange(CanisterSettingsChangeRecord),
+    #[serde(rename = "rename_canister")]
+    CanisterRename(CanisterRenameRecord),
 }
 
 impl CanisterChangeDetails {
-    pub fn canister_creation(controllers: Vec<PrincipalId>) -> CanisterChangeDetails {
-        CanisterChangeDetails::CanisterCreation(CanisterCreationRecord { controllers })
+    pub fn canister_creation(
+        controllers: Vec<PrincipalId>,
+        environment_variables_hash: Option<[u8; HASH_LENGTH]>,
+    ) -> CanisterChangeDetails {
+        CanisterChangeDetails::CanisterCreation(CanisterCreationRecord {
+            controllers,
+            environment_variables_hash,
+        })
     }
 
     pub fn code_deployment(
         mode: CanisterInstallMode,
-        module_hash: [u8; WASM_HASH_LENGTH],
+        module_hash: [u8; HASH_LENGTH],
     ) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterCodeDeployment(CanisterCodeDeploymentRecord {
             mode,
@@ -407,14 +491,46 @@ impl CanisterChangeDetails {
 
     pub fn load_snapshot(
         canister_version: u64,
-        snapshot_id: Vec<u8>,
+        snapshot_id: SnapshotId,
         taken_at_timestamp: u64,
+        source: SnapshotSource,
     ) -> CanisterChangeDetails {
         CanisterChangeDetails::CanisterLoadSnapshot(CanisterLoadSnapshotRecord {
             canister_version,
             snapshot_id,
             taken_at_timestamp,
+            source,
         })
+    }
+
+    pub fn settings_change(
+        controllers: Option<Vec<PrincipalId>>,
+        environment_variables_hash: Option<[u8; HASH_LENGTH]>,
+    ) -> CanisterChangeDetails {
+        CanisterChangeDetails::CanisterSettingsChange(CanisterSettingsChangeRecord {
+            controllers,
+            environment_variables_hash,
+        })
+    }
+
+    pub fn rename_canister(
+        canister_id: PrincipalId,
+        total_num_changes: u64,
+        to_canister_id: PrincipalId,
+        to_version: u64,
+        to_total_num_changes: u64,
+    ) -> CanisterChangeDetails {
+        let rename_to = RenameToRecord {
+            canister_id: to_canister_id,
+            version: to_version,
+            total_num_changes: to_total_num_changes,
+        };
+        let record = CanisterRenameRecord {
+            canister_id,
+            total_num_changes,
+            rename_to,
+        };
+        CanisterChangeDetails::CanisterRename(record)
     }
 }
 
@@ -467,22 +583,32 @@ impl CanisterChange {
     }
 
     /// Returns the number of bytes to represent a canister change in memory.
-    /// The vector of controllers in `CanisterCreation` and `CanisterControllersChange`
-    /// is counted separately because the controllers are stored on heap
-    /// and thus not accounted for in `size_of::<CanisterChange>()`.
+    /// The vector of controllers in `CanisterCreation`, `CanisterControllersChange`
+    /// and `CanisterSettingsChange` is counted separately because
+    /// the controllers are stored on heap and thus not accounted
+    /// for in `size_of::<CanisterChange>()`.
     pub fn count_bytes(&self) -> NumBytes {
-        let controllers_memory_size = match &self.details {
+        let num_controllers = match &self.details {
             CanisterChangeDetails::CanisterCreation(canister_creation) => {
-                std::mem::size_of_val(canister_creation.controllers())
+                canister_creation.controllers().len()
             }
             CanisterChangeDetails::CanisterControllersChange(canister_controllers_change) => {
-                std::mem::size_of_val(canister_controllers_change.controllers())
+                canister_controllers_change.controllers().len()
+            }
+            CanisterChangeDetails::CanisterSettingsChange(canister_settings_change) => {
+                canister_settings_change
+                    .controllers()
+                    .map(|controllers| controllers.len())
+                    .unwrap_or_default()
             }
             CanisterChangeDetails::CanisterCodeDeployment(_)
             | CanisterChangeDetails::CanisterCodeUninstall
-            | CanisterChangeDetails::CanisterLoadSnapshot(_) => 0,
+            | CanisterChangeDetails::CanisterLoadSnapshot(_)
+            | CanisterChangeDetails::CanisterRename(_) => 0,
         };
-        NumBytes::from((size_of::<CanisterChange>() + controllers_memory_size) as u64)
+        NumBytes::from(
+            (size_of::<CanisterChange>() + num_controllers * size_of::<PrincipalId>()) as u64,
+        )
     }
 
     pub fn canister_version(&self) -> u64 {
@@ -633,6 +759,9 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                             .iter()
                             .map(|c| (*c).into())
                             .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>(),
+                        environment_variables_hash: canister_creation
+                            .environment_variables_hash
+                            .map(|hash| hash.to_vec()),
                     },
                 )
             }
@@ -664,8 +793,42 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                 pb_canister_state_bits::canister_change::ChangeDetails::CanisterLoadSnapshot(
                     pb_canister_state_bits::CanisterLoadSnapshot {
                         canister_version: canister_load_snapshot.canister_version,
-                        snapshot_id: canister_load_snapshot.snapshot_id.clone(),
+                        snapshot_id: canister_load_snapshot.snapshot_id.to_vec(),
                         taken_at_timestamp: canister_load_snapshot.taken_at_timestamp,
+                        source: pb_canister_state_bits::SnapshotSource::from(
+                            canister_load_snapshot.source,
+                        )
+                        .into(),
+                    },
+                )
+            }
+            CanisterChangeDetails::CanisterSettingsChange(canister_settings_change) => {
+                pb_canister_state_bits::canister_change::ChangeDetails::CanisterSettingsChange(
+                    pb_canister_state_bits::CanisterSettingsChange {
+                        controllers: canister_settings_change.controllers.as_ref().map(
+                            |controllers| pb_canister_state_bits::CanisterControllers {
+                                controllers: controllers
+                                    .iter()
+                                    .map(|c| (*c).into())
+                                    .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>(),
+                            },
+                        ),
+                        environment_variables_hash: canister_settings_change
+                            .environment_variables_hash
+                            .map(|hash| hash.to_vec()),
+                    },
+                )
+            }
+            CanisterChangeDetails::CanisterRename(canister_rename) => {
+                pb_canister_state_bits::canister_change::ChangeDetails::CanisterRename(
+                    pb_canister_state_bits::CanisterRename {
+                        canister_id: Some(canister_rename.canister_id.into()),
+                        total_num_changes: canister_rename.total_num_changes,
+                        rename_to: Some(pb_canister_state_bits::RenameTo {
+                            canister_id: Some(canister_rename.rename_to.canister_id.into()),
+                            version: canister_rename.rename_to.version,
+                            total_num_changes: canister_rename.rename_to.total_num_changes,
+                        }),
                     },
                 )
             }
@@ -682,13 +845,21 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
         match item {
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterCreation(
                 canister_creation,
-            ) => Ok(CanisterChangeDetails::canister_creation(
-                canister_creation
-                    .controllers
-                    .into_iter()
-                    .map(TryInto::try_into)
-                    .collect::<Result<Vec<PrincipalId>, _>>()?,
-            )),
+            ) => {
+                let environment_variables_hash = match canister_creation.environment_variables_hash
+                {
+                    Some(bytes) => Some(try_decode_hash(bytes)?),
+                    None => None,
+                };
+                Ok(CanisterChangeDetails::canister_creation(
+                    canister_creation
+                        .controllers
+                        .into_iter()
+                        .map(TryInto::try_into)
+                        .collect::<Result<Vec<PrincipalId>, _>>()?,
+                    environment_variables_hash,
+                ))
+            }
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterCodeUninstall(_) => {
                 Ok(CanisterChangeDetails::CanisterCodeUninstall)
             }
@@ -728,11 +899,76 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
             )),
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterLoadSnapshot(
                 canister_load_snapshot,
-            ) => Ok(CanisterChangeDetails::load_snapshot(
-                canister_load_snapshot.canister_version,
-                canister_load_snapshot.snapshot_id,
-                canister_load_snapshot.taken_at_timestamp,
-            )),
+            ) => {
+                let snapshot_id = SnapshotId::try_from(canister_load_snapshot.snapshot_id)
+                    .map_err(|e| {
+                        ProxyDecodeError::Other(format!("Failed to decode snapshot_id: {e:?}"))
+                    })?;
+
+                let source = SnapshotSource::try_from(
+                    pb_canister_state_bits::SnapshotSource::try_from(canister_load_snapshot.source)
+                        .map_err(|e| {
+                            ProxyDecodeError::Other(format!(
+                                "Failed to decode snapshot source: {e:?}"
+                            ))
+                        })?,
+                )?;
+                Ok(CanisterChangeDetails::load_snapshot(
+                    canister_load_snapshot.canister_version,
+                    snapshot_id,
+                    canister_load_snapshot.taken_at_timestamp,
+                    source,
+                ))
+            }
+            pb_canister_state_bits::canister_change::ChangeDetails::CanisterSettingsChange(
+                canister_settings_change,
+            ) => {
+                let controllers = match canister_settings_change.controllers {
+                    None => None,
+                    Some(canister_controllers) => Some(
+                        canister_controllers
+                            .controllers
+                            .into_iter()
+                            .map(TryInto::try_into)
+                            .collect::<Result<Vec<PrincipalId>, _>>()?,
+                    ),
+                };
+                let environment_variables_hash =
+                    match canister_settings_change.environment_variables_hash {
+                        Some(bytes) => Some(try_decode_hash(bytes)?),
+                        None => None,
+                    };
+                Ok(CanisterChangeDetails::settings_change(
+                    controllers,
+                    environment_variables_hash,
+                ))
+            }
+            pb_canister_state_bits::canister_change::ChangeDetails::CanisterRename(
+                canister_rename,
+            ) => {
+                let rename_to = canister_rename
+                    .rename_to
+                    .ok_or(ProxyDecodeError::MissingField("CanisterRename::rename_to"))?;
+                Ok(CanisterChangeDetails::rename_canister(
+                    canister_rename
+                        .canister_id
+                        .as_ref()
+                        .ok_or(ProxyDecodeError::MissingField(
+                            "CanisterRename::canister_id",
+                        ))?
+                        .to_owned()
+                        .try_into()?,
+                    canister_rename.total_num_changes,
+                    rename_to
+                        .canister_id
+                        .as_ref()
+                        .ok_or(ProxyDecodeError::MissingField("RenameTo::canister_id"))?
+                        .to_owned()
+                        .try_into()?,
+                    rename_to.version,
+                    rename_to.total_num_changes,
+                ))
+            }
         }
     }
 }
@@ -898,6 +1134,7 @@ impl TryFrom<pb_canister_state_bits::LogVisibilityV2> for LogVisibilityV2 {
 ///     log_visibility: log_visibility;
 ///     wasm_memory_limit: nat;
 ///     wasm_memory_threshold: nat;
+///     environment_variables: vec environment_variable;
 /// })`
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct DefiniteCanisterSettingsArgs {
@@ -910,6 +1147,7 @@ pub struct DefiniteCanisterSettingsArgs {
     log_visibility: LogVisibilityV2,
     wasm_memory_limit: candid::Nat,
     wasm_memory_threshold: candid::Nat,
+    environment_variables: Vec<EnvironmentVariable>,
 }
 
 impl DefiniteCanisterSettingsArgs {
@@ -923,10 +1161,18 @@ impl DefiniteCanisterSettingsArgs {
         log_visibility: LogVisibilityV2,
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
+        environment_variables: EnvironmentVariables,
     ) -> Self {
         let memory_allocation = candid::Nat::from(memory_allocation.unwrap_or(0));
         let reserved_cycles_limit = candid::Nat::from(reserved_cycles_limit.unwrap_or(0));
         let wasm_memory_limit = candid::Nat::from(wasm_memory_limit.unwrap_or(0));
+        let environment_variables = environment_variables
+            .iter()
+            .map(|(name, value)| EnvironmentVariable {
+                name: name.clone(),
+                value: value.clone(),
+            })
+            .collect::<Vec<EnvironmentVariable>>();
         Self {
             controller,
             controllers,
@@ -937,6 +1183,7 @@ impl DefiniteCanisterSettingsArgs {
             log_visibility,
             wasm_memory_limit,
             wasm_memory_threshold: candid::Nat::from(wasm_memory_threshold),
+            environment_variables,
         }
     }
 
@@ -971,6 +1218,10 @@ impl DefiniteCanisterSettingsArgs {
     pub fn freezing_threshold(&self) -> candid::Nat {
         self.freezing_threshold.clone()
     }
+
+    pub fn environment_variables(&self) -> &[EnvironmentVariable] {
+        &self.environment_variables
+    }
 }
 
 impl Payload<'_> for DefiniteCanisterSettingsArgs {}
@@ -986,6 +1237,8 @@ pub struct QueryStats {
 /// Struct used for encoding/decoding
 /// `(record {
 ///     status : variant { running; stopping; stopped };
+///     ready_for_migration: bool,
+///     version: nat64,
 ///     settings: definite_canister_settings;
 ///     module_hash: opt blob;
 ///     controller: principal;
@@ -1014,6 +1267,8 @@ pub struct QueryStats {
 #[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterStatusResultV2 {
     status: CanisterStatusType,
+    ready_for_migration: bool,
+    version: u64,
     module_hash: Option<Vec<u8>>,
     controller: candid::Principal,
     settings: DefiniteCanisterSettingsArgs,
@@ -1044,6 +1299,8 @@ impl CanisterStatusResultV2 {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         status: CanisterStatusType,
+        ready_for_migration: bool,
+        version: u64,
         module_hash: Option<Vec<u8>>,
         controller: PrincipalId,
         controllers: Vec<PrincipalId>,
@@ -1070,9 +1327,12 @@ impl CanisterStatusResultV2 {
         query_egress_payload_size: u128,
         wasm_memory_limit: Option<u64>,
         wasm_memory_threshold: u64,
+        environment_variables: EnvironmentVariables,
     ) -> Self {
         Self {
             status,
+            ready_for_migration,
+            version,
             module_hash,
             controller: candid::Principal::from_text(controller.to_string()).unwrap(),
             memory_size: candid::Nat::from(memory_size.get()),
@@ -1100,6 +1360,7 @@ impl CanisterStatusResultV2 {
                 log_visibility,
                 wasm_memory_limit,
                 wasm_memory_threshold,
+                environment_variables,
             ),
             freezing_threshold: candid::Nat::from(freezing_threshold),
             idle_cycles_burned_per_day: candid::Nat::from(idle_cycles_burned_per_day),
@@ -1115,6 +1376,19 @@ impl CanisterStatusResultV2 {
 
     pub fn status(&self) -> CanisterStatusType {
         self.status.clone()
+    }
+
+    pub fn ready_for_migration(&self) -> bool {
+        self.ready_for_migration
+    }
+
+    pub fn version(&self) -> u64 {
+        self.version
+    }
+
+    /// Helper to facilitate comparing canister settings that differ only in the canister version.
+    pub fn ignore_version(self) -> Self {
+        Self { version: 0, ..self }
     }
 
     pub fn module_hash(&self) -> Option<Vec<u8>> {
@@ -1751,6 +2025,17 @@ impl DataSize for PrincipalId {
 
 /// Struct used for encoding/decoding
 /// `(record {
+///     name: text;
+///     value: text;
+/// })`
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+pub struct EnvironmentVariable {
+    pub name: String,
+    pub value: String,
+}
+
+/// Struct used for encoding/decoding
+/// `(record {
 ///     controllers: opt vec principal;
 ///     compute_allocation: opt nat;
 ///     memory_allocation: opt nat;
@@ -1759,6 +2044,7 @@ impl DataSize for PrincipalId {
 ///     log_visibility : opt log_visibility;
 ///     wasm_memory_limit: opt nat;
 ///     wasm_memory_threshold: opt nat;
+///     environment_variables: opt vec environment_variable;
 /// })`
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct CanisterSettingsArgs {
@@ -1770,6 +2056,7 @@ pub struct CanisterSettingsArgs {
     pub log_visibility: Option<LogVisibilityV2>,
     pub wasm_memory_limit: Option<candid::Nat>,
     pub wasm_memory_threshold: Option<candid::Nat>,
+    pub environment_variables: Option<Vec<EnvironmentVariable>>,
 }
 
 impl Payload<'_> for CanisterSettingsArgs {}
@@ -1787,6 +2074,7 @@ impl CanisterSettingsArgs {
             log_visibility: None,
             wasm_memory_limit: None,
             wasm_memory_threshold: None,
+            environment_variables: None,
         }
     }
 }
@@ -1801,6 +2089,7 @@ pub struct CanisterSettingsArgsBuilder {
     log_visibility: Option<LogVisibilityV2>,
     wasm_memory_limit: Option<candid::Nat>,
     wasm_memory_threshold: Option<candid::Nat>,
+    environment_variables: Option<Vec<EnvironmentVariable>>,
 }
 
 #[allow(dead_code)]
@@ -1819,6 +2108,7 @@ impl CanisterSettingsArgsBuilder {
             log_visibility: self.log_visibility,
             wasm_memory_limit: self.wasm_memory_limit,
             wasm_memory_threshold: self.wasm_memory_threshold,
+            environment_variables: self.environment_variables,
         }
     }
 
@@ -1903,6 +2193,16 @@ impl CanisterSettingsArgsBuilder {
             ..self
         }
     }
+
+    pub fn with_environment_variables(
+        self,
+        environment_variables: Vec<EnvironmentVariable>,
+    ) -> Self {
+        Self {
+            environment_variables: Some(environment_variables),
+            ..self
+        }
+    }
 }
 
 /// Struct used for encoding/decoding
@@ -1975,10 +2275,7 @@ impl SetupInitialDKGArgs {
             if !set.insert(NodeId::new(*node_id)) {
                 return Err(UserError::new(
                     ErrorCode::InvalidManagementPayload,
-                    format!(
-                        "Expected a set of NodeIds. The NodeId {} is repeated",
-                        node_id
-                    ),
+                    format!("Expected a set of NodeIds. The NodeId {node_id} is repeated"),
                 ));
             }
         }
@@ -2028,7 +2325,7 @@ impl SetupInitialDKGResponse {
         {
             Err(err) => Err(UserError::new(
                 ErrorCode::InvalidManagementPayload,
-                format!("Payload deserialization error: '{}'", err),
+                format!("Payload deserialization error: '{err}'"),
             )),
             Ok((
                 low_threshold_transcript_record,
@@ -2097,7 +2394,7 @@ impl TryFrom<pb_types::EcdsaCurve> for EcdsaCurve {
             pb_types::EcdsaCurve::Secp256k1 => Ok(EcdsaCurve::Secp256k1),
             pb_types::EcdsaCurve::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "EcdsaCurve",
-                err: format!("Unable to convert {:?} to an EcdsaCurve", item),
+                err: format!("Unable to convert {item:?} to an EcdsaCurve"),
             }),
         }
     }
@@ -2105,7 +2402,7 @@ impl TryFrom<pb_types::EcdsaCurve> for EcdsaCurve {
 
 impl std::fmt::Display for EcdsaCurve {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -2115,7 +2412,7 @@ impl FromStr for EcdsaCurve {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "secp256k1" => Ok(Self::Secp256k1),
-            _ => Err(format!("{} is not a recognized ECDSA curve", s)),
+            _ => Err(format!("{s} is not a recognized ECDSA curve")),
         }
     }
 }
@@ -2169,7 +2466,7 @@ impl FromStr for EcdsaKeyId {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (curve, name) = s
             .split_once(':')
-            .ok_or_else(|| format!("ECDSA key id {} does not contain a ':'", s))?;
+            .ok_or_else(|| format!("ECDSA key id {s} does not contain a ':'"))?;
         Ok(EcdsaKeyId {
             curve: curve.parse::<EcdsaCurve>()?,
             name: name.to_string(),
@@ -2234,7 +2531,7 @@ impl TryFrom<pb_types::SchnorrAlgorithm> for SchnorrAlgorithm {
             pb_types::SchnorrAlgorithm::Ed25519 => Ok(SchnorrAlgorithm::Ed25519),
             pb_types::SchnorrAlgorithm::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "SchnorrAlgorithm",
-                err: format!("Unable to convert {:?} to a SchnorrAlgorithm", item),
+                err: format!("Unable to convert {item:?} to a SchnorrAlgorithm"),
             }),
         }
     }
@@ -2242,7 +2539,7 @@ impl TryFrom<pb_types::SchnorrAlgorithm> for SchnorrAlgorithm {
 
 impl std::fmt::Display for SchnorrAlgorithm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -2253,7 +2550,7 @@ impl FromStr for SchnorrAlgorithm {
         match s.to_lowercase().as_str() {
             "bip340secp256k1" => Ok(Self::Bip340Secp256k1),
             "ed25519" => Ok(Self::Ed25519),
-            _ => Err(format!("{} is not a recognized Schnorr algorithm", s)),
+            _ => Err(format!("{s} is not a recognized Schnorr algorithm")),
         }
     }
 }
@@ -2289,7 +2586,7 @@ impl TryFrom<pb_types::SchnorrKeyId> for SchnorrKeyId {
             SchnorrAlgorithm::try_from(pb_types::SchnorrAlgorithm::try_from(algorithm).map_err(
                 |_| ProxyDecodeError::ValueOutOfRange {
                     typ: "SchnorrKeyId",
-                    err: format!("Unable to convert {} to a SchnorrAlgorithm", algorithm),
+                    err: format!("Unable to convert {algorithm} to a SchnorrAlgorithm"),
                 },
             )?)?;
         Ok(Self { algorithm, name })
@@ -2307,7 +2604,7 @@ impl FromStr for SchnorrKeyId {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (algorithm, name) = s
             .split_once(':')
-            .ok_or_else(|| format!("Schnorr key id {} does not contain a ':'", s))?;
+            .ok_or_else(|| format!("Schnorr key id {s} does not contain a ':'"))?;
         Ok(SchnorrKeyId {
             algorithm: algorithm.parse::<SchnorrAlgorithm>()?,
             name: name.to_string(),
@@ -2368,7 +2665,7 @@ impl TryFrom<pb_types::VetKdCurve> for VetKdCurve {
             pb_types::VetKdCurve::Bls12381G2 => Ok(VetKdCurve::Bls12_381_G2),
             pb_types::VetKdCurve::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
                 typ: "VetKdCurve",
-                err: format!("Unable to convert {:?} to a VetKdCurve", item),
+                err: format!("Unable to convert {item:?} to a VetKdCurve"),
             }),
         }
     }
@@ -2376,7 +2673,7 @@ impl TryFrom<pb_types::VetKdCurve> for VetKdCurve {
 
 impl std::fmt::Display for VetKdCurve {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -2386,7 +2683,7 @@ impl FromStr for VetKdCurve {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "bls12_381_g2" => Ok(Self::Bls12_381_G2),
-            _ => Err(format!("{} is not a recognized vetKD curve", s)),
+            _ => Err(format!("{s} is not a recognized vetKD curve")),
         }
     }
 }
@@ -2441,7 +2738,7 @@ impl FromStr for VetKdKeyId {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (curve, name) = s
             .split_once(':')
-            .ok_or_else(|| format!("vetKD key id {} does not contain a ':'", s))?;
+            .ok_or_else(|| format!("vetKD key id {s} does not contain a ':'"))?;
         Ok(VetKdKeyId {
             curve: curve.parse::<VetKdCurve>()?,
             name: name.to_string(),
@@ -2533,6 +2830,11 @@ impl MasterPublicKeyId {
         }
     }
 
+    /// Check whether this type of [`MasterPublicKeyId`] is a VetKd key
+    pub fn is_vetkd_key(&self) -> bool {
+        matches!(self, Self::VetKd(_))
+    }
+
     /// Check whether this type of [`MasterPublicKeyId`] requires pre-signatures
     pub fn requires_pre_signatures(&self) -> bool {
         match self {
@@ -2547,14 +2849,13 @@ impl FromStr for MasterPublicKeyId {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (scheme, key_id) = s
             .split_once(':')
-            .ok_or_else(|| format!("Master public key id {} does not contain a ':'", s))?;
+            .ok_or_else(|| format!("Master public key id {s} does not contain a ':'"))?;
         match scheme.to_lowercase().as_str() {
             "ecdsa" => Ok(Self::Ecdsa(EcdsaKeyId::from_str(key_id)?)),
             "schnorr" => Ok(Self::Schnorr(SchnorrKeyId::from_str(key_id)?)),
             "vetkd" => Ok(Self::VetKd(VetKdKeyId::from_str(key_id)?)),
             _ => Err(format!(
-                "Scheme {} in master public key id {} is not supported.",
-                scheme, s
+                "Scheme {scheme} in master public key id {s} is not supported."
             )),
         }
     }
@@ -2642,59 +2943,6 @@ const MAX_ALLOWED_NODES_COUNT: usize = 100;
 
 pub type BoundedNodes = BoundedVec<MAX_ALLOWED_NODES_COUNT, UNBOUNDED, UNBOUNDED, PrincipalId>;
 
-/// Argument of the compute_initial_idkg_dealings API.
-/// `(record {
-///     key_id: master_public_key_id;
-///     subnet_id: principal;
-///     nodes: vec principal;
-///     registry_version: nat64;
-/// })`
-#[derive(Eq, PartialEq, Debug, CandidType, Deserialize)]
-pub struct ComputeInitialIDkgDealingsArgs {
-    pub key_id: MasterPublicKeyId,
-    pub subnet_id: SubnetId,
-    nodes: BoundedNodes,
-    registry_version: u64,
-}
-
-impl Payload<'_> for ComputeInitialIDkgDealingsArgs {}
-
-impl ComputeInitialIDkgDealingsArgs {
-    pub fn new(
-        key_id: MasterPublicKeyId,
-        subnet_id: SubnetId,
-        nodes: BTreeSet<NodeId>,
-        registry_version: RegistryVersion,
-    ) -> Self {
-        Self {
-            key_id,
-            subnet_id,
-            nodes: BoundedNodes::new(nodes.iter().map(|id| id.get()).collect()),
-            registry_version: registry_version.get(),
-        }
-    }
-
-    pub fn get_set_of_nodes(&self) -> Result<BTreeSet<NodeId>, UserError> {
-        let mut set = BTreeSet::<NodeId>::new();
-        for node_id in self.nodes.get().iter() {
-            if !set.insert(NodeId::new(*node_id)) {
-                return Err(UserError::new(
-                    ErrorCode::InvalidManagementPayload,
-                    format!(
-                        "Expected a set of NodeIds. The NodeId {} is repeated",
-                        node_id
-                    ),
-                ));
-            }
-        }
-        Ok(set)
-    }
-
-    pub fn get_registry_version(&self) -> RegistryVersion {
-        RegistryVersion::new(self.registry_version)
-    }
-}
-
 /// Argument of the reshare_chain_key API.
 /// `(record {
 ///     key_id: master_public_key_id;
@@ -2733,10 +2981,7 @@ impl ReshareChainKeyArgs {
             if !set.insert(NodeId::new(*node_id)) {
                 return Err(UserError::new(
                     ErrorCode::InvalidManagementPayload,
-                    format!(
-                        "Expected a set of NodeIds. The NodeId {} is repeated",
-                        node_id
-                    ),
+                    format!("Expected a set of NodeIds. The NodeId {node_id} is repeated"),
                 ));
             }
         }
@@ -2771,7 +3016,7 @@ impl ReshareChainKeyResponse {
         serde_cbor::from_slice::<Self>(&serde_encoded_bytes).map_err(|err| {
             UserError::new(
                 ErrorCode::InvalidManagementPayload,
-                format!("Payload deserialization error: '{}'", err),
+                format!("Payload deserialization error: '{err}'"),
             )
         })
     }
@@ -2865,39 +3110,7 @@ pub struct SchnorrPublicKeyResponse {
 
 impl Payload<'_> for SchnorrPublicKeyResponse {}
 
-/// Struct used to return the xnet initial dealings.
-#[derive(Debug)]
-pub struct ComputeInitialIDkgDealingsResponse {
-    pub initial_dkg_dealings: InitialIDkgDealings,
-}
-
-impl ComputeInitialIDkgDealingsResponse {
-    pub fn encode(&self) -> Vec<u8> {
-        let serde_encoded_transcript_records = self.encode_with_serde_cbor();
-        Encode!(&serde_encoded_transcript_records).unwrap()
-    }
-
-    fn encode_with_serde_cbor(&self) -> Vec<u8> {
-        let transcript_records = (&self.initial_dkg_dealings,);
-        serde_cbor::to_vec(&transcript_records).unwrap()
-    }
-
-    pub fn decode(blob: &[u8]) -> Result<Self, UserError> {
-        let serde_encoded_transcript_records =
-            Decode!([decoder_config()]; blob, Vec<u8>).map_err(candid_error_to_user_error)?;
-        match serde_cbor::from_slice::<(InitialIDkgDealings,)>(&serde_encoded_transcript_records) {
-            Err(err) => Err(UserError::new(
-                ErrorCode::InvalidManagementPayload,
-                format!("Payload deserialization error: '{}'", err),
-            )),
-            Ok((initial_dkg_dealings,)) => Ok(Self {
-                initial_dkg_dealings,
-            }),
-        }
-    }
-}
-
-// Represents the argument of the vetkd_derive_key API.
+/// Represents the argument of the vetkd_derive_key API.
 /// ```text
 /// (record {
 ///   input: blob;
@@ -2970,14 +3183,14 @@ pub use ic_btc_interface::{
     GetBalanceRequest as BitcoinGetBalanceArgs,
     GetBlockHeadersRequest as BitcoinGetBlockHeadersArgs,
     GetCurrentFeePercentilesRequest as BitcoinGetCurrentFeePercentilesArgs,
-    GetUtxosRequest as BitcoinGetUtxosArgs, Network as BitcoinNetwork,
-    SendTransactionRequest as BitcoinSendTransactionArgs,
+    GetUtxosRequest as BitcoinGetUtxosArgs, SendTransactionRequest as BitcoinSendTransactionArgs,
 };
 pub use ic_btc_replica_types::{
     GetSuccessorsRequest as BitcoinGetSuccessorsArgs,
     GetSuccessorsRequestInitial as BitcoinGetSuccessorsRequestInitial,
     GetSuccessorsResponse as BitcoinGetSuccessorsResponse,
     GetSuccessorsResponseComplete as BitcoinGetSuccessorsResponseComplete,
+    GetSuccessorsResponsePartial as BitcoinGetSuccessorsResponsePartial, Network as BitcoinNetwork,
     SendTransactionRequest as BitcoinSendTransactionInternalArgs,
 };
 
@@ -3014,11 +3227,13 @@ impl Payload<'_> for SubnetInfoArgs {}
 /// ```text
 /// record {
 ///     replica_version: text;
+///     registry_version: nat64;
 /// }
 /// ```
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 pub struct SubnetInfoResponse {
     pub replica_version: String,
+    pub registry_version: u64,
 }
 
 impl Payload<'_> for SubnetInfoResponse {}
@@ -3408,15 +3623,14 @@ impl Payload<'_> for StoredChunksReply {}
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
 pub struct TakeCanisterSnapshotArgs {
     pub canister_id: PrincipalId,
-    pub replace_snapshot: Option<serde_bytes::ByteBuf>,
+    pub replace_snapshot: Option<SnapshotId>,
 }
 
 impl TakeCanisterSnapshotArgs {
     pub fn new(canister_id: CanisterId, replace_snapshot: Option<SnapshotId>) -> Self {
         Self {
             canister_id: canister_id.get(),
-            replace_snapshot: replace_snapshot
-                .map(|snapshot_id| ByteBuf::from(snapshot_id.to_vec())),
+            replace_snapshot,
         }
     }
 
@@ -3426,27 +3640,9 @@ impl TakeCanisterSnapshotArgs {
 
     pub fn replace_snapshot(&self) -> Option<SnapshotId> {
         self.replace_snapshot
-            .as_ref()
-            .map(|bytes| SnapshotId::try_from(&bytes.clone().into_vec()).unwrap())
     }
 }
-
-impl<'a> Payload<'a> for TakeCanisterSnapshotArgs {
-    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
-        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
-
-        if let Some(replace_snapshot) = &args.replace_snapshot {
-            // Verify that snapshot ID has the correct format.
-            if let Err(err) = SnapshotId::try_from(&replace_snapshot.clone().into_vec()) {
-                return Err(UserError::new(
-                    ErrorCode::InvalidManagementPayload,
-                    format!("Payload deserialization error: {err:?}"),
-                ));
-            }
-        }
-        Ok(args)
-    }
-}
+impl Payload<'_> for TakeCanisterSnapshotArgs {}
 
 /// Struct used for encoding/decoding
 /// `(record {
@@ -3454,11 +3650,10 @@ impl<'a> Payload<'a> for TakeCanisterSnapshotArgs {
 ///     snapshot_id: blob;
 ///     sender_canister_version: opt nat64;
 /// })`
-#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct LoadCanisterSnapshotArgs {
     canister_id: PrincipalId,
-    #[serde(with = "serde_bytes")]
-    snapshot_id: Vec<u8>,
+    snapshot_id: SnapshotId,
     sender_canister_version: Option<u64>,
 }
 
@@ -3470,7 +3665,7 @@ impl LoadCanisterSnapshotArgs {
     ) -> Self {
         Self {
             canister_id: canister_id.get(),
-            snapshot_id: snapshot_id.to_vec(),
+            snapshot_id,
             sender_canister_version,
         }
     }
@@ -3480,7 +3675,7 @@ impl LoadCanisterSnapshotArgs {
     }
 
     pub fn snapshot_id(&self) -> SnapshotId {
-        SnapshotId::try_from(&self.snapshot_id).unwrap()
+        self.snapshot_id
     }
 
     pub fn get_sender_canister_version(&self) -> Option<u64> {
@@ -3488,19 +3683,7 @@ impl LoadCanisterSnapshotArgs {
     }
 }
 
-impl<'a> Payload<'a> for LoadCanisterSnapshotArgs {
-    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
-        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
-        // Verify that snapshot ID has the correct format.
-        if let Err(err) = SnapshotId::try_from(&args.snapshot_id) {
-            return Err(UserError::new(
-                ErrorCode::InvalidManagementPayload,
-                format!("Payload deserialization error: {err:?}"),
-            ));
-        }
-        Ok(args)
-    }
-}
+impl Payload<'_> for LoadCanisterSnapshotArgs {}
 
 /// Struct to be returned when taking a canister snapshot.
 /// `(record {
@@ -3508,10 +3691,9 @@ impl<'a> Payload<'a> for LoadCanisterSnapshotArgs {
 ///      taken_at_timestamp: nat64;
 ///      total_size: nat64;
 /// })`
-#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterSnapshotResponse {
-    #[serde(with = "serde_bytes")]
-    pub id: Vec<u8>,
+    pub id: SnapshotId,
     pub taken_at_timestamp: u64,
     pub total_size: u64,
 }
@@ -3521,14 +3703,14 @@ impl Payload<'_> for CanisterSnapshotResponse {}
 impl CanisterSnapshotResponse {
     pub fn new(snapshot_id: &SnapshotId, taken_at_timestamp: u64, total_size: NumBytes) -> Self {
         Self {
-            id: snapshot_id.to_vec(),
+            id: *snapshot_id,
             taken_at_timestamp,
             total_size: total_size.get(),
         }
     }
 
     pub fn snapshot_id(&self) -> SnapshotId {
-        SnapshotId::try_from(&self.id).unwrap()
+        self.id
     }
 
     pub fn total_size(&self) -> u64 {
@@ -3545,18 +3727,17 @@ impl CanisterSnapshotResponse {
 ///     canister_id: principal;
 ///     snapshot_id: blob;
 /// })`
-#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct DeleteCanisterSnapshotArgs {
     pub canister_id: PrincipalId,
-    #[serde(with = "serde_bytes")]
-    pub snapshot_id: Vec<u8>,
+    pub snapshot_id: SnapshotId,
 }
 
 impl DeleteCanisterSnapshotArgs {
     pub fn new(canister_id: CanisterId, snapshot_id: SnapshotId) -> Self {
         Self {
             canister_id: canister_id.get(),
-            snapshot_id: snapshot_id.to_vec(),
+            snapshot_id,
         }
     }
 
@@ -3564,27 +3745,12 @@ impl DeleteCanisterSnapshotArgs {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
 
-    // TODO: EXC-1997.
     pub fn get_snapshot_id(&self) -> SnapshotId {
-        SnapshotId::try_from(&self.snapshot_id).unwrap()
+        self.snapshot_id
     }
 }
 
-// TODO: EXC-1997.
-impl<'a> Payload<'a> for DeleteCanisterSnapshotArgs {
-    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
-        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
-
-        // Verify that snapshot ID has the correct format.
-        if let Err(err) = SnapshotId::try_from(&args.snapshot_id) {
-            return Err(UserError::new(
-                ErrorCode::InvalidManagementPayload,
-                format!("Payload deserialization error: {err:?}"),
-            ));
-        }
-        Ok(args)
-    }
-}
+impl Payload<'_> for DeleteCanisterSnapshotArgs {}
 
 /// Struct used for encoding/decoding
 /// `(record {
@@ -3612,10 +3778,15 @@ impl Payload<'_> for ListCanisterSnapshotArgs {}
 /// An enum representing the possible values of a global variable.
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, EnumIter, CandidType)]
 pub enum Global {
+    #[serde(rename = "i32")]
     I32(i32),
+    #[serde(rename = "i64")]
     I64(i64),
+    #[serde(rename = "f32")]
     F32(f32),
+    #[serde(rename = "f64")]
     F64(f64),
+    #[serde(rename = "v128")]
     V128(u128),
 }
 
@@ -3704,80 +3875,87 @@ impl TryFrom<pb_canister_state_bits::Global> for Global {
 ///     snapshot_id : blob;
 /// })`
 
-#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct ReadCanisterSnapshotMetadataArgs {
     pub canister_id: PrincipalId,
-    #[serde(with = "serde_bytes")]
-    pub snapshot_id: Vec<u8>,
+    pub snapshot_id: SnapshotId,
 }
 
 impl ReadCanisterSnapshotMetadataArgs {
     pub fn new(canister_id: CanisterId, snapshot_id: SnapshotId) -> Self {
         Self {
             canister_id: canister_id.get(),
-            snapshot_id: snapshot_id.to_vec(),
+            snapshot_id,
         }
     }
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
-    // TODO: EXC-1997.
+
     pub fn get_snapshot_id(&self) -> SnapshotId {
-        SnapshotId::try_from(&self.snapshot_id).unwrap()
+        self.snapshot_id
     }
 }
 
-// TODO: EXC-1997.
-impl<'a> Payload<'a> for ReadCanisterSnapshotMetadataArgs {
-    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
-        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
-        // Verify that snapshot ID has the correct format.
-        if let Err(err) = SnapshotId::try_from(&args.snapshot_id) {
-            return Err(UserError::new(
-                ErrorCode::InvalidManagementPayload,
-                format!("Payload deserialization error: {err:?}"),
-            ));
-        }
-        Ok(args)
-    }
-}
+impl Payload<'_> for ReadCanisterSnapshotMetadataArgs {}
 
-#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Default, Deserialize, EnumIter)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Deserialize, EnumIter)]
 pub enum SnapshotSource {
-    #[default]
-    TakenFromCanister,
-    MetadataUpload,
+    #[serde(rename = "taken_from_canister")]
+    TakenFromCanister(Reserved),
+    #[serde(rename = "metadata_upload")]
+    MetadataUpload(Reserved),
 }
 
-impl From<SnapshotSource> for pb_canister_snapshot_bits::SnapshotSource {
+impl SnapshotSource {
+    /// Alternative to the literal variant `SnapshotSource::TakenFromCanister(candid::Reserved)`
+    /// for consumers that don't want to depend on Candid directly.
+    pub fn taken_from_canister() -> Self {
+        Self::TakenFromCanister(Reserved)
+    }
+
+    /// Alternative to the literal variant `SnapshotSource::MetadataUpload(candid::Reserved)`
+    /// for consumers that don't want to depend on Candid directly.
+    pub fn metadata_upload() -> Self {
+        Self::MetadataUpload(Reserved)
+    }
+}
+
+impl Default for SnapshotSource {
+    fn default() -> Self {
+        Self::TakenFromCanister(Reserved)
+    }
+}
+
+impl From<SnapshotSource> for pb_canister_state_bits::SnapshotSource {
     fn from(value: SnapshotSource) -> Self {
         match value {
-            SnapshotSource::TakenFromCanister => {
-                pb_canister_snapshot_bits::SnapshotSource::TakenFromCanister
+            SnapshotSource::TakenFromCanister(Reserved) => {
+                pb_canister_state_bits::SnapshotSource::TakenFromCanister
             }
-            SnapshotSource::MetadataUpload => {
-                pb_canister_snapshot_bits::SnapshotSource::UploadedManually
+            SnapshotSource::MetadataUpload(Reserved) => {
+                pb_canister_state_bits::SnapshotSource::UploadedManually
             }
         }
     }
 }
 
-impl TryFrom<pb_canister_snapshot_bits::SnapshotSource> for SnapshotSource {
+impl TryFrom<pb_canister_state_bits::SnapshotSource> for SnapshotSource {
     type Error = ProxyDecodeError;
 
-    fn try_from(value: pb_canister_snapshot_bits::SnapshotSource) -> Result<Self, Self::Error> {
+    fn try_from(value: pb_canister_state_bits::SnapshotSource) -> Result<Self, Self::Error> {
         match value {
-            pb_canister_snapshot_bits::SnapshotSource::Unspecified => {
+            pb_canister_state_bits::SnapshotSource::Unspecified => {
                 Err(ProxyDecodeError::ValueOutOfRange {
                     typ: "SnapshotSource",
-                    err: format!("Unexpected value of SnapshotSource: {:?}", value),
+                    err: format!("Unexpected value of SnapshotSource: {value:?}"),
                 })
             }
-            pb_canister_snapshot_bits::SnapshotSource::TakenFromCanister => {
-                Ok(SnapshotSource::TakenFromCanister)
+            pb_canister_state_bits::SnapshotSource::TakenFromCanister => {
+                Ok(SnapshotSource::TakenFromCanister(Reserved))
             }
-            pb_canister_snapshot_bits::SnapshotSource::UploadedManually => {
-                Ok(SnapshotSource::MetadataUpload)
+            pb_canister_state_bits::SnapshotSource::UploadedManually => {
+                Ok(SnapshotSource::MetadataUpload(Reserved))
             }
         }
     }
@@ -3786,12 +3964,12 @@ impl TryFrom<pb_canister_snapshot_bits::SnapshotSource> for SnapshotSource {
 /// Struct used for encoding/decoding
 /// (record {
 ///     source : variant {
-///         taken_from_canister;
-///         uploaded_manually;
+///         taken_from_canister : reserved;
+///         metadata_upload : reserved;
 ///     };
 ///     taken_at_timestamp : nat64;
 ///     wasm_module_size : nat64;
-///     exported_globals : vec variant {
+///     globals : vec variant {
 ///         i32 : int32;
 ///         i64 : int64;
 ///         f32 : float32;
@@ -3821,7 +3999,7 @@ pub struct ReadCanisterSnapshotMetadataResponse {
     pub source: SnapshotSource,
     pub taken_at_timestamp: u64,
     pub wasm_module_size: u64,
-    pub exported_globals: Vec<Global>,
+    pub globals: Vec<Global>,
     pub wasm_memory_size: u64,
     pub stable_memory_size: u64,
     pub wasm_chunk_store: Vec<ChunkHash>,
@@ -3836,10 +4014,12 @@ impl Payload<'_> for ReadCanisterSnapshotMetadataResponse {}
 
 /// An inner type of [`ReadCanisterSnapshotMetadataResponse`].
 ///
-/// Corresponds to the internal `CanisterTimer`, but is candid de/encodable.  
+/// Corresponds to the internal `CanisterTimer`, but is candid de/encodable.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
 pub enum GlobalTimer {
+    #[serde(rename = "inactive")]
     Inactive,
+    #[serde(rename = "active")]
     Active(u64),
 }
 
@@ -3849,8 +4029,11 @@ pub enum GlobalTimer {
 )]
 pub enum OnLowWasmMemoryHookStatus {
     #[default]
+    #[serde(rename = "condition_not_satisfied")]
     ConditionNotSatisfied,
+    #[serde(rename = "ready")]
     Ready,
+    #[serde(rename = "executed")]
     Executed,
 }
 
@@ -3868,6 +4051,18 @@ impl OnLowWasmMemoryHookStatus {
 
     pub fn is_ready(&self) -> bool {
         *self == Self::Ready
+    }
+
+    /// Used to compare the hook status from snapshot metadata with a recently checked hook_condition
+    /// (via `CanisterState::is_low_wasm_memory_hook_condition_satisfied`).
+    pub fn is_consistent_with(&self, hook_condition: bool) -> bool {
+        match (hook_condition, self) {
+            (true, OnLowWasmMemoryHookStatus::ConditionNotSatisfied)
+            | (false, OnLowWasmMemoryHookStatus::Ready)
+            | (false, OnLowWasmMemoryHookStatus::Executed) => false,
+            // all other combinations are valid
+            _ => true,
+        }
     }
 }
 
@@ -3894,8 +4089,7 @@ impl TryFrom<pb_canister_state_bits::OnLowWasmMemoryHookStatus> for OnLowWasmMem
                 Err(ProxyDecodeError::ValueOutOfRange {
                     typ: "OnLowWasmMemoryHookStatus",
                     err: format!(
-                        "Unexpected value of status of on low wasm memory hook: {:?}",
-                        value
+                        "Unexpected value of status of on low wasm memory hook: {value:?}"
                     ),
                 })
             }
@@ -3921,7 +4115,7 @@ impl TryFrom<pb_canister_state_bits::OnLowWasmMemoryHookStatus> for OnLowWasmMem
 ///         offset : nat64;
 ///         size : nat64;
 ///     };
-///     main_memory : record {
+///     wasm_memory : record {
 ///         offset : nat64;
 ///         size : nat64;
 ///     };
@@ -3938,25 +4132,11 @@ impl TryFrom<pb_canister_state_bits::OnLowWasmMemoryHookStatus> for OnLowWasmMem
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
 pub struct ReadCanisterSnapshotDataArgs {
     pub canister_id: PrincipalId,
-    #[serde(with = "serde_bytes")]
-    pub snapshot_id: Vec<u8>,
+    pub snapshot_id: SnapshotId,
     pub kind: CanisterSnapshotDataKind,
 }
 
-// TODO: EXC-1997.
-impl<'a> Payload<'a> for ReadCanisterSnapshotDataArgs {
-    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
-        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
-        // Verify that snapshot ID has the correct format.
-        if let Err(err) = SnapshotId::try_from(&args.snapshot_id) {
-            return Err(UserError::new(
-                ErrorCode::InvalidManagementPayload,
-                format!("Payload deserialization error: {err:?}"),
-            ));
-        }
-        Ok(args)
-    }
-}
+impl Payload<'_> for ReadCanisterSnapshotDataArgs {}
 
 impl ReadCanisterSnapshotDataArgs {
     pub fn new(
@@ -3966,7 +4146,7 @@ impl ReadCanisterSnapshotDataArgs {
     ) -> Self {
         Self {
             canister_id: canister_id.get(),
-            snapshot_id: snapshot_id.to_vec(),
+            snapshot_id,
             kind,
         }
     }
@@ -3975,26 +4155,20 @@ impl ReadCanisterSnapshotDataArgs {
         CanisterId::unchecked_from_principal(self.canister_id)
     }
 
-    // TODO: EXC-1997 strengthen types
     pub fn get_snapshot_id(&self) -> SnapshotId {
-        SnapshotId::try_from(&self.snapshot_id).unwrap()
+        self.snapshot_id
     }
 }
 
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
 pub enum CanisterSnapshotDataKind {
-    WasmModule {
-        offset: u64,
-        size: u64,
-    },
-    MainMemory {
-        offset: u64,
-        size: u64,
-    },
-    StableMemory {
-        offset: u64,
-        size: u64,
-    },
+    #[serde(rename = "wasm_module")]
+    WasmModule { offset: u64, size: u64 },
+    #[serde(rename = "wasm_memory")]
+    WasmMemory { offset: u64, size: u64 },
+    #[serde(rename = "stable_memory")]
+    StableMemory { offset: u64, size: u64 },
+    #[serde(rename = "wasm_chunk")]
     WasmChunk {
         #[serde(with = "serde_bytes")]
         hash: Vec<u8>,
@@ -4023,7 +4197,7 @@ impl ReadCanisterSnapshotDataResponse {
 ///     canister_id : principal;
 ///     replace_snapshot : opt blob;
 ///     wasm_module_size : nat64;
-///     exported_globals : vec variant {
+///     globals : vec variant {
 ///         i32 : int32;
 ///         i64 : int64;
 ///         f32 : float32;
@@ -4047,9 +4221,9 @@ impl ReadCanisterSnapshotDataResponse {
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
 pub struct UploadCanisterSnapshotMetadataArgs {
     pub canister_id: PrincipalId,
-    pub replace_snapshot: Option<ByteBuf>,
+    pub replace_snapshot: Option<SnapshotId>,
     pub wasm_module_size: u64,
-    pub exported_globals: Vec<Global>,
+    pub globals: Vec<Global>,
     pub wasm_memory_size: u64,
     pub stable_memory_size: u64,
     #[serde(with = "serde_bytes")]
@@ -4058,32 +4232,14 @@ pub struct UploadCanisterSnapshotMetadataArgs {
     pub on_low_wasm_memory_hook_status: Option<OnLowWasmMemoryHookStatus>,
 }
 
-// TODO: EXC-1997.
-impl<'a> Payload<'a> for UploadCanisterSnapshotMetadataArgs {
-    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
-        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
-        // Verify that snapshot ID has the correct format.
-        match args.replace_snapshot {
-            None => {}
-            Some(ref snapshot_id) => {
-                if let Err(err) = SnapshotId::try_from(&snapshot_id.to_vec()) {
-                    return Err(UserError::new(
-                        ErrorCode::InvalidManagementPayload,
-                        format!("Payload deserialization error: {err:?}"),
-                    ));
-                }
-            }
-        }
-        Ok(args)
-    }
-}
+impl Payload<'_> for UploadCanisterSnapshotMetadataArgs {}
 
 impl UploadCanisterSnapshotMetadataArgs {
     pub fn new(
         canister_id: CanisterId,
-        replace_snapshot: Option<Vec<u8>>,
+        replace_snapshot: Option<SnapshotId>,
         wasm_module_size: u64,
-        exported_globals: Vec<Global>,
+        globals: Vec<Global>,
         wasm_memory_size: u64,
         stable_memory_size: u64,
         certified_data: Vec<u8>,
@@ -4092,9 +4248,9 @@ impl UploadCanisterSnapshotMetadataArgs {
     ) -> Self {
         Self {
             canister_id: canister_id.get(),
-            replace_snapshot: replace_snapshot.map(ByteBuf::from),
+            replace_snapshot,
             wasm_module_size,
-            exported_globals,
+            globals,
             wasm_memory_size,
             stable_memory_size,
             certified_data,
@@ -4109,9 +4265,6 @@ impl UploadCanisterSnapshotMetadataArgs {
 
     pub fn replace_snapshot(&self) -> Option<SnapshotId> {
         self.replace_snapshot
-            .as_ref()
-            // TODO: EXC-1997.
-            .map(|bytes| SnapshotId::try_from(&bytes.clone().into_vec()).unwrap())
     }
 
     /// Returns the size of this snapshot, excluding the size of the wasm chunk store.
@@ -4120,7 +4273,7 @@ impl UploadCanisterSnapshotMetadataArgs {
             + self.wasm_memory_size
             + self.stable_memory_size
             + self.certified_data.len() as u64
-            + self.exported_globals.len() as u64 * size_of::<Global>() as u64;
+            + self.globals.len() as u64 * size_of::<Global>() as u64;
 
         NumBytes::new(num_bytes)
     }
@@ -4132,16 +4285,14 @@ impl UploadCanisterSnapshotMetadataArgs {
 /// };)
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
 pub struct UploadCanisterSnapshotMetadataResponse {
-    #[serde(with = "serde_bytes")]
-    pub snapshot_id: Vec<u8>,
+    pub snapshot_id: SnapshotId,
 }
 
 impl Payload<'_> for UploadCanisterSnapshotMetadataResponse {}
 
 impl UploadCanisterSnapshotMetadataResponse {
-    // TODO: EXC-1997.
     pub fn get_snapshot_id(&self) -> SnapshotId {
-        SnapshotId::try_from(&self.snapshot_id).unwrap()
+        self.snapshot_id
     }
 }
 
@@ -4153,7 +4304,7 @@ impl UploadCanisterSnapshotMetadataResponse {
 ///         wasm_module : record {
 ///             offset : nat64;
 ///         };
-///         main_memory : record {
+///         wasm_memory : record {
 ///             offset : nat64;
 ///         };
 ///         stable_memory : record {
@@ -4167,27 +4318,13 @@ impl UploadCanisterSnapshotMetadataResponse {
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
 pub struct UploadCanisterSnapshotDataArgs {
     pub canister_id: PrincipalId,
-    #[serde(with = "serde_bytes")]
-    pub snapshot_id: Vec<u8>,
+    pub snapshot_id: SnapshotId,
     pub kind: CanisterSnapshotDataOffset,
     #[serde(with = "serde_bytes")]
     pub chunk: Vec<u8>,
 }
 
-// TODO: EXC-1997.
-impl<'a> Payload<'a> for UploadCanisterSnapshotDataArgs {
-    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
-        let args = Decode!([decoder_config()]; blob, Self).map_err(candid_error_to_user_error)?;
-        // Verify that snapshot ID has the correct format.
-        if let Err(err) = SnapshotId::try_from(&args.snapshot_id) {
-            return Err(UserError::new(
-                ErrorCode::InvalidManagementPayload,
-                format!("Payload deserialization error: {err:?}"),
-            ));
-        }
-        Ok(args)
-    }
-}
+impl Payload<'_> for UploadCanisterSnapshotDataArgs {}
 
 impl UploadCanisterSnapshotDataArgs {
     pub fn new(
@@ -4198,7 +4335,7 @@ impl UploadCanisterSnapshotDataArgs {
     ) -> Self {
         Self {
             canister_id: canister_id.get(),
-            snapshot_id: snapshot_id.to_vec(),
+            snapshot_id,
             kind,
             chunk,
         }
@@ -4209,16 +4346,63 @@ impl UploadCanisterSnapshotDataArgs {
     }
 
     pub fn get_snapshot_id(&self) -> SnapshotId {
-        SnapshotId::try_from(&self.snapshot_id).unwrap()
+        self.snapshot_id
     }
 }
 
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize)]
 pub enum CanisterSnapshotDataOffset {
+    #[serde(rename = "wasm_module")]
     WasmModule { offset: u64 },
-    MainMemory { offset: u64 },
+    #[serde(rename = "wasm_memory")]
+    WasmMemory { offset: u64 },
+    #[serde(rename = "stable_memory")]
     StableMemory { offset: u64 },
+    #[serde(rename = "wasm_chunk")]
     WasmChunk,
+}
+
+/// Struct to encode/decode
+/// (record {
+///   canister_id : principal;
+///   rename_to : record {
+///     canister_id : principal;
+///     version : nat64;
+///     total_num_changes : nat64;
+///   };
+///   sender_canister_version : nat64;
+/// };)
+
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize, PartialEq)]
+pub struct RenameCanisterArgs {
+    pub canister_id: PrincipalId,
+    pub rename_to: RenameToArgs,
+    pub sender_canister_version: u64,
+}
+
+impl Payload<'_> for RenameCanisterArgs {}
+
+impl RenameCanisterArgs {
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    pub fn get_sender_canister_version(&self) -> Option<u64> {
+        Some(self.sender_canister_version)
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, CandidType, Serialize, PartialEq)]
+pub struct RenameToArgs {
+    pub canister_id: PrincipalId,
+    pub version: u64,
+    pub total_num_changes: u64,
+}
+
+impl RenameToArgs {
+    pub fn get_canister_id(&self) -> CanisterId {
+        CanisterId::unchecked_from_principal(self.canister_id)
+    }
 }
 
 #[cfg(test)]
@@ -4226,13 +4410,12 @@ mod tests {
     use super::*;
     use strum::IntoEnumIterator;
 
-    use ic_protobuf::state::canister_snapshot_bits::v1 as pb_canister_snapshot_bits;
     use ic_protobuf::state::canister_state_bits::v1 as pb_canister_state_bits;
 
     #[test]
     fn snapshot_source_exhaustive() {
         for initial in SnapshotSource::iter() {
-            let encoded = pb_canister_snapshot_bits::SnapshotSource::from(initial);
+            let encoded = pb_canister_state_bits::SnapshotSource::from(initial);
             let round_trip = SnapshotSource::try_from(encoded).unwrap();
             assert_eq!(initial, round_trip);
         }
@@ -4314,8 +4497,10 @@ mod tests {
     fn compatibility_for_snapshot_source() {
         // If this fails, you are making a potentially incompatible change to `SnapshotSource`.
         // See note [Handling changes to Enums in Replicated State] for how to proceed.
-        let actual_variants: Vec<i32> = SnapshotSource::iter().map(|x| x as i32).collect();
-        let expected_variants = vec![0, 1];
+        let actual_variants: Vec<i32> = SnapshotSource::iter()
+            .map(|x| pb_canister_state_bits::SnapshotSource::from(x) as i32)
+            .collect();
+        let expected_variants = vec![1, 2];
         assert_eq!(actual_variants, expected_variants);
     }
 
@@ -4372,8 +4557,7 @@ mod tests {
                 assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
                 assert!(
                     error.description().contains(&format!(
-                        "Deserialize error: The number of elements exceeds maximum allowed {}",
-                        MAX_ALLOWED_CONTROLLERS_COUNT
+                        "Deserialize error: The number of elements exceeds maximum allowed {MAX_ALLOWED_CONTROLLERS_COUNT}"
                     )),
                     "Actual: {}",
                     error.description()
@@ -4431,7 +4615,7 @@ mod tests {
     #[test]
     fn ecdsa_curve_round_trip() {
         for curve in EcdsaCurve::iter() {
-            assert_eq!(format!("{}", curve).parse::<EcdsaCurve>().unwrap(), curve);
+            assert_eq!(format!("{curve}").parse::<EcdsaCurve>().unwrap(), curve);
         }
     }
 
@@ -4443,7 +4627,7 @@ mod tests {
                     curve,
                     name: name.to_string(),
                 };
-                assert_eq!(format!("{}", key).parse::<EcdsaKeyId>().unwrap(), key);
+                assert_eq!(format!("{key}").parse::<EcdsaKeyId>().unwrap(), key);
             }
         }
     }
@@ -4452,9 +4636,7 @@ mod tests {
     fn schnorr_algorithm_round_trip() {
         for algorithm in SchnorrAlgorithm::iter() {
             assert_eq!(
-                format!("{}", algorithm)
-                    .parse::<SchnorrAlgorithm>()
-                    .unwrap(),
+                format!("{algorithm}").parse::<SchnorrAlgorithm>().unwrap(),
                 algorithm
             );
         }
@@ -4468,7 +4650,7 @@ mod tests {
                     algorithm,
                     name: name.to_string(),
                 };
-                assert_eq!(format!("{}", key).parse::<SchnorrKeyId>().unwrap(), key);
+                assert_eq!(format!("{key}").parse::<SchnorrKeyId>().unwrap(), key);
             }
         }
     }
@@ -4476,7 +4658,7 @@ mod tests {
     #[test]
     fn vetkd_curve_round_trip() {
         for curve in VetKdCurve::iter() {
-            assert_eq!(format!("{}", curve).parse::<VetKdCurve>().unwrap(), curve);
+            assert_eq!(format!("{curve}").parse::<VetKdCurve>().unwrap(), curve);
         }
     }
 
@@ -4488,7 +4670,7 @@ mod tests {
                     curve,
                     name: name.to_string(),
                 };
-                assert_eq!(format!("{}", key).parse::<VetKdKeyId>().unwrap(), key);
+                assert_eq!(format!("{key}").parse::<VetKdKeyId>().unwrap(), key);
             }
         }
     }
@@ -4501,10 +4683,7 @@ mod tests {
                     algorithm,
                     name: name.to_string(),
                 });
-                assert_eq!(
-                    format!("{}", key).parse::<MasterPublicKeyId>().unwrap(),
-                    key
-                );
+                assert_eq!(format!("{key}").parse::<MasterPublicKeyId>().unwrap(), key);
             }
         }
 
@@ -4514,10 +4693,7 @@ mod tests {
                     curve,
                     name: name.to_string(),
                 });
-                assert_eq!(
-                    format!("{}", key).parse::<MasterPublicKeyId>().unwrap(),
-                    key
-                );
+                assert_eq!(format!("{key}").parse::<MasterPublicKeyId>().unwrap(), key);
             }
         }
 
@@ -4527,10 +4703,7 @@ mod tests {
                     curve,
                     name: name.to_string(),
                 });
-                assert_eq!(
-                    format!("{}", key).parse::<MasterPublicKeyId>().unwrap(),
-                    key
-                );
+                assert_eq!(format!("{key}").parse::<MasterPublicKeyId>().unwrap(), key);
             }
         }
     }
@@ -4580,8 +4753,7 @@ mod tests {
             assert_eq!(result.code(), ErrorCode::InvalidManagementPayload);
             assert!(
                 result.description().contains(&format!(
-                    "Deserialize error: The number of elements exceeds maximum allowed {}",
-                    MAXIMUM_DERIVATION_PATH_LENGTH
+                    "Deserialize error: The number of elements exceeds maximum allowed {MAXIMUM_DERIVATION_PATH_LENGTH}"
                 )),
                 "Actual: {}",
                 result.description()
@@ -4601,8 +4773,7 @@ mod tests {
             assert_eq!(result.code(), ErrorCode::InvalidManagementPayload);
             assert!(
                 result.description().contains(&format!(
-                    "Deserialize error: The number of elements exceeds maximum allowed {}",
-                    MAXIMUM_DERIVATION_PATH_LENGTH
+                    "Deserialize error: The number of elements exceeds maximum allowed {MAXIMUM_DERIVATION_PATH_LENGTH}"
                 )),
                 "Actual: {}",
                 result.description()
@@ -4622,12 +4793,31 @@ mod tests {
             assert_eq!(result.code(), ErrorCode::InvalidManagementPayload);
             assert!(
                 result.description().contains(&format!(
-                    "Deserialize error: The number of elements exceeds maximum allowed {}",
-                    MAXIMUM_DERIVATION_PATH_LENGTH
+                    "Deserialize error: The number of elements exceeds maximum allowed {MAXIMUM_DERIVATION_PATH_LENGTH}"
                 )),
                 "Actual: {}",
                 result.description()
             );
         }
+    }
+
+    #[test]
+    fn canister_change_count_bytes() {
+        let change_bytes = |controllers| {
+            let timestamp_nanos = 0;
+            let canister_version = 0;
+            let origin = CanisterChangeOrigin::from_canister(PrincipalId::default(), Some(0));
+            let details = CanisterChangeDetails::canister_creation(controllers, None);
+            let change = CanisterChange::new(timestamp_nanos, canister_version, origin, details);
+            change.count_bytes()
+        };
+
+        assert_eq!(size_of::<PrincipalId>(), 30);
+        let controllers = vec![PrincipalId::default(); 2];
+        let num_controllers = controllers.len() as u64;
+        assert_eq!(
+            change_bytes(controllers),
+            change_bytes(vec![]) + NumBytes::new(num_controllers * 30)
+        );
     }
 }

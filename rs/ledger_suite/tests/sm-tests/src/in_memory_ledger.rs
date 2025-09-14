@@ -1,4 +1,4 @@
-use super::{get_all_ledger_and_archive_blocks, AllowanceProvider, BalanceProvider};
+use super::{AllowanceProvider, BalanceProvider, get_all_ledger_and_archive_blocks};
 use crate::metrics::parse_metric;
 use candid::{CandidType, Principal};
 use ic_agent::identity::Identity;
@@ -13,8 +13,7 @@ use icp_ledger::AccountIdentifier;
 use icrc_ledger_types::icrc1::account::Account;
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::time::Instant;
-use std::time::SystemTime;
+use std::time::{Instant, SystemTime};
 
 #[cfg(test)]
 mod tests;
@@ -102,6 +101,7 @@ where
     fee_collector: Option<AccountId>,
     burns_without_spender: Option<BurnsWithoutSpender<AccountId>>,
     transactions: u64,
+    latest_block_timestamp: Option<u64>,
 }
 
 impl<AccountId, Tokens: std::fmt::Debug> PartialEq for InMemoryLedger<AccountId, Tokens>
@@ -151,16 +151,14 @@ where
             other.balances.get(account_id).map_or_else(
                 || {
                     println!(
-                        "Mismatch in balance for account {:?}: {:?} vs None",
-                        account_id, balance
+                        "Mismatch in balance for account {account_id:?}: {balance:?} vs None"
                     );
                     false
                 },
                 |other_balance| {
                     if *balance != *other_balance {
                         println!(
-                            "Mismatch in balance for account {:?}: {:?} vs {:?}",
-                            account_id, balance, other_balance
+                            "Mismatch in balance for account {account_id:?}: {balance:?} vs {other_balance:?}"
                         );
                         false
                     } else {
@@ -175,16 +173,14 @@ where
             other.allowances.get(account_id_pair).map_or_else(
                 || {
                     println!(
-                        "Mismatch in allowance for account pair {:?}: {:?} vs None",
-                        account_id_pair, allowance
+                        "Mismatch in allowance for account pair {account_id_pair:?}: {allowance:?} vs None"
                     );
                     false
                 },
                 |other_allowance| {
                     if *allowance != *other_allowance {
                         println!(
-                            "Mismatch in allowance for account pair {:?}: {:?} vs {:?}",
-                            account_id_pair, allowance, other_allowance
+                            "Mismatch in allowance for account pair {account_id_pair:?}: {allowance:?} vs {other_allowance:?}"
                         );
                         false
                     } else {
@@ -312,6 +308,7 @@ where
             fee_collector: None,
             burns_without_spender: None,
             transactions: 0,
+            latest_block_timestamp: None,
         }
     }
 }
@@ -392,10 +389,9 @@ where
             match self.allowances.get(&key) {
                 None => {
                     // No in-memory allowance, so the expected allowance should be zero
-                    assert!(expected_allowance.is_zero(),
-                        "Expected allowance of ({:?}) for key {:?} does not match in-memory allowance (None, interpreted as 0)",
-                            expected_allowance,
-                            key
+                    assert!(
+                        expected_allowance.is_zero(),
+                        "Expected allowance of ({expected_allowance:?}) for key {key:?} does not match in-memory allowance (None, interpreted as 0)"
                     );
                 }
                 Some(in_memory_allowance) => {
@@ -414,10 +410,8 @@ where
                         }
                     };
                     assert_eq!(
-                        in_memory_allowance_amount,
-                        expected_allowance,
-                        "Expected allowance of ({:?}) for key {:?} does not match in-memory allowance ({:?})",
-                        expected_allowance, key, in_memory_allowance_amount
+                        in_memory_allowance_amount, expected_allowance,
+                        "Expected allowance of ({expected_allowance:?}) for key {key:?} does not match in-memory allowance ({in_memory_allowance_amount:?})"
                     );
                 }
             }
@@ -584,6 +578,12 @@ impl BlockConsumer<icp_ledger::Block>
     }
 }
 
+#[derive(Eq, PartialEq, Debug)]
+pub enum AllowancesRecentlyPurged {
+    Yes,
+    No,
+}
+
 impl<AccountId, Tokens> InMemoryLedger<AccountId, Tokens>
 where
     AccountId: Ord
@@ -608,9 +608,11 @@ where
     fn post_process_ledger_blocks<T: ConsumableBlock>(&mut self, blocks: &[T]) {
         if !blocks.is_empty() {
             self.validate_invariants();
+            let latest_block_timestamp = blocks.last().unwrap().creation_timestamp();
             self.prune_expired_allowances(TimeStamp::from_nanos_since_unix_epoch(
-                blocks.last().unwrap().creation_timestamp(),
+                latest_block_timestamp,
             ));
+            self.latest_block_timestamp = Some(latest_block_timestamp);
         }
     }
 
@@ -666,7 +668,24 @@ where
                     )
                 }
             }
+            LedgerEndpointArg::TransferFromArg(transfer_from_arg) => {
+                let owner = arg.caller.sender().unwrap();
+                let spender = AccountId::from(Account {
+                    owner,
+                    subaccount: transfer_from_arg.spender_subaccount,
+                });
+                let from = &AccountId::from(transfer_from_arg.from);
+                let to = &AccountId::from(transfer_from_arg.to);
+                self.process_transfer(
+                    from,
+                    to,
+                    &Some(spender),
+                    &Tokens::try_from(transfer_from_arg.amount.clone()).unwrap(),
+                    &fee,
+                )
+            }
         }
+        self.latest_block_timestamp = Some(timestamp.as_nanos_since_unix_epoch());
         self.validate_invariants();
     }
 
@@ -675,6 +694,7 @@ where
         env: &StateMachine,
         ledger_id: CanisterId,
         num_ledger_blocks: u64,
+        allowances_recently_purged: AllowancesRecentlyPurged,
     ) {
         let actual_num_approvals = parse_metric(env, ledger_id, "ledger_num_approvals");
         let actual_num_balances = parse_metric(env, ledger_id, "ledger_balance_store_entries");
@@ -682,29 +702,17 @@ where
             "total_blocks in ledger: {}, total InMemoryLedger transactions: {}",
             num_ledger_blocks, self.transactions
         );
-        assert_eq!(
-            num_ledger_blocks, self.transactions,
-            "Mismatch in number of transactions ({} vs {})",
-            self.transactions, num_ledger_blocks
-        );
-        assert_eq!(
-            self.balances.len() as u64,
-            actual_num_balances,
-            "Mismatch in number of balances ({} vs {})",
-            self.balances.len(),
-            actual_num_balances
-        );
-        assert_eq!(
-            self.allowances.len() as u64,
+        println!(
+            "number of approvals in ledger: {}, number of approvals in InMemoryLedger: {}",
             actual_num_approvals,
-            "Mismatch in number of approvals ({} vs {})",
-            self.allowances.len(),
-            actual_num_approvals
+            self.allowances.len()
         );
         println!(
-            "Checking {} balances and {} allowances",
-            actual_num_balances, actual_num_approvals
+            "number of balances in ledger: {}, number of balances in InMemoryLedger: {}",
+            actual_num_balances,
+            self.balances.len()
         );
+        println!("Checking {actual_num_balances} balances and {actual_num_approvals} allowances");
         let mut balances_checked = 0;
         let now = Instant::now();
         for (account, balance) in self.balances.iter() {
@@ -713,10 +721,7 @@ where
             assert_eq!(
                 &Tokens::try_from(actual_balance.clone()).unwrap(),
                 balance,
-                "Mismatch in balance for account {:?} ({} vs {})",
-                account,
-                balance,
-                actual_balance
+                "Mismatch in balance for account {account:?} ({balance} vs {actual_balance})"
             );
             if balances_checked % 100000 == 0 && balances_checked > 0 {
                 println!(
@@ -737,7 +742,10 @@ where
         let mut expiration_in_future_count = 0;
         let mut expiration_in_past_count = 0;
         let mut no_expiration_count = 0;
-        let timestamp = env
+        let latest_ledger_block_timestamp = self
+            .latest_block_timestamp
+            .expect("latest ledger block timestamp should be set");
+        let current_ledger_timestamp = env
             .time()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
@@ -750,22 +758,30 @@ where
                 &from,
                 &spender
             );
+            let actual_allowance = AccountId::get_allowance(env, ledger_id, from, spender);
             if let Some(in_memory_expires_at) = allowance.expires_at {
-                if in_memory_expires_at.as_nanos_since_unix_epoch() < timestamp {
-                    println!(
-                        "In memory expires_at is in the past ({:?} vs {:?}), ignoring",
-                        in_memory_expires_at, timestamp
+                if in_memory_expires_at.as_nanos_since_unix_epoch() < current_ledger_timestamp {
+                    assert_eq!(
+                        Tokens::zero(),
+                        Tokens::try_from(actual_allowance.allowance.clone()).unwrap(),
+                        "Expected amount of expired actual allowance to be zero, but it is not: {:?}",
+                        &actual_allowance
                     );
+                    assert!(
+                        actual_allowance.expires_at.is_none(),
+                        "Expected expired actual allowance to have no expires_at, but it has one: {:?}",
+                        &actual_allowance
+                    );
+                    allowances_checked += 1;
                     continue;
                 }
             }
-            let actual_allowance = AccountId::get_allowance(env, ledger_id, from, spender);
             match actual_allowance.expires_at {
                 None => {
                     no_expiration_count += 1;
                 }
                 Some(expires_at) => {
-                    if expires_at > timestamp {
+                    if expires_at > latest_ledger_block_timestamp {
                         expiration_in_future_count += 1;
                     } else {
                         // This should never happen, since the allowance returned from the ledger
@@ -811,9 +827,33 @@ where
             now.elapsed()
         );
         println!(
-            "allowances with no expiration: {}, expiration in future: {}, expiration in past: {}",
-            no_expiration_count, expiration_in_future_count, expiration_in_past_count
+            "allowances with no expiration: {no_expiration_count}, expiration in future: {expiration_in_future_count}, expiration in past: {expiration_in_past_count}"
         );
+        assert_eq!(
+            self.transactions, num_ledger_blocks,
+            "Mismatch in number of transactions (InMemoryLedger: {}, vs StateMachine ledger: {})",
+            self.transactions, num_ledger_blocks
+        );
+        assert_eq!(
+            self.balances.len() as u64,
+            actual_num_balances,
+            "Mismatch in number of balances (InMemoryLedger: {}, vs StateMachine ledger: {})",
+            self.balances.len(),
+            actual_num_balances
+        );
+        // The metric value for the number of allowances does not check if any allowances have
+        // expired since the last transactions was processed, and the current time. Therefore, for
+        // this test, only compare the number of expected allowances with the ledger metric if
+        // allowances were recently purged, i.e., if a transaction was recently processed.
+        if allowances_recently_purged == AllowancesRecentlyPurged::Yes {
+            assert_eq!(
+                self.allowances.len() as u64,
+                actual_num_approvals,
+                "Mismatch in number of approvals (InMemoryLedger: {}, vs StateMachine ledger: {})",
+                self.allowances.len(),
+                actual_num_approvals,
+            );
+        }
     }
 }
 
@@ -827,15 +867,21 @@ pub fn verify_ledger_state<Tokens>(
     env: &StateMachine,
     ledger_id: CanisterId,
     burns_without_spender: Option<BurnsWithoutSpender<Account>>,
+    allowances_recently_purged: AllowancesRecentlyPurged,
 ) where
     Tokens: Default + TokensType + PartialEq + std::fmt::Debug + std::fmt::Display,
 {
-    println!("verifying state of ledger {}", ledger_id);
+    println!("verifying state of ledger {ledger_id}");
     let blocks = get_all_ledger_and_archive_blocks::<Tokens>(env, ledger_id, None, None);
     println!("retrieved all ledger and archive blocks");
     let mut expected_ledger_state = InMemoryLedger::new(burns_without_spender);
     expected_ledger_state.consume_blocks(&blocks);
     println!("recreated expected ledger state");
-    expected_ledger_state.verify_balances_and_allowances(env, ledger_id, blocks.len() as u64);
+    expected_ledger_state.verify_balances_and_allowances(
+        env,
+        ledger_id,
+        blocks.len() as u64,
+        allowances_recently_purged,
+    );
     println!("ledger state verified successfully");
 }

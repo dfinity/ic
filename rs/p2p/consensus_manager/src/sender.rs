@@ -1,5 +1,5 @@
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{HashMap, hash_map::Entry},
     marker::PhantomData,
     panic,
     sync::Arc,
@@ -7,11 +7,11 @@ use std::{
 };
 
 use axum::http::Request;
-use backoff::{backoff::Backoff, ExponentialBackoffBuilder};
+use backoff::{ExponentialBackoffBuilder, backoff::Backoff};
 use bytes::Bytes;
 use ic_base_types::NodeId;
 use ic_interfaces::p2p::consensus::{ArtifactAssembler, ArtifactTransmit, ArtifactWithOpt};
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_quic_transport::{ConnId, Shutdown, Transport};
 use ic_types::artifact::{IdentifiableArtifact, PbArtifact};
@@ -26,7 +26,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
-use crate::{metrics::ConsensusManagerMetrics, uri_prefix, CommitId, SlotNumber};
+use crate::{CommitId, SlotNumber, metrics::ConsensusManagerMetrics, uri_prefix};
 
 use self::available_slot_set::{AvailableSlot, AvailableSlotSet};
 
@@ -47,7 +47,7 @@ fn panic_on_join_err<T>(result: Result<T, JoinError>) -> T {
             if err.is_panic() {
                 panic::resume_unwind(err.into_panic());
             } else {
-                panic!("Join error: {:?}", err);
+                panic!("Join error: {err:?}");
             }
         }
     }
@@ -68,10 +68,10 @@ pub struct ConsensusManagerSender<Artifact: IdentifiableArtifact, WireArtifact, 
 }
 
 impl<
-        Artifact: IdentifiableArtifact,
-        WireArtifact: PbArtifact,
-        Assembler: ArtifactAssembler<Artifact, WireArtifact>,
-    > ConsensusManagerSender<Artifact, WireArtifact, Assembler>
+    Artifact: IdentifiableArtifact,
+    WireArtifact: PbArtifact,
+    Assembler: ArtifactAssembler<Artifact, WireArtifact>,
+> ConsensusManagerSender<Artifact, WireArtifact, Assembler>
 {
     pub fn run(
         log: ReplicaLogger,
@@ -157,12 +157,15 @@ impl<
     }
 
     fn handle_abort_transmit(&mut self, id: &Artifact::Id) {
-        if let Some((cancellation_token, free_slot)) = self.active_slots.remove(id) {
-            self.metrics.send_view_consensus_purge_active_total.inc();
-            cancellation_token.cancel();
-            self.slot_manager.push(free_slot);
-        } else {
-            self.metrics.send_view_consensus_dup_purge_total.inc();
+        match self.active_slots.remove(id) {
+            Some((cancellation_token, free_slot)) => {
+                self.metrics.send_view_consensus_purge_active_total.inc();
+                cancellation_token.cancel();
+                self.slot_manager.push(free_slot);
+            }
+            _ => {
+                self.metrics.send_view_consensus_dup_purge_total.inc();
+            }
         }
     }
 
@@ -320,7 +323,7 @@ async fn send_transmit_to_peer(
 
     loop {
         let request = Request::builder()
-            .uri(format!("/{}/update", route))
+            .uri(format!("/{route}/update"))
             .body(message.clone())
             .expect("Building from typed values");
 
@@ -337,7 +340,7 @@ async fn send_transmit_to_peer(
 mod available_slot_set {
     use super::SLOT_TABLE_THRESHOLD;
     use crate::{ConsensusManagerMetrics, SlotNumber};
-    use ic_logger::{warn, ReplicaLogger};
+    use ic_logger::{ReplicaLogger, warn};
 
     pub struct AvailableSlot(u64);
 
@@ -405,12 +408,12 @@ mod available_slot_set {
 #[allow(clippy::disallowed_methods)]
 #[cfg(test)]
 mod tests {
-    use anyhow::anyhow;
     use axum::http::Response;
     use ic_interfaces::p2p::consensus::{AssembleResult, Peers};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::{consensus::U64Artifact, mocks::MockTransport};
+    use ic_quic_transport::P2PError;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
     use mockall::Sequence;
@@ -561,7 +564,7 @@ mod tests {
             mock_transport
                 .expect_rpc()
                 .times(5)
-                .returning(move |_, _| Err(anyhow!("")))
+                .returning(move |_, _| Err(P2PError::from("".to_string())))
                 .in_sequence(&mut seq);
             mock_transport.expect_rpc().times(1).returning(move |n, _| {
                 push_tx.send(*n).unwrap();

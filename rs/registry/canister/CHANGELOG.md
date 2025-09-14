@@ -11,6 +11,107 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-09-05: Proposal 138371
+
+http://dashboard.internetcomputer.org/proposal/138371
+
+## Added
+* New update method that will be used for node swapping feature.
+* `migrate_canisters` returns the new registry version.
+
+
+# 2025-08-22: Proposal 138164
+
+http://dashboard.internetcomputer.org/proposal/138164
+
+## Removed
+
+* The single entry routing table is no longer updated when there are changes to the routing table.
+
+
+# 2025-08-15: Proposal 137917
+
+http://dashboard.internetcomputer.org/proposal/137917
+
+## Added
+
+- Added AMD SEV launch measurements to ReplicaVersionRecord, replacing the previous
+  `guest_launch_measurement_sha256_hex` field with a new `guest_launch_measurements` field that can contain multiple
+  measurements with metadata.
+
+## Removed
+
+- Removed the `guest_launch_measurement_sha256_hex` field from ReplicaVersionRecord in favor of the
+  `guest_launch_measurements` field.
+
+
+# 2025-07-18: Proposal 137500
+
+https://dashboard.internetcomputer.org/proposal/137500
+
+Back fill some node records with reward type.
+
+
+# 2025-07-11: Proposal 137347
+
+http://dashboard.internetcomputer.org/proposal/137347
+
+## Changed
+
+* `create_subnet` now returns the new subnet's ID.
+
+
+# 2025-07-06: Proposal 137254
+
+http://dashboard.internetcomputer.org/proposal/137254
+
+## Added
+
+* There is now a `canister_cycles_cost_schedule` field in `CreateSubnetPayload`
+  and `SubnetRecord`. This isn't used yet, but it will be in the not too distant
+  future, for [subnet rental].
+
+[subnet rental]: https://dashboard.internetcomputer.org/proposal/128820
+
+
+# 2025-06-20: Proposal 137081
+
+https://dashboard.internetcomputer.org/proposal/137081
+
+### Changed
+
+* The `check_routing_table_invariants` method now checks the new canister_ranges_
+  and ensures they match the `routing_table` record. The old invariant check will be
+  removed once `routing_table` is removed.
+
+
+# 2025-06-13: Proposal 136988
+
+http://dashboard.internetcomputer.org/proposal/136988
+
+## Added
+
+- The RoutingTable is now also broken up into `canister_ranges_*` records, instead of only in a single
+  `routing_table` record. This will allow clients to migrate to the new format incrementally, as both will continue
+  to be available until all known clients have migrated to the new format, at which point `routing_table` will be
+  removed.
+
+## Changed
+
+* When performing "large" mutations (greater than approximately 1.3 MiB),
+  chunking is used. This has no effect on how mutations are written. Rather,
+  this affects how large mutations and records are read. For non-large
+  mutations, this has no effect. Chunking means that to fetch a large mutation
+  or record, clients must make follow up `get_chunk` canister method calls.
+  Because of this requirement, this is a breaking change (for clients who read
+  large mutations/records). This breaking change and how clients migrate was
+  [announced at the end of March in a forum][chunking] (and various other
+  channels). This release marks the end of the "migration window" described in
+  the aforelinked forum post.
+
+[chunking]: https://forum.dfinity.org/t/breaking-registry-changes-for-large-records/42893?u=daniel-wong
+
+
 # 2025-06-06: Proposal 136894
 
 http://dashboard.internetcomputer.org/proposal/136894

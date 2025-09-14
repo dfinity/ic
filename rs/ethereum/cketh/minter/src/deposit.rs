@@ -1,17 +1,17 @@
 use crate::eth_logs::{
-    report_transaction_error, LogParser, LogScraping, ReceivedErc20LogScraping,
-    ReceivedEthLogScraping, ReceivedEthOrErc20LogScraping, ReceivedEvent, ReceivedEventError,
+    LogParser, LogScraping, ReceivedErc20LogScraping, ReceivedEthLogScraping,
+    ReceivedEthOrErc20LogScraping, ReceivedEvent, ReceivedEventError, report_transaction_error,
 };
-use crate::eth_rpc::{is_response_too_large, FixedSizeData, LogEntry, Topic};
+use crate::eth_rpc::{Topic, is_response_too_large};
 use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
 use crate::guard::TimerGuard;
 use crate::logs::{DEBUG, INFO};
 use crate::numeric::{BlockNumber, BlockRangeInclusive, LedgerMintIndex};
 use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::{
-    audit::process_event, event::EventType, mutate_state, read_state, State, TaskType,
+    State, TaskType, audit::process_event, event::EventType, mutate_state, read_state,
 };
-use evm_rpc_client::{BlockTag, GetLogsArgs, Hex20, Hex32, Nat256};
+use evm_rpc_client::{BlockTag, GetLogsArgs, Hex20, Hex32, LogEntry, Nat256};
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use num_traits::ToPrimitive;
@@ -127,7 +127,9 @@ async fn mint() {
             INFO,
             "Failed to mint {error_count} events, rescheduling the minting"
         );
-        ic_cdk_timers::set_timer(crate::MINT_RETRY_DELAY, || ic_cdk::spawn(mint()));
+        ic_cdk_timers::set_timer(crate::MINT_RETRY_DELAY, || {
+            ic_cdk::futures::spawn_017_compat(mint())
+        });
     }
 }
 
@@ -330,7 +332,9 @@ pub fn register_deposit_events(
         }
     }
     if read_state(State::has_events_to_mint) {
-        ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(mint()));
+        ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+            ic_cdk::futures::spawn_017_compat(mint())
+        });
     }
     for error in errors {
         if let ReceivedEventError::InvalidEventSource { source, error } = &error {
@@ -349,14 +353,11 @@ pub fn register_deposit_events(
 }
 
 fn into_evm_topic(topics: Vec<Topic>) -> Vec<Vec<Hex32>> {
-    let into_hex_32 = |data: FixedSizeData| Hex32::from(data.0);
     let mut result = Vec::with_capacity(topics.len());
     for topic in topics {
         result.push(match topic {
-            Topic::Single(single_topic) => vec![into_hex_32(single_topic)],
-            Topic::Multiple(multiple_topic) => {
-                multiple_topic.into_iter().map(into_hex_32).collect()
-            }
+            Topic::Single(single_topic) => vec![single_topic],
+            Topic::Multiple(multiple_topic) => multiple_topic.into_iter().collect(),
         });
     }
     result

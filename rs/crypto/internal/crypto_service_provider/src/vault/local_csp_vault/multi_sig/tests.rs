@@ -1,7 +1,10 @@
 //! Tests of Multi-Signature operations in the CSP vault.
+use crate::Csp;
+use crate::KeyId;
+use crate::LocalCspVault;
 use crate::api::CspSigner;
-use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::public_key_store::PublicKeySetOnceError;
+use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::types::CspPublicKey;
 use crate::vault::api::BasicSignatureCspVault;
@@ -9,11 +12,8 @@ use crate::vault::api::MultiSignatureCspVault;
 use crate::vault::api::PublicKeyStoreCspVault;
 use crate::vault::api::SecretKeyStoreCspVault;
 use crate::vault::api::{CspMultiSignatureError, CspMultiSignatureKeygenError};
-use crate::vault::local_csp_vault::multi_sig::committee_signing_pk_to_proto;
 use crate::vault::local_csp_vault::multi_sig::SecretKeyStoreInsertionError;
-use crate::Csp;
-use crate::KeyId;
-use crate::LocalCspVault;
+use crate::vault::local_csp_vault::multi_sig::committee_signing_pk_to_proto;
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::AlgorithmId;
@@ -80,8 +80,8 @@ fn should_fail_with_internal_error_if_committee_signing_key_already_set() {
 }
 
 #[test]
-fn should_fail_with_transient_internal_error_if_node_signing_secret_key_persistence_fails_due_to_io_error(
-) {
+fn should_fail_with_transient_internal_error_if_node_signing_secret_key_persistence_fails_due_to_io_error()
+ {
     let mut sks_returning_io_error = MockSecretKeyStore::new();
     let expected_io_error = "cannot write to file".to_string();
     sks_returning_io_error
@@ -104,8 +104,8 @@ fn should_fail_with_transient_internal_error_if_node_signing_secret_key_persiste
 }
 
 #[test]
-fn should_fail_with_internal_error_if_node_signing_secret_key_persistence_fails_due_to_serialization_error(
-) {
+fn should_fail_with_internal_error_if_node_signing_secret_key_persistence_fails_due_to_serialization_error()
+ {
     let mut sks_returning_serialization_error = MockSecretKeyStore::new();
     let expected_serialization_error = "cannot serialize keys".to_string();
     sks_returning_serialization_error
@@ -143,7 +143,7 @@ fn should_fail_with_internal_error_if_committee_signing_key_generated_more_than_
 #[test]
 fn should_fail_with_transient_internal_error_if_committee_signing_key_persistence_fails() {
     let mut pks_returning_io_error = MockPublicKeyStore::new();
-    let io_error = std::io::Error::new(std::io::ErrorKind::Other, "oh no!");
+    let io_error = std::io::Error::other("oh no!");
     pks_returning_io_error
         .expect_set_once_committee_signing_pubkey()
         .return_once(|_key| Err(PublicKeySetOnceError::Io(io_error)));
@@ -166,9 +166,11 @@ fn should_generate_verifiable_pop() {
         .expect("Failed to generate key pair with PoP");
     let verifier = Csp::builder_for_test().build();
 
-    assert!(verifier
-        .verify_pop(&pop, AlgorithmId::MultiBls12_381, public_key)
-        .is_ok());
+    assert!(
+        verifier
+            .verify_pop(&pop, AlgorithmId::MultiBls12_381, public_key)
+            .is_ok()
+    );
 }
 
 #[test]
@@ -183,7 +185,7 @@ fn should_multi_sign_and_verify_with_generated_key() {
     let key_id = KeyId::from(&csp_pub_key);
 
     let msg_len: usize = rng.gen_range(0..1024);
-    let msg: Vec<u8> = (0..msg_len).map(|_| rng.gen::<u8>()).collect();
+    let msg: Vec<u8> = (0..msg_len).map(|_| rng.r#gen::<u8>()).collect();
 
     let verifier = Csp::builder_for_test()
         .with_vault(
@@ -196,13 +198,17 @@ fn should_multi_sign_and_verify_with_generated_key() {
         .multi_sign(AlgorithmId::MultiBls12_381, msg.clone(), key_id)
         .expect("failed to generate signature");
 
-    assert!(verifier
-        .verify(&sig, &msg, AlgorithmId::MultiBls12_381, csp_pub_key.clone())
-        .is_ok());
+    assert!(
+        verifier
+            .verify(&sig, &msg, AlgorithmId::MultiBls12_381, csp_pub_key.clone())
+            .is_ok()
+    );
 
-    assert!(verifier
-        .verify_pop(&csp_pop, AlgorithmId::MultiBls12_381, csp_pub_key)
-        .is_ok());
+    assert!(
+        verifier
+            .verify_pop(&csp_pop, AlgorithmId::MultiBls12_381, csp_pub_key)
+            .is_ok()
+    );
 }
 
 #[test]

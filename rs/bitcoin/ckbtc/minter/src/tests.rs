@@ -1,4 +1,5 @@
 use crate::{
+    BuildTxError, CacheWithExpiration, MINTER_ADDRESS_DUST_LIMIT, Network,
     address::BitcoinAddress,
     build_unsigned_transaction, estimate_retrieve_btc_fee, evaluate_minter_fee, fake_sign, greedy,
     lifecycle::init::InitArgs,
@@ -8,7 +9,7 @@ use crate::{
         SubmittedBtcTransaction,
     },
     test_fixtures::arbitrary,
-    tx, BuildTxError, CacheWithExpiration, Network, MINTER_ADDRESS_DUST_LIMIT,
+    tx,
 };
 use bitcoin::network::constants::Network as BtcNetwork;
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
@@ -252,7 +253,7 @@ fn should_have_same_input_and_output_count() {
     let out2_addr = BitcoinAddress::P2wpkhV0([2; 20]);
     let fee_per_vbyte = 10000;
 
-    let (tx, change_output, _) = build_unsigned_transaction(
+    let (tx, change_output, _, _) = build_unsigned_transaction(
         &mut available_utxos,
         vec![(out1_addr.clone(), 100_000), (out2_addr.clone(), 99_999)],
         minter_addr.clone(),
@@ -296,7 +297,7 @@ fn test_min_change_amount() {
     let out2_addr = BitcoinAddress::P2wpkhV0([2; 20]);
     let fee_per_vbyte = 10000;
 
-    let (tx, change_output, _) = build_unsigned_transaction(
+    let (tx, change_output, _, _) = build_unsigned_transaction(
         &mut available_utxos,
         vec![
             (out1_addr.clone(), utxo_1.value),
@@ -313,11 +314,11 @@ fn test_min_change_amount() {
 
     assert_eq!(tx.outputs.len(), 3);
     let fee_shares = {
-        let total_fee = fee + minter_fee;
-        let avg_fee_per_share = total_fee / 2;
-        let share_1 = avg_fee_per_share + (total_fee % 2);
+        let withdrawal_fee = fee + minter_fee;
+        let avg_fee_per_share = withdrawal_fee / 2;
+        let share_1 = avg_fee_per_share + (withdrawal_fee % 2);
         let share_2 = avg_fee_per_share;
-        assert_eq!(share_1 + share_2, total_fee);
+        assert_eq!(share_1 + share_2, withdrawal_fee);
         [share_1, share_2]
     };
 
@@ -416,7 +417,7 @@ fn test_no_dust_in_change_output() {
 
     for change in 1..=100 {
         let mut available_utxos = btreeset! {utxo.clone()};
-        let (tx, change_output, _utxos) = build_unsigned_transaction(
+        let (tx, change_output, _withdrawal_fee, _utxos) = build_unsigned_transaction(
             &mut available_utxos,
             vec![(out1_addr.clone(), utxo.value - change)],
             minter_addr.clone(),
@@ -509,12 +510,12 @@ proptest! {
         lock_time in any::<u32>(),
     ) {
         let arb_tx = tx::UnsignedTransaction { inputs, outputs, lock_time };
-        println!("{:?}", arb_tx);
+        println!("{arb_tx:?}");
         let btc_tx = unsigned_tx_to_bitcoin_tx(&arb_tx);
         println!("{:?}", btc_tx.serialize());
 
         let tx_bytes = tx::encode_into(&arb_tx, Vec::<u8>::new());
-        println!("{:?}", tx_bytes);
+        println!("{tx_bytes:?}");
         let decoded_btc_tx = bitcoin::Transaction::deserialize(&tx_bytes).expect("failed to deserialize an unsigned transaction");
 
         prop_assert_eq!(btc_tx.serialize(), tx_bytes);
@@ -574,12 +575,12 @@ proptest! {
         lock_time in any::<u32>(),
     ) {
         let arb_tx = tx::SignedTransaction { inputs, outputs, lock_time };
-        println!("{:?}", arb_tx);
+        println!("{arb_tx:?}");
         let btc_tx = signed_tx_to_bitcoin_tx(&arb_tx);
         println!("{:?}", btc_tx.serialize());
 
         let tx_bytes = tx::encode_into(&arb_tx, Vec::<u8>::new());
-        println!("{:?}", tx_bytes);
+        println!("{tx_bytes:?}");
         let decoded_btc_tx = bitcoin::Transaction::deserialize(&tx_bytes).expect("failed to deserialize a signed transaction");
 
         prop_assert_eq!(btc_tx.serialize(), tx_bytes);
@@ -606,7 +607,7 @@ proptest! {
         let fee_estimate = estimate_retrieve_btc_fee(&utxos, Some(target), fee_per_vbyte);
         let fee_estimate = fee_estimate.minter_fee + fee_estimate.bitcoin_fee;
 
-        let (unsigned_tx, _, _) = build_unsigned_transaction(
+        let (unsigned_tx, _, _, _) = build_unsigned_transaction(
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
             minter_address,
@@ -645,7 +646,7 @@ proptest! {
     ) {
         prop_assume!(dst_pkhash != main_pkhash);
 
-        let (unsigned_tx, _, _) = build_unsigned_transaction(
+        let (unsigned_tx, _, _, _) = build_unsigned_transaction(
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
             BitcoinAddress::P2wpkhV0(main_pkhash),
@@ -672,7 +673,7 @@ proptest! {
             .map(|utxo| (utxo.outpoint.clone(), utxo.value))
             .collect();
         let minter_address = BitcoinAddress::P2wpkhV0(main_pkhash);
-        let (unsigned_tx, change_output, _) = build_unsigned_transaction(
+        let (unsigned_tx, change_output, _, _) = build_unsigned_transaction(
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
             minter_address.clone(),
@@ -805,7 +806,7 @@ proptest! {
         }
         let fee_per_vbyte = 100_000u64;
 
-        let (tx, change_output, used_utxos) = build_unsigned_transaction(
+        let (tx, change_output, withdrawal_fee, used_utxos) = build_unsigned_transaction(
             &mut state.available_utxos,
             requests.iter().map(|r| (r.address.clone(), r.amount)).collect(),
             BitcoinAddress::P2wpkhV0(main_pkhash),
@@ -816,12 +817,13 @@ proptest! {
         let submitted_at = 1_234_567_890;
 
         state.push_submitted_transaction(SubmittedBtcTransaction {
-            requests: requests.clone(),
+            requests: requests.clone().into(),
             txid: txids[0],
             used_utxos: used_utxos.clone(),
             submitted_at,
             change_output: Some(change_output),
             fee_per_vbyte: Some(fee_per_vbyte),
+            withdrawal_fee: Some(withdrawal_fee),
         });
 
         state.check_invariants().expect("violated invariants");
@@ -829,7 +831,7 @@ proptest! {
         for i in 1..=resubmission_chain_length {
             let prev_txid = txids.last().unwrap();
             // Build a replacement transaction
-            let (tx, change_output, _used_utxos) = build_unsigned_transaction(
+            let (tx, change_output, withdrawal_fee, _used_utxos) = build_unsigned_transaction(
                 &mut used_utxos.clone().into_iter().collect(),
                 requests.iter().map(|r| (r.address.clone(), r.amount)).collect(),
                 BitcoinAddress::P2wpkhV0(main_pkhash),
@@ -840,12 +842,13 @@ proptest! {
             let new_txid = tx.txid();
 
             state.replace_transaction(prev_txid, SubmittedBtcTransaction {
-                requests: requests.clone(),
+                requests: requests.clone().into(),
                 txid: new_txid,
                 used_utxos: used_utxos.clone(),
                 submitted_at,
                 change_output: Some(change_output),
                 fee_per_vbyte: Some(fee_per_vbyte),
+                withdrawal_fee: Some(withdrawal_fee),
             });
 
             for txid in &txids {
@@ -1120,8 +1123,8 @@ fn test_build_account_to_utxos_table_pagination() {
 
 #[test]
 fn serialize_network_preserves_capitalization() {
-    use ciborium::{de::from_reader, ser::into_writer, Value};
     use Network::*;
+    use ciborium::{Value, de::from_reader, ser::into_writer};
     // We use CBOR serialization for events storage. The test below
     // checks if the serialization/deserialization of Network preserves
     // capitalization.

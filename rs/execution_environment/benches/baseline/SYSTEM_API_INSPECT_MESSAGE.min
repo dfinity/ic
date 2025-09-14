@@ -1,8 +1,0 @@
-test inspect/wasm32/ic0_msg_method_name_size() ... bench:    70469763 ns/iter (+/- 122184)
-test inspect/wasm64/ic0_msg_method_name_size() ... bench:    66378905 ns/iter (+/- 91098)
-test inspect/wasm32/ic0_msg_method_name_copy()/1B ... bench:   166897099 ns/iter (+/- 417815)
-test inspect/wasm64/ic0_msg_method_name_copy()/1B ... bench:   161130823 ns/iter (+/- 1391797)
-test inspect/wasm32/ic0_msg_method_name_copy()/20B ... bench:   169620287 ns/iter (+/- 561651)
-test inspect/wasm64/ic0_msg_method_name_copy()/20B ... bench:   174916507 ns/iter (+/- 9824293)
-test inspect/wasm32/ic0_accept_message()* ... bench:      142014 ns/iter (+/- 3060)
-test inspect/wasm64/ic0_accept_message()* ... bench:      142694 ns/iter (+/- 342)

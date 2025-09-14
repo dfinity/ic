@@ -1,13 +1,12 @@
 use crate::{
-    cli::wait_for_confirmation,
+    cli::{consent_given, wait_for_confirmation},
     command_helper::exec_cmd,
     error::{RecoveryError, RecoveryResult},
     ssh_helper,
 };
 use ic_http_utils::file_downloader::FileDownloader;
-use ic_replay::consent_given;
 use ic_types::ReplicaVersion;
-use slog::{info, warn, Logger};
+use slog::{Logger, info, warn};
 use std::{
     fs::{self, File, ReadDir},
     io::Write,
@@ -21,16 +20,14 @@ use std::{
 /// Returns a [PathBuf] to the downloaded binary.
 pub async fn download_binary(
     logger: &Logger,
-    replica_version: ReplicaVersion,
+    replica_version: &ReplicaVersion,
     binary_name: String,
     target_dir: &Path,
 ) -> RecoveryResult<PathBuf> {
-    let binary_url = format!(
-        "https://download.dfinity.systems/ic/{}/release/{}.gz",
-        replica_version, binary_name
-    );
+    let binary_url =
+        format!("https://download.dfinity.systems/ic/{replica_version}/release/{binary_name}.gz");
 
-    let mut file = target_dir.join(format!("{}.gz", binary_name));
+    let mut file = target_dir.join(format!("{binary_name}.gz"));
 
     info!(
         logger,
@@ -93,7 +90,8 @@ pub fn rsync_with_retries(
                     // before re-trying rsync.
                     info!(logger, "Retrying in 10 seconds...");
                     std::thread::sleep(Duration::from_secs(10));
-                } else if !consent_given("Do you want to retry the  download for this node?") {
+                } else if !consent_given(logger, "Do you want to retry the download for this node?")
+                {
                     return Err(RecoveryError::RsyncFailed);
                 }
             }
@@ -147,7 +145,7 @@ where
 {
     let mut rsync = Command::new("rsync");
     rsync.arg("--delete").arg("-acP").arg("--no-g");
-    rsync.args(excludes.into_iter().map(|e| format!("--exclude={}", e)));
+    rsync.args(excludes.into_iter().map(|e| format!("--exclude={e}")));
     rsync.arg(src).arg(target);
     rsync.arg("-e").arg(ssh_helper::get_rsync_ssh_arg(key_file));
 
@@ -156,7 +154,7 @@ where
 
 pub fn write_file(file: &Path, content: String) -> RecoveryResult<()> {
     let mut f = File::create(file).map_err(|e| RecoveryError::file_error(file, e))?;
-    write!(f, "{}", content).map_err(|e| RecoveryError::file_error(file, e))?;
+    write!(f, "{content}").map_err(|e| RecoveryError::file_error(file, e))?;
     Ok(())
 }
 
@@ -255,6 +253,8 @@ mod tests {
                 "/tmp/src",
                 "/tmp/target",
                 "-e",
-                "ssh -o StrictHostKeyChecking=no -o NumberOfPasswordPrompts=0 -o ConnectionAttempts=4 -o ConnectTimeout=15 -A -i /tmp/key_file"]);
+                "ssh -o StrictHostKeyChecking=no -o NumberOfPasswordPrompts=0 -o ConnectionAttempts=4 -o ConnectTimeout=15 -A -i \"/tmp/key_file\""
+            ]
+        );
     }
 }

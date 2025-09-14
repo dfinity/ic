@@ -3,47 +3,67 @@ load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/boundary_node/certificate_issuance/certificate_orchestrator_interface",
-    "@crate_index//:anyhow",
-    "@crate_index//:bincode",
-    "@crate_index//:candid",
-    "@crate_index//:cfg-if",
-    "@crate_index//:hex",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:ic-cdk-timers",
-    "@crate_index//:ic-certified-map",
-    "@crate_index//:ic-stable-structures",
-    "@crate_index//:mockall",
-    "@crate_index//:priority-queue",
-    "@crate_index//:prometheus",
-    "@crate_index//:publicsuffix",
-    "@crate_index//:serde",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:sha2",
-    "@crate_index//:thiserror",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:async-trait",
-]
-
 rust_canister(
     name = "certificate_orchestrator",
     srcs = glob(["src/**/*.rs"]),
     compile_data = ["public_suffix_list.dat"],
     crate_name = "certificate_orchestrator",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
     service_file = ":interface.did",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/boundary_node/certificate_issuance/certificate_orchestrator_interface",
+        "@crate_index//:anyhow",
+        "@crate_index//:bincode",
+        "@crate_index//:candid",
+        "@crate_index//:cfg-if",
+        "@crate_index//:hex",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic-certified-map",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:mockall",
+        "@crate_index//:priority-queue",
+        "@crate_index//:prometheus",
+        "@crate_index//:publicsuffix",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:sha2",
+        "@crate_index//:thiserror",
+    ],
 )
 
 rust_test(
     name = "certificate_orchestrator_test",
     compile_data = ["interface.did"],
     crate = ":_wasm_certificate_orchestrator",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + ["@crate_index//:candid_parser"],
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:async-trait",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/boundary_node/certificate_issuance/certificate_orchestrator_interface",
+        "@crate_index//:anyhow",
+        "@crate_index//:bincode",
+        "@crate_index//:candid",
+        "@crate_index//:candid_parser",
+        "@crate_index//:cfg-if",
+        "@crate_index//:hex",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic-certified-map",
+        "@crate_index//:ic-stable-structures",
+        "@crate_index//:mockall",
+        "@crate_index//:priority-queue",
+        "@crate_index//:prometheus",
+        "@crate_index//:publicsuffix",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:sha2",
+        "@crate_index//:thiserror",
+    ],
 )

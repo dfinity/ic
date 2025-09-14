@@ -273,8 +273,8 @@ pub const SAMPLE_CONFIG: &str = r#"
     // =================================
     // Configuration of Malicious behavior.
     // =================================
-    malicious_behaviour: {
-       allow_malicious_behaviour: false,
+    malicious_behavior: {
+       allow_malicious_behavior: false,
        maliciously_seg_fault: false,
 
        malicious_flags: {
@@ -403,7 +403,7 @@ mod tests {
                 for &alternative in group.iter() {
                     let full_config = [&prefix, alternative, &suffix].join("\n");
                     if let Err(err) = json5::from_str::<Config>(&full_config) {
-                        panic!("Failed to parse config variant {}: {}", full_config, err);
+                        panic!("Failed to parse config variant {full_config}: {err}");
                     }
                 }
             }

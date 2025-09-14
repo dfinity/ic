@@ -10,7 +10,7 @@ impl std::str::FromStr for ClapSubnetId {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         PrincipalId::from_str(s)
-            .map_err(|e| format!("Unable to parse subnet_id {:?}", e))
+            .map_err(|e| format!("Unable to parse subnet_id {e:?}"))
             .map(SubnetId::from)
             .map(ClapSubnetId)
     }
@@ -40,6 +40,10 @@ pub struct ReplayToolArgs {
     #[clap(long)]
     /// The replay will stop at this height and make a checkpoint.
     pub replay_until_height: Option<u64>,
+
+    #[clap(long)]
+    /// Whether or not to skip prompts for user input.
+    pub skip_prompts: bool,
 }
 
 #[derive(Clone, Subcommand)]

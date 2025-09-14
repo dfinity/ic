@@ -30,8 +30,8 @@ use crate::consensus::{
 };
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
-    bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto, get_notarization_delay_settings,
-    membership::Membership, pool_reader::PoolReader, RoundRobin,
+    RoundRobin, bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto,
+    get_notarization_delay_settings, membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
@@ -46,16 +46,16 @@ use ic_interfaces::{
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
-use ic_interfaces_registry::{RegistryClient, POLLING_PERIOD};
-use ic_interfaces_state_manager::{StateManager, StateReader};
-use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
+use ic_interfaces_registry::{POLLING_PERIOD, RegistryClient};
+use ic_interfaces_state_manager::StateManager;
+use ic_logger::{ReplicaLogger, debug, error, info, trace, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    artifact::ConsensusMessageId, consensus::ConsensusMessageHashable,
+    Time, artifact::ConsensusMessageId, consensus::ConsensusMessageHashable,
     malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
-    replica_version::ReplicaVersion, Time,
+    replica_version::ReplicaVersion,
 };
 pub use metrics::ValidatorMetrics;
 use std::{
@@ -368,8 +368,8 @@ impl ConsensusImpl {
 
         // Check that this replica is listed as a receiver for every transcript type
         transcripts
-            .iter()
-            .map(|(_, transcript)| {
+            .values()
+            .map(|transcript| {
                 transcript
                     .committee
                     .get()
@@ -595,7 +595,6 @@ fn add_to_validated<T: ConsensusMessageHashable>(timestamp: Time, msg: Option<T>
 /// Implements the BouncerFactory interfaces for Consensus.
 pub struct ConsensusBouncer {
     message_routing: Arc<dyn MessageRouting>,
-    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     metrics: BouncerMetrics,
 }
 
@@ -604,12 +603,10 @@ impl ConsensusBouncer {
     pub fn new(
         metrics_registry: &MetricsRegistry,
         message_routing: Arc<dyn MessageRouting>,
-        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> Self {
         ConsensusBouncer {
             metrics: BouncerMetrics::new(metrics_registry, "consensus_pool"),
             message_routing,
-            state_reader,
         }
     }
 }
@@ -619,11 +616,7 @@ impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessageId, Pool> for Consensus
     fn new_bouncer(&self, pool: &Pool) -> Bouncer<ConsensusMessageId> {
         let _timer = self.metrics.update_duration.start_timer();
 
-        new_bouncer(
-            pool,
-            self.message_routing.expected_batch_height(),
-            self.state_reader.latest_certified_height(),
-        )
+        new_bouncer(pool, self.message_routing.expected_batch_height())
     }
 
     fn refresh_period(&self) -> Duration {
@@ -635,7 +628,7 @@ impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessageId, Pool> for Consensus
 mod tests {
     use super::*;
     use ic_config::artifact_pool::ArtifactPoolConfig;
-    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -650,7 +643,7 @@ mod tests {
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_types::{crypto::CryptoHash, CryptoHashOfState, Height, SubnetId};
+    use ic_types::{CryptoHashOfState, Height, SubnetId, crypto::CryptoHash};
     use std::sync::Arc;
 
     fn set_up_consensus_with_subnet_record(

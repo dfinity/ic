@@ -1,8 +1,9 @@
 #![allow(unused_imports)]
+#![allow(deprecated)]
 
 use crate::helpers::{init_async, is_api_boundary_node_principal};
 use crate::logs::export_logs_as_http_response;
-use crate::metrics::{export_metrics_as_http_response, METRICS};
+use crate::metrics::{METRICS, export_metrics_as_http_response};
 use crate::storage::SALT;
 use ic_cdk::api::call::{accept_message, method_name};
 use ic_cdk::{api::time, spawn};
@@ -66,7 +67,10 @@ fn get_salt() -> GetSaltResponse {
     Err(GetSaltError::Unauthorized)
 }
 
-#[query(decoding_quota = 10000)]
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => export_metrics_as_http_response(),
@@ -75,13 +79,23 @@ fn http_request(request: HttpRequest) -> HttpResponse {
     }
 }
 
+// Manually add a dummy method so that the Candid interface can be properly generated:
+//   `http_request: (HttpRequest) -> (HttpResponse) query;`
+// Without this dummy method, it will be `http_request: (blob) -> (HttpResponse) query;`
+// because of the `decode_with` option used above.
+#[::candid::candid_method(query, rename = "http_request")]
+#[allow(unused_variables)]
+fn __candid_method_http_request(request: HttpRequest) -> HttpResponse {
+    panic!("candid dummy function called")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn check_candid_interface_compatibility() {
-        use candid_parser::utils::{service_equal, CandidSource};
+        use candid_parser::utils::{CandidSource, service_equal};
 
         fn source_to_str(source: &CandidSource) -> String {
             match source {
@@ -104,14 +118,13 @@ mod tests {
                 Ok(_) => {}
                 Err(e) => {
                     eprintln!(
-                        "{} is not compatible with {}!\n\n\
-                {}:\n\
-                {}\n\n\
-                {}:\n\
-                {}\n",
-                        new_name, old_name, new_name, new_str, old_name, old_str
+                        "{new_name} is not compatible with {old_name}!\n\n\
+                {new_name}:\n\
+                {new_str}\n\n\
+                {old_name}:\n\
+                {old_str}\n"
                     );
-                    panic!("{:?}", e);
+                    panic!("{e:?}");
                 }
             }
         }

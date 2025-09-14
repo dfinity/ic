@@ -1,7 +1,9 @@
 use ic_crypto_internal_csp::Csp;
 use ic_interfaces::time_source::SysTimeSource;
 use ic_limits::INITIAL_NOTARY_DELAY;
-use ic_protobuf::registry::subnet::v1::{ChainKeyConfig, KeyConfig, SubnetRecord, SubnetType};
+use ic_protobuf::registry::subnet::v1::{
+    CanisterCyclesCostSchedule, ChainKeyConfig, KeyConfig, SubnetRecord, SubnetType,
+};
 use ic_protobuf::types::v1 as pb_types;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use rand::rngs::OsRng;
@@ -26,10 +28,10 @@ pub mod internal {
     use ic_config::crypto::{CryptoConfig, CspVaultType};
     use ic_crypto::{CryptoComponent, CryptoComponentImpl};
     use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
+    use ic_crypto_internal_csp::LocalCspVault;
     use ic_crypto_internal_csp::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
     use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
     use ic_crypto_internal_csp::vault::local_csp_vault::ProdLocalCspVault;
-    use ic_crypto_internal_csp::LocalCspVault;
     use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
     use ic_crypto_internal_logmon::metrics::CryptoMetrics;
     use ic_crypto_node_key_generation::{
@@ -52,7 +54,7 @@ pub mod internal {
     use ic_interfaces::time_source::TimeSource;
     use ic_interfaces_registry::RegistryClient;
     use ic_logger::replica_logger::no_op_logger;
-    use ic_logger::{new_logger, ReplicaLogger};
+    use ic_logger::{ReplicaLogger, new_logger};
     use ic_protobuf::registry::subnet::v1::SubnetListRecord;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::{
@@ -78,6 +80,7 @@ pub mod internal {
         ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs, ThresholdEcdsaSigShare,
         ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs, ThresholdSchnorrSigShare,
     };
+    use ic_types::crypto::threshold_sig::IcRootOfTrust;
     use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
     use ic_types::crypto::threshold_sig::ni_dkg::errors::{
         create_dealing_error::DkgCreateDealingError,
@@ -85,7 +88,6 @@ pub mod internal {
         load_transcript_error::DkgLoadTranscriptError, verify_dealing_error::DkgVerifyDealingError,
     };
     use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTranscript};
-    use ic_types::crypto::threshold_sig::IcRootOfTrust;
     use ic_types::crypto::vetkd::{
         VetKdArgs, VetKdEncryptedKey, VetKdEncryptedKeyShare, VetKdKeyShareCombinationError,
         VetKdKeyShareCreationError, VetKdKeyShareVerificationError, VetKdKeyVerificationError,
@@ -328,7 +330,7 @@ pub mod internal {
                 .generate_idkg_dealing_encryption_keys
                 .then(|| {
                     generate_idkg_dealing_encryption_keys(local_vault.as_ref()).unwrap_or_else(
-                        |e| panic!("Error generating I-DKG dealing encryption keys: {:?}", e),
+                        |e| panic!("Error generating I-DKG dealing encryption keys: {e:?}"),
                     )
                 });
             let tls_certificate = node_keys_to_generate
@@ -1111,7 +1113,9 @@ impl EcdsaSubnetConfig {
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: key_rotation_period
                         .map(|key_rotation_period| key_rotation_period.as_millis() as u64),
+                    max_parallel_pre_signature_transcripts_in_creation: None,
                 }),
+                canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             },
         }
     }

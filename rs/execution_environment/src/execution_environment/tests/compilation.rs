@@ -2,13 +2,13 @@ mod execution_tests {
     use crate::CompilationCostHandling;
     use ic_error_types::ErrorCode;
     use ic_replicated_state::{
-        canister_state::execution_state::{WasmBinary, WasmExecutionMode, WasmMetadata},
         ExecutionState, ExportedFunctions, Memory,
+        canister_state::execution_state::{WasmBinary, WasmExecutionMode, WasmMetadata},
     };
-    use ic_test_utilities_execution_environment::{wat_compilation_cost, ExecutionTestBuilder};
+    use ic_test_utilities_execution_environment::{ExecutionTestBuilder, wat_compilation_cost};
     use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_int_counter_vec};
-    use ic_types::methods::WasmMethod;
     use ic_types::Cycles;
+    use ic_types::{batch::CanisterCyclesCostSchedule, methods::WasmMethod};
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
     use std::path::PathBuf;
@@ -265,6 +265,7 @@ mod execution_tests {
                 - test.cycles_account_manager().execution_cost(
                     reduced_compilation_instructions,
                     test.subnet_size(),
+                    CanisterCyclesCostSchedule::Normal,
                     WasmExecutionMode::Wasm32 // Does not matter if it is Wasm64 or Wasm32 for this test.
                 )
         );
@@ -302,6 +303,7 @@ mod execution_tests {
                 - test.cycles_account_manager().execution_cost(
                     compilation_instructions,
                     test.subnet_size(),
+                    CanisterCyclesCostSchedule::Normal,
                     WasmExecutionMode::Wasm32 // Does not matter if it is Wasm64 or Wasm32 for this test.
                 )
         );

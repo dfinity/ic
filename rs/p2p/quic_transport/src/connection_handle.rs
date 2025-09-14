@@ -9,11 +9,11 @@ use prost::Message;
 use quinn::Connection;
 
 use crate::{
+    ConnId, MAX_MESSAGE_SIZE_BYTES, MessagePriority, P2PError, ResetStreamOnDrop,
     metrics::{
-        observe_conn_error, observe_read_to_end_error, observe_stopped_error, observe_write_error,
-        QuicTransportMetrics, INFALIBBLE,
+        INFALIBBLE, QuicTransportMetrics, observe_conn_error, observe_read_to_end_error,
+        observe_stopped_error, observe_write_error,
     },
-    ConnId, MessagePriority, ResetStreamOnDrop, MAX_MESSAGE_SIZE_BYTES,
 };
 
 static CONN_ID_SEQ: AtomicU64 = AtomicU64::new(1);
@@ -53,7 +53,7 @@ impl ConnectionHandle {
     /// where connections can be managed directly by the caller.
     ///
     /// Note: The method is cancel-safe.
-    pub async fn rpc(&self, request: Request<Bytes>) -> Result<Response<Bytes>, anyhow::Error> {
+    pub async fn rpc(&self, request: Request<Bytes>) -> Result<Response<Bytes>, P2PError> {
         let _timer = self
             .metrics
             .connection_handle_duration_seconds
@@ -131,7 +131,7 @@ impl ConnectionHandle {
 }
 
 // The function returns infallible error.
-fn to_response(response_bytes: Vec<u8>) -> Result<Response<Bytes>, anyhow::Error> {
+fn to_response(response_bytes: Vec<u8>) -> Result<Response<Bytes>, P2PError> {
     let response_proto = pb::HttpResponse::decode(response_bytes.as_slice())?;
     let status: u16 = response_proto.status_code.try_into()?;
 
@@ -183,11 +183,11 @@ mod tests {
     use assert_matches::assert_matches;
     use bytes::Bytes;
     use ic_p2p_test_utils::{
-        generate_self_signed_cert, turmoil::CustomUdp, SkipServerVerification,
+        SkipServerVerification, generate_self_signed_cert, turmoil::CustomUdp,
     };
     use quinn::{
-        crypto::rustls::QuicClientConfig, ClientConfig, Endpoint, EndpointConfig, ReadError,
-        ReadToEndError,
+        ClientConfig, Endpoint, EndpointConfig, ReadError, ReadToEndError,
+        crypto::rustls::QuicClientConfig,
     };
     use rstest::rstest;
     use std::{

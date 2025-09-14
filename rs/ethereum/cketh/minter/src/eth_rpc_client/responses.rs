@@ -1,6 +1,8 @@
 use crate::eth_rpc::Hash;
 use crate::numeric::{BlockNumber, GasAmount, Wei, WeiPerGas};
+use evm_rpc_client::TransactionReceipt as EvmTransactionReceipt;
 use minicbor::{Decode, Encode};
+use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
@@ -40,6 +42,25 @@ impl TransactionReceipt {
     }
 }
 
+impl From<EvmTransactionReceipt> for TransactionReceipt {
+    fn from(transaction_receipt: EvmTransactionReceipt) -> Self {
+        Self {
+            block_hash: Hash(transaction_receipt.block_hash.into()),
+            block_number: BlockNumber::from(transaction_receipt.block_number),
+            effective_gas_price: WeiPerGas::from(transaction_receipt.effective_gas_price),
+            gas_used: GasAmount::from(transaction_receipt.gas_used),
+            status: TransactionStatus::try_from(
+                transaction_receipt
+                    .status
+                    .and_then(|s| s.as_ref().0.to_u8())
+                    .expect("EvmTransactionReceipt.status should be Some(0) or Some(1)"),
+            )
+            .expect("EvmTransactionReceipt.status should be Some(0) or Some(1)"),
+            transaction_hash: Hash(transaction_receipt.transaction_hash.into()),
+        }
+    }
+}
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Decode, Deserialize, Encode, Serialize)]
 #[serde(try_from = "ethnum::u256", into = "ethnum::u256")]
 pub enum TransactionStatus {
@@ -72,7 +93,7 @@ impl TryFrom<u8> for TransactionStatus {
         match value {
             0 => Ok(TransactionStatus::Failure),
             1 => Ok(TransactionStatus::Success),
-            _ => Err(format!("invalid transaction status: {}", value)),
+            _ => Err(format!("invalid transaction status: {value}")),
         }
     }
 }
@@ -83,7 +104,7 @@ impl TryFrom<ethnum::u256> for TransactionStatus {
     fn try_from(value: ethnum::u256) -> Result<Self, Self::Error> {
         match value {
             ethnum::u256::ZERO | ethnum::u256::ONE => TransactionStatus::try_from(value.as_u8()),
-            _ => Err(format!("invalid transaction status: {}", value)),
+            _ => Err(format!("invalid transaction status: {value}")),
         }
     }
 }

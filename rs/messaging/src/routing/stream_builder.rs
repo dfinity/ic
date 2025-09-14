@@ -1,28 +1,28 @@
 use crate::message_routing::{
-    LatencyMetrics, MessageRoutingMetrics, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, LatencyMetrics, MessageRoutingMetrics,
 };
 use ic_error_types::RejectCode;
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
-use ic_logger::{error, warn, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_logger::{ReplicaLogger, error, warn};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    replicated_state::{
-        PeekableOutputIterator, ReplicatedStateMessageRouting, MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
-    },
     ReplicatedState, Stream,
+    replicated_state::{
+        MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN, PeekableOutputIterator, ReplicatedStateMessageRouting,
+    },
 };
 use ic_types::{
-    messages::{
-        Payload, RejectContext, Request, RequestOrResponse, Response,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES,
-    },
     CountBytes, SubnetId,
+    messages::{
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, Payload, RejectContext,
+        Request, RequestOrResponse, Response,
+    },
 };
 #[cfg(test)]
 use mockall::automock;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
-use std::collections::{btree_map, BTreeMap};
+use std::collections::{BTreeMap, btree_map};
 use std::sync::{Arc, Mutex};
 
 #[cfg(test)]
@@ -281,7 +281,6 @@ impl StreamBuilderImpl {
         // Tests whether a stream is over the message count limit, byte limit or (if
         // directed at a system subnet) over `2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT`.
         let is_at_limit = |stream: &btree_map::Entry<SubnetId, Stream>,
-                           is_local_message: bool,
                            destination_subnet_type: SubnetType|
          -> bool {
             let stream = match stream {
@@ -301,16 +300,13 @@ impl StreamBuilderImpl {
             // At limit if system subnet limit is hit. This is only enforced for non-local
             // streams to system subnets (i.e., excluding the loopback stream on system
             // subnets).
-            !is_local_message
-                && destination_subnet_type == SubnetType::System
+            destination_subnet_type == SubnetType::System
                 && stream_messages_len >= 2 * SYSTEM_SUBNET_STREAM_MSG_LIMIT
         };
 
         let mut streams = state.take_streams();
-        let routing_table = state.routing_table();
-        let subnet_types: BTreeMap<_, _> = state
-            .metadata
-            .network_topology
+        let network_topology = state.metadata.network_topology.clone();
+        let subnet_types: BTreeMap<_, _> = network_topology
             .subnets
             .iter()
             .map(|(subnet_id, topology)| (*subnet_id, topology.subnet_type))
@@ -344,17 +340,19 @@ impl StreamBuilderImpl {
             }
             last_output_size = output_size;
 
-            match routing_table.route(msg.receiver().get()) {
+            match network_topology.route(msg.receiver().get()) {
                 // Destination subnet found.
                 Some(dst_subnet_id) => {
                     let dst_stream_entry = streams.entry(dst_subnet_id);
-                    if is_at_limit(
-                        &dst_stream_entry,
-                        self.subnet_id == dst_subnet_id,
-                        *subnet_types
-                            .get(&dst_subnet_id)
-                            .unwrap_or(&SubnetType::Application),
-                    ) {
+                    let is_loopback_stream = self.subnet_id == dst_subnet_id;
+                    if !is_loopback_stream
+                        && is_at_limit(
+                            &dst_stream_entry,
+                            *subnet_types
+                                .get(&dst_subnet_id)
+                                .unwrap_or(&SubnetType::Application),
+                        )
+                    {
                         // Stream full, skip all other messages to this destination.
                         output_iter.exclude_queue();
                         continue;
@@ -410,13 +408,21 @@ impl StreamBuilderImpl {
                                         RejectCode::CanisterError,
                                         format!(
                                             "Canister {} violated contract: attempted to send a message of size {} exceeding the limit {}",
-                                            rep.respondent, rep.payload_size_bytes(), MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
+                                            rep.respondent,
+                                            rep.payload_size_bytes(),
+                                            MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
                                         ),
                                     ))
                                 }
                                 // Truncate error messages of oversized reject payloads.
                                 &mut Payload::Reject(ref mut context @ RejectContext { .. }) => {
-                                    rep.response_payload = Payload::Reject(RejectContext::new_with_message_length_limit(context.code(), context.message(), MAX_REJECT_MESSAGE_LEN_BYTES));
+                                    rep.response_payload = Payload::Reject(
+                                        RejectContext::new_with_message_length_limit(
+                                            context.code(),
+                                            context.message(),
+                                            MAX_REJECT_MESSAGE_LEN_BYTES,
+                                        ),
+                                    );
                                 }
                             }
 
@@ -465,7 +471,7 @@ impl StreamBuilderImpl {
                 &mut state,
                 &req,
                 RejectCode::DestinationInvalid,
-                format!("No route to canister {}", dst_canister_id),
+                format!("No route to canister {dst_canister_id}"),
             );
         }
 

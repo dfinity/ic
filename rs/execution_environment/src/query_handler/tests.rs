@@ -6,9 +6,9 @@ use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_test_utilities_types::ids::user_test_id;
 use ic_types::{
+    Cycles, NumInstructions,
     ingress::WasmResult,
     messages::{Query, QuerySource},
-    Cycles, NumInstructions,
 };
 use std::sync::Arc;
 
@@ -276,8 +276,7 @@ fn composite_query_callgraph_depth_is_enforced() {
         match &test_query(&mut test, &canisters, num_calls) {
             Ok(_) => {}
             Err(err) => panic!(
-                "Query with depth {} failed, when it should have succeeded: {:?}",
-                num_calls, err
+                "Query with depth {num_calls} failed, when it should have succeeded: {err:?}"
             ),
         }
     }
@@ -286,8 +285,7 @@ fn composite_query_callgraph_depth_is_enforced() {
     for num_calls in 7..NUM_CANISTERS - 1 {
         match test_query(&mut test, &canisters, num_calls) {
             Ok(_) => panic!(
-                "Call with depth {} should have failed with call graph being too large",
-                num_calls
+                "Call with depth {num_calls} should have failed with call graph being too large"
             ),
             Err(err) => {
                 assert_eq!(err.code(), ErrorCode::QueryCallGraphTooDeep)
@@ -385,8 +383,7 @@ fn composite_query_callgraph_max_instructions_is_enforced() {
         match &test {
             Ok(_) => {}
             Err(err) => panic!(
-                "Query with {} calls failed, when it should have succeeded: {:?}",
-                num_calls, err
+                "Query with {num_calls} calls failed, when it should have succeeded: {err:?}"
             ),
         }
     }
@@ -397,7 +394,7 @@ fn composite_query_callgraph_max_instructions_is_enforced() {
             generate_call_to(&canisters, num_calls as usize).build(),
         );
         match &test {
-            Ok(_) => panic!("Query with {} calls should have failed!", num_calls),
+            Ok(_) => panic!("Query with {num_calls} calls should have failed!"),
             Err(err) => assert_eq!(
                 err.code(),
                 ErrorCode::QueryCallGraphTotalInstructionLimitExceeded
@@ -462,6 +459,7 @@ fn query_compiled_once() {
         },
         Arc::new(test.state().clone()),
         vec![],
+        /*certificate_delegation_metadata=*/ None,
     );
     assert!(result.is_ok());
 
@@ -504,8 +502,7 @@ fn queries_to_frozen_canisters_are_rejected() {
         Err(UserError::new(
             ErrorCode::CanisterOutOfCycles,
             format!(
-                "Canister {} is unable to process query calls because it's frozen. Please top up the canister with cycles and try again.",
-                canister_a
+                "Canister {canister_a} is unable to process query calls because it's frozen. Please top up the canister with cycles and try again."
             )
         )),
     );
@@ -550,6 +547,7 @@ fn composite_query_works_in_non_replicated_mode() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         )
         .unwrap();
 
@@ -578,6 +576,7 @@ fn composite_query_fails_if_disabled() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         )
         .unwrap_err();
 
@@ -645,6 +644,7 @@ fn composite_query_single_user_response() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         )
         .unwrap();
     assert_eq!(result, WasmResult::Reply([2_u8].to_vec()));
@@ -692,6 +692,7 @@ fn composite_query_single_canister_response() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         )
         .unwrap();
     assert_eq!(result, WasmResult::Reply([3_u8].to_vec()));
@@ -738,6 +739,7 @@ fn composite_query_no_user_response() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         )
         .unwrap_err();
     assert_eq!(
@@ -795,6 +797,7 @@ fn composite_query_no_canister_response() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         )
         .unwrap();
     match result {
@@ -836,6 +839,7 @@ fn composite_query_chained_calls() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         )
         .unwrap();
     assert_eq!(result, WasmResult::Reply(b));
@@ -905,9 +909,7 @@ fn composite_query_syscalls_from_reply_reject_callback() {
                 Err(err) => assert_eq!(
                     err.code(),
                     ErrorCode::CanisterContractViolation,
-                    "Incorrect return code for {} {}",
-                    label,
-                    callback_type
+                    "Incorrect return code for {label} {callback_type}"
                 ),
             }
         }
@@ -1110,7 +1112,7 @@ fn test_incorrect_query_name() {
     assert_eq!(err.code(), ErrorCode::CanisterMethodNotFound);
     assert_eq!(
         err.description(),
-        format!("Query method {} not found.", method)
+        format!("Query method {method} not found.")
     );
 }
 
@@ -1241,14 +1243,13 @@ fn query_call_exceeds_instructions_limit() {
             },
             Arc::new(test.state().clone()),
             vec![],
+            /*certificate_delegation_metadata=*/ None,
         )
         .unwrap_err();
     output.assert_contains(
             ErrorCode::CanisterInstructionLimitExceeded,
             &format!(
-                "Error from Canister {}: Canister exceeded the limit of {} instructions for single message execution.",
-                canister,
-                instructions_limit
+                "Error from Canister {canister}: Canister exceeded the limit of {instructions_limit} instructions for single message execution."
             )
     );
 }

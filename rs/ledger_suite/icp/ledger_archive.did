@@ -5,85 +5,85 @@ type Tokens = record { e8s : nat64 };
 type Timestamp = record { timestamp_nanos : nat64 };
 
 type Operation = variant {
-    Mint : record {
-        to : AccountIdentifier;
-        amount : Tokens;
-    };
-    Burn : record {
-        from : AccountIdentifier;
-        spender : opt AccountIdentifier;
-        amount : Tokens;
-    };
-    Transfer : record {
-        from : AccountIdentifier;
-        to : AccountIdentifier;
-        amount : Tokens;
-        fee : Tokens;
-        spender : opt vec nat8;
-    };
-    Approve : record {
-        from : AccountIdentifier;
-        spender : AccountIdentifier;
-        // This field is deprecated and should not be used.
-        allowance_e8s : int;
-        allowance: Tokens;
-        fee : Tokens;
-        expires_at : opt Timestamp;
-        expected_allowance : opt Tokens;
-    };
+  Mint : record {
+    to : AccountIdentifier;
+    amount : Tokens
+  };
+  Burn : record {
+    from : AccountIdentifier;
+    spender : opt AccountIdentifier;
+    amount : Tokens
+  };
+  Transfer : record {
+    from : AccountIdentifier;
+    to : AccountIdentifier;
+    amount : Tokens;
+    fee : Tokens;
+    spender : opt vec nat8
+  };
+  Approve : record {
+    from : AccountIdentifier;
+    spender : AccountIdentifier;
+    // This field is deprecated and should not be used.
+    allowance_e8s : int;
+    allowance : Tokens;
+    fee : Tokens;
+    expires_at : opt Timestamp;
+    expected_allowance : opt Tokens
+  }
 };
 
 type Transaction = record {
-    memo : Memo;
-    icrc1_memo : opt blob;
-    // Optional to support potential future variant extensions.
-    operation : opt Operation;
-    created_at_time : Timestamp;
+  memo : Memo;
+  icrc1_memo : opt blob;
+  // Optional to support potential future variant extensions.
+  operation : opt Operation;
+  created_at_time : Timestamp
 };
 
 type Block = record {
-    parent_hash : opt blob;
-    transaction : Transaction;
-    timestamp : Timestamp;
+  parent_hash : opt blob;
+  transaction : Transaction;
+  timestamp : Timestamp
 };
 
 type GetBlocksArgs = record {
-    start : BlockIndex;
-    length : nat64;
+  start : BlockIndex;
+  length : nat64
 };
 
 type BlockRange = record {
-    blocks : vec Block;
+  blocks : vec Block
 };
 
 type GetBlocksError = variant {
 
-    /// The [GetBlocksArgs.start] is below the first block that
-    /// archive node stores.
-    BadFirstBlockIndex : record {
-        requested_index : BlockIndex;
-        first_valid_index : BlockIndex;
-    };
+  /// The [GetBlocksArgs.start] is below the first block that
+  /// archive node stores.
+  BadFirstBlockIndex : record {
+    requested_index : BlockIndex;
+    first_valid_index : BlockIndex
+  };
 
-    /// Reserved for future use.
-    Other : record {
-        error_code : nat64;
-        error_message : text;
-    };
+  /// Reserved for future use.
+  Other : record {
+    error_code : nat64;
+    error_message : text
+  }
 };
 
 type GetBlocksResult = variant {
-    Ok : BlockRange;
-    Err : GetBlocksError;
+  Ok : BlockRange;
+  Err : GetBlocksError
 };
 
 type GetEncodedBlocksResult = variant { Ok : vec blob; Err : GetBlocksError };
 
 type ArchiveUpgradeArgument = record {
-    max_memory_size_bytes : opt nat64;
+  max_memory_size_bytes : opt nat64
 };
 
 service : {
-    get_blocks : (GetBlocksArgs) -> (GetBlocksResult) query;
-    get_encoded_blocks : (GetBlocksArgs) -> (GetEncodedBlocksResult) query;
+  get_blocks : (GetBlocksArgs) -> (GetBlocksResult) query;
+  get_encoded_blocks : (GetBlocksArgs) -> (GetEncodedBlocksResult) query
 }

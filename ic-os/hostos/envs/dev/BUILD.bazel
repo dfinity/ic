@@ -1,11 +1,12 @@
 load("//ic-os:defs.bzl", "icos_build")
 load("//ic-os/hostos:defs.bzl", "image_deps")
+load("//publish:defs.bzl", "artifact_bundle")
 
 # The macro contains several targets.
 # Check
 #       //ic-os/hostos/BUILD.bazel for examples
 #    or //ic-os/defs.bzl for the full list of targets.
-icos_build(
+icos_images = icos_build(
     name = "dev",
     image_deps_func = image_deps,
     visibility = [
@@ -13,4 +14,16 @@ icos_build(
         "//rs:system-tests-pkg",
     ],
     vuln_scan = False,
+)
+
+# Export checksums & build artifacts for update images
+artifact_bundle(
+    name = "bundle-update",
+    testonly = True,
+    inputs = [
+        icos_images.update_image,
+        icos_images.update_image_test,
+    ],
+    prefix = "host-os/update-img-dev",
+    visibility = ["//visibility:public"],
 )

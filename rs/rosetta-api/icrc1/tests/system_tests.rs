@@ -4,17 +4,10 @@ use crate::common::utils::{get_rosetta_blocks_from_icrc1_ledger, wait_for_rosett
 use candid::Nat;
 use candid::Principal;
 use common::local_replica::get_custom_agent;
-use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
+use ic_agent::identity::BasicIdentity;
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
-use ic_icrc1_ledger::{InitArgs, InitArgsBuilder};
-use ic_icrc1_test_utils::KeyPairGenerator;
-use ic_icrc1_test_utils::{
-    minter_identity, valid_transactions_strategy, ArgWithCaller, LedgerEndpointArg,
-    DEFAULT_TRANSFER_FEE,
-};
-use ic_icrc1_tokens_u256::U256;
 use ic_icrc_rosetta::common::constants::STATUS_COMPLETED;
 use ic_icrc_rosetta::common::types::Error;
 use ic_icrc_rosetta::common::types::OperationType;
@@ -26,16 +19,24 @@ use ic_icrc_rosetta::construction_api::types::ConstructionMetadataRequestOptions
 use ic_icrc_rosetta::data_api::types::{QueryBlockRangeRequest, QueryBlockRangeResponse};
 use ic_icrc_rosetta_client::RosettaClient;
 use ic_icrc_rosetta_runner::RosettaClientArgsBuilder;
-use ic_icrc_rosetta_runner::{make_transaction_with_rosetta_client_binary, DEFAULT_TOKEN_SYMBOL};
 use ic_icrc_rosetta_runner::{
-    start_rosetta, RosettaContext, RosettaOptions, DEFAULT_DECIMAL_PLACES,
+    DEFAULT_DECIMAL_PLACES, RosettaContext, RosettaOptions, start_rosetta,
 };
+use ic_icrc_rosetta_runner::{DEFAULT_TOKEN_SYMBOL, make_transaction_with_rosetta_client_binary};
+use ic_icrc1_ledger::{InitArgs, InitArgsBuilder};
+use ic_icrc1_test_utils::KeyPairGenerator;
+use ic_icrc1_test_utils::{
+    ArgWithCaller, DEFAULT_TRANSFER_FEE, LedgerEndpointArg, minter_identity,
+    valid_transactions_strategy,
+};
+use ic_icrc1_tokens_u256::U256;
 use ic_rosetta_api::DEFAULT_BLOCKCHAIN;
 use icrc_ledger_agent::CallMode;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
+use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use lazy_static::lazy_static;
 use num_traits::cast::ToPrimitive;
 use pocket_ic::{PocketIc, PocketIcBuilder};
@@ -77,7 +78,7 @@ lazy_static! {
 
 fn path_from_env(var: &str) -> PathBuf {
     std::fs::canonicalize(
-        std::env::var(var).unwrap_or_else(|_| panic!("Environment variable {} is not set", var)),
+        std::env::var(var).unwrap_or_else(|_| panic!("Environment variable {var} is not set")),
     )
     .unwrap()
 }
@@ -159,15 +160,11 @@ impl SetupBuilder {
         let canister_id = create_and_install_icrc_ledger(&pocket_ic, init_args.clone(), None);
 
         let subnet_id = pocket_ic.get_subnet(canister_id).unwrap();
-        println!(
-            "Installed the ICRC1 ledger canister ({}) onto {:?}",
-            canister_id, subnet_id
-        );
+        println!("Installed the ICRC1 ledger canister ({canister_id}) onto {subnet_id:?}");
         let sns_subnet_id = pocket_ic.topology().get_sns().unwrap();
         assert_eq!(
             subnet_id, sns_subnet_id,
-            "The canister subnet {} does not match the SNS subnet {}",
-            subnet_id, sns_subnet_id
+            "The canister subnet {subnet_id} does not match the SNS subnet {sns_subnet_id}"
         );
 
         let endpoint = pocket_ic.make_live(None);
@@ -262,6 +259,14 @@ impl RosettaTestingEnvironmentBuilder {
                         .0
                         .to_u64()
                         .unwrap(),
+                    LedgerEndpointArg::TransferFromArg(transfer_from_arg) => caller_agent
+                        .transfer_from(transfer_from_arg.clone())
+                        .await
+                        .unwrap()
+                        .unwrap()
+                        .0
+                        .to_u64()
+                        .unwrap(),
                 });
             }
         }
@@ -333,10 +338,7 @@ async fn assert_rosetta_balance(
     rosetta_client: &RosettaClient,
     network_identifier: NetworkIdentifier,
 ) {
-    println!(
-        "Checking balance for account: {:?} at block index {}",
-        account, block_index
-    );
+    println!("Checking balance for account: {account:?} at block index {block_index}");
     let start = Instant::now();
     let timeout = Duration::from_secs(30);
     loop {
@@ -348,15 +350,11 @@ async fn assert_rosetta_balance(
             break;
         } else {
             println!(
-                "Waited for rosetta, received block index {} but expected {}, waiting some more...",
-                latest_rosetta_block, block_index
+                "Waited for rosetta, received block index {latest_rosetta_block} but expected {block_index}, waiting some more..."
             );
         }
         if start.elapsed() > timeout {
-            panic!(
-                "Failed to get block index {} within {:?}",
-                block_index, timeout
-            );
+            panic!("Failed to get block index {block_index} within {timeout:?}");
         }
     }
     let rosetta_balance = rosetta_client
@@ -384,11 +382,13 @@ fn test_ledger_symbol_check() {
         });
     });
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .downcast_ref::<String>()
-        .unwrap()
-        .contains("Provided symbol does not match symbol retrieved in online mode."));
+    assert!(
+        result
+            .unwrap_err()
+            .downcast_ref::<String>()
+            .unwrap()
+            .contains("Provided symbol does not match symbol retrieved in online mode.")
+    );
 }
 
 #[test]
@@ -873,6 +873,29 @@ fn test_account_balance() {
                                         .or_insert(amount.0.to_u64().unwrap());
                                     involved_accounts.push(*to);
                                 }
+                            }
+                            LedgerEndpointArg::TransferFromArg(TransferFromArgs {
+                                from,
+                                to,
+                                amount,
+                                ..
+                            }) => {
+                                // For TransferFrom we always deduct the transfer fee. TransferFrom
+                                // from or to the minter account is not allowed, so we do not need
+                                // to check for it.
+                                accounts_balances.entry(*from).and_modify(|balance| {
+                                    *balance -= amount.0.to_u64().unwrap();
+                                    *balance -= DEFAULT_TRANSFER_FEE;
+                                });
+                                involved_accounts.push(*from);
+
+                                accounts_balances
+                                    .entry(*to)
+                                    .and_modify(|balance| {
+                                        *balance += amount.0.to_u64().unwrap();
+                                    })
+                                    .or_insert(amount.0.to_u64().unwrap());
+                                involved_accounts.push(*to);
                             }
                         };
 
@@ -1508,6 +1531,7 @@ fn test_search_transactions() {
         .unwrap()
 }
 
+#[cfg(not(target_os = "macos"))]
 #[test]
 fn test_cli_data() {
     let mut runner = TestRunner::new(TestRunnerConfig {
@@ -1730,10 +1754,12 @@ fn test_query_blocks_range() {
                             .try_into()
                             .unwrap();
                         assert!(query_block_range_response.blocks.len() == num_blocks);
-                        assert!(query_block_range_response
-                            .blocks
-                            .iter()
-                            .all(|block| block.block_identifier.index <= highest_block_index));
+                        assert!(
+                            query_block_range_response
+                                .blocks
+                                .iter()
+                                .all(|block| block.block_identifier.index <= highest_block_index)
+                        );
                     }
                 });
 

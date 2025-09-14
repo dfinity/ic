@@ -1,6 +1,6 @@
 use canister_test::*;
-use ic00::CanisterSettingsArgsBuilder;
 use ic_state_machine_tests::StateMachine;
+use ic00::CanisterSettingsArgsBuilder;
 
 #[test]
 fn test_memory_test_canisters() {
@@ -112,6 +112,6 @@ fn assert_reply_eq(res: WasmResult, expected: u64) {
         WasmResult::Reply(reply) => {
             assert_eq!(String::from_utf8(reply).unwrap(), expected.to_string());
         }
-        WasmResult::Reject(err) => panic!("Expected a reply but got {}", err),
+        WasmResult::Reject(err) => panic!("Expected a reply but got {err}"),
     }
 }

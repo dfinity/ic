@@ -32,7 +32,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/types",
     "//rs/types/types_test_utils",
-    "@crate_index//:anyhow",
     "@crate_index//:futures",
     "@crate_index//:http-body-util",
     "@crate_index//:mockall",

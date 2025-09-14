@@ -4,6 +4,7 @@ type AccountIdentifier = record {
 
 type Action = variant {
   RegisterKnownNeuron : KnownNeuron;
+  DeregisterKnownNeuron : DeregisterKnownNeuron;
   ManageNeuron : ManageNeuron;
   UpdateCanisterSettings : UpdateCanisterSettings;
   InstallCode : InstallCode;
@@ -19,6 +20,7 @@ type Action = variant {
   ApproveGenesisKyc : Principals;
   AddOrRemoveNodeProvider : AddOrRemoveNodeProvider;
   Motion : Motion;
+  FulfillSubnetRentalRequest : FulfillSubnetRentalRequest;
 };
 
 type AddHotKey = record {
@@ -138,6 +140,18 @@ type DisburseMaturityResponse = record {
   amount_disbursed_e8s : opt nat64;
 };
 
+type SetFollowing = record {
+  topic_following : opt vec FolloweesForTopic;
+};
+
+type FolloweesForTopic = record {
+  followees : opt vec NeuronId;
+  topic : opt int32;
+};
+
+type SetFollowingResponse = record {
+};
+
 // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
 type Command = variant {
   Spawn : Spawn;
@@ -154,6 +168,7 @@ type Command = variant {
   Disburse : Disburse;
   RefreshVotingPower : RefreshVotingPower;
   DisburseMaturity : DisburseMaturity;
+  SetFollowing : SetFollowing;
 
   // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
 };
@@ -174,6 +189,7 @@ type Command_1 = variant {
   Disburse : DisburseResponse;
   RefreshVotingPower : RefreshVotingPowerResponse;
   DisburseMaturity : DisburseMaturityResponse;
+  SetFollowing : SetFollowingResponse;
 };
 
 type Command_2 = variant {
@@ -296,7 +312,6 @@ type GlobalTimeOfDay = record {
 
 type Governance = record {
   default_followees : vec record { int32; Followees };
-  making_sns_proposal : opt MakingSnsProposal;
   most_recent_monthly_node_provider_rewards : opt MonthlyNodeProviderRewards;
   maturity_modulation_last_updated_at_timestamp_seconds : opt nat64;
   wait_for_quiet_threshold_seconds : nat64;
@@ -361,6 +376,7 @@ type GovernanceCachedMetrics = record {
   not_dissolving_neurons_e8s_buckets_seed : vec record { nat64; float64 };
   timestamp_seconds : nat64;
   seed_neuron_count : nat64;
+  spawning_neurons_count : nat64;
 
   non_self_authenticating_controller_neuron_subset_metrics : opt NeuronSubsetMetrics;
   public_neuron_subset_metrics : opt NeuronSubsetMetrics;
@@ -423,6 +439,10 @@ type InstallCodeRequest = record {
 type KnownNeuron = record {
   id : opt NeuronId;
   known_neuron_data : opt KnownNeuronData;
+};
+
+type DeregisterKnownNeuron = record {
+  id : opt NeuronId;
 };
 
 type KnownNeuronData = record {
@@ -518,12 +538,6 @@ type MakeProposalResponse = record {
   proposal_id : opt ProposalId;
 };
 
-type MakingSnsProposal = record {
-  proposal : opt Proposal;
-  caller : opt principal;
-  proposer_id : opt NeuronId;
-};
-
 // Not to be confused with ManageNeuronRequest. (Yes, this is very structurally
 // similar to that, but not actually exactly equivalent.)
 type ManageNeuron = record {
@@ -548,6 +562,7 @@ type ManageNeuronCommandRequest = variant {
   Disburse : Disburse;
   RefreshVotingPower : RefreshVotingPower;
   DisburseMaturity : DisburseMaturity;
+  SetFollowing : SetFollowing;
 
   // KEEP THIS IN SYNC WITH COMMAND!
 };
@@ -967,6 +982,7 @@ type Proposal = record {
 
 type ProposalActionRequest = variant {
   RegisterKnownNeuron : KnownNeuron;
+  DeregisterKnownNeuron : DeregisterKnownNeuron;
   ManageNeuron : ManageNeuronRequest;
   UpdateCanisterSettings : UpdateCanisterSettings;
   InstallCode : InstallCodeRequest;
@@ -979,6 +995,39 @@ type ProposalActionRequest = variant {
   ApproveGenesisKyc : Principals;
   AddOrRemoveNodeProvider : AddOrRemoveNodeProvider;
   Motion : Motion;
+  FulfillSubnetRentalRequest : FulfillSubnetRentalRequest;
+};
+
+// Creates a rented subnet from a rental request (in the Subnet Rental
+// canister).
+type FulfillSubnetRentalRequest = record {
+  // Identifies which rental request to fulfill.
+  //
+  // (Identifying the rental request by user works, because a user can have at
+  // most one rental request in the Subnet Rental canister).
+  user : opt principal;
+
+  // Which nodes will be members of the subnet.
+  node_ids : opt vec principal;
+
+  // What software the nodes will run.
+  //
+  // This must be approved by a prior proposal to bless an IC OS version.
+  //
+  // This is a FULL git commit ID in the ic repo. (Therefore, it must be a 40
+  // character hexidecimal string, not an abbreviated git commit ID.)
+  //
+  // One way to find a suitable value is with the following command:
+  //
+  //     ic-admin \
+  //         get-subnet 0 \
+  //         --nns-urls https://nns.ic0.app \
+  //     | grep replica_version_id
+  //
+  // Where to obtain a recent version of ic-admin:
+  //
+  //     https://github.com/dfinity/ic/releases/latest
+  replica_version_id : opt text;
 };
 
 type ProposalData = record {
@@ -1179,6 +1228,7 @@ type SpawnResponse = record {
 
 type Split = record {
   amount_e8s : nat64;
+  memo : opt nat64;
 };
 
 type StakeMaturity = record {

@@ -22,7 +22,6 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/rust_canisters/canister_test",
     "//rs/state_machine_tests",
-    "//rs/test_utilities",
     "//rs/types/types",
 ]
 

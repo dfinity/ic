@@ -210,6 +210,7 @@ table ip6 filter {
     ct state { invalid } drop
     ct state { established, related } accept
     icmpv6 type $icmp_v6_types_accept accept
+    ip6 daddr { ::/0 } ct state { new } tcp dport { 1080 } accept
     ip6 daddr { ::/0 } ct state { new } tcp dport { 53 } accept
     ip6 daddr { ::/0 } ct state { new } udp dport { 53 } accept
     ip6 daddr { ::/0 } ct state { new } udp dport { 123 } accept

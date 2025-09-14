@@ -10,7 +10,8 @@ use anyhow::{Context, Error};
 use clap::Args;
 use url::Url;
 
-use config::deployment_json::DeploymentSettings;
+use config::setupos::deployment_json::DeploymentSettings;
+use config_types::DeploymentEnvironment;
 
 #[derive(Args)]
 pub struct ConfigIni {
@@ -45,7 +46,7 @@ pub struct ConfigIni {
 #[derive(Args)]
 pub struct DeploymentConfig {
     #[arg(long)]
-    pub nns_url: Option<Url>,
+    pub nns_urls: Option<Url>,
 
     #[arg(long, allow_hyphen_values = true)]
     pub nns_public_key: Option<String>,
@@ -65,13 +66,7 @@ pub struct DeploymentConfig {
     pub mgmt_mac: Option<String>,
 
     #[arg(long)]
-    pub deployment_environment: Option<String>,
-
-    #[arg(long)]
-    pub elasticsearch_hosts: Option<String>,
-
-    #[arg(long)]
-    pub elasticsearch_tags: Option<String>,
+    pub deployment_environment: Option<DeploymentEnvironment>,
 }
 
 pub async fn write_config(path: &Path, cfg: &ConfigIni) -> Result<(), Error> {
@@ -90,35 +85,34 @@ pub async fn write_config(path: &Path, cfg: &ConfigIni) -> Result<(), Error> {
     } = cfg;
 
     if let Some(node_reward_type) = node_reward_type {
-        writeln!(&mut f, "node_reward_type={}", node_reward_type)?;
+        writeln!(&mut f, "node_reward_type={node_reward_type}")?;
     }
 
     if let (Some(ipv6_prefix), Some(ipv6_gateway)) = (ipv6_prefix, ipv6_gateway) {
         // Always write 4 segments, even if our prefix is less.
         assert!(format!("{ipv6_prefix}::").parse::<Ipv6Addr>().is_ok());
-        writeln!(&mut f, "ipv6_prefix={}", ipv6_prefix)?;
-        writeln!(&mut f, "ipv6_gateway={}", ipv6_gateway)?;
+        writeln!(&mut f, "ipv6_prefix={ipv6_prefix}")?;
+        writeln!(&mut f, "ipv6_gateway={ipv6_gateway}")?;
     }
 
     if let (Some(ipv4_address), Some(ipv4_gateway), Some(ipv4_prefix_length), Some(domain)) =
         (ipv4_address, ipv4_gateway, ipv4_prefix_length, domain)
     {
-        writeln!(&mut f, "ipv4_address={}", ipv4_address)?;
-        writeln!(&mut f, "ipv4_gateway={}", ipv4_gateway)?;
-        writeln!(&mut f, "ipv4_prefix_length={}", ipv4_prefix_length)?;
-        writeln!(&mut f, "domain={}", domain)?;
+        writeln!(&mut f, "ipv4_address={ipv4_address}")?;
+        writeln!(&mut f, "ipv4_gateway={ipv4_gateway}")?;
+        writeln!(&mut f, "ipv4_prefix_length={ipv4_prefix_length}")?;
+        writeln!(&mut f, "domain={domain}")?;
     }
 
     if let Some(enable_trusted_execution_environment) = enable_trusted_execution_environment {
         writeln!(
             &mut f,
-            "enable_trusted_execution_environment={}",
-            enable_trusted_execution_environment
+            "enable_trusted_execution_environment={enable_trusted_execution_environment}"
         )?;
     }
 
     if let Some(verbose) = verbose {
-        writeln!(&mut f, "verbose={}", verbose)?;
+        writeln!(&mut f, "verbose={verbose}")?;
     }
 
     Ok(())
@@ -146,32 +140,24 @@ pub async fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<()
         deployment_json.deployment.mgmt_mac = Some(mgmt_mac.to_owned());
     }
 
-    if let Some(nns_url) = &cfg.nns_url {
-        deployment_json.nns.url = vec![nns_url.clone()];
+    if let Some(nns_urls) = &cfg.nns_urls {
+        deployment_json.nns.urls = vec![nns_urls.clone()];
     }
 
     if let Some(memory) = cfg.memory_gb {
-        deployment_json.resources.memory = memory;
+        deployment_json.vm_resources.memory = memory;
     }
 
     if let Some(cpu) = &cfg.cpu {
-        deployment_json.resources.cpu = Some(cpu.to_owned());
+        deployment_json.vm_resources.cpu = cpu.to_owned();
     }
 
     if let Some(nr_of_vcpus) = &cfg.nr_of_vcpus {
-        deployment_json.resources.nr_of_vcpus = Some(nr_of_vcpus.to_owned());
+        deployment_json.vm_resources.nr_of_vcpus = nr_of_vcpus.to_owned();
     }
 
     if let Some(deployment_environment) = &cfg.deployment_environment {
-        deployment_json.deployment.name = deployment_environment.to_owned();
-    }
-
-    if let Some(elasticsearch_hosts) = &cfg.elasticsearch_hosts {
-        deployment_json.logging.hosts = elasticsearch_hosts.to_owned();
-    }
-
-    if let Some(elasticsearch_tags) = &cfg.elasticsearch_tags {
-        deployment_json.logging.tags = Some(elasticsearch_tags.to_owned());
+        deployment_json.deployment.deployment_environment = deployment_environment.to_owned();
     }
 
     let mut f = File::create(path).context("failed to open deployment config file")?;

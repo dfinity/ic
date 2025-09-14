@@ -4,7 +4,7 @@ use ic_system_test_driver::canister_api::{CallMode, GenericRequest};
 use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::farm::HostFeature;
 use ic_system_test_driver::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources};
-use ic_system_test_driver::driver::test_env_api::{get_dependency_path, IcNodeSnapshot};
+use ic_system_test_driver::driver::test_env_api::{IcNodeSnapshot, get_dependency_path};
 use ic_system_test_driver::driver::universal_vm::{UniversalVm, UniversalVms};
 use ic_system_test_driver::driver::{
     test_env::TestEnv,
@@ -14,10 +14,11 @@ use ic_system_test_driver::generic_workload_engine;
 use ic_system_test_driver::generic_workload_engine::metrics::{
     LoadTestMetrics, LoadTestMetricsProvider, RequestOutcome,
 };
-use ic_system_test_driver::util::{assert_canister_counter_with_retries, MetricsFetcher};
+use ic_system_test_driver::util::{MetricsFetcher, assert_canister_counter_with_retries};
+use ic_types::ReplicaVersion;
 
 use futures::future::join_all;
-use slog::{error, info, Logger};
+use slog::{Logger, error, info};
 use std::time::{Duration, Instant};
 use tokio::runtime::Handle;
 
@@ -126,7 +127,7 @@ pub fn test_with_rt_handle(
 
     info!(log, "Reporting workload execution results ...");
     if report {
-        env.emit_report(format!("{}", test_metrics));
+        env.emit_report(format!("{test_metrics}"));
     } else {
         info!(log, "{}", test_metrics);
     }
@@ -297,13 +298,13 @@ impl HistogramMetrics {
     async fn fetch(metrics_name: &str, filter: Option<&str>, nodes: &[IcNodeSnapshot]) -> Self {
         let (metrics_sum, metrics_count) = if let Some(filter) = filter {
             (
-                format!("{}_sum{{{}}}", metrics_name, filter),
-                format!("{}_count{{{}}}", metrics_name, filter),
+                format!("{metrics_name}_sum{{{filter}}}"),
+                format!("{metrics_name}_count{{{filter}}}"),
             )
         } else {
             (
-                format!("{}_sum", metrics_name),
-                format!("{}_count", metrics_name),
+                format!("{metrics_name}_sum"),
+                format!("{metrics_name}_count"),
             )
         };
 
@@ -340,7 +341,7 @@ impl std::ops::Sub for HistogramMetrics {
 }
 
 pub async fn persist_metrics(
-    ic_version: String,
+    ic_version: ReplicaVersion,
     metrics: TestMetrics,
     message_size: usize,
     rps: f64,

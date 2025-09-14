@@ -162,6 +162,9 @@ fn convert_action(
         pb::proposal::Action::RegisterKnownNeuron(v) => {
             pb_api::proposal::Action::RegisterKnownNeuron(v.clone().into())
         }
+        pb::proposal::Action::DeregisterKnownNeuron(v) => {
+            pb_api::proposal::Action::DeregisterKnownNeuron((*v).into())
+        }
         pb::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v) => {
             pb_api::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v.clone().into())
         }
@@ -173,6 +176,9 @@ fn convert_action(
         }
         pb::proposal::Action::UpdateCanisterSettings(v) => {
             pb_api::proposal::Action::UpdateCanisterSettings(v.clone().into())
+        }
+        pb::proposal::Action::FulfillSubnetRentalRequest(v) => {
+            pb_api::proposal::Action::FulfillSubnetRentalRequest(v.clone().into())
         }
 
         // The action types with potentially large fields need to be converted in a way that avoids

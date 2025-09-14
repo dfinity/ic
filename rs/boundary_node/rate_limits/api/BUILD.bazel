@@ -2,42 +2,39 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:candid",
-    "@crate_index//:humantime",
-    "@crate_index//:ipnet",
-    "@crate_index//:regex",
-    "@crate_index//:serde",
-    "@crate_index//:serde_json",
-    "@crate_index//:serde_regex",
-    "@crate_index//:serde_yaml",
-]
-
-DEV_DEPENDENCIES = []
-
-MACRO_DEPENDENCIES = []
-
-MACRO_DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:indoc",
-]
-
-ALIASES = {}
-
 rust_library(
     name = "rate_limits_api",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_name = "rate_limits_api",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:humantime",
+        "@crate_index//:ipnet",
+        "@crate_index//:regex",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:serde_regex",
+        "@crate_index//:serde_yaml",
+    ],
 )
 
 rust_test(
     name = "rate_limits_api_test",
-    aliases = ALIASES,
     crate = ":rate_limits_api",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:indoc",
+    ],
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:humantime",
+        "@crate_index//:ipnet",
+        "@crate_index//:regex",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:serde_regex",
+        "@crate_index//:serde_yaml",
+    ],
 )

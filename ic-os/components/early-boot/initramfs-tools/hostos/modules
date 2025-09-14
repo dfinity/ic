@@ -1,3 +1,4 @@
 virtio_blk
 nvme
 ahci
+msr

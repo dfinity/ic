@@ -6,161 +6,6 @@ const LLAMA_NODES: EvmRpcService = EvmRpcService::EthMainnet(EthMainnetService::
 
 mod multi_call_results {
 
-    mod reduce_with_equality {
-        use crate::eth_rpc_client::tests::{BLOCK_PI, PUBLIC_NODE};
-        use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
-        use evm_rpc_client::{HttpOutcallError, JsonRpcError};
-        use ic_cdk::api::call::RejectionCode;
-
-        #[test]
-        #[should_panic(expected = "MultiCallResults cannot be empty")]
-        fn should_panic_when_empty() {
-            let _panic = MultiCallResults::<String>::from_non_empty_iter(vec![]);
-        }
-
-        #[test]
-        fn should_be_inconsistent_when_different_call_errors() {
-            let results: MultiCallResults<String> = MultiCallResults::from_non_empty_iter(vec![
-                (
-                    BLOCK_PI,
-                    Err(HttpOutcallError::IcError {
-                        code: RejectionCode::CanisterReject,
-                        message: "reject".to_string(),
-                    }
-                    .into()),
-                ),
-                (
-                    PUBLIC_NODE,
-                    Err(HttpOutcallError::IcError {
-                        code: RejectionCode::SysTransient,
-                        message: "transient".to_string(),
-                    }
-                    .into()),
-                ),
-            ]);
-
-            let reduced = results.clone().reduce_with_equality();
-
-            assert_eq!(reduced, Err(MultiCallError::InconsistentResults(results)))
-        }
-
-        #[test]
-        fn should_be_inconsistent_when_different_rpc_errors() {
-            let results: MultiCallResults<String> = MultiCallResults::from_non_empty_iter(vec![
-                (
-                    BLOCK_PI,
-                    Err(JsonRpcError {
-                        code: -32700,
-                        message: "insufficient funds for gas * price + value".to_string(),
-                    }
-                    .into()),
-                ),
-                (
-                    PUBLIC_NODE,
-                    Err(JsonRpcError {
-                        code: -32000,
-                        message: "nonce too low".to_string(),
-                    }
-                    .into()),
-                ),
-            ]);
-
-            let reduced = results.clone().reduce_with_equality();
-
-            assert_eq!(reduced, Err(MultiCallError::InconsistentResults(results)))
-        }
-
-        #[test]
-        fn should_be_inconsistent_when_different_ok_results() {
-            let results: MultiCallResults<String> = MultiCallResults::from_non_empty_iter(vec![
-                (BLOCK_PI, Ok("hello".to_string())),
-                (PUBLIC_NODE, Ok("world".to_string())),
-            ]);
-
-            let reduced = results.clone().reduce_with_equality();
-
-            assert_eq!(reduced, Err(MultiCallError::InconsistentResults(results)))
-        }
-
-        #[test]
-        fn should_be_consistent_http_outcall_error() {
-            let results: MultiCallResults<String> = MultiCallResults::from_non_empty_iter(vec![
-                (
-                    BLOCK_PI,
-                    Err(HttpOutcallError::IcError {
-                        code: RejectionCode::CanisterReject,
-                        message: "reject".to_string(),
-                    }
-                    .into()),
-                ),
-                (
-                    PUBLIC_NODE,
-                    Err(HttpOutcallError::IcError {
-                        code: RejectionCode::CanisterReject,
-                        message: "reject".to_string(),
-                    }
-                    .into()),
-                ),
-            ]);
-
-            let reduced = results.clone().reduce_with_equality();
-
-            assert_eq!(
-                reduced,
-                Err(MultiCallError::ConsistentHttpOutcallError(
-                    HttpOutcallError::IcError {
-                        code: RejectionCode::CanisterReject,
-                        message: "reject".to_string(),
-                    }
-                ))
-            );
-        }
-
-        #[test]
-        fn should_be_consistent_rpc_error() {
-            let results: MultiCallResults<String> = MultiCallResults::from_non_empty_iter(vec![
-                (
-                    BLOCK_PI,
-                    Err(JsonRpcError {
-                        code: -32700,
-                        message: "insufficient funds for gas * price + value".to_string(),
-                    }
-                    .into()),
-                ),
-                (
-                    PUBLIC_NODE,
-                    Err(JsonRpcError {
-                        code: -32700,
-                        message: "insufficient funds for gas * price + value".to_string(),
-                    }
-                    .into()),
-                ),
-            ]);
-
-            let reduced = results.clone().reduce_with_equality();
-
-            assert_eq!(
-                reduced,
-                Err(MultiCallError::ConsistentJsonRpcError {
-                    code: -32700,
-                    message: "insufficient funds for gas * price + value".to_string(),
-                })
-            );
-        }
-
-        #[test]
-        fn should_be_consistent_ok_result() {
-            let results: MultiCallResults<String> = MultiCallResults::from_non_empty_iter(vec![
-                (BLOCK_PI, Ok("0x01".to_string())),
-                (PUBLIC_NODE, Ok("0x01".to_string())),
-            ]);
-
-            let reduced = results.clone().reduce_with_equality();
-
-            assert_eq!(reduced, Ok("0x01".to_string()));
-        }
-    }
-
     mod reduce_with_min_by_key {
         use crate::eth_rpc_client::tests::{BLOCK_PI, PUBLIC_NODE};
         use crate::eth_rpc_client::{MinByKey, ReduceWithStrategy};
@@ -175,7 +20,7 @@ mod multi_call_results {
             ]);
 
             let reduced: Result<TransactionCount, _> =
-                ReduceWithStrategy::<MinByKey>::reduce(results).into();
+                ReduceWithStrategy::<MinByKey>::reduce(results).result;
 
             assert_eq!(reduced, Ok(TransactionCount::new(123456)));
         }
@@ -183,23 +28,19 @@ mod multi_call_results {
 
     mod reduce_with_stable_majority_by_key {
         use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
-        use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
-        use candid::Nat;
-        use evm_rpc_client::{FeeHistory, HttpOutcallError, JsonRpcError};
-        use ic_cdk::api::call::RejectionCode;
+        use crate::eth_rpc_client::{
+            MultiCallError, MultiCallResults, ReduceWithStrategy, StrictMajorityByKey,
+        };
+        use evm_rpc_client::{
+            FeeHistory, HttpOutcallError, JsonRpcError, LegacyRejectionCode, MultiRpcResult,
+        };
 
         #[test]
         fn should_get_unanimous_fee_history() {
-            let results: MultiCallResults<FeeHistory> =
-                MultiCallResults::from_non_empty_iter(vec![
-                    (BLOCK_PI, Ok(fee_history())),
-                    (PUBLIC_NODE, Ok(fee_history())),
-                    (LLAMA_NODES, Ok(fee_history())),
-                ]);
+            let results: MultiRpcResult<FeeHistory> = MultiRpcResult::Consistent(Ok(fee_history()));
 
-            let reduced = results.reduce_with_strict_majority_by_key(|fee_history| {
-                Nat::from(fee_history.oldest_block.clone())
-            });
+            let reduced: Result<FeeHistory, _> =
+                ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).result;
 
             assert_eq!(reduced, Ok(fee_history()));
         }
@@ -215,17 +56,19 @@ mod multi_call_results {
                     fees[index_majority].oldest_block
                 );
                 let majority_fee = fees[index_majority].clone();
-                let [block_pi_fee_history, llama_nodes_fee_history, public_node_fee_history] = fees;
-                let results: MultiCallResults<FeeHistory> =
-                    MultiCallResults::from_non_empty_iter(vec![
-                        (BLOCK_PI, Ok(block_pi_fee_history)),
-                        (LLAMA_NODES, Ok(llama_nodes_fee_history)),
-                        (PUBLIC_NODE, Ok(public_node_fee_history)),
-                    ]);
+                let [
+                    block_pi_fee_history,
+                    llama_nodes_fee_history,
+                    public_node_fee_history,
+                ] = fees;
+                let results: MultiRpcResult<FeeHistory> = MultiRpcResult::Inconsistent(vec![
+                    (BLOCK_PI, Ok(block_pi_fee_history)),
+                    (LLAMA_NODES, Ok(llama_nodes_fee_history)),
+                    (PUBLIC_NODE, Ok(public_node_fee_history)),
+                ]);
 
-                let reduced = results.reduce_with_strict_majority_by_key(|fee_history| {
-                    Nat::from(fee_history.oldest_block.clone())
-                });
+                let reduced: Result<FeeHistory, _> =
+                    ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).result;
 
                 assert_eq!(reduced, Ok(majority_fee));
             }
@@ -233,23 +76,21 @@ mod multi_call_results {
 
         #[test]
         fn should_get_fee_history_with_2_out_of_3_when_third_is_error() {
-            let results: MultiCallResults<FeeHistory> =
-                MultiCallResults::from_non_empty_iter(vec![
-                    (BLOCK_PI, Ok(fee_history())),
-                    (
-                        PUBLIC_NODE,
-                        Err(HttpOutcallError::IcError {
-                            code: RejectionCode::SysTransient,
-                            message: "no consensus".to_string(),
-                        }
-                        .into()),
-                    ),
-                    (LLAMA_NODES, Ok(fee_history())),
-                ]);
+            let results: MultiRpcResult<FeeHistory> = MultiRpcResult::Inconsistent(vec![
+                (BLOCK_PI, Ok(fee_history())),
+                (
+                    PUBLIC_NODE,
+                    Err(HttpOutcallError::IcError {
+                        code: LegacyRejectionCode::SysTransient,
+                        message: "no consensus".to_string(),
+                    }
+                    .into()),
+                ),
+                (LLAMA_NODES, Ok(fee_history())),
+            ]);
 
-            let reduced = results.reduce_with_strict_majority_by_key(|fee_history| {
-                Nat::from(fee_history.oldest_block.clone())
-            });
+            let reduced: Result<FeeHistory, _> =
+                ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).result;
 
             assert_eq!(reduced, Ok(fee_history()));
         }
@@ -268,17 +109,16 @@ mod multi_call_results {
                 oldest_block: 0x10f73fe_u32.into(),
                 ..fee_history()
             };
-            let three_distinct_results: MultiCallResults<FeeHistory> =
-                MultiCallResults::from_non_empty_iter(vec![
+            let three_distinct_results: MultiRpcResult<FeeHistory> =
+                MultiRpcResult::Inconsistent(vec![
                     (BLOCK_PI, Ok(block_pi_fee_history.clone())),
+                    (LLAMA_NODES, Ok(llama_nodes_fee_history.clone())),
                     (PUBLIC_NODE, Ok(public_node_fee_history.clone())),
                 ]);
 
-            let reduced = three_distinct_results
-                .clone()
-                .reduce_with_strict_majority_by_key(|fee_history| {
-                    Nat::from(fee_history.oldest_block.clone())
-                });
+            let reduced: Result<FeeHistory, _> =
+                ReduceWithStrategy::<StrictMajorityByKey>::reduce(three_distinct_results.clone())
+                    .result;
 
             assert_eq!(
                 reduced,
@@ -290,17 +130,15 @@ mod multi_call_results {
                 ))
             );
 
-            let two_distinct_results: MultiCallResults<FeeHistory> =
-                MultiCallResults::from_non_empty_iter(vec![
+            let two_distinct_results: MultiRpcResult<FeeHistory> =
+                MultiRpcResult::Inconsistent(vec![
                     (BLOCK_PI, Ok(block_pi_fee_history.clone())),
                     (PUBLIC_NODE, Ok(llama_nodes_fee_history.clone())),
                 ]);
 
-            let reduced = two_distinct_results
-                .clone()
-                .reduce_with_strict_majority_by_key(|fee_history| {
-                    Nat::from(fee_history.oldest_block.clone())
-                });
+            let reduced: Result<FeeHistory, _> =
+                ReduceWithStrategy::<StrictMajorityByKey>::reduce(two_distinct_results.clone())
+                    .result;
 
             assert_eq!(
                 reduced,
@@ -312,8 +150,8 @@ mod multi_call_results {
                 ))
             );
 
-            let two_distinct_results_and_error: MultiCallResults<FeeHistory> =
-                MultiCallResults::from_non_empty_iter(vec![
+            let two_distinct_results_and_error: MultiRpcResult<FeeHistory> =
+                MultiRpcResult::Inconsistent(vec![
                     (BLOCK_PI, Ok(block_pi_fee_history.clone())),
                     (
                         PUBLIC_NODE,
@@ -326,11 +164,10 @@ mod multi_call_results {
                     (LLAMA_NODES, Ok(llama_nodes_fee_history.clone())),
                 ]);
 
-            let reduced = two_distinct_results_and_error
-                .clone()
-                .reduce_with_strict_majority_by_key(|fee_history| {
-                    Nat::from(fee_history.oldest_block.clone())
-                });
+            let reduced: Result<FeeHistory, _> = ReduceWithStrategy::<StrictMajorityByKey>::reduce(
+                two_distinct_results_and_error.clone(),
+            )
+            .result;
 
             assert_eq!(
                 reduced,
@@ -353,15 +190,13 @@ mod multi_call_results {
                 (fee, inconsistent_fee)
             };
 
-            let results: MultiCallResults<FeeHistory> =
-                MultiCallResults::from_non_empty_iter(vec![
-                    (BLOCK_PI, Ok(fee.clone())),
-                    (PUBLIC_NODE, Ok(inconsistent_fee.clone())),
-                ]);
+            let results: MultiRpcResult<FeeHistory> = MultiRpcResult::Inconsistent(vec![
+                (BLOCK_PI, Ok(fee.clone())),
+                (PUBLIC_NODE, Ok(inconsistent_fee.clone())),
+            ]);
 
-            let reduced = results.reduce_with_strict_majority_by_key(|fee_history| {
-                Nat::from(fee_history.oldest_block.clone())
-            });
+            let reduced: Result<FeeHistory, _> =
+                ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).result;
 
             assert_eq!(
                 reduced,
@@ -376,26 +211,37 @@ mod multi_call_results {
 
         #[test]
         fn should_fail_when_no_sufficient_ok_responses() {
-            let results: MultiCallResults<FeeHistory> =
-                MultiCallResults::from_non_empty_iter(vec![
-                    (BLOCK_PI, Ok(fee_history())),
-                    (
-                        PUBLIC_NODE,
-                        Err(JsonRpcError {
-                            code: -32700,
-                            message: "error".to_string(),
-                        }
-                        .into()),
-                    ),
-                ]);
+            let results: MultiRpcResult<FeeHistory> = MultiRpcResult::Inconsistent(vec![
+                (BLOCK_PI, Ok(fee_history())),
+                (
+                    PUBLIC_NODE,
+                    Err(JsonRpcError {
+                        code: -32700,
+                        message: "error".to_string(),
+                    }
+                    .into()),
+                ),
+            ]);
 
-            let reduced = results
-                .clone()
-                .reduce_with_strict_majority_by_key(|fee_history| {
-                    Nat::from(fee_history.oldest_block.clone())
-                });
+            let reduced: Result<FeeHistory, _> =
+                ReduceWithStrategy::<StrictMajorityByKey>::reduce(results.clone()).result;
 
-            assert_eq!(reduced, Err(MultiCallError::InconsistentResults(results)));
+            assert_eq!(
+                reduced,
+                Err(MultiCallError::InconsistentResults(
+                    MultiCallResults::from_non_empty_iter(vec![
+                        (BLOCK_PI, Ok(fee_history())),
+                        (
+                            PUBLIC_NODE,
+                            Err(JsonRpcError {
+                                code: -32700,
+                                message: "error".to_string(),
+                            }
+                            .into()),
+                        ),
+                    ])
+                ))
+            );
         }
 
         fn fee_history() -> FeeHistory {
@@ -424,18 +270,17 @@ mod multi_call_results {
     mod has_http_outcall_error_matching {
         use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
         use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
-        use evm_rpc_client::{HttpOutcallError, JsonRpcError};
-        use ic_cdk::api::call::RejectionCode;
+        use evm_rpc_client::{HttpOutcallError, JsonRpcError, LegacyRejectionCode, RpcError};
         use proptest::prelude::any;
         use proptest::proptest;
 
         proptest! {
             #[test]
             fn should_not_match_when_consistent_json_rpc_error(code in any::<i64>(), message in ".*") {
-                let error: MultiCallError<String> = MultiCallError::ConsistentJsonRpcError {
+                let error: MultiCallError<String> = MultiCallError::ConsistentError(RpcError::JsonRpcError(JsonRpcError {
                     code,
                     message,
-                };
+                }));
                 let always_true = |_outcall_error: &HttpOutcallError| true;
 
                 assert!(!error.has_http_outcall_error_matching(always_true));
@@ -444,11 +289,12 @@ mod multi_call_results {
 
         #[test]
         fn should_match_when_consistent_http_outcall_error() {
-            let error: MultiCallError<String> =
-                MultiCallError::ConsistentHttpOutcallError(HttpOutcallError::IcError {
-                    code: RejectionCode::SysTransient,
+            let error: MultiCallError<String> = MultiCallError::ConsistentError(
+                RpcError::HttpOutcallError(HttpOutcallError::IcError {
+                    code: LegacyRejectionCode::SysTransient,
                     message: "message".to_string(),
-                });
+                }),
+            );
             let always_true = |_outcall_error: &HttpOutcallError| true;
             let always_false = |_outcall_error: &HttpOutcallError| false;
 
@@ -480,7 +326,7 @@ mod multi_call_results {
                     (
                         LLAMA_NODES,
                         Err(HttpOutcallError::IcError {
-                            code: RejectionCode::SysTransient,
+                            code: LegacyRejectionCode::SysTransient,
                             message: "message".to_string(),
                         }
                         .into()),
@@ -572,7 +418,7 @@ mod eth_get_transaction_receipt {
     proptest! {
         #[test]
         fn should_fail_deserializing_wrong_transaction_status(wrong_status in 2_u32..u32::MAX) {
-            let status = format!("\"0x{:x}\"", wrong_status);
+            let status = format!("\"0x{wrong_status:x}\"");
             let error = serde_json::from_str::<TransactionStatus>(&status);
             assert_matches!(error, Err(e) if e.to_string().contains("invalid transaction status"));
         }

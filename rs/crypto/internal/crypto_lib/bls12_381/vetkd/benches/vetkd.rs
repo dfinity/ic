@@ -15,7 +15,7 @@ fn vetkd_bench(c: &mut Criterion) {
             .unwrap();
 
     let context = DerivationContext::new(&[1, 2, 3, 4], &[1, 2, 3]);
-    let input = rng.gen::<[u8; 32]>();
+    let input = rng.r#gen::<[u8; 32]>();
 
     for threshold in [9, 23] {
         let nodes = threshold + threshold / 2;
@@ -25,7 +25,7 @@ fn vetkd_bench(c: &mut Criterion) {
         let master_sk = poly.coeff(0);
         let master_pk = G2Affine::from(G2Affine::generator() * master_sk);
 
-        let node_id = (rng.gen::<usize>() % nodes) as u32;
+        let node_id = (rng.r#gen::<usize>() % nodes) as u32;
         let node_sk = poly.evaluate_at(&Scalar::from_node_index(node_id));
         let node_pk = G2Affine::from(G2Affine::generator() * &node_sk);
 
@@ -55,7 +55,7 @@ fn vetkd_bench(c: &mut Criterion) {
             });
         }
 
-        let mut node_info = Vec::with_capacity(nodes);
+        let mut node_info = std::collections::BTreeMap::new();
 
         for node in 0..nodes {
             let node_sk = poly.evaluate_at(&Scalar::from_node_index(node as u32));
@@ -63,11 +63,11 @@ fn vetkd_bench(c: &mut Criterion) {
 
             let eks = EncryptedKeyShare::create(rng, &master_pk, &node_sk, &tpk, &context, &input);
 
-            node_info.push((node as u32, node_pk, eks));
+            node_info.insert(node as u32, (node_pk, eks));
         }
 
         group.bench_function(
-            format!("EncryptedKey::combine_valid_shares (n={})", nodes),
+            format!("EncryptedKey::combine_valid_shares (n={nodes})"),
             |b| {
                 b.iter(|| {
                     EncryptedKey::combine_valid_shares(

@@ -2,38 +2,42 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/sha2",
-    "//rs/sys",
-    "//rs/types/types",
-    "//rs/utils",
-    "//rs/utils/validate_eq",
-    "@crate_index//:serde",
-]
-
-PROC_MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/utils/validate_eq_derive",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:tempfile",
-]
-
 rust_library(
     name = "wasm_types",
     srcs = glob(["src/**"]),
     crate_name = "ic_wasm_types",
-    proc_macro_deps = PROC_MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "//rs/utils/validate_eq_derive",
+    ],
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-heap-bytes",
+        "//rs/crypto/sha2",
+        "//rs/sys",
+        "//rs/types/types",
+        "//rs/utils",
+        "//rs/utils/validate_eq",
+        "@crate_index//:serde",
+    ],
 )
 
 rust_test(
     name = "wasm_types_test",
     crate = ":wasm_types",
-    proc_macro_deps = PROC_MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "//rs/utils/validate_eq_derive",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/sha2",
+        "//rs/sys",
+        "//rs/types/types",
+        "//rs/utils",
+        "//rs/utils/validate_eq",
+        "@crate_index//:serde",
+        "@crate_index//:tempfile",
+    ],
 )

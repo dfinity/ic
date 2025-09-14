@@ -2,14 +2,13 @@ use crate::setup::get_subnet_type;
 use ic_artifact_pool::{
     consensus_pool::ConsensusPoolImpl, ensure_persistent_pool_replica_version_compatibility,
 };
-use ic_btc_adapter_client::{setup_bitcoin_adapter_clients, BitcoinAdapterClients};
+use ic_btc_adapter_client::{BitcoinAdapterClients, setup_bitcoin_adapter_clients};
 use ic_btc_consensus::BitcoinPayloadBuilder;
-use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, Config};
+use ic_config::{Config, artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig};
 use ic_consensus_certification::VerifierImpl;
 use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
-use ic_http_endpoints_public::start_nns_delegation_manager;
 use ic_http_endpoints_xnet::XNetEndpoint;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
 use ic_interfaces::{
@@ -18,26 +17,27 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
+use ic_nns_delegation_manager::start_nns_delegation_manager;
 use ic_pprof::Pprof;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replica_setup_ic_network::setup_consensus_and_p2p;
 use ic_replicated_state::ReplicatedState;
-use ic_state_manager::{state_sync::StateSync, StateManagerImpl};
+use ic_state_manager::{StateManagerImpl, state_sync::StateSync};
 use ic_tracing::ReloadHandles;
 use ic_types::{
+    Height, NodeId, SubnetId,
     artifact::UnvalidatedArtifactMutation,
     consensus::{CatchUpPackage, HasHeight},
     messages::SignedIngress,
-    Height, NodeId, SubnetId,
 };
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::sync::{Arc, RwLock};
 use tokio::sync::{
-    mpsc::{channel, UnboundedSender},
+    mpsc::{Sender, channel},
     watch,
 };
 use tokio_util::sync::CancellationToken;
@@ -76,7 +76,7 @@ pub fn construct_ic_stack(
     // TODO: remove next three return values since they are used only in tests
     Arc<dyn StateReader<State = ReplicatedState>>,
     QueryExecutionService,
-    UnboundedSender<UnvalidatedArtifactMutation<SignedIngress>>,
+    Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     Vec<Box<dyn JoinGuard>>,
     XNetEndpoint,
 )> {
@@ -176,7 +176,7 @@ pub fn construct_ic_stack(
         // CUP and/or certification. This information part of the persisted consensus pool.
         // Hence the need of the dependency on consensus here.
         Some(consensus_pool_cache.starting_height()),
-        config.malicious_behaviour.malicious_flags.clone(),
+        config.malicious_behavior.malicious_flags.clone(),
     ));
     // ---------- EXECUTION DEPS FOLLOW ----------
     let subnet_config = SubnetConfig::new(subnet_type);
@@ -208,7 +208,7 @@ pub fn construct_ic_stack(
     // ---------- MESSAGE ROUTING DEPS FOLLOW ----------
     let certified_stream_store = Arc::clone(&state_manager);
     let message_router = if config
-        .malicious_behaviour
+        .malicious_behavior
         .malicious_flags
         .maliciously_disable_execution
     {
@@ -231,7 +231,7 @@ pub fn construct_ic_stack(
             metrics_registry,
             log.clone(),
             registry.clone(),
-            config.malicious_behaviour.malicious_flags.clone(),
+            config.malicious_behavior.malicious_flags.clone(),
         )
     };
     let xnet_endpoint = XNetEndpoint::new(
@@ -262,6 +262,8 @@ pub fn construct_ic_stack(
     let BitcoinAdapterClients {
         btc_testnet_client,
         btc_mainnet_client,
+        doge_testnet_client,
+        doge_mainnet_client,
     } = setup_bitcoin_adapter_clients(
         log.clone(),
         metrics_registry,
@@ -273,6 +275,8 @@ pub fn construct_ic_stack(
         metrics_registry,
         btc_mainnet_client,
         btc_testnet_client,
+        doge_mainnet_client,
+        doge_testnet_client,
         subnet_id,
         registry.clone(),
         config.bitcoin_payload_builder_config,
@@ -302,7 +306,6 @@ pub fn construct_ic_stack(
         execution_services.https_outcalls_service,
         max_canister_http_requests_in_flight,
         log.clone(),
-        subnet_type,
         nns_delegation_watcher.clone(),
     );
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
@@ -315,9 +318,10 @@ pub fn construct_ic_stack(
         rt_handle_p2p,
         artifact_pool_config,
         config.transport,
-        config.malicious_behaviour.malicious_flags.clone(),
+        config.malicious_behavior.malicious_flags.clone(),
         node_id,
         subnet_id,
+        subnet_type,
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
         Arc::new(state_sync) as Arc<_>,
@@ -360,7 +364,7 @@ pub fn construct_ic_stack(
         log.clone(),
         consensus_pool_cache,
         subnet_type,
-        config.malicious_behaviour.malicious_flags,
+        config.malicious_behavior.malicious_flags,
         nns_delegation_watcher,
         Arc::new(Pprof),
         tracing_handle,

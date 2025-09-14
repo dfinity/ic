@@ -4,9 +4,9 @@ use anyhow::Error;
 use async_trait::async_trait;
 use candid::Principal;
 use certificate_orchestrator_interface::IcCertificate;
-use ic_agent::{hash_tree::HashTree, Certificate};
+use ic_agent::{Certificate, hash_tree::HashTree};
 use prometheus::{CounterVec, HistogramVec, Registry};
-use tracing::info;
+use tracing::{error, info};
 use trust_dns_resolver::{error::ResolveError, lookup::Lookup, proto::rr::RecordType};
 
 use crate::{
@@ -20,8 +20,8 @@ use crate::{
     },
     verification::{Verify, VerifyError},
     work::{
-        extract_domain, Dispense, DispenseError, Peek, PeekError, Process, ProcessError, Queue,
-        QueueError, Task,
+        Dispense, DispenseError, Peek, PeekError, Process, ProcessError, Queue, QueueError, Task,
+        extract_domain,
     },
 };
 
@@ -342,7 +342,7 @@ impl<T: Process> Process for WithMetrics<T> {
             Err(err) => match err {
                 ProcessError::AwaitingAcmeOrderCreation => "awaiting-acme-order-creation",
                 ProcessError::AwaitingDnsPropagation => "awaiting-dns-propagation",
-                ProcessError::AwaitingAcmeOrderReady => "awaiting-acme-order-ready",
+                ProcessError::AwaitingAcmeOrderReady(_) => "awaiting-acme-order-ready",
                 ProcessError::FailedUserConfigurationCheck => "failed-user-configuration-check",
                 ProcessError::UnexpectedError(_) => "fail",
             },
@@ -539,9 +539,9 @@ impl<T: acme::Finalize> acme::Finalize for WithMetrics<T> {
     async fn finalize(&self, name: &str) -> Result<(String, String), acme::FinalizeError> {
         let start_time = Instant::now();
 
-        let out = self.0.finalize(name).await;
+        let result = self.0.finalize(name).await;
 
-        let status = if out.is_ok() { "ok" } else { "fail" };
+        let status = if result.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
 
         let MetricParams {
@@ -553,9 +553,21 @@ impl<T: acme::Finalize> acme::Finalize for WithMetrics<T> {
         counter.with_label_values(&[status]).inc();
         recorder.with_label_values(&[status]).observe(duration);
 
-        info!(action = action.as_str(), name, status, duration, error = ?out.as_ref().err());
+        match &result {
+            Ok(_) => {
+                info!(action, name, duration,);
+            }
+            Err(err) => {
+                error!(
+                    action,
+                    name,
+                    duration,
+                    error = %err,
+                );
+            }
+        }
 
-        out
+        result
     }
 }
 

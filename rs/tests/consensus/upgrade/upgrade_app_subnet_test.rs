@@ -3,11 +3,11 @@ use std::time::Duration;
 use anyhow::Result;
 
 use ic_consensus_system_test_upgrade_common::{
-    bless_branch_version, get_chain_key_canister_and_public_key, upgrade,
+    bless_target_version, get_chain_key_canister_and_public_key, upgrade,
 };
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
 use ic_consensus_threshold_sig_system_test_utils::make_key_ids_for_all_schemes;
-use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+use ic_registry_subnet_features::{ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
@@ -43,10 +43,10 @@ fn setup(env: TestEnv) {
                 .collect(),
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
     InternetComputer::new()
-        .with_mainnet_config()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .add_subnet(subnet_under_test)
         .setup_and_start(&env)
@@ -55,10 +55,10 @@ fn setup(env: TestEnv) {
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
-// Tests an upgrade of the app subnet to the branch version
+// Tests an upgrade of the app subnet to the target version
 fn upgrade_app_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_system_node_snapshot();
-    let branch_version = bless_branch_version(&env, &nns_node);
+    let target_version = bless_target_version(&env, &nns_node);
     let agent = nns_node.with_default_agent(|agent| async move { agent });
     let ecdsa_state = get_chain_key_canister_and_public_key(
         &env,
@@ -71,9 +71,10 @@ fn upgrade_app_subnet(env: TestEnv) {
     upgrade(
         &env,
         &nns_node,
-        &branch_version,
+        &target_version,
         SubnetType::Application,
         Some(&ecdsa_state),
+        /*assert_graceful_orchestrator_tasks_exits=*/ false,
     );
 }
 

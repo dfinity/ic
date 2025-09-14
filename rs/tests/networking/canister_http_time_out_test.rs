@@ -15,9 +15,10 @@ Success::
 2. Http request to invalid http endpoint returns a transient timeout error.
 
 end::catalog[] */
+#![allow(deprecated)]
 
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use canister_http::*;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
@@ -64,6 +65,7 @@ pub fn test(env: TestEnv) {
                     context: vec![0, 1, 2],
                 }),
                 max_response_bytes: None,
+                is_replicated: None,
             },
             cycles: 500_000_000_000,
         };

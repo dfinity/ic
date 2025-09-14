@@ -9,6 +9,14 @@ on the process that this file is part of, see
 
 ## Added
 
+* Added a new proposal type `DeregisterKnownNeuron` without enabling it (behind feature flag).
+
+* Enable FulfillSubnetRentalRequest proposals. The main effect of such proposals
+  is the creation of an EXCLUSIVE subnet, meaning that only ONE principal is
+  allowed to create canisters in the subnet. For details, see
+  https://forum.dfinity.org/t/subnet-rental-canister-work-on-next-phase-has-started/52803
+  (This is also discussed under the heading "Swiss subnet".)
+
 ## Changed
 
 ## Deprecated
@@ -16,8 +24,5 @@ on the process that this file is part of, see
 ## Removed
 
 ## Fixed
-
-* The `account_identifier_to_disburse_to` in the maturity disbursement now contains a 32-byte
-  address rather than the 28-byte one without checksum.
 
 ## Security

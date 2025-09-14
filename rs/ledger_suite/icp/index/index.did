@@ -2,23 +2,23 @@ type Account = record { owner : principal; subaccount : opt vec nat8 };
 type GetAccountIdentifierTransactionsArgs = record {
   max_results : nat64;
   start : opt nat64;
-  account_identifier : text;
+  account_identifier : text
 };
 type GetAccountTransactionsArgs = record {
-    account : Account;
-    // The txid of the last transaction seen by the client.
-    // If None then the results will start from the most recent
-    // txid. If set then the results will start from the next
-    // most recent txid after start (start won't be included).
-    start : opt nat;
-    // Maximum number of transactions to fetch.
-    max_results : nat;
+  account : Account;
+  // The txid of the last transaction seen by the client.
+  // If None then the results will start from the most recent
+  // txid. If set then the results will start from the next
+  // most recent txid after start (start won't be included).
+  start : opt nat;
+  // Maximum number of transactions to fetch.
+  max_results : nat
 };
 type GetAccountIdentifierTransactionsError = record { message : text };
 type GetAccountIdentifierTransactionsResponse = record {
   balance : nat64;
   transactions : vec TransactionWithId;
-  oldest_tx_id : opt nat64;
+  oldest_tx_id : opt nat64
 };
 type GetBlocksRequest = record { start : nat; length : nat };
 type GetBlocksResponse = record { blocks : vec vec nat8; chain_length : nat64 };
@@ -26,12 +26,12 @@ type HttpRequest = record {
   url : text;
   method : text;
   body : vec nat8;
-  headers : vec record { text; text };
+  headers : vec record { text; text }
 };
 type HttpResponse = record {
   body : vec nat8;
   headers : vec record { text; text };
-  status_code : nat16;
+  status_code : nat16
 };
 type InitArg = record { ledger_id : principal };
 type Operation = variant {
@@ -41,15 +41,21 @@ type Operation = variant {
     allowance : Tokens;
     expires_at : opt TimeStamp;
     spender : text;
-    expected_allowance : opt Tokens;
+    expected_allowance : opt Tokens
   };
   Burn : record { from : text; amount : Tokens; spender : opt text };
   Mint : record { to : text; amount : Tokens };
-  Transfer : record { to : text; fee : Tokens; from : text; amount : Tokens; spender : opt text };
+  Transfer : record {
+    to : text;
+    fee : Tokens;
+    from : text;
+    amount : Tokens;
+    spender : opt text
+  }
 };
 type GetAccountIdentifierTransactionsResult = variant {
   Ok : GetAccountIdentifierTransactionsResponse;
-  Err : GetAccountIdentifierTransactionsError;
+  Err : GetAccountIdentifierTransactionsError
 };
 type Status = record { num_blocks_synced : nat64 };
 type TimeStamp = record { timestamp_nanos : nat64 };
@@ -59,18 +65,18 @@ type Transaction = record {
   icrc1_memo : opt vec nat8;
   operation : Operation;
   created_at_time : opt TimeStamp;
-  timestamp : opt TimeStamp;
+  timestamp : opt TimeStamp
 };
 type TransactionWithId = record { id : nat64; transaction : Transaction };
 service : (InitArg) -> {
   get_account_identifier_balance : (text) -> (nat64) query;
   get_account_identifier_transactions : (
-      GetAccountIdentifierTransactionsArgs,
-    ) -> (GetAccountIdentifierTransactionsResult) query;
+    GetAccountIdentifierTransactionsArgs
+  ) -> (GetAccountIdentifierTransactionsResult) query;
   get_account_transactions : (GetAccountTransactionsArgs) -> (GetAccountIdentifierTransactionsResult) query;
   get_blocks : (GetBlocksRequest) -> (GetBlocksResponse) query;
   http_request : (HttpRequest) -> (HttpResponse) query;
   ledger_id : () -> (principal) query;
   status : () -> (Status) query;
-  icrc1_balance_of : (Account) -> (nat64) query;
+  icrc1_balance_of : (Account) -> (nat64) query
 }

@@ -1,25 +1,25 @@
 use crate::manifest::{
+    ChunkValidationError, DEFAULT_CHUNK_SIZE, DiffScript, MAX_FILE_SIZE_TO_GROUP, ManifestDelta,
+    ManifestMetrics, ManifestValidationError, RehashManifest, StateSyncVersion,
     build_file_group_chunks, build_meta_manifest, compute_manifest, diff_manifest,
     dirty_pages_to_dirty_chunks, file_chunk_range, files_with_sizes, filter_out_zero_chunks,
     hash::ManifestHash, manifest_hash, manifest_hash_v1, manifest_hash_v2, meta_manifest_hash,
     validate_chunk, validate_manifest, validate_manifest_internal_consistency,
-    validate_meta_manifest, validate_sub_manifest, ChunkValidationError, DiffScript, ManifestDelta,
-    ManifestMetrics, ManifestValidationError, StateSyncVersion, DEFAULT_CHUNK_SIZE,
-    MAX_FILE_SIZE_TO_GROUP,
+    validate_meta_manifest, validate_sub_manifest,
 };
 use crate::state_sync::types::{
-    decode_manifest, encode_manifest, ChunkInfo, FileGroupChunks, FileInfo, Manifest, MetaManifest,
-    FILE_GROUP_CHUNK_ID_OFFSET,
+    ChunkInfo, FILE_GROUP_CHUNK_ID_OFFSET, FileGroupChunks, FileInfo, Manifest, MetaManifest,
+    decode_manifest, encode_manifest,
 };
 
 use bit_vec::BitVec;
 use ic_crypto_sha2::Sha256;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_state_layout::{CheckpointLayout, CANISTER_FILE, UNVERIFIED_CHECKPOINT_MARKER};
+use ic_state_layout::{CANISTER_FILE, CheckpointLayout, UNVERIFIED_CHECKPOINT_MARKER};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
-use ic_types::{crypto::CryptoHash, CryptoHashOfState, Height};
+use ic_types::{CryptoHashOfState, Height, crypto::CryptoHash};
 use maplit::btreemap;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
@@ -30,7 +30,7 @@ use strum::IntoEnumIterator;
 const NUM_THREADS: u32 = 3;
 
 macro_rules! hash_concat {
-    ($( $x:expr ),*) => {
+    ($( $x:expr_2021 ),*) => {
         {
             let mut h = Sha256::new();
             $( $x.update_hash(&mut h); )*
@@ -295,6 +295,7 @@ fn test_simple_manifest_computation() {
             &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
             1024,
             None,
+            RehashManifest::No,
         )
         .expect("failed to compute manifest");
 
@@ -312,6 +313,7 @@ fn test_simple_manifest_computation() {
                 &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
                 1024,
                 None,
+                RehashManifest::No,
             )
             .expect("failed to compute manifest");
 
@@ -354,6 +356,7 @@ fn test_manifest_computation_skips_marker_file() {
         &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
         1024,
         None,
+        RehashManifest::No,
     )
     .expect("failed to compute manifest");
 
@@ -367,6 +370,7 @@ fn test_manifest_computation_skips_marker_file() {
         &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
         1024,
         None,
+        RehashManifest::No,
     )
     .expect("failed to compute manifest");
     // The manifest computation should ignore the marker files and produce identical manifest.
@@ -635,11 +639,11 @@ fn orphan_chunk_detected() {
 
         match validate_manifest_internal_consistency(&manifest) {
             Err(ManifestValidationError::InconsistentManifest { .. }) => (),
-            other => panic!("Expected an orphan chunk to be detected, got: {:?}", other),
+            other => panic!("Expected an orphan chunk to be detected, got: {other:?}"),
         }
         match validate_manifest(&manifest, &root_hash) {
             Err(ManifestValidationError::InconsistentManifest { .. }) => (),
-            other => panic!("Expected an orphan chunk to be detected, got: {:?}", other),
+            other => panic!("Expected an orphan chunk to be detected, got: {other:?}"),
         }
     }
 }
@@ -745,6 +749,7 @@ fn test_diff_manifest() {
         &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
         1024 * 1024,
         None,
+        RehashManifest::No,
     )
     .expect("failed to compute manifest");
 
@@ -761,6 +766,7 @@ fn test_diff_manifest() {
         &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
         1024 * 1024,
         None,
+        RehashManifest::No,
     )
     .expect("failed to compute manifest");
 
@@ -813,6 +819,7 @@ fn test_filter_all_zero_chunks() {
         &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
         1024 * 1024,
         None,
+        RehashManifest::No,
     )
     .expect("failed to compute manifest");
 
@@ -897,7 +904,7 @@ fn test_simple_manifest_encoding_roundtrip() {
 
 #[test]
 fn test_hash_plan() {
-    use crate::manifest::{build_chunk_table_parallel, files_with_sizes, hash_plan, ChunkAction};
+    use crate::manifest::{ChunkAction, build_chunk_table_parallel, files_with_sizes, hash_plan};
     use bit_vec::BitVec;
     use maplit::btreemap;
     use std::path::PathBuf;
@@ -930,6 +937,7 @@ fn test_hash_plan() {
         &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
         max_chunk_size,
         None,
+        RehashManifest::No,
     )
     .expect("failed to compute manifest");
 
@@ -947,12 +955,13 @@ fn test_hash_plan() {
         &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
         max_chunk_size,
         None,
+        RehashManifest::No,
     )
     .expect("failed to compute manifest");
 
     // Compute the manifest incrementally.
-    let mut files = Vec::new();
-    files_with_sizes(root, "".into(), &mut files).expect("failed to traverse the files");
+    let mut files =
+        files_with_sizes(root, "".into(), &mut thread_pool).expect("failed to traverse the files");
     // We sort the table to make sure that the table is the same on all replicas
     files.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
 
@@ -1088,7 +1097,7 @@ fn test_hash_plan() {
 
 #[test]
 fn test_dirty_pages_to_dirty_chunks_accounts_for_hardlinks() {
-    use crate::manifest::{dirty_pages_to_dirty_chunks, FileWithSize, ManifestDelta};
+    use crate::manifest::{FileWithSize, ManifestDelta, dirty_pages_to_dirty_chunks};
     use bit_vec::BitVec;
     use maplit::btreemap;
 
@@ -1121,6 +1130,7 @@ fn test_dirty_pages_to_dirty_chunks_accounts_for_hardlinks() {
         &CheckpointLayout::new_untracked(checkpoint0.to_path_buf(), Height::new(0)).unwrap(),
         max_chunk_size,
         None,
+        RehashManifest::No,
     )
     .expect("failed to compute manifest");
     let dirty_chunks = dirty_pages_to_dirty_chunks(
@@ -1141,6 +1151,7 @@ fn test_dirty_pages_to_dirty_chunks_accounts_for_hardlinks() {
             FileWithSize("wasm_b".into(), 2048 * 1024),
         ],
         max_chunk_size,
+        &mut thread_pool,
     )
     .expect("Failed to get dirty chunks");
     assert_eq!(
@@ -1301,6 +1312,7 @@ fn test_file_index_independent_file_hash() {
             &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
             1024,
             None,
+            RehashManifest::No,
         )
         .expect("failed to compute manifest");
 
@@ -1342,8 +1354,8 @@ fn test_file_index_independent_file_hash() {
 
 #[test]
 fn all_same_inodes_are_detected() {
-    use std::fs::hard_link;
     use std::fs::File;
+    use std::fs::hard_link;
 
     let base = tmpdir("base");
     let target = tmpdir("target");
@@ -1378,8 +1390,12 @@ fn all_same_inodes_are_detected() {
             .unwrap(),
     };
 
-    let mut files = Vec::new();
-    files_with_sizes(target.path(), "".into(), &mut files).unwrap();
+    let files = files_with_sizes(
+        target.path(),
+        "".into(),
+        &mut scoped_threadpool::Pool::new(NUM_THREADS),
+    )
+    .unwrap();
 
     let result = dirty_pages_to_dirty_chunks(
         &no_op_logger(),
@@ -1387,6 +1403,7 @@ fn all_same_inodes_are_detected() {
         &CheckpointLayout::new_untracked(target.path().to_path_buf(), Height::new(1)).unwrap(),
         &files,
         1024 * 1024,
+        &mut scoped_threadpool::Pool::new(NUM_THREADS),
     )
     .unwrap();
 

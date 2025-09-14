@@ -1,9 +1,11 @@
 use super::*;
+use crate::governance::{Governance, ValidGovernanceProto};
+use crate::pb::v1::Governance as GovernancePb;
 use crate::pb::v1::governance::Versions;
 use crate::pb::v1::governance::{CachedUpgradeSteps as CachedUpgradeStepsPb, Mode as ModePb};
-use crate::pb::v1::Governance as GovernancePb;
 use crate::types::test_helpers::NativeEnvironment;
 use futures::FutureExt;
+use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockICRC1Ledger};
 use ic_test_utilities_types::ids::canister_test_id;
 use pretty_assertions::assert_eq;
 
@@ -42,7 +44,12 @@ fn standard_governance_proto_for_tests(deployed_version: Option<Version>) -> Gov
         ledger_canister_id: Some(PrincipalId::from(canister_test_id(502))),
         swap_canister_id: Some(PrincipalId::from(canister_test_id(503))),
 
-        sns_metadata: None,
+        sns_metadata: Some(SnsMetadata {
+            logo: None,
+            url: Some("https://example.com".to_string()),
+            name: Some("Example".to_string()),
+            description: Some("Very descriptive description".to_string()),
+        }),
         sns_initialization_parameters: "".to_string(),
         parameters: Some(NervousSystemParameters::with_default_values()),
         id_to_nervous_system_functions: BTreeMap::new(),
@@ -64,6 +71,17 @@ fn standard_governance_proto_for_tests(deployed_version: Option<Version>) -> Gov
         upgrade_journal: None,
         cached_upgrade_steps: None,
     }
+}
+
+fn governance_for_tests(governance_proto: GovernancePb) -> Governance {
+    Governance::new(
+        ValidGovernanceProto::try_from(governance_proto)
+            .expect("Failed validating governance proto"),
+        Box::new(NativeEnvironment::new(Some(canister_test_id(501)))),
+        Box::new(MockICRC1Ledger::default()),
+        Box::new(MockICRC1Ledger::default()),
+        Box::new(MockCMC::default()),
+    )
 }
 
 #[test]
@@ -109,7 +127,6 @@ fn test_validate_and_render_advance_target_version_action() {
         upgrade_steps: Some(Versions { versions }),
         ..Default::default()
     });
-    let env = NativeEnvironment::new(Some(canister_test_id(501)));
 
     // Run code under test.
     {
@@ -118,11 +135,12 @@ fn test_validate_and_render_advance_target_version_action() {
             new_target: Some(SnsVersion::from(intermediate_version.clone())),
         });
 
-        let (_, action_auxiliary) =
-            validate_and_render_action(&Some(action), &env, &governance_proto, vec![])
-                .now_or_never()
-                .unwrap()
-                .unwrap();
+        let governance = governance_for_tests(governance_proto.clone());
+
+        let (_, action_auxiliary) = validate_and_render_action(&Some(action), &governance, vec![])
+            .now_or_never()
+            .unwrap()
+            .unwrap();
 
         // Inspect the observed results.
         assert_eq!(
@@ -141,8 +159,10 @@ fn test_validate_and_render_advance_target_version_action() {
     ] {
         let expected_target_version = expected_target_version.clone();
 
+        let governance = governance_for_tests(governance_proto.clone());
+
         let (actual_text, action_auxiliary) =
-            validate_and_render_action(&Some(action), &env, &governance_proto, vec![])
+            validate_and_render_action(&Some(action), &governance, vec![])
                 .now_or_never()
                 .unwrap()
                 .unwrap();
@@ -217,7 +237,6 @@ fn test_no_pending_upgrades() {
         upgrade_steps: Some(Versions { versions }),
         ..Default::default()
     });
-    let env = NativeEnvironment::new(Some(canister_test_id(501)));
 
     // Run code under test.
     for action in [
@@ -232,7 +251,9 @@ fn test_no_pending_upgrades() {
             new_target: Some(SnsVersion::from(non_existent_version)),
         }),
     ] {
-        let err = validate_and_render_action(&Some(action), &env, &governance_proto, vec![])
+        let governance = governance_for_tests(governance_proto.clone());
+
+        let err = validate_and_render_action(&Some(action), &governance, vec![])
             .now_or_never()
             .unwrap()
             .unwrap_err();
@@ -277,7 +298,6 @@ fn test_deployed_version_not_in_cached_upgrade_steps() {
         upgrade_steps: Some(Versions { versions }),
         ..Default::default()
     });
-    let env = NativeEnvironment::new(Some(canister_test_id(501)));
 
     // Run code under test.
     for action in [
@@ -292,7 +312,9 @@ fn test_deployed_version_not_in_cached_upgrade_steps() {
             new_target: Some(SnsVersion::from(non_existent_version)),
         }),
     ] {
-        let err = validate_and_render_action(&Some(action), &env, &governance_proto, vec![])
+        let governance = governance_for_tests(governance_proto.clone());
+
+        let err = validate_and_render_action(&Some(action), &governance, vec![])
             .now_or_never()
             .unwrap()
             .unwrap_err();
@@ -368,7 +390,7 @@ fn test_invalid_new_targets() {
             Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
                 new_target: Some(SnsVersion::from(next_version.clone())),
             }),
-            Err(format!("SNS target already set to {}.", next_version)),
+            Err(format!("SNS target already set to {next_version}.")),
         ),
         (
             "Scenario D: `new_target` is behind `current_target_version`.",
@@ -376,7 +398,7 @@ fn test_invalid_new_targets() {
             Action::AdvanceSnsTargetVersion(AdvanceSnsTargetVersion {
                 new_target: Some(SnsVersion::from(next_version.clone())),
             }),
-            Err(format!("SNS target already set to {}.", next_next_version)),
+            Err(format!("SNS target already set to {next_next_version}.")),
         ),
         (
             "Scenario E: `new_target` is ahead of `current_target_version`.",
@@ -396,9 +418,10 @@ fn test_invalid_new_targets() {
             }),
             ..Default::default()
         });
-        let env = NativeEnvironment::new(Some(canister_test_id(501)));
 
-        let result = validate_and_render_action(&Some(action), &env, &governance_proto, vec![])
+        let governance = governance_for_tests(governance_proto.clone());
+
+        let result = validate_and_render_action(&Some(action), &governance, vec![])
             .now_or_never()
             .unwrap()
             .map(|(_, action_auxiliary)| action_auxiliary);

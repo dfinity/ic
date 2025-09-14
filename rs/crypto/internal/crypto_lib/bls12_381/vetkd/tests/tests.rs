@@ -1,9 +1,10 @@
 use ic_crypto_internal_bls12_381_type::{
-    verify_bls_signature, G1Affine, G1Projective, G2Affine, G2Prepared, Gt, Polynomial, Scalar,
+    G1Affine, G1Projective, G2Affine, G2Prepared, Gt, Polynomial, Scalar, verify_bls_signature,
 };
 use ic_crypto_internal_bls12_381_vetkd::*;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::{prelude::SliceRandom, CryptoRng, Rng, RngCore, SeedableRng};
+use rand::{CryptoRng, Rng, RngCore, SeedableRng, seq::SliceRandom};
+use std::collections::BTreeMap;
 
 #[derive(Copy, Clone, Debug)]
 /// Deserialization of a transport secret key failed
@@ -68,11 +69,7 @@ impl TransportSecretKey {
         let k_is_valid_sig =
             Gt::multipairing(&[(&k, G2Prepared::neg_generator()), (&msg, &dpk_prep)]).is_identity();
 
-        if k_is_valid_sig {
-            Some(k)
-        } else {
-            None
-        }
+        if k_is_valid_sig { Some(k) } else { None }
     }
 }
 
@@ -86,13 +83,15 @@ fn transport_key_gen_is_stable() {
         "32f7f581d6de3c06a822fd6e7e8265fbc00f8401696a5bdc34f5a6d2ff3f922f"
     );
 
-    assert_eq!(hex::encode(tsk.public_key().serialize()),
-               "ac9524f219f1f958f261c87577e49dbbf2182c4060d51f84b8a0efac33c3c7ba9cd0bc9f41edf434d6c8a8fe20077e50");
+    assert_eq!(
+        hex::encode(tsk.public_key().serialize()),
+        "ac9524f219f1f958f261c87577e49dbbf2182c4060d51f84b8a0efac33c3c7ba9cd0bc9f41edf434d6c8a8fe20077e50"
+    );
 }
 
 fn random_derivation_context<R: RngCore + CryptoRng>(rng: &mut R) -> DerivationContext {
-    let canister_id = rng.gen::<[u8; 32]>();
-    let context = rng.gen::<[u8; 32]>();
+    let canister_id = rng.r#gen::<[u8; 32]>();
+    let context = rng.r#gen::<[u8; 32]>();
 
     DerivationContext::new(&canister_id, &context)
 }
@@ -104,14 +103,18 @@ fn key_derivation_outputs_expected_values() {
     let canister_id = b"test-canister-id";
 
     let context1 = DerivationContext::new(canister_id, &[]);
-    assert_eq!(hex::encode(DerivedPublicKey::derive_sub_key(&mpk, &context1).serialize()),
-               "af78a908589d332fc8b9d042807c483e73872e2aea7620bdb985b9289d5a99ebfd5ac0ec4844a4c542f6d0f12a716d941674953cef4f38dde601ce9792db8832557eaa051733c5541fa5017465d69b62cc4d93f2079fb8c050b4bd735ef75859");
+    assert_eq!(
+        hex::encode(DerivedPublicKey::derive_sub_key(&mpk, &context1).serialize()),
+        "af78a908589d332fc8b9d042807c483e73872e2aea7620bdb985b9289d5a99ebfd5ac0ec4844a4c542f6d0f12a716d941674953cef4f38dde601ce9792db8832557eaa051733c5541fa5017465d69b62cc4d93f2079fb8c050b4bd735ef75859"
+    );
 
     let context = b"test-context";
 
     let context2 = DerivationContext::new(canister_id, context);
-    assert_eq!(hex::encode(DerivedPublicKey::derive_sub_key(&mpk, &context2).serialize()),
-               "a20125b8cdfc57f71b6f67e557e82c1307c1af9f728573f3b682f3b1816684f3f6aed5d8dd40a309b457a25dab7d8a1416fc0e0973000321c0c1dd844d80a5708e81fdd8338ea6433f175992fa05ef343b1e7f89a09f3b5b7c0766ccb3c624cd");
+    assert_eq!(
+        hex::encode(DerivedPublicKey::derive_sub_key(&mpk, &context2).serialize()),
+        "a20125b8cdfc57f71b6f67e557e82c1307c1af9f728573f3b682f3b1816684f3f6aed5d8dd40a309b457a25dab7d8a1416fc0e0973000321c0c1dd844d80a5708e81fdd8338ea6433f175992fa05ef343b1e7f89a09f3b5b7c0766ccb3c624cd"
+    );
 }
 
 #[test]
@@ -129,7 +132,7 @@ fn encrypted_key_share_creation_is_stable() {
     let master_pk = G2Affine::from(G2Affine::generator() * master_sk);
 
     let context = random_derivation_context(&mut rng);
-    let input = rng.gen::<[u8; 28]>();
+    let input = rng.r#gen::<[u8; 28]>();
 
     const EXPECTED_EKS_VALUE: [&str; NODES] = [
         "811d9cd064cd7c6ab4a448c68b8b5fc8a5f08cd17c78d46469e810e8df3d1f8d3f1431ccf627e2198b72d850eb99b2e2b2dfe2c43ddf86e5403ba474a3a0ba596ddabecfe303eddfd70444057baaae733f92eca70509425f87633ce9d78a28040b559446e22f73d637b04c6eca6ecff71fb3d1a662d86ef22fa6c3ef8157c582e4afdc7a0047d4535c6e01e9c65eae7896dea80dc666ec27eba683e2f08148b623aa697fa6f04740eac098b1ccdbd2b17632b3132750bbd48969b2e0346e6170",
@@ -155,7 +158,6 @@ fn encrypted_key_share_creation_is_stable() {
 }
 
 struct VetkdTestProtocolSetup {
-    nodes: usize,
     threshold: usize,
     transport_sk: TransportSecretKey,
     transport_pk: TransportPublicKey,
@@ -183,7 +185,6 @@ impl VetkdTestProtocolSetup {
         }
 
         Self {
-            nodes,
             threshold,
             transport_sk,
             transport_pk,
@@ -205,7 +206,7 @@ impl<'a> VetkdTestProtocolExecution<'a> {
         rng: &mut R,
         setup: &'a VetkdTestProtocolSetup,
     ) -> VetkdTestProtocolExecution<'a> {
-        let input = rng.gen::<[u8; 32]>().to_vec();
+        let input = rng.r#gen::<[u8; 32]>().to_vec();
         let context = random_derivation_context(rng);
 
         let derived_pk = DerivedPublicKey::derive_sub_key(&setup.master_pk, &context);
@@ -222,8 +223,8 @@ impl<'a> VetkdTestProtocolExecution<'a> {
         &self,
         rng: &mut R,
         input: Option<&[u8]>,
-    ) -> Vec<(u32, G2Affine, EncryptedKeyShare)> {
-        let mut node_info = Vec::with_capacity(self.setup.nodes);
+    ) -> BTreeMap<NodeIndex, (G2Affine, EncryptedKeyShare)> {
+        let mut node_info = BTreeMap::new();
 
         let input = input.unwrap_or(&self.input);
 
@@ -250,7 +251,7 @@ impl<'a> VetkdTestProtocolExecution<'a> {
             let eks2 = EncryptedKeyShare::deserialize(&eks_bytes).unwrap();
             assert_eq!(eks, eks2);
 
-            node_info.push((node_idx as u32, node_pk.clone(), eks.clone()));
+            node_info.insert(node_idx as NodeIndex, (node_pk.clone(), eks.clone()));
         }
 
         node_info
@@ -258,7 +259,7 @@ impl<'a> VetkdTestProtocolExecution<'a> {
 
     fn combine_all(
         &self,
-        node_eks: &[(u32, EncryptedKeyShare)],
+        node_eks: &BTreeMap<NodeIndex, EncryptedKeyShare>,
     ) -> Result<EncryptedKey, EncryptedKeyCombinationError> {
         EncryptedKey::combine_all(
             node_eks,
@@ -272,7 +273,7 @@ impl<'a> VetkdTestProtocolExecution<'a> {
 
     fn combine_valid(
         &self,
-        node_info: &[(u32, G2Affine, EncryptedKeyShare)],
+        node_info: &BTreeMap<NodeIndex, (G2Affine, EncryptedKeyShare)>,
     ) -> Result<EncryptedKey, EncryptedKeyCombinationError> {
         EncryptedKey::combine_valid_shares(
             node_info,
@@ -285,14 +286,36 @@ impl<'a> VetkdTestProtocolExecution<'a> {
     }
 }
 
-fn random_subset<R: rand::Rng, T: Clone>(rng: &mut R, items: &[T], include: usize) -> Vec<T> {
-    use rand::seq::SliceRandom;
+fn remove_public_keys(
+    node_info: &BTreeMap<NodeIndex, (G2Affine, EncryptedKeyShare)>,
+) -> BTreeMap<NodeIndex, EncryptedKeyShare> {
+    let mut ek = BTreeMap::new();
 
+    for (index, (_pk, eks)) in node_info {
+        ek.insert(*index, eks.clone());
+    }
+    ek
+}
+
+fn random_subset<R: rand::Rng, T: Clone>(
+    rng: &mut R,
+    items: &BTreeMap<NodeIndex, T>,
+    include: usize,
+) -> BTreeMap<NodeIndex, T> {
     assert!(include <= items.len());
-    let result: Vec<_> = items.choose_multiple(rng, include).cloned().collect();
-    assert_eq!(result.len(), include);
 
-    result
+    let mut keys: Vec<_> = items.keys().cloned().collect();
+    keys.shuffle(rng);
+
+    let selected_keys = keys.into_iter().take(include);
+
+    let r: BTreeMap<NodeIndex, T> = selected_keys
+        .filter_map(|k| items.get(&k).cloned().map(|v| (k, v)))
+        .collect();
+
+    assert_eq!(r.len(), include);
+
+    r
 }
 
 #[test]
@@ -307,39 +330,39 @@ fn test_protocol_execution() {
 
     let node_info = proto.create_encrypted_key_shares(rng, None);
 
-    let node_eks = node_info
-        .iter()
-        .map(|(idx, _pk, eks)| (*idx, eks.clone()))
-        .collect::<Vec<_>>();
+    let node_eks = remove_public_keys(&node_info);
 
     let mut keys_recovered = vec![];
 
     // Check that recovery works with sufficient shares, and fails without sufficient shares
     for rec_threshold in 1..nodes {
-        if let Ok(ek) = proto.combine_all(&random_subset(rng, &node_eks, rec_threshold)) {
-            assert!(
-                rec_threshold >= threshold,
-                "Recovery only works with sufficient quorum"
-            );
+        match proto.combine_all(&random_subset(rng, &node_eks, rec_threshold)) {
+            Ok(ek) => {
+                assert!(
+                    rec_threshold >= threshold,
+                    "Recovery only works with sufficient quorum"
+                );
 
-            assert!(ek.is_valid(
-                &setup.master_pk,
-                &proto.context,
-                &proto.input,
-                &setup.transport_pk
-            ));
+                assert!(ek.is_valid(
+                    &setup.master_pk,
+                    &proto.context,
+                    &proto.input,
+                    &setup.transport_pk
+                ));
 
-            let k = setup
-                .transport_sk
-                .decrypt(&ek, &proto.derived_pk, &proto.input)
-                .expect("Decryption failed");
+                let k = setup
+                    .transport_sk
+                    .decrypt(&ek, &proto.derived_pk, &proto.input)
+                    .expect("Decryption failed");
 
-            keys_recovered.push(k);
-        } else {
-            assert!(
-                rec_threshold < threshold,
-                "Recovery fails with insufficient quorum"
-            );
+                keys_recovered.push(k);
+            }
+            _ => {
+                assert!(
+                    rec_threshold < threshold,
+                    "Recovery fails with insufficient quorum"
+                );
+            }
         }
     }
 
@@ -361,14 +384,11 @@ fn test_protocol_execution() {
 
     // Check that if we introduce incorrect shares then combine_all will fail
 
-    let other_input = rng.gen::<[u8; 24]>();
+    let other_input = rng.r#gen::<[u8; 24]>();
     assert_ne!(proto.input, other_input);
     let node_info_wrong_input = proto.create_encrypted_key_shares(rng, Some(&other_input));
 
-    let node_eks_wrong_input = node_info_wrong_input
-        .iter()
-        .map(|(idx, _pk, eks)| (*idx, eks.clone()))
-        .collect::<Vec<_>>();
+    let node_eks_wrong_input = remove_public_keys(&node_info_wrong_input);
 
     // With combine_all even if we provide sufficiently many valid shares
     // if any one share is invalid then combination will fail
@@ -377,14 +397,16 @@ fn test_protocol_execution() {
 
         // Avoid using a duplicate index for this test
         let random_unused_idx = loop {
-            let idx = (rng.gen::<usize>() % node_eks_wrong_input.len()) as u32;
-            if !shares.iter().map(|(i, _eks)| *i).any(|x| x == idx) {
-                break idx as usize;
+            let idx = (rng.r#gen::<usize>() % node_eks_wrong_input.len()) as NodeIndex;
+            if !shares.contains_key(&idx) {
+                break idx;
             }
         };
 
-        shares.push(node_eks_wrong_input[random_unused_idx].clone());
-        shares.shuffle(rng);
+        shares.insert(
+            random_unused_idx,
+            node_eks_wrong_input[&random_unused_idx].clone(),
+        );
 
         let expected_error = if rec_threshold < threshold {
             EncryptedKeyCombinationError::InsufficientShares
@@ -394,38 +416,21 @@ fn test_protocol_execution() {
         assert_eq!(proto.combine_all(&shares), Err(expected_error));
     }
 
-    // Check that duplicate node indexes are detected
-    for rec_threshold in 2..nodes {
-        let mut shares = random_subset(rng, &node_eks, rec_threshold - 1);
-
-        let random_duplicate_idx = loop {
-            let idx = (rng.gen::<usize>() % node_eks.len()) as u32;
-
-            if shares.iter().map(|(i, _eks)| *i).any(|x| x == idx) {
-                break idx as usize;
-            }
-        };
-
-        shares.push(node_eks[random_duplicate_idx].clone());
-        shares.shuffle(rng);
-
-        let expected_error = if rec_threshold < threshold {
-            EncryptedKeyCombinationError::InsufficientShares
-        } else {
-            EncryptedKeyCombinationError::DuplicateNodeIndex
-        };
-        assert_eq!(proto.combine_all(&shares), Err(expected_error));
-    }
-
     // With combine_valid_shares OTOH we detect and reject the invalid shares
 
     for rec_threshold in threshold..nodes {
         let mut shares = random_subset(rng, &node_info, rec_threshold);
-        shares.append(&mut random_subset(rng, &node_info_wrong_input, 4));
-        shares.shuffle(rng);
+
+        for (idx, (pk, eks)) in random_subset(rng, &node_info_wrong_input, 4) {
+            // Avoid overwriting existing valid shares
+            shares.insert(idx + 10000, (pk, eks));
+        }
 
         let combined = proto.combine_valid(&shares);
-        assert!(combined.is_ok(), "Combination unexpectedly failed");
+        assert!(
+            combined.is_ok(),
+            "Combination with valid and invalid shares unexpectedly failed"
+        );
 
         let k = setup
             .transport_sk
@@ -437,46 +442,5 @@ fn test_protocol_execution() {
             .expect("Decryption failed");
 
         assert_eq!(k, vetkey);
-    }
-
-    // Here check that if we add a random duplicate (valid) share to the
-    // list, combine_valid succeeds iff the duplicated share does not
-    // appear in the first `threshold` many shares, since we only look
-    // at that many
-    for rec_threshold in threshold..nodes {
-        let mut shares = random_subset(rng, &node_info, rec_threshold);
-
-        let random_duplicate_idx = loop {
-            let idx = (rng.gen::<usize>() % node_eks.len()) as u32;
-
-            if shares.iter().map(|x| x.0).any(|x| x == idx) {
-                break idx as usize;
-            }
-        };
-
-        shares.push(node_info[random_duplicate_idx].clone());
-        shares.shuffle(rng);
-
-        let result = proto.combine_valid(&shares);
-
-        if result.is_ok() {
-            // This can still suceed since we only look at the first threshold shares
-            // If success, verify that the duplicate appears later in the list
-
-            let indexes = shares
-                .iter()
-                .map(|s| s.0)
-                .enumerate()
-                .filter(|(_i, s)| *s == random_duplicate_idx as u32)
-                .map(|s| s.0)
-                .collect::<Vec<usize>>();
-            assert_eq!(indexes.len(), 2);
-            assert!(indexes[1] >= threshold);
-        } else {
-            assert_eq!(
-                result,
-                Err(EncryptedKeyCombinationError::DuplicateNodeIndex)
-            );
-        }
     }
 }

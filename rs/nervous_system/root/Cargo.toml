@@ -15,6 +15,11 @@ ic-cdk = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-nervous-system-clients = { path = "../clients" }
+ic-nervous-system-lock = { path = "../lock" }
 ic-nervous-system-runtime = { path = "../runtime" }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
+
+[dev-dependencies]
+async-trait = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }

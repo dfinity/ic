@@ -9,9 +9,7 @@ on the process that this file is part of, see
 
 ## Added
 
-### New `get_metrics` function for SNS Governance
-
-A new function, `get_metrics`, has been added to the SNS Governance canister. This allows front-end clients and SNS aggregators to query for activity metrics of an SNS over a specified time period. Currently, the metrics include the number of most-recent proposals and the timestamp of the latest SNS ledger transaction.
+* The feature flag `SNS_EXTENSIONS_ENABLED` is turned on. Enabling it allows for deployment of SNS extensions.
 
 ## Changed
 

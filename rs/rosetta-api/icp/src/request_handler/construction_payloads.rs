@@ -1,8 +1,8 @@
 use candid::Encode;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_types::{
-    messages::{Blob, HttpCanisterUpdate, MessageId},
     PrincipalId,
+    messages::{Blob, HttpCanisterUpdate, MessageId},
 };
 use icp_ledger::{Memo, Operation, SendArgs, Tokens};
 use rand::Rng;
@@ -20,17 +20,17 @@ use crate::{
         UnsignedTransaction,
     },
     request::Request,
-    request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler},
+    request_handler::{RosettaRequestHandler, make_sig_data, verify_network_id},
     request_types::{
-        AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, ListNeurons, MergeMaturity,
+        AddHotKey, ChangeAutoStakeMaturity, Disburse, DisburseMaturity, Follow, ListNeurons,
         NeuronInfo, PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey,
         RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve,
         StopDissolve,
     },
 };
 use ic_nns_governance_api::{
-    manage_neuron::{self, configure, Command, NeuronIdOrSubaccount},
     ClaimOrRefreshNeuronFromAccount, ManageNeuron,
+    manage_neuron::{self, Command, NeuronIdOrSubaccount, configure},
 };
 use rosetta_core::convert::principal_id_from_public_key;
 
@@ -86,7 +86,7 @@ impl RosettaRequestHandler {
             .as_ref()
             .and_then(|meta| meta.memo)
             .map(Memo)
-            .unwrap_or_else(|| Memo(rand::thread_rng().gen()));
+            .unwrap_or_else(|| Memo(rand::thread_rng().r#gen()));
 
         let mut ingress_expiries = vec![];
         let mut now = ingress_start;
@@ -193,6 +193,13 @@ impl RosettaRequestHandler {
                     &pks_map,
                     &ingress_expiries,
                 )?,
+                Request::DisburseMaturity(req) => handle_disburse_maturity(
+                    req,
+                    &mut payloads,
+                    &mut updates,
+                    &pks_map,
+                    &ingress_expiries,
+                )?,
                 Request::Spawn(req) => handle_spawn(
                     req,
                     &mut payloads,
@@ -201,13 +208,6 @@ impl RosettaRequestHandler {
                     &ingress_expiries,
                 )?,
                 Request::RegisterVote(req) => handle_register_vote(
-                    req,
-                    &mut payloads,
-                    &mut updates,
-                    &pks_map,
-                    &ingress_expiries,
-                )?,
-                Request::MergeMaturity(req) => handle_merge_maturity(
                     req,
                     &mut payloads,
                     &mut updates,
@@ -314,8 +314,7 @@ fn handle_transfer_operation(
 ) -> Result<(), ApiError> {
     let pk = pks_map.get(&from).ok_or_else(|| {
         ApiError::internal_error(format!(
-            "Cannot find public key for account identifier {}",
-            from,
+            "Cannot find public key for account identifier {from}",
         ))
     })?;
 
@@ -373,8 +372,7 @@ fn handle_neuron_info(
     // we can use the same logic for controller or hotkey.
     let pk = pks_map.get(&account).ok_or_else(|| {
         ApiError::internal_error(format!(
-            "NeuronInfo - Cannot find public key for account {}",
-            account,
+            "NeuronInfo - Cannot find public key for account {account}",
         ))
     })?;
     let sender = principal_id_from_public_key(pk)
@@ -421,8 +419,7 @@ fn handle_list_neurons(
     // we can use the same logic for controller or hotkey.
     let pk = pks_map.get(&account).ok_or_else(|| {
         ApiError::internal_error(format!(
-            "NeuronInfo - Cannot find public key for account {}",
-            account,
+            "NeuronInfo - Cannot find public key for account {account}",
         ))
     })?;
     let sender = principal_id_from_public_key(pk)
@@ -494,6 +491,36 @@ fn handle_disburse(
     Ok(())
 }
 
+/// Handle DISBURSE_MATURITY.
+fn handle_disburse_maturity(
+    req: DisburseMaturity,
+    payloads: &mut Vec<SigningPayload>,
+    updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
+    ingress_expiries: &[u64],
+) -> Result<(), ApiError> {
+    let account = req.account;
+    let neuron_index = req.neuron_index;
+    let command = Command::DisburseMaturity(manage_neuron::DisburseMaturity {
+        percentage_to_disburse: req.percentage_to_disburse,
+        to_account_identifier: req.recipient.map(From::from),
+        to_account: None,
+    });
+
+    add_neuron_management_payload(
+        RequestType::DisburseMaturity { neuron_index },
+        account,
+        None,
+        neuron_index,
+        command,
+        payloads,
+        updates,
+        pks_map,
+        ingress_expiries,
+    )?;
+    Ok(())
+}
+
 /// Handle STAKE.
 fn handle_stake(
     req: Stake,
@@ -506,8 +533,7 @@ fn handle_stake(
     let neuron_index = req.neuron_index;
     let pk = pks_map.get(&account).ok_or_else(|| {
         ApiError::internal_error(format!(
-            "Cannot find public key for account identifier {}",
-            account,
+            "Cannot find public key for account identifier {account}",
         ))
     })?;
 
@@ -802,34 +828,6 @@ fn handle_register_vote(
     Ok(())
 }
 
-/// Handle MERGE_MATURITY.
-fn handle_merge_maturity(
-    req: MergeMaturity,
-    payloads: &mut Vec<SigningPayload>,
-    updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
-    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
-    ingress_expiries: &[u64],
-) -> Result<(), ApiError> {
-    let account = req.account;
-    let neuron_index = req.neuron_index;
-    let percentage_to_merge = req.percentage_to_merge;
-    let command = Command::MergeMaturity(manage_neuron::MergeMaturity {
-        percentage_to_merge,
-    });
-    add_neuron_management_payload(
-        RequestType::MergeMaturity { neuron_index },
-        account,
-        None,
-        neuron_index,
-        command,
-        payloads,
-        updates,
-        pks_map,
-        ingress_expiries,
-    )?;
-    Ok(())
-}
-
 fn handle_stake_maturity(
     req: StakeMaturity,
     payloads: &mut Vec<SigningPayload>,
@@ -939,8 +937,7 @@ fn add_neuron_management_payload(
     // we can use the same logic for controller or hotkey.
     let pk = pks_map.get(&account).ok_or_else(|| {
         ApiError::internal_error(format!(
-            "Neuron management - Cannot find public key for account {}",
-            account,
+            "Neuron management - Cannot find public key for account {account}",
         ))
     })?;
 
@@ -1029,8 +1026,7 @@ fn neuron_subaccount(
                 .get(&account)
                 .ok_or_else(|| {
                     ApiError::internal_error(format!(
-                        "Cannot find public key for account {}",
-                        account,
+                        "Cannot find public key for account {account}",
                     ))
                 })
                 .unwrap();

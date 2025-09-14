@@ -10,6 +10,7 @@ documentation.workspace = true
 os_qualification_utils = { path = "./utils" }
 ic-system-test-driver = { path = "../driver" }
 ic-protobuf = { path = "../../protobuf" }
+ic-types = { path = "../../types/types" }
 tokio.workspace = true
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 anyhow.workspace = true

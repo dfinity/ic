@@ -5,12 +5,15 @@
 
 //! A crate for creating and verifying Ed25519 signatures
 
-use curve25519_dalek::{edwards::CompressedEdwardsY, EdwardsPoint, Scalar};
+use curve25519_dalek::{EdwardsPoint, Scalar, edwards::CompressedEdwardsY};
 use ed25519_dalek::pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey, EncodePublicKey};
 use ed25519_dalek::{Digest, Sha512};
 use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
+use hex_literal::hex;
 use thiserror::Error;
 use zeroize::ZeroizeOnDrop;
+
+pub use ic_principal::Principal as CanisterId;
 
 /// An error if a private key cannot be decoded
 #[derive(Clone, Debug, Error)]
@@ -243,7 +246,7 @@ impl PrivateKey {
             Self::deserialize_raw(&bytes[sk_offset..sk_offset + Self::BYTES])
         } else {
             let sk = SigningKey::from_pkcs8_der(bytes)
-                .map_err(|e| PrivateKeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
+                .map_err(|e| PrivateKeyDecodingError::InvalidKeyEncoding(format!("{e:?}")))?;
             Ok(Self { sk })
         }
     }
@@ -267,7 +270,7 @@ impl PrivateKey {
     /// This corresponds with the format used by PrivateKey::serialize_pkcs8_pem
     pub fn deserialize_pkcs8_pem(pem: &str) -> Result<Self, PrivateKeyDecodingError> {
         let der = pem::parse(pem)
-            .map_err(|e| PrivateKeyDecodingError::InvalidPemEncoding(format!("{:?}", e)))?;
+            .map_err(|e| PrivateKeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
         if der.tag != "PRIVATE KEY" {
             return Err(PrivateKeyDecodingError::UnexpectedPemLabel(der.tag));
         }
@@ -480,6 +483,15 @@ impl Signature {
     }
 }
 
+/// An identifier for the mainnet production key
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum MasterPublicKeyId {
+    /// The production master key
+    Key1,
+    /// The test master key
+    TestKey1,
+}
+
 /// An Ed25519 public key
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct PublicKey {
@@ -599,7 +611,7 @@ impl PublicKey {
             ))
         })?;
         let pk = VerifyingKey::from_bytes(&bytes)
-            .map_err(|e| PublicKeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
+            .map_err(|e| PublicKeyDecodingError::InvalidKeyEncoding(format!("{e:?}")))?;
 
         Ok(Self::new(pk))
     }
@@ -639,7 +651,7 @@ impl PublicKey {
     /// properties, use is_torsion_free and is_canonical
     pub fn deserialize_rfc8410_der(bytes: &[u8]) -> Result<Self, PublicKeyDecodingError> {
         let pk = VerifyingKey::from_public_key_der(bytes)
-            .map_err(|e| PublicKeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
+            .map_err(|e| PublicKeyDecodingError::InvalidKeyEncoding(format!("{e:?}")))?;
         Ok(Self::new(pk))
     }
 
@@ -655,7 +667,7 @@ impl PublicKey {
     /// properties, use is_torsion_free and is_canonical
     pub fn deserialize_rfc8410_pem(pem: &str) -> Result<Self, PublicKeyDecodingError> {
         let der = pem::parse(pem)
-            .map_err(|e| PublicKeyDecodingError::InvalidPemEncoding(format!("{:?}", e)))?;
+            .map_err(|e| PublicKeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
         if der.tag != "PUBLIC KEY" {
             return Err(PublicKeyDecodingError::UnexpectedPemLabel(der.tag));
         }
@@ -736,7 +748,7 @@ impl PublicKey {
             .collect::<Vec<_>>();
 
         // Select a random Scalar for each signature.
-        let zs: Vec<Scalar> = (0..n).map(|_| Scalar::from(rng.gen::<u128>())).collect();
+        let zs: Vec<Scalar> = (0..n).map(|_| Scalar::from(rng.r#gen::<u128>())).collect();
 
         let b_coefficient: Scalar = signatures
             .iter()
@@ -760,6 +772,35 @@ impl PublicKey {
         } else {
             Err(SignatureError::InvalidSignature)
         }
+    }
+
+    /// Return the public master keys used in the production mainnet
+    pub fn mainnet_key(key_id: MasterPublicKeyId) -> Self {
+        match key_id {
+            MasterPublicKeyId::Key1 => Self::deserialize_raw(&hex!(
+                "476374d9df3a8af28d3164dc2422cff894482eadd1295290b6d9ad92b2eeaa5c"
+            ))
+            .expect("Hardcoded master key was rejected"),
+            MasterPublicKeyId::TestKey1 => Self::deserialize_raw(&hex!(
+                "6c0824beb37621bcca6eecc237ed1bc4e64c9c59dcb85344aa7f9cc8278ee31f"
+            ))
+            .expect("Hardcoded master key was rejected"),
+        }
+    }
+
+    /// Derive a public key from the mainnet parameters
+    ///
+    /// This is an offline equivalent to the `schnorr_public_key` management canister call
+    pub fn derive_mainnet_key(
+        key_id: MasterPublicKeyId,
+        canister_id: &CanisterId,
+        derivation_path: &[Vec<u8>],
+    ) -> (Self, [u8; 32]) {
+        let mk = PublicKey::mainnet_key(key_id);
+        mk.derive_subkey(&DerivationPath::from_canister_id_and_path(
+            canister_id.as_slice(),
+            derivation_path,
+        ))
     }
 
     /// Derive a public key from this public key using a derivation path

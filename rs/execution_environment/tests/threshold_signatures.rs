@@ -8,8 +8,8 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError};
-use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
-use ic_types::{ingress::WasmResult, CanisterId, Cycles, RegistryVersion, SubnetId};
+use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
+use ic_types::{CanisterId, Cycles, RegistryVersion, SubnetId, ingress::WasmResult};
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
 use itertools::Itertools;
 use serde::Deserialize;
@@ -76,7 +76,7 @@ fn into_inner_vetkd(key_id: MasterPublicKeyId) -> VetKdKeyId {
     }
 }
 
-fn compute_initial_threshold_key_dealings_payload(
+fn reshare_chain_key_payload(
     method: Method,
     key_id: MasterPublicKeyId,
     subnet_id: SubnetId,
@@ -84,9 +84,8 @@ fn compute_initial_threshold_key_dealings_payload(
     let nodes = vec![node_test_id(1), node_test_id(2)].into_iter().collect();
     let registry_version = RegistryVersion::from(100);
     match method {
-        Method::ComputeInitialIDkgDealings => {
-            ic00::ComputeInitialIDkgDealingsArgs::new(key_id, subnet_id, nodes, registry_version)
-                .encode()
+        Method::ReshareChainKey => {
+            ic00::ReshareChainKeyArgs::new(key_id, subnet_id, nodes, registry_version).encode()
         }
         _ => panic!("unexpected method"),
     }
@@ -211,24 +210,24 @@ where
     match result {
         Ok(wasm_result) => match wasm_result {
             WasmResult::Reply(bytes) => Decode!(&bytes, T).unwrap(),
-            WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+            WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
         },
-        Err(err) => panic!("Unexpected error: {}", err),
+        Err(err) => panic!("Unexpected error: {err}"),
     }
 }
 
 pub fn get_reject_message(result: Result<WasmResult, UserError>) -> String {
     match result {
         Ok(wasm_result) => match wasm_result {
-            WasmResult::Reply(bytes) => panic!("Unexpected reply: {:?}", bytes),
+            WasmResult::Reply(bytes) => panic!("Unexpected reply: {bytes:?}"),
             WasmResult::Reject(msg) => msg,
         },
-        Err(err) => panic!("Unexpected error: {}", err),
+        Err(err) => panic!("Unexpected error: {err}"),
     }
 }
 
 macro_rules! expect_contains {
-    ($message:expr, $expected:expr) => {
+    ($message:expr_2021, $expected:expr_2021) => {
         assert!(
             $message.contains($expected),
             "Expected: {}\nActual: {}",
@@ -238,20 +237,12 @@ macro_rules! expect_contains {
     };
 }
 
-fn compute_initial_threshold_key_dealings_test_cases() -> Vec<(Method, MasterPublicKeyId)> {
+fn reshare_chain_key_test_cases() -> Vec<(Method, MasterPublicKeyId)> {
     vec![
-        (
-            Method::ComputeInitialIDkgDealings,
-            make_ecdsa_key("some_key"),
-        ),
-        (
-            Method::ComputeInitialIDkgDealings,
-            make_ed25519_key("some_key"),
-        ),
-        (
-            Method::ComputeInitialIDkgDealings,
-            make_bip340_key("some_key"),
-        ),
+        (Method::ReshareChainKey, make_ecdsa_key("some_key")),
+        (Method::ReshareChainKey, make_ed25519_key("some_key")),
+        (Method::ReshareChainKey, make_bip340_key("some_key")),
+        (Method::ReshareChainKey, make_vetkd_key("some_key")),
     ]
 }
 
@@ -264,8 +255,8 @@ fn format_keys(keys: Vec<MasterPublicKeyId>) -> String {
 }
 
 #[test]
-fn test_compute_initial_idkg_dealings_sender_on_nns() {
-    for (method, key_id) in compute_initial_threshold_key_dealings_test_cases() {
+fn test_reshare_chain_keys_sender_on_nns() {
+    for (method, key_id) in reshare_chain_key_test_cases() {
         let nns_subnet = subnet_test_id(1);
         let env = StateMachineBuilder::new()
             .with_checkpoints_enabled(false)
@@ -295,7 +286,7 @@ fn test_compute_initial_idkg_dealings_sender_on_nns() {
                     ic00::IC_00,
                     method,
                     call_args()
-                        .other_side(compute_initial_threshold_key_dealings_payload(
+                        .other_side(reshare_chain_key_payload(
                             method,
                             key_id.clone(),
                             nns_subnet,
@@ -319,8 +310,8 @@ fn test_compute_initial_idkg_dealings_sender_on_nns() {
 }
 
 #[test]
-fn test_compute_initial_idkg_dealings_sender_not_on_nns() {
-    for (method, key_id) in compute_initial_threshold_key_dealings_test_cases() {
+fn test_reshare_chain_keys_sender_not_on_nns() {
+    for (method, key_id) in reshare_chain_key_test_cases() {
         let own_subnet = subnet_test_id(1);
         let nns_subnet = subnet_test_id(2);
         let env = StateMachineBuilder::new()
@@ -339,9 +330,7 @@ fn test_compute_initial_idkg_dealings_sender_not_on_nns() {
                     ic00::IC_00,
                     method,
                     call_args()
-                        .other_side(compute_initial_threshold_key_dealings_payload(
-                            method, key_id, own_subnet,
-                        ))
+                        .other_side(reshare_chain_key_payload(method, key_id, own_subnet))
                         .on_reject(wasm().reject_message().reject()),
                 )
                 .build(),
@@ -357,8 +346,8 @@ fn test_compute_initial_idkg_dealings_sender_not_on_nns() {
 }
 
 #[test]
-fn test_compute_initial_idkg_dealings_with_unknown_key() {
-    for (method, unknown_key) in compute_initial_threshold_key_dealings_test_cases() {
+fn test_reshare_chain_key_with_unknown_key() {
+    for (method, unknown_key) in reshare_chain_key_test_cases() {
         let nns_subnet = subnet_test_id(2);
         let env = StateMachineBuilder::new()
             .with_checkpoints_enabled(false)
@@ -375,7 +364,7 @@ fn test_compute_initial_idkg_dealings_with_unknown_key() {
                     ic00::IC_00,
                     method,
                     call_args()
-                        .other_side(compute_initial_threshold_key_dealings_payload(
+                        .other_side(reshare_chain_key_payload(
                             method,
                             unknown_key.clone(),
                             nns_subnet,
@@ -388,8 +377,7 @@ fn test_compute_initial_idkg_dealings_with_unknown_key() {
         assert_eq!(
             result,
             Ok(WasmResult::Reject(format!(
-                "Unable to route management canister request {}: ChainKeyError(\"Requested unknown threshold key {} on subnet {}, subnet has keys: []\")",
-                method, unknown_key, nns_subnet,
+                "Unable to route management canister request {method}: ChainKeyError(\"Requested unknown threshold key {unknown_key} on subnet {nns_subnet}, subnet has keys: []\")",
             ))),
         );
     }
@@ -910,8 +898,7 @@ fn test_sign_with_threshold_key_queue_fills_up() {
         assert_eq!(
             result,
             Ok(WasmResult::Reject(format!(
-                "{} request failed: request queue for key {} is full.",
-                method, key_id,
+                "{method} request failed: request queue for key {key_id} is full.",
             )))
         );
     }

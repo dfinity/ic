@@ -13,4 +13,7 @@
         "followee",
         "followees"
     ],
+    "files.associations": {
+        "PULL_REQUEST_BAZEL_TARGETS": "ignore"
+    }
 }

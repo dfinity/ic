@@ -7,13 +7,13 @@ use std::{
 };
 
 use axum::{
+    Router,
     body::Body,
     extract::{Path, Request},
     http::{HeaderMap, HeaderName, Method, StatusCode},
     middleware::map_response,
     response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post},
-    Router,
 };
 use clap::Parser;
 use hyper::body::Incoming;
@@ -21,12 +21,13 @@ use hyper_util::{
     rt::{TokioExecutor, TokioIo},
     server::conn::auto::Builder,
 };
+use rand::Rng;
 use rustls::ServerConfig;
 use serde_json::json;
 use tokio::{
     net::TcpListener,
     select, signal,
-    time::{sleep, Duration},
+    time::{Duration, sleep},
 };
 use tokio_rustls::TlsAcceptor;
 use tower::Service;
@@ -116,8 +117,8 @@ async fn many_response_headers_handler(Path(size): Path<usize>) -> (HeaderMap, S
 
     for i in 0..size {
         headers.insert(
-            HeaderName::from_str(&format!("Name{:?}", i)).unwrap(),
-            format!("value{:?}", i).parse().unwrap(),
+            HeaderName::from_str(&format!("Name{i:?}")).unwrap(),
+            format!("value{i:?}").parse().unwrap(),
         );
     }
 
@@ -186,6 +187,12 @@ async fn large_response_total_header_size_handler(
     builder.body(Body::empty()).unwrap()
 }
 
+async fn random_handler() -> String {
+    let mut rng = rand::thread_rng();
+    let random_number: u32 = rng.gen_range(1..=1000000000);
+    random_number.to_string()
+}
+
 async fn fallback() -> Redirect {
     Redirect::to("/anything")
 }
@@ -252,6 +259,7 @@ fn router() -> Router {
             "/large_response_total_header_size/{n}/{m}",
             get(large_response_total_header_size_handler),
         )
+        .route("/random", get(random_handler))
         .fallback(fallback)
         .layer(map_response(add_deterministic_headers))
 }

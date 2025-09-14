@@ -10,6 +10,7 @@ documentation.workspace = true
 clap = { workspace = true }
 ic-config = { path = "../../config" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
+ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
 ic-http-endpoints-metrics = { path = "../../http_endpoints/metrics" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-logger = { path = "../../monitoring/logger" }
@@ -27,7 +28,12 @@ prost = { workspace = true }
 slog = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 url = { workspace = true }
+
+[dev-dependencies]
+ic-registry-client-fake = { path = "../../registry/fake" }
+ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 
 [[bin]]
 name = "ic-registry-replicator"

@@ -72,7 +72,7 @@ pub mod crypto;
 pub mod funds;
 pub mod hostos_version;
 pub mod ingress;
-pub mod malicious_behaviour;
+pub mod malicious_behavior;
 pub mod malicious_flags;
 pub mod messages;
 pub mod methods;
@@ -94,13 +94,13 @@ pub use crate::replica_version::ReplicaVersion;
 pub use crate::time::Time;
 pub use funds::*;
 pub use ic_base_types::{
-    subnet_id_into_protobuf, subnet_id_try_from_protobuf, CanisterId, CanisterIdBlobParseError,
-    NodeId, NodeTag, NumBytes, NumOsPages, PrincipalId, PrincipalIdBlobParseError,
-    PrincipalIdParseError, RegistryVersion, SnapshotId, SubnetId,
+    CanisterId, CanisterIdBlobParseError, NodeId, NodeTag, NumBytes, NumOsPages, PrincipalId,
+    PrincipalIdBlobParseError, PrincipalIdParseError, RegistryVersion, SnapshotId, SubnetId,
+    subnet_id_into_protobuf, subnet_id_try_from_protobuf,
 };
 pub use ic_crypto_internal_types::NodeIndex;
 use ic_management_canister_types_private::GlobalTimer;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_snapshot_bits::v1 as pb_snapshot_bits;
 use ic_protobuf::state::canister_state_bits::v1 as pb_state_bits;
 use ic_protobuf::types::v1 as pb;
@@ -164,6 +164,10 @@ pub fn node_id_into_protobuf(id: NodeId) -> pb::NodeId {
 /// as both `Id` and `pb::NodeId` are defined in other crates.
 pub fn node_id_try_from_option(value: Option<pb::NodeId>) -> Result<NodeId, ProxyDecodeError> {
     let value: pb::NodeId = value.ok_or(ProxyDecodeError::MissingField("NodeId"))?;
+    node_id_try_from_protobuf(value)
+}
+
+pub fn node_id_try_from_protobuf(value: pb::NodeId) -> Result<NodeId, ProxyDecodeError> {
     let principal_id: PrincipalId =
         try_from_option_field(value.principal_id, "NodeId::PrincipalId")?;
     Ok(NodeId::from(principal_id))
@@ -577,31 +581,14 @@ pub trait CountBytes {
     fn count_bytes(&self) -> usize;
 }
 
-/// Allow an object to report its own byte size on disk and in memory. Not
-/// necessarily exact.
-pub trait MemoryDiskBytes {
-    fn memory_bytes(&self) -> usize;
-    fn disk_bytes(&self) -> usize;
-}
-
-impl MemoryDiskBytes for Time {
-    fn memory_bytes(&self) -> usize {
-        8
-    }
-
+/// Allow an object to report its own byte size on disk. Not necessarily exact.
+pub trait DiskBytes {
     fn disk_bytes(&self) -> usize {
         0
     }
 }
 
-impl<T: MemoryDiskBytes, E: MemoryDiskBytes> MemoryDiskBytes for Result<T, E> {
-    fn memory_bytes(&self) -> usize {
-        match self {
-            Ok(result) => result.memory_bytes(),
-            Err(err) => err.memory_bytes(),
-        }
-    }
-
+impl<T: DiskBytes, E: DiskBytes> DiskBytes for Result<T, E> {
     fn disk_bytes(&self) -> usize {
         match self {
             Ok(result) => result.disk_bytes(),
@@ -610,23 +597,8 @@ impl<T: MemoryDiskBytes, E: MemoryDiskBytes> MemoryDiskBytes for Result<T, E> {
     }
 }
 
-impl<T: MemoryDiskBytes> MemoryDiskBytes for Arc<T> {
-    fn memory_bytes(&self) -> usize {
-        self.as_ref().memory_bytes()
-    }
-
+impl<T: DiskBytes> DiskBytes for Arc<T> {
     fn disk_bytes(&self) -> usize {
         self.as_ref().disk_bytes()
-    }
-}
-
-// Implementing `MemoryDiskBytes` in `ic_error_types` introduces a circular dependency.
-impl MemoryDiskBytes for ic_error_types::UserError {
-    fn memory_bytes(&self) -> usize {
-        self.count_bytes()
-    }
-
-    fn disk_bytes(&self) -> usize {
-        0
     }
 }

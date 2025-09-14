@@ -92,9 +92,15 @@ pub(crate) struct ProposeToUpdateRecoveryCupCmd {
 
     /// Configuration for chain key:
     /// idkg key rotation period of a single node in milliseconds.
-    /// If none is specified key rotation is disabled.
+    /// If none is specified, key rotation is disabled.
     #[clap(long)]
     pub idkg_key_rotation_period_ms: Option<u64>,
+
+    /// Configuration for chain key:
+    /// Maximum number of pre-signature transcripts that can be worked on in parallel to fill the
+    /// pre-signature stash.
+    #[clap(long)]
+    pub max_parallel_pre_signature_transcripts_in_creation: Option<u32>,
 }
 
 impl ProposalTitle for ProposeToUpdateRecoveryCupCmd {
@@ -118,7 +124,7 @@ fn parse_key_config_requests_option(
     };
 
     let raw: Vec<BTreeMap<String, String>> = serde_json::from_str(value)
-        .unwrap_or_else(|err| panic!("Cannot parse `{}` as JSON: {}", value, err));
+        .unwrap_or_else(|err| panic!("Cannot parse `{value}` as JSON: {err}"));
 
     raw.iter()
         .map(|btree| {
@@ -126,7 +132,7 @@ fn parse_key_config_requests_option(
                 .get("subnet_id")
                 .map(|key| {
                     key.parse::<PrincipalId>()
-                        .unwrap_or_else(|_| panic!("Could not parse subnet_id: '{}'", key))
+                        .unwrap_or_else(|_| panic!("Could not parse subnet_id: '{key}'"))
                 })
                 .expect("Each element of the JSON object must specify a 'subnet_id'."));
 
@@ -134,7 +140,7 @@ fn parse_key_config_requests_option(
                 .get("key_id")
                 .map(|key| {
                     key.parse::<MasterPublicKeyId>()
-                        .unwrap_or_else(|_| panic!("Could not parse key_id: '{}'", key))
+                        .unwrap_or_else(|_| panic!("Could not parse key_id: '{key}'"))
                 })
                 .expect("Each element of the JSON object must specify a 'key_id'."));
 
@@ -165,7 +171,7 @@ impl ProposeToUpdateRecoveryCupCmd {
         subnet_id: SubnetId,
     ) -> do_recover_subnet::RecoverSubnetPayload {
         let state_hash = hex::decode(self.state_hash.clone())
-            .unwrap_or_else(|err| panic!("The provided state hash was invalid: {}", err));
+            .unwrap_or_else(|err| panic!("The provided state hash was invalid: {err}"));
 
         let replacement_nodes = self
             .replacement_nodes
@@ -182,6 +188,9 @@ impl ProposeToUpdateRecoveryCupCmd {
 
         let chain_key_config = if self.signature_request_timeout_ns.is_none()
             && self.idkg_key_rotation_period_ms.is_none()
+            && self
+                .max_parallel_pre_signature_transcripts_in_creation
+                .is_none()
             && self.initial_chain_key_configs_to_request.is_none()
         {
             None
@@ -192,6 +201,8 @@ impl ProposeToUpdateRecoveryCupCmd {
                 key_configs,
                 signature_request_timeout_ns: self.signature_request_timeout_ns,
                 idkg_key_rotation_period_ms: self.idkg_key_rotation_period_ms,
+                max_parallel_pre_signature_transcripts_in_creation: self
+                    .max_parallel_pre_signature_transcripts_in_creation,
             })
         };
 
@@ -238,7 +249,7 @@ mod tests {
             height,
             time_ns,
             state_hash: hex::decode(state_hash)
-                .unwrap_or_else(|err| panic!("Invalid state hash: {}", err)),
+                .unwrap_or_else(|err| panic!("Invalid state hash: {err}")),
             replacement_nodes: None,
             registry_store_uri: None,
             chain_key_config: None,
@@ -271,6 +282,7 @@ mod tests {
             initial_chain_key_configs_to_request: None,
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         }
     }
 
@@ -305,12 +317,14 @@ mod tests {
         let initial_chain_key_configs_to_request = Some(initial_chain_key_configs_to_request);
         let signature_request_timeout_ns = Some(111);
         let idkg_key_rotation_period_ms = Some(222);
+        let max_parallel_pre_signature_transcripts_in_creation = Some(333);
 
         // Run code under test
         let cmd = ProposeToUpdateRecoveryCupCmd {
             initial_chain_key_configs_to_request,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
             ..empty_propose_to_recover_subnet_cmd(subnet_id, height, time_ns, state_hash.clone())
         };
         assert_eq!(
@@ -360,6 +374,7 @@ mod tests {
                     ],
                     signature_request_timeout_ns: Some(111),
                     idkg_key_rotation_period_ms: Some(222),
+                    max_parallel_pre_signature_transcripts_in_creation: Some(333),
                 }),
                 ..minimal_recover_payload(subnet_id, height, time_ns, state_hash)
             },

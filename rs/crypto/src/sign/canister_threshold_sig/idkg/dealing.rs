@@ -2,8 +2,8 @@
 
 use crate::sign::basic_sig::{BasicSigVerifierInternal, BasicSignerInternal};
 use crate::sign::canister_threshold_sig::idkg::utils::{
-    fetch_idkg_dealing_encryption_public_key_from_registry, key_id_from_mega_public_key_or_panic,
-    retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError,
+    MegaKeyFromRegistryError, fetch_idkg_dealing_encryption_public_key_from_registry,
+    key_id_from_mega_public_key_or_panic, retrieve_mega_public_key_from_registry,
 };
 use ic_base_types::RegistryVersion;
 use ic_crypto_internal_csp::api::CspSigner;
@@ -11,9 +11,10 @@ use ic_crypto_internal_csp::vault::api::{
     CspVault, IDkgCreateDealingVaultError, IDkgDealingInternalBytes,
 };
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    publicly_verify_dealing, IDkgDealingInternal, IDkgTranscriptOperationInternal,
+    IDkgDealingInternal, IDkgTranscriptOperationInternal, publicly_verify_dealing,
 };
 use ic_interfaces_registry::RegistryClient;
+use ic_types::NodeId;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError,
     IDkgVerifyInitialDealingsError,
@@ -22,7 +23,6 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgReceivers, IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
 };
 use ic_types::signature::BasicSignature;
-use ic_types::NodeId;
 use std::convert::TryFrom;
 use std::sync::Arc;
 
@@ -95,7 +95,7 @@ fn sign_dealing<S: CspSigner>(
             content: dealing,
         })
         .map_err(|crypto_error| IDkgCreateDealingError::SignatureError {
-            internal_error: format!("{}", crypto_error),
+            internal_error: format!("{crypto_error}"),
         })
 }
 
@@ -160,6 +160,7 @@ impl From<MegaKeyFromRegistryError> for IDkgVerifyDealingPrivateError {
     }
 }
 
+#[allow(clippy::result_large_err)]
 pub fn verify_dealing_public<C: CspSigner>(
     csp_client: &C,
     registry: &dyn RegistryClient,
@@ -193,14 +194,14 @@ pub fn verify_dealing_public<C: CspSigner>(
     let internal_dealing =
         IDkgDealingInternal::deserialize(&signed_dealing.idkg_dealing().internal_dealing_raw)
             .map_err(|e| IDkgVerifyDealingPublicError::InvalidDealing {
-                reason: format!("{:?}", e),
+                reason: format!("{e:?}"),
             })?;
 
     // Compute CSP operation. Same of IDKM operation type, but wrapping the polynomial commitment from the transcripts.
 
     let internal_operation = IDkgTranscriptOperationInternal::try_from(params.operation_type())
         .map_err(|e| IDkgVerifyDealingPublicError::InvalidDealing {
-            reason: format!("{:?}", e),
+            reason: format!("{e:?}"),
         })?;
 
     let dealer_index =
@@ -222,10 +223,11 @@ pub fn verify_dealing_public<C: CspSigner>(
         &params.context_data(),
     )
     .map_err(|e| IDkgVerifyDealingPublicError::InvalidDealing {
-        reason: format!("{:?}", e),
+        reason: format!("{e:?}"),
     })
 }
 
+#[allow(clippy::result_large_err)]
 pub fn verify_initial_dealings<C: CspSigner>(
     csp_client: &C,
     registry: &dyn RegistryClient,

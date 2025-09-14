@@ -3,12 +3,12 @@ use crate::validation::ValidationError;
 use ic_base_types::RegistryVersion;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
+    NodeId, Time,
     artifact::CanisterHttpResponseId,
     canister_http::{CanisterHttpResponse, CanisterHttpResponseShare},
     consensus::Threshold,
     crypto::{CryptoError, CryptoHashOf},
     messages::CallbackId,
-    NodeId, Time,
 };
 
 #[derive(Debug)]
@@ -88,6 +88,7 @@ pub enum CanisterHttpPayloadValidationFailure {
 pub type CanisterHttpPayloadValidationError =
     ValidationError<InvalidCanisterHttpPayloadReason, CanisterHttpPayloadValidationFailure>;
 
+#[derive(Debug)]
 pub enum CanisterHttpChangeAction {
     AddToValidated(CanisterHttpResponseShare, CanisterHttpResponse),
     MoveToValidated(CanisterHttpResponseShare),

@@ -464,6 +464,11 @@ EOF
 ## Example: $1 directory_with_new_proposals/*
 ## Example: $1 proposal_1.md proposal_2.md
 generate_forum_post_nns_upgrades() {
+    if [ $# -eq 0 ]; then
+        echo "No proposal files provided"
+        exit 1
+    fi
+
     PROPOSAL_FILES=$(ls "$@")
 
     THIS_FRIDAY=$(date -d "next Friday" +'%Y-%m-%d' 2>/dev/null || date -v+Fri +%Y-%m-%d)
@@ -498,6 +503,11 @@ EOF
 ## Example: $1 directory_with_new_proposals/*
 ## Example: $1 proposal_1.md proposal_2.md
 generate_forum_post_sns_wasm_publish() {
+    if [ $# -eq 0 ]; then
+        echo "No proposal files provided"
+        exit 1
+    fi
+
     PROPOSAL_FILES=$(ls "$@")
 
     THIS_FRIDAY=$(date -d "next Friday" +'%Y-%m-%d' 2>/dev/null || date -v+Fri +%Y-%m-%d)

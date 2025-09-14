@@ -1,4 +1,4 @@
-use candid::CandidType;
+use candid::{CandidType, Nat};
 use dfn_protobuf::ProtoBuf;
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -11,8 +11,9 @@ use ic_ledger_core::{
     block::{BlockType, EncodedBlock, FeeCollector},
     tokens::CheckedAdd,
 };
-use ic_ledger_hash_of::HashOf;
 use ic_ledger_hash_of::HASH_LENGTH;
+use ic_ledger_hash_of::HashOf;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire};
 use prost::Message;
@@ -28,7 +29,7 @@ use strum_macros::IntoStaticStr;
 pub use ic_ledger_core::{
     block::BlockIndex,
     timestamp::TimeStamp,
-    tokens::{Tokens, TOKEN_SUBDIVIDABLE_BY},
+    tokens::{TOKEN_SUBDIVIDABLE_BY, Tokens},
 };
 
 pub mod account_identifier;
@@ -37,6 +38,7 @@ pub mod account_identifier;
 pub mod protobuf;
 mod validate_endpoints;
 pub use account_identifier::{AccountIdentifier, Subaccount};
+use icrc_ledger_types::icrc1::account::Subaccount as Icrc1Subaccount;
 pub use validate_endpoints::{tokens_from_proto, tokens_into_proto};
 
 /// Note that the Ledger can be deployed with a
@@ -48,6 +50,8 @@ pub const MAX_BLOCKS_PER_REQUEST: usize = 2000;
 pub const MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST: usize = 50;
 
 pub const MEMO_SIZE_BYTES: usize = 32;
+
+pub const MAX_TAKE_ALLOWANCES: u64 = 500;
 
 pub type LedgerBalances = Balances<BTreeMap<AccountIdentifier, Tokens>>;
 pub type LedgerAllowances = AllowanceTable<HeapAllowancesData<AccountIdentifier, Tokens>>;
@@ -527,6 +531,27 @@ impl LedgerCanisterInitPayloadBuilder {
         }
     }
 
+    pub fn new_with_mainnet_settings() -> Self {
+        Self::new()
+            .minting_account(GOVERNANCE_CANISTER_ID.get().into())
+            .archive_options(ArchiveOptions {
+                trigger_threshold: 2000,
+                num_blocks_to_archive: 1000,
+                // 1 GB, which gives us 3 GB space when upgrading
+                node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
+                // 128kb
+                max_message_size_bytes: Some(128 * 1024),
+                controller_id: ROOT_CANISTER_ID.into(),
+                more_controller_ids: None,
+                cycles_for_archive_creation: Some(0),
+                max_transactions_per_response: None,
+            })
+            .max_message_size_bytes(128 * 1024)
+            // 24 hour transaction window
+            .transaction_window(Duration::from_secs(24 * 60 * 60))
+            .transfer_fee(DEFAULT_TRANSFER_FEE)
+    }
+
     pub fn minting_account(mut self, minting_account: AccountIdentifier) -> Self {
         self.minting_account = Some(minting_account);
         self
@@ -703,13 +728,12 @@ impl fmt::Display for TransferError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::BadFee { expected_fee } => {
-                write!(f, "transfer fee should be {}", expected_fee)
+                write!(f, "transfer fee should be {expected_fee}")
             }
             Self::InsufficientFunds { balance } => {
                 write!(
                     f,
-                    "the debit account doesn't have enough funds to complete the transaction, current balance: {}",
-                    balance
+                    "the debit account doesn't have enough funds to complete the transaction, current balance: {balance}"
                 )
             }
             Self::TxTooOld {
@@ -722,8 +746,7 @@ impl fmt::Display for TransferError {
             Self::TxCreatedInFuture => write!(f, "transaction's created_at_time is in future"),
             Self::TxDuplicate { duplicate_of } => write!(
                 f,
-                "transaction is a duplicate of another transaction in block {}",
-                duplicate_of
+                "transaction is a duplicate of another transaction in block {duplicate_of}"
             ),
         }
     }
@@ -1085,6 +1108,7 @@ pub struct Archives {
 }
 
 /// Argument returned by the tip_of_chain endpoint
+#[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct TipOfChainRes {
     pub certification: Option<Vec<u8>>,
     pub tip_index: BlockIndex,
@@ -1149,8 +1173,9 @@ pub fn get_blocks(
     // [100 .. 109] then requesting blocks at BlockIndex < 100 or BlockIndex
     // > 109 is an error
     if range_from < range_from_offset || requested_range_to > range_to {
-        return GetBlocksRes(Err(format!("Requested blocks outside the range stored in the archive node. Requested [{} .. {}]. Available [{} .. {}].",
-            range_from, requested_range_to, range_from_offset, range_to)));
+        return GetBlocksRes(Err(format!(
+            "Requested blocks outside the range stored in the archive node. Requested [{range_from} .. {requested_range_to}]. Available [{range_from_offset} .. {range_to}]."
+        )));
     }
     // Example: If the node stores blocks [100 .. 109] then BLOCK_HEIGHT_OFFSET
     // is 100 and the Block with BlockIndex 100 is at index 0
@@ -1248,6 +1273,36 @@ pub fn from_proto_bytes<T: ToProto>(msg: Vec<u8>) -> Result<T, String> {
     T::from_proto(prost::Message::decode(&msg[..]).map_err(|e| e.to_string())?)
 }
 
+/// The arguments for the `get_allowances` endpoint.
+/// The `prev_spender_id` argument can be used for pagination. If specified
+/// the endpoint returns allowances that are lexicographically greater than
+/// (`from_account_id`, `prev_spender_id`) - start with spender after `prev_spender_id`.
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct GetAllowancesArgs {
+    pub from_account_id: AccountIdentifier,
+    pub prev_spender_id: Option<AccountIdentifier>,
+    pub take: Option<u64>,
+}
+
+/// The allowance returned by the `get_allowances` endpoint.
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct Allowance {
+    pub from_account_id: AccountIdentifier,
+    pub to_spender_id: AccountIdentifier,
+    pub allowance: Tokens,
+    pub expires_at: Option<u64>,
+}
+
+/// The allowances vector returned by the `get_allowances` endpoint.
+pub type Allowances = Vec<Allowance>;
+
+/// The arguments for the `remove_approval` endpoint.
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct RemoveApprovalArgs {
+    pub from_subaccount: Option<Icrc1Subaccount>,
+    pub spender: AccountIdBlob,
+    pub fee: Option<Nat>,
+}
 #[cfg(test)]
 mod test {
     use ic_stable_structures::storable::Storable;

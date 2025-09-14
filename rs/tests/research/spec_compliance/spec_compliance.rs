@@ -5,16 +5,16 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::ic::{InternetComputer, NrOfVCPUs, Subnet, VmResources};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    NnsInstallationBuilder, SubnetSnapshot, TopologySnapshot,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder, SubnetSnapshot,
+    TopologySnapshot, get_dependency_path,
 };
 use ic_system_test_driver::driver::universal_vm::UniversalVm;
 use ic_system_test_driver::util::timeit;
 use ic_types::SubnetId;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::thread::{spawn, JoinHandle};
+use std::thread::{JoinHandle, spawn};
 
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 
@@ -23,29 +23,12 @@ const REPLICATION_FACTOR: usize = 2;
 const EXCLUDED: &[&str] = &[
     // to start with something that is always false
     "(1 == 0)",
-    // the replica does not yet check that the effective canister id is valid in all cases
-    "$0 ~ /wrong effective canister id.in management call/",
-    "$0 ~ /access denied with different effective canister id/",
     // Recursive calls from queries are now allowed.
     // When composite queries are enabled, we should clean up and re-enable this test
     "$0 ~ /Call from query method traps (in query call)/",
 ];
 
-pub fn group_all() -> Vec<&'static str> {
-    [group_01(), group_02()].concat()
-}
-
 pub fn group_01() -> Vec<&'static str> {
-    vec![
-        "($0 ~ /canister history/)",
-        "($0 ~ /canister version/)",
-        "($0 ~ /canister global timer/)",
-        "($0 ~ /canister http/)",
-        "($0 ~ /WebAssembly module validation/)",
-    ]
-}
-
-pub fn group_02() -> Vec<&'static str> {
     vec![
         "($0 ~ /stable memory/)",
         "($0 ~ /inter-canister calls/)",
@@ -71,13 +54,17 @@ pub fn setup_impl(env: TestEnv, deploy_nns_canisters: bool, http_requests: bool)
     let cloned_env = env.clone();
     if http_requests {
         deploy_httpbin_uvm_thread = Some(spawn(move || {
-            env::set_var(
-                "SSL_CERT_FILE",
-                get_dependency_path(
-                    "ic-os/components/networking/dev-certs/canister_http_test_ca.cert",
-                ),
-            );
-            env::remove_var("NIX_SSL_CERT_FILE");
+            // TODO: Audit that the environment access only happens in single-threaded code.
+            unsafe {
+                env::set_var(
+                    "SSL_CERT_FILE",
+                    get_dependency_path(
+                        "ic-os/components/networking/dev-certs/canister_http_test_ca.cert",
+                    ),
+                )
+            };
+            // TODO: Audit that the environment access only happens in single-threaded code.
+            unsafe { env::remove_var("NIX_SSL_CERT_FILE") };
 
             // Set up Universal VM for httpbin testing service
             UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
@@ -292,9 +279,9 @@ pub fn run_ic_ref_test(
     let mut cmd = Command::new(ic_ref_test_path);
     cmd.env("IC_TEST_DATA", ic_test_data_path)
         .arg("+RTS")
-        .arg(format!("-N{}", jobs))
+        .arg(format!("-N{jobs}"))
         .arg("-RTS")
-        .arg(format!("-j{}", jobs))
+        .arg(format!("-j{jobs}"))
         .arg("--pattern")
         .arg(tests_to_pattern(excluded_tests, included_tests))
         .arg("--endpoint")
@@ -374,6 +361,6 @@ fn tests_to_pattern(excluded_tests: Vec<&str>, included_tests: Vec<&str>) -> Str
         excluded
     } else {
         let included = format!("({})", included_tests.join(" || "));
-        format!("{} && {}", excluded, included)
+        format!("{excluded} && {included}")
     }
 }

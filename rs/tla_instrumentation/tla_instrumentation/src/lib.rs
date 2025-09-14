@@ -207,7 +207,7 @@ pub fn log_request(
     let old_stage = mem::replace(&mut state.stage, Stage::Start);
     let start_state = match old_stage {
         Stage::End(start) => start,
-        _ => panic!("Issuing request {} to {}, but stage is start", args, to),
+        _ => panic!("Issuing request {args} to {to}, but stage is start"),
     };
     let unresolved = StatePair {
         start: start_state,
@@ -240,9 +240,7 @@ pub fn log_response(
     let stage = &mut state.stage;
     assert!(
         matches!(stage, Stage::Start),
-        "Receiving response {} from {} in end stage",
-        message,
-        from
+        "Receiving response {message} from {from} in end stage"
     );
     *stage = Stage::End(StartState {
         global,
@@ -295,7 +293,7 @@ pub fn log_label(state: &mut MessageHandlerState, label: &str) {
         .location
         .0
         .last_mut()
-        .unwrap_or_else(|| panic!("Asked to log label {}, but the location stack empty", label)) =
+        .unwrap_or_else(|| panic!("Asked to log label {label}, but the location stack empty")) =
         LocationStackElem::Label(Label::new(label));
 }
 
@@ -308,7 +306,7 @@ pub fn log_label(state: &mut MessageHandlerState, label: &str) {
 /// in scope (typically providing a way to mutate some global canister variable).
 #[macro_export]
 macro_rules! tla_log_locals {
-    ($($name:ident : $value:expr),*) => {
+    ($($name:ident : $value:expr_2021),*) => {
         {
             let mut locals = Vec::new();
             $(
@@ -338,7 +336,7 @@ macro_rules! tla_log_locals {
 /// in scope (typically providing a way to mutate some global canister variable).
 #[macro_export]
 macro_rules! tla_log_globals {
-    (($($name:ident : $value:expr),*)) => {
+    (($($name:ident : $value:expr_2021),*)) => {
         {
             let mut globals = GlobalState::new();
             $(
@@ -353,7 +351,7 @@ macro_rules! tla_log_globals {
 
 #[macro_export]
 macro_rules! tla_log_all_globals {
-    ($self:expr) => {{
+    ($self:expr_2021) => {{
         let mut globals = tla_get_globals!($self);
         let state_with_pairs = TLA_INSTRUMENTATION_STATE.get();
         let mut state = state_with_pairs
@@ -372,7 +370,7 @@ macro_rules! tla_log_all_globals {
 /// 3. `with_tla_state_pairs<F>(f: F) where F: FnOnce(&mut Vec<StatePair>) -> ()
 #[macro_export]
 macro_rules! tla_log_request {
-    ($label:expr, $to:expr, $method:expr, $message:expr) => {{
+    ($label:expr_2021, $to:expr_2021, $method:expr_2021, $message:expr_2021) => {{
         let message = $message.to_tla_value();
         let res = TLA_INSTRUMENTATION_STATE.try_with(|state| {
             let mut handler_state = state.handler_state.lock().expect("Failed to lock handler state in log_request");
@@ -398,7 +396,7 @@ macro_rules! tla_log_request {
 /// 2. with_tla_state<F>(f: F) where F: FnOnce(&mut InstrumentationState) -> ()
 #[macro_export]
 macro_rules! tla_log_response {
-    ($from:expr, $message:expr) => {{
+    ($from:expr_2021, $message:expr_2021) => {{
         let message = $message.to_tla_value();
         let location = $crate::SourceLocation { file: file!().to_string(), line: line!().to_string() };
         let res = TLA_INSTRUMENTATION_STATE.try_with(|state| {
@@ -424,14 +422,12 @@ macro_rules! tla_log_response {
 /// is used instead.
 #[macro_export]
 macro_rules! tla_log_method_call {
-    ($update:expr, $global:expr) => {{
-        $crate::log_method_call($update, $global)
-    }};
+    ($update:expr_2021, $global:expr_2021) => {{ $crate::log_method_call($update, $global) }};
 }
 
 #[macro_export]
 macro_rules! tla_log_label {
-    ($label:expr) => {{
+    ($label:expr_2021) => {{
         let res = TLA_INSTRUMENTATION_STATE.try_with(|state| {
             let mut handler_state = state
                 .handler_state

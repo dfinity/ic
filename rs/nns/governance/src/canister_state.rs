@@ -5,7 +5,6 @@ use crate::governance::{
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use ic_base_types::CanisterId;
-use ic_cdk::spawn;
 use ic_nervous_system_canisters::cmc::CMCCanister;
 use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 use ic_nervous_system_runtime::CdkRuntime;
@@ -191,7 +190,7 @@ impl Environment for CanisterEnv {
         update: &crate::pb::v1::ExecuteNnsFunction,
     ) -> Result<(), crate::pb::v1::GovernanceError> {
         // use internal types, as this API is used in core
-        use crate::pb::v1::{governance_error::ErrorType, GovernanceError, NnsFunction};
+        use crate::pb::v1::{GovernanceError, NnsFunction, governance_error::ErrorType};
 
         let mt = NnsFunction::try_from(update.nns_function).map_err(|_|
             // No update type specified.
@@ -223,9 +222,7 @@ impl Environment for CanisterEnv {
                 Err(GovernanceError::new_with_message(
                     ErrorType::External,
                     format!(
-                        "Error executing ExecuteNnsFunction proposal. Error Code: {}. Rejection message: {}",
-                        code,
-                        msg
+                        "Error executing ExecuteNnsFunction proposal. Error Code: {code}. Rejection message: {msg}"
                     ),
                 )),
             );
@@ -243,7 +240,7 @@ impl Environment for CanisterEnv {
             proposal_timestamp_seconds,
         )?;
 
-        spawn(async move {
+        ic_cdk::futures::spawn_017_compat(async move {
             match CdkRuntime::call_bytes_with_cleanup(canister_id, &method, &effective_payload)
                 .await
             {
@@ -291,7 +288,7 @@ fn get_effective_payload(
     proposal_id: u64,
     proposal_timestamp_seconds: u64,
 ) -> Result<Vec<u8>, crate::pb::v1::GovernanceError> {
-    use crate::pb::v1::{governance_error::ErrorType, GovernanceError, NnsFunction};
+    use crate::pb::v1::{GovernanceError, NnsFunction, governance_error::ErrorType};
 
     const BITCOIN_SET_CONFIG_METHOD_NAME: &str = "set_config";
     const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";
@@ -455,8 +452,8 @@ mod tests {
         environment.set_time_warp(crate::governance::TimeWarp { delta_s: 1_000 });
         let delta_s = environment.now() - start;
 
-        assert!(delta_s >= 1000, "delta_s = {}", delta_s);
-        assert!(delta_s < 1005, "delta_s = {}", delta_s);
+        assert!(delta_s >= 1000, "delta_s = {delta_s}");
+        assert!(delta_s < 1005, "delta_s = {delta_s}");
     }
 
     #[test]

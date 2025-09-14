@@ -2,7 +2,7 @@
 
 use crate::consensus::{
     metrics::{
-        PayloadBuilderMetrics, CRITICAL_ERROR_PAYLOAD_TOO_LARGE, CRITICAL_ERROR_SUBNET_RECORD_ISSUE,
+        CRITICAL_ERROR_PAYLOAD_TOO_LARGE, CRITICAL_ERROR_SUBNET_RECORD_ISSUE, PayloadBuilderMetrics,
     },
     payload::BatchPayloadSectionBuilder,
 };
@@ -16,14 +16,14 @@ use ic_interfaces::{
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_types::{
-    batch::{BatchPayload, ValidationContext, MAX_BITCOIN_PAYLOAD_IN_BYTES},
-    consensus::{block_maker::SubnetRecords, Payload},
-    messages::MAX_XNET_PAYLOAD_IN_BYTES,
     Height, NodeId, NumBytes, SubnetId, Time,
+    batch::{BatchPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES, ValidationContext},
+    consensus::{Payload, block_maker::SubnetRecords},
+    messages::MAX_XNET_PAYLOAD_IN_BYTES,
 };
 use num_traits::SaturatingSub;
 use std::sync::Arc;
@@ -216,7 +216,7 @@ pub(crate) mod test {
     use ic_btc_replica_types::{
         BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsResponseComplete,
     };
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
@@ -231,6 +231,7 @@ pub(crate) mod test {
         messages::SignedIngressBuilder,
     };
     use ic_types::{
+        CryptoHashOfPartialState, RegistryVersion,
         canister_http::CanisterHttpResponseWithConsensus,
         consensus::certification::{Certification, CertificationContent},
         crypto::{CryptoHash, Signed},
@@ -238,7 +239,6 @@ pub(crate) mod test {
         signature::ThresholdSignature,
         time::UNIX_EPOCH,
         xnet::CertifiedStreamSlice,
-        CryptoHashOfPartialState, RegistryVersion,
     };
     use std::collections::BTreeMap;
 

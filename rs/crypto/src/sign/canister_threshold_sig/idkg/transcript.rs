@@ -8,12 +8,13 @@ use crate::sign::canister_threshold_sig::idkg::utils::{
 use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::vault::api::{CspVault, IDkgTranscriptInternalBytes};
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    create_transcript as idkg_create_transcript,
+    CommitmentOpening, IDkgComplaintInternal, IDkgDealingInternal, IDkgTranscriptInternal,
+    IDkgTranscriptOperationInternal, create_transcript as idkg_create_transcript,
     verify_dealing_opening as idkg_verify_dealing_opening,
-    verify_transcript as idkg_verify_transcript, CommitmentOpening, IDkgComplaintInternal,
-    IDkgDealingInternal, IDkgTranscriptInternal, IDkgTranscriptOperationInternal,
+    verify_transcript as idkg_verify_transcript,
 };
 use ic_interfaces_registry::RegistryClient;
+use ic_types::crypto::CryptoError;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateTranscriptError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
     IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
@@ -22,7 +23,6 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, BatchSignedIDkgDealings, IDkgComplaint, IDkgOpening, IDkgTranscript,
     IDkgTranscriptParams, IDkgTranscriptType,
 };
-use ic_types::crypto::CryptoError;
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, RegistryVersion};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -64,7 +64,7 @@ pub fn create_transcript<C: CspSigner>(
     let internal_operation_type =
         IDkgTranscriptOperationInternal::try_from(params.operation_type()).map_err(|e| {
             IDkgCreateTranscriptError::SerializationError {
-                internal_error: format!("{:?}", e),
+                internal_error: format!("{e:?}"),
             }
         })?;
 
@@ -75,12 +75,12 @@ pub fn create_transcript<C: CspSigner>(
         &internal_operation_type,
     )
     .map_err(|e| IDkgCreateTranscriptError::InternalError {
-        internal_error: format!("{:?}", e),
+        internal_error: format!("{e:?}"),
     })?;
 
     let internal_transcript_raw = internal_transcript.serialize().map_err(|e| {
         IDkgCreateTranscriptError::SerializationError {
-            internal_error: format!("{:?}", e),
+            internal_error: format!("{e:?}"),
         }
     })?;
 
@@ -97,6 +97,7 @@ pub fn create_transcript<C: CspSigner>(
     })
 }
 
+#[allow(clippy::result_large_err)]
 pub fn verify_transcript<C: CspSigner>(
     csp_client: &C,
     vault: &dyn CspVault,
@@ -108,8 +109,7 @@ pub fn verify_transcript<C: CspSigner>(
         .verify_consistency_with_params(params)
         .map_err(|e| {
             IDkgVerifyTranscriptError::InvalidArgument(format!(
-                "failed to verify transcript against params: {}",
-                e
+                "failed to verify transcript against params: {e}"
             ))
         })?;
 
@@ -129,14 +129,12 @@ pub fn verify_transcript<C: CspSigner>(
     let internal_transcript_operation =
         IDkgTranscriptOperationInternal::try_from(params.operation_type()).map_err(|e| {
             IDkgVerifyTranscriptError::InvalidArgument(format!(
-                "failed to convert transcript operation to internal counterpart: {:?}",
-                e
+                "failed to convert transcript operation to internal counterpart: {e:?}"
             ))
         })?;
     let internal_transcript = IDkgTranscriptInternal::try_from(transcript).map_err(|e| {
         IDkgVerifyTranscriptError::SerializationError(format!(
-            "failed to deserialize internal transcript: {:?}",
-            e
+            "failed to deserialize internal transcript: {e:?}"
         ))
     })?;
     let internal_dealings = internal_dealings_from_verified_dealings(&transcript.verified_dealings)
@@ -219,7 +217,7 @@ pub fn load_transcript_with_openings(
             })?;
             let internal_opening = CommitmentOpening::try_from(opening).map_err(|e| {
                 IDkgLoadTranscriptError::SerializationError {
-                    internal_error: format!("failed to deserialize opening: {:?}", e),
+                    internal_error: format!("failed to deserialize opening: {e:?}"),
                 }
             })?;
             internal_openings_by_opener_index.insert(opener_index, internal_opening);
@@ -257,7 +255,7 @@ pub fn open_transcript(
     // Verifies the complaint
     verify_complaint(registry, transcript, complaint, complainer_id).map_err(|e| {
         IDkgOpenTranscriptError::InternalError {
-            internal_error: format!("Complaint verification failed: {:?}", e),
+            internal_error: format!("Complaint verification failed: {e:?}"),
         }
     })?;
 
@@ -276,7 +274,7 @@ pub fn open_transcript(
         None => {
             return Err(IDkgOpenTranscriptError::InternalError {
                 internal_error: "This node is not a receiver of the given transcript".to_string(),
-            })
+            });
         }
         Some(index) => index,
     };
@@ -293,7 +291,7 @@ pub fn open_transcript(
         internal_opening
             .serialize()
             .map_err(|e| IDkgOpenTranscriptError::InternalError {
-                internal_error: format!("Error serializing opening: {:?}", e),
+                internal_error: format!("Error serializing opening: {e:?}"),
             })?;
 
     Ok(IDkgOpening {
@@ -327,13 +325,13 @@ pub fn verify_opening(
         .ok_or(IDkgVerifyOpeningError::MissingOpenerInReceivers { opener_id })?;
     let internal_opening = CommitmentOpening::try_from(opening).map_err(|e| {
         IDkgVerifyOpeningError::InternalError {
-            internal_error: format!("Failed to deserialize opening: {:?}", e),
+            internal_error: format!("Failed to deserialize opening: {e:?}"),
         }
     })?;
 
     idkg_verify_dealing_opening(&internal_dealing, opener_index, &internal_opening).map_err(|e| {
         IDkgVerifyOpeningError::InternalError {
-            internal_error: format!("{:?}", e),
+            internal_error: format!("{e:?}"),
         }
     })
 }
@@ -390,7 +388,7 @@ fn internal_dealings_from_signed_dealings(
                 &signed_dealing.idkg_dealing().internal_dealing_raw,
             )
             .map_err(|e| IDkgCreateTranscriptError::SerializationError {
-                internal_error: format!("{:?}", e),
+                internal_error: format!("{e:?}"),
             })?;
             Ok((*index, internal_dealing))
         })
@@ -433,7 +431,7 @@ fn internal_dealings_from_verified_dealings(
         .map(|(index, signed_dealing)| {
             let dealing = IDkgDealingInternal::try_from(signed_dealing).map_err(|e| {
                 InternalDealingsFromVerifiedDealingsSerializationError {
-                    serde_error: format!("failed to deserialize internal dealing: {:?}", e),
+                    serde_error: format!("failed to deserialize internal dealing: {e:?}"),
                 }
             })?;
             Ok((*index, dealing))
@@ -456,13 +454,13 @@ fn complaints_from_internal_complaints(
         .map(|(dealer_index, internal_complaint)| {
             let internal_complaint_raw = internal_complaint.serialize().map_err(|e| {
                 IDkgLoadTranscriptError::SerializationError {
-                    internal_error: format!("{:?}", e),
+                    internal_error: format!("{e:?}"),
                 }
             })?;
             let dealer_id = transcript
                 .dealer_id_for_index(*dealer_index)
                 .ok_or_else(|| IDkgLoadTranscriptError::InternalError {
-                    internal_error: format!("failed to get dealer ID for index {}", dealer_index),
+                    internal_error: format!("failed to get dealer ID for index {dealer_index}"),
                 })?;
 
             Ok(IDkgComplaint {
@@ -482,8 +480,7 @@ fn ensure_sufficient_openings(
         usize::try_from(transcript.reconstruction_threshold().get()).map_err(|e| {
             IDkgLoadTranscriptError::InternalError {
                 internal_error: format!(
-                    "failed to convert reconstruction threshold to usize: {:?}",
-                    e
+                    "failed to convert reconstruction threshold to usize: {e:?}"
                 ),
             }
         })?;
@@ -588,6 +585,7 @@ fn signature_batch_err_to_verify_transcript_err(
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn verify_signature_batch<C: CspSigner>(
     csp_client: &C,
     vault: &dyn CspVault,
