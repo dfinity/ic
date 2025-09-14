@@ -1,4 +1,4 @@
-use crate::canister::{BackfillRewardableNodesStatus, NodeRewardsCanister, current_time};
+use crate::canister::{NodeRewardsCanister, current_time};
 use async_trait::async_trait;
 use ic_cdk_timers::{TimerId, clear_timer};
 use ic_nervous_system_timer_task::{
@@ -8,9 +8,14 @@ use std::cell::RefCell;
 use std::thread::LocalKey;
 use std::time::Duration;
 
-thread_local! {
-    static CACHE_SYNC_TIMER_ID: RefCell<Option<TimerId>> = const { RefCell::new(None) };
+pub enum TaskStatus {
+    Completed,
+    NotCompleted,
 }
+
+// ================================================================================================
+// DAILY SYNC TASK
+// ================================================================================================
 
 #[derive(Copy, Clone)]
 pub struct DailySyncTask {
@@ -20,7 +25,7 @@ pub struct DailySyncTask {
 
 const DAY_IN_SECONDS: u64 = 60 * 60 * 24;
 const DAILY_SYNC_AT_SECONDS_AFTER_MIDNIGHT: u64 = 5 * 60; // 5 minutes after midnight
-const RETRY_DELAY: Duration = Duration::from_secs(10 * 60); // 10 minutes
+const DAILY_SYNC_RETRY_DELAY: Duration = Duration::from_secs(10 * 60); // 10 minutes
 
 impl DailySyncTask {
     pub fn new(
@@ -49,16 +54,15 @@ impl RecurringAsyncTask for DailySyncTask {
         let registry_sync_result = NodeRewardsCanister::schedule_registry_sync(self.canister).await;
         let delay = match registry_sync_result {
             Ok(_) => {
-                run_rewardable_nodes_backfill_task(self.canister, self.metrics);
-
                 ic_cdk::futures::spawn_017_compat(async move {
                     NodeRewardsCanister::schedule_metrics_sync(self.canister).await
                 });
+                run_rewardable_nodes_backfill_task(self.canister, self.metrics);
                 self.default_delay()
             }
             Err(e) => {
-                ic_cdk::println!("Failed to sync registry: {:?}", e);
-                RETRY_DELAY
+                ic_cdk::println!("Failed to sync registry: {}", e);
+                DAILY_SYNC_RETRY_DELAY
             }
         };
 
@@ -73,6 +77,13 @@ impl RecurringAsyncTask for DailySyncTask {
     const NAME: &'static str = "daily_sync";
 }
 
+// ================================================================================================
+// REWARDABLE NODES BACKFILL TASK
+// ================================================================================================
+
+thread_local! {
+    static REWARDABLE_NODES_BACKFILL_TIMER_ID: RefCell<Option<TimerId>> = const { RefCell::new(None) };
+}
 #[derive(Copy, Clone)]
 pub struct RewardableNodesBackfillTask {
     canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
@@ -91,15 +102,15 @@ impl PeriodicSyncTask for RewardableNodesBackfillTask {
             .with_borrow(|canister| canister.backfill_rewardable_nodes());
 
         match backfill_status {
-            BackfillRewardableNodesStatus::Completed => {
-                CACHE_SYNC_TIMER_ID.with(|id| {
+            TaskStatus::Completed => {
+                REWARDABLE_NODES_BACKFILL_TIMER_ID.with(|id| {
                     if let Some(timer_id) = id.borrow_mut().take() {
                         clear_timer(timer_id);
                     }
                 });
                 ic_cdk::println!("Backfill completed");
             }
-            BackfillRewardableNodesStatus::NotCompleted => {
+            TaskStatus::NotCompleted => {
                 ic_cdk::println!("Backfill still in progress...");
             }
         }
@@ -113,10 +124,8 @@ fn run_rewardable_nodes_backfill_task(
     canister: &'static LocalKey<RefCell<NodeRewardsCanister>>,
     metrics: &'static LocalKey<RefCell<TimerTaskMetricsRegistry>>,
 ) {
-    CACHE_SYNC_TIMER_ID.with(|id| {
-        if id.borrow().is_none() {
-            let timer_id = RewardableNodesBackfillTask::new(canister).schedule(metrics);
-            id.borrow_mut().replace(timer_id);
-        }
+    REWARDABLE_NODES_BACKFILL_TIMER_ID.with(|id| {
+        let timer_id = RewardableNodesBackfillTask::new(canister).schedule(metrics);
+        id.borrow_mut().replace(timer_id);
     });
 }

@@ -1,9 +1,10 @@
+use crate::KeyRange;
 use crate::api_conversion::into_rewards_calculation_results;
 use crate::metrics::MetricsManager;
 use crate::pb::v1::{RewardableNodesKey, RewardableNodesValue};
 use crate::registry_querier::RegistryQuerier;
 use crate::storage::{REWARDABLE_NODES_CACHE, VM};
-use crate::{KeyRange, telemetry};
+use crate::timer_tasks::TaskStatus;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_node_rewards_canister_api::monthly_rewards::{
@@ -167,38 +168,34 @@ impl NodeRewardsCanister {
 
 // Rewardable nodes methods
 
-const CACHE_BACKFILL_START_DAY: u64 = 1746057600; // 1st May 2025
-
-pub enum BackfillRewardableNodesStatus {
-    Completed,
-    NotCompleted,
-}
+const CACHE_BACKFILL_START_DAY: u64 = 1747094400; // 13th May 2025 - First day with timestamps for each registry version
 
 impl NodeRewardsCanister {
-    pub fn backfill_rewardable_nodes(&self) -> BackfillRewardableNodesStatus {
+    pub fn backfill_rewardable_nodes(&self) -> TaskStatus {
         let today = DayUtc::from_secs(current_time().as_secs_since_unix_epoch());
         let start_backfill_day = DayUtc::from_secs(CACHE_BACKFILL_START_DAY);
         let end_backfill_day = today.previous_day();
 
-        let all_days = start_backfill_day.days_until(&end_backfill_day).unwrap();
-        ic_cdk::println!("Day to backfill: {:?}", all_days);
-        let mut days_to_backfill: Vec<DayUtc> = all_days
+        let mut days_to_backfill: Vec<DayUtc> = start_backfill_day
+            .days_until(&end_backfill_day)
+            .expect("Start day always before today")
             .into_iter()
-            .filter(|day| self.get_rewardable_nodes(day).is_err())
+            .filter(|day| !self.is_rewardable_nodes_day_cached(day))
             .collect_vec();
 
         if let Some(day) = days_to_backfill.pop() {
             ic_cdk::println!("Backfilling rewardable nodes for day: {}", day);
 
-            self.backfill_rewardable_nodes_single_day(&day)
-                .unwrap_or_else(|e| {
-                    ic_cdk::println!("Failed to backfill: {:?}", e);
-                });
+            if let Err(e) = self.backfill_rewardable_nodes_single_day(&day) {
+                ic_cdk::println!("Failed to backfill: {:?}", e);
+                return TaskStatus::NotCompleted;
+            }
             if !days_to_backfill.is_empty() {
-                return BackfillRewardableNodesStatus::NotCompleted;
+                return TaskStatus::NotCompleted;
             }
         }
-        BackfillRewardableNodesStatus::Completed
+
+        TaskStatus::Completed
     }
 
     fn backfill_rewardable_nodes_single_day(&self, day_utc: &DayUtc) -> Result<(), String> {
@@ -305,6 +302,19 @@ impl NodeRewardsCanister {
         } else {
             Ok(result)
         }
+    }
+
+    fn is_rewardable_nodes_day_cached(&self, day: &DayUtc) -> bool {
+        self.registry_version_for_day(day).map_or(false, |version| {
+            let mut start_key = RewardableNodesKey::min_key();
+            start_key.registry_version = version.get();
+            let mut end_key = RewardableNodesKey::max_key();
+            end_key.registry_version = version.get();
+
+            REWARDABLE_NODES_CACHE.with_borrow(|rewardable_nodes_cache| {
+                rewardable_nodes_cache.range(start_key..=end_key).count() > 0
+            })
+        })
     }
 }
 

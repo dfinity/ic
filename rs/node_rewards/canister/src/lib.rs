@@ -43,7 +43,7 @@ impl KeyRange for pb::v1::SubnetMetricsKey {
     fn min_key() -> Self {
         Self {
             timestamp_nanos: u64::MIN,
-            subnet_id: Some(MIN_PRINCIPAL_ID),
+            subnet_id: None,
         }
     }
 
@@ -59,7 +59,7 @@ impl KeyRange for pb::v1::RewardableNodesKey {
     fn min_key() -> Self {
         Self {
             registry_version: u64::MIN,
-            provider_id: Some(MIN_PRINCIPAL_ID),
+            provider_id: None,
         }
     }
 
