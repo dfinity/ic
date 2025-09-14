@@ -8,6 +8,7 @@ package(default_visibility = [
     "//rs/pocket_ic_server:__subpackages__",
     "//rs/replica:__subpackages__",
     "//rs/state_machine_tests:__subpackages__",
+    "//rs/tests/networking:__subpackages__",
 ])
 
 DEPENDENCIES = [
@@ -19,6 +20,7 @@ DEPENDENCIES = [
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/http_endpoints/async_utils",
+    "//rs/http_endpoints/nns_delegation_manager",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",

@@ -6,16 +6,15 @@ use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_canister_client::{
-    get_decoded_value, CanisterRegistryClient, RegistryDataStableMemory, StorableRegistryKey,
+    CanisterRegistryClient, RegistryDataStableMemory, StorableRegistryKey, get_decoded_value,
 };
 use ic_registry_keys::{
-    make_data_center_record_key, make_node_operator_record_key, make_subnet_list_record_key,
-    NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
+    NODE_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, make_data_center_record_key,
+    make_node_operator_record_key, make_subnet_list_record_key,
 };
 use ic_types::registry::RegistryClientError;
 use itertools::Itertools;
-use rewards_calculation::rewards_calculator_results::DayUtc;
-use rewards_calculation::types::{Region, RewardableNode, UnixTsNanos};
+use rewards_calculation::types::{DayUtc, Region, RewardableNode, UnixTsNanos};
 use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -90,6 +89,7 @@ impl RegistryQuerier {
         registry_client: &dyn CanisterRegistryClient,
         start_day: DayUtc,
         end_day: DayUtc,
+        provider_filter: Option<PrincipalId>,
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, RegistryClientError> {
         let mut rewardable_nodes_per_provider: BTreeMap<_, Vec<RewardableNode>> = BTreeMap::new();
         let nodes_in_range = Self::nodes_in_registry_between::<S>(start_day, end_day);
@@ -110,6 +110,11 @@ impl RegistryQuerier {
                 ic_cdk::println!("Node {} has no NodeOperatorData: skipping", node_id);
                 continue;
             };
+            if let Some(provider_filter) = provider_filter {
+                if node_provider_id != provider_filter {
+                    continue;
+                }
+            }
             let Some(some_reward_type) = node_record.node_reward_type else {
                 ic_cdk::println!("Node {} has no node_reward_type: skipping", node_id);
                 // If the node does not have a node_reward_type, we skip it.
@@ -251,7 +256,7 @@ impl RegistryQuerier {
             version,
         )
         .map_err(|e| RegistryClientError::DecodeError {
-            error: format!("Failed to decode NodeOperatorRecord: {}", e),
+            error: format!("Failed to decode NodeOperatorRecord: {e}"),
         })?
         else {
             return Ok(None);
@@ -264,7 +269,7 @@ impl RegistryQuerier {
             version,
         )
         .map_err(|e| RegistryClientError::DecodeError {
-            error: format!("Failed to decode DataCenterRecord: {}", e),
+            error: format!("Failed to decode DataCenterRecord: {e}"),
         })?
         else {
             return Ok(None);

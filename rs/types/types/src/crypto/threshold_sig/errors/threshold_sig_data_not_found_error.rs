@@ -1,7 +1,7 @@
 //! An error that occurs if the threshold signature data has not been loaded
 //! into the threshold signature data store.
-use crate::crypto::threshold_sig::ni_dkg::NiDkgId;
 use crate::crypto::CryptoError;
+use crate::crypto::threshold_sig::ni_dkg::NiDkgId;
 use std::fmt;
 
 /// Occurs if the threshold signature data has not been loaded into the
@@ -18,8 +18,7 @@ impl fmt::Display for ThresholdSigDataNotFoundError {
         match self {
             ThresholdSigDataNotFoundError::ThresholdSigDataNotFound { dkg_id } => write!(
                 f,
-                "Cannot find transcript data for DKG ID {:?} in data store",
-                dkg_id
+                "Cannot find transcript data for DKG ID {dkg_id:?} in data store"
             ),
         }
     }

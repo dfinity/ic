@@ -7,22 +7,22 @@ pub mod test_utils;
 use bit_vec::BitVec;
 pub use checkpoint::{CheckpointSerialization, MappingSerialization};
 use ic_config::state_manager::LsmtConfig;
-use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_metrics::MetricsRegistry;
+use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_sys::PageBytes;
-pub use ic_sys::{PageIndex, PAGE_SIZE};
+pub use ic_sys::{PAGE_SIZE, PageIndex};
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 pub use page_allocator::{
-    allocated_pages_count, PageAllocator, PageAllocatorRegistry, PageAllocatorSerialization,
-    PageDeltaSerialization, PageSerialization,
+    PageAllocator, PageAllocatorRegistry, PageAllocatorSerialization, PageDeltaSerialization,
+    PageSerialization, allocated_pages_count,
 };
 pub use storage::{
-    BaseFileSerialization, MergeCandidate, OverlayFileSerialization, Shard, StorageLayout,
-    StorageResult, StorageSerialization, MAX_NUMBER_OF_FILES,
+    BaseFileSerialization, MAX_NUMBER_OF_FILES, MergeCandidate, OverlayFileSerialization, Shard,
+    StorageLayout, StorageResult, StorageSerialization,
 };
 use storage::{OverlayFile, OverlayVersion, Storage};
 
-use ic_types::{Height, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES};
+use ic_types::{Height, MAX_STABLE_MEMORY_IN_BYTES, NumOsPages};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use int_map::{Bounds, IntMap};
@@ -243,12 +243,11 @@ impl std::fmt::Display for PersistenceError {
             } => {
                 write!(
                     f,
-                    "File system error for file {}: {} {}",
-                    path, context, internal_error
+                    "File system error for file {path}: {context} {internal_error}"
                 )
             }
             PersistenceError::MmapError { path, len, .. } => {
-                write!(f, "Failed to memory map file {} of length {}", path, len)
+                write!(f, "Failed to memory map file {path} of length {len}")
             }
             PersistenceError::InvalidHeapFile {
                 path,
@@ -256,25 +255,21 @@ impl std::fmt::Display for PersistenceError {
                 page_size,
             } => write!(
                 f,
-                "Size of heap file {} is {}, which is not a multiple of the page size {}",
-                path, file_size, page_size
+                "Size of heap file {path} is {file_size}, which is not a multiple of the page size {page_size}"
             ),
             PersistenceError::InvalidOverlay { path, message } => {
-                write!(f, "Overlay file {} is broken: {}", path, message)
+                write!(f, "Overlay file {path} is broken: {message}")
             }
-            PersistenceError::BadPageSize { expected, actual } => write!(
-                f,
-                "Bad slice size: expected {}, actual {}",
-                expected, actual
-            ),
+            PersistenceError::BadPageSize { expected, actual } => {
+                write!(f, "Bad slice size: expected {expected}, actual {actual}")
+            }
             PersistenceError::VersionMismatch {
                 path,
                 file_version,
                 supported,
             } => write!(
                 f,
-                "Unsupported overlay version for {}: file version {}, max supported {:?}",
-                path, file_version, supported,
+                "Unsupported overlay version for {path}: file version {file_version}, max supported {supported:?}",
             ),
         }
     }
@@ -1003,7 +998,7 @@ impl std::fmt::Debug for PageMap {
                 let idx = PageIndex::from(i as u64);
                 ic_utils::rle::display(self.get_page(idx))
             })
-            .try_for_each(|s| write!(f, "[{:?}]", s))?;
+            .try_for_each(|s| write!(f, "[{s:?}]"))?;
         write!(f, "}}")
     }
 }
@@ -1040,8 +1035,7 @@ impl PageAllocatorFileDescriptor for TestPageAllocatorFileDescriptorImpl {
             Ok(file) => file.into_raw_fd(),
             Err(err) => {
                 panic!(
-                    "TempPageAllocatorFileDescriptorImpl failed to create the backing file {}",
-                    err
+                    "TempPageAllocatorFileDescriptorImpl failed to create the backing file {err}"
                 )
             }
         }

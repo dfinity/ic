@@ -1,5 +1,5 @@
 use crate::objects::{Object, ObjectMap};
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use candid::Principal;
 use ic_types::{CanisterId, PrincipalId};
 use serde::{Deserialize, Serialize};

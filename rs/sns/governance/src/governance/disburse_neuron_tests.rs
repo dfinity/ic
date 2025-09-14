@@ -1,14 +1,14 @@
 //! Unit tests for disburse_neuron functionality and related fee calculations.
 
 use super::test_helpers::{
-    basic_governance_proto, A_MOTION_PROPOSAL, A_NEURON, A_NEURON_PRINCIPAL_ID,
+    A_MOTION_PROPOSAL, A_NEURON, A_NEURON_PRINCIPAL_ID, basic_governance_proto,
 };
 use super::*;
 use crate::{
     governance::AccountProto,
     pb::v1::{
-        governance_error::ErrorType, manage_neuron, neuron::DissolveState, NeuronId, ProposalData,
-        ProposalId, Subaccount,
+        NeuronId, ProposalData, ProposalId, Subaccount, governance_error::ErrorType, manage_neuron,
+        neuron::DissolveState,
     },
     types::test_helpers::NativeEnvironment,
 };
@@ -18,7 +18,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_canisters::cmc::FakeCmc;
 use ic_nervous_system_common::{
-    ledger::compute_neuron_staking_subaccount_bytes, NervousSystemError, E8,
+    E8, NervousSystemError, ledger::compute_neuron_staking_subaccount_bytes,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
@@ -102,6 +102,20 @@ impl ICRC1Ledger for MockLedger {
 
     fn canister_id(&self) -> CanisterId {
         CanisterId::from(42)
+    }
+
+    async fn icrc2_approve(
+        &self,
+        _spender: Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 
     async fn icrc3_get_blocks(

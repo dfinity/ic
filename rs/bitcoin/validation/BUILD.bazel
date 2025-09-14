@@ -22,10 +22,7 @@ rust_test(
     ],
     deps = [
         # Keep sorted.
-        "@crate_index//:bitcoin",
         "@crate_index//:csv",
-        "@crate_index//:hex",
-        "@crate_index//:proptest",
         "@crate_index//:rstest",
     ],
 )
@@ -36,14 +33,5 @@ rust_test_suite(
     data = [
         # Keep sorted.
         "tests/data/headers.csv",
-    ],
-    deps = [
-        # Keep sorted.
-        ":validation",
-        "@crate_index//:bitcoin",
-        "@crate_index//:csv",
-        "@crate_index//:hex",
-        "@crate_index//:proptest",
-        "@crate_index//:rstest",
     ],
 )

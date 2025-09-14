@@ -51,7 +51,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
 
     let mut apply_attribute = |attribute, type_names| {
         for type_name in type_names {
-            config.type_attribute(format!("ic_sns_governance.pb.v1.{}", type_name), attribute);
+            config.type_attribute(format!("ic_sns_governance.pb.v1.{type_name}"), attribute);
         }
     };
     apply_attribute(
@@ -61,6 +61,8 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
             "NeuronPermissionType",
             "Proposal.action",
             "Topic",
+            "ExtensionType",
+            "OperationType",
         ],
     );
     apply_attribute(
@@ -123,14 +125,14 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     ];
     for field in blob_fields {
         config.field_attribute(
-            format!(".ic_sns_governance.pb.v1.{}", field),
+            format!(".ic_sns_governance.pb.v1.{field}"),
             "#[serde(with = \"serde_bytes\")]",
         );
     }
     let option_blob_fields = vec!["UpgradeSnsControlledCanister.canister_upgrade_arg"];
     for field in option_blob_fields {
         config.field_attribute(
-            format!(".ic_sns_governance.pb.v1.{}", field),
+            format!(".ic_sns_governance.pb.v1.{field}"),
             "#[serde(deserialize_with = \"ic_utils::deserialize::deserialize_option_blob\")]",
         );
     }

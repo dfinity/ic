@@ -107,7 +107,7 @@ pub trait RegistryDataStableMemory: Send + Sync {
 /// code.
 #[macro_export]
 macro_rules! test_registry_data_stable_memory_impl {
-    ($state_struct:ident, $local_key_btree_map:expr) => {
+    ($state_struct:ident, $local_key_btree_map:expr_2021) => {
 
         pub struct $state_struct;
 

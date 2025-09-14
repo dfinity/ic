@@ -30,7 +30,6 @@ RUNTIME_DEPS = [
 
 system_test_nns(
     name = "dfx_smoke_test",
-    extra_head_nns_tags = [],  # don't run the head_nns variant on nightly since it aleady runs on long_test.
     tags = [
         "long_test",  # since it takes longer than 5 minutes.
     ],

@@ -16,20 +16,20 @@
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_management_canister_types_private::Method;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{execution_state::WasmExecutionMode, system_state::CyclesUseCase},
     CanisterState, MessageMemoryUsage, SystemState,
+    canister_state::{execution_state::WasmExecutionMode, system_state::CyclesUseCase},
 };
 use ic_types::{
-    batch::CanisterCyclesCostSchedule,
-    canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
-    messages::{Request, Response, SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     PrincipalId, SubnetId,
+    batch::CanisterCyclesCostSchedule,
+    canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
+    messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Request, Response, SignedIngressContent},
 };
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
@@ -62,7 +62,7 @@ impl std::fmt::Display for CyclesAccountManagerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CyclesAccountManagerError::ContractViolation(msg) => {
-                write!(f, "Contract violation: {}", msg)
+                write!(f, "Contract violation: {msg}")
             }
         }
     }
@@ -102,12 +102,6 @@ impl ResourceSaturation {
             threshold,
             capacity,
         }
-    }
-
-    /// Creates a new `ResourceSaturation` like the `new()` constructor, but also
-    /// divides `usage`, `threshold`, and `capacity` by the given `scaling` factor.
-    pub fn new_scaled(usage: u64, threshold: u64, capacity: u64, scaling: u64) -> Self {
-        Self::new(usage / scaling, threshold / scaling, capacity / scaling)
     }
 
     /// Returns the part of the usage that is above the threshold.
@@ -675,7 +669,7 @@ impl CyclesAccountManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> IngressInductionCost {
-        let paying_canister = match ingress.is_addressed_to_subnet(self.own_subnet_id) {
+        let paying_canister = match ingress.is_addressed_to_subnet() {
             // If a subnet message, get effective canister id who will pay for the message.
             true => {
                 if let Ok(Method::UpdateSettings) = Method::from_str(ingress.method_name()) {
@@ -1184,8 +1178,7 @@ impl CyclesAccountManager {
     ) -> Result<Cycles, CyclesAccountManagerError> {
         if canister_id != CYCLES_MINTING_CANISTER_ID {
             let error_str = format!(
-                "ic0.mint_cycles128 cannot be executed on non Cycles Minting Canister: {} != {}",
-                canister_id, CYCLES_MINTING_CANISTER_ID
+                "ic0.mint_cycles128 cannot be executed on non Cycles Minting Canister: {canister_id} != {CYCLES_MINTING_CANISTER_ID}"
             );
             Err(CyclesAccountManagerError::ContractViolation(error_str))
         } else {
@@ -1450,9 +1443,7 @@ mod tests {
 
         assert!(
             payload_size <= MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE,
-            "Payload size: {}, is greater than MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: {}.",
-            payload_size,
-            MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE
+            "Payload size: {payload_size}, is greater than MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: {MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE}."
         );
     }
 

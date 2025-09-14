@@ -1,7 +1,7 @@
 //! A parser for the command line flags and configuration file.
 use clap::Parser;
 use http::Uri;
-use ic_btc_adapter::{address_limits, Config};
+use ic_btc_adapter::{AdapterNetwork, Config, address_limits};
 use std::{fs::File, io, path::PathBuf};
 use thiserror::Error;
 
@@ -25,10 +25,10 @@ pub struct Cli {
 
 impl Cli {
     /// Loads the config from the provided `config` argument.
-    pub fn get_config(&self) -> Result<Config, CliError> {
+    pub fn get_config(&self) -> Result<Config<AdapterNetwork>, CliError> {
         // The expected JSON config.
         let file = File::open(&self.config).map_err(CliError::Io)?;
-        let mut config: Config =
+        let mut config: Config<AdapterNetwork> =
             serde_json::from_reader(file).map_err(|err| CliError::Deserialize(err.to_string()))?;
 
         // Set the address limits based on the specified network.
@@ -55,7 +55,6 @@ impl Cli {
 pub mod test {
     use super::*;
     use crate::IncomingSource;
-    use bitcoin::Network;
     use std::io::Write;
     use std::path::PathBuf;
     use std::str::FromStr;
@@ -113,7 +112,7 @@ pub mod test {
     #[test]
     fn test_cli_get_config_error_invalid_json() {
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", EMPTY_CONFIG).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{EMPTY_CONFIG}").expect("Failed to write to tmp file");
         let cli = Cli {
             config: tmpfile.path().to_owned(),
         };
@@ -132,7 +131,7 @@ pub mod test {
     #[test]
     fn test_cli_bad_socks_url() {
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", TESTNET_BAD_SOCKS_CONFIG).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{TESTNET_BAD_SOCKS_CONFIG}").expect("Failed to write to tmp file");
         let cli = Cli {
             config: tmpfile.path().to_owned(),
         };
@@ -149,13 +148,13 @@ pub mod test {
     #[test]
     fn test_cli_get_config_good_mainnet_json() {
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", MAINNET_CONFIG).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{MAINNET_CONFIG}").expect("Failed to write to tmp file");
         let cli = Cli {
             config: tmpfile.path().to_owned(),
         };
         let result = cli.get_config();
         let config = result.unwrap();
-        assert_eq!(config.network, Network::Bitcoin);
+        assert_eq!(config.network, bitcoin::Network::Bitcoin.into());
         assert_eq!(config.address_limits, (500, 2000));
         assert_eq!(config.dns_seeds.len(), 9);
         assert_eq!(config.socks_proxy, None);
@@ -165,13 +164,13 @@ pub mod test {
     #[test]
     fn test_cli_get_config_good_testnet_json() {
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", TESTNET_CONFIG).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{TESTNET_CONFIG}").expect("Failed to write to tmp file");
         let cli = Cli {
             config: tmpfile.path().to_owned(),
         };
         let result = cli.get_config();
         let config = result.unwrap();
-        assert_eq!(config.network, Network::Testnet);
+        assert_eq!(config.network, bitcoin::Network::Testnet.into());
         assert_eq!(config.address_limits, (100, 1000));
         assert_eq!(config.dns_seeds.len(), 4);
         assert_eq!(config.socks_proxy, None);

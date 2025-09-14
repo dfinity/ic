@@ -35,14 +35,18 @@ fn test_network_options() {
         assert_eq!(network_options.version.rosetta_version, API_VERSION);
         assert_eq!(network_options.version.node_version, NODE_VERSION);
         assert!(!network_options.allow.operation_statuses.is_empty());
-        assert!(network_options
-            .allow
-            .operation_types
-            .contains(&"TRANSACTION".to_string()));
-        assert!(network_options
-            .allow
-            .operation_types
-            .contains(&"FEE".to_string()));
+        assert!(
+            network_options
+                .allow
+                .operation_types
+                .contains(&"TRANSACTION".to_string())
+        );
+        assert!(
+            network_options
+                .allow
+                .operation_types
+                .contains(&"FEE".to_string())
+        );
         assert!(!network_options.allow.errors.is_empty());
         assert!(network_options.allow.historical_balance_lookup);
     });

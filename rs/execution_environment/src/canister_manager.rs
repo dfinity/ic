@@ -1,5 +1,5 @@
 use crate::as_round_instructions;
-use crate::execution::install_code::{validate_controller, OriginalContext};
+use crate::execution::install_code::{OriginalContext, validate_controller};
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::execution_environment::{
     CompilationCostHandling, RoundContext, RoundCounters, RoundLimits,
@@ -19,7 +19,7 @@ use ic_embedders::{
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{IngressHistoryWriter, SubnetAvailableMemory};
-use ic_logger::{error, fatal, info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, fatal, info};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterSnapshotDataKind,
     CanisterSnapshotDataOffset, CanisterSnapshotResponse, CanisterStatusResultV2,
@@ -30,38 +30,38 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::canister_snapshots::ValidatedSnapshotMetadata;
+use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_replicated_state::canister_state::execution_state::SandboxMemory;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
-    ChunkValidationResult, WasmChunkHash, CHUNK_SIZE,
+    CHUNK_SIZE, ChunkValidationResult, WasmChunkHash,
 };
-use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_replicated_state::page_map::Buffer;
 use ic_replicated_state::{
+    CallOrigin, CanisterState, MessageMemoryUsage, NetworkTopology, ReplicatedState,
+    SchedulerState, SystemState,
     canister_snapshots::CanisterSnapshot,
     canister_state::{
+        NextExecution,
         execution_state::Memory,
         execution_state::WasmExecutionMode,
         system_state::{
-            wasm_chunk_store::{self, WasmChunkStore},
             CyclesUseCase, ReservationError,
+            wasm_chunk_store::{self, WasmChunkStore},
         },
-        NextExecution,
     },
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::PageAllocatorFileDescriptor,
-    CallOrigin, CanisterState, MessageMemoryUsage, NetworkTopology, ReplicatedState,
-    SchedulerState, SystemState,
 };
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
+    CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
+    NumInstructions, PrincipalId, SnapshotId, SubnetId, Time,
     ingress::{IngressState, IngressStatus},
     messages::{
         CanisterCall, Payload, RejectContext, Response as CanisterResponse, SignedIngressContent,
         StopCanisterContext,
     },
     nominal_cycles::NominalCycles,
-    CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
-    NumInstructions, PrincipalId, SnapshotId, SubnetId, Time,
 };
 use ic_wasm_types::WasmHash;
 use num_traits::{SaturatingAdd, SaturatingSub};
@@ -169,7 +169,7 @@ impl CanisterManager {
             // `RenameCanister` can only be called from the NNS subnet.
             | Ok(Ic00Method::RenameCanister) => Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
-                format!("Only canisters can call ic00 method {}", method_name),
+                format!("Only canisters can call ic00 method {method_name}"),
             )),
 
             // These methods are only valid if they are sent by the controller
@@ -198,22 +198,21 @@ impl CanisterManager {
                     Some(canister_id) => {
                         let canister = state.canister_state(&canister_id).ok_or_else(|| UserError::new(
                             ErrorCode::CanisterNotFound,
-                            format!("Canister {} not found", canister_id),
+                            format!("Canister {canister_id} not found"),
                         ))?;
                         match canister.controllers().contains(&sender.get()) {
                             true => Ok(()),
                             false => Err(UserError::new(
                                 ErrorCode::CanisterInvalidController,
                                 format!(
-                                    "Only controllers of canister {} can call ic00 method {}",
-                                    canister_id, method_name,
+                                    "Only controllers of canister {canister_id} can call ic00 method {method_name}",
                                 ),
                             )),
                         }
                     },
                     None => Err(UserError::new(
                         ErrorCode::InvalidManagementPayload,
-                        format!("Failed to decode payload for ic00 method: {}", method_name),
+                        format!("Failed to decode payload for ic00 method: {method_name}"),
                     )),
                 }
             },
@@ -221,7 +220,7 @@ impl CanisterManager {
             Ok(Ic00Method::FetchCanisterLogs) => Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "{} API is only accessible in non-replicated mode",
+                    "{} API is not accessible via ingress in replicated mode",
                     Ic00Method::FetchCanisterLogs
                 ),
             )),
@@ -234,7 +233,7 @@ impl CanisterManager {
                 } else {
                     Err(UserError::new(
                         ErrorCode::CanisterRejectedMessage,
-                        format!("Caller {} is not allowed to call ic00 method {}", sender, method_name)
+                        format!("Caller {sender} is not allowed to call ic00 method {method_name}")
                     ))
                 }
             },
@@ -367,9 +366,9 @@ impl CanisterManager {
             if controllers.len() > self.config.max_controllers {
                 return Err(CanisterManagerError::InvalidSettings {
                     message: format!(
-                    "Invalid settings: 'controllers' length exceeds maximum size allowed of {}.",
-                    self.config.max_controllers
-                ),
+                        "Invalid settings: 'controllers' length exceeds maximum size allowed of {}.",
+                        self.config.max_controllers
+                    ),
                 });
             }
         }
@@ -641,8 +640,12 @@ impl CanisterManager {
             None => None,
         };
 
+        // For the sake of backward-compatibility, we do not record
+        // changes to canister environment variables in canister history.
+        // In particular, we never produce a canister history entry of the form `settings_change`.
+        /*
         match self.environment_variables_flag {
-            FlagStatus::Enabled => {
+                      FlagStatus::Enabled => {
                 let new_environment_variables_hash = validated_settings
                     .environment_variables()
                     .map(|environment_variables| environment_variables.hash());
@@ -659,15 +662,18 @@ impl CanisterManager {
                 }
             }
             FlagStatus::Disabled => {
-                if let Some(new_controllers) = new_controllers {
-                    canister.system_state.add_canister_change(
-                        timestamp_nanos,
-                        origin,
-                        CanisterChangeDetails::controllers_change(new_controllers),
-                    );
-                }
+        */
+        if let Some(new_controllers) = new_controllers {
+            canister.system_state.add_canister_change(
+                timestamp_nanos,
+                origin,
+                CanisterChangeDetails::controllers_change(new_controllers),
+            );
+        }
+        /*
             }
         }
+        */
 
         Ok(())
     }
@@ -976,7 +982,7 @@ impl CanisterManager {
                 return StopCanisterResult::Failure {
                     error: CanisterManagerError::CanisterNotFound(canister_id),
                     cycles_to_return: stop_context.take_cycles(),
-                }
+                };
             }
             Some(canister) => canister,
         };
@@ -1284,12 +1290,7 @@ impl CanisterManager {
             return Err(CanisterManagerError::CanisterAlreadyExists(new_canister_id));
         }
 
-        if state
-            .metadata
-            .network_topology
-            .routing_table
-            .route(specified_id)
-            == Some(state.metadata.own_subnet_id)
+        if state.metadata.network_topology.route(specified_id) == Some(state.metadata.own_subnet_id)
         {
             Ok(new_canister_id)
         } else {
@@ -1517,7 +1518,7 @@ impl CanisterManager {
                 WasmExecutionMode::Wasm32,
             )
             .map_err(|err| CanisterManagerError::WasmChunkStoreError {
-                message: format!("Error charging for 'upload_chunk': {}", err),
+                message: format!("Error charging for 'upload_chunk': {err}"),
             })?;
 
         let validated_chunk = match canister
@@ -2054,6 +2055,7 @@ impl CanisterManager {
                 snapshot
             }
         };
+        let execution_snapshot = snapshot.execution_snapshot();
 
         // Check the precondition:
         // Unable to start executing a `load_canister_snapshot`
@@ -2064,7 +2066,8 @@ impl CanisterManager {
                 long_execution_already_in_progress.inc();
                 error!(
                     self.log,
-                    "[EXC-BUG] Attempted to start a new `load_canister_snapshot` execution while the previous execution is still in progress for {}.", canister_id
+                    "[EXC-BUG] Attempted to start a new `load_canister_snapshot` execution while the previous execution is still in progress for {}.",
+                    canister_id
                 );
                 return (
                     Err(CanisterManagerError::LongExecutionAlreadyInProgress { canister_id }),
@@ -2098,7 +2101,6 @@ impl CanisterManager {
         let (_old_execution_state, mut system_state, scheduler_state) = canister_clone.into_parts();
 
         let (instructions_used, new_execution_state) = {
-            let execution_snapshot = snapshot.execution_snapshot();
             let new_wasm_hash = WasmHash::from(&execution_snapshot.wasm_binary);
             let compilation_cost_handling = if state
                 .metadata
@@ -2151,6 +2153,25 @@ impl CanisterManager {
         system_state
             .certified_data
             .clone_from(snapshot.certified_data());
+
+        // We don't restore the state of global timer and on low wasm memory hook
+        // for snapshots created via `take_canister_snapshot`
+        // since that would be a breaking change.
+        if snapshot.source() == SnapshotSource::MetadataUpload(candid::Reserved) {
+            if let Some(global_timer) = execution_snapshot.global_timer {
+                system_state.global_timer = global_timer;
+            }
+            if let Some(on_low_wasm_memory_hook_status) =
+                execution_snapshot.on_low_wasm_memory_hook_status
+            {
+                system_state
+                    .task_queue
+                    .set_on_low_wasm_memory_hook_status_from_snapshot(
+                        on_low_wasm_memory_hook_status,
+                    );
+            }
+        }
+
         let wasm_execution_mode = new_execution_state
             .as_ref()
             .map_or(WasmExecutionMode::Wasm32, |exec_state| {
@@ -2171,11 +2192,13 @@ impl CanisterManager {
                 .unwrap_or(true)
             {
                 return (
-                        Err(CanisterManagerError::CanisterSnapshotInconsistent {
-                            message: format!("Hook status ({:?}) of uploaded snapshot is inconsistent with the canister's state (hook condition satisfied: {}).", snapshot_hook_status, hook_condition),
-                        }),
-                        instructions_used,
-                    );
+                    Err(CanisterManagerError::CanisterSnapshotInconsistent {
+                        message: format!(
+                            "Hook status ({snapshot_hook_status:?}) of uploaded snapshot is inconsistent with the canister's state (hook condition satisfied: {hook_condition})."
+                        ),
+                    }),
+                    instructions_used,
+                );
             }
         }
 
@@ -2328,12 +2351,19 @@ impl CanisterManager {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
         let snapshot = self.get_snapshot(canister.canister_id(), snapshot_id, state)?;
+        // A snapshot also contains the instruction counter as the last global
+        // (because it is *appended* during WASM instrumentation).
+        // We pop that last global (which is merely an implementation detail)
+        // from the list of globals returned to the user.
+        let mut globals = snapshot.exported_globals().clone();
+        let maybe_instruction_counter = globals.pop();
+        debug_assert!(maybe_instruction_counter.is_some());
 
         Ok(ReadCanisterSnapshotMetadataResponse {
             source: snapshot.source(),
             taken_at_timestamp: snapshot.taken_at_timestamp().as_nanos_since_unix_epoch(),
             wasm_module_size: snapshot.execution_snapshot().wasm_binary.len() as u64,
-            exported_globals: snapshot.exported_globals().clone(),
+            globals,
             wasm_memory_size: snapshot.execution_snapshot().wasm_memory.size.get() as u64
                 * WASM_PAGE_SIZE_IN_BYTES as u64,
             stable_memory_size: snapshot.execution_snapshot().stable_memory.size.get() as u64
@@ -2393,7 +2423,7 @@ impl CanisterManager {
                     Err(e) => Err(e.into()),
                 }
             }
-            CanisterSnapshotDataKind::MainMemory { offset, size } => {
+            CanisterSnapshotDataKind::WasmMemory { offset, size } => {
                 let main_memory = snapshot.execution_snapshot().wasm_memory.clone();
                 match CanisterSnapshot::get_memory_chunk(main_memory, offset, size) {
                     Ok(chunk) => Ok(chunk),
@@ -2409,12 +2439,12 @@ impl CanisterManager {
             CanisterSnapshotDataKind::WasmChunk { hash } => {
                 let Ok(hash) = <WasmChunkHash>::try_from(hash.clone()) else {
                     return Err(CanisterManagerError::WasmChunkStoreError {
-                        message: format!("Bytes {:02x?} are not a valid WasmChunkHash.", hash),
+                        message: format!("Bytes {hash:02x?} are not a valid WasmChunkHash."),
                     });
                 };
                 let Some(chunk) = snapshot.chunk_store().get_chunk_complete(&hash) else {
                     return Err(CanisterManagerError::WasmChunkStoreError {
-                        message: format!("WasmChunkHash {:02x?} not found.", hash),
+                        message: format!("WasmChunkHash {hash:02x?} not found."),
                     });
                 };
                 Ok(chunk)
@@ -2458,7 +2488,7 @@ impl CanisterManager {
             ValidatedSnapshotMetadata::validate(args.clone(), wasm_mode).map_err(|e| {
                 UserError::new(
                     ErrorCode::InvalidManagementPayload,
-                    format!("Snapshot Metadata contains invalid data: {:?}", e),
+                    format!("Snapshot Metadata contains invalid data: {e:?}"),
                 )
             })?;
 
@@ -2643,7 +2673,7 @@ impl CanisterManager {
                     });
                 }
             }
-            CanisterSnapshotDataOffset::MainMemory { offset } => {
+            CanisterSnapshotDataOffset::WasmMemory { offset } => {
                 let max_size_bytes =
                     snapshot_inner.wasm_memory().size.get() * WASM_PAGE_SIZE_IN_BYTES;
                 if max_size_bytes < args.chunk.len().saturating_add(offset as usize) {
@@ -2680,10 +2710,10 @@ impl CanisterManager {
                 {
                     ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
                     ChunkValidationResult::AlreadyExists(_hash) => {
-                        return Ok(NumInstructions::new(0))
+                        return Ok(NumInstructions::new(0));
                     }
                     ChunkValidationResult::ValidationError(err) => {
-                        return Err(CanisterManagerError::WasmChunkStoreError { message: err })
+                        return Err(CanisterManagerError::WasmChunkStoreError { message: err });
                     }
                 };
 
@@ -2770,7 +2800,7 @@ impl CanisterManager {
                 args.chunk.len() as u64,
                 NumInstructions::new(args.chunk.len() as u64),
             ),
-            CanisterSnapshotDataOffset::MainMemory { .. } => (
+            CanisterSnapshotDataOffset::WasmMemory { .. } => (
                 args.chunk.len() as u64,
                 NumInstructions::new(args.chunk.len() as u64),
             ),
@@ -2857,7 +2887,7 @@ impl CanisterManager {
 fn get_response_size(kind: &CanisterSnapshotDataKind) -> Result<u64, CanisterManagerError> {
     let size = match kind {
         CanisterSnapshotDataKind::WasmModule { size, .. } => *size,
-        CanisterSnapshotDataKind::MainMemory { size, .. } => *size,
+        CanisterSnapshotDataKind::WasmMemory { size, .. } => *size,
         CanisterSnapshotDataKind::StableMemory { size, .. } => *size,
         CanisterSnapshotDataKind::WasmChunk { .. } => return Ok(CHUNK_SIZE),
     };
@@ -2911,7 +2941,8 @@ pub fn uninstall_canister(
     };
 
     let canister_id = canister.canister_id();
-    let reject_responses = canister
+
+    canister
         .system_state
         .delete_all_call_contexts(|call_context| {
             // Generate reject responses for ingress and canister messages.
@@ -2952,9 +2983,7 @@ pub fn uninstall_canister(
                     None
                 }
             }
-        });
-
-    reject_responses
+        })
 }
 
 fn globals_match(g1: &[Global], g2: &[Global]) -> bool {

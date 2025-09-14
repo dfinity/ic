@@ -1,11 +1,10 @@
-use ic00::BitcoinGetBlockHeadersArgs;
 use ic_base_types::CanisterId;
 use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_btc_replica_types::{GetSuccessorsResponseComplete, GetSuccessorsResponsePartial};
 use ic_btc_service::{
-    btc_service_server::{BtcService, BtcServiceServer},
     BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,
     BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
+    btc_service_server::{BtcService, BtcServiceServer},
 };
 use ic_config::bitcoin_payload_builder_config::Config as BitcoinPayloadBuilderConfig;
 use ic_config::{
@@ -24,6 +23,7 @@ use ic_replica_tests as utils;
 use ic_state_machine_tests::{StateMachine, StateMachineConfig};
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_types::ingress::WasmResult;
+use ic00::BitcoinGetBlockHeadersArgs;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -209,7 +209,7 @@ fn bitcoin_get_successors() {
             let response = call_get_successors(
                 &canister,
                 ic00::BitcoinGetSuccessorsArgs::Initial(ic00::BitcoinGetSuccessorsRequestInitial {
-                    network: ic_btc_interface::Network::Regtest,
+                    network: ic_btc_replica_types::Network::BitcoinRegtest,
                     anchor: vec![],
                     processed_block_hashes: vec![],
                 }),
@@ -247,7 +247,7 @@ fn bitcoin_get_successors_pagination() {
             let response = call_get_successors(
                 &canister,
                 ic00::BitcoinGetSuccessorsArgs::Initial(ic00::BitcoinGetSuccessorsRequestInitial {
-                    network: ic_btc_interface::Network::Regtest,
+                    network: ic_btc_replica_types::Network::BitcoinRegtest,
                     anchor: vec![],
                     processed_block_hashes: vec![],
                 }),
@@ -293,7 +293,7 @@ fn bitcoin_get_successors_pagination_invalid_adapter_request() {
             let response = call_get_successors(
                 &canister,
                 ic00::BitcoinGetSuccessorsArgs::Initial(ic00::BitcoinGetSuccessorsRequestInitial {
-                    network: ic_btc_interface::Network::Regtest,
+                    network: ic_btc_replica_types::Network::BitcoinRegtest,
                     anchor: vec![],
                     processed_block_hashes: vec![],
                 }),
@@ -327,7 +327,7 @@ fn bitcoin_get_successors_reject() {
             let response = call_get_successors(
                 &canister,
                 ic00::BitcoinGetSuccessorsArgs::Initial(ic00::BitcoinGetSuccessorsRequestInitial {
-                    network: ic_btc_interface::Network::Regtest,
+                    network: ic_btc_replica_types::Network::BitcoinRegtest,
                     anchor: vec![],
                     processed_block_hashes: vec![],
                 }),
@@ -336,7 +336,7 @@ fn bitcoin_get_successors_reject() {
             // Expect the reject message to be received.
             assert_eq!(
                 response,
-                WasmResult::Reject(format!("Unavailable({})", err_message))
+                WasmResult::Reject(format!("Unavailable({err_message})"))
             );
         },
     );
@@ -359,7 +359,7 @@ fn bitcoin_send_transaction_internal_valid_request() {
             let response = call_send_transaction_internal(
                 &canister,
                 ic00::BitcoinSendTransactionInternalArgs {
-                    network: ic_btc_interface::Network::Regtest,
+                    network: ic_btc_replica_types::Network::BitcoinRegtest,
                     transaction: vec![1, 2, 3],
                 },
             );
@@ -388,7 +388,7 @@ fn bitcoin_send_transaction_internal_reject() {
             let response = call_send_transaction_internal(
                 &canister,
                 ic00::BitcoinSendTransactionInternalArgs {
-                    network: ic_btc_interface::Network::Regtest,
+                    network: ic_btc_replica_types::Network::BitcoinRegtest,
                     transaction: vec![1, 2, 3],
                 },
             );
@@ -396,7 +396,7 @@ fn bitcoin_send_transaction_internal_reject() {
             // Expect the reject message to be received.
             assert_eq!(
                 response,
-                WasmResult::Reject(format!("Unavailable({})", err_message))
+                WasmResult::Reject(format!("Unavailable({err_message})"))
             );
         },
     );
@@ -441,7 +441,7 @@ fn bitcoin_send_transaction_internal_no_permissions() {
             let response = call_send_transaction_internal(
                 &canister,
                 ic00::BitcoinSendTransactionInternalArgs {
-                    network: ic_btc_interface::Network::Regtest,
+                    network: ic_btc_replica_types::Network::BitcoinRegtest,
                     transaction: vec![1, 2, 3],
                 },
             );
@@ -472,14 +472,13 @@ fn mock_bitcoin_canister_wat(network: BitcoinNetwork) -> String {
 
               (memory $memory 1)
               (export "memory" (memory $memory))
-              (data (i32.const 0) "Hello from {}!")
+              (data (i32.const 0) "Hello from {network}!")
               (export "canister_update bitcoin_get_balance" (func $ping))
               (export "canister_update bitcoin_get_utxos" (func $ping))
               (export "canister_update bitcoin_get_block_headers" (func $ping))
               (export "canister_update bitcoin_send_transaction" (func $ping))
               (export "canister_update bitcoin_get_current_fee_percentiles" (func $ping))
-            )"#,
-        network
+            )"#
     )
 }
 
@@ -536,7 +535,7 @@ fn test_canister_routing(env: StateMachine, networks: Vec<BitcoinNetwork>) {
                     method,
                     call_args().other_side(payload),
                 )),
-                format!("Hello from {}!", network).as_bytes(),
+                format!("Hello from {network}!").as_bytes(),
             );
         }
     }

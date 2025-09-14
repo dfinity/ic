@@ -2,8 +2,8 @@ use crate::{registry::Registry, storage::with_chunks};
 use ic_protobuf::registry::dc::v1::DataCenterRecord;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_canister_chunkify::decode_high_capacity_registry_value;
-use ic_registry_keys::make_data_center_record_key;
 use ic_registry_keys::NODE_OPERATOR_RECORD_KEY_PREFIX;
+use ic_registry_keys::make_data_center_record_key;
 use ic_registry_transport::pb::v1::HighCapacityRegistryValue;
 use ic_types::PrincipalId;
 use prost::Message;
@@ -76,13 +76,13 @@ mod tests {
     use ic_nns_test_utils::registry::invariant_compliant_mutation;
     use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
     use ic_registry_keys::make_node_operator_record_key;
-    use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+    use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
     use maplit::btreemap;
     use std::collections::HashSet;
     use std::hash::Hash;
 
     pub fn principal(i: u64) -> PrincipalId {
-        PrincipalId::try_from(format!("SID{}", i).as_bytes().to_vec()).unwrap()
+        PrincipalId::try_from(format!("SID{i}").as_bytes().to_vec()).unwrap()
     }
 
     // Check that two vectors have the same elements. If fails if two vectors have a different
@@ -283,9 +283,11 @@ mod tests {
         // Check invariants before applying mutations
         registry.maybe_apply_mutation_internal(mutations);
 
-        assert!(registry
-            .get_node_operators_and_dcs_of_node_provider(*TEST_USER1_PRINCIPAL)
-            .unwrap()
-            .is_empty());
+        assert!(
+            registry
+                .get_node_operators_and_dcs_of_node_provider(*TEST_USER1_PRINCIPAL)
+                .unwrap()
+                .is_empty()
+        );
     }
 }

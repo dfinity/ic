@@ -7,14 +7,15 @@ use crate::consensus::{
 };
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::consensus_pool::{ChangeAction, HeightRange, Mutations};
-use ic_logger::{info, trace, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, trace};
 use ic_types::{
+    Time,
     consensus::{
-        hashed, Block, BlockMetadata, BlockProposal, ConsensusMessage, ConsensusMessageHashable,
+        Block, BlockMetadata, BlockProposal, ConsensusMessage, ConsensusMessageHashable,
         FinalizationContent, FinalizationShare, HasHeight, HashedBlock, NotarizationShare, Rank,
+        hashed,
     },
     malicious_flags::MaliciousFlags,
-    Time,
 };
 use std::time::Duration;
 

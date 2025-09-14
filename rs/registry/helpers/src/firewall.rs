@@ -9,17 +9,17 @@ use ic_protobuf::registry::{
     node::v1::ConnectionEndpoint,
 };
 use ic_registry_keys::{
-    get_node_record_node_id, make_firewall_config_record_key, make_firewall_rules_record_key,
-    make_node_record_key, FirewallRulesScope, NODE_RECORD_KEY_PREFIX,
+    FirewallRulesScope, NODE_RECORD_KEY_PREFIX, get_node_record_node_id,
+    make_firewall_config_record_key, make_firewall_rules_record_key, make_node_record_key,
 };
-use ic_types::{NodeId, RegistryVersion};
+use ic_types::{NodeId, RegistryVersion, SubnetId};
 use std::{collections::HashSet, net::IpAddr};
 
 /// A trait that allows access to firewall rules and ancillary information.
 pub trait FirewallRegistry {
     // TODO: Remove when IC-1026 is fully integrated
     fn get_firewall_config(&self, version: RegistryVersion)
-        -> RegistryClientResult<FirewallConfig>;
+    -> RegistryClientResult<FirewallConfig>;
 
     fn get_firewall_rules(
         &self,
@@ -35,6 +35,17 @@ pub trait FirewallRegistry {
     fn get_system_subnet_nodes_ip_addresses(
         &self,
         version: RegistryVersion,
+    ) -> RegistryClientResult<Vec<IpAddr>>;
+
+    fn get_app_subnet_nodes_ip_addresses(
+        &self,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<Vec<IpAddr>>;
+
+    fn get_ip_addresses_for_node_ids(
+        &self,
+        version: RegistryVersion,
+        node_ids: &[NodeId],
     ) -> RegistryClientResult<Vec<IpAddr>>;
 }
 
@@ -116,28 +127,67 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
             .flatten()
             .collect();
 
-        let mut system_subnet_endpoints: HashSet<IpAddr> = HashSet::new();
+        self.get_ip_addresses_for_node_ids(version, &system_subnet_node_ids)
+    }
 
-        for node_id in system_subnet_node_ids {
+    /// Get the IP addresses of all app subnet nodes in the registry, for endpoints used for core protocol services (p2p, xnet, api)
+    fn get_app_subnet_nodes_ip_addresses(
+        &self,
+        version: RegistryVersion,
+    ) -> RegistryClientResult<Vec<IpAddr>> {
+        let all_subnet_ids = self.get_subnet_ids(version)?.unwrap_or_default();
+        let system_subnet_ids = self.get_system_subnet_ids(version)?.unwrap_or_default();
+
+        let app_subnet_ids: Vec<SubnetId> = all_subnet_ids
+            .into_iter()
+            .filter(|id| !system_subnet_ids.contains(id))
+            .collect();
+
+        let app_subnet_node_ids: Vec<NodeId> = app_subnet_ids
+            .into_iter()
+            .map(
+                |subnet_id| match self.get_node_ids_on_subnet(subnet_id, version) {
+                    Ok(Some(node_ids)) => Ok(node_ids),
+                    Ok(None) => Ok(vec![]),
+                    Err(e) => Err(e),
+                },
+            )
+            .collect::<Result<Vec<Vec<NodeId>>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect();
+
+        self.get_ip_addresses_for_node_ids(version, &app_subnet_node_ids)
+    }
+
+    /// Get the IP addresses of the specified nodes
+    fn get_ip_addresses_for_node_ids(
+        &self,
+        version: RegistryVersion,
+        node_ids: &[NodeId],
+    ) -> RegistryClientResult<Vec<IpAddr>> {
+        let mut node_endpoints: HashSet<IpAddr> = HashSet::new();
+
+        for node_id in node_ids {
             if let Some(node_record) = deserialize_registry_value::<NodeRecord>(
-                self.get_value(&make_node_record_key(node_id), version),
+                self.get_value(&make_node_record_key(*node_id), version),
             )? {
                 if let Some(ip_addr) = node_record
                     .xnet
                     .and_then(|endpoint| endpoint.ip_addr.parse::<IpAddr>().ok())
                 {
-                    system_subnet_endpoints.insert(ip_addr);
+                    node_endpoints.insert(ip_addr);
                 }
                 if let Some(ip_addr) = node_record
                     .http
                     .and_then(|endpoint| endpoint.ip_addr.parse::<IpAddr>().ok())
                 {
-                    system_subnet_endpoints.insert(ip_addr);
+                    node_endpoints.insert(ip_addr);
                 }
             }
         }
 
-        Ok(Some(Vec::from_iter(system_subnet_endpoints)))
+        Ok(Some(Vec::from_iter(node_endpoints)))
     }
 }
 

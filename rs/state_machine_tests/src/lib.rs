@@ -1,6 +1,6 @@
 use candid::Decode;
 use core::sync::atomic::Ordering;
-use ed25519_dalek::{pkcs8::EncodePrivateKey, SigningKey};
+use ed25519_dalek::{SigningKey, pkcs8::EncodePrivateKey};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_consensus::BitcoinPayloadBuilder;
@@ -19,14 +19,14 @@ use ic_consensus::{
 };
 use ic_consensus_utils::crypto::SignVerify;
 use ic_crypto_test_utils_ni_dkg::{
-    dummy_initial_dkg_transcript_with_master_key, sign_message, SecretKeyBytes,
+    SecretKeyBytes, dummy_initial_dkg_transcript_with_master_key, sign_message,
 };
-use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path as LabeledTreePath};
+use ic_crypto_tree_hash::{Label, Path as LabeledTreePath, sparse_labeled_tree_from_paths};
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
-use ic_http_endpoints_public::{metrics::HttpHandlerMetrics, IngressWatcher, IngressWatcherHandle};
+use ic_http_endpoints_public::{IngressWatcher, IngressWatcherHandle, metrics::HttpHandlerMetrics};
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
@@ -35,7 +35,9 @@ use ic_interfaces::{
     certification::{Verifier, VerifierError},
     consensus::{PayloadBuilder as ConsensusPayloadBuilder, PayloadValidationError},
     consensus_pool::ConsensusTime,
-    execution_environment::{IngressFilterService, IngressHistoryReader, QueryExecutionService},
+    execution_environment::{
+        IngressFilterService, IngressHistoryReader, QueryExecutionInput, QueryExecutionService,
+    },
     ingress_pool::{
         IngressPool, IngressPoolObject, PoolSection, UnvalidatedIngressArtifact,
         ValidatedIngressArtifact,
@@ -48,7 +50,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
 use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::replica_logger::no_op_logger;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private::{
     self as ic00, CanisterIdRecord, CanisterSnapshotDataKind, CanisterSnapshotDataOffset,
     InstallCodeArgs, MasterPublicKeyId, Method, Payload, ReadCanisterSnapshotDataArgs,
@@ -65,6 +67,7 @@ use ic_management_canister_types_private::{
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use ic_protobuf::{
     registry::{
         crypto::v1::{ChainKeyEnabledSubnetList, PublicKey as PublicKeyProto, X509PublicKeyCert},
@@ -87,42 +90,54 @@ use ic_registry_client_helpers::{
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
 use ic_registry_keys::{
-    make_blessed_replica_versions_key, make_canister_migrations_record_key,
-    make_canister_ranges_key, make_catch_up_package_contents_key,
-    make_chain_key_enabled_subnet_list_key, make_crypto_node_key, make_crypto_tls_cert_key,
-    make_node_record_key, make_provisional_whitelist_record_key, make_replica_version_key,
-    make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
+    NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY, make_blessed_replica_versions_key,
+    make_canister_migrations_record_key, make_canister_ranges_key,
+    make_catch_up_package_contents_key, make_chain_key_enabled_subnet_list_key,
+    make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key,
+    make_provisional_whitelist_record_key, make_replica_version_key,
 };
-use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, INITIAL_REGISTRY_VERSION};
+use ic_registry_proto_data_provider::{INITIAL_REGISTRY_VERSION, ProtoRegistryDataProvider};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{
-    routing_table_insert_subnet, CanisterIdRange, CanisterIdRanges, RoutingTable,
-    CANISTER_IDS_PER_SUBNET,
+    CANISTER_IDS_PER_SUBNET, CanisterIdRange, CanisterIdRanges, RoutingTable,
+    routing_table_insert_subnet,
 };
 use ic_registry_subnet_features::{
-    ChainKeyConfig, KeyConfig, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE,
+    ChainKeyConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE, KeyConfig, SubnetFeatures,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::{system_state::CyclesUseCase, NumWasmPages, WASM_PAGE_SIZE_IN_BYTES},
+    CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
+    canister_state::{NumWasmPages, WASM_PAGE_SIZE_IN_BYTES, system_state::CyclesUseCase},
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     page_map::Buffer,
-    CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::crypto::CryptoReturningOk;
-use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, FakeConsensusPoolCache};
+use ic_test_utilities_consensus::{FakeConsensusPoolCache, batch::MockBatchPayloadBuilder};
 use ic_test_utilities_metrics::{
-    fetch_counter_vec, fetch_histogram_stats, fetch_int_counter, fetch_int_gauge,
-    fetch_int_gauge_vec, Labels,
+    Labels, fetch_counter_vec, fetch_histogram_stats, fetch_int_counter, fetch_int_gauge,
+    fetch_int_gauge_vec,
 };
 use ic_test_utilities_registry::{
-    add_single_subnet_record, add_subnet_key_record, add_subnet_list_record, SubnetRecordBuilder,
+    SubnetRecordBuilder, add_single_subnet_record, add_subnet_key_record, add_subnet_list_record,
 };
 use ic_test_utilities_time::FastForwardTimeSource;
 pub use ic_types::ingress::WasmResult;
 use ic_types::{
+    CanisterId, CryptoHashOfState, Cycles, NumBytes, PrincipalId, SubnetId, UserId,
+    canister_http::{
+        CanisterHttpRequestContext, CanisterHttpRequestId, CanisterHttpResponseMetadata,
+    },
+    crypto::threshold_sig::ThresholdSigPublicKey,
+    ingress::{IngressState, IngressStatus},
+    messages::{CallbackId, MessageId},
+    time::Time,
+};
+use ic_types::{
+    CanisterLog, CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
+    ReplicaVersion, SnapshotId,
     artifact::IngressMessageId,
     batch::{
         Batch, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterCyclesCostSchedule,
@@ -131,49 +146,38 @@ use ic_types::{
     },
     canister_http::{CanisterHttpResponse, CanisterHttpResponseContent},
     consensus::{
+        CatchUpPackage,
         block_maker::SubnetRecords,
         certification::{Certification, CertificationContent},
-        CatchUpPackage,
     },
     crypto::{
+        AlgorithmId, CombinedThresholdSig, CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
         canister_threshold_sig::MasterPublicKey,
         threshold_sig::ni_dkg::{
             NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript,
         },
-        AlgorithmId, CombinedThresholdSig, CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
     },
     malicious_flags::MaliciousFlags,
     messages::{
-        extract_effective_canister_id, Blob, Certificate, CertificateDelegation, HttpCallContent,
-        HttpCanisterUpdate, HttpRequestContent, HttpRequestEnvelope, Payload as MsgPayload, Query,
-        QuerySource, RejectContext, SignedIngress, EXPECTED_MESSAGE_ID_LENGTH,
+        Blob, Certificate, CertificateDelegation, CertificateDelegationMetadata,
+        EXPECTED_MESSAGE_ID_LENGTH, HttpCallContent, HttpCanisterUpdate, HttpRequestContent,
+        HttpRequestEnvelope, Payload as MsgPayload, Query, QuerySource, RejectContext,
+        SignedIngress, extract_effective_canister_id,
     },
     signature::ThresholdSignature,
     time::GENESIS,
     xnet::{CertifiedStreamSlice, StreamIndex},
-    CanisterLog, CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
-    ReplicaVersion, SnapshotId,
-};
-use ic_types::{
-    canister_http::{
-        CanisterHttpRequestContext, CanisterHttpRequestId, CanisterHttpResponseMetadata,
-    },
-    crypto::threshold_sig::ThresholdSigPublicKey,
-    ingress::{IngressState, IngressStatus},
-    messages::{CallbackId, MessageId},
-    time::Time,
-    CanisterId, CryptoHashOfState, Cycles, NumBytes, PrincipalId, SubnetId, UserId,
 };
 use ic_xnet_payload_builder::{
-    certified_slice_pool::CertifiedSlicePool, refill_stream_slice_indices, RefillTaskHandle,
-    XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics, XNetSlicePoolImpl,
+    RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics, XNetSlicePoolImpl,
+    certified_slice_pool::CertifiedSlicePool, refill_stream_slice_indices,
 };
 use rcgen::{CertificateParams, KeyPair};
 use serde::Deserialize;
 
 use ic_error_types::RejectCode;
 use maplit::btreemap;
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 use serde::Serialize;
 use slog::Level;
 use std::{
@@ -185,7 +189,7 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
     string::ToString,
-    sync::{atomic::AtomicU64, Arc, Mutex, RwLock},
+    sync::{Arc, Mutex, RwLock, atomic::AtomicU64},
     time::{Duration, Instant, SystemTime},
 };
 use tempfile::TempDir;
@@ -264,14 +268,6 @@ pub fn add_global_registry_records(
             Some(pb_routing_table.clone()),
         )
         .unwrap();
-    // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
-    registry_data_provider
-        .add(
-            &make_routing_table_record_key(),
-            registry_version,
-            Some(pb_routing_table),
-        )
-        .unwrap();
 
     // subnet list record
     add_subnet_list_record(&registry_data_provider, registry_version.get(), subnet_list);
@@ -294,6 +290,17 @@ pub fn add_global_registry_records(
             )
             .unwrap();
     }
+
+    // node rewards table
+    registry_data_provider
+        .add(
+            NODE_REWARDS_TABLE_KEY,
+            registry_version,
+            Some(NodeRewardsTable {
+                table: BTreeMap::new(),
+            }),
+        )
+        .unwrap();
 }
 
 /// Adds initial registry records to the registry managed by the registry data provider:
@@ -710,7 +717,7 @@ impl PocketXNetImpl {
                     }
                 }
                 Err(EncodeStreamError::NoStreamForSubnet(_)) => (),
-                Err(err) => panic!("Unexpected XNetClient error: {}", err),
+                Err(err) => panic!("Unexpected XNetClient error: {err}"),
             }
         }
     }
@@ -824,17 +831,17 @@ pub struct StateMachineNode {
 
 impl StateMachineNode {
     fn new(rng: &mut StdRng) -> Self {
-        let node_signing_key = ic_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
-        let committee_signing_key = ic_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
-        let dkg_dealing_encryption_key = ic_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
-        let idkg_mega_encryption_key = ic_ed25519::PrivateKey::deserialize_raw_32(&rng.gen());
-        let mut http_ip_addr_bytes = rng.gen::<[u8; 16]>();
+        let node_signing_key = ic_ed25519::PrivateKey::deserialize_raw_32(&rng.r#gen());
+        let committee_signing_key = ic_ed25519::PrivateKey::deserialize_raw_32(&rng.r#gen());
+        let dkg_dealing_encryption_key = ic_ed25519::PrivateKey::deserialize_raw_32(&rng.r#gen());
+        let idkg_mega_encryption_key = ic_ed25519::PrivateKey::deserialize_raw_32(&rng.r#gen());
+        let mut http_ip_addr_bytes = rng.r#gen::<[u8; 16]>();
         http_ip_addr_bytes[0] = 0xe0; // make sure the ipv6 address has no special form
         let http_ip_addr = Ipv6Addr::from(http_ip_addr_bytes);
-        let mut xnet_ip_addr_bytes = rng.gen::<[u8; 16]>();
+        let mut xnet_ip_addr_bytes = rng.r#gen::<[u8; 16]>();
         xnet_ip_addr_bytes[0] = 0xe0; // make sure the ipv6 address has no special form
         let xnet_ip_addr = Ipv6Addr::from(xnet_ip_addr_bytes);
-        let seed = rng.gen::<[u8; 32]>();
+        let seed = rng.r#gen::<[u8; 32]>();
         let signing_key = SigningKey::from_bytes(&seed);
         let pkcs8_bytes = signing_key.to_pkcs8_der().unwrap().as_bytes().to_vec();
         let root_key_pair: KeyPair = pkcs8_bytes.try_into().unwrap();
@@ -1402,6 +1409,10 @@ impl StateMachineBuilder {
             bitcoin_mainnet_uds_metrics_path: None,
             bitcoin_testnet_uds_path,
             bitcoin_testnet_uds_metrics_path: None,
+            dogecoin_mainnet_uds_path: None,
+            dogecoin_mainnet_uds_metrics_path: None,
+            dogecoin_testnet_uds_path: None,
+            dogecoin_testnet_uds_metrics_path: None,
             https_outcalls_uds_path: None,
             https_outcalls_uds_metrics_path: None,
         };
@@ -1416,6 +1427,8 @@ impl StateMachineBuilder {
             &sm.metrics_registry,
             bitcoin_clients.btc_mainnet_client,
             bitcoin_clients.btc_testnet_client,
+            bitcoin_clients.doge_testnet_client,
+            bitcoin_clients.doge_mainnet_client,
             sm.subnet_id,
             sm.registry_client.clone(),
             BitcoinPayloadBuilderConfig::default(),
@@ -2146,6 +2159,7 @@ impl StateMachine {
                 return Err("No certified state available.".to_string());
             }
         };
+        // TODO(CON-1487): return the `canister_ranges/{subnet_id}` path as well
         let paths = vec![
             LabeledTreePath::new(vec![
                 b"subnet".into(),
@@ -2357,7 +2371,7 @@ impl StateMachine {
     ) {
         let mut payload = PayloadBuilder::new();
         let contexts = self.canister_http_request_contexts();
-        assert!(!contexts.is_empty(), "expected '{}' HTTP request", name);
+        assert!(!contexts.is_empty(), "expected '{name}' HTTP request");
         for (id, context) in &contexts {
             let response = f(context);
             payload = payload.http_response(*id, &response);
@@ -2604,10 +2618,7 @@ impl StateMachine {
             self.tick();
         }
         if !reached_completion {
-            panic!(
-                "The state machine did not reach completion after {} ticks",
-                max_ticks
-            );
+            panic!("The state machine did not reach completion after {max_ticks} ticks");
         }
     }
 
@@ -2616,7 +2627,7 @@ impl StateMachine {
         let error_counter_vec = fetch_counter_vec(&self.metrics_registry, "critical_errors");
         if let Some((metric, _)) = error_counter_vec.into_iter().find(|(_, v)| *v != 0.0) {
             let err: String = metric.get("error").unwrap().to_string();
-            panic!("Critical error {} occurred.", err);
+            panic!("Critical error {err} occurred.");
         }
     }
 
@@ -2844,7 +2855,7 @@ impl StateMachine {
         loop {
             let elapsed = started_at.elapsed();
             if elapsed > Duration::from_secs(5 * 60) {
-                panic!("State hash computation took too long ({:?})", elapsed);
+                panic!("State hash computation took too long ({elapsed:?})");
             }
             match self.state_manager.get_state_hash_at(h) {
                 Ok(hash) => return hash,
@@ -2853,7 +2864,7 @@ impl StateMachine {
                     continue;
                 }
                 Err(e @ StateHashError::Permanent(_)) => {
-                    panic!("Failed to compute state hash: {}", e)
+                    panic!("Failed to compute state hash: {e}")
                 }
             }
         }
@@ -3064,10 +3075,7 @@ impl StateMachine {
 
             return Ok(());
         }
-        Err(format!(
-            "No canister state for canister id {}.",
-            canister_id
-        ))
+        Err(format!("No canister state for canister id {canister_id}."))
     }
 
     /// Returns the controllers of a canister or `None` if the canister does not exist.
@@ -3126,7 +3134,7 @@ impl StateMachine {
         self.create_canister_with_cycles(None, Cycles::new(0), settings)
     }
 
-    /// Creates a new canister with a cycles balance and returns the canister principal.
+    /// Creates a new canister and returns the canister principal.
     pub fn create_canister_with_cycles(
         &self,
         specified_id: Option<PrincipalId>,
@@ -3134,24 +3142,34 @@ impl StateMachine {
         settings: Option<CanisterSettingsArgs>,
     ) -> CanisterId {
         let wasm_result = self
-            .execute_ingress(
-                ic00::IC_00,
-                ic00::Method::ProvisionalCreateCanisterWithCycles,
-                ic00::ProvisionalCreateCanisterWithCyclesArgs {
-                    amount: Some(candid::Nat::from(cycles.get())),
-                    settings,
-                    specified_id,
-                    sender_canister_version: None,
-                }
-                .encode(),
-            )
+            .create_canister_with_cycles_impl(specified_id, cycles, settings)
             .expect("failed to create canister");
         match wasm_result {
             WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
                 .expect("failed to decode canister ID record")
                 .get_canister_id(),
-            WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+            WasmResult::Reject(reason) => panic!("create_canister call rejected: {reason}"),
         }
+    }
+
+    /// Creates a new canister.
+    pub fn create_canister_with_cycles_impl(
+        &self,
+        specified_id: Option<PrincipalId>,
+        cycles: Cycles,
+        settings: Option<CanisterSettingsArgs>,
+    ) -> Result<WasmResult, UserError> {
+        self.execute_ingress(
+            ic00::IC_00,
+            ic00::Method::ProvisionalCreateCanisterWithCycles,
+            ic00::ProvisionalCreateCanisterWithCyclesArgs {
+                amount: Some(candid::Nat::from(cycles.get())),
+                settings,
+                specified_id,
+                sender_canister_version: None,
+            }
+            .encode(),
+        )
     }
 
     /// Creates a new canister and installs its code.
@@ -3302,7 +3320,7 @@ impl StateMachine {
         .map(|res| match res {
             WasmResult::Reply(data) => CanisterSnapshotResponse::decode(&data),
             WasmResult::Reject(reason) => {
-                panic!("take_canister_snapshot call rejected: {}", reason)
+                panic!("take_canister_snapshot call rejected: {reason}")
             }
         })?
     }
@@ -3322,7 +3340,7 @@ impl StateMachine {
         .map(|res| match res {
             WasmResult::Reply(data) => Ok(data),
             WasmResult::Reject(reason) => {
-                panic!("load_canister_snapshot call rejected: {}", reason)
+                panic!("load_canister_snapshot call rejected: {reason}")
             }
         })?
     }
@@ -3341,7 +3359,7 @@ impl StateMachine {
         .map(|res| match res {
             WasmResult::Reply(data) => ReadCanisterSnapshotMetadataResponse::decode(&data),
             WasmResult::Reject(reason) => {
-                panic!("read_canister_snapshot_metadata call rejected: {}", reason)
+                panic!("read_canister_snapshot_metadata call rejected: {reason}")
             }
         })?
     }
@@ -3360,7 +3378,7 @@ impl StateMachine {
         .map(|res| match res {
             WasmResult::Reply(data) => ReadCanisterSnapshotDataResponse::decode(&data),
             WasmResult::Reject(reason) => {
-                panic!("read_canister_snapshot_data call rejected: {}", reason)
+                panic!("read_canister_snapshot_data call rejected: {reason}")
             }
         })?
     }
@@ -3407,7 +3425,7 @@ impl StateMachine {
         self.get_snapshot_blob(
             args,
             |md: &ReadCanisterSnapshotMetadataResponse| md.wasm_memory_size,
-            |offset, size| CanisterSnapshotDataKind::MainMemory { offset, size },
+            |offset, size| CanisterSnapshotDataKind::WasmMemory { offset, size },
         )
     }
 
@@ -3464,10 +3482,7 @@ impl StateMachine {
         .map(|res| match res {
             WasmResult::Reply(data) => UploadCanisterSnapshotMetadataResponse::decode(&data),
             WasmResult::Reject(reason) => {
-                panic!(
-                    "upload_canister_snapshot_metadata call rejected: {}",
-                    reason
-                )
+                panic!("upload_canister_snapshot_metadata call rejected: {reason}")
             }
         })?
     }
@@ -3486,7 +3501,7 @@ impl StateMachine {
         .map(|res| match res {
             WasmResult::Reply(data) => Decode!(&data, ()).unwrap(),
             WasmResult::Reject(reason) => {
-                panic!("upload_canister_snapshot_data call rejected: {}", reason)
+                panic!("upload_canister_snapshot_data call rejected: {reason}")
             }
         })
     }
@@ -3533,7 +3548,7 @@ impl StateMachine {
             data,
             start_chunk,
             end_chunk,
-            |x| CanisterSnapshotDataOffset::MainMemory { offset: x },
+            |x| CanisterSnapshotDataOffset::WasmMemory { offset: x },
         )
     }
 
@@ -3614,7 +3629,7 @@ impl StateMachine {
             .map(|res| match res {
                 WasmResult::Reply(data) => UploadChunkReply::decode(&data),
                 WasmResult::Reject(reason) => {
-                    panic!("upload_chunk call rejected: {}", reason)
+                    panic!("upload_chunk call rejected: {reason}")
                 }
             })?
     }
@@ -3718,7 +3733,7 @@ impl StateMachine {
         receiver: CanisterId,
         method: impl ToString,
         method_payload: Vec<u8>,
-        delegation: Option<CertificateDelegation>,
+        delegation: Option<(CertificateDelegation, CertificateDelegationMetadata)>,
     ) -> Result<WasmResult, UserError> {
         self.certify_latest_state();
         let user_query = Query {
@@ -3732,11 +3747,11 @@ impl StateMachine {
             method_payload,
         };
         let query_svc = self.query_handler.lock().unwrap().clone();
-        if let Ok((result, _)) = self
-            .runtime
-            .block_on(query_svc.oneshot((user_query, delegation)))
-            .unwrap()
-        {
+        let input = QueryExecutionInput {
+            query: user_query,
+            certificate_delegation_with_metadata: delegation,
+        };
+        if let Ok((result, _)) = self.runtime.block_on(query_svc.oneshot(input)).unwrap() {
             result
         } else {
             unreachable!()
@@ -3827,8 +3842,7 @@ impl StateMachine {
         payload: Vec<u8>,
     ) -> IngressInductionCost {
         let msg = self.ingress_message(sender, canister_id, method, payload);
-        let effective_canister_id =
-            extract_effective_canister_id(msg.content(), self.get_subnet_id()).unwrap();
+        let effective_canister_id = extract_effective_canister_id(msg.content()).unwrap();
         let subnet_size = self.nodes.len();
         self.cycles_account_manager.ingress_induction_cost(
             msg.content(),
@@ -4033,14 +4047,6 @@ impl StateMachine {
                 Some(pb_routing_table.clone()),
             )
             .unwrap();
-        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
-        self.registry_data_provider
-            .add(
-                &make_routing_table_record_key(),
-                next_version,
-                Some(pb_routing_table),
-            )
-            .unwrap();
         self.registry_client.update_to_latest_version();
 
         assert_eq!(next_version, self.registry_client.get_latest_version());
@@ -4157,10 +4163,10 @@ impl StateMachine {
         let replicated_state = self.state_manager.get_latest_state().take();
         let memory = &replicated_state
             .canister_state(&canister_id)
-            .unwrap_or_else(|| panic!("Canister {} does not exist", canister_id))
+            .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"))
             .execution_state
             .as_ref()
-            .unwrap_or_else(|| panic!("Canister {} has no module", canister_id))
+            .unwrap_or_else(|| panic!("Canister {canister_id} has no module"))
             .stable_memory;
 
         let mut dst = vec![0u8; memory.size.get() * WASM_PAGE_SIZE_IN_BYTES];
@@ -4174,7 +4180,7 @@ impl StateMachine {
         let replicated_state = self.state_manager.get_latest_state().take();
         let canister_state = replicated_state
             .canister_state(&canister_id)
-            .unwrap_or_else(|| panic!("Canister {} does not exist", canister_id));
+            .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"));
         canister_state.system_state.canister_log.clone()
     }
 
@@ -4199,13 +4205,13 @@ impl StateMachine {
         let (height, mut replicated_state) = self.state_manager.take_tip();
         let canister_state = replicated_state
             .canister_state_mut(&canister_id)
-            .unwrap_or_else(|| panic!("Canister {} does not exist", canister_id));
+            .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"));
         let size = data.len().div_ceil(WASM_PAGE_SIZE_IN_BYTES);
         let memory = Memory::new(PageMap::from(data), NumWasmPages::new(size));
         canister_state
             .execution_state
             .as_mut()
-            .unwrap_or_else(|| panic!("Canister {} has no module", canister_id))
+            .unwrap_or_else(|| panic!("Canister {canister_id} has no module"))
             .stable_memory = memory;
         self.state_manager.commit_and_certify(
             replicated_state,
@@ -4224,7 +4230,7 @@ impl StateMachine {
         let state = self.state_manager.get_latest_state().take();
         state
             .canister_state(canister_id)
-            .unwrap_or_else(|| panic!("Canister {} not found", canister_id))
+            .unwrap_or_else(|| panic!("Canister {canister_id} not found"))
             .scheduler_state
             .total_query_stats
             .clone()
@@ -4239,7 +4245,7 @@ impl StateMachine {
         let (h, mut state) = self.state_manager.take_tip();
         state
             .canister_state_mut(canister_id)
-            .unwrap_or_else(|| panic!("Canister {} not found", canister_id))
+            .unwrap_or_else(|| panic!("Canister {canister_id} not found"))
             .scheduler_state
             .total_query_stats = total_query_stats;
 
@@ -4260,7 +4266,7 @@ impl StateMachine {
         let state = self.state_manager.get_latest_state().take();
         state
             .canister_state(&canister_id)
-            .unwrap_or_else(|| panic!("Canister {} not found", canister_id))
+            .unwrap_or_else(|| panic!("Canister {canister_id} not found"))
             .system_state
             .balance()
             .get()
@@ -4275,7 +4281,7 @@ impl StateMachine {
         let (height, mut state) = self.state_manager.take_tip();
         let canister_state = state
             .canister_state_mut(&canister_id)
-            .unwrap_or_else(|| panic!("Canister {} not found", canister_id));
+            .unwrap_or_else(|| panic!("Canister {canister_id} not found"));
         canister_state
             .system_state
             .add_cycles(Cycles::from(amount), CyclesUseCase::NonConsumed);

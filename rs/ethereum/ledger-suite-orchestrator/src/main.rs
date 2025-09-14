@@ -1,23 +1,24 @@
+#![allow(deprecated)]
 use ic_cdk::api::management_canister::main::{
-    canister_status, CanisterIdRecord, CanisterStatusResponse,
+    CanisterIdRecord, CanisterStatusResponse, canister_status,
 };
 use ic_cdk::{init, post_upgrade, query, update};
 use ic_ledger_suite_orchestrator::candid::Erc20Contract as CandidErc20Contract;
 use ic_ledger_suite_orchestrator::candid::{ManagedCanisterIds, OrchestratorArg, OrchestratorInfo};
 use ic_ledger_suite_orchestrator::lifecycle;
 use ic_ledger_suite_orchestrator::scheduler::{
-    encode_orchestrator_metrics, Erc20Token, IC_CANISTER_RUNTIME,
+    Erc20Token, IC_CANISTER_RUNTIME, encode_orchestrator_metrics,
 };
-use ic_ledger_suite_orchestrator::state::{read_state, TokenId};
-use ic_ledger_suite_orchestrator::storage::read_wasm_store;
+use ic_ledger_suite_orchestrator::state::{TokenId, read_state};
 use ic_ledger_suite_orchestrator::storage::TASKS;
+use ic_ledger_suite_orchestrator::storage::read_wasm_store;
 
 mod dashboard;
 
 #[query]
 fn canister_ids(contract: CandidErc20Contract) -> Option<ManagedCanisterIds> {
     let contract = Erc20Token::try_from(contract)
-        .unwrap_or_else(|e| ic_cdk::trap(&format!("Invalid ERC-20 contract: {:?}", e)));
+        .unwrap_or_else(|e| ic_cdk::trap(format!("Invalid ERC-20 contract: {e:?}")));
     let token_id = TokenId::from(contract);
     read_state(|s| s.managed_canisters(&token_id).cloned()).map(ManagedCanisterIds::from)
 }
@@ -57,9 +58,13 @@ fn get_orchestrator_info() -> OrchestratorInfo {
     })
 }
 
-#[export_name = "canister_global_timer"]
+#[unsafe(export_name = "canister_global_timer")]
 fn timer() {
-    ic_ledger_suite_orchestrator::scheduler::timer(IC_CANISTER_RUNTIME);
+    // ic_ledger_suite_orchestrator::scheduler::timer invokes ic_cdk::futures::spawn_017_compat
+    // which must be wrapped in in_executor_context as required by the new ic-cdk-executor.
+    ic_cdk::futures::in_executor_context(|| {
+        ic_ledger_suite_orchestrator::scheduler::timer(IC_CANISTER_RUNTIME);
+    });
 }
 
 #[init]
@@ -255,7 +260,7 @@ fn http_request(req: ic_http_types::HttpRequest) -> ic_http_types::HttpResponse 
                     .with_body_and_content_length(writer.into_inner())
                     .build(),
                 Err(err) => {
-                    HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                    HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
                         .build()
                 }
             }
@@ -301,14 +306,13 @@ fn check_candid_interface_compatibility() {
             Ok(_) => {}
             Err(e) => {
                 eprintln!(
-                    "{} is not compatible with {}!\n\n\
-            {}:\n\
-            {}\n\n\
-            {}:\n\
-            {}\n",
-                    new_name, old_name, new_name, new_str, old_name, old_str
+                    "{new_name} is not compatible with {old_name}!\n\n\
+            {new_name}:\n\
+            {new_str}\n\n\
+            {old_name}:\n\
+            {old_str}\n"
                 );
-                panic!("{:?}", e);
+                panic!("{e:?}");
             }
         }
     }

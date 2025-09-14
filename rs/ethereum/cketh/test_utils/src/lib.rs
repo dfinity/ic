@@ -15,7 +15,7 @@ use ic_cketh_minter::lifecycle::upgrade::UpgradeArg;
 use ic_cketh_minter::logs::Log;
 use ic_cketh_minter::{
     endpoints::{CandidBlockTag, Eip1559TransactionPrice},
-    lifecycle::{init::InitArg as MinterInitArgs, EthereumNetwork, MinterArg},
+    lifecycle::{EthereumNetwork, MinterArg, init::InitArg as MinterInitArgs},
 };
 use ic_ethereum_types::Address;
 use ic_http_types::{HttpRequest, HttpResponse};
@@ -277,8 +277,7 @@ impl CkEthSetup {
             .eip_1559_transaction_price(Some(principal_id))
             .expect_err("Expecting Err but got Ok");
         assert!(error.description().contains(&format!(
-            "ERROR: Unsupported ckERC20 token ledger {}",
-            principal_id
+            "ERROR: Unsupported ckERC20 token ledger {principal_id}"
         )));
     }
 
@@ -587,7 +586,7 @@ impl CkEthSetup {
                 })
                 .find(|rpc_request| rpc_request.method.to_string() == method.to_string())
             {
-                panic!("Unexpected RPC call: {:?}", unexpected_request);
+                panic!("Unexpected RPC call: {unexpected_request:?}");
             }
             self.env.tick();
             self.env.advance_time(Duration::from_nanos(1));
@@ -709,7 +708,7 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
     match result {
         WasmResult::Reply(bytes) => bytes,
         WasmResult::Reject(reject) => {
-            panic!("Expected a successful reply, got a reject: {}", reject)
+            panic!("Expected a successful reply, got a reject: {reject}")
         }
     }
 }

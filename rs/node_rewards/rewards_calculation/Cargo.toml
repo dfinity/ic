@@ -22,5 +22,4 @@ chrono = { version = "0.4.41", default-features = false, features = [
     "alloc",
     "serde",
 ] }
-candid = { workspace = true }
 serde = { workspace = true }

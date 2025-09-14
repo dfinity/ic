@@ -1,5 +1,6 @@
-use bitcoin::consensus::deserialize;
+#![allow(deprecated)]
 use bitcoin::Transaction;
+use bitcoin::consensus::deserialize;
 use candid::{Decode, Encode};
 use hex::FromHex;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -12,8 +13,8 @@ use ic_cdk::api::management_canister::bitcoin::{BitcoinNetwork, SendTransactionR
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
-use rand::{thread_rng, Rng};
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
+use rand::{Rng, thread_rng};
 use std::str::FromStr;
 
 fn generate_tx_id() -> Txid {

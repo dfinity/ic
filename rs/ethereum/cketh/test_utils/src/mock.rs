@@ -1,4 +1,5 @@
-use crate::{assert_reply, CkEthSetup, JsonRpcProvider, MAX_TICKS};
+#![allow(deprecated)]
+use crate::{CkEthSetup, JsonRpcProvider, MAX_TICKS, assert_reply};
 use candid::{Decode, Encode};
 use ic_cdk::api::management_canister::http_request::{
     HttpResponse as OutCallHttpResponse, TransformArgs,
@@ -8,8 +9,8 @@ use ic_management_canister_types_private::CanisterHttpResponsePayload;
 use ic_state_machine_tests::{PayloadBuilder, StateMachine};
 use ic_types::canister_http::{CanisterHttpMethod, CanisterHttpRequestContext};
 use ic_types::messages::CallbackId;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use serde_json::json;
 use std::collections::BTreeMap;
 use std::str::FromStr;
@@ -187,10 +188,7 @@ struct StubOnce {
 impl StubOnce {
     fn expect_no_matching_rpc_call(self, env: &StateMachine) {
         if let Some((id, _)) = self.matcher.find_rpc_call(env) {
-            panic!(
-                "expect no request matching the stub {:?} but found one {}",
-                self, id
-            );
+            panic!("expect no request matching the stub {self:?} but found one {id}");
         }
     }
 
@@ -226,10 +224,7 @@ impl StubOnce {
                 payload = payload.http_response_failure(
                     id,
                     RejectCode::SysFatal,
-                    format!(
-                        "Http body exceeds size limit of {} bytes.",
-                        max_response_bytes
-                    ),
+                    format!("Http body exceeds size limit of {max_response_bytes} bytes."),
                 );
                 env.execute_payload(payload);
                 return;
@@ -268,10 +263,7 @@ impl StubOnce {
                 payload = payload.http_response_failure(
                     id,
                     RejectCode::SysFatal,
-                    format!(
-                        "Http body exceeds size limit of {} bytes.",
-                        max_response_bytes
-                    ),
+                    format!("Http body exceeds size limit of {max_response_bytes} bytes."),
                 );
                 env.execute_payload(payload);
                 return;

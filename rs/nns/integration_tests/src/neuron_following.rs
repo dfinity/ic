@@ -6,17 +6,17 @@ use ic_nervous_system_integration_tests::pocket_ic_helpers::{install_canister, n
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance_api::{
+    Neuron, Tally, Topic, Vote,
     governance_error::ErrorType,
     manage_neuron_response::{Command, FollowResponse},
     neuron::{DissolveState, Followees},
-    Neuron, Tally, Topic, Vote,
 };
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_test_utils::{
-    common::{build_governance_wasm, NnsInitPayloadsBuilder},
+    common::{NnsInitPayloadsBuilder, build_governance_wasm},
     neuron_helpers::{
-        get_neuron_1, get_neuron_2, get_neuron_3, get_nonexistent_neuron, get_unauthorized_neuron,
-        submit_proposal, TestNeuronOwner,
+        TestNeuronOwner, get_neuron_1, get_neuron_2, get_neuron_3, get_nonexistent_neuron,
+        get_unauthorized_neuron, submit_proposal,
     },
     state_test_helpers::{
         get_neuron_ids, nns_cast_vote_or_panic, nns_governance_get_full_neuron,
@@ -28,7 +28,7 @@ use ic_nns_test_utils::{
 use ic_state_machine_tests::StateMachine;
 use itertools::Itertools;
 use maplit::hashmap;
-use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
+use pocket_ic::{PocketIcBuilder, nonblocking::PocketIc};
 use pretty_assertions::assert_eq;
 use std::time::{Duration, SystemTime};
 

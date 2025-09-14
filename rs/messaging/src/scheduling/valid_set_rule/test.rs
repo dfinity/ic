@@ -4,30 +4,30 @@ use assert_matches::assert_matches;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
-    CanisterSettingsArgsBuilder, Payload, UpdateSettingsArgs, IC_00,
+    CanisterSettingsArgsBuilder, IC_00, Payload, UpdateSettingsArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{
-    fetch_histogram_stats, fetch_int_counter_vec, metric_vec, nonzero_values, HistogramStats,
-    MetricVec,
+    HistogramStats, MetricVec, fetch_histogram_stats, fetch_int_counter_vec, metric_vec,
+    nonzero_values,
 };
 use ic_test_utilities_state::{
-    get_running_canister, get_stopped_canister, get_stopping_canister, CanisterStateBuilder,
-    MockIngressHistory, ReplicatedStateBuilder,
+    CanisterStateBuilder, MockIngressHistory, ReplicatedStateBuilder, get_running_canister,
+    get_stopped_canister, get_stopping_canister,
 };
 use ic_test_utilities_types::{
     ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
     messages::SignedIngressBuilder,
 };
 use ic_types::{
+    CanisterId,
     batch::CanisterCyclesCostSchedule,
     ingress::{IngressState, IngressStatus},
     messages::{MessageId, SignedIngressContent},
     time::UNIX_EPOCH,
-    CanisterId,
 };
 use mockall::predicate::{always, eq};
 
@@ -80,14 +80,8 @@ fn assert_inducted_ingress_messages_eq(
 
 /// Retrieves the stats of the `METRIC_INDUCTED_PAYLOAD_SIZES` histogram.
 fn fetch_inducted_payload_size_stats(metrics_registry: &MetricsRegistry) -> HistogramStats {
-    fetch_histogram_stats(metrics_registry, METRIC_INDUCTED_INGRESS_PAYLOAD_SIZES).unwrap_or_else(
-        || {
-            panic!(
-                "Histogram not found: {}",
-                METRIC_INDUCTED_INGRESS_PAYLOAD_SIZES
-            )
-        },
-    )
+    fetch_histogram_stats(metrics_registry, METRIC_INDUCTED_INGRESS_PAYLOAD_SIZES)
+        .unwrap_or_else(|| panic!("Histogram not found: {METRIC_INDUCTED_INGRESS_PAYLOAD_SIZES}"))
 }
 
 #[test]
@@ -134,7 +128,6 @@ fn induct_message_with_successful_history_update() {
             ingress_history_writer,
             cycles_account_manager,
             &metrics_registry,
-            subnet_test_id(1),
             log,
         );
 
@@ -179,7 +172,7 @@ fn induct_message_fails_for_stopping_canister() {
                     time: UNIX_EPOCH,
                     state: IngressState::Failed(UserError::new(
                         ErrorCode::CanisterStopping,
-                        format!("Canister {} is stopping", canister_id),
+                        format!("Canister {canister_id} is stopping"),
                     )),
                 }),
             )
@@ -194,7 +187,6 @@ fn induct_message_fails_for_stopping_canister() {
             ingress_history_writer,
             Arc::new(CyclesAccountManagerBuilder::new().build()),
             &metrics_registry,
-            subnet_test_id(1),
             log,
         );
 
@@ -236,7 +228,7 @@ fn induct_message_fails_for_stopped_canister() {
                     time: UNIX_EPOCH,
                     state: IngressState::Failed(UserError::new(
                         ErrorCode::CanisterStopped,
-                        format!("Canister {} is stopped", canister_id),
+                        format!("Canister {canister_id} is stopped"),
                     )),
                 }),
             )
@@ -252,7 +244,6 @@ fn induct_message_fails_for_stopped_canister() {
             ingress_history_writer,
             Arc::new(CyclesAccountManagerBuilder::new().build()),
             &metrics_registry,
-            subnet_test_id(1),
             log,
         );
 
@@ -294,7 +285,6 @@ fn try_to_induct_a_message_marked_as_already_inducted() {
             ingress_history_writer,
             Arc::new(CyclesAccountManagerBuilder::new().build()),
             &metrics_registry,
-            subnet_test_id(1),
             log,
         );
 
@@ -330,7 +320,7 @@ fn update_history_if_induction_failed() {
             time: UNIX_EPOCH,
             state: IngressState::Failed(UserError::new(
                 ErrorCode::CanisterNotFound,
-                format!("Canister {} not found", canister_id),
+                format!("Canister {canister_id} not found"),
             )),
         };
         let status_clone = status.clone();
@@ -349,7 +339,6 @@ fn update_history_if_induction_failed() {
             ingress_history_writer,
             Arc::new(CyclesAccountManagerBuilder::new().build()),
             &metrics_registry,
-            subnet_test_id(1),
             log,
         );
 
@@ -420,7 +409,6 @@ fn dont_induct_duplicate_messages() {
             ingress_history_writer,
             Arc::new(CyclesAccountManagerBuilder::new().build()),
             &metrics_registry,
-            subnet_test_id(1),
             log,
         );
 
@@ -510,7 +498,6 @@ fn canister_on_application_subnet_charges_for_ingress() {
         ingress_history_writer,
         cycles_account_manager,
         &metrics_registry,
-        subnet_test_id(1),
         no_op_logger(),
     );
 
@@ -557,7 +544,6 @@ fn canister_on_system_subnet_does_not_charge_for_ingress() {
         ingress_history_writer,
         cycles_account_manager,
         &metrics_registry,
-        subnet_test_id(1),
         no_op_logger(),
     );
 
@@ -592,7 +578,6 @@ fn ingress_to_stopping_canister_is_rejected() {
         ingress_history_writer,
         Arc::new(CyclesAccountManagerBuilder::new().build()),
         &metrics_registry,
-        subnet_test_id(1),
         no_op_logger(),
     );
 
@@ -626,7 +611,6 @@ fn ingress_to_stopped_canister_is_rejected() {
         ingress_history_writer,
         Arc::new(CyclesAccountManagerBuilder::new().build()),
         &metrics_registry,
-        subnet_test_id(1),
         no_op_logger(),
     );
 
@@ -666,7 +650,6 @@ fn running_canister_on_application_subnet_accepts_and_charges_for_ingress() {
             Arc::new(ingress_history_writer),
             Arc::new(CyclesAccountManagerBuilder::new().build()),
             &metrics_registry,
-            subnet_test_id(1),
             log,
         );
 
@@ -716,7 +699,6 @@ fn running_canister_on_system_subnet_accepts_and_does_not_charge_for_ingress() {
                     .build(),
             ),
             &metrics_registry,
-            subnet_test_id(1),
             log,
         );
 
@@ -752,7 +734,6 @@ fn management_message_with_unknown_method_is_not_inducted() {
                 .build(),
         ),
         &metrics_registry,
-        subnet_id,
         no_op_logger(),
     );
 
@@ -783,7 +764,6 @@ fn management_message_with_invalid_payload_is_not_inducted() {
                 .build(),
         ),
         &metrics_registry,
-        subnet_id,
         no_op_logger(),
     );
 
@@ -813,7 +793,6 @@ fn management_message_update_setting_is_inducted_but_not_charged() {
                 .build(),
         ),
         &metrics_registry,
-        subnet_id,
         no_op_logger(),
     );
 
@@ -837,9 +816,11 @@ fn management_message_update_setting_is_inducted_but_not_charged() {
         .method_payload(payload)
         .build()
         .into();
-    assert!(valid_set_rule
-        .enqueue(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE)
-        .is_ok());
+    assert!(
+        valid_set_rule
+            .enqueue(&mut state, ingress, SMALL_APP_SUBNET_MAX_SIZE)
+            .is_ok()
+    );
 
     let balance_after = state
         .canister_state(&canister_id)
@@ -908,7 +889,6 @@ fn ingress_history_max_messages_impl(subnet_type: SubnetType) {
             ingress_history_writer,
             cycles_account_manager,
             &metrics_registry,
-            subnet_test_id(1),
             log,
         );
         valid_set_rule.ingress_history_max_messages = 3;

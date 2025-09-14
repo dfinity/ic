@@ -25,6 +25,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
     canister_api::{CallMode, GenericRequest},
     driver::{
+        farm::HostFeature,
         group::SystemTestGroup,
         ic::ImageSizeGiB,
         test_env::TestEnv,
@@ -33,7 +34,7 @@ use ic_system_test_driver::{
     systest,
     util::spawn_round_robin_workload_engine,
 };
-use slog::{debug, info, Logger};
+use slog::{Logger, debug, info};
 use std::process::Command;
 use std::time::Duration;
 
@@ -99,7 +100,10 @@ pub fn test(env: TestEnv, rps: usize, runtime: Duration) {
     );
     let app_canister = app_node.create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
     info!(&log, "Installation of counter canister has succeeded.");
-    info!(&log, "Step 3: Instantiate and start a workload using one node of the Application subnet as target.");
+    info!(
+        &log,
+        "Step 3: Instantiate and start a workload using one node of the Application subnet as target."
+    );
     // Workload sends messages to canister via node agents.
     // As we talk to a single node, we create one agent, accordingly.
     let app_agent = app_node.with_default_agent(|agent| async move { agent });
@@ -135,26 +139,28 @@ pub fn test(env: TestEnv, rps: usize, runtime: Duration) {
         "Too many requests have failed."
     );
     let min_expected_counter = rps as u64 * runtime.as_secs();
-    assert!(requests_count_below_threshold
-        .iter()
-        .all(|(_, count)| *count == min_expected_counter));
+    assert!(
+        requests_count_below_threshold
+            .iter()
+            .all(|(_, count)| *count == min_expected_counter)
+    );
 }
 
 fn main() -> Result<()> {
     let per_task_timeout: Duration = WORKLOAD_RUNTIME + TASK_TIMEOUT_DELTA; // This should be a bit larger than the workload execution time.
     let overall_timeout: Duration = per_task_timeout + OVERALL_TIMEOUT_DELTA; // This should be a bit larger than the per_task_timeout.
-    let setup = |env| {
-        setup(
-            env,
-            SMALL_APP_SUBNET_MAX_SIZE,
-            // Since this is a long-running test, it accumulates a lot of disk space.
-            // This is why we increase the default of 50 GiB to 500 GiB.
-            Some(ImageSizeGiB::new(500)),
-        )
-    };
     let test = |env| test(env, RPS, WORKLOAD_RUNTIME);
     SystemTestGroup::new()
-        .with_setup(setup)
+        .with_setup(|env| {
+            setup(
+                env,
+                SMALL_APP_SUBNET_MAX_SIZE,
+                // Since this is a long-running test, it accumulates a lot of disk space.
+                // This is why we increase the default of 50 GiB to 500 GiB.
+                Some(ImageSizeGiB::new(500)),
+                vec![HostFeature::Performance],
+            )
+        })
         .add_test(systest!(test))
         .with_timeout_per_test(per_task_timeout) // each task (including the setup function) may take up to `per_task_timeout`.
         .with_overall_timeout(overall_timeout) // the entire group may take up to `overall_timeout`.

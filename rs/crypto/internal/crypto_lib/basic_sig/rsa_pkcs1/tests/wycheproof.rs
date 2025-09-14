@@ -1,7 +1,7 @@
 use ic_crypto_internal_basic_sig_rsa_pkcs1::*;
 use ic_types::crypto::CryptoError;
 use wycheproof::rsa_pkcs1_verify::{Test, TestGroup};
-use wycheproof::{rsa_pkcs1_verify, HashFunction, TestResult};
+use wycheproof::{HashFunction, TestResult, rsa_pkcs1_verify};
 
 #[test]
 fn should_pass_wycheproof_tests() {
@@ -41,9 +41,7 @@ fn verify_signature(public_key: &RsaPublicKey, test: &Test) {
     assert_eq!(
         verification_result.is_ok(),
         expected_ok,
-        "Test failed: {:?}\nVerification result: {:?}",
-        test,
-        verification_result
+        "Test failed: {test:?}\nVerification result: {verification_result:?}"
     );
 }
 
@@ -57,6 +55,6 @@ fn public_key_of_supported_size(test_group: &TestGroup) -> Option<RsaPublicKey> 
             );
             None
         }
-        Err(e) => panic!("Unexpected error {:?}", e),
+        Err(e) => panic!("Unexpected error {e:?}"),
     }
 }

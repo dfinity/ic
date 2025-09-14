@@ -68,8 +68,8 @@ pub enum RequestValidationError {
 impl Display for RequestValidationError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            RequestValidationError::InvalidIngressExpiry(msg) => write!(f, "{}", msg),
-            RequestValidationError::InvalidDelegationExpiry(msg) => write!(f, "{}", msg),
+            RequestValidationError::InvalidIngressExpiry(msg) => write!(f, "{msg}"),
+            RequestValidationError::InvalidDelegationExpiry(msg) => write!(f, "{msg}"),
             RequestValidationError::UserIdDoesNotMatchPublicKey(user_id, pubkey) => write!(
                 f,
                 "The user id {} does not match the public key {}",
@@ -77,36 +77,35 @@ impl Display for RequestValidationError {
                 hex::encode(pubkey)
             ),
             RequestValidationError::InvalidSignature(err) => {
-                write!(f, "Invalid signature: {}", err)
+                write!(f, "Invalid signature: {err}")
             }
             RequestValidationError::InvalidDelegation(err) => {
-                write!(f, "Invalid delegation: {}", err)
+                write!(f, "Invalid delegation: {err}")
             }
             RequestValidationError::MissingSignature(user_id) => {
-                write!(f, "Missing signature from user: {}", user_id)
+                write!(f, "Missing signature from user: {user_id}")
             }
             RequestValidationError::AnonymousSignatureNotAllowed => {
                 write!(f, "Signature is not allowed for the anonymous user")
             }
             RequestValidationError::CanisterNotInDelegationTargets(canister_id) => write!(
                 f,
-                "Canister {} is not one of the delegation targets",
-                canister_id
+                "Canister {canister_id} is not one of the delegation targets"
             ),
             RequestValidationError::TooManyPathsError { length, maximum } => write!(
                 f,
-                "Too many paths in read state request: got {} paths, but at most {} are allowed",
-                length, maximum
+                "Too many paths in read state request: got {length} paths, but at most {maximum} are allowed"
             ),
             RequestValidationError::PathTooLongError { length, maximum } => write!(
                 f,
-                "At least one path in read state request is too deep: got {} labels, but at most {} are allowed",
-                length, maximum
+                "At least one path in read state request is too deep: got {length} labels, but at most {maximum} are allowed"
             ),
-            RequestValidationError::NonceTooBigError { num_bytes: length, maximum } => write!(
+            RequestValidationError::NonceTooBigError {
+                num_bytes: length,
+                maximum,
+            } => write!(
                 f,
-                "Nonce in request is too big: got {} bytes, but at most {} are allowed",
-                length, maximum
+                "Nonce in request is too big: got {length} bytes, but at most {maximum} are allowed"
             ),
         }
     }
@@ -144,18 +143,17 @@ impl Display for AuthenticationError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             AuthenticationError::InvalidBasicSignature(err) => {
-                write!(f, "Invalid basic signature: {}", err)
+                write!(f, "Invalid basic signature: {err}")
             }
             AuthenticationError::InvalidCanisterSignature(err) => {
-                write!(f, "Invalid canister signature: {}", err)
+                write!(f, "Invalid canister signature: {err}")
             }
-            AuthenticationError::InvalidPublicKey(err) => write!(f, "Invalid public key: {}", err),
-            AuthenticationError::WebAuthnError(msg) => write!(f, "{}", msg),
-            AuthenticationError::DelegationTargetError(msg) => write!(f, "{}", msg),
+            AuthenticationError::InvalidPublicKey(err) => write!(f, "Invalid public key: {err}"),
+            AuthenticationError::WebAuthnError(msg) => write!(f, "{msg}"),
+            AuthenticationError::DelegationTargetError(msg) => write!(f, "{msg}"),
             AuthenticationError::DelegationTooLongError { length, maximum } => write!(
                 f,
-                "Chain of delegations is too long: got {} delegations, but at most {} are allowed",
-                length, maximum
+                "Chain of delegations is too long: got {length} delegations, but at most {maximum} are allowed"
             ),
             AuthenticationError::DelegationContainsCyclesError { public_key } => write!(
                 f,

@@ -40,15 +40,15 @@ use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes as BasicSigEd255
 use ic_crypto_internal_multi_sig_bls12381::types::PopBytes as MultiSigBls12381PopBytes;
 use ic_crypto_internal_multi_sig_bls12381::types::PublicKeyBytes as MultiSigBls12381PublicKeyBytes;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    verify_mega_public_key, EccCurveType,
+    EccCurveType, verify_mega_public_key,
 };
 pub use ic_crypto_tls_cert_validation::TlsCertValidationError;
 pub use ic_crypto_tls_cert_validation::ValidTlsCertificate;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
-use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::Time;
+use ic_types::crypto::CurrentNodePublicKeys;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;
@@ -218,7 +218,7 @@ impl TryFrom<PublicKey> for ValidNodeSigningPublicKey {
 
     fn try_from(public_key: PublicKey) -> Result<Self, Self::Error> {
         let public_key_bytes = BasicSigEd25519PublicKeyBytes::try_from(&public_key)
-            .map_err(|e| invalid_node_signing_key_error(format!("{}", e)))?;
+            .map_err(|e| invalid_node_signing_key_error(format!("{e}")))?;
         if !ic_crypto_internal_basic_sig_ed25519::verify_public_key(&public_key_bytes) {
             return Err(invalid_node_signing_key_error("verification failed"));
         }
@@ -272,14 +272,14 @@ impl TryFrom<PublicKey> for ValidCommitteeSigningPublicKey {
 
     fn try_from(value: PublicKey) -> Result<Self, Self::Error> {
         let pubkey_bytes = MultiSigBls12381PublicKeyBytes::try_from(&value)
-            .map_err(|e| invalid_committee_signing_key_error(format!("{}", e)))?;
+            .map_err(|e| invalid_committee_signing_key_error(format!("{e}")))?;
         let pop_bytes = MultiSigBls12381PopBytes::try_from(&value)
-            .map_err(|e| invalid_committee_signing_key_error(format!("{}", e)))?;
+            .map_err(|e| invalid_committee_signing_key_error(format!("{e}")))?;
 
         // Note that `verify_pop` also ensures that the public key is a point on the
         // curve and in the right subgroup.
         ic_crypto_internal_multi_sig_bls12381::verify_pop(&pop_bytes, &pubkey_bytes)
-            .map_err(|e| invalid_committee_signing_key_error(format!("{}", e)))?;
+            .map_err(|e| invalid_committee_signing_key_error(format!("{e}")))?;
         Ok(Self { public_key: value })
     }
 }
@@ -310,7 +310,7 @@ impl TryFrom<(PublicKey, NodeId)> for ValidDkgDealingEncryptionPublicKey {
         // Note: `fs_ni_dkg_pubkey_from_proto` also ensures that the
         // public key is a point on the curve and in the right subgroup.
         let fs_ni_dkg_pubkey = fs_ni_dkg_pubkey_from_proto(&public_key)
-            .map_err(|e| invalid_dkg_dealing_enc_pubkey_error(format!("{}", e)))?;
+            .map_err(|e| invalid_dkg_dealing_enc_pubkey_error(format!("{e}")))?;
         if !fs_ni_dkg_pubkey.verify(node_id.get().as_slice()) {
             return Err(invalid_dkg_dealing_enc_pubkey_error("verification failed"));
         }
@@ -345,13 +345,12 @@ impl TryFrom<PublicKey> for ValidIDkgDealingEncryptionPublicKey {
         let curve_type = match AlgorithmIdProto::try_from(public_key.algorithm).ok() {
             Some(AlgorithmIdProto::MegaSecp256k1) => Ok(EccCurveType::K256),
             alg_id => Err(invalid_idkg_dealing_enc_pubkey_error(format!(
-                "unsupported algorithm: {:?}",
-                alg_id
+                "unsupported algorithm: {alg_id:?}"
             ))),
         }?;
         // `verify_mega_public_key` also ensures that the public key is a valid point on the curve.
         verify_mega_public_key(curve_type, &public_key.key_value).map_err(|e| {
-            invalid_idkg_dealing_enc_pubkey_error(format!("verification failed: {:?}", e))
+            invalid_idkg_dealing_enc_pubkey_error(format!("verification failed: {e:?}"))
         })?;
         Ok(Self { public_key })
     }
@@ -372,7 +371,7 @@ pub struct KeyValidationError {
 
 impl fmt::Display for KeyValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 

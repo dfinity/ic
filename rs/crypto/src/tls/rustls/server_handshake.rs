@@ -9,11 +9,11 @@ use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsConfigError, TlsPublicKeyCert}
 use ic_interfaces_registry::RegistryClient;
 use ic_types::{NodeId, RegistryVersion};
 use rustls::{
+    ServerConfig, SignatureScheme,
     crypto::ring::cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384},
-    server::{danger::ClientCertVerifier, NoClientAuth, ResolvesServerCert},
+    server::{NoClientAuth, ResolvesServerCert, danger::ClientCertVerifier},
     sign::CertifiedKey,
     version::TLS13,
-    ServerConfig, SignatureScheme,
 };
 use std::sync::Arc;
 

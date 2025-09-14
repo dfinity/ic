@@ -8,8 +8,8 @@ use ic_nns_common::types::NeuronId;
 use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_system_test_driver::{
     driver::test_env_api::{
-        get_guestos_img_version, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
-        IcNodeContainer, IcNodeSnapshot,
+        GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+        IcNodeSnapshot, get_guestos_img_version,
     },
     nns::{
         get_governance_canister, submit_update_api_boundary_node_version_proposal,
@@ -19,7 +19,7 @@ use ic_system_test_driver::{
 };
 use ic_types::ReplicaVersion;
 use itertools::Itertools;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use tokio::runtime::Handle;
 
 use super::Step;
@@ -106,8 +106,7 @@ impl Step for UpdateSubnetType {
                 return Ok(());
             }
 
-            let version =
-                get_guestos_img_version().expect("Should be able to read unassigned nodes version");
+            let version = get_guestos_img_version();
             if version.eq(&self.version) {
                 info!(
                     logger,
@@ -165,8 +164,7 @@ impl Step for UpdateApiBoundaryNodes {
         }
 
         // check whether the current version of the API BNs is already the one they should be upgraded to
-        let current_version =
-            get_guestos_img_version().expect("Should be able to read API boundary nodes version");
+        let current_version = get_guestos_img_version();
         if current_version.eq(&self.version) {
             info!(
                 logger,

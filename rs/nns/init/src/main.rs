@@ -133,7 +133,7 @@ const GTC_FORWARD_ALL_UNCLAIMED_ACCOUNTS_RECIPIENT_NEURON_ID: NeuronId = NeuronI
 #[tokio::main]
 async fn main() {
     let args = CliArgs::try_parse_from(std::env::args())
-        .unwrap_or_else(|e| panic!("Illegal arguments: {}", e));
+        .unwrap_or_else(|e| panic!("Illegal arguments: {e}"));
 
     let init_payloads = create_init_payloads(&args);
 
@@ -169,10 +169,7 @@ async fn main() {
         true => NnsCanisters::set_up_at_ids(&runtime, init_payloads).await,
         false => NnsCanisters::set_up(&runtime, init_payloads).await,
     };
-    eprintln!(
-        "{}All NNS canisters have been set up on the replica with {}",
-        LOG_PREFIX, url
-    );
+    eprintln!("{LOG_PREFIX}All NNS canisters have been set up on the replica with {url}");
 }
 
 /// Constructs the `NnsInitPayloads` from the command line options.
@@ -186,15 +183,11 @@ fn create_init_payloads(args: &CliArgs) -> NnsInitPayloads {
     );
 
     if let Some(path) = &args.initial_neurons {
-        eprintln!(
-            "{}Initializing neurons from CSV file: {:?}",
-            LOG_PREFIX, path
-        );
+        eprintln!("{LOG_PREFIX}Initializing neurons from CSV file: {path:?}");
         init_payloads_builder.with_neurons_from_csv_file(path);
     } else {
         eprintln!(
-            "{}Initial neuron CSV or PB path not specified, initializing with test neurons",
-            LOG_PREFIX
+            "{LOG_PREFIX}Initial neuron CSV or PB path not specified, initializing with test neurons"
         );
         init_payloads_builder
             // We need some neurons, because we need to vote on some proposals to create subnets.
@@ -256,7 +249,7 @@ fn create_init_payloads(args: &CliArgs) -> NnsInitPayloads {
             .collect(),
     );
 
-    println!("{}Initialized governance.", LOG_PREFIX);
+    println!("{LOG_PREFIX}Initialized governance.");
 
     init_payloads_builder.build()
 }
@@ -267,23 +260,29 @@ fn add_registry_content(
     registry_local_store_dir: Option<&PathBuf>,
 ) {
     let mutate_reqs = match (ic_prep_path, registry_local_store_dir) {
-        (Some(_), Some(_)) => panic!("{} --initial-registry and --registry-local-store-dir are incompatible, gotta make up your mind!", LOG_PREFIX),
+        (Some(_), Some(_)) => panic!(
+            "{LOG_PREFIX} --initial-registry and --registry-local-store-dir are incompatible, gotta make up your mind!"
+        ),
         (None, None) => vec![],
         (Some(p), None) => ic_nns_init::read_initial_mutations_from_ic_prep(p),
-        (None, Some(d)) => ic_nns_init::read_initial_mutations_from_local_store_dir(d)
+        (None, Some(d)) => ic_nns_init::read_initial_mutations_from_local_store_dir(d),
     };
     if mutate_reqs.is_empty() {
         eprintln!(
-            "{}The content of the registry will be initialized with an empty content. \
+            "{LOG_PREFIX}The content of the registry will be initialized with an empty content. \
         This is most likely not what you want. \
-        Use --initial-registry or --registry-local-store-dir to specify initial content.",
-            LOG_PREFIX
+        Use --initial-registry or --registry-local-store-dir to specify initial content."
         );
     } else {
-        eprintln!("{}The registry will be initialized with {} transactions for a total of {} key-value pair mutations.",
-        LOG_PREFIX,
-        mutate_reqs.len(),
-        mutate_reqs.iter().map(|mr| mr.mutations.len()).sum::<usize>());
+        eprintln!(
+            "{}The registry will be initialized with {} transactions for a total of {} key-value pair mutations.",
+            LOG_PREFIX,
+            mutate_reqs.len(),
+            mutate_reqs
+                .iter()
+                .map(|mr| mr.mutations.len())
+                .sum::<usize>()
+        );
     }
     for mutate_req in mutate_reqs {
         init_payloads_builder
