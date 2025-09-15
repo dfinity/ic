@@ -1,11 +1,11 @@
 //! Prunes a replicated state, as part of a subnet split.
 use crate::{
+    NUMBER_OF_CHECKPOINT_THREADS, StateManagerMetrics,
     checkpoint::{
         flush_canister_snapshots_and_page_maps, load_checkpoint, make_unvalidated_checkpoint,
         validate_and_finalize_checkpoint_and_remove_unverified_marker,
     },
     tip::spawn_tip_thread,
-    StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
 };
 
 use ic_base_types::CanisterId;
@@ -13,15 +13,15 @@ use ic_config::state_manager::Config;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{
-    difference, CanisterIdRange, CanisterIdRanges, RoutingTable, WellFormedError,
+    CanisterIdRange, CanisterIdRanges, RoutingTable, WellFormedError, difference,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    page_map::PageAllocatorFileDescriptor, page_map::TestPageAllocatorFileDescriptorImpl,
-    ReplicatedState,
+    ReplicatedState, page_map::PageAllocatorFileDescriptor,
+    page_map::TestPageAllocatorFileDescriptorImpl,
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout};
-use ic_types::{malicious_flags::MaliciousFlags, PrincipalId, SubnetId, Time};
+use ic_types::{PrincipalId, SubnetId, Time, malicious_flags::MaliciousFlags};
 use scoped_threadpool::Pool;
 use std::{iter::once, path::PathBuf, sync::Arc};
 
@@ -41,7 +41,7 @@ pub fn resolve_ranges_and_split(
     metrics_registry: &MetricsRegistry,
     log: ReplicaLogger,
 ) -> Result<(), String> {
-    let canister_id_ranges = resolve(retain, drop).map_err(|e| format!("{:?}", e))?;
+    let canister_id_ranges = resolve(retain, drop).map_err(|e| format!("{e:?}"))?;
 
     split(
         root,
@@ -89,7 +89,7 @@ pub fn split(
     let mut routing_table = RoutingTable::new();
     routing_table
         .assign_ranges(canister_id_ranges, subnet_id)
-        .map_err(|e| format!("{:?}", e))?;
+        .map_err(|e| format!("{e:?}"))?;
 
     // Split the state.
     let split_state = state.split(subnet_id, &routing_table, new_subnet_batch_time)?;
@@ -211,7 +211,7 @@ fn write_checkpoint(
         &metrics.checkpoint_metrics,
         fd_factory.clone(),
     )
-    .map_err(|e| format!("Failed to write checkpoint: {}", e))?;
+    .map_err(|e| format!("Failed to write checkpoint: {e}"))?;
 
     validate_and_finalize_checkpoint_and_remove_unverified_marker(
         &cp_layout,
@@ -221,7 +221,7 @@ fn write_checkpoint(
         &metrics.checkpoint_metrics,
         Some(thread_pool),
     )
-    .map_err(|e| format!("Failed to validate checkpoint: {}", e))?;
+    .map_err(|e| format!("Failed to validate checkpoint: {e}"))?;
 
     Ok(())
 }

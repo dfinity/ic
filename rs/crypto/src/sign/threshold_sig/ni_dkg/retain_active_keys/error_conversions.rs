@@ -1,6 +1,6 @@
 use crate::sign::threshold_sig::ni_dkg::utils::DkgEncPubkeyRegistryQueryError;
-use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRemovalError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::MalformedFsEncryptionPublicKeyError;
+use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRemovalError;
 
 impl From<DkgEncPubkeyRegistryQueryError> for DkgKeyRemovalError {
     fn from(registry_query_error: DkgEncPubkeyRegistryQueryError) -> Self {

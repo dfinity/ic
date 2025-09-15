@@ -1,7 +1,7 @@
 use anyhow::Result;
 use candid::Decode;
 use futures::future::join_all;
-use ic_agent::{agent::RejectCode, export::Principal, AgentError};
+use ic_agent::{AgentError, agent::RejectCode, export::Principal};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
@@ -9,9 +9,9 @@ use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use ic_system_test_driver::systest;
 use ic_system_test_driver::types::CreateCanisterResult;
-use ic_system_test_driver::util::{assert_reject, block_on, UniversalCanister};
+use ic_system_test_driver::util::{UniversalCanister, assert_reject, block_on};
 use ic_types::Cycles;
-use ic_universal_canister::{call_args, management, wasm, CallInterface, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{CallInterface, UNIVERSAL_CANISTER_WASM, call_args, management, wasm};
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::ManagementCanister;
 

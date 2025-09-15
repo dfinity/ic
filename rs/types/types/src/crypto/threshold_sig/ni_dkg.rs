@@ -1,9 +1,9 @@
 //! Types for non-interactive distributed key generation (NI-DKG).
-pub use crate::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
-use crate::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
 #[cfg(test)]
 use crate::NodeId;
 use crate::NumberOfNodes;
+use crate::crypto::threshold_sig::ni_dkg::config::NiDkgThreshold;
+pub use crate::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use crate::{Height, PrincipalId, PrincipalIdBlobParseError, RegistryVersion, SubnetId};
 use core::fmt;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{CspNiDkgDealing, CspNiDkgTranscript};
@@ -86,10 +86,7 @@ impl TryFrom<pb::MasterPublicKeyId> for NiDkgMasterPublicKeyId {
             KeyId::Ecdsa(_) | KeyId::Schnorr(_) => {
                 return Err(ProxyDecodeError::ValueOutOfRange {
                     typ: "NiDkgMasterPublicKeyId",
-                    err: format!(
-                        "Unable to convert {:?} to a NiDkgMasterPublicKeyId",
-                        key_id_pb
-                    ),
+                    err: format!("Unable to convert {key_id_pb:?} to a NiDkgMasterPublicKeyId"),
                 });
             }
         })
@@ -177,7 +174,7 @@ impl fmt::Debug for NiDkgTargetSubnet {
 
 impl fmt::Display for NiDkgTargetSubnet {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -263,7 +260,7 @@ impl TryFrom<&pb::NiDkgTranscript> for NiDkgTranscript {
         Ok(Self {
             dkg_id: NiDkgId::from_option_protobuf(summary.dkg_id.clone(), "NiDkgTranscript")?,
             threshold: NiDkgThreshold::new(NumberOfNodes::from(summary.threshold))
-                .map_err(|e| format!("threshold error {:?}", e))?,
+                .map_err(|e| format!("threshold error {e:?}"))?,
             committee: NiDkgReceivers::new(
                 summary
                     .committee
@@ -272,13 +269,13 @@ impl TryFrom<&pb::NiDkgTranscript> for NiDkgTranscript {
                     .map(|committee_member| crate::node_id_try_from_option(Some(committee_member)))
                     .collect::<Result<BTreeSet<_>, _>>()
                     .map_err(|err| {
-                        format!("Problem loading committee in NiDkgTranscript: {:?}", err)
+                        format!("Problem loading committee in NiDkgTranscript: {err:?}")
                     })?,
             )
-            .map_err(|e| format!("{:?}", e))?,
+            .map_err(|e| format!("{e:?}"))?,
             registry_version: RegistryVersion::from(summary.registry_version),
             internal_csp_transcript: bincode::deserialize(&summary.internal_csp_transcript)
-                .map_err(|e| format!("{:?}", e))?,
+                .map_err(|e| format!("{e:?}"))?,
         })
     }
 }

@@ -5,7 +5,7 @@ use ic_sns_governance::pb::v1::{
     NervousSystemParameters, NeuronPermissionList, NeuronPermissionType,
 };
 use ic_sns_test_utils::itest_helpers::{
-    local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder,
+    SnsCanisters, SnsTestsInitPayloadBuilder, local_test_on_sns_subnet,
 };
 use serde_bytes::ByteBuf;
 

@@ -17,8 +17,8 @@ Success::
 end::catalog[] */
 #![allow(deprecated)]
 
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use canister_http::*;
 use canister_test::Canister;
 use dfn_candid::candid_one;
@@ -37,7 +37,7 @@ use proxy_canister::RemoteHttpRequest;
 use proxy_canister::RemoteHttpResponse;
 use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
 use serde::{Deserialize, Serialize};
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct BenchmarkResult {

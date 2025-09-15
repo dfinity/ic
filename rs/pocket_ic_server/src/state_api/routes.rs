@@ -6,7 +6,7 @@
 /// deterministically update the PocketIc state machine.
 ///
 use super::state::{
-    ApiState, OpOut, PocketIcError, StateLabel, UpdateReply, DEFAULT_SYNC_WAIT_DURATION,
+    ApiState, DEFAULT_SYNC_WAIT_DURATION, OpOut, PocketIcError, StateLabel, UpdateReply,
 };
 use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
@@ -15,20 +15,20 @@ use crate::pocket_ic::{
     QueryRequest, SetCertifiedTime, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
     SubnetReadStateRequest, Tick,
 };
-use crate::{async_trait, pocket_ic::PocketIc, BlobStore, InstanceId, OpId, Operation};
+use crate::{BlobStore, InstanceId, OpId, Operation, async_trait, pocket_ic::PocketIc};
 use aide::{
-    axum::routing::{delete, get, post, ApiMethodRouter},
-    axum::ApiRouter,
     NoApi,
+    axum::ApiRouter,
+    axum::routing::{ApiMethodRouter, delete, get, post},
 };
 
 use axum::{
+    Json,
     body::{Body, Bytes},
     extract::{self, Path, Request, State},
     http::{self, HeaderMap, HeaderName, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
-    Json,
 };
 use axum_extra::headers;
 use axum_extra::headers::HeaderMapExt;
@@ -37,6 +37,7 @@ use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use ic_boundary::{ErrorClientFacing, MAX_REQUEST_BODY_SIZE};
 use ic_http_endpoints_public::{cors_layer, make_plaintext_response, query, read_state};
 use ic_types::{CanisterId, SubnetId};
+use pocket_ic::RejectResponse;
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
     HttpGatewayDetails, IcpConfig, IcpFeatures, InitialTime, InstanceConfig,
@@ -45,11 +46,10 @@ use pocket_ic::common::rest::{
     RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, TickConfigs,
     Topology,
 };
-use pocket_ic::RejectResponse;
 use serde::Serialize;
 use slog::Level;
 use std::str::FromStr;
-use std::{collections::BTreeMap, fs::File, sync::atomic::AtomicU64, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, fs::File, sync::Arc, sync::atomic::AtomicU64, time::Duration};
 use tokio::{runtime::Runtime, sync::RwLock, time::Instant};
 use tower_http::limit::RequestBodyLimitLayer;
 use tracing::trace;
@@ -300,9 +300,9 @@ async fn run_operation<T: Serialize + FromOpOut>(
                 break (
                     StatusCode::BAD_REQUEST,
                     ApiResponse::Error {
-                        message: format!("{:?}", e),
+                        message: format!("{e:?}"),
                     },
-                )
+                );
             }
             Ok(update_reply) => {
                 match update_reply {
@@ -319,7 +319,10 @@ async fn run_operation<T: Serialize + FromOpOut>(
                     // Otherwise, the instance is busy with a different computation, so we retry (if appliacable) or return 409.
                     UpdateReply::Busy { state_label, op_id } => {
                         if retry_if_busy {
-                            trace!("run_operation::retry_busy instance_id={} state_label={:?} op_id={}", instance_id, state_label, op_id.0);
+                            trace!(
+                                "run_operation::retry_busy instance_id={} state_label={:?} op_id={}",
+                                instance_id, state_label, op_id.0
+                            );
                             match retry_policy.next_backoff() {
                                 Some(duration) => tokio::time::sleep(duration).await,
                                 None => {
@@ -329,7 +332,7 @@ async fn run_operation<T: Serialize + FromOpOut>(
                                             message: "Service is overloaded, try again later."
                                                 .to_string(),
                                         },
-                                    )
+                                    );
                                 }
                             }
                         } else {
@@ -374,21 +377,18 @@ impl<T: TryFrom<OpOut>> FromOpOut for T {
             OpOut::Error(e) => (
                 StatusCode::BAD_REQUEST,
                 ApiResponse::Error {
-                    message: format!("{:?}", e),
+                    message: format!("{e:?}"),
                 },
             ),
-            val => {
-                if let Ok(t) = T::try_from(val) {
-                    (StatusCode::OK, ApiResponse::Success(t))
-                } else {
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        ApiResponse::Error {
-                            message: "operation returned invalid type".into(),
-                        },
-                    )
-                }
-            }
+            val => match T::try_from(val) {
+                Ok(t) => (StatusCode::OK, ApiResponse::Success(t)),
+                _ => (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    ApiResponse::Error {
+                        message: "operation returned invalid type".into(),
+                    },
+                ),
+            },
         }
     }
 }
@@ -606,7 +606,7 @@ pub async fn handler_json_query(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -679,7 +679,7 @@ pub async fn handler_get_controllers(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -701,7 +701,7 @@ pub async fn handler_get_cycles(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -723,7 +723,7 @@ pub async fn handler_get_stable_memory(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -745,7 +745,7 @@ pub async fn handler_get_subnet(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -1049,10 +1049,9 @@ pub async fn handler_read_graph(
     if let Ok(state_label) = StateLabel::try_from(vec) {
         let op_id = OpId(op_id_str.clone());
         // TODO: use new_state_label and return it to library
-        if let Some((_new_state_label, op_out)) = api_state.read_graph(&state_label, &op_id) {
-            op_out_to_response(op_out).await
-        } else {
-            (
+        match api_state.read_graph(&state_label, &op_id) {
+            Some((_new_state_label, op_out)) => op_out_to_response(op_out).await,
+            _ => (
                 StatusCode::NOT_FOUND,
                 Json(ApiResponse::<()>::Error {
                     message: format!(
@@ -1063,7 +1062,7 @@ pub async fn handler_read_graph(
                     ),
                 }),
             )
-                .into_response()
+                .into_response(),
         }
     } else {
         (
@@ -1098,7 +1097,7 @@ pub async fn handler_submit_ingress_message(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -1120,7 +1119,7 @@ pub async fn handler_await_ingress_message(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -1147,7 +1146,7 @@ pub async fn handler_ingress_status(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -1196,7 +1195,7 @@ pub async fn handler_add_cycles(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -1221,7 +1220,7 @@ pub async fn handler_set_stable_memory(
         Err(e) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::Error {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             }),
         ),
     }
@@ -1289,7 +1288,7 @@ pub async fn create_instance(
                     return (
                         StatusCode::BAD_REQUEST,
                         Json(rest::CreateInstanceResponse::Error {
-                            message: format!("Subnet config failed to validate: {}", e),
+                            message: format!("Subnet config failed to validate: {e}"),
                         }),
                     );
                 }
@@ -1299,7 +1298,7 @@ pub async fn create_instance(
             return (
                 StatusCode::BAD_REQUEST,
                 Json(rest::CreateInstanceResponse::Error {
-                    message: format!("Subnet config failed to validate: {:?}", e),
+                    message: format!("Subnet config failed to validate: {e:?}"),
                 }),
             );
         }
@@ -1321,9 +1320,9 @@ pub async fn create_instance(
                 return (
                     StatusCode::BAD_REQUEST,
                     Json(rest::CreateInstanceResponse::Error {
-                        message: format!("Failed to parse log level: {:?}", e),
+                        message: format!("Failed to parse log level: {e:?}"),
                     }),
-                )
+                );
             }
         }
     } else {
@@ -1377,7 +1376,9 @@ pub async fn create_instance(
                     return (
                         StatusCode::BAD_REQUEST,
                         Json(rest::CreateInstanceResponse::Error {
-                            message: format!("The `nns_ui` feature requires the `{}` feature to be enabled, too.", icp_feature_str),
+                            message: format!(
+                                "The `nns_ui` feature requires the `{icp_feature_str}` feature to be enabled, too."
+                            ),
                         }),
                     );
                 }

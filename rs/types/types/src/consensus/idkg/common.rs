@@ -1,10 +1,15 @@
 //! Canister threshold transcripts and references related defininitions.
+use crate::{Height, RegistryVersion};
 use crate::{
     consensus::idkg::{
-        ecdsa::PreSignatureQuadrupleError, schnorr::PreSignatureTranscriptError, IDkgPayload,
+        IDkgPayload, ecdsa::PreSignatureQuadrupleError, schnorr::PreSignatureTranscriptError,
     },
     crypto::{
+        AlgorithmId,
         canister_threshold_sig::{
+            EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript,
+            ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
+            ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
             error::{
                 IDkgParamsValidationError, ThresholdEcdsaSigInputsCreationError,
                 ThresholdSchnorrSigInputsCreationError,
@@ -13,20 +18,15 @@ use crate::{
                 IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
                 IDkgTranscriptType,
             },
-            EcdsaPreSignatureQuadruple, SchnorrPreSignatureTranscript,
-            ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
-            ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
         },
         vetkd::{VetKdArgs, VetKdEncryptedKey},
-        AlgorithmId,
     },
     messages::CallbackId,
 };
-use crate::{Height, RegistryVersion};
 use ic_base_types::{NodeId, PrincipalId};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
@@ -41,9 +41,9 @@ use std::{
 };
 
 use super::{
+    IDkgMasterPublicKeyId,
     ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation},
     schnorr::{PreSignatureTranscriptRef, TranscriptInCreation},
-    IDkgMasterPublicKeyId,
 };
 
 /// PseudoRandomId is defined in execution context as plain 32-byte vector, we give it a synonym here.

@@ -1,8 +1,8 @@
 use anyhow::Result;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::OwnerReference;
+use kube::Api;
 use kube::api::DynamicObject;
 use kube::api::{Patch, PatchParams};
-use kube::Api;
 use strum_macros::AsRefStr;
 use tracing::*;
 

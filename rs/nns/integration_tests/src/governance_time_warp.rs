@@ -7,17 +7,17 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_governance_api::{
+    GovernanceError, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Neuron,
+    NeuronInfo,
     governance_error::ErrorType,
     manage_neuron::{Disburse, NeuronIdOrSubaccount},
     manage_neuron_response,
     neuron::DissolveState,
     test_api::TimeWarp,
-    GovernanceError, ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Neuron,
-    NeuronInfo,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
 };
 use icp_ledger::AccountIdentifier;
 
@@ -88,13 +88,12 @@ fn test_time_warp() {
         let command = disburse_result.command.unwrap();
         let governance_error = match command {
             manage_neuron_response::Command::Error(error) => error,
-            _ => panic!("\n\n{:?}\n\n", command),
+            _ => panic!("\n\n{command:?}\n\n"),
         };
         assert_eq!(
             governance_error.error_type,
             ErrorType::PreconditionFailed as i32,
-            "{:?}",
-            governance_error
+            "{governance_error:?}"
         );
 
         // Fast forward in time to right before the neuron-held funds becomes eligible for
@@ -128,22 +127,19 @@ fn test_time_warp() {
         let command = disburse_result.command.unwrap();
         let governance_error = match command {
             manage_neuron_response::Command::Error(error) => error,
-            _ => panic!("\n\n{:?}\n\n", command),
+            _ => panic!("\n\n{command:?}\n\n"),
         };
         assert_eq!(
             governance_error.error_type,
             ErrorType::PreconditionFailed as i32,
-            "{:?}",
-            governance_error
+            "{governance_error:?}"
         );
         let error_message = governance_error.error_message.to_lowercase();
         {
             let key_word = "dissolve";
             assert!(
                 error_message.contains(key_word),
-                "{:?} not in {:?}",
-                key_word,
-                error_message
+                "{key_word:?} not in {error_message:?}"
             );
         }
 
@@ -189,7 +185,7 @@ fn test_time_warp() {
                     .unwrap();
                 let neuron_info = neuron_info.unwrap();
 
-                panic!("\n\n{:?}\n\n{:#?}", command, neuron_info);
+                panic!("\n\n{command:?}\n\n{neuron_info:#?}");
             }
         }
 

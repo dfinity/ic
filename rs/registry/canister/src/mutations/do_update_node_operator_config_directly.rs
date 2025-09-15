@@ -10,7 +10,7 @@ use serde::Serialize;
 use ic_base_types::PrincipalId;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
 
 use prost::Message;
 
@@ -21,10 +21,7 @@ impl Registry {
         &mut self,
         payload: UpdateNodeOperatorConfigDirectlyPayload,
     ) {
-        println!(
-            "{}do_update_node_operator_config_directly: {:?}",
-            LOG_PREFIX, payload
-        );
+        println!("{LOG_PREFIX}do_update_node_operator_config_directly: {payload:?}");
 
         // 1. Look up the record of the requested target NodeOperatorRecord.
         let node_operator_id = payload
@@ -35,8 +32,7 @@ impl Registry {
             .get(&node_operator_record_key, self.latest_version())
             .unwrap_or_else(|| {
                 panic!(
-                    "{}Node Operator record with ID {} not found in the registry.",
-                    LOG_PREFIX, node_operator_id
+                    "{LOG_PREFIX}Node Operator record with ID {node_operator_id} not found in the registry."
                 )
             })
             .value;
@@ -57,8 +53,7 @@ impl Registry {
             .expect("No Node Provider specified in the payload");
         assert_ne!(
             node_provider_id, node_operator_id,
-            "The Node Operator ID cannot be the same as the Node Provider ID: {}",
-            node_operator_id
+            "The Node Operator ID cannot be the same as the Node Provider ID: {node_operator_id}"
         );
         node_operator_record.node_provider_principal_id = node_provider_id.to_vec();
 

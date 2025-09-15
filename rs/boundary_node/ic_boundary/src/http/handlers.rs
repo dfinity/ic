@@ -8,14 +8,14 @@ use std::{
 #[cfg(test)]
 use axum::extract::ConnectInfo;
 use axum::{
+    Extension,
     body::Body,
     extract::{
-        ws::{CloseFrame, Message, Utf8Bytes, WebSocket, WebSocketUpgrade},
         Path, Request, State,
+        ws::{CloseFrame, Message, Utf8Bytes, WebSocket, WebSocketUpgrade},
     },
     http::StatusCode,
     response::IntoResponse,
-    Extension,
 };
 use bytes::Bytes;
 use candid::Principal;
@@ -27,8 +27,8 @@ use ic_bn_lib::{
     pubsub::{Broker, Subscriber},
 };
 use ic_types::{
-    messages::{HttpStatusResponse, ReplicaHealthStatus},
     CanisterId, SubnetId,
+    messages::{HttpStatusResponse, ReplicaHealthStatus},
 };
 use moka::sync::{Cache, CacheBuilder};
 use serde::Serialize;
@@ -271,7 +271,7 @@ pub async fn handle_subnet(
 
 #[cfg(test)]
 mod test {
-    use axum::{routing::any, Router};
+    use axum::{Router, routing::any};
     use futures_util::StreamExt;
     use ic_bn_lib::principal;
     use ic_bn_lib::pubsub::BrokerBuilder;

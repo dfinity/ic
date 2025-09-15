@@ -13,12 +13,12 @@ pub fn fs_ni_dkg_pubkey_from_proto(
 ) -> Result<ClibFsNiDkgPublicKey, FsNiDkgPubkeyFromPubkeyProtoError> {
     let csp_pk = CspFsEncryptionPublicKey::try_from(pubkey_proto.clone()).map_err(|e| {
         FsNiDkgPubkeyFromPubkeyProtoError::PublicKeyConversion {
-            error: format!("{}", e),
+            error: format!("{e}"),
         }
     })?;
     let csp_pop = CspFsEncryptionPop::try_from(pubkey_proto).map_err(|e| {
         FsNiDkgPubkeyFromPubkeyProtoError::PopConversion {
-            error: format!("{}", e),
+            error: format!("{e}"),
         }
     })?;
     clib_fs_ni_dkg_pubkey_from_csp_pubkey_with_pop(&csp_pk, &csp_pop)
@@ -49,10 +49,10 @@ impl fmt::Display for FsNiDkgPubkeyFromPubkeyProtoError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::PublicKeyConversion { error } => {
-                write!(f, "Failed to convert public key: {}", error,)
+                write!(f, "Failed to convert public key: {error}",)
             }
             Self::PopConversion { error } => {
-                write!(f, "Failed to convert proof of possession (PoP): {}", error)
+                write!(f, "Failed to convert proof of possession (PoP): {error}")
             }
             Self::InternalConversion => write!(f, "Internal conversion failed"),
         }

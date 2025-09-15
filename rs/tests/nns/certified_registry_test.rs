@@ -36,7 +36,7 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::{HasIcPrepDir, TestEnv};
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{block_on, runtime_from_url, UNIVERSAL_CANISTER_WASM};
+use ic_system_test_driver::util::{UNIVERSAL_CANISTER_WASM, block_on, runtime_from_url};
 use ic_types::RegistryVersion;
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
@@ -86,7 +86,7 @@ pub fn test(env: TestEnv) {
         let proxy_server = axum::serve(listener, mitm);
         info!(logger, "Started a MITM proxy on {}", socket_addr);
         let proxy_url =
-            url::Url::parse(&format!("http://{}", socket_addr)).expect("failed to parse url");
+            url::Url::parse(&format!("http://{socket_addr}")).expect("failed to parse url");
 
         tokio::runtime::Handle::current().spawn(async move {
             proxy_server.await.ok();
@@ -153,8 +153,7 @@ pub fn test(env: TestEnv) {
         assert_eq!(version, RegistryVersion::new(3));
         assert!(
             time_v2 > time_v1,
-            "Expected certification time to advance, got the same time {}",
-            time_v1
+            "Expected certification time to advance, got the same time {time_v1}"
         );
 
         // MITM case
@@ -170,13 +169,11 @@ pub fn test(env: TestEnv) {
         let result = client.get_certified_changes_since(0, &pk).await;
         assert!(
             result.is_err(),
-            "Expected get_certified_changes_since() to fail, got {:?}",
-            result
+            "Expected get_certified_changes_since() to fail, got {result:?}"
         );
         assert!(
-            format!("{:?}", result).contains("CertifiedDataMismatch"),
-            "Expected the result to contain signature verification error, got {:?}",
-            result
+            format!("{result:?}").contains("CertifiedDataMismatch"),
+            "Expected the result to contain signature verification error, got {result:?}"
         );
     });
 }

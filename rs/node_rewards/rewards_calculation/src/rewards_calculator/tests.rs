@@ -332,9 +332,7 @@ fn test_adjust_nodes_rewards() {
         assert_eq!(
             adjusted_rewards.get(&(day1, *node)),
             Some(&expected),
-            "Unexpected reward for node {:?} on day {:?}",
-            node,
-            day1
+            "Unexpected reward for node {node:?} on day {day1:?}"
         );
     }
     // Case 2: fewer than 4 nodes (3 on day2), all assigned penalty applies
@@ -342,9 +340,7 @@ fn test_adjust_nodes_rewards() {
         assert_eq!(
             adjusted_rewards.get(&(day2, *node)),
             Some(&expected),
-            "Unexpected reward for node {:?} on day {:?}",
-            node,
-            day2
+            "Unexpected reward for node {node:?} on day {day2:?}"
         );
     }
 
@@ -354,9 +350,7 @@ fn test_adjust_nodes_rewards() {
         assert_eq!(
             adjusted_rewards.get(&(day3, *node)),
             Some(&expected),
-            "Unexpected reward for node {:?} on day {:?}",
-            node,
-            day3
+            "Unexpected reward for node {node:?} on day {day3:?}"
         );
     }
 }

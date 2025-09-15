@@ -1,8 +1,8 @@
 //! Metrics for the idkg feature
 
 use ic_metrics::{
-    buckets::{decimal_buckets, linear_buckets},
     MetricsRegistry,
+    buckets::{decimal_buckets, linear_buckets},
 };
 use ic_types::consensus::idkg::{
     CompletedReshareRequest, CompletedSignature, HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId,

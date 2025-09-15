@@ -62,12 +62,12 @@
 /// Create a new logger with the supplied context
 #[macro_export(local_inner_macros)]
 macro_rules! new_logger {
-    ($logger:expr; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    ($logger:expr_2021; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         let mut context = $logger.get_context();
         update_context!(context; $($field $( . $sub_field)* => $value),*);
         $logger.with_new_context(context)
     }};
-    ($logger:expr) => {{
+    ($logger:expr_2021) => {{
         $logger.clone()
     }};
 }
@@ -75,16 +75,16 @@ macro_rules! new_logger {
 /// Log a trace-level message, with context fields if given
 #[macro_export(local_inner_macros)]
 macro_rules! trace {
-    ($logger:expr, $message:expr $(,$args:expr)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         log!($logger, slog::Level::Trace, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
     }};
-    ($logger:expr ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    ($logger:expr_2021 ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         log!($logger, slog::Level::Trace ; $( $field $( . $sub_field)* => $value ),*)
     }};
-    ($logger:expr, $message:expr $(,$args:expr)* $(,)*) => {{
+    ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
         log!($logger, slog::Level::Trace, $message $(,$args)*)
     }};
-    ($logger:expr $(,)*) => {{
+    ($logger:expr_2021 $(,)*) => {{
         trace!($logger, "");
     }};
 }
@@ -92,26 +92,26 @@ macro_rules! trace {
 /// Log a debug-level log, with context fields if given
 #[macro_export(local_inner_macros)]
 macro_rules! debug {
-    (every_n_seconds => $seconds:expr, $logger:expr, $message:expr $(,$args:expr)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Debug)) {
             log!($logger, slog::Level::Debug, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
         }
     }};
-    ($logger:expr, $message:expr $(,$args:expr)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         log!($logger, slog::Level::Debug, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
     }};
-    ($logger:expr ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    ($logger:expr_2021 ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         log!($logger, slog::Level::Debug ; $( $field $( . $sub_field)* => $value ),*)
     }};
-    (every_n_seconds => $seconds:expr, $logger:expr, $message:expr $(,$args:expr)* $(,)*) => {{
+    (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
         if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Debug)) {
             log!($logger, slog::Level::Debug, $message $(,$args)*)
         }
     }};
-    ($logger:expr, $message:expr $(,$args:expr)* $(,)*) => {{
+    ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
         log!($logger, slog::Level::Debug, $message $(,$args)*)
     }};
-    ($logger:expr $(,)*) => {{
+    ($logger:expr_2021 $(,)*) => {{
         debug!($logger, "");
     }};
 }
@@ -119,31 +119,31 @@ macro_rules! debug {
 /// Log an info-level log, with context fields if given
 #[macro_export(local_inner_macros)]
 macro_rules! info {
-    (every_n_seconds => $seconds:expr, $logger:expr, $message:expr $(,$args:expr)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Info)) {
             log!($logger, slog::Level::Info, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
         }
     }};
-    ($logger:expr, $message:expr $(,$args:expr)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         log!($logger, slog::Level::Info, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
     }};
-    (every_n_seconds => $seconds:expr, $logger:expr, $message:expr $(,$args:expr)* ) => {{
+    (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ) => {{
         if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Info)) {
             log!($logger, slog::Level::Info, $message $(,$args)*)
         }
     }};
-    (every_n_seconds => $seconds:expr, $logger:expr ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    (every_n_seconds => $seconds:expr_2021, $logger:expr_2021 ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Info)) {
             log!($logger, slog::Level::Info ; $( $field $( . $sub_field)* => $value ),*)
         }
     }};
-    ($logger:expr ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    ($logger:expr_2021 ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         log!($logger, slog::Level::Info ; $( $field $( . $sub_field)* => $value ),*)
     }};
-    ($logger:expr, $message:expr $(,$args:expr)* $(,)*) => {{
+    ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
         log!($logger, slog::Level::Info, $message $(,$args)*)
     }};
-    ($logger:expr $(,)*) => {{
+    ($logger:expr_2021 $(,)*) => {{
         info!($logger, "");
     }};
 }
@@ -151,31 +151,31 @@ macro_rules! info {
 /// Log a warn-level log, with context fields if given
 #[macro_export(local_inner_macros)]
 macro_rules! warn {
-    (every_n_seconds => $seconds:expr, $logger:expr, $message:expr $(,$args:expr)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Warning)) {
             log!($logger, slog::Level::Warning, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
         }
     }};
-    ($logger:expr, $message:expr $(,$args:expr)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         log!($logger, slog::Level::Warning, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
     }};
-    (every_n_seconds => $seconds:expr, $logger:expr ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    (every_n_seconds => $seconds:expr_2021, $logger:expr_2021 ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Warning)) {
             log!($logger, slog::Level::Warning ; $( $field $( . $sub_field)* => $value ),*)
         }
     }};
-    ($logger:expr ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    ($logger:expr_2021 ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         log!($logger, slog::Level::Warning ; $( $field $( . $sub_field)* => $value ),*)
     }};
-    (every_n_seconds => $seconds:expr, $logger:expr, $message:expr $(,$args:expr)* ) => {{
+    (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ) => {{
         if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Warning)) {
             log!($logger, slog::Level::Warning, $message $(,$args)*)
         }
     }};
-    ($logger:expr, $message:expr $(,$args:expr)* $(,)*) => {{
+    ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
         log!($logger, slog::Level::Warning, $message $(,$args)*)
     }};
-    ($logger:expr $(,)*) => {{
+    ($logger:expr_2021 $(,)*) => {{
         warn!($logger, "");
     }};
 }
@@ -183,21 +183,21 @@ macro_rules! warn {
 /// Log an error-level log, with context fields if given
 #[macro_export(local_inner_macros)]
 macro_rules! error {
-    (every_n_seconds => $seconds:expr, $logger:expr, $message:expr $(,$args:expr)* ) => {{
+    (every_n_seconds => $seconds:expr_2021, $logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ) => {{
         if $logger.is_n_seconds($seconds, log_metadata!(slog::Level::Error)) {
             log!($logger, slog::Level::Error, $message $(,$args)*)
         }
     }};
-    ($logger:expr, $message:expr $(,$args:expr)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         log!($logger, slog::Level::Error, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
     }};
-    ($logger:expr ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    ($logger:expr_2021 ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         log!($logger, slog::Level::Error ; $( $field $( . $sub_field)* => $value ),*)
     }};
-    ($logger:expr, $message:expr $(,$args:expr)* $(,)*) => {{
+    ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
         log!($logger, slog::Level::Error, $message $(,$args)*)
     }};
-    ($logger:expr $(,)*) => {{
+    ($logger:expr_2021 $(,)*) => {{
         error!($logger, "");
     }};
 }
@@ -205,16 +205,16 @@ macro_rules! error {
 /// Log a crit-level log, with context fields if given
 #[macro_export(local_inner_macros)]
 macro_rules! crit {
-    ($logger:expr, $message:expr $(,$args:expr)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         log!($logger, slog::Level::Critical, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*)
     }};
-    ($logger:expr ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    ($logger:expr_2021 ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         log!($logger, slog::Level::Critical ; $( $field $( . $sub_field)* => $value ),*)
     }};
-    ($logger:expr, $message:expr $(,$args:expr)* $(,)*) => {{
+    ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
         log!($logger, slog::Level::Critical, $message $(,$args)*)
     }};
-    ($logger:expr $(,)*) => {{
+    ($logger:expr_2021 $(,)*) => {{
         crit!($logger, "");
     }};
 }
@@ -222,19 +222,19 @@ macro_rules! crit {
 /// Log a crit-level log, with context fields if given, then panic!()
 #[macro_export(local_inner_macros)]
 macro_rules! fatal {
-    ($logger:expr, $message:expr $(,$args:expr)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         log!($logger, slog::Level::Critical, $message $(,$args)* ; $( $field $( . $sub_field)* => $value ),*);
         std::panic!($message $(,$args)*);
     }};
-    ($logger:expr ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    ($logger:expr_2021 ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         log!($logger, slog::Level::Critical ; $( $field $( . $sub_field)* => $value ),*);
         std::panic!("");
     }};
-    ($logger:expr, $message:expr $(,$args:expr)* $(,)*) => {{
+    ($logger:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
         log!($logger, slog::Level::Critical, $message $(,$args)*);
         std::panic!($message $(,$args)*);
     }};
-    ($logger:expr $(,)*) => {{
+    ($logger:expr_2021 $(,)*) => {{
         fatal!($logger, "");
     }};
 }
@@ -242,7 +242,7 @@ macro_rules! fatal {
 /// Log an entry at the given log level, with context fields if given
 #[macro_export(local_inner_macros)]
 macro_rules! log {
-    ($logger:expr, $level:expr, $message:expr $(,$args:expr)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    ($logger:expr_2021, $level:expr_2021, $message:expr_2021 $(,$args:expr_2021)* ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         if $logger.is_enabled_at($level) {
             let mut context = $logger.get_context();
             update_context!(context; $($field $( . $sub_field)* => $value),*);
@@ -251,7 +251,7 @@ macro_rules! log {
             $logger.log(message, context, log_metadata!($level))
         }
     }};
-    ($logger:expr, $level:expr ; $( $field:ident $( . $sub_field:ident)* => $value:expr ),* $(,)*) => {{
+    ($logger:expr_2021, $level:expr_2021 ; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),* $(,)*) => {{
         if $logger.is_enabled_at($level) {
             let mut context = $logger.get_context();
             update_context!(context; $($field $( . $sub_field)* => $value),*);
@@ -259,20 +259,20 @@ macro_rules! log {
             $logger.log("".into(), context, log_metadata!($level))
         }
     }};
-    ($logger:expr, $level:expr, $message:expr $(,$args:expr)* $(,)*) => {{
+    ($logger:expr_2021, $level:expr_2021, $message:expr_2021 $(,$args:expr_2021)* $(,)*) => {{
         if $logger.is_enabled_at($level) {
             let message = std::format!($message $(,$args)*);
             $logger.log(message, $logger.get_context(), log_metadata!($level))
         }
     }};
-    ($logger:expr $(,)*) => {{
+    ($logger:expr_2021 $(,)*) => {{
         log!($logger, "");
     }};
 }
 
 #[macro_export(local_inner_macros)]
 macro_rules! update_context {
-    ($context:expr; $( $field:ident $( . $sub_field:ident)* => $value:expr ),*) => {{
+    ($context:expr_2021; $( $field:ident $( . $sub_field:ident)* => $value:expr_2021 ),*) => {{
         $(
             let mut sub_context = match $context.$field {
                 Some(x) => x.clone(),
@@ -288,7 +288,7 @@ macro_rules! update_context {
 /// Return a LogMetadata
 #[macro_export(local_inner_macros)]
 macro_rules! log_metadata {
-    ($level:expr) => {{
+    ($level:expr_2021) => {{
         $crate::context_logger::LogMetadata {
             level: $level,
             module_path: std::module_path!(),

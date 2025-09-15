@@ -18,6 +18,7 @@ use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
+    IC_CONSENSUS_POOL_PATH, IC_REGISTRY_LOCAL_STORE, NeuronArgs, Recovery, RecoveryArgs,
     cli::{consent_given, read_optional, wait_for_confirmation},
     error::{RecoveryError, RecoveryResult},
     get_node_heights_from_metrics,
@@ -26,13 +27,12 @@ use ic_recovery::{
     registry_helper::RegistryPollingStrategy,
     steps::{AdminStep, Step, UploadAndRestartStep},
     util::{DataLocation, SshUser},
-    NeuronArgs, Recovery, RecoveryArgs, IC_CONSENSUS_POOL_PATH, IC_REGISTRY_LOCAL_STORE,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use serde::{Deserialize, Serialize};
-use slog::{error, warn, Logger};
+use slog::{Logger, error, warn};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 use url::Url;
@@ -225,8 +225,7 @@ impl SubnetSplitting {
     ) -> RecoveryResult<SubnetRecord> {
         let validation_error = |error_message| {
             Err(RecoveryError::ValidationFailed(format!(
-                "Subnet {}: {}",
-                subnet_id, error_message
+                "Subnet {subnet_id}: {error_message}"
             )))
         };
 
@@ -250,8 +249,7 @@ impl SubnetSplitting {
 
         if !SUBNET_TYPE_ALLOW_LIST.contains(&subnet_type) {
             return validation_error(format!(
-                "Subnet's type ({:?}) is not allowed for subnet splitting. Allowlist: {:?}",
-                subnet_type, SUBNET_TYPE_ALLOW_LIST,
+                "Subnet's type ({subnet_type:?}) is not allowed for subnet splitting. Allowlist: {SUBNET_TYPE_ALLOW_LIST:?}",
             ));
         }
 
@@ -317,7 +315,7 @@ impl SubnetSplitting {
         }
     }
 
-    fn unhalt(&self, target_subnet: TargetSubnet) -> impl Step {
+    fn unhalt(&self, target_subnet: TargetSubnet) -> impl Step + use<> {
         self.recovery.halt_subnet(
             self.subnet_id(target_subnet),
             /*is_halted=*/ false,
@@ -325,7 +323,7 @@ impl SubnetSplitting {
         )
     }
 
-    fn propose_cup(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step> {
+    fn propose_cup(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step + use<>> {
         let checkpoints_dir = self.layout.checkpoints_dir(target_subnet);
 
         let (max_name, max_height) =
@@ -344,7 +342,10 @@ impl SubnetSplitting {
         )
     }
 
-    fn upload_and_restart_step(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step> {
+    fn upload_and_restart_step(
+        &self,
+        target_subnet: TargetSubnet,
+    ) -> RecoveryResult<impl Step + use<>> {
         match self.upload_node(target_subnet) {
             Some(node_ip) => Ok(UploadAndRestartStep {
                 logger: self.recovery.logger.clone(),
@@ -359,7 +360,7 @@ impl SubnetSplitting {
         }
     }
 
-    fn wait_for_cup_step(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step> {
+    fn wait_for_cup_step(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step + use<>> {
         match self.upload_node(target_subnet) {
             Some(node_ip) => Ok(WaitForCUPStep {
                 logger: self.recovery.logger.clone(),

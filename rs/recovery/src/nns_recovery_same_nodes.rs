@@ -1,11 +1,11 @@
 use crate::{
+    CUPS_DIR, IC_STATE_DIR, RecoveryArgs, RecoveryResult,
     cli::{print_height_info, read_optional, read_optional_data_location, read_optional_version},
     error::{GracefulExpect, RecoveryError},
     file_sync_helper::create_dir,
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
     util::{DataLocation, SshUser},
-    RecoveryArgs, RecoveryResult, CUPS_DIR, IC_STATE_DIR,
 };
 use clap::Parser;
 use ic_base_types::SubnetId;
@@ -166,8 +166,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
             StepType::DownloadConsensusPool => {
                 if self.params.download_pool_node.is_none() {
-                    self.params.download_pool_node =
-                        read_optional(&self.logger, "Enter IP to download the most up-to-date consensus pool from (backup access required):");
+                    self.params.download_pool_node = read_optional(
+                        &self.logger,
+                        "Enter IP to download the most up-to-date consensus pool from (backup access required):",
+                    );
                 }
             }
 

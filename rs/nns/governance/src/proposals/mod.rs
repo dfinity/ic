@@ -1,6 +1,6 @@
 use crate::{
     governance::LOG_PREFIX,
-    pb::v1::{governance_error::ErrorType, GovernanceError, ProposalData, Topic, Vote},
+    pb::v1::{GovernanceError, ProposalData, Topic, Vote, governance_error::ErrorType},
 };
 use ic_base_types::CanisterId;
 use ic_cdk::println;
@@ -32,7 +32,7 @@ pub(crate) fn topic_to_manage_canister(canister_id: &CanisterId) -> Topic {
 pub(crate) fn invalid_proposal_error(reason: &str) -> GovernanceError {
     GovernanceError::new_with_message(
         ErrorType::InvalidProposal,
-        format!("Proposal invalid because of {}", reason),
+        format!("Proposal invalid because of {reason}"),
     )
 }
 

@@ -1,8 +1,8 @@
 use std::{collections::BTreeMap, time::Duration};
 
 use ic_metrics::{
-    buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,
+    buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
 };
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_types::nominal_cycles::NominalCycles;
@@ -12,9 +12,9 @@ use prometheus::{
 
 use crate::{
     metrics::{
-        cycles_histogram, dts_pause_or_abort_histogram, duration_histogram, instructions_histogram,
-        memory_histogram, messages_histogram, slices_histogram, unique_sorted_buckets,
-        ScopedMetrics,
+        ScopedMetrics, cycles_histogram, dts_pause_or_abort_histogram, duration_histogram,
+        instructions_histogram, memory_histogram, messages_histogram, slices_histogram,
+        unique_sorted_buckets,
     },
     scheduler::threshold_signatures::THRESHOLD_SIGNATURE_SCHEME_MISMATCH,
 };

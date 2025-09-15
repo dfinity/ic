@@ -9,7 +9,7 @@ use ic_error_types::RejectCode;
 use ic_interfaces_adapter_client::RpcAdapterClient;
 use ic_protobuf::{
     bitcoin::v1,
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     types::v1::RejectCode as pbRejectCode,
 };
 use serde::{Deserialize, Serialize};

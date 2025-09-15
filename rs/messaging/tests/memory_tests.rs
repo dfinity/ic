@@ -1,8 +1,8 @@
 pub mod common;
 
 use common::{
-    arb_canister_config, induct_from_head_of_stream, stream_snapshot, DebugInfo, SubnetPair,
-    SubnetPairConfig, KB, MB,
+    DebugInfo, KB, MB, SubnetPair, SubnetPairConfig, arb_canister_config,
+    induct_from_head_of_stream, stream_snapshot,
 };
 use ic_types::{
     ingress::{IngressState, IngressStatus},

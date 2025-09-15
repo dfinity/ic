@@ -85,35 +85,34 @@ pub async fn write_config(path: &Path, cfg: &ConfigIni) -> Result<(), Error> {
     } = cfg;
 
     if let Some(node_reward_type) = node_reward_type {
-        writeln!(&mut f, "node_reward_type={}", node_reward_type)?;
+        writeln!(&mut f, "node_reward_type={node_reward_type}")?;
     }
 
     if let (Some(ipv6_prefix), Some(ipv6_gateway)) = (ipv6_prefix, ipv6_gateway) {
         // Always write 4 segments, even if our prefix is less.
         assert!(format!("{ipv6_prefix}::").parse::<Ipv6Addr>().is_ok());
-        writeln!(&mut f, "ipv6_prefix={}", ipv6_prefix)?;
-        writeln!(&mut f, "ipv6_gateway={}", ipv6_gateway)?;
+        writeln!(&mut f, "ipv6_prefix={ipv6_prefix}")?;
+        writeln!(&mut f, "ipv6_gateway={ipv6_gateway}")?;
     }
 
     if let (Some(ipv4_address), Some(ipv4_gateway), Some(ipv4_prefix_length), Some(domain)) =
         (ipv4_address, ipv4_gateway, ipv4_prefix_length, domain)
     {
-        writeln!(&mut f, "ipv4_address={}", ipv4_address)?;
-        writeln!(&mut f, "ipv4_gateway={}", ipv4_gateway)?;
-        writeln!(&mut f, "ipv4_prefix_length={}", ipv4_prefix_length)?;
-        writeln!(&mut f, "domain={}", domain)?;
+        writeln!(&mut f, "ipv4_address={ipv4_address}")?;
+        writeln!(&mut f, "ipv4_gateway={ipv4_gateway}")?;
+        writeln!(&mut f, "ipv4_prefix_length={ipv4_prefix_length}")?;
+        writeln!(&mut f, "domain={domain}")?;
     }
 
     if let Some(enable_trusted_execution_environment) = enable_trusted_execution_environment {
         writeln!(
             &mut f,
-            "enable_trusted_execution_environment={}",
-            enable_trusted_execution_environment
+            "enable_trusted_execution_environment={enable_trusted_execution_environment}"
         )?;
     }
 
     if let Some(verbose) = verbose {
-        writeln!(&mut f, "verbose={}", verbose)?;
+        writeln!(&mut f, "verbose={verbose}")?;
     }
 
     Ok(())
