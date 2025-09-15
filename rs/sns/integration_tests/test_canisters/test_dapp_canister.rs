@@ -10,7 +10,7 @@ fn test_dapp_method_validate() {
 
 fn test_dapp_method_validate_(payload: i64) -> Result<String, String> {
     if payload > 10 {
-        Ok(format!("Value is {}. Valid!", payload))
+        Ok(format!("Value is {payload}. Valid!"))
     } else {
         Err("Value < 10. Invalid!".to_string())
     }

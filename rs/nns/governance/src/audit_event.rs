@@ -1,6 +1,6 @@
 use crate::{pb::v1::AuditEvent, storage::with_audit_events_log};
 
-use ic_stable_structures::{storable::Bound, Storable};
+use ic_stable_structures::{Storable, storable::Bound};
 use prost::Message;
 use std::borrow::Cow;
 

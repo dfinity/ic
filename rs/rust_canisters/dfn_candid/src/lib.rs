@@ -1,9 +1,9 @@
 use candid::de::IDLDeserialize;
+use candid::{CandidType, DecoderConfig};
 pub use candid::{
     decode_args_with_config, encode_args, encode_one,
     utils::{ArgumentDecoder, ArgumentEncoder},
 };
-use candid::{CandidType, DecoderConfig};
 use ic_http_types::HttpRequest;
 use on_wire::witness;
 use on_wire::{FromWire, IntoWire, NewType};

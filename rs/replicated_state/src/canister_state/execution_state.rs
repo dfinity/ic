@@ -1,12 +1,12 @@
 pub mod proto;
 
 use crate::hash::ic_hashtree_leaf_hash;
-use crate::{canister_state::WASM_PAGE_SIZE_IN_BYTES, num_bytes_try_from, NumWasmPages, PageMap};
+use crate::{NumWasmPages, PageMap, canister_state::WASM_PAGE_SIZE_IN_BYTES, num_bytes_try_from};
 use ic_management_canister_types_private::Global;
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    methods::{SystemMethod, WasmMethod},
     CountBytes, ExecutionRound, NumBytes,
+    methods::{SystemMethod, WasmMethod},
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -197,8 +197,7 @@ impl Memory {
             Ok(())
         } else {
             Err(format!(
-                "The page map size {} exceeds the memory size {}",
-                page_map_bytes, memory_bytes
+                "The page map size {page_map_bytes} exceeds the memory size {memory_bytes}"
             ))
         }
     }

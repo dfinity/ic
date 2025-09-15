@@ -148,9 +148,11 @@ mod tests {
 
         let payload = valid_payload();
 
-        assert!(registry
-            .swap_nodes_inner(payload, PrincipalId::new_user_test_id(1))
-            .is_err_and(|err| err == SwapError::FeatureDisabled))
+        assert!(
+            registry
+                .swap_nodes_inner(payload, PrincipalId::new_user_test_id(1))
+                .is_err_and(|err| err == SwapError::FeatureDisabled)
+        )
     }
 
     #[test]
@@ -161,9 +163,11 @@ mod tests {
 
         let payload = valid_payload();
 
-        assert!(registry
-            .swap_nodes_inner(payload, PrincipalId::new_user_test_id(1))
-            .is_ok())
+        assert!(
+            registry
+                .swap_nodes_inner(payload, PrincipalId::new_user_test_id(1))
+                .is_ok()
+        )
     }
 
     #[test]

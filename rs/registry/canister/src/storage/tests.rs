@@ -1,8 +1,8 @@
 use super::*;
 use crate::flags::temporarily_enable_chunkifying_large_values;
 use ic_registry_transport::pb::v1::{
-    high_capacity_registry_mutation, registry_mutation, LargeValueChunkKeys, Precondition,
-    RegistryMutation,
+    LargeValueChunkKeys, Precondition, RegistryMutation, high_capacity_registry_mutation,
+    registry_mutation,
 };
 use lazy_static::lazy_static;
 
@@ -71,7 +71,7 @@ fn test_chunkify_reasonably_large_mutation() {
         chunk_content_sha256s,
     }) = first_prime_mutation
     else {
-        panic!("{:?}", result);
+        panic!("{result:?}");
     };
 
     // Step 3.2: Assert that reassembled blob is equal to the original.

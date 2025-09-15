@@ -55,7 +55,7 @@ mod types;
 pub use crate::types::{LogFilter, RegexString, RegexSubstitution, Sort};
 
 pub use ic_canister_log::{
-    declare_log_buffer, export as export_logs, log as raw_log, GlobalBuffer, Sink,
+    GlobalBuffer, Sink, declare_log_buffer, export as export_logs, log as raw_log,
 };
 use serde::{Deserialize, Serialize};
 

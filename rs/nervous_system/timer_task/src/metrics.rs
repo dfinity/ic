@@ -148,9 +148,9 @@ impl MetricsRegistry {
         prefix: &'static str,
         encoder: &mut MetricsEncoder<Vec<u8>>,
     ) -> std::io::Result<()> {
-        let instruction_histogram_metric_name = format!("{}_task_instruction", prefix);
+        let instruction_histogram_metric_name = format!("{prefix}_task_instruction");
 
-        let sync_last_executed_metric_name = format!("{}_sync_task_last_executed", prefix);
+        let sync_last_executed_metric_name = format!("{prefix}_sync_task_last_executed");
         for (task_name, metrics) in &self.sync_metrics {
             metrics.instruction.encode(
                 task_name,
@@ -168,9 +168,9 @@ impl MetricsRegistry {
         }
 
         let async_outstanding_counter_metric_name =
-            format!("{}_async_task_outstanding_count", prefix);
-        let async_last_started_metric_name = format!("{}_async_task_last_started", prefix);
-        let async_last_finished_metric_name = format!("{}_async_task_last_finished", prefix);
+            format!("{prefix}_async_task_outstanding_count");
+        let async_last_started_metric_name = format!("{prefix}_async_task_last_started");
+        let async_last_finished_metric_name = format!("{prefix}_async_task_last_finished");
         for (task_name, metrics) in &self.async_metrics {
             metrics.instruction.encode(
                 task_name,

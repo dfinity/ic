@@ -6,7 +6,7 @@ use crate::{
 
 use ic_base_types::NodeId;
 use ic_protobuf::registry::api_boundary_node::v1::ApiBoundaryNodeRecord;
-use ic_registry_keys::{make_api_boundary_node_record_key, API_BOUNDARY_NODE_RECORD_KEY_PREFIX};
+use ic_registry_keys::{API_BOUNDARY_NODE_RECORD_KEY_PREFIX, make_api_boundary_node_record_key};
 use ic_registry_transport::pb::v1::RegistryValue;
 use ic_types::PrincipalId;
 use prost::Message;
@@ -32,8 +32,7 @@ impl Registry {
         self.get_api_boundary_node_record(node_id)
             .unwrap_or_else(|| {
                 panic!(
-                    "{}api_boundary_node record for {:} not found in the registry.",
-                    LOG_PREFIX, node_id
+                    "{LOG_PREFIX}api_boundary_node record for {node_id:} not found in the registry."
                 )
             })
     }
@@ -70,7 +69,7 @@ mod tests {
     use std::collections::VecDeque;
 
     use ic_registry_keys::{
-        make_api_boundary_node_record_key, API_BOUNDARY_NODE_RECORD_KEY_PREFIX,
+        API_BOUNDARY_NODE_RECORD_KEY_PREFIX, make_api_boundary_node_record_key,
     };
     use ic_registry_transport::pb::v1::HighCapacityRegistryValue;
     use ic_types_test_utils::ids::node_test_id;

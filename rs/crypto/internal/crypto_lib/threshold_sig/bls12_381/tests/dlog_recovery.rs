@@ -100,7 +100,7 @@ fn baby_giant_negative() {
 
         match baby_giant.solve(&tgt) {
             Some(dlog) => assert_eq!(dlog, x),
-            None => assert!(out_of_range, "{:?}", x),
+            None => assert!(out_of_range, "{x:?}"),
         }
     }
 }

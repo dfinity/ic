@@ -8,11 +8,11 @@ mod snapshot;
 mod source;
 mod tests;
 
-use anyhow::{anyhow, Result};
-use args::{universal_projection, Command, RegistrySpec, SourceSpec, VersionSpec};
+use anyhow::{Result, anyhow};
+use args::{Command, RegistrySpec, SourceSpec, VersionSpec, universal_projection};
 use ic_base_types::RegistryVersion;
 use ic_registry_local_store::{
-    changelog_to_compact_delta, KeyMutation, LocalStoreImpl, LocalStoreWriter,
+    KeyMutation, LocalStoreImpl, LocalStoreWriter, changelog_to_compact_delta,
 };
 use normalization::NormalizedSnapshot;
 use serde_json::Value;
@@ -93,8 +93,7 @@ pub fn execute_command(cmd: Command) -> Result<Value> {
             let mut f = File::create(path)?;
             f.write_all(&pb)?;
             Value::String(format!(
-                "Successfully written registry delta protbobuf for version range {}-{} to: {}",
-                start_version, latest_registry_version_in_pb, pb_path
+                "Successfully written registry delta protbobuf for version range {start_version}-{latest_registry_version_in_pb} to: {pb_path}"
             ))
         }
         Command::ShowDiff {

@@ -42,7 +42,7 @@ use ic_system_test_driver::{
 };
 use ic_types::Height;
 use registry_canister::mutations::do_add_nodes_to_subnet::AddNodesToSubnetPayload;
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 const DKG_INTERVAL: u64 = 9;
 const INITIAL_APP_NODES_COUNT: usize = 1;
@@ -170,9 +170,11 @@ fn wait_until_node_in_subnet(
             .expect("Should get newer registry version");
 
     // The node is not unassigned anymore
-    assert!(!new_topology_snapshot
-        .unassigned_nodes()
-        .any(|node| node.node_id == node_id));
+    assert!(
+        !new_topology_snapshot
+            .unassigned_nodes()
+            .any(|node| node.node_id == node_id)
+    );
 
     let subnet = new_topology_snapshot
         .subnets()

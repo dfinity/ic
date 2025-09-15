@@ -7,7 +7,7 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     state::ingress::v1 as pb_ingress,
     types::v1 as pb_types,
 };
@@ -217,7 +217,7 @@ impl fmt::Display for WasmResult {
         match &self {
             WasmResult::Reply(_) => write!(f, "reply"),
             WasmResult::Reject(reject_str) => {
-                write!(f, "reject with error message => [{}]", reject_str)
+                write!(f, "reject with error message => [{reject_str}]")
             }
         }
     }

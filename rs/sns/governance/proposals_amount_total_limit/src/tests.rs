@@ -159,14 +159,12 @@ fn test_clamp_unrealistically_low_xdrs_per_icp() {
             observed_treasury_upper_bound_tokens,
             transfer_sns_treasury_funds_7_day_total_upper_bound_tokens(effective_valuation,)
                 .unwrap(),
-            "{}",
-            tokens,
+            "{tokens}",
         );
         assert_eq!(
             observed_minting_upper_bound_tokens,
             mint_sns_tokens_7_day_total_upper_bound_tokens(effective_valuation,).unwrap(),
-            "{}",
-            tokens,
+            "{tokens}",
         );
     }
 }

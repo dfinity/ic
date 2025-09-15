@@ -2,8 +2,8 @@ use ic_sys::{PageBytes, PageIndex};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::Debug,
-    sync::atomic::{AtomicUsize, Ordering},
     sync::Arc,
+    sync::atomic::{AtomicUsize, Ordering},
 };
 mod page_bytes;
 

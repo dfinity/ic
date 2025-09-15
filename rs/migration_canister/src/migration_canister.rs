@@ -7,13 +7,13 @@ use ic_cdk::{api::msg_caller, init, post_upgrade, println, update};
 use serde::Deserialize;
 
 use crate::{
+    RequestState, ValidationError,
     canister_state::{
         migrations_disabled,
         requests::{insert_request, list_by},
     },
     rate_limited, start_timers,
     validation::validate_request,
-    RequestState, ValidationError,
 };
 
 #[init]

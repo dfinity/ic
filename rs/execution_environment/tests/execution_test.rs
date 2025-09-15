@@ -9,9 +9,9 @@ use ic_config::{
 use ic_embedders::wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_management_canister_types_private::{
     CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
-    CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, LoadCanisterSnapshotArgs,
+    CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, IC_00, LoadCanisterSnapshotArgs,
     MasterPublicKeyId, Method, Payload, SignWithECDSAArgs, TakeCanisterSnapshotArgs,
-    UpdateSettingsArgs, IC_00,
+    UpdateSettingsArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
@@ -21,8 +21,8 @@ use ic_state_machine_tests::{
 use ic_test_utilities_metrics::{fetch_gauge, fetch_int_counter};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::MessageId;
-use ic_types::{ingress::WasmResult, messages::NO_DEADLINE, CanisterId, Cycles, NumBytes, Time};
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_types::{CanisterId, Cycles, NumBytes, Time, ingress::WasmResult, messages::NO_DEADLINE};
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::{assert_gt, assert_le, assert_lt};
 use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
 
@@ -978,9 +978,9 @@ fn assert_replied(result: Result<WasmResult, UserError>) {
     match result {
         Ok(wasm_result) => match wasm_result {
             WasmResult::Reply(_) => {}
-            WasmResult::Reject(err) => panic!("Unexpected reject: {:?}", err),
+            WasmResult::Reject(err) => panic!("Unexpected reject: {err:?}"),
         },
-        Err(err) => panic!("Got unexpected error: {}", err),
+        Err(err) => panic!("Got unexpected error: {err}"),
     }
 }
 
@@ -995,10 +995,10 @@ fn assert_replied_with(result: Result<WasmResult, UserError>, expected: i64) {
                 assert_eq!(i64::from_le_bytes(res[0..8].try_into().unwrap()), expected)
             }
             WasmResult::Reject(reject_message) => {
-                panic!("Got unexpected reject: {}", reject_message)
+                panic!("Got unexpected reject: {reject_message}")
             }
         },
-        Err(err) => panic!("Got unexpected error: {}", err),
+        Err(err) => panic!("Got unexpected error: {err}"),
     }
 }
 
@@ -1016,10 +1016,10 @@ fn replied_with(result: &Result<WasmResult, UserError>, expected: i64) -> bool {
 fn assert_rejected(result: Result<WasmResult, UserError>) {
     match result {
         Ok(wasm_result) => match wasm_result {
-            WasmResult::Reply(blob) => panic!("Unexpected reply: {:?}", blob),
+            WasmResult::Reply(blob) => panic!("Unexpected reply: {blob:?}"),
             WasmResult::Reject(_err) => {}
         },
-        Err(err) => panic!("Got unexpected error: {}", err),
+        Err(err) => panic!("Got unexpected error: {err}"),
     }
 }
 
@@ -1188,10 +1188,7 @@ fn subnet_memory_reservation_scales_with_number_of_cores() {
     let err = env.execute_ingress(a_id, "update", a).unwrap_err();
     err.assert_contains(
         ErrorCode::CanisterTrapped,
-        &format!(
-            "Error from Canister {}: Canister trapped: stable memory out of bounds",
-            a_id
-        ),
+        &format!("Error from Canister {a_id}: Canister trapped: stable memory out of bounds"),
     );
 }
 
@@ -2417,7 +2414,7 @@ fn helper_tests_for_stale_data_in_buffer_between_calls(
 
     let data = match ret_val.unwrap() {
         WasmResult::Reply(data) => data,
-        WasmResult::Reject(msg) => panic!("Unexpected reject {}.", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject {msg}."),
     };
 
     assert_eq!(
@@ -2447,7 +2444,7 @@ fn helper_tests_for_stale_data_in_buffer_between_calls(
 
     let data = match ret_val.unwrap() {
         WasmResult::Reply(data) => data,
-        WasmResult::Reject(msg) => panic!("Unexpected reject {}.", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject {msg}."),
     };
 
     assert_eq!(
@@ -2498,7 +2495,8 @@ fn helper_tests_for_illegal_data_buffer_access(env: &StateMachine, canister_id: 
 
     assert!(
         ret_val.description().contains(containing_str),
-        "Should return error if input data is copied to out of bound internal buffer. Instead, it returns unexpected message: {}.", ret_val.description()
+        "Should return error if input data is copied to out of bound internal buffer. Instead, it returns unexpected message: {}.",
+        ret_val.description()
     );
 }
 
@@ -2943,7 +2941,7 @@ fn test_canister_liquid_cycle_balance() {
         .unwrap();
     let liquid_balance = match res {
         WasmResult::Reply(blob) => u128::from_le_bytes(blob.try_into().unwrap()),
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
 
     // Install another universal canister to receive as many cycles as possible from the existing universal canister.
@@ -2970,7 +2968,7 @@ fn test_canister_liquid_cycle_balance() {
         .unwrap();
     let accepted_cycles = match res {
         WasmResult::Reply(blob) => u128::from_le_bytes(blob.try_into().unwrap()),
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
     assert!(0 < accepted_cycles && accepted_cycles < liquid_balance);
 
@@ -3015,8 +3013,10 @@ fn large_ipc_call_fails() {
     let err = env
         .execute_ingress(canister_id, "send_calls", Encode!(&(2 * 1024_u32)).unwrap())
         .unwrap_err();
-    let expected_error = format!("Error from Canister \
+    let expected_error = format!(
+        "Error from Canister \
         rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister exceeded the limit of {instruction_limit} instructions \
-        for single message execution.");
+        for single message execution."
+    );
     err.assert_contains(ErrorCode::CanisterInstructionLimitExceeded, &expected_error);
 }

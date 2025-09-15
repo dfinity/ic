@@ -1,9 +1,9 @@
 use ic_canonical_state::encoding::types::SubnetMetrics;
 use ic_crypto_tree_hash::{LabeledTree, LookupStatus, MixedHashTree};
 use ic_types::{
+    CanisterId, SubnetId,
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{HttpReadStateResponse, MessageId},
-    CanisterId, SubnetId,
 };
 use serde::Deserialize;
 use serde_cbor::value::Value as CBOR;
@@ -43,15 +43,15 @@ pub fn parse_read_state_response(
     message: CBOR,
 ) -> Result<RequestStatus, String> {
     let response = serde_cbor::value::from_value::<HttpReadStateResponse>(message)
-        .map_err(|source| format!("decoding to HttpReadStateResponse failed: {}", source))?;
+        .map_err(|source| format!("decoding to HttpReadStateResponse failed: {source}"))?;
 
     let certificate = match root_pk {
         Some(pk) => {
             ic_certification::verify_certificate(&response.certificate, effective_canister_id, pk)
-                .map_err(|source| format!("verifying certificate failed: {}", source))?
+                .map_err(|source| format!("verifying certificate failed: {source}"))?
         }
         None => serde_cbor::from_slice(response.certificate.as_slice())
-            .map_err(|source| format!("decoding Certificate failed: {}", source))?,
+            .map_err(|source| format!("decoding Certificate failed: {source}"))?,
     };
 
     match certificate
@@ -66,11 +66,11 @@ pub fn parse_read_state_response(
 
     // Parse the tree.
     let tree = LabeledTree::try_from(certificate.tree)
-        .map_err(|e| format!("parsing tree in certificate failed: {:?}", e))?;
+        .map_err(|e| format!("parsing tree in certificate failed: {e:?}"))?;
 
     let request_statuses =
         RequestStatuses::deserialize(tree_deserializer::LabeledTreeDeserializer::new(&tree))
-            .map_err(|err| format!("deserializing request statuses failed: {:?}", err))?;
+            .map_err(|err| format!("deserializing request statuses failed: {err:?}"))?;
 
     Ok(match request_statuses.request_status {
         Some(mut request_status_map) => request_status_map
@@ -88,7 +88,7 @@ pub fn parse_subnet_read_state_response(
     message: CBOR,
 ) -> Result<SubnetMetrics, String> {
     let response = serde_cbor::value::from_value::<HttpReadStateResponse>(message)
-        .map_err(|source| format!("decoding to HttpReadStateResponse failed: {}", source))?;
+        .map_err(|source| format!("decoding to HttpReadStateResponse failed: {source}"))?;
 
     let certificate = match root_pk {
         Some(pk) => ic_certification::verify_certificate_for_subnet_read_state(
@@ -96,9 +96,9 @@ pub fn parse_subnet_read_state_response(
             subnet_id,
             pk,
         )
-        .map_err(|source| format!("verifying certificate failed: {}", source))?,
+        .map_err(|source| format!("verifying certificate failed: {source}"))?,
         None => serde_cbor::from_slice(response.certificate.as_slice())
-            .map_err(|source| format!("decoding Certificate failed: {}", source))?,
+            .map_err(|source| format!("decoding Certificate failed: {source}"))?,
     };
 
     let subnet_metrics_leaf =
@@ -113,10 +113,10 @@ pub fn parse_subnet_read_state_response(
     match subnet_metrics_leaf {
         MixedHashTree::Leaf(bytes) => {
             let subnet_metrics: SubnetMetrics = serde_cbor::from_slice(&bytes)
-                .map_err(|err| format!("deserializing subnet_metrics failed: {:?}", err))?;
+                .map_err(|err| format!("deserializing subnet_metrics failed: {err:?}"))?;
             Ok(subnet_metrics)
         }
-        tree => Err(format!("Expected subnet metrics leaf but found {:?}", tree)),
+        tree => Err(format!("Expected subnet metrics leaf but found {tree:?}")),
     }
 }
 
@@ -127,8 +127,8 @@ mod tests {
     use ic_certification_test_utils::CertificateData;
     use ic_crypto_tree_hash::Digest;
     use ic_crypto_tree_hash::Label;
-    use ic_types::messages::Blob;
     use ic_types::CanisterId;
+    use ic_types::messages::Blob;
     use serde::Serialize;
 
     fn to_self_describing_cbor<T: Serialize>(e: &T) -> serde_cbor::Result<Vec<u8>> {

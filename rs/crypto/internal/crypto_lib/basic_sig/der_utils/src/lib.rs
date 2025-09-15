@@ -72,7 +72,7 @@ pub fn subject_public_key_info_der(algorithm: OID, key: &[u8]) -> Result<Vec<u8>
     let subject_public_key = ASN1Block::BitString(0, key.len() * 8, key.to_vec());
     let subject_public_key_info = ASN1Block::Sequence(0, vec![algorithm, subject_public_key]);
     simple_asn1::to_der(&subject_public_key_info)
-        .map_err(|e| format!("failed to encode as DER: {}", e))
+        .map_err(|e| format!("failed to encode as DER: {e}"))
 }
 
 /// The provided DER-encoded bytes are malformed.
@@ -122,8 +122,7 @@ pub fn parse_public_key(
             algorithm,
             key_bytes: Some(der.to_vec()),
             internal_error: format!(
-                "Wrong algorithm identifier for {:?}: expected {:?} got {:?}",
-                algorithm, expected_algo_id, algo_id
+                "Wrong algorithm identifier for {algorithm:?}: expected {expected_algo_id:?} got {algo_id:?}"
             ),
         });
     }
@@ -227,8 +226,7 @@ impl KeyDerParser {
             Ok(key_bytes.to_vec())
         } else {
             Err(Self::parsing_error(&format!(
-                "Expected BitString, got {:?}",
-                key_part
+                "Expected BitString, got {key_part:?}"
             )))
         }
     }
@@ -243,7 +241,7 @@ impl KeyDerParser {
     /// parses the entire DER-string provided upon construction.
     fn parse_pk(&self) -> Result<Vec<ASN1Block>, KeyDerParsingError> {
         simple_asn1::from_der(&self.key_der)
-            .map_err(|e| Self::parsing_error(&format!("Error in DER encoding: {}", e)))
+            .map_err(|e| Self::parsing_error(&format!("Error in DER encoding: {e}")))
     }
 
     /// Verifies that the specified `parts` contain exactly one ASN1Block, and

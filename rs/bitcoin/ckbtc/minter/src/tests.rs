@@ -1,4 +1,5 @@
 use crate::{
+    BuildTxError, CacheWithExpiration, MINTER_ADDRESS_DUST_LIMIT, Network,
     address::BitcoinAddress,
     build_unsigned_transaction, estimate_retrieve_btc_fee, evaluate_minter_fee, fake_sign, greedy,
     lifecycle::init::InitArgs,
@@ -8,7 +9,7 @@ use crate::{
         SubmittedBtcTransaction,
     },
     test_fixtures::arbitrary,
-    tx, BuildTxError, CacheWithExpiration, Network, MINTER_ADDRESS_DUST_LIMIT,
+    tx,
 };
 use bitcoin::network::constants::Network as BtcNetwork;
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
@@ -509,12 +510,12 @@ proptest! {
         lock_time in any::<u32>(),
     ) {
         let arb_tx = tx::UnsignedTransaction { inputs, outputs, lock_time };
-        println!("{:?}", arb_tx);
+        println!("{arb_tx:?}");
         let btc_tx = unsigned_tx_to_bitcoin_tx(&arb_tx);
         println!("{:?}", btc_tx.serialize());
 
         let tx_bytes = tx::encode_into(&arb_tx, Vec::<u8>::new());
-        println!("{:?}", tx_bytes);
+        println!("{tx_bytes:?}");
         let decoded_btc_tx = bitcoin::Transaction::deserialize(&tx_bytes).expect("failed to deserialize an unsigned transaction");
 
         prop_assert_eq!(btc_tx.serialize(), tx_bytes);
@@ -574,12 +575,12 @@ proptest! {
         lock_time in any::<u32>(),
     ) {
         let arb_tx = tx::SignedTransaction { inputs, outputs, lock_time };
-        println!("{:?}", arb_tx);
+        println!("{arb_tx:?}");
         let btc_tx = signed_tx_to_bitcoin_tx(&arb_tx);
         println!("{:?}", btc_tx.serialize());
 
         let tx_bytes = tx::encode_into(&arb_tx, Vec::<u8>::new());
-        println!("{:?}", tx_bytes);
+        println!("{tx_bytes:?}");
         let decoded_btc_tx = bitcoin::Transaction::deserialize(&tx_bytes).expect("failed to deserialize a signed transaction");
 
         prop_assert_eq!(btc_tx.serialize(), tx_bytes);
@@ -1122,8 +1123,8 @@ fn test_build_account_to_utxos_table_pagination() {
 
 #[test]
 fn serialize_network_preserves_capitalization() {
-    use ciborium::{de::from_reader, ser::into_writer, Value};
     use Network::*;
+    use ciborium::{Value, de::from_reader, ser::into_writer};
     // We use CBOR serialization for events storage. The test below
     // checks if the serialization/deserialization of Network preserves
     // capitalization.

@@ -142,9 +142,9 @@ impl LedgerClient {
                         message,
                     } => LedgerBurnError::TemporarilyUnavailable {
                         message: format!(
-                        "{} ledger unreachable, error code: {error_code}, with message: {message}",
-                        self.token_symbol
-                    ),
+                            "{} ledger unreachable, error code: {error_code}, with message: {message}",
+                            self.token_symbol
+                        ),
                         ledger: self.ck_ledger(),
                     },
                 };
