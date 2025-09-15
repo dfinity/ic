@@ -1,4 +1,3 @@
-#![allow(deprecated)]
 use candid::{decode_one, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_btc_checker::{
@@ -10,7 +9,6 @@ use ic_btc_checker::{
     INITIAL_MAX_RESPONSE_BYTES,
 };
 use ic_btc_interface::Txid;
-use ic_cdk::api::call::RejectionCode;
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_management_canister_types::CanisterId;
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
@@ -661,7 +659,7 @@ fn test_check_transaction_error() {
             subnet_id: canister_http_requests[0].subnet_id,
             request_id: canister_http_requests[0].request_id,
             response: CanisterHttpResponse::CanisterHttpReject(CanisterHttpReject {
-                reject_code: RejectionCode::SysTransient as u64,
+                reject_code: 2, //SYS_TRANSIENT
                 message: "Failed to directly connect".to_string(),
             }),
             additional_responses: vec![],
